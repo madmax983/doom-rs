@@ -3,6 +3,14 @@
 //! Drives an [`OplChip`] from a decoded [`MusScore`].  Maps MUS channels to
 //! OPL2 hardware channels and translates [`MusEvent`] values into OPL2
 //! register writes.
+//!
+//! # Timed playback
+//!
+//! Call [`MidiPlayer::load_score`] to queue a score for timed playback, then
+//! call [`MidiPlayer::advance_samples`] from the audio callback on every
+//! buffer fill.  The sequencer tracks accumulated sample position and fires
+//! events when their absolute tick position becomes due.  The score loops
+//! automatically when [`MusEvent::ScoreEnd`] is reached.
 
 use crate::{
     mus::{MusEvent, MusScore},
@@ -84,6 +92,29 @@ fn apply_default_instrument(opl: &mut OplChip, ch: u8) {
 }
 
 // ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/// Discriminant returned by the borrow-splitting logic inside
+/// [`MidiPlayer::advance_samples`].
+enum LoopAction {
+    /// No event is due in this window — exit the loop.
+    Break,
+    /// The score has been exhausted; restart it.
+    Restart {
+        /// Absolute tick number of the first event after restart.
+        restart_tick: u64,
+        /// Delta of event[0] (added to restart_tick to get first event's due tick).
+        first_delta: u64,
+    },
+    /// An event is due — process it.
+    Process {
+        event_clone: MusEvent,
+        delta_next: Option<u64>,
+    },
+}
+
+// ---------------------------------------------------------------------------
 // MidiPlayer
 // ---------------------------------------------------------------------------
 
@@ -91,6 +122,11 @@ fn apply_default_instrument(opl: &mut OplChip, ch: u8) {
 ///
 /// Channel allocation uses round-robin assignment of the 9 OPL2 hardware
 /// channels.  MUS channel 15 (percussion) is treated as a no-op.
+///
+/// For timed playback, load a score with [`MidiPlayer::load_score`] and call
+/// [`MidiPlayer::advance_samples`] from the audio callback on every buffer
+/// fill.  The sequencer loops automatically when [`MusEvent::ScoreEnd`] is
+/// reached.
 pub struct MidiPlayer {
     /// The OPL2 chip register state.
     pub opl: OplChip,
@@ -101,6 +137,21 @@ pub struct MidiPlayer {
     next_opl_ch: u8,
     /// Playback rate in ticks per second (MUS default: 140 Hz).
     pub ticks_per_sec: u32,
+
+    // -----------------------------------------------------------------------
+    // Timed-playback state
+    // -----------------------------------------------------------------------
+    /// The currently loaded score, if any.
+    pub current_score: Option<MusScore>,
+    /// Index into `current_score.events` for the next unplayed event.
+    pub event_cursor: usize,
+    /// Absolute tick number at which `events[event_cursor]` becomes due.
+    ///
+    /// This is the *cumulative* sum of all delta values from event 0 up to
+    /// (but not including) `event_cursor`.
+    pub next_event_tick: u64,
+    /// Accumulated sample count since the score was loaded.
+    sample_count: u64,
 }
 
 impl Default for MidiPlayer {
@@ -118,7 +169,142 @@ impl MidiPlayer {
             channel_map: [0xFF; 16],
             next_opl_ch: 0,
             ticks_per_sec: 140,
+            current_score: None,
+            event_cursor: 0,
+            next_event_tick: 0,
+            sample_count: 0,
         }
+    }
+
+    /// Load a new score for timed playback, resetting position to the start.
+    ///
+    /// Silences the OPL chip and resets all channel allocations before
+    /// beginning playback of the new score.
+    pub fn load_score(&mut self, score: MusScore) {
+        // Silence the chip and reset channel allocations.
+        self.opl = OplChip::new();
+        self.channel_map = [0xFF; 16];
+        self.next_opl_ch = 0;
+
+        // The first event is due immediately (its delta is the delay *before*
+        // it fires, so for event 0 the absolute tick = events[0].0).
+        let first_tick = score.events.first().map_or(0, |e| u64::from(e.0));
+
+        self.current_score = Some(score);
+        self.event_cursor = 0;
+        self.next_event_tick = first_tick;
+        self.sample_count = 0;
+    }
+
+    /// Stop playback and silence all OPL channels.
+    pub fn stop(&mut self) {
+        self.current_score = None;
+        self.opl = OplChip::new();
+        self.channel_map = [0xFF; 16];
+        self.next_opl_ch = 0;
+        self.sample_count = 0;
+        self.event_cursor = 0;
+        self.next_event_tick = 0;
+    }
+
+    /// Advance playback by `n_samples` at `sample_rate` Hz, synthesizing OPL
+    /// audio into `buf`.
+    ///
+    /// - Processes all MUS events whose absolute tick position falls within
+    ///   the current window `[sample_count, sample_count + n_samples)`.
+    /// - Calls `self.opl.synthesize(buf, sample_rate)` to fill `buf` with OPL
+    ///   audio after event processing.
+    /// - Loops the score automatically when [`MusEvent::ScoreEnd`] is reached.
+    /// - If no score is loaded, `buf` is filled with zeros.
+    ///
+    /// `buf.len()` must equal `n_samples`.
+    pub fn advance_samples(&mut self, n_samples: usize, sample_rate: u32, buf: &mut [f32]) {
+        // Zero the output buffer first.
+        for s in buf.iter_mut() {
+            *s = 0.0;
+        }
+
+        let sample_count_end = self.sample_count + n_samples as u64;
+
+        // Process all events that are due before sample_count_end.
+        // `next_event_tick` is an ever-increasing absolute tick counter that
+        // never wraps on loop — when the score restarts we add the score's
+        // total tick duration to next_event_tick rather than resetting it.
+        // This prevents the loop from firing the same event infinitely.
+        loop {
+            if self.current_score.is_none() {
+                break;
+            }
+
+            // Gather what we need in a short immutable-borrow block.
+            let action = {
+                let score = self.current_score.as_ref().expect("checked above");
+
+                if self.event_cursor >= score.events.len() {
+                    // Past the end of the event list — ScoreEnd was the last
+                    // event and we've already processed it.  Restart.
+                    //
+                    // `next_event_tick` currently points to the tick of the
+                    // last processed event.  The first event of the new loop
+                    // is due at `next_event_tick + events[0].delta`.  We keep
+                    // `next_event_tick` monotonically increasing so no event
+                    // fires more than once per loop iteration.
+                    let first_delta = score.events.first().map_or(0, |e| u64::from(e.0));
+                    LoopAction::Restart { restart_tick: self.next_event_tick, first_delta }
+                } else {
+                    // Convert this event's absolute tick to a sample position.
+                    let event_sample = (self.next_event_tick as u128
+                        * sample_rate as u128
+                        / self.ticks_per_sec as u128)
+                        as u64;
+
+                    if event_sample >= sample_count_end {
+                        LoopAction::Break
+                    } else {
+                        let event_clone = score.events[self.event_cursor].1.clone();
+                        let delta_next = score
+                            .events
+                            .get(self.event_cursor + 1)
+                            .map(|e| u64::from(e.0));
+                        LoopAction::Process { event_clone, delta_next }
+                    }
+                }
+            };
+
+            match action {
+                LoopAction::Break => break,
+
+                LoopAction::Restart { restart_tick, first_delta } => {
+                    self.event_cursor = 0;
+                    // next_event_tick for the first event of the new loop.
+                    // restart_tick is the current absolute tick (tick of the
+                    // last processed event); first_delta is events[0].delta.
+                    self.next_event_tick = restart_tick + first_delta;
+                    // Always break after a restart.  Events from the new loop
+                    // iteration will fire on the next advance_samples() call.
+                    // This prevents infinite looping when all deltas are zero
+                    // and keeps the timing error bounded to at most one buffer
+                    // period (~1–5 ms at typical block sizes).
+                    break;
+                }
+
+                LoopAction::Process { event_clone, delta_next } => {
+                    self.process_event(&event_clone);
+                    self.event_cursor += 1;
+                    if let Some(d) = delta_next {
+                        self.next_event_tick += d;
+                    }
+                    // If there is no next event, next iteration will hit the
+                    // Restart arm.
+                }
+            }
+        }
+
+        // Synthesize OPL audio for this window.
+        // Agent 1 implements OplChip::synthesize; we call it here.
+        self.opl.synthesize(buf, sample_rate);
+
+        self.sample_count = sample_count_end;
     }
 
     /// Process a single [`MusEvent`], writing the appropriate OPL2 registers.
@@ -233,6 +419,21 @@ mod tests {
         }
     }
 
+    /// Build a [`MusScore`] from events with explicit per-event delta ticks.
+    fn make_score_with_deltas(events: Vec<(u32, MusEvent)>) -> MusScore {
+        MusScore {
+            header: MusHeader {
+                score_length: 0,
+                score_start: 0,
+                primary_channels: 1,
+                secondary_channels: 0,
+                instrument_count: 0,
+            },
+            instruments: Vec::new(),
+            events,
+        }
+    }
+
     #[test]
     fn midi_new_player_all_channels_silent() {
         let player = MidiPlayer::new();
@@ -305,5 +506,110 @@ mod tests {
         ]);
         let count = player.play_score(&score);
         assert_eq!(count, 3, "play_score must return the number of events in the score");
+    }
+
+    // -----------------------------------------------------------------------
+    // Timed-playback tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn midi_load_score_resets_state() {
+        let mut player = MidiPlayer::new();
+        // Fake prior state.
+        player.event_cursor = 5;
+        player.sample_count = 99_999;
+
+        let score = make_score(vec![MusEvent::ScoreEnd]);
+        player.load_score(score);
+
+        assert_eq!(player.event_cursor, 0, "event_cursor must reset to 0 after load_score");
+        assert_eq!(player.sample_count, 0, "sample_count must reset to 0 after load_score");
+        assert!(player.current_score.is_some(), "current_score must be Some after load_score");
+    }
+
+    #[test]
+    fn midi_advance_samples_processes_events() {
+        // Score: PlayNote at delta=0, ScoreEnd at delta=100.
+        // With sample_rate=44100 and ticks_per_sec=140:
+        //   PlayNote is due at tick 0 → sample 0.
+        //   ScoreEnd is due at tick 100 → sample ~31500.
+        // advance_samples(44100) covers the full second, so PlayNote fires.
+        let mut player = MidiPlayer::new();
+        let score = make_score_with_deltas(vec![
+            (0, MusEvent::PlayNote { channel: 0, note: 60, volume: Some(127) }),
+            (100, MusEvent::ScoreEnd),
+        ]);
+        player.load_score(score);
+
+        let mut buf = vec![0.0f32; 44_100];
+        player.advance_samples(44_100, 44_100, &mut buf);
+
+        // OPL channel 0 should have key_on set after PlayNote was dispatched.
+        assert!(
+            player.opl.channel(0).key_on,
+            "OPL channel 0 should have key_on after PlayNote event was processed"
+        );
+    }
+
+    #[test]
+    fn midi_advance_samples_future_event_not_fired() {
+        // PlayNote is at tick 1000 (≈7143 samples at 44100/140).
+        // advance_samples(64) should NOT fire it.
+        let mut player = MidiPlayer::new();
+        let score = make_score_with_deltas(vec![
+            (1000, MusEvent::PlayNote { channel: 0, note: 60, volume: Some(127) }),
+            (1, MusEvent::ScoreEnd),
+        ]);
+        player.load_score(score);
+
+        let mut buf = vec![0.0f32; 64];
+        player.advance_samples(64, 44_100, &mut buf);
+
+        assert!(
+            !player.opl.channel(0).key_on,
+            "OPL channel 0 must NOT have key_on when event is far in the future"
+        );
+    }
+
+    #[test]
+    fn midi_stop_silences() {
+        let mut player = MidiPlayer::new();
+        let score = make_score(vec![
+            MusEvent::PlayNote { channel: 0, note: 60, volume: Some(127) },
+            MusEvent::ScoreEnd,
+        ]);
+        player.load_score(score);
+
+        // Advance enough to fire all events.
+        let mut buf = vec![0.0f32; 64];
+        player.advance_samples(64, 44_100, &mut buf);
+
+        player.stop();
+
+        assert!(
+            player.current_score.is_none(),
+            "current_score must be None after stop()"
+        );
+        assert_eq!(player.event_cursor, 0, "event_cursor must be 0 after stop()");
+        assert_eq!(player.sample_count, 0, "sample_count must be 0 after stop()");
+        // OPL chip should be reset (all channels silent).
+        for ch in 0..9 {
+            assert!(
+                !player.opl.channel(ch).key_on,
+                "OPL channel {ch} must be silent after stop()"
+            );
+        }
+    }
+
+    #[test]
+    fn midi_advance_samples_zeros_buf_when_no_score() {
+        let mut player = MidiPlayer::new();
+        let mut buf = vec![1.0f32; 64]; // pre-fill with non-zero
+        player.advance_samples(64, 44_100, &mut buf);
+        // The buffer should be all zeros (OPL silent, no score).
+        assert!(
+            buf.iter().all(|&s| s == 0.0),
+            "advance_samples must zero the buffer when no score is loaded"
+        );
     }
 }

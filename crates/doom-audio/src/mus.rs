@@ -31,7 +31,7 @@ pub struct MusHeader {
 }
 
 /// A single decoded MUS event.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum MusEvent {
     /// Note-off for `note` on `channel`.
     ReleaseNote { channel: u8, note: u8 },

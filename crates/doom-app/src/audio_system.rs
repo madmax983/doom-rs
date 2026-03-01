@@ -3,8 +3,11 @@
 //!
 //! # Design
 //! `AudioSystem` holds the cpal `AudioDriver` on the main thread (keeping the
-//! stream alive) and spawns a background thread that owns the `MidiPlayer` and
-//! `SfxCache`.  Commands are sent via a `std::sync::mpsc::channel`.
+//! stream alive) and spawns a background thread that handles `AudioEvent`
+//! commands.  Music commands call `load_score`/`stop` on the `MidiPlayer`
+//! that lives inside `AudioDriver` — the cpal callback calls
+//! `MidiPlayer::advance_samples` on every buffer fill, so timing is driven
+//! by the real audio clock.
 //!
 //! If audio initialisation fails (no device, CI, headless) `try_open` returns
 //! `None` and the game runs silently — no panics, no unwraps in hot paths.
@@ -65,6 +68,8 @@ impl AudioSystem {
 
         // Clone the Arc<Mutex<Mixer>> so the background thread can post samples.
         let mixer_arc: Arc<Mutex<Mixer>> = Arc::clone(&driver.mixer);
+        // Clone the Arc<Mutex<MidiPlayer>> so the background thread can load/stop scores.
+        let midi_arc: Arc<Mutex<MidiPlayer>> = Arc::clone(&driver.midi);
 
         // Pre-populate SfxCache from WAD lumps whose names start with "DS".
         let mut sfx_cache = SfxCache::new();
@@ -72,10 +77,9 @@ impl AudioSystem {
 
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
 
-        // Spawn the audio command thread.  It owns MidiPlayer + SfxCache.
+        // Spawn the audio command thread.  It owns SfxCache and shared Arcs.
         std::thread::spawn(move || {
-            let mut player = MidiPlayer::new();
-            audio_thread_loop(rx, &mixer_arc, &mut player, &sfx_cache);
+            audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache);
         });
 
         Some(Self { sender: tx, _driver: driver })
@@ -88,13 +92,13 @@ impl AudioSystem {
     pub fn try_open_null() -> Option<Self> {
         let driver = AudioDriver::null();
         let mixer_arc: Arc<Mutex<Mixer>> = Arc::clone(&driver.mixer);
+        let midi_arc: Arc<Mutex<MidiPlayer>> = Arc::clone(&driver.midi);
         let sfx_cache = SfxCache::new();
 
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
 
         std::thread::spawn(move || {
-            let mut player = MidiPlayer::new();
-            audio_thread_loop(rx, &mixer_arc, &mut player, &sfx_cache);
+            audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache);
         });
 
         Some(Self { sender: tx, _driver: driver })
@@ -175,24 +179,25 @@ fn populate_sfx_cache(wad: &WadFile, cache: &mut SfxCache) {
 }
 
 // ---------------------------------------------------------------------------
-// Background audio thread
+// Background audio command thread
 // ---------------------------------------------------------------------------
 
 /// Main loop of the audio background thread.
 ///
-/// Receives `AudioEvent` values and dispatches them to the mixer / sequencer.
+/// Receives `AudioEvent` values and dispatches them:
+/// - `PlaySfx` — queues a PCM sound into the mixer.
+/// - `StartMusic` — parses the MUS data and calls `MidiPlayer::load_score`.
+///   The cpal callback in `AudioDriver::open` calls `advance_samples` on
+///   every buffer fill, providing real-time timed playback.
+/// - `StopMusic` — calls `MidiPlayer::stop` to silence the OPL chip.
+///
 /// Exits when the sender side of the channel is dropped (game shutdown).
-fn audio_thread_loop(
+fn audio_cmd_thread(
     rx: std::sync::mpsc::Receiver<AudioEvent>,
     mixer_arc: &Arc<Mutex<Mixer>>,
-    player: &mut MidiPlayer,
+    midi_arc: &Arc<Mutex<MidiPlayer>>,
     sfx_cache: &SfxCache,
 ) {
-    // `current_score` holds the MUS score currently being tracked.
-    // (Real sequencer timing is outside scope here; we just process all events
-    //  immediately when StartMusic is received, matching the rest of the engine.)
-    let mut _current_score: Option<MusScore> = None;
-
     while let Ok(event) = rx.recv() {
         match event {
             AudioEvent::PlaySfx(sfx_id) => {
@@ -204,11 +209,9 @@ fn audio_thread_loop(
             AudioEvent::StartMusic(data) => {
                 match MusScore::parse(&data) {
                     Ok(score) => {
-                        // Drive the OPL sequencer through all events immediately.
-                        // (A full real-time MUS scheduler with timer threads is
-                        //  out of scope; this gives audible music feedback.)
-                        player.play_score(&score);
-                        _current_score = Some(score);
+                        if let Ok(mut mp) = midi_arc.lock() {
+                            mp.load_score(score);
+                        }
                     }
                     Err(e) => {
                         // Non-fatal: log and continue.
@@ -218,9 +221,9 @@ fn audio_thread_loop(
             }
 
             AudioEvent::StopMusic => {
-                // Silence all OPL channels by resetting the player.
-                *player = MidiPlayer::new();
-                _current_score = None;
+                if let Ok(mut mp) = midi_arc.lock() {
+                    mp.stop();
+                }
             }
         }
     }
