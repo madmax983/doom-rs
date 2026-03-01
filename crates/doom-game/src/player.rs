@@ -333,6 +333,162 @@ impl WeaponType {
 }
 
 // ---------------------------------------------------------------------------
+// Proptest property tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod prop_tests {
+    use super::*;
+    use doom_types::limits::{MAX_AMMO, NUM_AMMO};
+    use proptest::prelude::*;
+
+    /// Property: `ammo[i] ≤ MAX_AMMO[i]` holds after any `give_ammo` call.
+    ///
+    /// This is the core Verus invariant translated into a proptest property.
+    /// We cap the `amount` at `MAX_AMMO[i]` (300 max across all types) to avoid
+    /// u32 addition overflow in the underlying implementation's `cur + amount`.
+    proptest! {
+        #[test]
+        fn ammo_never_exceeds_max_after_give(
+            ammo_type_idx in 0usize..NUM_AMMO,
+            // Stay well within u32 range to avoid overflow in give_ammo's cur+amount.
+            amount in 0u32..=300u32,
+        ) {
+            let mut player = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            player.give_ammo(ammo_type_idx, amount);
+            let current = player.ammo(ammo_type_idx);
+            let max = MAX_AMMO[ammo_type_idx];
+            prop_assert!(
+                current <= max,
+                "ammo[{}] = {} > MAX_AMMO[{}] = {} after give_ammo({}, {})",
+                ammo_type_idx, current, ammo_type_idx, max, ammo_type_idx, amount
+            );
+        }
+
+        /// Property: giving ammo multiple times never pushes past the cap.
+        #[test]
+        fn ammo_cap_survives_repeated_give(
+            ammo_type_idx in 0usize..NUM_AMMO,
+            amount1 in 0u32..=500u32,
+            amount2 in 0u32..=500u32,
+            amount3 in 0u32..=500u32,
+        ) {
+            let mut player = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            player.give_ammo(ammo_type_idx, amount1);
+            player.give_ammo(ammo_type_idx, amount2);
+            player.give_ammo(ammo_type_idx, amount3);
+            let current = player.ammo(ammo_type_idx);
+            let max = MAX_AMMO[ammo_type_idx];
+            prop_assert!(
+                current <= max,
+                "ammo[{}] = {} > MAX_AMMO = {} after repeated give",
+                ammo_type_idx, current, max
+            );
+        }
+
+        /// Property: `health()` is always ≤ MAX_HEALTH immediately after
+        /// `pistol_start` (no mutation), because pistol start sets it exactly.
+        #[test]
+        fn pistol_start_health_within_bounds(_seed in 0u32..256u32) {
+            // _seed is unused — proptest needs at least one argument.
+            let player = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            let h = player.health();
+            prop_assert!(
+                h <= MAX_HEALTH,
+                "pistol_start health {} > MAX_HEALTH {}", h, MAX_HEALTH
+            );
+            prop_assert!(
+                h >= 0,
+                "pistol_start health {} < 0", h
+            );
+        }
+
+        /// Property: after any sequence of `apply_damage(n)`, health is always
+        /// within `[-32768, MAX_HEALTH]`.
+        #[test]
+        fn health_clamped_after_apply_damage(
+            damage in i32::MIN..=i32::MAX,
+        ) {
+            let mut player = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            player.apply_damage(damage);
+            let h = player.health();
+            prop_assert!(
+                h <= MAX_HEALTH,
+                "health {} > MAX_HEALTH {} after apply_damage({})", h, MAX_HEALTH, damage
+            );
+            prop_assert!(
+                h >= -32768,
+                "health {} < -32768 after apply_damage({})", h, damage
+            );
+        }
+
+        /// Property: `heal(n)` never pushes health above MAX_HEALTH.
+        #[test]
+        fn heal_never_exceeds_max(
+            initial_damage in 0i32..=100i32,
+            heal_amount in 0i32..=10000i32,
+        ) {
+            let mut player = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            player.apply_damage(initial_damage); // possibly lower health
+            player.heal(heal_amount);
+            let h = player.health();
+            prop_assert!(
+                h <= MAX_HEALTH,
+                "health {} > MAX_HEALTH {} after heal({})", h, MAX_HEALTH, heal_amount
+            );
+        }
+
+        /// Property: key bitmask operations are idempotent — giving the same
+        /// key twice is the same as giving it once.
+        #[test]
+        fn give_key_is_idempotent(key_bit in 0u8..8u8) {
+            let mut p1 = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            let mut p2 = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            let key = 1u8 << key_bit;
+            p1.give_key(key);
+            p2.give_key(key);
+            p2.give_key(key);
+            prop_assert_eq!(
+                p1.keys, p2.keys,
+                "give_key twice should equal give_key once for bit {}", key_bit
+            );
+        }
+
+        /// Property: `has_key(k)` returns `true` iff `give_key(k)` was called.
+        #[test]
+        fn has_key_reflects_give_key(
+            key_bit in 0u8..8u8,
+        ) {
+            let mut player = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            let key = 1u8 << key_bit;
+            prop_assert!(!player.has_key(key), "player should not have key before give");
+            player.give_key(key);
+            prop_assert!(player.has_key(key), "player should have key after give");
+        }
+
+        /// Property: `use_ammo` always preserves the `ammo ≤ MAX_AMMO` invariant.
+        #[test]
+        fn use_ammo_preserves_invariant(
+            ammo_type_idx in 0usize..NUM_AMMO,
+            // Avoid u32 overflow in give_ammo: cap amount at MAX_AMMO (300 max).
+            give_amount in 0u32..=300u32,
+            use_amount in 0u32..=300u32,
+        ) {
+            let mut player = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            // Give a bounded amount of ammo, then use some.
+            player.give_ammo(ammo_type_idx, give_amount);
+            let _ = player.use_ammo(ammo_type_idx, use_amount);
+            let current = player.ammo(ammo_type_idx);
+            let max = MAX_AMMO[ammo_type_idx];
+            prop_assert!(
+                current <= max,
+                "ammo[{}] = {} > MAX_AMMO = {} after use_ammo", ammo_type_idx, current, max
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

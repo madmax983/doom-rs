@@ -285,6 +285,206 @@ impl WadDir {
     pub fn is_empty(&self) -> bool { self.lumps.is_empty() }
 }
 
+// ---------------------------------------------------------------------------
+// Proptest property tests
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod prop_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// Build a minimal valid IWAD with one lump from its component parts.
+    fn make_iwad_with_lump(name: &str, payload: &[u8]) -> Vec<u8> {
+        let mut data: Vec<u8> = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&1i32.to_le_bytes()); // numlumps = 1
+        data.extend_from_slice(&0i32.to_le_bytes()); // dir offset placeholder
+
+        let lump_offset = data.len();
+        data.extend_from_slice(payload);
+
+        let dir_offset = data.len() as i32;
+        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+
+        // Directory entry: filepos (4) + size (4) + name (8)
+        data.extend_from_slice(&(lump_offset as i32).to_le_bytes());
+        data.extend_from_slice(&(payload.len() as i32).to_le_bytes());
+        let mut name_buf = [0u8; 8];
+        for (i, &b) in name.as_bytes().iter().take(8).enumerate() {
+            name_buf[i] = b.to_ascii_uppercase();
+        }
+        data.extend_from_slice(&name_buf);
+        data
+    }
+
+    proptest! {
+        /// Any buffer shorter than 12 bytes must be rejected — the WAD header
+        /// requires exactly 12 bytes (4 magic + 4 numlumps + 4 infotableofs).
+        #[test]
+        fn parse_rejects_any_buffer_under_12_bytes(len in 0usize..12) {
+            let buf = vec![0u8; len];
+            prop_assert!(
+                WadFile::parse(buf).is_err(),
+                "buffer of {len} bytes should be rejected (too short)"
+            );
+        }
+
+        /// A buffer of exactly 12 bytes with a bad magic must produce
+        /// `InvalidMagic`, not a panic or `TooShort`.
+        #[test]
+        fn parse_12_byte_bad_magic_gives_invalid_magic(
+            // Use byte values that can never form "IWAD" or "PWAD"
+            b0 in 0u8..=255u8,
+            b1 in 0u8..=255u8,
+            b2 in 0u8..=255u8,
+            b3 in 0u8..=255u8,
+        ) {
+            let magic = [b0, b1, b2, b3];
+            if magic == *b"IWAD" || magic == *b"PWAD" {
+                // Skip valid magic — it would parse further.
+                return Ok(());
+            }
+            let mut buf = vec![0u8; 12];
+            buf[0..4].copy_from_slice(&magic);
+            // numlumps = 0, infotableofs = 12 → minimal valid structure
+            // but magic is wrong so parse must error.
+            buf[8..12].copy_from_slice(&12i32.to_le_bytes());
+            prop_assert!(
+                matches!(WadFile::parse(buf), Err(WadError::InvalidMagic(_))),
+                "bad magic {:?} should give InvalidMagic", magic
+            );
+        }
+
+        /// After loading an IWAD and a PWAD, every IWAD lump that the PWAD
+        /// does NOT override must still be accessible via the stack.
+        ///
+        /// We test with fixed lump names to keep the test fast and self-contained.
+        #[test]
+        fn pwad_override_preserves_all_base_lumps(
+            // Number of extra lumps only in IWAD (0..4) to vary coverage.
+            n_extra in 0usize..=3,
+        ) {
+            // Build IWAD with "BASE" + n_extra unique lumps.
+            let unique_names: Vec<String> = (0..n_extra)
+                .map(|i| format!("UNQ{i}"))
+                .collect();
+
+            let mut iwad_data: Vec<u8> = Vec::new();
+            let all_lump_count = 1 + n_extra; // BASE + unique
+            iwad_data.extend_from_slice(b"IWAD");
+            iwad_data.extend_from_slice(&(all_lump_count as i32).to_le_bytes());
+            iwad_data.extend_from_slice(&0i32.to_le_bytes()); // placeholder
+
+            let mut offsets = Vec::new();
+            // BASE lump
+            offsets.push((iwad_data.len(), b"base_data".len()));
+            iwad_data.extend_from_slice(b"base_data");
+            // Unique lumps
+            for name in &unique_names {
+                let payload = format!("data_{name}");
+                offsets.push((iwad_data.len(), payload.len()));
+                iwad_data.extend_from_slice(payload.as_bytes());
+            }
+
+            let dir_offset = iwad_data.len() as i32;
+            iwad_data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+
+            // BASE directory entry
+            iwad_data.extend_from_slice(&(offsets[0].0 as i32).to_le_bytes());
+            iwad_data.extend_from_slice(&(offsets[0].1 as i32).to_le_bytes());
+            let mut nb = [0u8; 8];
+            nb[..4].copy_from_slice(b"BASE");
+            iwad_data.extend_from_slice(&nb);
+            // Unique entries
+            for (i, name) in unique_names.iter().enumerate() {
+                let (off, sz) = offsets[i + 1];
+                iwad_data.extend_from_slice(&(off as i32).to_le_bytes());
+                iwad_data.extend_from_slice(&(sz as i32).to_le_bytes());
+                let mut nb2 = [0u8; 8];
+                for (j, &b) in name.as_bytes().iter().take(8).enumerate() {
+                    nb2[j] = b.to_ascii_uppercase();
+                }
+                iwad_data.extend_from_slice(&nb2);
+            }
+
+            // Build PWAD that overrides only "BASE".
+            let pwad_bytes = {
+                let mut d: Vec<u8> = Vec::new();
+                d.extend_from_slice(b"PWAD");
+                d.extend_from_slice(&1i32.to_le_bytes());
+                d.extend_from_slice(&0i32.to_le_bytes());
+                let payload_off = d.len();
+                d.extend_from_slice(b"override");
+                let dir_off = d.len() as i32;
+                d[8..12].copy_from_slice(&dir_off.to_le_bytes());
+                d.extend_from_slice(&(payload_off as i32).to_le_bytes());
+                d.extend_from_slice(&8i32.to_le_bytes()); // "override" is 8 bytes
+                let mut nb2 = [0u8; 8];
+                nb2[..4].copy_from_slice(b"BASE");
+                d.extend_from_slice(&nb2);
+                d
+            };
+
+            let iwad = WadFile::parse(iwad_data).expect("IWAD parse failed");
+            // Verify all unique base lumps are present in the IWAD directly.
+            for name in &unique_names {
+                prop_assert!(
+                    iwad.find_lump(name).is_some(),
+                    "IWAD should contain lump {name}"
+                );
+            }
+
+            // Simulate stack behavior: PWAD overrides BASE but unique lumps stay.
+            // (WadStack is in stack.rs; here we test WadFile-level semantics.)
+            let pwad = WadFile::parse(pwad_bytes).expect("PWAD parse failed");
+            prop_assert_eq!(
+                pwad.find_lump_data("BASE").unwrap(),
+                b"override",
+                "PWAD must override BASE"
+            );
+            // Unique lumps are not in PWAD — absence is correct.
+            for name in &unique_names {
+                prop_assert!(
+                    pwad.find_lump(name).is_none(),
+                    "PWAD should not contain unique IWAD lump {name}"
+                );
+            }
+        }
+
+        /// Parsed lump names must never contain lowercase ASCII letters.
+        /// `LumpName::from_raw` normalises all names to uppercase at parse time.
+        #[test]
+        fn all_parsed_lump_names_are_uppercase(
+            // Generate a 1-8 char ASCII name with mixed case.
+            name_len in 1usize..=8,
+            // Use printable-ASCII byte range (excluding null) for the name chars.
+            ch0 in b'a'..=b'z',
+            ch1 in b'a'..=b'z',
+        ) {
+            // Build a name of `name_len` alternating between ch0/ch1.
+            let name_bytes: Vec<u8> = (0..name_len)
+                .map(|i| if i % 2 == 0 { ch0 } else { ch1 })
+                .collect();
+            let name_str = String::from_utf8(name_bytes).unwrap();
+
+            let payload = b"data";
+            let wad_bytes = make_iwad_with_lump(&name_str, payload);
+            let wad = WadFile::parse(wad_bytes).expect("should parse");
+
+            for lump in wad.lumps() {
+                let s = lump.name.as_str();
+                prop_assert!(
+                    s.chars().all(|c| !c.is_ascii_lowercase()),
+                    "lump name '{}' contains lowercase", s
+                );
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests
+// ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -16,3 +16,7 @@ criterion = { workspace = true }
 [[bench]]
 name    = "column_span"
 harness = false
+
+[[bench]]
+name    = "renderer_bench"
+harness = false

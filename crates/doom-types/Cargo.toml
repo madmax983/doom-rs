@@ -17,3 +17,11 @@ criterion = { workspace = true }
 [[bench]]
 name    = "fixed_point"
 harness = false
+
+[[bench]]
+name    = "fixed_bench"
+harness = false
+
+[[bench]]
+name    = "angle_bench"
+harness = false

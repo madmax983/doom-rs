@@ -554,7 +554,137 @@ where
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// Proptest property tests
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod prop_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        /// For an all-zero reject table (everything visible), `visible(a, b)`
+        /// must equal `visible(b, a)` — the relation is symmetric.
+        ///
+        /// Note: symmetry is a property of the *data*, not structurally
+        /// guaranteed by the format.  Doom's BSP builder always writes
+        /// symmetric tables.  We verify this for the all-zero (all-visible)
+        /// case which maps cleanly to a property test.
+        #[test]
+        fn reject_visible_symmetric_all_zero(
+            n_sectors in 1usize..=8,
+            a in 0usize..8,
+            b in 0usize..8,
+        ) {
+            // Clamp a and b to valid sector indices for this test.
+            let a = a % n_sectors;
+            let b = b % n_sectors;
+            // All-zero reject: every bit is 0 → all pairs visible.
+            let size = (n_sectors * n_sectors + 7) / 8;
+            let data = vec![0u8; size];
+            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            let vis_ab = reject.visible(a, b);
+            let vis_ba = reject.visible(b, a);
+            prop_assert!(
+                vis_ab == vis_ba,
+                "visible({},{}) = {} != visible({},{}) = {} for n_sectors={}",
+                a, b, vis_ab, b, a, vis_ba, n_sectors
+            );
+        }
+
+        /// For an all-zero reject table, `visible(a, a)` must be `true` —
+        /// a sector is always visible from itself.
+        #[test]
+        fn reject_sector_always_visible_from_itself_all_zero(
+            n_sectors in 1usize..=16,
+            a in 0usize..16,
+        ) {
+            let a = a % n_sectors;
+            let size = (n_sectors * n_sectors + 7) / 8;
+            let data = vec![0u8; size];
+            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            prop_assert!(
+                reject.visible(a, a),
+                "sector {} should be visible from itself", a
+            );
+        }
+
+        /// `visible` with out-of-range indices must return `false`, not panic.
+        #[test]
+        fn reject_out_of_range_returns_false(
+            n_sectors in 1usize..=4,
+            a in 100usize..=200,
+            b in 100usize..=200,
+        ) {
+            let size = (n_sectors * n_sectors + 7) / 8;
+            let data = vec![0u8; size];
+            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            // a and b are deliberately far out of range.
+            prop_assert!(!reject.visible(a, b));
+        }
+
+        /// All-ones reject (nothing visible): `visible(a, b)` is always `false`
+        /// for valid in-range indices.
+        #[test]
+        fn reject_all_ones_never_visible(
+            n_sectors in 1usize..=8,
+            a in 0usize..8,
+            b in 0usize..8,
+        ) {
+            let a = a % n_sectors;
+            let b = b % n_sectors;
+            let size = (n_sectors * n_sectors + 7) / 8;
+            let data = vec![0xFFu8; size];
+            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            prop_assert!(
+                !reject.visible(a, b),
+                "all-ones reject must report not-visible for ({},{})", a, b
+            );
+        }
+
+        /// `Reject::parse_lump` must accept any data buffer of exactly the
+        /// expected size `ceil(n² / 8)`.
+        #[test]
+        fn reject_parse_accepts_correctly_sized_buffer(
+            n_sectors in 1usize..=10,
+            fill_byte in 0u8..=255u8,
+        ) {
+            let size = (n_sectors * n_sectors + 7) / 8;
+            let data = vec![fill_byte; size];
+            prop_assert!(
+                Reject::parse_lump(&data, n_sectors).is_ok(),
+                "correctly-sized buffer should parse successfully"
+            );
+        }
+
+        /// `Reject::parse_lump` must reject any buffer whose size does not
+        /// match `ceil(n² / 8)`.
+        #[test]
+        fn reject_parse_rejects_wrong_size(
+            n_sectors in 2usize..=8,
+            // Offset the size by at least 1 in either direction.
+            offset in 1usize..=4,
+            add_not_sub in any::<bool>(),
+        ) {
+            let expected: usize = (n_sectors * n_sectors + 7) / 8;
+            let wrong_size = if add_not_sub {
+                expected + offset
+            } else {
+                expected.saturating_sub(offset)
+            };
+            if wrong_size == expected {
+                return Ok(()); // saturating_sub hit 0 == expected; skip
+            }
+            let data = vec![0u8; wrong_size];
+            prop_assert!(
+                Reject::parse_lump(&data, n_sectors).is_err(),
+                "wrong-sized buffer (expected={}, got={}) should fail", expected, wrong_size
+            );
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Unit tests
 // ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {

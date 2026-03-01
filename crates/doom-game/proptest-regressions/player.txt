@@ -1,0 +1,9 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc ba6faa79f4acd000d6c007fbe95fb7bb6cb2b263342c6ce64f4ca36d2d4f9755 # shrinks to key_bit = 8
+cc a1c7acd5d40c0f52015e86de053eb22178df180a7173e858711be0681ef4abb4 # shrinks to key_bit = 8
+cc c577cfa2a5076fe81ef5523d47f9ebcc08d7fd1f146519d9b97a0f269c4f23fd # shrinks to ammo_type_idx = 0, use_amount = 0

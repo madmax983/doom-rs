@@ -49,6 +49,103 @@ impl GameState {
 }
 
 // ---------------------------------------------------------------------------
+// Proptest property tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod prop_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// Property: save → restore roundtrip preserves `tic_num`.
+    ///
+    /// `Snapshot` does not implement `PartialEq`, so we compare individual
+    /// observable fields rather than the struct itself.
+    proptest! {
+        #[test]
+        fn snapshot_roundtrip_preserves_tic_num(tic in 0u32..=u32::MAX) {
+            let mut gs = GameState::new("E1M1");
+            gs.tic_num = tic;
+            let snap = gs.save_snapshot();
+            // Mutate the live state before restoring.
+            gs.tic_num = gs.tic_num.wrapping_add(1);
+            gs.restore_snapshot(snap);
+            prop_assert_eq!(gs.tic_num, tic, "tic_num must be restored exactly");
+        }
+
+        /// Property: save → restore roundtrip preserves the RNG index.
+        #[test]
+        fn snapshot_roundtrip_preserves_rng_index(advances in 0u32..=255u32) {
+            let mut gs = GameState::new("E1M1");
+            for _ in 0..advances {
+                gs.rng.next();
+            }
+            let saved_idx = gs.rng.index();
+            let snap = gs.save_snapshot();
+            // Advance RNG further after snapshot.
+            for _ in 0..10 {
+                gs.rng.next();
+            }
+            gs.restore_snapshot(snap);
+            prop_assert_eq!(
+                gs.rng.index(), saved_idx,
+                "RNG index must be restored to {}", saved_idx
+            );
+        }
+
+        /// Property: save → restore roundtrip preserves kill/item/secret counts.
+        #[test]
+        fn snapshot_roundtrip_preserves_counters(
+            kills in 0u32..=1000u32,
+            items in 0u32..=1000u32,
+            secrets in 0u32..=100u32,
+        ) {
+            let mut gs = GameState::new("E1M1");
+            gs.kill_count   = kills;
+            gs.item_count   = items;
+            gs.secret_count = secrets;
+            let snap = gs.save_snapshot();
+            // Corrupt live state.
+            gs.kill_count   = 0;
+            gs.item_count   = 0;
+            gs.secret_count = 0;
+            gs.restore_snapshot(snap);
+            prop_assert_eq!(gs.kill_count,   kills,   "kill_count mismatch");
+            prop_assert_eq!(gs.item_count,   items,   "item_count mismatch");
+            prop_assert_eq!(gs.secret_count, secrets, "secret_count mismatch");
+        }
+
+        /// Property: snapshot tic_num accessor matches the tic at save time.
+        #[test]
+        fn snapshot_tic_accessor_matches_save_time(tic in 0u32..=u32::MAX) {
+            let mut gs = GameState::new("E1M1");
+            gs.tic_num = tic;
+            let snap = gs.save_snapshot();
+            prop_assert_eq!(snap.tic_num(), tic);
+        }
+
+        /// Property: two independent snapshots are truly independent — restoring
+        /// the first must not be affected by what snap2 captured.
+        #[test]
+        fn two_snapshots_are_independent(tic1 in 0u32..=500u32, tic2 in 501u32..=1000u32) {
+            let mut gs = GameState::new("E1M1");
+            gs.tic_num = tic1;
+            let snap1 = gs.save_snapshot();
+            gs.tic_num = tic2;
+            let snap2 = gs.save_snapshot();
+
+            // Restore snap1 — tic must revert to tic1.
+            gs.restore_snapshot(snap1);
+            prop_assert_eq!(gs.tic_num, tic1);
+
+            // Restore snap2 — tic must revert to tic2.
+            gs.restore_snapshot(snap2);
+            prop_assert_eq!(gs.tic_num, tic2);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
