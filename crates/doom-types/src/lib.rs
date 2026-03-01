@@ -16,3 +16,7 @@ pub use angle::{Bam, ANG45, ANG90, ANG180, ANG270};
 pub use bbox::BBox;
 pub use fixed::{Fixed16_16, FIXED_ONE, FRAC_BITS};
 pub use vec2::Vec2Fixed;
+
+// Verus spine proofs (only processed by verus, not rustc).
+#[cfg(verus_keep_ghost)]
+mod proofs;

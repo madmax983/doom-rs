@@ -6,10 +6,12 @@ mod audio_system;
 mod cheats;
 mod console;
 mod demo_mode;
+mod net_mode;
 mod savegame;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use std::net::SocketAddr;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
 use doom_map::Level;
@@ -46,6 +48,25 @@ struct Args {
     /// Play back a .lmp demo file instead of live input (e.g. --playdemo my.lmp)
     #[arg(long)]
     playdemo: Option<std::path::PathBuf>,
+
+    /// Run as a relay server on this port (e.g. --server 5029).
+    /// Players connect to this address.  Mutually exclusive with --connect,
+    /// --record, and --playdemo.
+    #[arg(long)]
+    server: Option<u16>,
+
+    /// Connect to a relay server for netplay (e.g. --connect 127.0.0.1:5029).
+    /// Mutually exclusive with --server, --record, and --playdemo.
+    #[arg(long)]
+    connect: Option<String>,
+
+    /// Player slot for netplay (1-based, e.g. 1 = player 1).  Defaults to 1.
+    #[arg(long, default_value = "1")]
+    player: u8,
+
+    /// Total number of players in a netplay session (2-4).  Defaults to 2.
+    #[arg(long, default_value = "2")]
+    num_players: u8,
 }
 
 // ---------------------------------------------------------------------------
@@ -311,14 +332,56 @@ fn main() -> Result<()> {
         }
     }
 
-    // Validate mutually exclusive demo args.
-    if args.record.is_some() && args.playdemo.is_some() {
-        eprintln!("Error: --record and --playdemo cannot be used together");
+    // Validate mutually exclusive mode args: at most one of the four modes.
+    let exclusive_modes = [
+        args.record.is_some(),
+        args.playdemo.is_some(),
+        args.server.is_some(),
+        args.connect.is_some(),
+    ];
+    if exclusive_modes.iter().filter(|&&x| x).count() > 1 {
+        eprintln!("Error: --record, --playdemo, --server, and --connect are mutually exclusive");
         std::process::exit(1);
+    }
+
+    // Server mode: run relay, no game rendering.
+    if let Some(port) = args.server {
+        let rt = tokio::runtime::Runtime::new()?;
+        return rt
+            .block_on(net_mode::run_server(port, args.num_players))
+            .map_err(|e| anyhow::anyhow!("Server error: {e}"));
     }
 
     // Build the app.
     let app = DoomGame::new(gs, level, audio);
+
+    // Client (netplay) mode: connect to relay server and run game with net input.
+    if let Some(addr_str) = args.connect {
+        // Parse server address.
+        let server_addr: SocketAddr = addr_str
+            .parse()
+            .map_err(|e| anyhow::anyhow!("Invalid --connect address '{addr_str}': {e}"))?;
+
+        // Bind a local ephemeral UDP socket.
+        let local_addr: SocketAddr = "0.0.0.0:0"
+            .parse()
+            .expect("hardcoded address is valid");
+
+        let rt = tokio::runtime::Runtime::new()?;
+        let client = rt
+            .block_on(doom_net::NetClient::connect(local_addr, server_addr, args.player.saturating_sub(1)))
+            .map_err(|e| anyhow::anyhow!("Connect failed: {e}"))?;
+
+        let mut net_app = net_mode::NetGameApp::new(app, client, args.player);
+
+        let mut event_loop = DoomEventLoop::new()
+            .map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
+        event_loop
+            .run(&mut net_app, &blit_palette)
+            .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+
+        return Ok(());
+    }
 
     // Start the terminal event loop and run until the user quits (Q or Esc).
     let mut event_loop = DoomEventLoop::new()
