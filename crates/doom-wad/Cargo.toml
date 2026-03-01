@@ -1,0 +1,13 @@
+[package]
+name    = "doom-wad"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+doom-types = { workspace = true }
+bytemuck   = { workspace = true }
+thiserror  = { workspace = true }
+nom        = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

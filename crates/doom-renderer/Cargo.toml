@@ -1,0 +1,17 @@
+[package]
+name    = "doom-renderer"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+doom-types = { workspace = true }
+doom-map   = { workspace = true }
+doom-wad   = { workspace = true }
+thiserror  = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+
+[[bench]]
+name    = "column_span"
+harness = false

@@ -1,0 +1,15 @@
+[package]
+name    = "doom-net"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+doom-types = { workspace = true }
+tokio      = { workspace = true }
+bincode    = { workspace = true }
+crc32fast  = { workspace = true }
+serde      = { workspace = true }
+thiserror  = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }

@@ -1,0 +1,11 @@
+[package]
+name    = "doom-audio"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+doom-types = { workspace = true }
+doom-wad   = { workspace = true }
+cpal       = { workspace = true }
+nom        = { workspace = true }
+thiserror  = { workspace = true }

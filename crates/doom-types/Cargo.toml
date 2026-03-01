@@ -1,0 +1,19 @@
+[package]
+name    = "doom-types"
+version.workspace = true
+edition.workspace = true
+
+# no_std compatible — verified core must be pure math, no OS calls
+[features]
+default = ["std"]
+std     = []
+
+[dependencies]
+
+[dev-dependencies]
+proptest  = { workspace = true }
+criterion = { workspace = true }
+
+[[bench]]
+name    = "fixed_point"
+harness = false

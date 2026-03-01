@@ -1,0 +1,22 @@
+[package]
+name    = "doom-app"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "doom-app"
+path = "src/main.rs"
+
+[dependencies]
+doom-types    = { workspace = true }
+doom-wad      = { workspace = true }
+doom-map      = { workspace = true }
+doom-game     = { workspace = true }
+doom-renderer = { workspace = true }
+doom-tui      = { workspace = true }
+doom-audio    = { workspace = true }
+doom-net      = { workspace = true }
+doom-demo     = { workspace = true }
+clap          = { workspace = true }
+anyhow        = { workspace = true }
+tokio         = { workspace = true }

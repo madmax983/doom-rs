@@ -1,0 +1,13 @@
+[package]
+name    = "doom-tui"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+doom-renderer = { workspace = true }
+ratatui       = { workspace = true }
+crossterm     = { workspace = true }
+thiserror     = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.59", features = ["Win32_Graphics_Gdi"] }

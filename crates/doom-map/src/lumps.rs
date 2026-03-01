@@ -1,0 +1,627 @@
+//! Raw map lump types and byte-level parsers for all standard Doom map lumps.
+//!
+//! Every struct is parsed field-by-field from `&[u8]` slices using
+//! `i16/u16::from_le_bytes` — no `bytemuck::cast_slice` to avoid
+//! alignment panics on arbitrary byte slices from the WAD parser.
+//!
+//! # Lump sizes (from the Unofficial Doom Specs)
+//! | Lump      | Entry bytes |
+//! |-----------|-------------|
+//! | THINGS    | 10          |
+//! | LINEDEFS  | 14          |
+//! | SIDEDEFS  | 30          |
+//! | VERTEXES  | 4           |
+//! | SEGS      | 12          |
+//! | SSECTORS  | 4           |
+//! | NODES     | 28          |
+//! | SECTORS   | 26          |
+//! | REJECT    | ceil(N²/8)  |
+//! | BLOCKMAP  | variable    |
+
+use thiserror::Error;
+
+/// Errors from map-lump parsing.
+#[derive(Debug, Error)]
+pub enum LumpParseError {
+    /// Lump byte count is not divisible by the expected entry size.
+    #[error("{lump}: expected size divisible by {entry_size}, got {actual}")]
+    BadLength { lump: &'static str, entry_size: usize, actual: usize },
+
+    /// The reject lump is the wrong size for the number of sectors.
+    #[error("REJECT: expected {expected} bytes for {n_sectors} sectors, got {actual}")]
+    BadRejectSize { n_sectors: usize, expected: usize, actual: usize },
+
+    /// Blockmap header is truncated.
+    #[error("BLOCKMAP: lump too short for header ({0} bytes)")]
+    BlockmapTooShort(usize),
+}
+
+// ---------------------------------------------------------------------------
+// THINGS
+// ---------------------------------------------------------------------------
+
+/// Linedef flags bit for two-sided lines.
+pub const FLAG_TWO_SIDED: u16 = 0x0004;
+
+/// Sentinel value meaning "no sidedef assigned".
+pub const SIDEDEF_NONE: u16 = 0xFFFF;
+
+/// A map thing (monster, item, player start, etc.).
+#[derive(Clone, Debug)]
+pub struct Thing {
+    /// X position in map units (i16 range).
+    pub x: i16,
+    /// Y position in map units.
+    pub y: i16,
+    /// Facing angle in degrees (0–360, NOT BAM).
+    pub angle: u16,
+    /// DoomEd thing type number.
+    pub kind: u16,
+    /// Bit flags (skill levels, deaf, etc.).
+    pub flags: u16,
+}
+
+impl Thing {
+    const BYTE_SIZE: usize = 10;
+
+    fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            x:     i16::from_le_bytes([b[0], b[1]]),
+            y:     i16::from_le_bytes([b[2], b[3]]),
+            angle: u16::from_le_bytes([b[4], b[5]]),
+            kind:  u16::from_le_bytes([b[6], b[7]]),
+            flags: u16::from_le_bytes([b[8], b[9]]),
+        }
+    }
+
+    /// Parse a THINGS lump.
+    pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
+        parse_fixed_records(data, Self::BYTE_SIZE, "THINGS", Self::from_bytes)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// LINEDEFS
+// ---------------------------------------------------------------------------
+
+/// A map linedef: connects two vertices, has up to two sidedefs.
+#[derive(Clone, Debug)]
+pub struct Linedef {
+    /// Index into VERTEXES for the start point.
+    pub from_vertex: u16,
+    /// Index into VERTEXES for the end point.
+    pub to_vertex: u16,
+    /// Bit flags (blocking, two-sided, secret, etc.).
+    pub flags: u16,
+    /// Special type (door trigger, teleport, etc.).
+    pub special: u16,
+    /// Sector tag for the special action.
+    pub tag: u16,
+    /// Right sidedef index (`SIDEDEF_NONE` if absent — always present per spec).
+    pub right_sidedef: u16,
+    /// Left sidedef index (`SIDEDEF_NONE` if no left side — single-sided line).
+    pub left_sidedef: u16,
+}
+
+impl Linedef {
+    const BYTE_SIZE: usize = 14;
+
+    fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            from_vertex:  u16::from_le_bytes([b[0],  b[1]]),
+            to_vertex:    u16::from_le_bytes([b[2],  b[3]]),
+            flags:        u16::from_le_bytes([b[4],  b[5]]),
+            special:      u16::from_le_bytes([b[6],  b[7]]),
+            tag:          u16::from_le_bytes([b[8],  b[9]]),
+            right_sidedef: u16::from_le_bytes([b[10], b[11]]),
+            left_sidedef:  u16::from_le_bytes([b[12], b[13]]),
+        }
+    }
+
+    /// Parse a LINEDEFS lump.
+    pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
+        parse_fixed_records(data, Self::BYTE_SIZE, "LINEDEFS", Self::from_bytes)
+    }
+
+    /// Returns `true` if the two-sided flag is set.
+    #[inline]
+    pub fn is_two_sided(&self) -> bool {
+        self.flags & FLAG_TWO_SIDED != 0
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SIDEDEFS
+// ---------------------------------------------------------------------------
+
+/// A map sidedef: texture info + sector reference for one side of a linedef.
+#[derive(Clone, Debug)]
+pub struct Sidedef {
+    /// Horizontal texture offset.
+    pub x_offset: i16,
+    /// Vertical texture offset.
+    pub y_offset: i16,
+    /// Upper texture name (above the window on a two-sided line), null-padded.
+    pub upper_texture: [u8; 8],
+    /// Lower texture name (below the window on a two-sided line).
+    pub lower_texture: [u8; 8],
+    /// Middle texture name (solid wall on a one-sided line).
+    pub middle_texture: [u8; 8],
+    /// Index into SECTORS that this sidedef faces.
+    pub sector: u16,
+}
+
+impl Sidedef {
+    const BYTE_SIZE: usize = 30;
+
+    fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            x_offset:       i16::from_le_bytes([b[0], b[1]]),
+            y_offset:       i16::from_le_bytes([b[2], b[3]]),
+            upper_texture:  b[4..12].try_into().unwrap(),
+            lower_texture:  b[12..20].try_into().unwrap(),
+            middle_texture: b[20..28].try_into().unwrap(),
+            sector:         u16::from_le_bytes([b[28], b[29]]),
+        }
+    }
+
+    /// Parse a SIDEDEFS lump.
+    pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
+        parse_fixed_records(data, Self::BYTE_SIZE, "SIDEDEFS", Self::from_bytes)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// VERTEXES
+// ---------------------------------------------------------------------------
+
+/// A map vertex: raw (x, y) in i16 map-unit coordinates.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Vertex {
+    pub x: i16,
+    pub y: i16,
+}
+
+impl Vertex {
+    const BYTE_SIZE: usize = 4;
+
+    fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            x: i16::from_le_bytes([b[0], b[1]]),
+            y: i16::from_le_bytes([b[2], b[3]]),
+        }
+    }
+
+    /// Parse a VERTEXES lump.
+    pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
+        parse_fixed_records(data, Self::BYTE_SIZE, "VERTEXES", Self::from_bytes)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SEGS
+// ---------------------------------------------------------------------------
+
+/// A BSP seg: a portion of a linedef used during rendering.
+#[derive(Clone, Debug)]
+pub struct Seg {
+    /// Index into VERTEXES for the seg start.
+    pub from_vertex: u16,
+    /// Index into VERTEXES for the seg end.
+    pub to_vertex: u16,
+    /// Facing angle (16-bit BAM: `bam16 << 16` to get a full 32-bit Bam).
+    pub angle: u16,
+    /// Linedef this seg is part of.
+    pub linedef: u16,
+    /// 0 = same direction as linedef, 1 = opposite.
+    pub direction: u16,
+    /// Distance along the linedef to the seg start (in fixed-point map units >> 16).
+    pub offset: u16,
+}
+
+impl Seg {
+    const BYTE_SIZE: usize = 12;
+
+    fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            from_vertex: u16::from_le_bytes([b[0],  b[1]]),
+            to_vertex:   u16::from_le_bytes([b[2],  b[3]]),
+            angle:       u16::from_le_bytes([b[4],  b[5]]),
+            linedef:     u16::from_le_bytes([b[6],  b[7]]),
+            direction:   u16::from_le_bytes([b[8],  b[9]]),
+            offset:      u16::from_le_bytes([b[10], b[11]]),
+        }
+    }
+
+    /// Parse a SEGS lump.
+    pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
+        parse_fixed_records(data, Self::BYTE_SIZE, "SEGS", Self::from_bytes)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SSECTORS (subsectors)
+// ---------------------------------------------------------------------------
+
+/// A BSP leaf: a convex sub-region of the map covered by a run of segs.
+#[derive(Clone, Copy, Debug)]
+pub struct Ssector {
+    /// Number of segs in this subsector.
+    pub seg_count: u16,
+    /// Index of the first seg in SEGS.
+    pub first_seg: u16,
+}
+
+impl Ssector {
+    const BYTE_SIZE: usize = 4;
+
+    fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            seg_count: u16::from_le_bytes([b[0], b[1]]),
+            first_seg: u16::from_le_bytes([b[2], b[3]]),
+        }
+    }
+
+    /// Parse a SSECTORS lump.
+    pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
+        parse_fixed_records(data, Self::BYTE_SIZE, "SSECTORS", Self::from_bytes)
+    }
+
+    /// Exclusive end index into SEGS: `first_seg + seg_count`.
+    #[inline]
+    pub fn seg_end(self) -> usize {
+        self.first_seg as usize + self.seg_count as usize
+    }
+}
+
+// ---------------------------------------------------------------------------
+// NODES
+// ---------------------------------------------------------------------------
+
+/// The bit flag in a child pointer that signals "this child is a subsector".
+pub const NODE_SUBSECTOR_BIT: u16 = 0x8000;
+
+/// The mask to extract the actual index from a child pointer.
+pub const NODE_INDEX_MASK: u16 = 0x7FFF;
+
+/// An axis-aligned bounding box in node format (ymax, ymin, xmin, xmax).
+#[derive(Clone, Copy, Debug)]
+pub struct NodeBBox {
+    pub ymax: i16,
+    pub ymin: i16,
+    pub xmin: i16,
+    pub xmax: i16,
+}
+
+impl NodeBBox {
+    /// Returns `true` if the invariant holds: ymax ≥ ymin ∧ xmax ≥ xmin.
+    #[inline]
+    pub fn is_valid(self) -> bool {
+        self.ymax >= self.ymin && self.xmax >= self.xmin
+    }
+
+    fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            ymax: i16::from_le_bytes([b[0], b[1]]),
+            ymin: i16::from_le_bytes([b[2], b[3]]),
+            xmin: i16::from_le_bytes([b[4], b[5]]),
+            xmax: i16::from_le_bytes([b[6], b[7]]),
+        }
+    }
+}
+
+/// A BSP node: a partition line and two child pointers.
+#[derive(Clone, Debug)]
+pub struct Node {
+    /// X coordinate of the partition line's starting point.
+    pub x: i16,
+    /// Y coordinate of the partition line's starting point.
+    pub y: i16,
+    /// Delta X of the partition line direction.
+    pub dx: i16,
+    /// Delta Y of the partition line direction.
+    pub dy: i16,
+    /// Bounding box of the right (front) child's space.
+    pub right_bbox: NodeBBox,
+    /// Bounding box of the left (back) child's space.
+    pub left_bbox: NodeBBox,
+    /// Right child pointer (bit 15 = subsector flag, bits 14-0 = index).
+    pub right_child: u16,
+    /// Left child pointer.
+    pub left_child: u16,
+}
+
+impl Node {
+    const BYTE_SIZE: usize = 28;
+
+    fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            x:           i16::from_le_bytes([b[0],  b[1]]),
+            y:           i16::from_le_bytes([b[2],  b[3]]),
+            dx:          i16::from_le_bytes([b[4],  b[5]]),
+            dy:          i16::from_le_bytes([b[6],  b[7]]),
+            right_bbox:  NodeBBox::from_bytes(&b[8..16]),
+            left_bbox:   NodeBBox::from_bytes(&b[16..24]),
+            right_child: u16::from_le_bytes([b[24], b[25]]),
+            left_child:  u16::from_le_bytes([b[26], b[27]]),
+        }
+    }
+
+    /// Parse a NODES lump.
+    pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
+        parse_fixed_records(data, Self::BYTE_SIZE, "NODES", Self::from_bytes)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SECTORS
+// ---------------------------------------------------------------------------
+
+/// A map sector: floor/ceiling heights, textures, light level, specials.
+#[derive(Clone, Debug)]
+pub struct Sector {
+    /// Floor height in map units.
+    pub floor_height: i16,
+    /// Ceiling height in map units.
+    pub ceil_height: i16,
+    /// Floor flat texture name.
+    pub floor_flat: [u8; 8],
+    /// Ceiling flat texture name.
+    pub ceil_flat: [u8; 8],
+    /// Light level (0–255 in practice, though stored as i16).
+    pub light_level: i16,
+    /// Sector special type (0 = normal, 1–16 = various effects).
+    pub special: u16,
+    /// Sector tag (for linedef trigger targeting).
+    pub tag: u16,
+}
+
+impl Sector {
+    const BYTE_SIZE: usize = 26;
+
+    fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            floor_height: i16::from_le_bytes([b[0],  b[1]]),
+            ceil_height:  i16::from_le_bytes([b[2],  b[3]]),
+            floor_flat:   b[4..12].try_into().unwrap(),
+            ceil_flat:    b[12..20].try_into().unwrap(),
+            light_level:  i16::from_le_bytes([b[20], b[21]]),
+            special:      u16::from_le_bytes([b[22], b[23]]),
+            tag:          u16::from_le_bytes([b[24], b[25]]),
+        }
+    }
+
+    /// Parse a SECTORS lump.
+    pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
+        parse_fixed_records(data, Self::BYTE_SIZE, "SECTORS", Self::from_bytes)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// REJECT
+// ---------------------------------------------------------------------------
+
+/// The sector visibility reject table.
+///
+/// Bit `sector_i * n_sectors + sector_j` being set means sector `i` cannot
+/// see sector `j` — the engine can skip LOS checks between them.
+///
+/// Size: `ceil(n_sectors² / 8)` bytes.
+#[derive(Clone, Debug)]
+pub struct Reject {
+    n_sectors: usize,
+    data: Vec<u8>,
+}
+
+impl Reject {
+    /// Parse a REJECT lump given the number of sectors.
+    ///
+    /// # Errors
+    /// Returns `LumpParseError::BadRejectSize` if the lump size doesn't match.
+    pub fn parse_lump(data: &[u8], n_sectors: usize) -> Result<Self, LumpParseError> {
+        let expected = (n_sectors * n_sectors + 7) / 8;
+        if data.len() != expected {
+            return Err(LumpParseError::BadRejectSize {
+                n_sectors,
+                expected,
+                actual: data.len(),
+            });
+        }
+        Ok(Self { n_sectors, data: data.to_vec() })
+    }
+
+    /// Returns `true` if sectors `a` and `b` might be mutually visible
+    /// (i.e., the reject bit is NOT set).
+    pub fn visible(&self, a: usize, b: usize) -> bool {
+        if a >= self.n_sectors || b >= self.n_sectors {
+            return false;
+        }
+        let bit_idx = a * self.n_sectors + b;
+        let byte = bit_idx / 8;
+        let bit  = bit_idx % 8;
+        (self.data[byte] >> bit) & 1 == 0
+    }
+
+    /// Number of sectors this reject was built for.
+    pub fn n_sectors(&self) -> usize { self.n_sectors }
+}
+
+// ---------------------------------------------------------------------------
+// BLOCKMAP
+// ---------------------------------------------------------------------------
+
+/// The blockmap header and offset table.
+///
+/// The blockmap divides the map into 128×128 unit cells.
+/// Each cell has a list of linedefs that cross it (used for collision detection).
+#[derive(Clone, Debug)]
+pub struct Blockmap {
+    /// X origin of the grid.
+    pub x_origin: i16,
+    /// Y origin of the grid.
+    pub y_origin: i16,
+    /// Number of columns.
+    pub x_count: u16,
+    /// Number of rows.
+    pub y_count: u16,
+    /// Offsets (in 16-bit words from lump start) to each block's linedef list.
+    pub offsets: Vec<u16>,
+    /// Raw lump bytes (for linedef list lookup).
+    raw: Vec<u8>,
+}
+
+impl Blockmap {
+    const HEADER_BYTES: usize = 8;
+
+    /// Parse a BLOCKMAP lump.
+    pub fn parse_lump(data: &[u8]) -> Result<Self, LumpParseError> {
+        if data.len() < Self::HEADER_BYTES {
+            return Err(LumpParseError::BlockmapTooShort(data.len()));
+        }
+        let x_origin = i16::from_le_bytes([data[0], data[1]]);
+        let y_origin = i16::from_le_bytes([data[2], data[3]]);
+        let x_count  = u16::from_le_bytes([data[4], data[5]]);
+        let y_count  = u16::from_le_bytes([data[6], data[7]]);
+
+        let n_blocks = x_count as usize * y_count as usize;
+        let offsets_end = Self::HEADER_BYTES + n_blocks * 2;
+
+        let mut offsets = Vec::with_capacity(n_blocks);
+        let offset_bytes = &data[Self::HEADER_BYTES..offsets_end.min(data.len())];
+        for chunk in offset_bytes.chunks_exact(2) {
+            offsets.push(u16::from_le_bytes([chunk[0], chunk[1]]));
+        }
+
+        Ok(Self { x_origin, y_origin, x_count, y_count, offsets, raw: data.to_vec() })
+    }
+
+    /// Iterate over the linedef indices in the block at column `col`, row `row`.
+    ///
+    /// Returns an empty iterator if the block index is out of range or the
+    /// offset points past the lump.
+    pub fn block_linedefs(&self, col: usize, row: usize) -> impl Iterator<Item = u16> + '_ {
+        let idx = row * self.x_count as usize + col;
+        let offset = self.offsets.get(idx).copied().unwrap_or(0) as usize;
+        let byte_offset = offset * 2;
+
+        // Block lists start with 0x0000 and are terminated by 0xFFFF.
+        let data = &self.raw;
+        let mut pos = byte_offset;
+        // Skip the leading 0x0000 sentinel if present.
+        if pos + 1 < data.len() {
+            let first = u16::from_le_bytes([data[pos], data[pos + 1]]);
+            if first == 0x0000 {
+                pos += 2;
+            }
+        }
+
+        std::iter::from_fn(move || {
+            if pos + 1 >= data.len() {
+                return None;
+            }
+            let val = u16::from_le_bytes([data[pos], data[pos + 1]]);
+            pos += 2;
+            if val == 0xFFFF {
+                None
+            } else {
+                Some(val)
+            }
+        })
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Shared helper
+// ---------------------------------------------------------------------------
+
+fn parse_fixed_records<T, F>(
+    data: &[u8],
+    entry_size: usize,
+    lump_name: &'static str,
+    f: F,
+) -> Result<Vec<T>, LumpParseError>
+where
+    F: Fn(&[u8]) -> T,
+{
+    if data.len() % entry_size != 0 {
+        return Err(LumpParseError::BadLength {
+            lump: lump_name,
+            entry_size,
+            actual: data.len(),
+        });
+    }
+    Ok(data.chunks_exact(entry_size).map(f).collect())
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_single_thing() {
+        // x=100, y=200, angle=90, kind=1, flags=7
+        let mut data = [0u8; 10];
+        data[0..2].copy_from_slice(&100i16.to_le_bytes());
+        data[2..4].copy_from_slice(&200i16.to_le_bytes());
+        data[4..6].copy_from_slice(&90u16.to_le_bytes());
+        data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        data[8..10].copy_from_slice(&7u16.to_le_bytes());
+        let things = Thing::parse_lump(&data).unwrap();
+        assert_eq!(things.len(), 1);
+        assert_eq!(things[0].x, 100);
+        assert_eq!(things[0].y, 200);
+    }
+
+    #[test]
+    fn parse_vertex_pair() {
+        let mut data = [0u8; 8];
+        data[0..2].copy_from_slice(&(-10i16).to_le_bytes());
+        data[2..4].copy_from_slice(&20i16.to_le_bytes());
+        data[4..6].copy_from_slice(&30i16.to_le_bytes());
+        data[6..8].copy_from_slice(&(-40i16).to_le_bytes());
+        let verts = Vertex::parse_lump(&data).unwrap();
+        assert_eq!(verts.len(), 2);
+        assert_eq!(verts[0], Vertex { x: -10, y: 20 });
+        assert_eq!(verts[1], Vertex { x: 30, y: -40 });
+    }
+
+    #[test]
+    fn ssector_seg_end() {
+        let ss = Ssector { seg_count: 5, first_seg: 3 };
+        assert_eq!(ss.seg_end(), 8);
+    }
+
+    #[test]
+    fn node_subsector_bit_decode() {
+        let child = NODE_SUBSECTOR_BIT | 7;
+        assert_ne!(child & NODE_SUBSECTOR_BIT, 0);
+        assert_eq!(child & NODE_INDEX_MASK, 7);
+    }
+
+    #[test]
+    fn reject_visible_symmetry() {
+        // All-zero reject → everything visible.
+        let data = vec![0u8; (4 * 4 + 7) / 8]; // 4 sectors
+        let reject = Reject::parse_lump(&data, 4).unwrap();
+        for i in 0..4 {
+            for j in 0..4 {
+                assert!(reject.visible(i, j));
+                assert_eq!(reject.visible(i, j), reject.visible(j, i));
+            }
+        }
+    }
+
+    #[test]
+    fn reject_bad_size_errors() {
+        let data = vec![0u8; 5];
+        assert!(Reject::parse_lump(&data, 4).is_err()); // expects 2 bytes
+    }
+
+    #[test]
+    fn bad_lump_length_errors() {
+        assert!(Thing::parse_lump(&[0u8; 7]).is_err()); // 7 not divisible by 10
+    }
+}

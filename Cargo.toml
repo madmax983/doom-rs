@@ -1,0 +1,76 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/doom-types",
+    "crates/doom-wad",
+    "crates/doom-map",
+    "crates/doom-game",
+    "crates/doom-renderer",
+    "crates/doom-tui",
+    "crates/doom-audio",
+    "crates/doom-net",
+    "crates/doom-demo",
+    "crates/doom-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+authors = ["Mark"]
+license = "GPL-2.0-only"
+
+# ---------------------------------------------------------------------------
+# Workspace-wide dependency versions (crates opt-in with `workspace = true`)
+# ---------------------------------------------------------------------------
+[workspace.dependencies]
+# Internal crates
+doom-types    = { path = "crates/doom-types" }
+doom-wad      = { path = "crates/doom-wad" }
+doom-map      = { path = "crates/doom-map" }
+doom-game     = { path = "crates/doom-game" }
+doom-renderer = { path = "crates/doom-renderer" }
+doom-tui      = { path = "crates/doom-tui" }
+doom-audio    = { path = "crates/doom-audio" }
+doom-net      = { path = "crates/doom-net" }
+doom-demo     = { path = "crates/doom-demo" }
+
+# Rendering
+ratatui   = "0.30.0"
+crossterm = "0.29.0"
+
+# Audio
+cpal = "0.15"
+
+# Networking
+tokio     = { version = "1", features = ["full"] }
+bincode   = "2"
+crc32fast = "1"
+
+# Parsing
+nom = "7"
+
+# Data / Error
+serde     = { version = "1", features = ["derive"] }
+thiserror = "2"
+anyhow    = "1"
+bytemuck  = { version = "1", features = ["derive"] }
+clap      = { version = "4", features = ["derive"] }
+
+# Testing / Benchmarks
+proptest  = "1"
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# ---------------------------------------------------------------------------
+# Workspace-wide lint profile
+# ---------------------------------------------------------------------------
+[workspace.lints.rust]
+unsafe_code  = "warn"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+pedantic                 = { level = "warn", priority = -1 }
+nursery                  = { level = "warn", priority = -1 }
+cast_possible_truncation = "allow"
+cast_sign_loss           = "allow"
+cast_precision_loss      = "allow"
+module_name_repetitions  = "allow"
