@@ -218,6 +218,12 @@ impl DoomEventLoop {
                             if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
                                 self.is_running = false;
                             }
+                            // Quick save / load via F5 / F9.
+                            if key.code == KeyCode::F(5) {
+                                self.input.push_f5();
+                            } else if key.code == KeyCode::F(9) {
+                                self.input.push_f9();
+                            }
                             // Queue raw char for console/cheat processing.
                             if let KeyCode::Char(ch) = key.code {
                                 self.input.push_console_char(ch);

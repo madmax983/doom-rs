@@ -4,12 +4,13 @@
 
 mod cheats;
 mod console;
+mod savegame;
 
 use anyhow::{Context, Result};
 use clap::Parser;
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
 use doom_map::Level;
-use doom_renderer::{Framebuffer, PaletteLut, render_level};
+use doom_renderer::{Framebuffer, PaletteLut, draw_status_bar, render_level};
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
@@ -39,6 +40,8 @@ struct DoomGame {
     level: Level,
     cheat_detector: cheats::CheatDetector,
     console: console::Console,
+    /// Path used for quick save (F5) and quick load (F9).
+    save_path: std::path::PathBuf,
 }
 
 impl DoomGame {
@@ -48,6 +51,7 @@ impl DoomGame {
             level,
             cheat_detector: cheats::CheatDetector::new(),
             console: console::Console::new(),
+            save_path: std::path::PathBuf::from("doom_save.bin"),
         }
     }
 }
@@ -87,6 +91,31 @@ impl DoomApp for DoomGame {
             }
         }
 
+        // Quick save (F5).
+        if input.f5_save {
+            if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0) {
+                self.console.print(format!("Save failed: {e}"));
+            } else {
+                self.console.print("Game saved.".to_string());
+            }
+        }
+
+        // Quick load (F9).
+        if input.f9_load {
+            match savegame::load_game(&self.save_path) {
+                Ok((_header, payload)) => {
+                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
+                        self.console.print(format!("Load failed: {e}"));
+                    } else {
+                        self.console.print("Game loaded.".to_string());
+                    }
+                }
+                Err(e) => {
+                    self.console.print(format!("Load failed: {e}"));
+                }
+            }
+        }
+
         let cmd = ticinput_to_ticcmd(input);
         self.gs.tick(cmd, Some(&mut self.level));
     }
@@ -101,6 +130,10 @@ impl DoomApp for DoomGame {
         // (wall colors are derived from light levels only).
         let palette = PaletteLut::grayscale();
         render_level(&self.level, px, py, angle, fb, &palette);
+
+        // Draw HUD status bar over the bottom 32 rows.
+        let god_mode = self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+        draw_status_bar(fb, &self.gs.player, god_mode);
     }
 
     fn active_palette(&self) -> usize {

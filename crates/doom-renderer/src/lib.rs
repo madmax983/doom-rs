@@ -13,6 +13,7 @@ pub mod render;
 pub mod seg;
 pub mod span;
 pub mod sprite;
+pub mod statusbar;
 pub mod texture;
 pub mod visplane;
 
@@ -22,3 +23,4 @@ pub use framebuffer::Framebuffer;
 pub use palette::{PaletteLut, Rgb};
 pub use render::render_level;
 pub use span::{DrawSpanParams, FLAT_DIM, FLAT_MASK, draw_span, draw_span_solid};
+pub use statusbar::draw_status_bar;
