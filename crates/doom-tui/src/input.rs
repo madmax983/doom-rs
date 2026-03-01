@@ -51,6 +51,8 @@ pub struct TicInput {
     pub f5_save: bool,
     /// F9 was pressed this tic — quick load.
     pub f9_load: bool,
+    /// Tab was pressed this tic — toggle automap.
+    pub tab_pressed: bool,
 }
 
 /// Tracks which keys are currently held and produces `TicInput` on demand.
@@ -65,6 +67,8 @@ pub struct InputState {
     pending_f5: bool,
     /// F9 was pressed since the last tic — quick load trigger.
     pending_f9: bool,
+    /// Tab was pressed since the last tic — automap toggle trigger.
+    pending_tab: bool,
 }
 
 impl InputState {
@@ -118,6 +122,11 @@ impl InputState {
     /// Signal that F9 (quick load) was pressed.
     pub fn push_f9(&mut self) {
         self.pending_f9 = true;
+    }
+
+    /// Signal that Tab (automap toggle) was pressed.
+    pub fn push_tab(&mut self) {
+        self.pending_tab = true;
     }
 
     /// Synthesize a `TicInput` from the current held state.
@@ -188,6 +197,9 @@ impl InputState {
         t.f5_save = std::mem::take(&mut self.pending_f5);
         t.f9_load = std::mem::take(&mut self.pending_f9);
 
+        // Consume pending Tab press (cleared each tic).
+        t.tab_pressed = std::mem::take(&mut self.pending_tab);
+
         t
     }
 
@@ -198,6 +210,7 @@ impl InputState {
         self.pending_console_char = None;
         self.pending_f5 = false;
         self.pending_f9 = false;
+        self.pending_tab = false;
     }
 }
 
@@ -258,5 +271,15 @@ mod tests {
     fn no_keys_produces_zero_input() {
         let mut s = InputState::new();
         assert_eq!(s.to_tic_input(), TicInput::default());
+    }
+
+    #[test]
+    fn tab_pressed_in_tic_input() {
+        let mut s = InputState::new();
+        s.push_tab();
+        // First to_tic_input() must deliver tab_pressed = true.
+        assert!(s.to_tic_input().tab_pressed, "tab_pressed must be true after push_tab");
+        // Second call must return false — it is consumed (one-shot).
+        assert!(!s.to_tic_input().tab_pressed, "tab_pressed must be false after being consumed");
     }
 }

@@ -289,4 +289,11 @@ mod tests {
             "IDKFA must set all weapon slots"
         );
     }
+
+    #[test]
+    fn cheat_iddt_returns_map_revealed() {
+        let mut gs = make_test_gs();
+        let msg = apply_cheat(&mut gs, "IDDT");
+        assert_eq!(msg, "Map Revealed", "IDDT must return 'Map Revealed'");
+    }
 }

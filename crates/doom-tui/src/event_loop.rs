@@ -21,6 +21,7 @@
 //! ```
 
 use crate::input::{InputState, TicInput};
+use crate::scaler::ScalingMode;
 use crate::widget::DoomFramebufferWidget;
 use crossterm::{
     event::{self, KeyCode, KeyEventKind, KeyModifiers},
@@ -93,6 +94,9 @@ pub struct DoomEventLoop {
     frames_since_update: u64,
     last_fps_update: Instant,
     frame_count: u64,
+
+    /// Scaling algorithm used when blitting the framebuffer to the terminal.
+    scaling_mode: ScalingMode,
 }
 
 /// Query the primary monitor's refresh rate via platform APIs.
@@ -159,7 +163,15 @@ impl DoomEventLoop {
             frames_since_update: 0,
             last_fps_update: Instant::now(),
             frame_count: 0,
+            scaling_mode: ScalingMode::Nearest,
         })
+    }
+
+    /// Set the scaling algorithm used when blitting the framebuffer to the terminal.
+    ///
+    /// Defaults to [`ScalingMode::Nearest`] (no behavior change from earlier versions).
+    pub fn set_scaling_mode(&mut self, mode: ScalingMode) {
+        self.scaling_mode = mode;
     }
 
     /// Run the game loop until the user quits (Q or Escape).
@@ -223,6 +235,8 @@ impl DoomEventLoop {
                                 self.input.push_f5();
                             } else if key.code == KeyCode::F(9) {
                                 self.input.push_f9();
+                            } else if key.code == KeyCode::Tab {
+                                self.input.push_tab();
                             }
                             // Queue raw char for console/cheat processing.
                             if let KeyCode::Char(ch) = key.code {
@@ -270,6 +284,7 @@ impl DoomEventLoop {
 
         let fps = self.fps;
         let frame_count = self.frame_count;
+        let scaling_mode = self.scaling_mode;
 
         self.terminal
             .draw(|f| {
@@ -278,7 +293,8 @@ impl DoomEventLoop {
                     .constraints([Constraint::Min(0), Constraint::Length(1)])
                     .split(f.area());
 
-                let widget = DoomFramebufferWidget::new(fb, lut, active_palette);
+                let widget = DoomFramebufferWidget::new(fb, lut, active_palette)
+                    .with_scaling(scaling_mode);
                 f.render_widget(widget, chunks[0]);
 
                 let status = format!(

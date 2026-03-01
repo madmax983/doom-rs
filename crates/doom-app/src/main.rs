@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use clap::Parser;
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
 use doom_map::Level;
-use doom_renderer::{Framebuffer, PaletteLut, draw_status_bar, render_level};
+use doom_renderer::{Framebuffer, PaletteLut, draw_automap, draw_status_bar, render_level};
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
@@ -42,6 +42,10 @@ struct DoomGame {
     console: console::Console,
     /// Path used for quick save (F5) and quick load (F9).
     save_path: std::path::PathBuf,
+    /// Whether the overhead automap is currently displayed instead of first-person view.
+    automap_visible: bool,
+    /// Whether the IDDT cheat has toggled full automap reveal.
+    automap_full_reveal: bool,
 }
 
 impl DoomGame {
@@ -52,6 +56,8 @@ impl DoomGame {
             cheat_detector: cheats::CheatDetector::new(),
             console: console::Console::new(),
             save_path: std::path::PathBuf::from("doom_save.bin"),
+            automap_visible: false,
+            automap_full_reveal: false,
         }
     }
 }
@@ -85,10 +91,21 @@ impl DoomApp for DoomGame {
             } else {
                 // Console is closed: feed character to the cheat detector.
                 if let Some(cheat_name) = self.cheat_detector.feed(ch) {
-                    // Apply the cheat; message reserved for future HUD display.
-                    let _msg = cheats::apply_cheat(&mut self.gs, cheat_name);
+                    let msg = cheats::apply_cheat(&mut self.gs, cheat_name);
+                    // IDDT toggles full automap reveal.
+                    if cheat_name == "IDDT" {
+                        self.automap_full_reveal = !self.automap_full_reveal;
+                    }
+                    if !msg.is_empty() {
+                        self.console.print(msg.to_string());
+                    }
                 }
             }
+        }
+
+        // Toggle automap on Tab (stateful — each press flips visibility).
+        if input.tab_pressed {
+            self.automap_visible = !self.automap_visible;
         }
 
         // Quick save (F5).
@@ -126,14 +143,25 @@ impl DoomApp for DoomGame {
             Some(mo) => (mo.x.to_int(), mo.y.to_int(), mo.angle),
             None => (0, 0, Bam::ZERO),
         };
-        // We pass a grayscale palette; render_level currently ignores it
-        // (wall colors are derived from light levels only).
-        let palette = PaletteLut::grayscale();
-        render_level(&self.level, px, py, angle, fb, &palette);
 
-        // Draw HUD status bar over the bottom 32 rows.
-        let god_mode = self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
-        draw_status_bar(fb, &self.gs.player, god_mode);
+        let palette = PaletteLut::grayscale();
+
+        if self.automap_visible {
+            // Draw the overhead automap.
+            // automap_full_reveal (toggled by IDDT) is wired for future use;
+            // the current automap implementation already shows all linedefs.
+            draw_automap(&self.level, px, py, angle, fb, &palette);
+        } else {
+            // Draw the first-person 3D view.
+            // We pass a grayscale palette; render_level currently ignores it
+            // (wall colors are derived from light levels only).
+            render_level(&self.level, px, py, angle, fb, &palette);
+
+            // Draw HUD status bar over the bottom 32 rows.
+            let god_mode =
+                self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+            draw_status_bar(fb, &self.gs.player, god_mode);
+        }
     }
 
     fn active_palette(&self) -> usize {

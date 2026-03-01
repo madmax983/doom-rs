@@ -16,4 +16,5 @@ pub mod widget;
 
 pub use event_loop::{DoomApp, DoomEventLoop, EventLoopError, TIC_DURATION, TIC_RATE_HZ};
 pub use input::{InputState, TicInput, buttons};
+pub use scaler::{ScalingMode, sample_bilinear};
 pub use widget::DoomFramebufferWidget;
