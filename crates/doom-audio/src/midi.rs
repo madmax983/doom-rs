@@ -13,6 +13,7 @@
 //! automatically when [`MusEvent::ScoreEnd`] is reached.
 
 use crate::{
+    AudioError,
     mus::{MusEvent, MusScore},
     opl::OplChip,
 };
@@ -92,6 +93,176 @@ fn apply_default_instrument(opl: &mut OplChip, ch: u8) {
 }
 
 // ---------------------------------------------------------------------------
+// GENMIDI instrument bank
+// ---------------------------------------------------------------------------
+
+/// One OPL2 voice (operator pair) from a GENMIDI instrument record.
+///
+/// Each field corresponds directly to an OPL2 register write as described
+/// in the GENMIDI lump specification.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GenmidiVoice {
+    // Modulator operator
+    /// Written to OPL2 register `0x20 + mod_slot`.
+    pub mod_trem_vibrato: u8,
+    /// Written to OPL2 register `0x60 + mod_slot`.
+    pub mod_attack_decay: u8,
+    /// Written to OPL2 register `0x80 + mod_slot`.
+    pub mod_sustain_release: u8,
+    /// Written to OPL2 register `0xE0 + mod_slot`.
+    pub mod_wave_select: u8,
+    /// Written to OPL2 register `0x40 + mod_slot`.
+    pub mod_ksl_output: u8,
+    /// Written to OPL2 register `0xC0 + ch` (feedback/connection byte).
+    pub feedback: u8,
+    // Carrier operator
+    /// Written to OPL2 register `0x20 + car_slot`.
+    pub car_trem_vibrato: u8,
+    /// Written to OPL2 register `0x60 + car_slot`.
+    pub car_attack_decay: u8,
+    /// Written to OPL2 register `0x80 + car_slot`.
+    pub car_sustain_release: u8,
+    /// Written to OPL2 register `0xE0 + car_slot`.
+    pub car_wave_select: u8,
+    /// Written to OPL2 register `0x40 + car_slot`.
+    pub car_ksl_output: u8,
+    /// Padding byte — ignored.
+    pub _unused: u8,
+    /// Semitone offset added to the MIDI note before frequency lookup.
+    pub base_note_offset: i16,
+}
+
+/// One instrument definition from the GENMIDI lump.
+///
+/// Each record is 32 bytes on disk: 4 bytes of header fields followed by
+/// two 14-byte voice records.
+#[derive(Debug, Clone)]
+pub struct GenmidiInstrument {
+    /// Instrument flags.
+    ///
+    /// - Bit 0: fixed pitch — use `fixed_note` instead of the MIDI note.
+    /// - Bit 1: two-voice instrument — voice\[1\] is valid (usually ignored).
+    pub flags: u16,
+    /// Fine-tuning byte (rarely used; stored but not applied).
+    pub fine_tuning: u8,
+    /// Note to play when `flags & 1` is set (fixed-pitch instruments).
+    pub fixed_note: u8,
+    /// Primary (voice\[0\]) and secondary (voice\[1\]) operator pairs.
+    pub voices: [GenmidiVoice; 2],
+}
+
+/// Parsed GENMIDI WAD lump — 175 GM instrument patches for OPL2.
+///
+/// Indices 0–127 are melodic GM patches; 128–174 are percussion.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// # use doom_audio::midi::GenmidiBank;
+/// // `data` is the raw bytes of the GENMIDI lump from the WAD.
+/// # let data = vec![0u8; 5608]; // placeholder
+/// let bank = GenmidiBank::parse(&data).expect("valid GENMIDI lump");
+/// let piano = bank.get(0); // Acoustic Grand Piano
+/// let _ = piano.voices[0].feedback;
+/// ```
+pub struct GenmidiBank {
+    /// 175 instrument definitions indexed by GM patch number.
+    pub instruments: Vec<GenmidiInstrument>,
+}
+
+impl GenmidiBank {
+    /// Parse raw GENMIDI lump bytes.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AudioError::InvalidMus`] (repurposed) if:
+    /// - `data` is shorter than `8 + 175 * 32 = 5608` bytes, or
+    /// - the 8-byte magic header is not `b"#OPL_II#"`.
+    pub fn parse(data: &[u8]) -> Result<Self, AudioError> {
+        const HEADER: &[u8; 8] = b"#OPL_II#";
+        const INSTR_SIZE: usize = 32;
+        const NUM_INSTRS: usize = 175;
+        const MIN_LEN: usize = 8 + INSTR_SIZE * NUM_INSTRS; // = 5608
+
+        if data.len() < MIN_LEN {
+            return Err(AudioError::InvalidMus("GENMIDI lump too short"));
+        }
+        if &data[0..8] != HEADER {
+            return Err(AudioError::InvalidMus("invalid GENMIDI header"));
+        }
+
+        let mut instruments = Vec::with_capacity(NUM_INSTRS);
+        for i in 0..NUM_INSTRS {
+            let base = 8 + i * INSTR_SIZE;
+            let b = &data[base..base + INSTR_SIZE];
+            let flags = u16::from_le_bytes([b[0], b[1]]);
+            let fine_tuning = b[2];
+            let fixed_note = b[3];
+            let v0 = parse_genmidi_voice(&b[4..18]);
+            let v1 = parse_genmidi_voice(&b[18..32]);
+            instruments.push(GenmidiInstrument {
+                flags,
+                fine_tuning,
+                fixed_note,
+                voices: [v0, v1],
+            });
+        }
+        Ok(Self { instruments })
+    }
+
+    /// Get the instrument for a GM program number (0–174).
+    ///
+    /// Out-of-range indices are clamped to the last valid index (174) —
+    /// this method never panics.
+    pub fn get(&self, program: usize) -> &GenmidiInstrument {
+        let idx = program.min(self.instruments.len().saturating_sub(1));
+        &self.instruments[idx]
+    }
+}
+
+/// Parse a 14-byte GENMIDI voice record from `b`.
+fn parse_genmidi_voice(b: &[u8]) -> GenmidiVoice {
+    GenmidiVoice {
+        mod_trem_vibrato: b[0],
+        mod_attack_decay: b[1],
+        mod_sustain_release: b[2],
+        mod_wave_select: b[3],
+        mod_ksl_output: b[4],
+        feedback: b[5],
+        car_trem_vibrato: b[6],
+        car_attack_decay: b[7],
+        car_sustain_release: b[8],
+        car_wave_select: b[9],
+        car_ksl_output: b[10],
+        _unused: b[11],
+        base_note_offset: i16::from_le_bytes([b[12], b[13]]),
+    }
+}
+
+/// Write a GENMIDI voice's register values to the given OPL2 channel.
+fn apply_genmidi_instrument(opl: &mut OplChip, opl_ch: u8, voice: &GenmidiVoice) {
+    let mod_reg = opl2_mod_reg(opl_ch);
+    let car_reg = opl2_car_reg(opl_ch);
+
+    // Modulator operator registers
+    opl.write(0x20 + mod_reg, voice.mod_trem_vibrato);
+    opl.write(0x40 + mod_reg, voice.mod_ksl_output);
+    opl.write(0x60 + mod_reg, voice.mod_attack_decay);
+    opl.write(0x80 + mod_reg, voice.mod_sustain_release);
+    opl.write(0xE0 + mod_reg, voice.mod_wave_select);
+
+    // Carrier operator registers
+    opl.write(0x20 + car_reg, voice.car_trem_vibrato);
+    opl.write(0x40 + car_reg, voice.car_ksl_output);
+    opl.write(0x60 + car_reg, voice.car_attack_decay);
+    opl.write(0x80 + car_reg, voice.car_sustain_release);
+    opl.write(0xE0 + car_reg, voice.car_wave_select);
+
+    // Feedback / connection register (per-channel)
+    opl.write(0xC0 + opl_ch, voice.feedback);
+}
+
+// ---------------------------------------------------------------------------
 // Internal helpers
 // ---------------------------------------------------------------------------
 
@@ -152,6 +323,19 @@ pub struct MidiPlayer {
     pub next_event_tick: u64,
     /// Accumulated sample count since the score was loaded.
     sample_count: u64,
+
+    // -----------------------------------------------------------------------
+    // GENMIDI state
+    // -----------------------------------------------------------------------
+    /// Loaded GENMIDI patch bank, if any.
+    ///
+    /// When `Some`, real FM instrument patches are applied on each `PlayNote`
+    /// event instead of the built-in sine-wave default.
+    pub genmidi: Option<GenmidiBank>,
+    /// Current GM program (instrument patch) per MUS channel (0–15).
+    ///
+    /// Updated by `Controller { controller: 2, value }` events.
+    channel_program: [u8; 16],
 }
 
 impl Default for MidiPlayer {
@@ -173,18 +357,30 @@ impl MidiPlayer {
             event_cursor: 0,
             next_event_tick: 0,
             sample_count: 0,
+            genmidi: None,
+            channel_program: [0u8; 16],
         }
+    }
+
+    /// Load a GENMIDI patch bank for real FM instrument sounds.
+    ///
+    /// After calling this, `PlayNote` events will apply the appropriate GM
+    /// patch from `bank` instead of the built-in sine-wave default.
+    pub fn load_genmidi(&mut self, bank: GenmidiBank) {
+        self.genmidi = Some(bank);
     }
 
     /// Load a new score for timed playback, resetting position to the start.
     ///
     /// Silences the OPL chip and resets all channel allocations before
-    /// beginning playback of the new score.
+    /// beginning playback of the new score.  Per-channel GM program numbers
+    /// are also reset to 0 (Acoustic Grand Piano).
     pub fn load_score(&mut self, score: MusScore) {
         // Silence the chip and reset channel allocations.
         self.opl = OplChip::new();
         self.channel_map = [0xFF; 16];
         self.next_opl_ch = 0;
+        self.channel_program = [0u8; 16];
 
         // The first event is due immediately (its delta is the delay *before*
         // it fires, so for event 0 the absolute tick = events[0].0).
@@ -316,10 +512,25 @@ impl MidiPlayer {
                     return;
                 }
                 let opl_ch = self.alloc_channel(*channel);
-                apply_default_instrument(&mut self.opl, opl_ch);
+
+                // Apply instrument — GENMIDI if loaded, else default sine.
+                // Compute the note offset from the GENMIDI bank at the same time.
+                let genmidi_note_offset: i16 = if let Some(ref bank) = self.genmidi {
+                    let prog = self.channel_program[*channel as usize & 0x0F] as usize;
+                    let instr = bank.get(prog);
+                    apply_genmidi_instrument(&mut self.opl, opl_ch, &instr.voices[0]);
+                    instr.voices[0].base_note_offset
+                } else {
+                    apply_default_instrument(&mut self.opl, opl_ch);
+                    0
+                };
 
                 let vol = volume.unwrap_or(127);
-                let (block, fnum) = note_to_block_fnum(*note);
+
+                // Apply base_note_offset from GENMIDI voice to the MIDI note.
+                let actual_note =
+                    (*note as i16).saturating_add(genmidi_note_offset).clamp(0, 127) as u8;
+                let (block, fnum) = note_to_block_fnum(actual_note);
 
                 // Frequency low byte
                 self.opl.write(0xA0 + opl_ch, (fnum & 0xFF) as u8);
@@ -350,15 +561,22 @@ impl MidiPlayer {
             }
 
             MusEvent::Controller { channel, controller, value } => {
-                // MUS controller 3 = volume
-                if *controller == 3 {
-                    let idx = *channel as usize;
-                    if idx < 16 && self.channel_map[idx] != 0xFF {
-                        let opl_ch = self.channel_map[idx];
-                        let tl = 63u8.saturating_sub(*value / 2);
-                        let car_reg = opl2_car_reg(opl_ch);
-                        self.opl.write(0x40 + car_reg, tl.min(63));
+                let idx = *channel as usize & 0x0F;
+                match *controller {
+                    // MUS controller 2 = program/voice change.
+                    2 => {
+                        self.channel_program[idx] = *value;
                     }
+                    // MUS controller 3 = volume.
+                    3 => {
+                        if self.channel_map[idx] != 0xFF {
+                            let opl_ch = self.channel_map[idx];
+                            let tl = 63u8.saturating_sub(*value / 2);
+                            let car_reg = opl2_car_reg(opl_ch);
+                            self.opl.write(0x40 + car_reg, tl.min(63));
+                        }
+                    }
+                    _ => {}
                 }
             }
 
@@ -610,6 +828,145 @@ mod tests {
         assert!(
             buf.iter().all(|&s| s == 0.0),
             "advance_samples must zero the buffer when no score is loaded"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // GENMIDI tests
+    // -----------------------------------------------------------------------
+
+    /// Build a valid 5608-byte GENMIDI buffer: magic header + 175 × 32 zero bytes.
+    fn make_genmidi_buf() -> Vec<u8> {
+        let mut buf = Vec::with_capacity(5608);
+        buf.extend_from_slice(b"#OPL_II#");
+        buf.extend(std::iter::repeat(0u8).take(175 * 32));
+        buf
+    }
+
+    #[test]
+    fn genmidi_parse_valid_bank() {
+        let buf = make_genmidi_buf();
+        let bank = GenmidiBank::parse(&buf).expect("valid GENMIDI must parse");
+        assert_eq!(bank.instruments.len(), 175, "bank must contain exactly 175 instruments");
+    }
+
+    #[test]
+    fn genmidi_parse_bad_magic() {
+        let mut buf = make_genmidi_buf();
+        // Corrupt the first byte of the magic header.
+        buf[0] = b'X';
+        let result = GenmidiBank::parse(&buf);
+        assert!(result.is_err(), "wrong magic header must produce an error");
+    }
+
+    #[test]
+    fn genmidi_parse_too_short() {
+        let buf = vec![0u8; 10];
+        let result = GenmidiBank::parse(&buf);
+        assert!(result.is_err(), "buffer shorter than 5608 bytes must produce an error");
+    }
+
+    #[test]
+    fn genmidi_get_clamps_out_of_range() {
+        let buf = make_genmidi_buf();
+        let bank = GenmidiBank::parse(&buf).expect("valid GENMIDI must parse");
+        // get(999) must not panic and must return the last instrument (index 174).
+        let instr = bank.get(999);
+        // The returned reference must be the same as instruments[174].
+        let last = bank.get(174);
+        // Both should have the same flags (all zeros in our test buffer).
+        assert_eq!(instr.flags, last.flags, "out-of-range get must clamp to last instrument");
+    }
+
+    #[test]
+    fn genmidi_apply_writes_registers() {
+        // Build a bank where instrument 0 voice[0] has specific register values.
+        let mut buf = make_genmidi_buf();
+        // Instrument 0 starts at offset 8; voice[0] at offset 8+4 = 12.
+        // Voice layout (14 bytes): [mod_tv, mod_ad, mod_sr, mod_ws, mod_ksl,
+        //                           feedback, car_tv, car_ad, car_sr, car_ws,
+        //                           car_ksl, _unused, base_lo, base_hi]
+        let v_offset = 8 + 0 * 32 + 4; // = 12
+        buf[v_offset]     = 0x01; // mod_trem_vibrato
+        buf[v_offset + 1] = 0xF0; // mod_attack_decay
+        buf[v_offset + 2] = 0x0F; // mod_sustain_release
+        buf[v_offset + 3] = 0x02; // mod_wave_select
+        buf[v_offset + 4] = 0x10; // mod_ksl_output
+        buf[v_offset + 5] = 0x0E; // feedback
+        buf[v_offset + 6] = 0x03; // car_trem_vibrato
+        buf[v_offset + 7] = 0xF1; // car_attack_decay
+        buf[v_offset + 8] = 0x01; // car_sustain_release
+        buf[v_offset + 9] = 0x01; // car_wave_select
+        buf[v_offset + 10] = 0x00; // car_ksl_output
+        // bytes 11–13 stay 0 (_unused and base_note_offset = 0)
+
+        let bank = GenmidiBank::parse(&buf).expect("valid GENMIDI must parse");
+        let mut opl = OplChip::new();
+        apply_genmidi_instrument(&mut opl, 0, &bank.instruments[0].voices[0]);
+
+        let mod_reg = opl2_mod_reg(0); // = 0
+        let car_reg = opl2_car_reg(0); // = 3
+
+        assert_eq!(opl.read(0x20 + mod_reg), 0x01, "mod_trem_vibrato must be written to 0x20+mod");
+        assert_eq!(opl.read(0x40 + mod_reg), 0x10, "mod_ksl_output must be written to 0x40+mod");
+        assert_eq!(opl.read(0x60 + mod_reg), 0xF0, "mod_attack_decay must be written to 0x60+mod");
+        assert_eq!(opl.read(0x80 + mod_reg), 0x0F, "mod_sustain_release must be written to 0x80+mod");
+        assert_eq!(opl.read(0xE0 + mod_reg), 0x02, "mod_wave_select must be written to 0xE0+mod");
+        assert_eq!(opl.read(0x20 + car_reg), 0x03, "car_trem_vibrato must be written to 0x20+car");
+        assert_eq!(opl.read(0x40 + car_reg), 0x00, "car_ksl_output must be written to 0x40+car");
+        assert_eq!(opl.read(0x60 + car_reg), 0xF1, "car_attack_decay must be written to 0x60+car");
+        assert_eq!(opl.read(0x80 + car_reg), 0x01, "car_sustain_release must be written to 0x80+car");
+        assert_eq!(opl.read(0xE0 + car_reg), 0x01, "car_wave_select must be written to 0xE0+car");
+        assert_eq!(opl.read(0xC0),           0x0E, "feedback must be written to 0xC0+ch");
+    }
+
+    #[test]
+    fn genmidi_controller2_changes_program() {
+        let mut player = MidiPlayer::new();
+        // Send a Controller { controller: 2, value: 5 } on channel 0.
+        player.process_event(&MusEvent::Controller {
+            channel: 0,
+            controller: 2,
+            value: 5,
+        });
+        assert_eq!(
+            player.channel_program[0], 5,
+            "controller 2 must update channel_program"
+        );
+    }
+
+    #[test]
+    fn genmidi_playnote_uses_program() {
+        // Build a bank where instrument 1 voice[0] has a distinctive feedback value.
+        let mut buf = make_genmidi_buf();
+        // Instrument 1, voice[0] starts at: 8 + 1*32 + 4 = 44
+        let v_offset = 8 + 1 * 32 + 4;
+        buf[v_offset + 5] = 0x3E; // feedback = 0x3E (distinctive)
+
+        let bank = GenmidiBank::parse(&buf).expect("valid GENMIDI must parse");
+        let mut player = MidiPlayer::new();
+        player.load_genmidi(bank);
+
+        // Switch channel 0 to program 1 via controller 2.
+        player.process_event(&MusEvent::Controller {
+            channel: 0,
+            controller: 2,
+            value: 1,
+        });
+
+        // Play a note — this should apply instrument 1's registers.
+        player.process_event(&MusEvent::PlayNote {
+            channel: 0,
+            note: 60,
+            volume: Some(127),
+        });
+
+        // OPL channel 0 is allocated for MUS channel 0.
+        // Check that the feedback register (0xC0 + opl_ch = 0xC0) matches instrument 1.
+        assert_eq!(
+            player.opl.read(0xC0),
+            0x3E,
+            "PlayNote with GENMIDI must apply the instrument for the current program"
         );
     }
 }

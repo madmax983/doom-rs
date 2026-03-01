@@ -174,6 +174,7 @@ fn bench_render_level_minimal(c: &mut Criterion) {
                 black_box(player_angle),
                 &mut fb,
                 black_box(&palette),
+                None,
             )
         })
     });

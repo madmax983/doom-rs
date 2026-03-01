@@ -15,7 +15,7 @@ use std::net::SocketAddr;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
 use doom_map::Level;
-use doom_renderer::{Framebuffer, PaletteLut, draw_automap, draw_status_bar, render_level};
+use doom_renderer::{FlatCache, Framebuffer, PaletteLut, draw_automap, draw_status_bar, render_level};
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
@@ -88,10 +88,12 @@ pub(crate) struct DoomGame {
     audio: Option<AudioSystem>,
     /// Whether the attack button was held during the previous tic (for edge detection).
     prev_attack_down: bool,
+    /// Flat texture cache (floor/ceiling textures loaded from the WAD).
+    flat_cache: Option<FlatCache>,
 }
 
 impl DoomGame {
-    fn new(gs: GameState, level: Level, audio: Option<AudioSystem>) -> Self {
+    fn new(gs: GameState, level: Level, audio: Option<AudioSystem>, flat_cache: Option<FlatCache>) -> Self {
         Self {
             gs,
             level,
@@ -102,6 +104,7 @@ impl DoomGame {
             automap_full_reveal: false,
             audio,
             prev_attack_down: false,
+            flat_cache,
         }
     }
 }
@@ -219,7 +222,7 @@ impl DoomApp for DoomGame {
             // Draw the first-person 3D view.
             // We pass a grayscale palette; render_level currently ignores it
             // (wall colors are derived from light levels only).
-            render_level(&self.level, px, py, angle, fb, &palette);
+            render_level(&self.level, px, py, angle, fb, &palette, self.flat_cache.as_ref());
 
             // Draw HUD status bar over the bottom 32 rows.
             let god_mode =
@@ -320,6 +323,10 @@ fn main() -> Result<()> {
     let mut gs = GameState::new(&args.warp);
     spawn_player(&mut gs, &level);
 
+    // Load flat texture cache (floor/ceiling textures between F_START and F_END).
+    let flat_cache = FlatCache::load(&wad);
+    let flat_cache = if flat_cache.is_empty() { None } else { Some(flat_cache) };
+
     // Try to open the audio subsystem.  Returns None in headless/CI environments.
     let audio = AudioSystem::try_open(&wad);
 
@@ -353,7 +360,7 @@ fn main() -> Result<()> {
     }
 
     // Build the app.
-    let app = DoomGame::new(gs, level, audio);
+    let app = DoomGame::new(gs, level, audio, flat_cache);
 
     // Client (netplay) mode: connect to relay server and run game with net input.
     if let Some(addr_str) = args.connect {

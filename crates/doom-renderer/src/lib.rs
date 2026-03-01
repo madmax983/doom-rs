@@ -7,6 +7,7 @@
 pub mod automap;
 pub mod clip;
 pub mod column;
+pub mod flat_cache;
 pub mod framebuffer;
 pub mod palette;
 pub mod render;
@@ -21,6 +22,7 @@ pub use automap::draw_automap;
 pub use column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column, draw_column_solid};
 pub use framebuffer::Framebuffer;
 pub use palette::{PaletteLut, Rgb};
+pub use flat_cache::FlatCache;
 pub use render::render_level;
 pub use span::{DrawSpanParams, FLAT_DIM, FLAT_MASK, draw_span, draw_span_solid};
 pub use statusbar::draw_status_bar;

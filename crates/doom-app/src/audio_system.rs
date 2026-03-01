@@ -15,7 +15,7 @@
 use std::sync::{Arc, Mutex};
 
 use doom_audio::{
-    AudioDriver, MidiPlayer, Mixer, MusScore, SfxCache,
+    AudioDriver, GenmidiBank, MidiPlayer, Mixer, MusScore, SfxCache,
     mixer::PcmSample,
     sfx::play_sfx,
 };
@@ -75,10 +75,22 @@ impl AudioSystem {
         let mut sfx_cache = SfxCache::new();
         populate_sfx_cache(wad, &mut sfx_cache);
 
+        // Try to load the GENMIDI bank for real FM instrument sounds.
+        // Gracefully falls back to the default sine-wave instrument if absent or malformed.
+        let genmidi_bank = wad
+            .find_lump_data("GENMIDI")
+            .and_then(|data| GenmidiBank::parse(data).ok());
+
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
 
         // Spawn the audio command thread.  It owns SfxCache and shared Arcs.
         std::thread::spawn(move || {
+            // Apply GENMIDI bank to the player if one was found in the WAD.
+            if let Some(bank) = genmidi_bank {
+                if let Ok(mut mp) = midi_arc.lock() {
+                    mp.load_genmidi(bank);
+                }
+            }
             audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache);
         });
 
