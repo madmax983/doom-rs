@@ -189,6 +189,21 @@ impl PlayerState {
         }
     }
 
+    /// Heal the player by `amount`, allowing health to exceed `MAX_HEALTH`.
+    ///
+    /// Used for power-up items (Soulsphere, Megasphere) that can overheal.
+    /// Health is capped at `cap` (e.g. 200).
+    pub fn heal_overheal(&mut self, amount: i32, cap: i32) {
+        self.health = (self.health + amount).min(cap);
+    }
+
+    /// Set health directly to `value`, clamped to `[0, cap]`.
+    ///
+    /// Used for items that set health to a fixed value (e.g. Megasphere).
+    pub fn set_health_capped(&mut self, value: i32, cap: i32) {
+        self.health = value.clamp(0, cap);
+    }
+
     /// Returns `true` if the player is dead (health ≤ 0).
     #[inline]
     pub fn is_dead(&self) -> bool {
@@ -256,6 +271,26 @@ impl PlayerState {
 impl Default for PlayerState {
     fn default() -> Self {
         Self::pistol_start(MobjHandle::NULL)
+    }
+}
+
+impl WeaponType {
+    /// Convert a weapon number (0–8) from `BT_WEAPONMASK` to a `WeaponType`.
+    ///
+    /// Returns `None` for any out-of-range value.
+    pub fn from_num(n: usize) -> Option<Self> {
+        match n {
+            0 => Some(WeaponType::Fist),
+            1 => Some(WeaponType::Pistol),
+            2 => Some(WeaponType::Shotgun),
+            3 => Some(WeaponType::Chaingun),
+            4 => Some(WeaponType::RocketLauncher),
+            5 => Some(WeaponType::PlasmaRifle),
+            6 => Some(WeaponType::Bfg),
+            7 => Some(WeaponType::Chainsaw),
+            8 => Some(WeaponType::SuperShotgun),
+            _ => None,
+        }
     }
 }
 

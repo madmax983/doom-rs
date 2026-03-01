@@ -23,6 +23,7 @@ use doom_map::Level;
 use doom_types::{ANG90, Bam, Fixed16_16};
 
 use crate::mobj::{MobjHandle, StateNum};
+use crate::player::WeaponType;
 use crate::state::GameState;
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,11 @@ impl GameState {
         // Movement + attack (immutable level borrow).
         self.p_move_player(cmd, level.as_deref());
 
+        // Pickup check: scan MF_SPECIAL actors.
+        if !self.player.is_dead() {
+            crate::pickups::p_check_pickups(self);
+        }
+
         // BT_ATTACK: fire current weapon.
         if cmd.buttons & bt::BT_ATTACK != 0 {
             let handle = self.player.handle;
@@ -109,6 +115,16 @@ impl GameState {
             if let Some(lv) = level.as_deref_mut() {
                 let handle = self.player.handle;
                 crate::specials::p_use_lines(self, lv, handle);
+            }
+        }
+
+        // BT_CHANGE: weapon switch.
+        if cmd.buttons & bt::BT_CHANGE != 0 {
+            let weapon_num = ((cmd.buttons & bt::BT_WEAPONMASK) >> 3) as usize;
+            if let Some(weapon) = WeaponType::from_num(weapon_num) {
+                if self.player.weapons[weapon as usize] {
+                    self.player.weapon = weapon;
+                }
             }
         }
 
@@ -390,5 +406,45 @@ mod tests {
     #[test]
     fn ticcmd_size_is_8_bytes() {
         assert_eq!(std::mem::size_of::<TicCmd>(), 8);
+    }
+
+    #[test]
+    fn bt_change_switches_weapon_when_owned() {
+        use crate::player::WeaponType;
+        let mut gs = make_game_state();
+        // Give player the shotgun.
+        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        // BT_CHANGE | (weapon_num=2 << 3) = 0x04 | 0x10 = 0x14
+        let cmd = TicCmd {
+            buttons: bt::BT_CHANGE | (2u8 << 3),
+            ..Default::default()
+        };
+        gs.tick(cmd, None);
+        assert_eq!(
+            gs.player.weapon,
+            WeaponType::Shotgun,
+            "Should switch to Shotgun when owned"
+        );
+    }
+
+    #[test]
+    fn bt_change_ignores_unowned_weapon() {
+        use crate::player::WeaponType;
+        let mut gs = make_game_state();
+        // Confirm player does NOT have the shotgun.
+        gs.player.weapons[WeaponType::Shotgun as usize] = false;
+        let original_weapon = gs.player.weapon;
+
+        // Attempt to switch to shotgun (weapon_num=2).
+        let cmd = TicCmd {
+            buttons: bt::BT_CHANGE | (2u8 << 3),
+            ..Default::default()
+        };
+        gs.tick(cmd, None);
+
+        assert_eq!(
+            gs.player.weapon, original_weapon,
+            "Should not switch to unowned weapon"
+        );
     }
 }

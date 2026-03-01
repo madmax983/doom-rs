@@ -21,6 +21,7 @@ pub mod snapshot;
 pub mod specials;
 pub mod state;
 pub mod states;
+pub mod pickups;
 pub mod tic;
 pub mod weapons;
 
@@ -35,4 +36,5 @@ pub use specials::{USE_RANGE, activate_linedef, p_use_lines, tick_sector_special
 pub use state::{DoomRng, GameState, RNG_TABLE};
 pub use states::STATES;
 pub use tic::{FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt};
+pub use pickups::p_check_pickups;
 pub use weapons::{fire_weapon, player_can_fire};

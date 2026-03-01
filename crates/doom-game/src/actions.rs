@@ -8,10 +8,12 @@
 //! - `A_Chase` (index 2): move toward target; use 8-direction grid movement.
 //! - `A_FaceTarget` (index 3): snap angle to face the current target.
 //!
-//! # Planned (Batch 3)
-//! - `A_PosAttack`, `A_SPosAttack`, `A_TroopAttack` — monster attacks.
-//! - `A_Scream`, `A_Fall`, `A_XScream` — death reactions.
-//! - Pain/death state dispatch.
+//! # Implemented (Batch 5)
+//! - `A_PosAttack`  (index 3): Trooper hitscan attack.
+//! - `A_SPosAttack` (index 4): Sergeant 3-pellet shotgun burst.
+//! - `A_TroopAttack`(index 5): Imp — melee if close, else hitscan.
+//! - `A_SargAttack` (index 6): Demon melee-only attack.
+//! - `A_Fall`       (index 7): clear MF_SOLID/MF_COUNTKILL on death.
 
 use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
@@ -30,6 +32,16 @@ pub const ACTION_NONE: u8 = 0;
 pub const ACTION_LOOK: u8 = 1;
 /// `A_Chase`: move toward current target using 8-direction grid movement.
 pub const ACTION_CHASE: u8 = 2;
+/// `A_PosAttack`: Trooper hitscan attack.
+pub const ACTION_POS_ATTACK: u8 = 3;
+/// `A_SPosAttack`: Sergeant 3-pellet shotgun burst.
+pub const ACTION_SPOS_ATTACK: u8 = 4;
+/// `A_TroopAttack`: Imp melee-or-hitscan attack.
+pub const ACTION_TROO_ATTACK: u8 = 5;
+/// `A_SargAttack`: Demon melee-only attack.
+pub const ACTION_SARG_ATTACK: u8 = 6;
+/// `A_Fall`: clear MF_SOLID and MF_COUNTKILL so corpses are passable.
+pub const ACTION_FALL: u8 = 7;
 
 // ---------------------------------------------------------------------------
 // Public dispatcher
@@ -46,10 +58,15 @@ pub fn dispatch_action(
     level: Option<&Level>,
 ) {
     match action {
-        ACTION_NONE  => {}
-        ACTION_LOOK  => a_look(gs, handle),
-        ACTION_CHASE => a_chase(gs, handle, level),
-        _            => {}
+        ACTION_NONE         => {}
+        ACTION_LOOK         => a_look(gs, handle),
+        ACTION_CHASE        => a_chase(gs, handle, level),
+        ACTION_POS_ATTACK   => a_pos_attack(gs, handle, level),
+        ACTION_SPOS_ATTACK  => a_spos_attack(gs, handle, level),
+        ACTION_TROO_ATTACK  => a_troo_attack(gs, handle, level),
+        ACTION_SARG_ATTACK  => a_sarg_attack(gs, handle),
+        ACTION_FALL         => a_fall(gs, handle),
+        _                   => {}
     }
 }
 
@@ -244,6 +261,49 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     // Face the target.
     a_face_target(gs, handle);
+
+    // Check if we should transition to an attack state.
+    let (melee_sn, missile_sn) = {
+        let Some(mo) = gs.mobjslab.get(handle) else { return };
+        let info = &mobjinfo::MOBJINFO[mo.kind as usize];
+        (info.melee_state, info.missile_state)
+    };
+    let (mo_x2, mo_y2) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x, mo.y),
+        None => return,
+    };
+    let (tx2, ty2) = match gs.mobjslab.get(target_handle) {
+        Some(t) => (t.x, t.y),
+        None => return,
+    };
+    let dist = (tx2 - mo_x2).to_int().abs() + (ty2 - mo_y2).to_int().abs();
+
+    // Melee: enter melee state if within MELEERANGE and melee_state != S_NULL.
+    if melee_sn != crate::mobj::StateNum::NULL
+        && dist <= crate::combat::MELEERANGE.to_int()
+    {
+        if let Some(entry) = states::STATES.get(melee_sn.0 as usize) {
+            let new_tics = entry.tics;
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.state = melee_sn;
+                mo.tics  = new_tics;
+            }
+        }
+        return;
+    }
+
+    // Ranged: enter missile state if within MISSILERANGE and missile_state != S_NULL.
+    if missile_sn != crate::mobj::StateNum::NULL
+        && dist <= crate::combat::MISSILERANGE.to_int()
+    {
+        if let Some(entry) = states::STATES.get(missile_sn.0 as usize) {
+            let new_tics = entry.tics;
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.state = missile_sn;
+                mo.tics  = new_tics;
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -273,6 +333,151 @@ fn a_face_target(gs: &mut GameState, handle: MobjHandle) {
 
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.angle = angle;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A_Fall
+// ---------------------------------------------------------------------------
+
+/// Port of `A_Fall` from Doom's `p_enemy.c`.
+///
+/// Called on the first death-state frame.  Clears `MF_SOLID` and
+/// `MF_COUNTKILL` so corpses no longer block movement and are no longer
+/// tallied in the kill count again.
+fn a_fall(gs: &mut GameState, handle: MobjHandle) {
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.flags &= !(crate::mobj::flags::MF_SOLID | crate::mobj::flags::MF_COUNTKILL);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A_PosAttack (Trooper hitscan)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_PosAttack` from Doom's `p_enemy.c`.
+///
+/// Fires a single hitscan bolt at the current target.
+fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    // Check target exists and is alive.
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    // Face the target, then read the resulting angle.
+    a_face_target(gs, handle);
+    let angle = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.angle,
+        None => return,
+    };
+
+    let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
+    crate::combat::p_line_attack(gs, handle, angle, crate::combat::MISSILERANGE, damage, level);
+}
+
+// ---------------------------------------------------------------------------
+// A_SPosAttack (Sergeant — 3-pellet shotgun burst)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_SPosAttack` from Doom's `p_enemy.c`.
+///
+/// Fires 3 hitscan pellets with a small angular spread centered on the target.
+fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    let angle = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.angle,
+        None => return,
+    };
+
+    let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
+    // Spread: ~11.25° per step in 32-bit BAM space.
+    let spread = Bam(0x0800_0000u32);
+    for i in 0u32..3 {
+        // offsets: -spread, 0, +spread
+        let offset = Bam(spread.0.wrapping_mul(i).wrapping_sub(spread.0));
+        let shot_angle = Bam(angle.0.wrapping_add(offset.0));
+        crate::combat::p_line_attack(
+            gs, handle, shot_angle, crate::combat::MISSILERANGE, damage, level,
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A_TroopAttack (Imp — melee if in range, else hitscan)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_TroopAttack` from Doom's `p_enemy.c`.
+///
+/// Uses melee if the target is within `MELEERANGE`, otherwise hitscan.
+fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let (target, mo_x, mo_y) = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => (mo.target, mo.x, mo.y),
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    let angle = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.angle,
+        None => return,
+    };
+
+    let (tx, ty) = match gs.mobjslab.get(target) {
+        Some(t) => (t.x, t.y),
+        None => return,
+    };
+
+    let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
+    let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
+
+    if dist <= crate::combat::MELEERANGE.to_int() {
+        crate::combat::damage_mobj(gs, target, handle, damage);
+    } else {
+        crate::combat::p_line_attack(
+            gs, handle, angle, crate::combat::MISSILERANGE, damage, level,
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A_SargAttack (Demon — melee only)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_SargAttack` from Doom's `p_enemy.c`.
+///
+/// Deals melee damage only if the target is within `MELEERANGE`.
+fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
+    let (target, mo_x, mo_y) = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => (mo.target, mo.x, mo.y),
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    let (tx, ty) = match gs.mobjslab.get(target) {
+        Some(t) => (t.x, t.y),
+        None => return,
+    };
+
+    let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
+    if dist <= crate::combat::MELEERANGE.to_int() {
+        let damage = ((gs.tic_num % 3) + 1) as i32 * 4;
+        crate::combat::damage_mobj(gs, target, handle, damage);
     }
 }
 
@@ -406,7 +611,10 @@ mod tests {
         gs.mobjslab.get_mut(gs.player.handle).unwrap().health = 0;
 
         // Keep ticking: A_Chase should notice dead target and revert.
-        for _ in 0..10 {
+        // With attack states added (Batch 5), the trooper may be mid-attack
+        // sequence (ATK1→ATK2→ATK3→RUN1 = 4+4+4+4 = 16 tics) before A_Chase
+        // fires and detects the dead target.  Use 32 tics to be safe.
+        for _ in 0..32 {
             gs.tick(TicCmd::default(), None);
         }
 
@@ -417,5 +625,103 @@ mod tests {
             "trooper must revert to spawn state when target is dead"
         );
         assert_eq!(mo.target, MobjHandle::NULL, "target must be cleared");
+    }
+
+    // -----------------------------------------------------------------------
+    // Batch 5 attack tests
+    // -----------------------------------------------------------------------
+
+    /// Helper: spawn a monster of `kind` at `(x, y)` with given health,
+    /// already targeting the player, in the RUN1 chase state.
+    fn spawn_monster_chasing(
+        gs: &mut GameState,
+        kind: MobjKind,
+        x: i32,
+        y: i32,
+        health: i32,
+    ) -> MobjHandle {
+        use crate::mobjinfo::MOBJINFO;
+        use crate::states::{ids, STATES};
+        let see_sn = MOBJINFO[kind as usize].see_state;
+        let fallback_sn = if see_sn.0 != 0 {
+            see_sn
+        } else {
+            crate::mobj::StateNum(ids::S_POSS_RUN1)
+        };
+        let mut mo = Mobj::new(
+            kind,
+            Fixed16_16::from_int(x),
+            Fixed16_16::from_int(y),
+            Bam::ZERO,
+        );
+        mo.health  = health;
+        mo.flags   = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.state   = fallback_sn;
+        mo.tics    = STATES[fallback_sn.0 as usize].tics;
+        mo.target  = gs.player.handle;
+        mo.threshold = 60;
+        gs.mobjslab.alloc(mo)
+    }
+
+    #[test]
+    fn trooper_attacks_when_in_range() {
+        use crate::states::ids;
+        let mut gs = make_game_state();
+        // Trooper well within missile range (2048 units); needs to enter ATK state.
+        // Player at (0,0), trooper at (50, 0) — within MISSILERANGE (2048 units).
+        let trooper = spawn_monster_chasing(&mut gs, MobjKind::Trooper, 50, 0, 20);
+
+        // Tick enough times that A_Chase fires and detects missile range → ATK1.
+        // Chase fires every 4 tics; with target set we just need one A_Chase invocation.
+        let mut found_atk = false;
+        for _ in 0..20 {
+            gs.tick(TicCmd::default(), None);
+            let mo = gs.mobjslab.get(trooper).unwrap();
+            let s = mo.state.0;
+            if s == ids::S_POSS_ATK1 || s == ids::S_POSS_ATK2 || s == ids::S_POSS_ATK3 {
+                found_atk = true;
+                break;
+            }
+        }
+        assert!(found_atk, "trooper must enter an ATK state when player is in range");
+    }
+
+    #[test]
+    fn a_fall_clears_solid_flag() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+
+        // Confirm solid before.
+        assert_ne!(
+            gs.mobjslab.get(trooper).unwrap().flags & flags::MF_SOLID,
+            0,
+            "trooper must start with MF_SOLID"
+        );
+
+        // Dispatch A_Fall directly.
+        dispatch_action(&mut gs, trooper, ACTION_FALL, None);
+
+        let mo = gs.mobjslab.get(trooper).unwrap();
+        assert_eq!(
+            mo.flags & flags::MF_SOLID,
+            0,
+            "a_fall must clear MF_SOLID"
+        );
+        assert_eq!(
+            mo.flags & flags::MF_COUNTKILL,
+            0,
+            "a_fall must clear MF_COUNTKILL"
+        );
+    }
+
+    #[test]
+    fn a_pos_attack_does_not_panic_without_target() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        // No target set — must not panic.
+        dispatch_action(&mut gs, trooper, ACTION_POS_ATTACK, None);
+        // Health unchanged since we have no target to shoot.
+        let mo = gs.mobjslab.get(trooper).unwrap();
+        assert_eq!(mo.health, 20, "no target → no effect");
     }
 }

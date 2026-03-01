@@ -1,22 +1,27 @@
 //! Mobj state machine table — sparse subset covering core E1 monsters.
 //!
-//! Full Doom has ~900 state entries.  This table covers IDLE (A_Look) and
-//! CHASE (A_Chase) states for the 8 standard monsters, sufficient to drive
-//! the Batch 2 AI.  Pain and death states are wired in Batch 3.
+//! Full Doom has ~900 state entries.  This table covers IDLE (A_Look),
+//! CHASE (A_Chase), ATTACK, pain, and death states for the 8 standard
+//! monsters.
 //!
 //! # Layout
 //! Entry 0 is always `S_NULL` (terminal / hold-forever state).
 //! Within each monster group: STND (idle/look loop) → RUN1 ↔ RUN2 (2-frame
-//! chase loop, each 4 tics).
+//! chase loop, each 4 tics).  Attack states: ATK1 (windup) → ATK2 (fire)
+//! → ATK3 (recovery) → RUN1.
 
 use crate::mobj::{MobjStateEntry, StateNum};
 
 // ---------------------------------------------------------------------------
 // Action index constants (must match `actions::ACTION_*`)
 // ---------------------------------------------------------------------------
-const NONE: u8 = 0;
-const LOOK: u8 = 1;
-const CHASE: u8 = 2;
+const NONE:        u8 = 0;
+const LOOK:        u8 = 1;
+const CHASE:       u8 = 2;
+const POS_ATTACK:  u8 = 3;
+const SPOS_ATTACK: u8 = 4;
+const TROO_ATTACK: u8 = 5;
+const SARG_ATTACK: u8 = 6;
 
 // ---------------------------------------------------------------------------
 // State ID constants
@@ -113,8 +118,35 @@ pub mod ids {
     pub const S_SPID_DIE2: u16 = 47;
     pub const S_SPID_PAIN: u16 = 48;
 
+    // -----------------------------------------------------------------------
+    // Attack states (Batch 5)
+    // ATK1 = windup (4 tics, no action) → ATK2
+    // ATK2 = fire   (4 tics, attack action) → ATK3
+    // ATK3 = recover (4 tics, no action) → RUN1
+    // -----------------------------------------------------------------------
+
+    // --- Trooper attack ---
+    pub const S_POSS_ATK1: u16 = 49;
+    pub const S_POSS_ATK2: u16 = 50;
+    pub const S_POSS_ATK3: u16 = 51;
+
+    // --- Sergeant attack ---
+    pub const S_SPOS_ATK1: u16 = 52;
+    pub const S_SPOS_ATK2: u16 = 53;
+    pub const S_SPOS_ATK3: u16 = 54;
+
+    // --- Imp attack ---
+    pub const S_TROO_ATK1: u16 = 55;
+    pub const S_TROO_ATK2: u16 = 56;
+    pub const S_TROO_ATK3: u16 = 57;
+
+    // --- Demon attack ---
+    pub const S_SARG_ATK1: u16 = 58;
+    pub const S_SARG_ATK2: u16 = 59;
+    pub const S_SARG_ATK3: u16 = 60;
+
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 49;
+    pub const STATES_COUNT: usize = 61;
 }
 
 // ---------------------------------------------------------------------------
@@ -240,6 +272,42 @@ pub static STATES: &[MobjStateEntry] = &[
     MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
     // 48: S_SPID_PAIN
     MobjStateEntry { tics:  6, next_state: StateNum(ids::S_SPID_STND),  action: NONE },
+
+    // -----------------------------------------------------------------------
+    // Attack states (Batch 5)
+    // -----------------------------------------------------------------------
+
+    // --- Trooper (Zombie Man) attack ---
+    // 49: S_POSS_ATK1 — windup (no action)
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_POSS_ATK2),  action: NONE        },
+    // 50: S_POSS_ATK2 — fire hitscan
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_POSS_ATK3),  action: POS_ATTACK  },
+    // 51: S_POSS_ATK3 — recovery → resume chasing
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_POSS_RUN1),  action: NONE        },
+
+    // --- Sergeant (Shotgun Guy) attack ---
+    // 52: S_SPOS_ATK1 — windup
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPOS_ATK2),  action: NONE        },
+    // 53: S_SPOS_ATK2 — fire 3-pellet burst
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPOS_ATK3),  action: SPOS_ATTACK },
+    // 54: S_SPOS_ATK3 — recovery → resume chasing
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPOS_RUN1),  action: NONE        },
+
+    // --- Imp attack ---
+    // 55: S_TROO_ATK1 — windup
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_TROO_ATK2),  action: NONE        },
+    // 56: S_TROO_ATK2 — melee if close, else hitscan
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_TROO_ATK3),  action: TROO_ATTACK },
+    // 57: S_TROO_ATK3 — recovery → resume chasing
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_TROO_RUN1),  action: NONE        },
+
+    // --- Demon attack ---
+    // 58: S_SARG_ATK1 — windup
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SARG_ATK2),  action: NONE        },
+    // 59: S_SARG_ATK2 — melee only
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SARG_ATK3),  action: SARG_ATTACK },
+    // 60: S_SARG_ATK3 — recovery → resume chasing
+    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SARG_RUN1),  action: NONE        },
 ];
 
 // ---------------------------------------------------------------------------
@@ -310,5 +378,33 @@ mod tests {
         // Pain state must transition back to the trooper's idle state.
         assert_eq!(pain.next_state, StateNum(ids::S_POSS_STND));
         assert_eq!(pain.tics, 6);
+    }
+
+    #[test]
+    fn attack_states_return_to_run() {
+        // Trooper: ATK3 must return to RUN1.
+        let atk3 = &STATES[ids::S_POSS_ATK3 as usize];
+        assert_eq!(atk3.next_state, StateNum(ids::S_POSS_RUN1));
+        assert_eq!(atk3.action, actions::ACTION_NONE);
+
+        // Sergeant: ATK3 must return to RUN1.
+        let spos_atk3 = &STATES[ids::S_SPOS_ATK3 as usize];
+        assert_eq!(spos_atk3.next_state, StateNum(ids::S_SPOS_RUN1));
+
+        // Imp: ATK3 must return to RUN1.
+        let troo_atk3 = &STATES[ids::S_TROO_ATK3 as usize];
+        assert_eq!(troo_atk3.next_state, StateNum(ids::S_TROO_RUN1));
+
+        // Demon: ATK3 must return to RUN1.
+        let sarg_atk3 = &STATES[ids::S_SARG_ATK3 as usize];
+        assert_eq!(sarg_atk3.next_state, StateNum(ids::S_SARG_RUN1));
+    }
+
+    #[test]
+    fn attack_atk2_fires_correct_action() {
+        assert_eq!(STATES[ids::S_POSS_ATK2 as usize].action, actions::ACTION_POS_ATTACK);
+        assert_eq!(STATES[ids::S_SPOS_ATK2 as usize].action, actions::ACTION_SPOS_ATTACK);
+        assert_eq!(STATES[ids::S_TROO_ATK2 as usize].action, actions::ACTION_TROO_ATTACK);
+        assert_eq!(STATES[ids::S_SARG_ATK2 as usize].action, actions::ACTION_SARG_ATTACK);
     }
 }
