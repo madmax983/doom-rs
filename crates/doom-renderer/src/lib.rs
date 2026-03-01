@@ -4,6 +4,7 @@
 //! Hot path — no Verus proofs in this crate.
 //! `Framebuffer` and `PaletteLut` are the primary types consumed by `doom-tui`.
 
+pub mod automap;
 pub mod clip;
 pub mod column;
 pub mod framebuffer;
@@ -15,6 +16,7 @@ pub mod sprite;
 pub mod texture;
 pub mod visplane;
 
+pub use automap::draw_automap;
 pub use column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column, draw_column_solid};
 pub use framebuffer::Framebuffer;
 pub use palette::{PaletteLut, Rgb};
