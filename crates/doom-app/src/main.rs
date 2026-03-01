@@ -2,18 +2,23 @@
 //!
 //! Usage: doom-app --wad doom1.wad [--warp E1M1]
 
+mod audio_system;
 mod cheats;
 mod console;
+mod demo_mode;
 mod savegame;
 
 use anyhow::{Context, Result};
 use clap::Parser;
+use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
 use doom_map::Level;
 use doom_renderer::{Framebuffer, PaletteLut, draw_automap, draw_status_bar, render_level};
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
+
+use audio_system::{AudioSystem, music_lump_for_map, weapon_fire_sfx};
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -29,15 +34,27 @@ struct Args {
     /// Map to load (e.g. E1M1, MAP01). Defaults to E1M1.
     #[arg(long, default_value = "E1M1")]
     warp: String,
+
+    /// Skill level 1-5 (1=ITYTD, 2=HNTR, 3=HMP, 4=UV, 5=NM). Defaults to 3.
+    #[arg(long, default_value = "3")]
+    skill: u8,
+
+    /// Record gameplay to a .lmp demo file (e.g. --record my.lmp)
+    #[arg(long)]
+    record: Option<std::path::PathBuf>,
+
+    /// Play back a .lmp demo file instead of live input (e.g. --playdemo my.lmp)
+    #[arg(long)]
+    playdemo: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
 // DoomGame — implements DoomApp
 // ---------------------------------------------------------------------------
 
-struct DoomGame {
-    gs: GameState,
-    level: Level,
+pub(crate) struct DoomGame {
+    pub(crate) gs: GameState,
+    pub(crate) level: Level,
     cheat_detector: cheats::CheatDetector,
     console: console::Console,
     /// Path used for quick save (F5) and quick load (F9).
@@ -46,10 +63,14 @@ struct DoomGame {
     automap_visible: bool,
     /// Whether the IDDT cheat has toggled full automap reveal.
     automap_full_reveal: bool,
+    /// Optional audio subsystem.  `None` when no audio device is available.
+    audio: Option<AudioSystem>,
+    /// Whether the attack button was held during the previous tic (for edge detection).
+    prev_attack_down: bool,
 }
 
 impl DoomGame {
-    fn new(gs: GameState, level: Level) -> Self {
+    fn new(gs: GameState, level: Level, audio: Option<AudioSystem>) -> Self {
         Self {
             gs,
             level,
@@ -58,6 +79,8 @@ impl DoomGame {
             save_path: std::path::PathBuf::from("doom_save.bin"),
             automap_visible: false,
             automap_full_reveal: false,
+            audio,
+            prev_attack_down: false,
         }
     }
 }
@@ -134,7 +157,27 @@ impl DoomApp for DoomGame {
         }
 
         let cmd = ticinput_to_ticcmd(input);
+
+        // Capture attack state *before* the tick so we can detect the leading
+        // edge (button just pressed, not held from a previous tic).
+        let attack_pressed_now = cmd.buttons & doom_tui::buttons::BT_ATTACK != 0;
+        let attack_just_fired = attack_pressed_now && !self.prev_attack_down;
+
         self.gs.tick(cmd, Some(&mut self.level));
+
+        // Emit weapon SFX on the leading edge of the attack button, and only
+        // when the player is alive and has enough ammo to fire.
+        if attack_just_fired
+            && !self.gs.player.is_dead()
+            && doom_game::player_can_fire(&self.gs)
+        {
+            if let Some(ref audio) = self.audio {
+                let sfx_id = weapon_fire_sfx(self.gs.player.weapon);
+                audio.play_sfx(sfx_id);
+            }
+        }
+
+        self.prev_attack_down = attack_pressed_now;
     }
 
     fn render(&mut self, fb: &mut Framebuffer) {
@@ -176,7 +219,7 @@ impl DoomApp for DoomGame {
 /// Convert a `TicInput` from doom-tui to a `TicCmd` for doom-game.
 ///
 /// Both structs have identical movement/button fields; this is a direct copy.
-fn ticinput_to_ticcmd(input: TicInput) -> TicCmd {
+pub(crate) fn ticinput_to_ticcmd(input: TicInput) -> TicCmd {
     let mut cmd = TicCmd::default();
     cmd.forward_move = input.forward_move;
     cmd.side_move = input.side_move;
@@ -256,16 +299,87 @@ fn main() -> Result<()> {
     let mut gs = GameState::new(&args.warp);
     spawn_player(&mut gs, &level);
 
+    // Try to open the audio subsystem.  Returns None in headless/CI environments.
+    let audio = AudioSystem::try_open(&wad);
+
+    // Start map music if audio is available.
+    if let Some(ref audio) = audio {
+        if let Some(music_lump) = music_lump_for_map(&args.warp) {
+            if let Some(mus_data) = wad.find_lump_data(&music_lump) {
+                audio.start_music(mus_data.to_vec());
+            }
+        }
+    }
+
+    // Validate mutually exclusive demo args.
+    if args.record.is_some() && args.playdemo.is_some() {
+        eprintln!("Error: --record and --playdemo cannot be used together");
+        std::process::exit(1);
+    }
+
     // Build the app.
-    let mut app = DoomGame::new(gs, level);
+    let app = DoomGame::new(gs, level, audio);
 
     // Start the terminal event loop and run until the user quits (Q or Esc).
     let mut event_loop = DoomEventLoop::new()
         .map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
 
-    event_loop
-        .run(&mut app, &blit_palette)
-        .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+    if let Some(demo_path) = args.playdemo {
+        // Load and parse the demo file.
+        let demo_bytes = std::fs::read(&demo_path)
+            .with_context(|| format!("Failed to read demo: {}", demo_path.display()))?;
+        let player = DemoPlayer::parse(&demo_bytes)
+            .with_context(|| "Failed to parse demo")?;
+        let mut playback_app = demo_mode::DemoPlaybackApp::new(app, player);
+        event_loop
+            .run(&mut playback_app, &blit_palette)
+            .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+    } else if let Some(record_path) = args.record {
+        // Parse episode/map from the --warp argument.
+        let (episode, map) = parse_warp_episode_map(&args.warp);
+        // Clamp skill to 0-4 (LMP uses 0-based skill internally).
+        let skill = args.skill.saturating_sub(1).min(4);
+        let header = LmpHeader::new_singleplayer(skill, episode, map);
+        let recorder = DemoRecorder::new(header);
+        let mut recording_app = demo_mode::DemoRecordingWrapper::new(app, recorder, record_path);
+        event_loop
+            .run(&mut recording_app, &blit_palette)
+            .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+    } else {
+        let mut app = app;
+        event_loop
+            .run(&mut app, &blit_palette)
+            .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+    }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Warp string parsing
+// ---------------------------------------------------------------------------
+
+/// Parse a warp string (e.g. `"E1M1"` or `"MAP03"`) into `(episode, map)`.
+///
+/// For `E{e}M{m}` format: returns `(e, m)`.
+/// For `MAP{xx}` format: returns `(1, xx)`.
+/// Falls back to `(1, 1)` on parse failure.
+fn parse_warp_episode_map(warp: &str) -> (u8, u8) {
+    let upper = warp.to_uppercase();
+    if let Some(rest) = upper.strip_prefix('E') {
+        // E{e}M{m}
+        if let Some(mid) = rest.find('M') {
+            let ep_str = &rest[..mid];
+            let map_str = &rest[mid + 1..];
+            if let (Ok(ep), Ok(map)) = (ep_str.parse::<u8>(), map_str.parse::<u8>()) {
+                return (ep, map);
+            }
+        }
+    } else if let Some(rest) = upper.strip_prefix("MAP") {
+        if let Ok(map) = rest.parse::<u8>() {
+            return (1, map);
+        }
+    }
+    // Fallback
+    (1, 1)
 }
