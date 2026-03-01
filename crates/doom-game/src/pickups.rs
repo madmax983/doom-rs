@@ -162,7 +162,27 @@ fn apply_pickup(gs: &mut GameState, kind: MobjKind) {
             gs.player.heal(100);
         }
 
-        // Everything else: keys, decorations, power-ups not yet implemented.
+        // ---- Keys ----
+        MobjKind::BlueCard => {
+            gs.player.give_key(crate::player::KEY_BLUE_CARD);
+        }
+        MobjKind::YellowCard => {
+            gs.player.give_key(crate::player::KEY_YELLOW_CARD);
+        }
+        MobjKind::RedCard => {
+            gs.player.give_key(crate::player::KEY_RED_CARD);
+        }
+        MobjKind::BlueSkull => {
+            gs.player.give_key(crate::player::KEY_BLUE_SKULL);
+        }
+        MobjKind::YellowSkull => {
+            gs.player.give_key(crate::player::KEY_YELLOW_SKULL);
+        }
+        MobjKind::RedSkull => {
+            gs.player.give_key(crate::player::KEY_RED_SKULL);
+        }
+
+        // Everything else: decorations, power-ups not yet implemented.
         _ => {}
     }
 }
@@ -365,6 +385,34 @@ mod tests {
             gs.player.ammo(AmmoType::Rockets as usize),
             rockets_before + 1,
             "RocketAmmo should give 1 rocket"
+        );
+    }
+
+    #[test]
+    fn pickup_blue_card_gives_key() {
+        let mut gs = make_game_state();
+        assert!(!gs.player.has_key(crate::player::KEY_BLUE_CARD));
+
+        spawn_item(&mut gs, MobjKind::BlueCard, 0, 0);
+        p_check_pickups(&mut gs);
+
+        assert!(
+            gs.player.has_key(crate::player::KEY_BLUE_CARD),
+            "Player should have blue card after pickup"
+        );
+    }
+
+    #[test]
+    fn pickup_red_skull_gives_key() {
+        let mut gs = make_game_state();
+        assert!(!gs.player.has_key(crate::player::KEY_RED_SKULL));
+
+        spawn_item(&mut gs, MobjKind::RedSkull, 0, 0);
+        p_check_pickups(&mut gs);
+
+        assert!(
+            gs.player.has_key(crate::player::KEY_RED_SKULL),
+            "Player should have red skull after pickup"
         );
     }
 }

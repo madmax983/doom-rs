@@ -12,6 +12,23 @@ use doom_types::limits::{MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_WEAPONS}
 use crate::mobj::MobjHandle;
 
 // ---------------------------------------------------------------------------
+// Key bit constants
+// ---------------------------------------------------------------------------
+
+/// Blue keycard bit.
+pub const KEY_BLUE_CARD:    u8 = 0x01;
+/// Yellow keycard bit.
+pub const KEY_YELLOW_CARD:  u8 = 0x02;
+/// Red keycard bit.
+pub const KEY_RED_CARD:     u8 = 0x04;
+/// Blue skull key bit.
+pub const KEY_BLUE_SKULL:   u8 = 0x08;
+/// Yellow skull key bit.
+pub const KEY_YELLOW_SKULL: u8 = 0x10;
+/// Red skull key bit.
+pub const KEY_RED_SKULL:    u8 = 0x20;
+
+// ---------------------------------------------------------------------------
 // Power-up constants
 // ---------------------------------------------------------------------------
 
@@ -124,6 +141,10 @@ pub struct PlayerState {
     // --- Power-ups: remaining tics (0 = not active) ---
     pub powers: [u32; NUM_POWERS],
 
+    // --- Keys ---
+    /// Bitmask of collected keys (KEY_BLUE_CARD, etc.).
+    pub keys: u8,
+
     // --- HUD flash counters ---
     /// Tics to flash the screen yellow (pickup).
     pub bonus_count: u32,
@@ -157,6 +178,7 @@ impl PlayerState {
             attack_down: false,
             use_down: false,
             powers: [0; NUM_POWERS],
+            keys: 0,
             bonus_count: 0,
             damage_count: 0,
         }
@@ -228,6 +250,22 @@ impl PlayerState {
             self.armor = points.min(MAX_ARMOR);
             self.armor_type = armor_type;
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Keys
+    // -----------------------------------------------------------------------
+
+    /// Returns `true` if the player holds the key identified by `key_bit`.
+    #[inline]
+    pub fn has_key(&self, key_bit: u8) -> bool {
+        self.keys & key_bit != 0
+    }
+
+    /// Give the player the key identified by `key_bit`.
+    #[inline]
+    pub fn give_key(&mut self, key_bit: u8) {
+        self.keys |= key_bit;
     }
 
     // -----------------------------------------------------------------------
@@ -404,5 +442,31 @@ mod tests {
         let mut p = PlayerState::pistol_start(MobjHandle::NULL);
         p.give_armor(MAX_ARMOR + 100, 2);
         assert_eq!(p.armor(), MAX_ARMOR);
+    }
+
+    #[test]
+    fn give_key_sets_bit() {
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        p.give_key(KEY_BLUE_CARD);
+        assert!(p.has_key(KEY_BLUE_CARD));
+        assert!(!p.has_key(KEY_RED_CARD));
+    }
+
+    #[test]
+    fn give_multiple_keys_independent() {
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        p.give_key(KEY_BLUE_CARD);
+        p.give_key(KEY_YELLOW_SKULL);
+        assert!(p.has_key(KEY_BLUE_CARD));
+        assert!(p.has_key(KEY_YELLOW_SKULL));
+        assert!(!p.has_key(KEY_RED_CARD));
+        assert!(!p.has_key(KEY_BLUE_SKULL));
+    }
+
+    #[test]
+    fn pistol_start_has_no_keys() {
+        let p = PlayerState::pistol_start(MobjHandle::NULL);
+        assert_eq!(p.keys, 0);
+        assert!(!p.has_key(KEY_BLUE_CARD));
     }
 }

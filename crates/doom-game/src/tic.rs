@@ -128,10 +128,16 @@ impl GameState {
             }
         }
 
-        // Sector specials: damage floors, etc.
+        // Sector specials: damage floors, etc. (immutable level borrow).
         if let Some(lv) = level.as_deref() {
             let handle = self.player.handle;
             crate::specials::tick_sector_specials(self, lv, handle);
+        }
+
+        // Animated doors and light specials (mutable level borrow).
+        if let Some(lv) = level.as_deref_mut() {
+            crate::specials::tick_doors(self, lv);
+            crate::specials::tick_lights(self, lv);
         }
 
         // Thinker loop: advance all actor state machines.

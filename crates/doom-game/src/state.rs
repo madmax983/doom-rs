@@ -8,6 +8,52 @@ use crate::mobj::MobjSlab;
 use crate::player::PlayerState;
 
 // ---------------------------------------------------------------------------
+// Sector mover / light thinker types
+// ---------------------------------------------------------------------------
+
+/// An animated door or floor/ceiling mover.
+///
+/// Added to `GameState::active_doors` when a door linedef is activated.
+/// Ticked each tic by `specials::tick_doors`.
+#[derive(Clone, Debug)]
+pub struct DoorMover {
+    /// Index into `level.sectors`.
+    pub sector: usize,
+    /// Target ceiling height (doors) or floor height (floors).
+    pub target_height: i16,
+    /// Current ceiling/floor height (updated each tic — mirrors the sector value).
+    pub current_height: i16,
+    /// Speed in map units per tic (positive = opening/rising, negative = closing/lowering).
+    pub speed: i16,
+    /// `true` = this mover operates on ceiling height, `false` = floor height.
+    pub is_ceiling: bool,
+    /// Tics to wait at top/bottom before reversing (0 = no wait, no reverse).
+    pub wait_tics: i32,
+    /// Countdown until the door starts closing again (−1 = permanent open/close).
+    pub countdown: i32,
+}
+
+/// A flickering or blinking light special.
+///
+/// Added to `GameState::active_lights` by `specials::spawn_level_specials`.
+/// Ticked each tic by `specials::tick_lights`.
+#[derive(Clone, Debug)]
+pub struct LightSpecial {
+    /// Index into `level.sectors`.
+    pub sector: usize,
+    /// Timer counting down to next toggle.
+    pub timer: i32,
+    /// Timer period in tics (reset to this value after each toggle).
+    pub period: i32,
+    /// Light value when in the bright phase.
+    pub bright: i16,
+    /// Light value when in the dark phase.
+    pub dark: i16,
+    /// `true` if currently in the bright phase.
+    pub is_bright: bool,
+}
+
+// ---------------------------------------------------------------------------
 // Doom's deterministic RNG
 // ---------------------------------------------------------------------------
 
@@ -111,6 +157,11 @@ pub struct GameState {
     pub total_kills:  u32,
     /// Total collectable items.
     pub total_items:  u32,
+
+    /// Active door/floor/ceiling movers (ticked by `specials::tick_doors`).
+    pub active_doors:  Vec<DoorMover>,
+    /// Active light specials (ticked by `specials::tick_lights`).
+    pub active_lights: Vec<LightSpecial>,
 }
 
 impl GameState {
@@ -132,6 +183,8 @@ impl GameState {
             secret_count: 0,
             total_kills: 0,
             total_items: 0,
+            active_doors: Vec::new(),
+            active_lights: Vec::new(),
         }
     }
 }
