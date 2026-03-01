@@ -184,7 +184,7 @@ impl DoomEventLoop {
             // --- Fixed-step tic simulation ---
             self.tic_accumulator += elapsed;
             while self.tic_accumulator >= TIC_DURATION {
-                let tic_input = self.input.to_tic_input();
+                let tic_input = self.input.to_tic_input(); // consumes pending_console_char
                 app.tick(tic_input);
                 self.tic_accumulator -= TIC_DURATION;
             }
@@ -217,6 +217,14 @@ impl DoomEventLoop {
                         KeyEventKind::Press => {
                             if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
                                 self.is_running = false;
+                            }
+                            // Queue raw char for console/cheat processing.
+                            if let KeyCode::Char(ch) = key.code {
+                                self.input.push_console_char(ch);
+                            } else if key.code == KeyCode::Enter {
+                                self.input.push_console_char('\n');
+                            } else if key.code == KeyCode::Backspace {
+                                self.input.push_console_char('\x08');
                             }
                             self.input.key_down(key.code);
                         }

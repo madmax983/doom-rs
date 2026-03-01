@@ -44,6 +44,9 @@ pub struct TicInput {
     pub buttons: u8,
     /// ASCII chatchar (0 = none).
     pub chatchar: u8,
+    /// Raw character keypress for console/cheat input (`None` if no printable
+    /// key was pressed this tic, or if multiple keys arrived — first wins).
+    pub console_char: Option<char>,
 }
 
 /// Tracks which keys are currently held and produces `TicInput` on demand.
@@ -51,6 +54,9 @@ pub struct TicInput {
 pub struct InputState {
     held: HashSet<KeyCode>,
     shift_held: bool,
+    /// Pending raw character press to forward to the console/cheat system.
+    /// Set by `push_console_char`; consumed (and cleared) by `to_tic_input`.
+    pending_console_char: Option<char>,
 }
 
 impl InputState {
@@ -85,8 +91,23 @@ impl InputState {
         self.held.contains(&key)
     }
 
+    /// Queue a raw character for console/cheat delivery.
+    ///
+    /// Only the first character queued between two consecutive tics is
+    /// delivered (first-wins). This keeps the console responsive without
+    /// requiring a full event queue.
+    pub fn push_console_char(&mut self, ch: char) {
+        if self.pending_console_char.is_none() {
+            self.pending_console_char = Some(ch);
+        }
+    }
+
     /// Synthesize a `TicInput` from the current held state.
-    pub fn to_tic_input(&self) -> TicInput {
+    ///
+    /// This method takes `&mut self` so it can consume the pending
+    /// `console_char` (it is cleared after being placed in the returned
+    /// `TicInput`).
+    pub fn to_tic_input(&mut self) -> TicInput {
         let mut t = TicInput::default();
 
         // Forward / backward
@@ -142,6 +163,9 @@ impl InputState {
             }
         }
 
+        // Consume pending console char (first-wins, cleared each tic).
+        t.console_char = self.pending_console_char.take();
+
         t
     }
 
@@ -149,6 +173,7 @@ impl InputState {
     pub fn clear(&mut self) {
         self.held.clear();
         self.shift_held = false;
+        self.pending_console_char = None;
     }
 }
 
@@ -207,7 +232,7 @@ mod tests {
 
     #[test]
     fn no_keys_produces_zero_input() {
-        let s = InputState::new();
+        let mut s = InputState::new();
         assert_eq!(s.to_tic_input(), TicInput::default());
     }
 }

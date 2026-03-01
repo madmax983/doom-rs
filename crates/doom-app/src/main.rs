@@ -2,6 +2,9 @@
 //!
 //! Usage: doom-app --wad doom1.wad [--warp E1M1]
 
+mod cheats;
+mod console;
+
 use anyhow::{Context, Result};
 use clap::Parser;
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
@@ -34,16 +37,56 @@ struct Args {
 struct DoomGame {
     gs: GameState,
     level: Level,
+    cheat_detector: cheats::CheatDetector,
+    console: console::Console,
 }
 
 impl DoomGame {
     fn new(gs: GameState, level: Level) -> Self {
-        Self { gs, level }
+        Self {
+            gs,
+            level,
+            cheat_detector: cheats::CheatDetector::new(),
+            console: console::Console::new(),
+        }
     }
 }
 
 impl DoomApp for DoomGame {
     fn tick(&mut self, input: TicInput) {
+        // Handle console / cheat input before forwarding movement to the
+        // game simulation.
+        if let Some(ch) = input.console_char {
+            if ch == '`' || ch == '~' {
+                // Toggle the console overlay on backtick/tilde.
+                self.console.toggle();
+            } else if self.console.visible {
+                // Console is open: feed characters to the input line.
+                if ch == '\n' {
+                    // Enter: submit the line, try to apply as a cheat.
+                    let line = self.console.submit();
+                    if !line.is_empty() {
+                        let upper = line.to_uppercase();
+                        let msg = cheats::apply_cheat(&mut self.gs, &upper);
+                        let display = if msg.is_empty() {
+                            format!("Unknown command: {line}")
+                        } else {
+                            msg.to_string()
+                        };
+                        self.console.print(display);
+                    }
+                } else {
+                    self.console.type_char(ch);
+                }
+            } else {
+                // Console is closed: feed character to the cheat detector.
+                if let Some(cheat_name) = self.cheat_detector.feed(ch) {
+                    // Apply the cheat; message reserved for future HUD display.
+                    let _msg = cheats::apply_cheat(&mut self.gs, cheat_name);
+                }
+            }
+        }
+
         let cmd = ticinput_to_ticcmd(input);
         self.gs.tick(cmd, Some(&mut self.level));
     }

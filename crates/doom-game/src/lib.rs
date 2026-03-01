@@ -13,6 +13,7 @@
 
 pub mod actions;
 pub mod combat;
+pub mod dehacked;
 pub mod mobj;
 pub mod mobjinfo;
 pub mod movement;
@@ -26,6 +27,7 @@ pub mod tic;
 pub mod weapons;
 
 pub use actions::{ACTION_CHASE, ACTION_LOOK, ACTION_NONE, dispatch_action};
+pub use dehacked::{DehError, DehPatch, FramePatch, ThingPatch, WeaponPatch};
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
 pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MobjInfo, MOBJINFO};
