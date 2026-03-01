@@ -1,0 +1,11 @@
+# Clippy configuration for doom-rs workspace.
+# Lints are set via [workspace.lints.clippy] in Cargo.toml.
+# This file holds value-level configuration only.
+
+msrv = "1.87.0"
+
+# Cognitive complexity threshold — game engine code tends to be branchy.
+cognitive-complexity-threshold = 30
+
+# Allow up to 10 function arguments (renderer draw calls can be verbose).
+too-many-arguments-threshold = 10

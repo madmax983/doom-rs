@@ -67,8 +67,54 @@ pub mod ids {
     pub const S_SPID_RUN1: u16 = 23;
     pub const S_SPID_RUN2: u16 = 24;
 
+    // -----------------------------------------------------------------------
+    // Death and pain states (Batch 3)
+    // Death: 2 frames — DIE1 (active, 8 tics) → DIE2 (holds at S_NULL forever)
+    // Pain:  1 frame  — PAIN (6 tics) → returns to spawn_state (STND)
+    // -----------------------------------------------------------------------
+
+    // --- Trooper ---
+    pub const S_POSS_DIE1: u16 = 25;
+    pub const S_POSS_DIE2: u16 = 26;
+    pub const S_POSS_PAIN: u16 = 27;
+
+    // --- Sergeant ---
+    pub const S_SPOS_DIE1: u16 = 28;
+    pub const S_SPOS_DIE2: u16 = 29;
+    pub const S_SPOS_PAIN: u16 = 30;
+
+    // --- Imp ---
+    pub const S_TROO_DIE1: u16 = 31;
+    pub const S_TROO_DIE2: u16 = 32;
+    pub const S_TROO_PAIN: u16 = 33;
+
+    // --- Demon ---
+    pub const S_SARG_DIE1: u16 = 34;
+    pub const S_SARG_DIE2: u16 = 35;
+    pub const S_SARG_PAIN: u16 = 36;
+
+    // --- Cacodemon ---
+    pub const S_HEAD_DIE1: u16 = 37;
+    pub const S_HEAD_DIE2: u16 = 38;
+    pub const S_HEAD_PAIN: u16 = 39;
+
+    // --- Baron of Hell ---
+    pub const S_BOSS_DIE1: u16 = 40;
+    pub const S_BOSS_DIE2: u16 = 41;
+    pub const S_BOSS_PAIN: u16 = 42;
+
+    // --- Cyberdemon ---
+    pub const S_CYBER_DIE1: u16 = 43;
+    pub const S_CYBER_DIE2: u16 = 44;
+    pub const S_CYBER_PAIN: u16 = 45;
+
+    // --- Spider Mastermind ---
+    pub const S_SPID_DIE1: u16 = 46;
+    pub const S_SPID_DIE2: u16 = 47;
+    pub const S_SPID_PAIN: u16 = 48;
+
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 25;
+    pub const STATES_COUNT: usize = 49;
 }
 
 // ---------------------------------------------------------------------------
@@ -126,6 +172,74 @@ pub static STATES: &[MobjStateEntry] = &[
     MobjStateEntry { tics: 10, next_state: StateNum(ids::S_SPID_STND), action: LOOK  },
     MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPID_RUN2), action: CHASE },
     MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPID_RUN1), action: CHASE },
+
+    // -----------------------------------------------------------------------
+    // Death and pain states
+    // -----------------------------------------------------------------------
+
+    // --- Trooper death / pain ---
+    // 25: S_POSS_DIE1
+    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_POSS_DIE2),  action: NONE },
+    // 26: S_POSS_DIE2 — holds forever (next_state = S_NULL)
+    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    // 27: S_POSS_PAIN — returns to idle
+    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_POSS_STND),  action: NONE },
+
+    // --- Sergeant death / pain ---
+    // 28: S_SPOS_DIE1
+    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_SPOS_DIE2),  action: NONE },
+    // 29: S_SPOS_DIE2
+    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    // 30: S_SPOS_PAIN
+    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_SPOS_STND),  action: NONE },
+
+    // --- Imp death / pain ---
+    // 31: S_TROO_DIE1
+    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_TROO_DIE2),  action: NONE },
+    // 32: S_TROO_DIE2
+    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    // 33: S_TROO_PAIN
+    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_TROO_STND),  action: NONE },
+
+    // --- Demon death / pain ---
+    // 34: S_SARG_DIE1
+    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_SARG_DIE2),  action: NONE },
+    // 35: S_SARG_DIE2
+    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    // 36: S_SARG_PAIN
+    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_SARG_STND),  action: NONE },
+
+    // --- Cacodemon death / pain ---
+    // 37: S_HEAD_DIE1
+    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_HEAD_DIE2),  action: NONE },
+    // 38: S_HEAD_DIE2
+    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    // 39: S_HEAD_PAIN
+    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_HEAD_STND),  action: NONE },
+
+    // --- Baron of Hell death / pain ---
+    // 40: S_BOSS_DIE1
+    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_BOSS_DIE2),  action: NONE },
+    // 41: S_BOSS_DIE2
+    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    // 42: S_BOSS_PAIN
+    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_BOSS_STND),  action: NONE },
+
+    // --- Cyberdemon death / pain ---
+    // 43: S_CYBER_DIE1
+    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_CYBER_DIE2), action: NONE },
+    // 44: S_CYBER_DIE2
+    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    // 45: S_CYBER_PAIN
+    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_CYBER_STND), action: NONE },
+
+    // --- Spider Mastermind death / pain ---
+    // 46: S_SPID_DIE1
+    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_SPID_DIE2),  action: NONE },
+    // 47: S_SPID_DIE2
+    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    // 48: S_SPID_PAIN
+    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_SPID_STND),  action: NONE },
 ];
 
 // ---------------------------------------------------------------------------
@@ -177,5 +291,24 @@ mod tests {
                 "state {i} has next_state {next} out of bounds"
             );
         }
+    }
+
+    #[test]
+    fn trooper_death_state_is_two_frames() {
+        let die1 = &STATES[ids::S_POSS_DIE1 as usize];
+        let die2 = &STATES[ids::S_POSS_DIE2 as usize];
+        // DIE1 must transition to DIE2.
+        assert_eq!(die1.next_state, StateNum(ids::S_POSS_DIE2));
+        // DIE2 must hold forever (tics = -1) and chain to S_NULL.
+        assert_eq!(die2.tics, -1);
+        assert_eq!(die2.next_state, StateNum(ids::S_NULL));
+    }
+
+    #[test]
+    fn pain_state_returns_to_idle() {
+        let pain = &STATES[ids::S_POSS_PAIN as usize];
+        // Pain state must transition back to the trooper's idle state.
+        assert_eq!(pain.next_state, StateNum(ids::S_POSS_STND));
+        assert_eq!(pain.tics, 6);
     }
 }

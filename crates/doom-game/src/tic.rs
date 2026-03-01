@@ -85,15 +85,41 @@ impl GameState {
     /// Advance the simulation by one tic.
     ///
     /// 1. Increment `tic_num`.
-    /// 2. Apply `cmd` to the player Mobj (`P_MovePlayer`).
-    /// 3. Run the thinker loop for all actors.
+    /// 2. Apply `cmd` to the player Mobj (`P_MovePlayer`), including weapon
+    ///    firing (`BT_ATTACK`) and use-key activation (`BT_USE`).
+    /// 3. Tick sector specials (damage floors, crusher ceilings).
+    /// 4. Run the thinker loop for all actors.
     ///
-    /// `level` is `None` in unit tests (skips blockmap collision) and
-    /// `Some(level)` in real gameplay.
-    pub fn tick(&mut self, cmd: TicCmd, level: Option<&Level>) {
+    /// `level` is `None` in unit tests (skips blockmap collision, BT_USE,
+    /// and sector specials) and `Some(&mut level)` in real gameplay.
+    pub fn tick(&mut self, cmd: TicCmd, mut level: Option<&mut Level>) {
         self.tic_num = self.tic_num.wrapping_add(1);
-        self.p_move_player(cmd, level);
-        self.run_thinkers(level);
+
+        // Movement + attack (immutable level borrow).
+        self.p_move_player(cmd, level.as_deref());
+
+        // BT_ATTACK: fire current weapon.
+        if cmd.buttons & bt::BT_ATTACK != 0 {
+            let handle = self.player.handle;
+            crate::weapons::fire_weapon(self, level.as_deref(), handle);
+        }
+
+        // BT_USE: activate linedef ahead of player.
+        if cmd.buttons & bt::BT_USE != 0 {
+            if let Some(lv) = level.as_deref_mut() {
+                let handle = self.player.handle;
+                crate::specials::p_use_lines(self, lv, handle);
+            }
+        }
+
+        // Sector specials: damage floors, etc.
+        if let Some(lv) = level.as_deref() {
+            let handle = self.player.handle;
+            crate::specials::tick_sector_specials(self, lv, handle);
+        }
+
+        // Thinker loop: advance all actor state machines.
+        self.run_thinkers(level.as_deref());
     }
 
     // -----------------------------------------------------------------------

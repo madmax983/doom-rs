@@ -120,8 +120,8 @@ pub static MOBJINFO: [MobjInfo; 67] = [
         pain_chance:  200,
         spawn_state:  sn(ids::S_POSS_STND),
         see_state:    sn(ids::S_POSS_RUN1),
-        pain_state:   sn(ids::S_NULL),
-        death_state:  sn(ids::S_NULL),
+        pain_state:   sn(ids::S_POSS_PAIN),
+        death_state:  sn(ids::S_POSS_DIE1),
     },
     // -----------------------------------------------------------------------
     // 2: Sergeant (Shotgun Guy) — MT_SHOTGUY
@@ -136,8 +136,8 @@ pub static MOBJINFO: [MobjInfo; 67] = [
         pain_chance:  170,
         spawn_state:  sn(ids::S_SPOS_STND),
         see_state:    sn(ids::S_SPOS_RUN1),
-        pain_state:   sn(ids::S_NULL),
-        death_state:  sn(ids::S_NULL),
+        pain_state:   sn(ids::S_SPOS_PAIN),
+        death_state:  sn(ids::S_SPOS_DIE1),
     },
     // -----------------------------------------------------------------------
     // 3: Imp — MT_TROOP
@@ -152,8 +152,8 @@ pub static MOBJINFO: [MobjInfo; 67] = [
         pain_chance:  200,
         spawn_state:  sn(ids::S_TROO_STND),
         see_state:    sn(ids::S_TROO_RUN1),
-        pain_state:   sn(ids::S_NULL),
-        death_state:  sn(ids::S_NULL),
+        pain_state:   sn(ids::S_TROO_PAIN),
+        death_state:  sn(ids::S_TROO_DIE1),
     },
     // -----------------------------------------------------------------------
     // 4: Demon (Pink Demon) — MT_SERGEANT
@@ -168,8 +168,8 @@ pub static MOBJINFO: [MobjInfo; 67] = [
         pain_chance:  180,
         spawn_state:  sn(ids::S_SARG_STND),
         see_state:    sn(ids::S_SARG_RUN1),
-        pain_state:   sn(ids::S_NULL),
-        death_state:  sn(ids::S_NULL),
+        pain_state:   sn(ids::S_SARG_PAIN),
+        death_state:  sn(ids::S_SARG_DIE1),
     },
     // -----------------------------------------------------------------------
     // 5: Spectre — same as Demon + MF_SHADOW
@@ -184,8 +184,8 @@ pub static MOBJINFO: [MobjInfo; 67] = [
         pain_chance:  180,
         spawn_state:  sn(ids::S_SARG_STND),
         see_state:    sn(ids::S_SARG_RUN1),
-        pain_state:   sn(ids::S_NULL),
-        death_state:  sn(ids::S_NULL),
+        pain_state:   sn(ids::S_SARG_PAIN),
+        death_state:  sn(ids::S_SARG_DIE1),
     },
     // -----------------------------------------------------------------------
     // 6: Lost Soul — MT_SKULL  (no state table entry yet)
@@ -216,8 +216,8 @@ pub static MOBJINFO: [MobjInfo; 67] = [
         pain_chance:  128,
         spawn_state:  sn(ids::S_HEAD_STND),
         see_state:    sn(ids::S_HEAD_RUN1),
-        pain_state:   sn(ids::S_NULL),
-        death_state:  sn(ids::S_NULL),
+        pain_state:   sn(ids::S_HEAD_PAIN),
+        death_state:  sn(ids::S_HEAD_DIE1),
     },
     // -----------------------------------------------------------------------
     // 8: Baron of Hell — MT_BRUISER
@@ -232,8 +232,8 @@ pub static MOBJINFO: [MobjInfo; 67] = [
         pain_chance:  50,
         spawn_state:  sn(ids::S_BOSS_STND),
         see_state:    sn(ids::S_BOSS_RUN1),
-        pain_state:   sn(ids::S_NULL),
-        death_state:  sn(ids::S_NULL),
+        pain_state:   sn(ids::S_BOSS_PAIN),
+        death_state:  sn(ids::S_BOSS_DIE1),
     },
     // -----------------------------------------------------------------------
     // 9: Hell Knight — shares Baron states for now
@@ -248,8 +248,8 @@ pub static MOBJINFO: [MobjInfo; 67] = [
         pain_chance:  50,
         spawn_state:  sn(ids::S_BOSS_STND),
         see_state:    sn(ids::S_BOSS_RUN1),
-        pain_state:   sn(ids::S_NULL),
-        death_state:  sn(ids::S_NULL),
+        pain_state:   sn(ids::S_BOSS_PAIN),
+        death_state:  sn(ids::S_BOSS_DIE1),
     },
     // -----------------------------------------------------------------------
     // 10: Arachnotron — MT_BABY  (state table entry Batch 3)
@@ -334,8 +334,8 @@ pub static MOBJINFO: [MobjInfo; 67] = [
         pain_chance:  40,
         spawn_state:  sn(ids::S_SPID_STND),
         see_state:    sn(ids::S_SPID_RUN1),
-        pain_state:   sn(ids::S_NULL),
-        death_state:  sn(ids::S_NULL),
+        pain_state:   sn(ids::S_SPID_PAIN),
+        death_state:  sn(ids::S_SPID_DIE1),
     },
     // 16: Cyberdemon — MT_CYBORG
     MobjInfo {
@@ -348,8 +348,8 @@ pub static MOBJINFO: [MobjInfo; 67] = [
         pain_chance:  20,
         spawn_state:  sn(ids::S_CYBER_STND),
         see_state:    sn(ids::S_CYBER_RUN1),
-        pain_state:   sn(ids::S_NULL),
-        death_state:  sn(ids::S_NULL),
+        pain_state:   sn(ids::S_CYBER_PAIN),
+        death_state:  sn(ids::S_CYBER_DIE1),
     },
     // 17: Wolf SS — reuses Trooper states
     MobjInfo {
@@ -528,5 +528,23 @@ mod tests {
                 "MobjKind {kind_idx} see_state {see} out of STATES bounds"
             );
         }
+    }
+
+    #[test]
+    fn trooper_has_death_state() {
+        let info = &MOBJINFO[MobjKind::Trooper as usize];
+        assert_eq!(info.death_state, StateNum(ids::S_POSS_DIE1));
+    }
+
+    #[test]
+    fn trooper_has_pain_state() {
+        let info = &MOBJINFO[MobjKind::Trooper as usize];
+        assert_eq!(info.pain_state, StateNum(ids::S_POSS_PAIN));
+    }
+
+    #[test]
+    fn cyberdemon_pain_chance_is_low() {
+        let info = &MOBJINFO[MobjKind::Cyberdemon as usize];
+        assert_eq!(info.pain_chance, 20);
     }
 }
