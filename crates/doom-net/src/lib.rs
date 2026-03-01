@@ -10,9 +10,12 @@ pub mod rollback;
 pub mod server;
 pub mod transport;
 
+pub use client::NetClient;
 pub use input_log::InputLog;
 pub use packet::{TicPacket, WireTicCmd, MAX_PLAYERS};
 pub use rollback::{MAX_ROLLBACK_TICS, SnapshotRing};
+pub use server::RelayServer;
+pub use transport::{MAX_PACKET_BYTES, UdpTransport};
 
 /// Errors produced by the netcode layer.
 #[derive(Debug, thiserror::Error)]
