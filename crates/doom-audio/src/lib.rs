@@ -9,8 +9,10 @@ pub mod opl;
 pub mod sfx;
 
 pub use driver::AudioDriver;
+pub use midi::MidiPlayer;
 pub use mixer::{Mixer, PcmSample};
 pub use mus::{MusEvent, MusScore};
+pub use sfx::{play_sfx, SfxCache, SfxPriority};
 
 /// Top-level error type for the doom-audio crate.
 #[derive(Debug, thiserror::Error)]

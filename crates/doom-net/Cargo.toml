@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+doom-game  = { workspace = true }
 doom-types = { workspace = true }
 tokio      = { workspace = true }
 bincode    = { workspace = true }
