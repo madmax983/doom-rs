@@ -205,6 +205,228 @@ pub fn parse_picture(data: &[u8]) -> Option<SpriteFrame> {
 }
 
 // ---------------------------------------------------------------------------
+// Thing projection constants (must match render.rs)
+// ---------------------------------------------------------------------------
+
+const SCREEN_W: usize = 320;
+const SCREEN_H: usize = 200;
+const HALF_W: i32 = 160;
+const HALF_H: i32 = 100;
+const FOCAL_LEN: f32 = 160.0;
+/// Eye height above floor in map units (matches render.rs PLAYER_HEIGHT).
+const PLAYER_HEIGHT: f32 = 41.0;
+
+// ---------------------------------------------------------------------------
+// Thing sprite lookup
+// ---------------------------------------------------------------------------
+
+/// Map a Doom DoomEd type number to the 8-byte lump name of its idle sprite
+/// (frame A, rotation 0).  Returns `None` for things that have no world sprite
+/// (player starts, teleport destinations, etc.).
+fn thing_sprite(kind: u16) -> Option<[u8; 8]> {
+    let base: &[u8; 4] = match kind {
+        1    => return None,    // player 1 start — no world sprite
+        2    => b"SHOT",        // shotgun (dropped)
+        3    => b"BSKU",        // blue skull key
+        5    => b"BKEY",        // blue keycard
+        6    => b"YKEY",        // yellow keycard
+        13   => b"RKEY",        // red keycard
+        38   => b"RSKU",        // red skull key
+        39   => b"YSKU",        // yellow skull key
+        40   => b"BSKU",        // blue skull key (alt number)
+        2001 => b"SHOT",        // shotgun pickup
+        2002 => b"MGUN",        // chaingun pickup
+        2003 => b"LAUN",        // rocket launcher
+        2004 => b"PLAS",        // plasma gun
+        2005 => b"CSAW",        // chainsaw
+        2006 => b"BFUG",        // BFG9000
+        2007 => b"CLIP",        // ammo clip
+        2008 => b"SHEL",        // shotgun shells
+        2010 => b"ROCK",        // rocket
+        2011 => b"STIM",        // stimpack
+        2012 => b"MEDI",        // medikit
+        2013 => b"SOUL",        // soulsphere
+        2014 => b"BON1",        // health bonus
+        2015 => b"BON2",        // armor bonus
+        2018 => b"ARM1",        // green armor
+        2019 => b"ARM2",        // blue armor
+        2022 => b"PINV",        // invulnerability sphere
+        2023 => b"PSTR",        // berserk pack
+        2024 => b"PINS",        // invisibility sphere
+        2025 => b"SUIT",        // radiation suit
+        2026 => b"PMAP",        // computer area map
+        2028 => b"COLU",        // floor lamp
+        2035 => b"BAR1",        // barrel (explosive)
+        2045 => b"PVIS",        // light amplification visor
+        3001 => b"TROO",        // imp
+        3002 => b"SARG",        // demon (pinky)
+        3003 => b"BOSS",        // baron of hell
+        3004 => b"POSS",        // former human (zombie man)
+        3005 => b"HEAD",        // cacodemon
+        3006 => b"SKUL",        // lost soul
+        9    => b"SPOS",        // shotgun guy (former sergeant)
+        58   => b"SARG",        // spectre (same sprite as demon)
+        65   => b"CPOS",        // heavy weapon dude (chaingunner)
+        66   => b"SKEL",        // revenant
+        67   => b"FATT",        // mancubus
+        68   => b"VILE",        // archvile
+        71   => b"PAIN",        // pain elemental
+        72   => b"KEEN",        // commander keen
+        84   => b"SSWV",        // wolfenstein ss
+        88   => b"BBRN",        // boss brain
+        _    => return None,    // unknown / no world sprite
+    };
+
+    // Frame A, rotation 0: four base bytes + "A0" + two null bytes.
+    let mut name = [0u8; 8];
+    name[0..4].copy_from_slice(base);
+    name[4] = b'A';
+    name[5] = b'0';
+    // name[6] and name[7] remain 0x00 (null).
+    Some(name)
+}
+
+// ---------------------------------------------------------------------------
+// Billboard sprite projection
+// ---------------------------------------------------------------------------
+
+/// Project and render all Things from the level as billboard sprites.
+///
+/// Call this **after** `render_level` so wall columns are already drawn.
+/// Uses the painter's algorithm (back-to-front sort); no z-buffer clipping.
+///
+/// # Arguments
+/// - `level`        — parsed map (provides Things list).
+/// - `player_x/y`  — player world position (Fixed16_16).
+/// - `player_angle` — player view angle (Bam, 32-bit; full circle = 2³²).
+/// - `fb`           — framebuffer to draw into.
+/// - `cache`        — sprite frame cache (loaded from S_START..S_END).
+///
+/// # Projection model
+/// View space is computed with a standard rotation: `vx` is depth (forward
+/// from the player eye), `vy` is lateral displacement.  A sprite with
+/// `vx <= 0.5` is behind or too close and is skipped.  Screen X of the
+/// sprite centre is `HALF_W - FOCAL_LEN * vy / vx`; sprite screen height is
+/// `frame.height * FOCAL_LEN / vx`.
+pub fn render_things(
+    level: &doom_map::Level,
+    player_x: doom_types::Fixed16_16,
+    player_y: doom_types::Fixed16_16,
+    player_angle: doom_types::Bam,
+    fb: &mut Framebuffer,
+    cache: &SpriteCache,
+) {
+    // Convert player angle (32-bit BAM) to radians.
+    // BAM: 0x0000_0000 = 0°, 0x4000_0000 = 90°, 0x8000_0000 = 180°, etc.
+    let angle_rad = (player_angle.0 as f32)
+        * (std::f32::consts::PI * 2.0 / (u32::MAX as f32 + 1.0));
+    let cos_a = angle_rad.cos();
+    let sin_a = angle_rad.sin();
+
+    // Player eye position in map units (f32).
+    // Fixed16_16 stores value as raw i32 with 16.16 encoding; divide by 65536
+    // to convert to f32 map units.
+    let px = player_x.raw() as f32 / 65536.0;
+    let py = player_y.raw() as f32 / 65536.0;
+
+    // ---------- Collect visible things with their view-space depths ----------
+    let mut visible: Vec<(f32, &doom_map::Thing)> = level
+        .things
+        .iter()
+        .filter_map(|thing| {
+            let dx = thing.x as f32 - px;
+            let dy = thing.y as f32 - py;
+            // Rotate into view space.
+            let vx = dx * cos_a + dy * sin_a; // depth (forward)
+            if vx > 0.5 {
+                Some((vx, thing))
+            } else {
+                None // behind or too close
+            }
+        })
+        .collect();
+
+    // Painter's algorithm: draw farthest things first so nearer ones overdraw.
+    visible.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    // ---------- Render each visible thing ------------------------------------
+    for (vx, thing) in visible {
+        // Look up sprite name; skip unknown kinds and player starts.
+        let lump_name = match thing_sprite(thing.kind) {
+            Some(n) => n,
+            None => continue,
+        };
+        // Look up the frame in the cache; skip if not loaded (PWAD without sprites).
+        let frame = match cache.get(&lump_name) {
+            Some(f) => f,
+            None => continue,
+        };
+
+        let dx = thing.x as f32 - px;
+        let dy = thing.y as f32 - py;
+        let vy = -dx * sin_a + dy * cos_a; // lateral displacement
+
+        // --- Screen-space projection ---
+        // Horizontal centre of the sprite on screen.
+        let sx_center = HALF_W as f32 - FOCAL_LEN * vy / vx;
+
+        // Scale factor: how many screen pixels per map unit at this depth.
+        let sprite_scale = FOCAL_LEN / vx;
+
+        // Scaled screen dimensions of the sprite.
+        let screen_h = ((frame.height as f32) * sprite_scale).round() as i32;
+        let screen_w = ((frame.width as f32) * sprite_scale).round() as i32;
+
+        if screen_h <= 0 || screen_w <= 0 {
+            continue;
+        }
+
+        // Vertical placement: bottom of sprite is at floor level.
+        // Player eye is PLAYER_HEIGHT map units above the floor, so the floor
+        // projects to HALF_H + PLAYER_HEIGHT * sprite_scale below the horizon.
+        let screen_y_bot =
+            HALF_H + (PLAYER_HEIGHT * sprite_scale).round() as i32;
+        let screen_y_top = screen_y_bot - screen_h;
+
+        // Horizontal placement: left_offset tells us how many sprite pixels
+        // the centre point is to the right of column 0.
+        let screen_x_left = sx_center as i32
+            - (frame.left_offset as i32 * screen_w / frame.width as i32);
+        let screen_x_right = screen_x_left + screen_w;
+
+        // Guard against degenerate cases (e.g. 0-width frame).
+        if screen_x_right <= 0 || screen_x_left >= SCREEN_W as i32 {
+            continue;
+        }
+
+        let col_h = screen_y_bot - screen_y_top;
+
+        // --- Draw each scaled sprite column ---
+        for col in 0..frame.width as i32 {
+            let sx = screen_x_left + col * screen_w / frame.width as i32;
+            if sx < 0 || sx >= SCREEN_W as i32 {
+                continue;
+            }
+
+            let sy_top_clamped = screen_y_top.max(0);
+            let sy_bot_clamped = screen_y_bot.min(SCREEN_H as i32 - 1);
+
+            for sy in sy_top_clamped..=sy_bot_clamped {
+                // Map screen row back to sprite row.
+                let sprite_row =
+                    (sy - screen_y_top) * frame.height as i32 / col_h.max(1);
+                let sprite_row = sprite_row.clamp(0, frame.height as i32 - 1) as usize;
+
+                let pixel_idx = col as usize * frame.height as usize + sprite_row;
+                if let Some(Some(idx)) = frame.pixels.get(pixel_idx) {
+                    fb.data[sy as usize * SCREEN_W + sx as usize] = *idx;
+                }
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
 
@@ -505,6 +727,290 @@ mod tests {
         let frame = cache.get(b"PISGA0\0\0");
         assert!(frame.is_some(), "PISGA0 should be in cache");
         assert_eq!(frame.unwrap().pixels[0], Some(7));
+    }
+
+    // ------------------------------------------------------------------
+    // render_things helpers
+    // ------------------------------------------------------------------
+
+    /// Build a minimal Level suitable for render_things tests.
+    ///
+    /// The level contains exactly the things provided and has the minimum
+    /// valid BSP (0 nodes, 1 ssector) required by Level::from_wad validation.
+    fn make_test_level(things: Vec<doom_map::Thing>) -> doom_map::Level {
+        use doom_wad::{WadKind, REQUIRED_MAP_LUMPS};
+
+        let _ = WadKind::Iwad; // suppress unused import warning
+        let _ = REQUIRED_MAP_LUMPS;
+
+        // ---- sector ----
+        let mut sector_data = vec![0u8; 26];
+        sector_data[0..2].copy_from_slice(&0i16.to_le_bytes());
+        sector_data[2..4].copy_from_slice(&128i16.to_le_bytes());
+        sector_data[4..12].copy_from_slice(b"FLAT1\0\0\0");
+        sector_data[12..20].copy_from_slice(b"FLAT2\0\0\0");
+        sector_data[20..22].copy_from_slice(&192i16.to_le_bytes());
+        sector_data[22..24].copy_from_slice(&0u16.to_le_bytes());
+        sector_data[24..26].copy_from_slice(&0u16.to_le_bytes());
+
+        // ---- vertices ----
+        let mut vert_data = vec![0u8; 4 * 4];
+        let verts: [(i16, i16); 4] = [(0, 0), (64, 0), (64, 64), (0, 64)];
+        for (i, (x, y)) in verts.iter().enumerate() {
+            vert_data[i * 4..i * 4 + 2].copy_from_slice(&x.to_le_bytes());
+            vert_data[i * 4 + 2..i * 4 + 4].copy_from_slice(&y.to_le_bytes());
+        }
+
+        // ---- sidedefs ----
+        let mut sd_data = vec![0u8; 4 * 30];
+        for i in 0..4 {
+            sd_data[i * 30 + 20..i * 30 + 28].copy_from_slice(b"WALL1\0\0\0");
+            sd_data[i * 30 + 28..i * 30 + 30].copy_from_slice(&0u16.to_le_bytes());
+        }
+
+        // ---- linedefs ----
+        let mut ld_data = vec![0u8; 4 * 14];
+        let edges: [(u16, u16); 4] = [(0, 1), (1, 2), (2, 3), (3, 0)];
+        for (i, (from, to)) in edges.iter().enumerate() {
+            let b = &mut ld_data[i * 14..i * 14 + 14];
+            b[0..2].copy_from_slice(&from.to_le_bytes());
+            b[2..4].copy_from_slice(&to.to_le_bytes());
+            b[4..6].copy_from_slice(&0u16.to_le_bytes());
+            b[6..8].copy_from_slice(&0u16.to_le_bytes());
+            b[8..10].copy_from_slice(&0u16.to_le_bytes());
+            b[10..12].copy_from_slice(&(i as u16).to_le_bytes());
+            b[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        }
+
+        // ---- seg ----
+        let mut seg_data = vec![0u8; 12];
+        seg_data[0..2].copy_from_slice(&0u16.to_le_bytes());
+        seg_data[2..4].copy_from_slice(&1u16.to_le_bytes());
+
+        // ---- ssector ----
+        let mut ss_data = vec![0u8; 4];
+        ss_data[0..2].copy_from_slice(&1u16.to_le_bytes());
+        ss_data[2..4].copy_from_slice(&0u16.to_le_bytes());
+
+        // ---- things ----
+        let mut thing_data = vec![0u8; things.len() * 10];
+        for (i, t) in things.iter().enumerate() {
+            let b = &mut thing_data[i * 10..i * 10 + 10];
+            b[0..2].copy_from_slice(&t.x.to_le_bytes());
+            b[2..4].copy_from_slice(&t.y.to_le_bytes());
+            b[4..6].copy_from_slice(&t.angle.to_le_bytes());
+            b[6..8].copy_from_slice(&t.kind.to_le_bytes());
+            b[8..10].copy_from_slice(&t.flags.to_le_bytes());
+        }
+        // If no things provided, add a dummy player-start so validation
+        // doesn't fail on completely empty THINGS lump (which is valid anyway,
+        // but some engines require at least a player start).
+        if things.is_empty() {
+            // 0-byte THINGS lump is valid (0 entries).
+        }
+
+        // ---- reject ----
+        let reject_data = vec![0u8; 1];
+
+        // ---- blockmap ----
+        let mut bm_data = vec![0u8; 8 + 2 + 4];
+        bm_data[0..2].copy_from_slice(&0i16.to_le_bytes());
+        bm_data[2..4].copy_from_slice(&0i16.to_le_bytes());
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+
+        let lump_payloads: &[(&[u8; 8], &[u8])] = &[
+            (b"E1M1\0\0\0\0", &[]),
+            (b"THINGS\0\0", &thing_data),
+            (b"LINEDEFS", &ld_data),
+            (b"SIDEDEFS", &sd_data),
+            (b"VERTEXES", &vert_data),
+            (b"SEGS\0\0\0\0", &seg_data),
+            (b"SSECTORS", &ss_data),
+            (b"NODES\0\0\0", &[]),
+            (b"SECTORS\0", &sector_data),
+            (b"REJECT\0\0", &reject_data),
+            (b"BLOCKMAP", &bm_data),
+        ];
+
+        let mut data: Vec<u8> = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
+        data.extend_from_slice(&0i32.to_le_bytes());
+
+        let mut offsets: Vec<(usize, usize)> = Vec::new();
+        for (_, payload) in lump_payloads {
+            let pos = data.len();
+            data.extend_from_slice(payload);
+            offsets.push((pos, payload.len()));
+        }
+
+        let dir_offset = data.len() as i32;
+        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+        for (i, (name_bytes, _)) in lump_payloads.iter().enumerate() {
+            let (filepos, size) = offsets[i];
+            data.extend_from_slice(&(filepos as i32).to_le_bytes());
+            data.extend_from_slice(&(size as i32).to_le_bytes());
+            data.extend_from_slice(*name_bytes);
+        }
+
+        let wad = doom_wad::WadFile::parse(data).expect("test WAD parse failed");
+        doom_map::Level::from_wad(&wad, "E1M1").expect("test level load failed")
+    }
+
+    /// Build a Thing with given position, kind.
+    fn make_thing(x: i16, y: i16, kind: u16) -> doom_map::Thing {
+        doom_map::Thing { x, y, angle: 0, kind, flags: 7 }
+    }
+
+    // ------------------------------------------------------------------
+    // render_things test 1: empty level — no panic
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_render_things_empty_level() {
+        let level = make_test_level(vec![]);
+        let cache = SpriteCache::empty();
+        let mut fb = Framebuffer::new();
+        // Must not panic on zero things.
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(32),
+            doom_types::Fixed16_16::from_int(32),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+        );
+        // Framebuffer stays zeroed (empty cache → nothing drawn).
+        assert!(fb.data.iter().all(|&b| b == 0));
+    }
+
+    // ------------------------------------------------------------------
+    // render_things test 2: thing behind player is not rendered
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_render_things_behind_player_skipped() {
+        // Player at (0,0) facing east (angle 0 = east in Doom convention).
+        // Thing is at (-100, 0) — directly behind the player.
+        let thing = make_thing(-100, 0, 2035); // barrel — has sprite name BAR1
+        let level = make_test_level(vec![thing]);
+
+        // Insert a dummy sprite so the cache lookup would succeed if
+        // the thing were incorrectly included.
+        let mut cache = SpriteCache::empty();
+        let dummy_frame = SpriteFrame {
+            width: 2,
+            height: 2,
+            left_offset: 1,
+            top_offset: 0,
+            pixels: vec![Some(42); 4],
+        };
+        cache.insert("BAR1A0".to_string(), dummy_frame);
+
+        let mut fb = Framebuffer::new();
+        // Player at origin, facing east (Bam(0)).
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+        );
+        // If the thing behind the player were rendered it would write pixel 42.
+        // The framebuffer must remain all zeros.
+        assert!(
+            fb.data.iter().all(|&b| b == 0),
+            "behind-player thing must not be rendered"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // render_things test 3: unknown thing kind is silently skipped
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_render_things_unknown_kind_skipped() {
+        // Kind 9999 is not in the lookup table.
+        let thing = make_thing(100, 0, 9999);
+        let level = make_test_level(vec![thing]);
+        let cache = SpriteCache::empty();
+        let mut fb = Framebuffer::new();
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+        );
+        // Nothing drawn — no panic.
+        assert!(fb.data.iter().all(|&b| b == 0));
+    }
+
+    // ------------------------------------------------------------------
+    // render_things test 4: player start (kind=1) is skipped
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_render_things_player_start_skipped() {
+        // Kind 1 = player 1 start; thing_sprite returns None.
+        let thing = make_thing(100, 0, 1);
+        let level = make_test_level(vec![thing]);
+        let cache = SpriteCache::empty();
+        let mut fb = Framebuffer::new();
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+        );
+        assert!(fb.data.iter().all(|&b| b == 0));
+    }
+
+    // ------------------------------------------------------------------
+    // render_things test 5: forward thing projects to screen centre
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_proj_math_forward_thing() {
+        // Player at (0,0) facing east (Bam(0)).
+        // Thing at (200, 0) — directly ahead.
+        // vy = 0 so sx_center = HALF_W - FOCAL_LEN * 0 / vx = 160.
+
+        let player_x = doom_types::Fixed16_16::from_int(0);
+        let player_y = doom_types::Fixed16_16::from_int(0);
+        let player_angle = doom_types::Bam(0);
+
+        // Manually replicate the projection math for a forward thing.
+        let angle_rad = (player_angle.0 as f32)
+            * (std::f32::consts::PI * 2.0 / (u32::MAX as f32 + 1.0));
+        let cos_a = angle_rad.cos();
+        let sin_a = angle_rad.sin();
+
+        let px = player_x.raw() as f32 / 65536.0;
+        let py = player_y.raw() as f32 / 65536.0;
+
+        let thing_x: f32 = 200.0;
+        let thing_y: f32 = 0.0;
+
+        let dx = thing_x - px;
+        let dy = thing_y - py;
+        let vx = dx * cos_a + dy * sin_a;
+        let vy = -dx * sin_a + dy * cos_a;
+
+        // vx must be positive (thing is in front).
+        assert!(vx > 0.5, "thing should be in front: vx={vx}");
+
+        let sx_center = 160.0_f32 - 160.0 * vy / vx;
+
+        // For a thing directly ahead, vy ≈ 0 so sx_center ≈ 160.
+        let deviation = (sx_center - 160.0).abs();
+        assert!(
+            deviation < 1.0,
+            "forward thing should project to screen centre ≈160, got {sx_center}"
+        );
     }
 
     // ------------------------------------------------------------------

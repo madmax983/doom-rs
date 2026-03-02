@@ -15,7 +15,7 @@ use std::net::SocketAddr;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
 use doom_map::Level;
-use doom_renderer::{FlatCache, Framebuffer, PaletteLut, SpriteCache, TextureCache, draw_automap, draw_status_bar, draw_weapon_sprite, render_level};
+use doom_renderer::{FlatCache, Framebuffer, PaletteLut, SpriteCache, TextureCache, draw_automap, draw_status_bar, draw_weapon_sprite, render_level, render_things};
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -237,6 +237,20 @@ impl DoomApp for DoomGame {
             // We pass a grayscale palette; render_level currently ignores it
             // (wall colors are derived from light levels only).
             render_level(&self.level, px, py, angle, fb, &palette, self.flat_cache.as_ref(), self.tex_cache.as_ref());
+
+            // Project level Things as billboard sprites (painter's algorithm,
+            // back-to-front). Must run after render_level so walls are already
+            // drawn into the framebuffer.
+            if let Some(ref cache) = self.sprite_cache {
+                render_things(
+                    &self.level,
+                    Fixed16_16::from_int(px),
+                    Fixed16_16::from_int(py),
+                    angle,
+                    fb,
+                    cache,
+                );
+            }
 
             // Draw weapon sprite overlay (pistol idle frame A).
             if let Some(ref cache) = self.sprite_cache {

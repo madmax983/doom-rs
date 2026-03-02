@@ -25,6 +25,6 @@ pub use palette::{PaletteLut, Rgb};
 pub use flat_cache::FlatCache;
 pub use render::render_level;
 pub use span::{DrawSpanParams, FLAT_DIM, FLAT_MASK, draw_span, draw_span_solid};
-pub use sprite::{SpriteCache, SpriteFrame, draw_sprite, draw_weapon_sprite};
+pub use sprite::{SpriteCache, SpriteFrame, draw_sprite, draw_weapon_sprite, render_things};
 pub use statusbar::draw_status_bar;
 pub use texture::TextureCache;

@@ -13,6 +13,17 @@
 //!    names belong to the ceiling and floor of that column's sector.
 //! 3. After all segs: for each row `y`, emit spans for unoccluded ceiling
 //!    and floor pixels using perspective-correct texture coordinates.
+//!
+//! # Two-sided linedef handling
+//! For two-sided linedefs (portals, doors, windows), the wall is split into
+//! three bands:
+//! - Upper band: `w_top .. screen_back_ceil`   — upper texture (if front_ceil > back_ceil)
+//! - Portal opening: `screen_back_ceil .. screen_back_floor` — transparent, not drawn
+//! - Lower band: `screen_back_floor .. w_bot`  — lower texture (if back_floor > front_floor)
+//!
+//! The z-buffer is NOT updated for two-sided segs so geometry behind can show
+//! through.  `wall_top[x]`/`wall_bot[x]` are set to the portal opening bounds
+//! so floor/ceiling spans fill through the gap.
 
 use doom_map::Level;
 use doom_types::Bam;
@@ -157,6 +168,24 @@ pub fn render_level(
         let ceil_h  = sector.ceil_height as i32;
         let light   = ((sector.light_level as u32) >> 3).min(31) as u8;
 
+        // Resolve the back sector for two-sided linedefs.
+        let is_two_sided = linedef.is_two_sided();
+        let back_sector = if is_two_sided {
+            let back_sidedef_idx = if seg.direction == 0 {
+                linedef.left_sidedef
+            } else {
+                linedef.right_sidedef
+            };
+            if back_sidedef_idx != 0xFFFF {
+                level.sidedefs.get(back_sidedef_idx as usize)
+                    .and_then(|sd| level.sectors.get(sd.sector as usize))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         // Near-clip.
         let clipped = match clip_seg_to_near_plane(vx1, vy1, vx2, vy2) {
             Some(c) => c,
@@ -184,104 +213,239 @@ pub fn render_level(
 
         let span_w = (sx_right - sx_left).max(1);
 
+        // Precompute seg world length for texture UV (hoisted outside column loop).
+        let v1_pos = &level.vertexes[seg.from_vertex as usize];
+        let v2_pos = &level.vertexes[seg.to_vertex as usize];
+        let seg_dx = (v2_pos.x as f32) - (v1_pos.x as f32);
+        let seg_dy = (v2_pos.y as f32) - (v1_pos.y as f32);
+        let seg_world_len = (seg_dx * seg_dx + seg_dy * seg_dy).sqrt();
+
         for x in col_start..=col_end {
             let t = (x as i64 - sx_left).max(0);
             let depth = vx_left + t * (vx_right - vx_left) / span_w;
             let depth_i32 = depth.max(1) as i32;
 
-            // Z-buffer occlusion.
-            if depth_i32 >= z_buf[x] {
-                continue;
-            }
-            z_buf[x] = depth_i32;
+            if is_two_sided {
+                // -----------------------------------------------------------------
+                // TWO-SIDED SEG: portal / door / window
+                // -----------------------------------------------------------------
+                // For two-sided segs we do NOT update z_buf — the line does not
+                // fully occlude the view.  Things behind can show through the
+                // portal opening.
 
-            // Wall height in pixels.
-            let wall_h_world = (ceil_h - floor_h).max(0);
-            let wall_h_px = (wall_h_world * FOCAL_LEN / depth_i32).min(SCREEN_H as i32);
+                // Wall height covers the full front sector span.
+                let wall_h_world = (ceil_h - floor_h).max(0);
+                let wall_h_px = (wall_h_world * FOCAL_LEN / depth_i32).min(SCREEN_H as i32);
 
-            let w_top = (HALF_H - wall_h_px / 2).max(0) as i32;
-            let w_bot = (HALF_H + wall_h_px / 2).min(SCREEN_H as i32 - 1) as i32;
+                let w_top = (HALF_H - wall_h_px / 2).max(0);
+                let w_bot = (HALF_H + wall_h_px / 2).min(SCREEN_H as i32 - 1);
 
-            wall_top[x] = w_top;
-            wall_bot[x] = w_bot;
+                // Project a back-sector height linearly between w_top (= front_ceil
+                // projected) and w_bot (= front_floor projected).
+                //
+                //   proj(h) = w_top + (front_ceil - h) * (w_bot - w_top) / (front_ceil - front_floor)
+                //
+                // Clamped to [w_top, w_bot] to avoid drawing outside the wall span.
+                let proj = |h: i32| -> i32 {
+                    let height_range = (ceil_h - floor_h).max(1);
+                    let pixel_range  = w_bot - w_top;
+                    (w_top + (ceil_h - h) * pixel_range / height_range)
+                        .clamp(w_top, w_bot)
+                };
 
-            // Record which sector's flats belong to this column.
-            ceil_flat[x]  = sector.ceil_flat;
-            floor_flat[x] = sector.floor_flat;
+                // Compute screen-space positions of the back sector's ceiling and floor.
+                let (screen_back_ceil, screen_back_floor) = if let Some(bs) = back_sector {
+                    let bc = bs.ceil_height as i32;
+                    let bf = bs.floor_height as i32;
+                    (proj(bc), proj(bf))
+                } else {
+                    // No back sector — treat as fully closed (no portal opening).
+                    (w_top, w_bot)
+                };
 
-            // Draw the wall column — textured if a TextureCache is available.
-            if let Some(cache) = tex_cache {
-                if let Some(tex) = cache.get(&sidedef.middle_texture) {
-                    // Perspective-correct horizontal texture coordinate (U).
-                    //
-                    // t_screen ∈ [0,1] across the screen span.
-                    // We correct for non-linear perspective by weighting with
-                    // the view-space depths at each end of the span.
-                    //
-                    //   t_persp = t_screen * vx_right
-                    //             / (vx_left + t_screen * (vx_right - vx_left))
-                    //
-                    // u_world = seg.offset + x_offset + t_persp * seg_world_len
-                    // u_tex   = u_world.rem_euclid(tex.width)
+                // Clamp so upper ≤ lower (degenerate case: equal heights, sealed door).
+                let upper_bot = screen_back_ceil.min(w_bot);
+                let lower_top = screen_back_floor.max(w_top);
 
-                    // Compute seg world length from vertex positions (precomputed
-                    // here inside the column loop; for very hot code paths this
-                    // could be hoisted, but it only runs once per column hit).
-                    let v1 = &level.vertexes[seg.from_vertex as usize];
-                    let v2 = &level.vertexes[seg.to_vertex as usize];
-                    let dx = (v2.x as f32) - (v1.x as f32);
-                    let dy = (v2.y as f32) - (v1.y as f32);
-                    let seg_world_len = (dx * dx + dy * dy).sqrt();
+                // The portal opening is screen_back_ceil .. screen_back_floor.
+                // Update wall_top/wall_bot to reflect the opening so that ceiling
+                // and floor spans fill through it.
+                wall_top[x] = screen_back_ceil;
+                wall_bot[x] = screen_back_floor;
 
-                    let t_screen = (t as f32) / (span_w as f32).max(1.0);
-                    // Denominator: vx_left + t_screen*(vx_right-vx_left), clamped to ≥1.
-                    let denom = (vx_left as f32 + t_screen * (vx_right as f32 - vx_left as f32)).max(1.0);
-                    let t_persp = t_screen * (vx_right as f32) / denom;
-
-                    let u_world = seg.offset as f32
-                        + sidedef.x_offset as f32
-                        + t_persp * seg_world_len;
-                    let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
-
-                    // Vertical texture coordinate (V).
-                    //
-                    // fracstep: how many texels to advance per screen pixel.
-                    //   fracstep = tex.height << 16 / wall_h_px
-                    //
-                    // frac at y_top: the texture V at the top of the wall column.
-                    //   At HALF_H the texture shows texel (tex.height/2 + y_offset).
-                    //   frac = ((tex.height/2 + y_offset) << 16)
-                    //          - (HALF_H - w_top) * fracstep
-                    let tex_h = tex.height as u32;
-                    let fracstep = (tex_h << 16) / (wall_h_px as u32).max(1);
-                    let texturemid = ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
-                    let frac_start = ((texturemid << 16) as i64
-                        - (HALF_H as i64 - w_top as i64) * fracstep as i64)
-                        as u32;
-
-                    // Column data slice: tex.data[u_tex*tex_h .. u_tex*tex_h + tex_h].
-                    let col_start = u_tex * tex_h as usize;
-                    let col_data = &tex.data[col_start..col_start + tex_h as usize];
-
-                    draw_column(
-                        fb,
-                        &DrawColumnParams {
-                            x,
-                            y_top: w_top as usize,
-                            y_bot: w_bot as usize,
-                            frac: frac_start,
-                            fracstep,
-                            source: col_data,
-                            colormap: &IDENTITY_COLORMAP,
-                        },
-                    );
-                    continue; // skip flat-color fallback
+                // Record back sector flats (what the player sees through the portal).
+                if let Some(bs) = back_sector {
+                    ceil_flat[x]  = bs.ceil_flat;
+                    floor_flat[x] = bs.floor_flat;
+                } else {
+                    ceil_flat[x]  = sector.ceil_flat;
+                    floor_flat[x] = sector.floor_flat;
                 }
-            }
 
-            // Fallback: flat-shaded solid color (no texture or texture not found).
-            let wall_color = (32u8).saturating_add(light);
-            fb.draw_column(x, w_top as usize, w_bot as usize, wall_color);
+                // Perspective-correct U coordinate helper (shared for upper/lower).
+                let t_screen = (t as f32) / (span_w as f32).max(1.0);
+                let denom = (vx_left as f32
+                    + t_screen * (vx_right as f32 - vx_left as f32))
+                    .max(1.0);
+                let t_persp = t_screen * (vx_right as f32) / denom;
+                let u_world = seg.offset as f32
+                    + sidedef.x_offset as f32
+                    + t_persp * seg_world_len;
+
+                // ---- Upper band (front_ceil > back_ceil) -------------------------
+                let has_upper = upper_bot > w_top;
+                if has_upper {
+                    let upper_h_px = (upper_bot - w_top).max(1);
+
+                    if let Some(cache) = tex_cache {
+                        if let Some(tex) = cache.get(&sidedef.upper_texture) {
+                            let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
+                            let tex_h = tex.height as u32;
+                            let fracstep = (tex_h << 16) / (upper_h_px as u32).max(1);
+                            let texturemid =
+                                ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
+                            let frac_start = ((texturemid << 16) as i64
+                                - (HALF_H as i64 - w_top as i64) * fracstep as i64)
+                                as u32;
+                            let col_off = u_tex * tex_h as usize;
+                            let col_data = &tex.data[col_off..col_off + tex_h as usize];
+                            draw_column(
+                                fb,
+                                &DrawColumnParams {
+                                    x,
+                                    y_top: w_top as usize,
+                                    y_bot: (upper_bot - 1).max(w_top) as usize,
+                                    frac: frac_start,
+                                    fracstep,
+                                    source: col_data,
+                                    colormap: &IDENTITY_COLORMAP,
+                                },
+                            );
+                        } else {
+                            // Texture not in cache — flat-shade fallback.
+                            let wall_color = (32u8).saturating_add(light);
+                            fb.draw_column(x, w_top as usize, (upper_bot - 1).max(w_top) as usize, wall_color);
+                        }
+                    } else {
+                        // No tex_cache — flat-shade fallback.
+                        let wall_color = (32u8).saturating_add(light);
+                        fb.draw_column(x, w_top as usize, (upper_bot - 1).max(w_top) as usize, wall_color);
+                    }
+                }
+
+                // ---- Lower band (back_floor > front_floor) -----------------------
+                let has_lower = lower_top < w_bot;
+                if has_lower {
+                    let lower_h_px = (w_bot - lower_top).max(1);
+
+                    if let Some(cache) = tex_cache {
+                        if let Some(tex) = cache.get(&sidedef.lower_texture) {
+                            let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
+                            let tex_h = tex.height as u32;
+                            let fracstep = (tex_h << 16) / (lower_h_px as u32).max(1);
+                            let texturemid =
+                                ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
+                            let frac_start = ((texturemid << 16) as i64
+                                - (HALF_H as i64 - lower_top as i64) * fracstep as i64)
+                                as u32;
+                            let col_off = u_tex * tex_h as usize;
+                            let col_data = &tex.data[col_off..col_off + tex_h as usize];
+                            draw_column(
+                                fb,
+                                &DrawColumnParams {
+                                    x,
+                                    y_top: lower_top as usize,
+                                    y_bot: w_bot as usize,
+                                    frac: frac_start,
+                                    fracstep,
+                                    source: col_data,
+                                    colormap: &IDENTITY_COLORMAP,
+                                },
+                            );
+                        } else {
+                            // Texture not in cache — flat-shade fallback.
+                            let wall_color = (32u8).saturating_add(light);
+                            fb.draw_column(x, lower_top as usize, w_bot as usize, wall_color);
+                        }
+                    } else {
+                        // No tex_cache — flat-shade fallback.
+                        let wall_color = (32u8).saturating_add(light);
+                        fb.draw_column(x, lower_top as usize, w_bot as usize, wall_color);
+                    }
+                }
+            } else {
+                // -----------------------------------------------------------------
+                // ONE-SIDED SEG: solid wall (unchanged from original)
+                // -----------------------------------------------------------------
+
+                // Z-buffer occlusion.
+                if depth_i32 >= z_buf[x] {
+                    continue;
+                }
+                z_buf[x] = depth_i32;
+
+                // Wall height in pixels.
+                let wall_h_world = (ceil_h - floor_h).max(0);
+                let wall_h_px = (wall_h_world * FOCAL_LEN / depth_i32).min(SCREEN_H as i32);
+
+                let w_top = (HALF_H - wall_h_px / 2).max(0) as i32;
+                let w_bot = (HALF_H + wall_h_px / 2).min(SCREEN_H as i32 - 1) as i32;
+
+                wall_top[x] = w_top;
+                wall_bot[x] = w_bot;
+
+                // Record which sector's flats belong to this column.
+                ceil_flat[x]  = sector.ceil_flat;
+                floor_flat[x] = sector.floor_flat;
+
+                // Draw the wall column — textured if a TextureCache is available.
+                if let Some(cache) = tex_cache {
+                    if let Some(tex) = cache.get(&sidedef.middle_texture) {
+                        // Perspective-correct horizontal texture coordinate (U).
+                        let t_screen = (t as f32) / (span_w as f32).max(1.0);
+                        let denom = (vx_left as f32
+                            + t_screen * (vx_right as f32 - vx_left as f32))
+                            .max(1.0);
+                        let t_persp = t_screen * (vx_right as f32) / denom;
+
+                        let u_world = seg.offset as f32
+                            + sidedef.x_offset as f32
+                            + t_persp * seg_world_len;
+                        let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
+
+                        // Vertical texture coordinate (V).
+                        let tex_h = tex.height as u32;
+                        let fracstep = (tex_h << 16) / (wall_h_px as u32).max(1);
+                        let texturemid =
+                            ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
+                        let frac_start = ((texturemid << 16) as i64
+                            - (HALF_H as i64 - w_top as i64) * fracstep as i64)
+                            as u32;
+
+                        let col_start_idx = u_tex * tex_h as usize;
+                        let col_data =
+                            &tex.data[col_start_idx..col_start_idx + tex_h as usize];
+
+                        draw_column(
+                            fb,
+                            &DrawColumnParams {
+                                x,
+                                y_top: w_top as usize,
+                                y_bot: w_bot as usize,
+                                frac: frac_start,
+                                fracstep,
+                                source: col_data,
+                                colormap: &IDENTITY_COLORMAP,
+                            },
+                        );
+                        continue; // skip flat-color fallback
+                    }
+                }
+
+                // Fallback: flat-shaded solid color (no texture or texture not found).
+                let wall_color = (32u8).saturating_add(light);
+                fb.draw_column(x, w_top as usize, w_bot as usize, wall_color);
+            }
         }
     }
 
@@ -437,7 +601,7 @@ pub fn render_level(
                     run_start = Some(x);
                     run_flat_name = name;
                 }
-                (Some(start), Some(name)) if name == run_flat_name => {
+                (Some(_start), Some(name)) if name == run_flat_name => {
                     // Continue the existing run.
                 }
                 (Some(start), other) => {
@@ -577,6 +741,109 @@ mod tests {
 
         Level {
             name: "TEST".to_owned(),
+            things,
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap,
+        }
+    }
+
+    /// Build a two-sided level: two sectors separated by a portal wall.
+    ///
+    /// Layout:
+    ///   front sector (sector 0): floor=0, ceil=128
+    ///   back sector  (sector 1): floor=32, ceil=96
+    ///
+    /// The portal opening is at y=128 (the wall seg).
+    /// Player is at (0, 0) looking toward the wall at y=128.
+    fn make_two_sided_level(front_floor: i16, front_ceil: i16,
+                            back_floor: i16,  back_ceil: i16) -> Level {
+        use doom_map::lumps::{
+            Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
+        };
+
+        let vertexes = vec![
+            Vertex { x: -64, y: 128 },
+            Vertex { x:  64, y: 128 },
+        ];
+        let sectors = vec![
+            // Sector 0 — front (player stands here)
+            Sector {
+                floor_height: front_floor,
+                ceil_height:  front_ceil,
+                floor_flat:   *b"FLAT1\0\0\0",
+                ceil_flat:    *b"FLAT2\0\0\0",
+                light_level:  192,
+                special: 0,
+                tag: 0,
+            },
+            // Sector 1 — back (player looks into this)
+            Sector {
+                floor_height: back_floor,
+                ceil_height:  back_ceil,
+                floor_flat:   *b"FLAT3\0\0\0",
+                ceil_flat:    *b"FLAT4\0\0\0",
+                light_level:  192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+        // right sidedef (sector 0, front), left sidedef (sector 1, back)
+        let sidedefs = vec![
+            Sidedef {
+                x_offset: 0, y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            Sidedef {
+                x_offset: 0, y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+        ];
+        // FLAG_TWO_SIDED = 0x0004
+        let linedefs = vec![Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004, // two-sided
+            special: 0,
+            tag: 0,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        }];
+        let segs = vec![Seg {
+            from_vertex: 0,
+            to_vertex: 1,
+            angle: 0,
+            linedef: 0,
+            direction: 0,
+            offset: 0,
+        }];
+        let ssectors = vec![Ssector { seg_count: 1, first_seg: 0 }];
+        let things = vec![Thing { x: 0, y: 0, angle: 0, kind: 1, flags: 7 }];
+
+        let reject = Reject::parse_lump(&[0u8; 1], 2).expect("reject parse");
+
+        let mut bm_data = vec![0u8; 8 + 2 + 4];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("blockmap parse");
+
+        Level {
+            name: "TEST2".to_owned(),
             things,
             linedefs,
             sidedefs,
@@ -735,5 +1002,154 @@ mod tests {
         // Should not panic and should produce some non-zero output.
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
         assert!(has_nonzero, "render with flat cache must produce non-zero output");
+    }
+
+    // -----------------------------------------------------------------------
+    // NEW: Two-sided linedef tests
+    // -----------------------------------------------------------------------
+
+    /// Initialize trig tables once before tests that need them.
+    fn init_trig() {
+        // SAFETY: test environment, called at most once per process due to the
+        // AtomicBool guard inside init_trig_tables.
+        unsafe { doom_types::Bam::init_trig_tables(); }
+    }
+
+    /// A two-sided seg with front_ceil > back_ceil produces pixels in the
+    /// upper band (w_top .. screen_back_ceil).
+    ///
+    /// Setup:
+    ///   front sector: floor=0, ceil=128
+    ///   back  sector: floor=0, ceil=64   ← back ceiling is lower → upper step
+    ///
+    /// Player at (0, 0), wall at y=128.  ANG90 = North (+Y) so the player
+    /// faces the wall at y=128.
+    /// The center column (x=160) should have some opaque pixels between w_top
+    /// and the projected back_ceil position.
+    #[test]
+    fn test_two_sided_seg_draws_upper_band() {
+        use doom_types::ANG90;
+        init_trig();
+
+        // front_ceil=128 > back_ceil=64 → upper band should be drawn
+        let level = make_two_sided_level(0, 128, 0, 64);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        // Player at y=0, wall at y=128, facing ANG90 = North (+Y direction).
+        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None);
+
+        // The wall spans some columns around center (x=160).
+        // We check that the framebuffer has been written in the upper half for
+        // at least some columns — a flat-shade fallback color (>= 32) should appear.
+        // The background fills with 25 (ceiling) and 119 (floor).  The upper
+        // band is drawn with a flat-shade wall color = 32 + light (= 32 + 24 = 56).
+        let center_x = HALF_W as usize;
+        // Look for wall-colored pixels anywhere in the center column — either
+        // upper (upper band) or lower half may contain wall pixels.
+        let has_wall = (0..SCREEN_H).any(|y| {
+            let px = fb.get_pixel(center_x, y).unwrap_or(0);
+            // flat-shade wall color is 32..=63 range, distinct from ceiling=25, floor=119
+            px >= 32 && px < 64
+        });
+        assert!(
+            has_wall,
+            "upper band pixels must appear in some column for two-sided seg with front_ceil > back_ceil"
+        );
+    }
+
+    /// The portal opening for a two-sided seg causes wall_top[x] and wall_bot[x]
+    /// to be set to the portal opening bounds — not the full front-sector span.
+    ///
+    /// This means the floor/ceiling spans can fill through the portal.
+    ///
+    /// We verify this by checking that wall_top < HALF_H and wall_bot > HALF_H
+    /// does NOT hold for the portal center column when the back sector is inset
+    /// (which would mean the column is fully blocked by the wall).  Instead,
+    /// wall_top and wall_bot should reflect only the opaque bands.
+    ///
+    /// Concretely: with front floor=0/ceil=128 and back floor=32/ceil=96,
+    /// the portal opening occupies the middle of the view.  After render,
+    /// the back sector's flats (FLAT3/FLAT4) should be recorded for the
+    /// center column (they flow through the portal).
+    #[test]
+    fn test_two_sided_portal_leaves_opening() {
+        use doom_types::ANG90;
+        init_trig();
+
+        // front: floor=0,  ceil=128
+        // back:  floor=32, ceil=96   → upper step + lower step
+        let level = make_two_sided_level(0, 128, 32, 96);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None);
+
+        // We cannot directly inspect wall_top/wall_bot from outside, but we can
+        // verify the visual outcome:
+        //
+        // With a portal, the MIDDLE of the center column should NOT be painted
+        // with wall color (32-63) — it is the open portal that shows the sky/floor
+        // background (25 or 119).
+        //
+        // Specifically, the very center row (HALF_H = 100) should not be wall-colored
+        // since it falls within the portal opening (back_ceil=96 projected above
+        // center, back_floor=32 projected below center).
+        let center_x = HALF_W as usize;
+        let center_y = HALF_H as usize;
+
+        // At the exact horizon row (y=100), the flat code skips (dy==0), so
+        // we check a row just above and just below center that should be inside
+        // the portal opening.
+        let row_above_center = center_y.saturating_sub(5); // y=95, inside portal gap
+        let row_below_center = center_y + 5;               // y=105, inside portal gap
+
+        let px_above = fb.get_pixel(center_x, row_above_center).unwrap_or(0);
+        let px_below = fb.get_pixel(center_x, row_below_center).unwrap_or(0);
+
+        // These pixels should be background (ceiling=25 or floor=119), NOT wall (32-63).
+        // The portal is transparent so the background fill shows through.
+        let is_wall_color = |px: u8| px >= 32 && px < 64;
+        assert!(
+            !is_wall_color(px_above),
+            "pixel at ({center_x}, {row_above_center}) = {px_above} should NOT be wall-colored (portal opening)"
+        );
+        assert!(
+            !is_wall_color(px_below),
+            "pixel at ({center_x}, {row_below_center}) = {px_below} should NOT be wall-colored (portal opening)"
+        );
+    }
+
+    /// Regression: one-sided walls still render correctly after the two-sided
+    /// refactor.  The center column of a one-sided wall facing the player
+    /// must be painted with a wall color (not background).
+    #[test]
+    fn test_one_sided_regression() {
+        use doom_types::ANG90;
+        init_trig();
+
+        // Plain one-sided level (flags=0, no back sector)
+        let level = make_minimal_level(); // floor=0, ceil=128, flags=0
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        // Player at (64, 0) looking toward the wall at y=128 (ANG90 = North = +Y).
+        render_level(&level, 64, 0, ANG90, &mut fb, &palette, None, None);
+
+        // The wall should occupy vertical pixels around the center column.
+        // Flat-shade color = 32 + (192 >> 3).min(31) = 32 + 24 = 56.
+        let center_x = HALF_W as usize;
+        let has_wall = fb.data[0..SCREEN_W * SCREEN_H]
+            .chunks(SCREEN_W)
+            .enumerate()
+            .any(|(y, row)| {
+                let px = row[center_x];
+                let _ = y;
+                px >= 32 && px < 64
+            });
+        assert!(
+            has_wall,
+            "one-sided wall must still render wall-colored pixels in center column after refactor"
+        );
     }
 }
