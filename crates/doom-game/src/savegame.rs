@@ -14,8 +14,8 @@ use doom_types::{Bam, Fixed16_16};
 use crate::mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum};
 use crate::player::{NUM_POWERS, PlayerState, WeaponType};
 use crate::state::{
-    CeilingMover, DoomRng, DoorMover, ExitRequest, FloorMover, GameState, LightSpecial,
-    MoveDirection, PerpetualPlatform, PlatformStatus,
+    CeilingMover, CeilingType, DoomRng, DoorMover, ExitRequest, FloorMover, GameState,
+    LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus,
 };
 
 // ---------------------------------------------------------------------------
@@ -649,16 +649,40 @@ fn read_light_special(r: &mut ReadCursor<'_>) -> Result<LightSpecial, SaveError>
     })
 }
 
+fn write_ceiling_type(w: &mut WriteCursor, ct: CeilingType) {
+    let byte = match ct {
+        CeilingType::LowerToFloor => 0u8,
+        CeilingType::CrushAndRaise => 1u8,
+        CeilingType::LowerAndCrush => 2u8,
+        CeilingType::FastCrushAndRaise => 3u8,
+        CeilingType::SilentCrush => 4u8,
+    };
+    w.write_u8(byte);
+}
+
+fn read_ceiling_type(r: &mut ReadCursor<'_>) -> Result<CeilingType, SaveError> {
+    match r.read_u8()? {
+        0 => Ok(CeilingType::LowerToFloor),
+        1 => Ok(CeilingType::CrushAndRaise),
+        2 => Ok(CeilingType::LowerAndCrush),
+        3 => Ok(CeilingType::FastCrushAndRaise),
+        4 => Ok(CeilingType::SilentCrush),
+        _ => Err(SaveError::Truncated),
+    }
+}
+
 fn write_ceiling_mover(w: &mut WriteCursor, c: &CeilingMover) {
     w.write_u32(c.sector_index as u32);
     w.write_i16(c.top_height);
     w.write_i16(c.bottom_height);
     w.write_i16(c.speed);
+    w.write_i16(c.normal_speed);
     w.write_i32(c.crush_damage);
     write_move_direction(w, c.direction);
     w.write_bool(c.silent);
     w.write_bool(c.remove_when_done);
     w.write_u16(c.tag);
+    write_ceiling_type(w, c.ceiling_type);
 }
 
 fn read_ceiling_mover(r: &mut ReadCursor<'_>) -> Result<CeilingMover, SaveError> {
@@ -667,11 +691,13 @@ fn read_ceiling_mover(r: &mut ReadCursor<'_>) -> Result<CeilingMover, SaveError>
         top_height: r.read_i16()?,
         bottom_height: r.read_i16()?,
         speed: r.read_i16()?,
+        normal_speed: r.read_i16()?,
         crush_damage: r.read_i32()?,
         direction: read_move_direction(r)?,
         silent: r.read_bool()?,
         remove_when_done: r.read_bool()?,
         tag: r.read_u16()?,
+        ceiling_type: read_ceiling_type(r)?,
     })
 }
 
@@ -1376,11 +1402,13 @@ mod tests {
             top_height: 128,
             bottom_height: 8,
             speed: 1,
+            normal_speed: 1,
             crush_damage: 10,
             direction: MoveDirection::Down,
             silent: false,
             remove_when_done: false,
             tag: 42,
+            ceiling_type: CeilingType::CrushAndRaise,
         });
         let data = save_game(&gs, &test_level_name(), 2, "ceiling test");
         let loaded = load_game(&data).expect("load must succeed");

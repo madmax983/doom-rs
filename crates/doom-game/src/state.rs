@@ -61,6 +61,21 @@ pub enum MoveDirection {
     Down,
 }
 
+/// The type of ceiling motion behavior.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CeilingType {
+    /// Lower ceiling to floor height.
+    LowerToFloor,
+    /// Perpetual: lower to floor+8, raise back, repeat.
+    CrushAndRaise,
+    /// Lower to floor+8 and stop.
+    LowerAndCrush,
+    /// Like CrushAndRaise but faster.
+    FastCrushAndRaise,
+    /// Crush without sound flag.
+    SilentCrush,
+}
+
 /// A ceiling crusher that oscillates between top and bottom heights,
 /// damaging actors caught in between.
 ///
@@ -76,6 +91,8 @@ pub struct CeilingMover {
     pub bottom_height: i16,
     /// Movement speed in map units per tic (typically 1 for slow, 2 for fast).
     pub speed: i16,
+    /// Normal (un-slowed) speed, remembered for resume after crush slow-down.
+    pub normal_speed: i16,
     /// Damage per tic when crushing an actor (typically 10).
     pub crush_damage: i32,
     /// Current movement direction.
@@ -87,6 +104,8 @@ pub struct CeilingMover {
     pub remove_when_done: bool,
     /// Tag from the activating linedef (used by line type 57 to stop crushers).
     pub tag: u16,
+    /// The type of ceiling motion.
+    pub ceiling_type: CeilingType,
 }
 
 /// A floor that moves to a target height, optionally waits, then returns.

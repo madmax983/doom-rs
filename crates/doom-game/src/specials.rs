@@ -20,8 +20,8 @@ use doom_types::Fixed16_16;
 
 use crate::mobj::MobjHandle;
 use crate::state::{
-    CeilingMover, DoorMover, ExitRequest, FloorMover, GameState, LightEffectType, LightSpecial,
-    MoveDirection, PerpetualPlatform, PlatformStatus, SectorLightEffect,
+    CeilingMover, CeilingType, DoorMover, ExitRequest, FloorMover, GameState, LightEffectType,
+    LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus, SectorLightEffect,
 };
 
 // ---------------------------------------------------------------------------
@@ -1127,6 +1127,8 @@ pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
         let bottom = gs.active_ceilings[i].bottom_height;
         let crush_dmg = gs.active_ceilings[i].crush_damage;
         let remove_when_done = gs.active_ceilings[i].remove_when_done;
+        let normal_speed = gs.active_ceilings[i].normal_speed;
+        let ceiling_type = gs.active_ceilings[i].ceiling_type;
 
         if sector_idx >= level.sectors.len() {
             gs.active_ceilings.remove(i);
@@ -1155,15 +1157,36 @@ pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
                             }
                         }
                     }
+
+                    // Slow down to speed 1 when crushing (CrushAndRaise / SilentCrush).
+                    match ceiling_type {
+                        CeilingType::CrushAndRaise | CeilingType::SilentCrush => {
+                            gs.active_ceilings[i].speed = 1;
+                        }
+                        _ => {}
+                    }
                 }
 
                 if ceil <= bottom {
                     level.sectors[sector_idx].ceil_height = bottom;
-                    gs.active_ceilings[i].direction = MoveDirection::Up;
+                    match ceiling_type {
+                        CeilingType::LowerToFloor | CeilingType::LowerAndCrush => {
+                            // One-shot types: remove when done.
+                            gs.active_ceilings.remove(i);
+                            continue;
+                        }
+                        _ => {
+                            // Perpetual types: reverse to Up.
+                            gs.active_ceilings[i].direction = MoveDirection::Up;
+                        }
+                    }
                 }
             }
             MoveDirection::Up => {
-                level.sectors[sector_idx].ceil_height += speed;
+                // Resume normal speed when going up.
+                gs.active_ceilings[i].speed = normal_speed;
+
+                level.sectors[sector_idx].ceil_height += normal_speed;
                 let ceil = level.sectors[sector_idx].ceil_height;
 
                 if ceil >= top {
@@ -1291,6 +1314,48 @@ pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
 /// Standard lift wait time: 3 seconds at 35 Hz = 105 tics.
 const LIFT_WAIT: i32 = 105;
 
+// ---------------------------------------------------------------------------
+// Public ceiling activation functions
+// ---------------------------------------------------------------------------
+
+/// Activate a CrushAndRaise ceiling on all sectors matching `tag`.
+///
+/// Perpetual crusher: lowers to floor+8, reverses, raises to top, reverses, repeat.
+/// Deals 10 damage per tic when crushing.
+pub fn ev_ceiling_crush_and_raise(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    activate_crusher(gs, level, tag, speed, 10, false, false, CeilingType::CrushAndRaise);
+}
+
+/// Activate a LowerAndCrush ceiling on all sectors matching `tag`.
+///
+/// One-shot: lowers to floor+8 then stops. No crush damage.
+pub fn ev_ceiling_lower_and_crush(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    activate_crusher(gs, level, tag, speed, 0, false, true, CeilingType::LowerAndCrush);
+}
+
+/// Activate a LowerToFloor ceiling on all sectors matching `tag`.
+///
+/// One-shot: lowers to floor height then stops. No crush damage.
+pub fn ev_ceiling_lower_to_floor(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    activate_crusher(gs, level, tag, speed, 0, false, true, CeilingType::LowerToFloor);
+}
+
+/// Stop all crushers with matching `tag` by removing them.
+///
+/// Used by line types 57 and 74.
+pub fn ev_ceiling_crush_stop(gs: &mut GameState, tag: u16) {
+    stop_crushers(gs, tag);
+}
+
+/// Activate a FastCrushAndRaise ceiling on all sectors matching `tag`.
+///
+/// Like CrushAndRaise but typically with higher speed. Deals 10 damage per tic.
+pub fn ev_ceiling_crush_raise_fast(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    activate_crusher(gs, level, tag, speed, 10, false, false, CeilingType::FastCrushAndRaise);
+}
+
+// ---------------------------------------------------------------------------
+
 /// Activate a crusher on all sectors matching `tag`.
 fn activate_crusher(
     gs: &mut GameState,
@@ -1300,6 +1365,7 @@ fn activate_crusher(
     crush_damage: i32,
     silent: bool,
     remove_when_done: bool,
+    ceiling_type: CeilingType,
 ) {
     let sector_indices: Vec<usize> = level
         .sectors
@@ -1315,16 +1381,22 @@ fn activate_crusher(
             continue;
         }
         let sector = &level.sectors[idx];
+        let bottom = match ceiling_type {
+            CeilingType::LowerToFloor => sector.floor_height,
+            _ => sector.floor_height + 8,
+        };
         gs.active_ceilings.push(CeilingMover {
             sector_index: idx,
             top_height: sector.ceil_height,
-            bottom_height: sector.floor_height + 8,
+            bottom_height: bottom,
             speed,
+            normal_speed: speed,
             crush_damage,
             direction: MoveDirection::Down,
             silent,
             remove_when_done,
             tag,
+            ceiling_type,
         });
     }
 }
@@ -1707,28 +1779,58 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Crushers
         // -----------------------------------------------------------------
 
-        // Type 6: Fast crusher ceiling (perpetual, speed=2).
+        // Type 6: W1 Fast crusher ceiling (perpetual, speed=2).
         6 => {
             let tag = level.linedefs[linedef_idx].tag;
-            activate_crusher(gs, level, tag, 2, 10, false, false);
+            ev_ceiling_crush_raise_fast(gs, level, tag, 2);
         }
 
-        // Type 25: Slow crusher ceiling (perpetual, speed=1).
+        // Type 25: W1 Slow crusher ceiling (perpetual, speed=1).
         25 => {
             let tag = level.linedefs[linedef_idx].tag;
-            activate_crusher(gs, level, tag, 1, 10, false, false);
+            ev_ceiling_crush_and_raise(gs, level, tag, 1);
         }
 
-        // Type 44: Ceiling lower to 8 above floor (one-shot, no crush damage).
+        // Type 44: W1 Ceiling lower to 8 above floor (one-shot, no crush damage).
         44 => {
             let tag = level.linedefs[linedef_idx].tag;
-            activate_crusher(gs, level, tag, 2, 0, true, true);
+            ev_ceiling_lower_and_crush(gs, level, tag, 2);
         }
 
-        // Type 57: Stop crusher (remove all crushers matching tag).
+        // Type 49: S1 Ceiling lower to 8 above floor + crush damage.
+        49 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_crusher(gs, level, tag, 2, 10, false, true, CeilingType::LowerAndCrush);
+        }
+
+        // Type 57: W1 Stop ceiling crusher (remove all crushers matching tag).
         57 => {
             let tag = level.linedefs[linedef_idx].tag;
-            stop_crushers(gs, tag);
+            ev_ceiling_crush_stop(gs, tag);
+        }
+
+        // Type 72: WR Ceiling lower to 8 above floor.
+        72 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_ceiling_lower_and_crush(gs, level, tag, 2);
+        }
+
+        // Type 73: WR Ceiling crush and raise (slow, perpetual).
+        73 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_ceiling_crush_and_raise(gs, level, tag, 1);
+        }
+
+        // Type 74: WR Stop ceiling crusher.
+        74 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_ceiling_crush_stop(gs, tag);
+        }
+
+        // Type 141: W1 Ceiling crush and raise (silent, perpetual).
+        141 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_crusher(gs, level, tag, 2, 10, true, false, CeilingType::SilentCrush);
         }
 
         // -----------------------------------------------------------------
@@ -2859,11 +2961,16 @@ mod tests {
     #[test]
     fn one_shot_crusher_removes_itself() {
         let mut gs = GameState::new("TEST");
-        // Line type 44: one-shot ceiling lower (remove_when_done=true).
+        // Line type 44: LowerAndCrush — one-shot ceiling lower, removes at bottom.
         let mut level = make_tagged_sector_level(0, 128, 1, 44);
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_ceilings.len(), 1);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::LowerAndCrush,
+            "type 44 must create a LowerAndCrush ceiling"
+        );
 
         // Tick down to bottom_height (8). 128 -> 8 = 120 units / speed 2 = 60 tics.
         for _ in 0..60 {
@@ -2871,17 +2978,11 @@ mod tests {
         }
         assert_eq!(level.sectors[1].ceil_height, 8);
 
-        // Reverses to Up; tick back to 128. 120 / 2 = 60 tics.
-        for _ in 0..60 {
-            tick_ceilings(&mut gs, &mut level);
-        }
-
-        // One-shot crusher should be removed when reaching top.
+        // LowerAndCrush removes itself when reaching bottom.
         assert!(
             gs.active_ceilings.is_empty(),
-            "one-shot crusher must remove itself after returning to top"
+            "LowerAndCrush must remove itself after reaching bottom"
         );
-        assert_eq!(level.sectors[1].ceil_height, 128);
     }
 
     #[test]
@@ -3217,11 +3318,13 @@ mod tests {
             top_height: 128,
             bottom_height: 8,
             speed: 2,
+            normal_speed: 2,
             crush_damage: 10,
             direction: MoveDirection::Down,
             silent: false,
             remove_when_done: false,
             tag: 1,
+            ceiling_type: CeilingType::CrushAndRaise,
         });
         gs.active_floors.push(FloorMover {
             sector_index: 0,
@@ -4979,6 +5082,725 @@ mod tests {
         assert_eq!(
             gs.active_platforms[0].tag, 7,
             "snapshot must preserve platform data"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: CeilingType enum and CeilingMover creation
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ceiling_mover_creation_has_correct_fields() {
+        let mover = CeilingMover {
+            sector_index: 3,
+            top_height: 256,
+            bottom_height: 8,
+            speed: 2,
+            normal_speed: 2,
+            crush_damage: 10,
+            direction: MoveDirection::Down,
+            silent: false,
+            remove_when_done: false,
+            tag: 7,
+            ceiling_type: CeilingType::CrushAndRaise,
+        };
+        assert_eq!(mover.sector_index, 3);
+        assert_eq!(mover.top_height, 256);
+        assert_eq!(mover.bottom_height, 8);
+        assert_eq!(mover.speed, 2);
+        assert_eq!(mover.normal_speed, 2);
+        assert_eq!(mover.crush_damage, 10);
+        assert_eq!(mover.direction, MoveDirection::Down);
+        assert!(!mover.silent);
+        assert!(!mover.remove_when_done);
+        assert_eq!(mover.tag, 7);
+        assert_eq!(mover.ceiling_type, CeilingType::CrushAndRaise);
+    }
+
+    #[test]
+    fn ceiling_type_enum_variants_are_distinct() {
+        assert_ne!(CeilingType::LowerToFloor, CeilingType::CrushAndRaise);
+        assert_ne!(CeilingType::LowerAndCrush, CeilingType::FastCrushAndRaise);
+        assert_ne!(CeilingType::SilentCrush, CeilingType::LowerToFloor);
+        // Copy + Clone
+        let a = CeilingType::CrushAndRaise;
+        let b = a;
+        let c = a.clone();
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: tick_ceilings behavior
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn tick_ceilings_lowers_ceiling_toward_floor() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 25);
+
+        // Activate slow crusher (type 25, speed=1).
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(level.sectors[1].ceil_height, 128);
+
+        // One tick should lower by speed=1.
+        tick_ceilings(&mut gs, &mut level);
+        assert_eq!(
+            level.sectors[1].ceil_height, 127,
+            "ceiling must lower by speed each tic"
+        );
+
+        // Five more tics.
+        for _ in 0..5 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+        assert_eq!(
+            level.sectors[1].ceil_height, 122,
+            "ceiling must continue lowering"
+        );
+    }
+
+    #[test]
+    fn crush_and_raise_reverses_at_bottom() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 25);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::CrushAndRaise);
+
+        // Tick down to bottom: 128 - 8 = 120 units / speed 1 = 120 tics.
+        for _ in 0..120 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].ceil_height, 8, "must reach bottom_height");
+        assert_eq!(
+            gs.active_ceilings[0].direction,
+            MoveDirection::Up,
+            "must reverse to Up at bottom"
+        );
+    }
+
+    #[test]
+    fn crush_and_raise_reverses_at_top_perpetual() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 25);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        // Down: 120 tics at speed 1.
+        for _ in 0..120 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+        assert_eq!(gs.active_ceilings[0].direction, MoveDirection::Up);
+
+        // Up: 120 tics at speed 1.
+        for _ in 0..120 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].ceil_height, 128, "must return to top");
+        assert_eq!(
+            gs.active_ceilings[0].direction,
+            MoveDirection::Down,
+            "perpetual crusher reverses back to Down at top"
+        );
+
+        // Still active (perpetual — not removed).
+        assert_eq!(
+            gs.active_ceilings.len(),
+            1,
+            "perpetual crusher must remain active"
+        );
+    }
+
+    #[test]
+    fn fast_crush_and_raise_speed_difference() {
+        let mut gs = GameState::new("TEST");
+        // Type 6 = FastCrushAndRaise, speed 2.
+        let mut level = make_tagged_sector_level(0, 128, 1, 6);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::FastCrushAndRaise);
+        assert_eq!(gs.active_ceilings[0].speed, 2, "fast crusher uses speed 2");
+
+        // Tick once.
+        tick_ceilings(&mut gs, &mut level);
+        assert_eq!(
+            level.sectors[1].ceil_height, 126,
+            "fast crusher must move 2 units per tic"
+        );
+
+        // Compare: slow crusher (type 25) uses speed 1.
+        let mut gs2 = GameState::new("TEST");
+        let mut level2 = make_tagged_sector_level(0, 128, 1, 25);
+        activate_linedef(&mut gs2, &mut level2, 0);
+        assert_eq!(gs2.active_ceilings[0].speed, 1, "slow crusher uses speed 1");
+
+        tick_ceilings(&mut gs2, &mut level2);
+        assert_eq!(
+            level2.sectors[1].ceil_height, 127,
+            "slow crusher must move 1 unit per tic"
+        );
+    }
+
+    #[test]
+    fn lower_and_crush_stops_at_bottom() {
+        let mut gs = GameState::new("TEST");
+        // Type 44 = LowerAndCrush.
+        let mut level = make_tagged_sector_level(0, 128, 1, 44);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::LowerAndCrush);
+
+        // Tick to bottom: 128 - 8 = 120 / speed 2 = 60 tics.
+        for _ in 0..60 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].ceil_height, 8);
+        assert!(
+            gs.active_ceilings.is_empty(),
+            "LowerAndCrush must remove itself at bottom"
+        );
+    }
+
+    #[test]
+    fn lower_to_floor_stops_at_floor_height() {
+        let mut gs = GameState::new("TEST");
+        // Use ev_ceiling_lower_to_floor directly. Floor is 0, ceil is 128.
+        let level = make_tagged_sector_level(0, 128, 1, 0);
+
+        ev_ceiling_lower_to_floor(&mut gs, &level, 1, 2);
+        assert_eq!(gs.active_ceilings.len(), 1);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::LowerToFloor);
+        assert_eq!(
+            gs.active_ceilings[0].bottom_height, 0,
+            "LowerToFloor bottom must be floor height (0), not floor+8"
+        );
+
+        // Tick to bottom: 128 / speed 2 = 64 tics.
+        let mut level_mut = level;
+        for _ in 0..64 {
+            tick_ceilings(&mut gs, &mut level_mut);
+        }
+        assert_eq!(level_mut.sectors[1].ceil_height, 0, "ceiling must reach floor");
+        assert!(
+            gs.active_ceilings.is_empty(),
+            "LowerToFloor must remove itself at bottom"
+        );
+    }
+
+    #[test]
+    fn ev_ceiling_crush_stop_halts_active_crusher() {
+        let mut gs = GameState::new("TEST");
+        let level = make_tagged_sector_level(0, 128, 5, 0);
+
+        // Start a crusher manually with tag=5.
+        ev_ceiling_crush_and_raise(&mut gs, &level, 5, 1);
+        assert_eq!(gs.active_ceilings.len(), 1);
+
+        // Stop it.
+        ev_ceiling_crush_stop(&mut gs, 5);
+        assert!(
+            gs.active_ceilings.is_empty(),
+            "ev_ceiling_crush_stop must remove crusher with matching tag"
+        );
+    }
+
+    #[test]
+    fn crush_damage_applied_when_at_bottom() {
+        let mut gs = GameState::new("TEST");
+        // Floor=0, ceil=10. Player at z=0. CrushAndRaise with crush_damage=10.
+        let mut level = make_tagged_sector_level(0, 10, 1, 25);
+
+        // Place player in sector 1 at z=0.
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        mo.z = Fixed16_16::ZERO;
+        let handle = gs.mobjslab.alloc(mo);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings[0].crush_damage, 10);
+
+        // Tick down until ceiling is at floor + 8 = 8. ceil=10, speed=1 → 2 tics.
+        for _ in 0..2 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].ceil_height, 8);
+
+        // Player should have taken damage.
+        let health = gs.mobjslab.get(handle).unwrap().health;
+        assert!(
+            health < 100,
+            "player must take crush damage when ceiling is at floor+8"
+        );
+    }
+
+    #[test]
+    fn crusher_slow_down_when_crushing() {
+        let mut gs = GameState::new("TEST");
+        // Floor=0, ceil=16. CrushAndRaise, speed=2.
+        let mut level = make_tagged_sector_level(0, 16, 1, 6);
+
+        // Place player at z=0 in sector 1 (needed for crush damage to trigger slow-down).
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        mo.z = Fixed16_16::ZERO;
+        let handle = gs.mobjslab.alloc(mo);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings[0].speed, 2, "initial speed is 2");
+        assert_eq!(gs.active_ceilings[0].normal_speed, 2, "normal speed is 2");
+
+        // FastCrushAndRaise does NOT slow down (only CrushAndRaise and SilentCrush do).
+        // FastCrushAndRaise: tick a few times.
+        // Actually, type 6 is FastCrushAndRaise which does NOT slow down.
+        // Let's use CrushAndRaise (type 25, speed 1) instead.
+        gs.active_ceilings.clear();
+
+        let mut level2 = make_tagged_sector_level(0, 16, 1, 25);
+        // Place player at z=0 in sector 1.
+        activate_linedef(&mut gs, &mut level2, 0);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::CrushAndRaise);
+        assert_eq!(gs.active_ceilings[0].speed, 1);
+
+        // Tick down to floor+8 = 8. ceil=16, speed=1 → 8 tics.
+        for _ in 0..8 {
+            tick_ceilings(&mut gs, &mut level2);
+        }
+        assert_eq!(level2.sectors[1].ceil_height, 8);
+
+        // The crush damage should have triggered slow-down to speed 1.
+        // (It's already 1, so this is a no-op for speed=1 crushers.
+        // Test with a manually created crusher at speed 4 instead.)
+        gs.active_ceilings.clear();
+
+        // Create a CrushAndRaise crusher with speed 4.
+        let level3 = make_tagged_sector_level(0, 20, 2, 0);
+        activate_crusher(
+            &mut gs, &level3, 2, 4, 10, false, false, CeilingType::CrushAndRaise,
+        );
+        assert_eq!(gs.active_ceilings[0].speed, 4);
+        assert_eq!(gs.active_ceilings[0].normal_speed, 4);
+
+        let mut level3_mut = level3;
+
+        // Tick down until near floor. ceil=20, floor=0, bottom=8. 20-8=12 / speed 4 = 3 tics.
+        for _ in 0..3 {
+            tick_ceilings(&mut gs, &mut level3_mut);
+        }
+        assert_eq!(level3_mut.sectors[1].ceil_height, 8);
+
+        // Speed should be slowed to 1 after crush.
+        assert_eq!(
+            gs.active_ceilings[0].speed, 1,
+            "CrushAndRaise must slow to speed 1 when crushing"
+        );
+
+        // Now reverse to Up — speed should be restored to normal.
+        tick_ceilings(&mut gs, &mut level3_mut);
+        assert_eq!(
+            gs.active_ceilings[0].direction,
+            MoveDirection::Up,
+            "must reverse to Up"
+        );
+        assert_eq!(
+            gs.active_ceilings[0].speed, 4,
+            "speed must be restored to normal_speed when going up"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: Line type dispatch
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn line_type_6_dispatches_fast_crush_and_raise() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 6);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::FastCrushAndRaise);
+        assert_eq!(gs.active_ceilings[0].speed, 2);
+        assert!(!gs.active_ceilings[0].remove_when_done);
+    }
+
+    #[test]
+    fn line_type_25_dispatches_crush_and_raise() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 25);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::CrushAndRaise);
+        assert_eq!(gs.active_ceilings[0].speed, 1);
+    }
+
+    #[test]
+    fn line_type_44_dispatches_lower_and_crush() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 44);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::LowerAndCrush);
+        assert_eq!(gs.active_ceilings[0].crush_damage, 0, "type 44 has no crush damage");
+    }
+
+    #[test]
+    fn line_type_49_dispatches_lower_and_crush_with_damage() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 49);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::LowerAndCrush);
+        assert_eq!(
+            gs.active_ceilings[0].crush_damage, 10,
+            "type 49 has crush damage 10"
+        );
+        assert!(
+            gs.active_ceilings[0].remove_when_done,
+            "type 49 is one-shot"
+        );
+    }
+
+    #[test]
+    fn line_type_57_stops_crusher() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 3, 25);
+
+        // Start a crusher with tag=3.
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+
+        // Add linedef with special 57 and same tag.
+        level.linedefs.push(doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004,
+            special: 57,
+            tag: 3,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        });
+        let stop_idx = level.linedefs.len() - 1;
+        activate_linedef(&mut gs, &mut level, stop_idx);
+
+        assert!(
+            gs.active_ceilings.is_empty(),
+            "line type 57 must stop crusher with matching tag"
+        );
+    }
+
+    #[test]
+    fn line_type_72_dispatches_lower_and_crush() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 72);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::LowerAndCrush);
+    }
+
+    #[test]
+    fn line_type_73_dispatches_crush_and_raise() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 73);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::CrushAndRaise);
+        assert_eq!(gs.active_ceilings[0].speed, 1, "type 73 is slow (speed 1)");
+    }
+
+    #[test]
+    fn line_type_74_stops_crusher() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 4, 73);
+
+        // Start a crusher with tag=4.
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+
+        // Add linedef with special 74 and same tag.
+        level.linedefs.push(doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004,
+            special: 74,
+            tag: 4,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        });
+        let stop_idx = level.linedefs.len() - 1;
+        activate_linedef(&mut gs, &mut level, stop_idx);
+
+        assert!(
+            gs.active_ceilings.is_empty(),
+            "line type 74 must stop crusher with matching tag"
+        );
+    }
+
+    #[test]
+    fn line_type_141_dispatches_silent_crush() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 141);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::SilentCrush);
+        assert!(
+            gs.active_ceilings[0].silent,
+            "type 141 must set silent=true"
+        );
+        assert!(
+            !gs.active_ceilings[0].remove_when_done,
+            "type 141 is perpetual"
+        );
+    }
+
+    #[test]
+    fn multiple_crushers_active_simultaneously() {
+        let mut gs = GameState::new("TEST");
+        // Create a level with two sectors sharing the same tag.
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+        let mut level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special: 25,
+                tag: 1,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            }],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: -10 },
+                doom_map::Vertex { x: 0, y: 10 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 1,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 200,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 1,
+                },
+            ],
+            reject,
+            blockmap: make_minimal_blockmap(),
+        };
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.active_ceilings.len(),
+            2,
+            "both tagged sectors must get a crusher"
+        );
+
+        // Tick and verify both move.
+        tick_ceilings(&mut gs, &mut level);
+        assert_eq!(level.sectors[1].ceil_height, 127);
+        assert_eq!(level.sectors[2].ceil_height, 199);
+    }
+
+    #[test]
+    fn game_state_clone_includes_ceiling_type() {
+        let mut gs = GameState::new("TEST");
+        gs.active_ceilings.push(CeilingMover {
+            sector_index: 0,
+            top_height: 128,
+            bottom_height: 8,
+            speed: 2,
+            normal_speed: 2,
+            crush_damage: 10,
+            direction: MoveDirection::Down,
+            silent: true,
+            remove_when_done: false,
+            tag: 1,
+            ceiling_type: CeilingType::SilentCrush,
+        });
+
+        let gs2 = gs.clone();
+        assert_eq!(gs2.active_ceilings.len(), 1);
+        assert_eq!(gs2.active_ceilings[0].ceiling_type, CeilingType::SilentCrush);
+        assert_eq!(gs2.active_ceilings[0].normal_speed, 2);
+        assert!(gs2.active_ceilings[0].silent);
+    }
+
+    #[test]
+    fn save_load_roundtrip_ceiling_mover_with_ceiling_type() {
+        let mut gs = GameState::new("TEST");
+        gs.active_ceilings.push(CeilingMover {
+            sector_index: 5,
+            top_height: 200,
+            bottom_height: 16,
+            speed: 1,
+            normal_speed: 4,
+            crush_damage: 10,
+            direction: MoveDirection::Up,
+            silent: true,
+            remove_when_done: false,
+            tag: 99,
+            ceiling_type: CeilingType::SilentCrush,
+        });
+
+        // Place a player mobj so save_game works.
+        let mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let handle = gs.mobjslab.alloc(mo);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+
+        let data = crate::savegame::save_game(&gs, b"TEST\0\0\0\0", 0, "ceiling type test");
+        let loaded = crate::savegame::load_game(&data).expect("load must succeed");
+
+        assert_eq!(loaded.state.active_ceilings.len(), 1);
+        let c = &loaded.state.active_ceilings[0];
+        assert_eq!(c.sector_index, 5);
+        assert_eq!(c.top_height, 200);
+        assert_eq!(c.bottom_height, 16);
+        assert_eq!(c.speed, 1);
+        assert_eq!(c.normal_speed, 4);
+        assert_eq!(c.crush_damage, 10);
+        assert_eq!(c.direction, MoveDirection::Up);
+        assert!(c.silent);
+        assert!(!c.remove_when_done);
+        assert_eq!(c.tag, 99);
+        assert_eq!(c.ceiling_type, CeilingType::SilentCrush);
+    }
+
+    #[test]
+    fn silent_crush_slows_down_like_crush_and_raise() {
+        let mut gs = GameState::new("TEST");
+        let level = make_tagged_sector_level(0, 20, 2, 0);
+
+        // Create a SilentCrush crusher with speed 4.
+        activate_crusher(
+            &mut gs, &level, 2, 4, 10, true, false, CeilingType::SilentCrush,
+        );
+        assert_eq!(gs.active_ceilings[0].speed, 4);
+
+        let mut level_mut = level;
+
+        // Place player at z=0.
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        mo.z = Fixed16_16::ZERO;
+        let handle = gs.mobjslab.alloc(mo);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+
+        // Tick to bottom. ceil=20, floor=0, bottom=8. 20-8=12/4=3 tics.
+        for _ in 0..3 {
+            tick_ceilings(&mut gs, &mut level_mut);
+        }
+        assert_eq!(level_mut.sectors[1].ceil_height, 8);
+
+        // SilentCrush should also slow to speed 1.
+        assert_eq!(
+            gs.active_ceilings[0].speed, 1,
+            "SilentCrush must also slow down when crushing"
+        );
+    }
+
+    #[test]
+    fn fast_crush_and_raise_does_not_slow_down() {
+        let mut gs = GameState::new("TEST");
+        let level = make_tagged_sector_level(0, 20, 2, 0);
+
+        // Create a FastCrushAndRaise crusher with speed 4.
+        activate_crusher(
+            &mut gs, &level, 2, 4, 10, false, false, CeilingType::FastCrushAndRaise,
+        );
+        assert_eq!(gs.active_ceilings[0].speed, 4);
+
+        let mut level_mut = level;
+
+        // Place player at z=0.
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        mo.z = Fixed16_16::ZERO;
+        let handle = gs.mobjslab.alloc(mo);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+
+        // Tick to bottom. ceil=20, floor=0, bottom=8. 12/4=3 tics.
+        for _ in 0..3 {
+            tick_ceilings(&mut gs, &mut level_mut);
+        }
+        assert_eq!(level_mut.sectors[1].ceil_height, 8);
+
+        // FastCrushAndRaise should NOT slow down — speed stays at 4.
+        assert_eq!(
+            gs.active_ceilings[0].speed, 4,
+            "FastCrushAndRaise must NOT slow down"
         );
     }
 }

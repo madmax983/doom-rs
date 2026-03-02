@@ -21,7 +21,7 @@ pub mod statusbar;
 pub mod texture;
 pub mod visplane;
 
-pub use anim::{AnimSequence, AnimState};
+pub use anim::{AnimSequence, AnimState, AnimType, SwitchList};
 pub use automap::{AutomapState, draw_automap, draw_automap_ex, line_color};
 pub use colormap::ColormapCache;
 pub use column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column, draw_column_solid};
