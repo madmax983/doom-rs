@@ -31,6 +31,9 @@ pub use palette::{PaletteLut, Rgb};
 pub use render::render_level;
 pub use sky::{SKY_FLAT_NAME, column_to_angle, draw_sky_columns, is_sky_flat, sky_texture_name};
 pub use span::{DrawSpanParams, FLAT_DIM, FLAT_MASK, draw_span, draw_span_solid};
-pub use sprite::{SpriteCache, SpriteFrame, draw_sprite, draw_weapon_sprite, render_things};
+pub use sprite::{
+    SpriteCache, SpriteFrame, compute_sprite_rotation, draw_sprite, draw_sprite_ex,
+    draw_weapon_sprite, render_things, sprite_lump_name, thing_has_rotations, thing_sprite_prefix,
+};
 pub use statusbar::draw_status_bar;
 pub use texture::TextureCache;

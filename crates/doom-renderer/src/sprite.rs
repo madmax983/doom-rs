@@ -119,6 +119,218 @@ impl SpriteCache {
 }
 
 // ---------------------------------------------------------------------------
+// Sprite name resolution
+// ---------------------------------------------------------------------------
+
+/// Build the WAD lump name for a sprite given its prefix, frame, and rotation.
+///
+/// Returns an 8-byte lump name. For example, `sprite_lump_name(b"TROO", 0, 1)`
+/// produces `b"TROOA1\0\0"` (Imp, frame A, rotation 1).
+///
+/// - `frame` is 0-based: 0 = A, 1 = B, 2 = C, etc.
+/// - `rotation` is 0 for non-directional sprites, or 1-8 for 8-direction sprites.
+pub fn sprite_lump_name(prefix: &[u8; 4], frame: u8, rotation: u8) -> [u8; 8] {
+    let mut name = [0u8; 8];
+    name[0..4].copy_from_slice(prefix);
+    name[4] = b'A' + frame;
+    name[5] = b'0' + rotation;
+    name
+}
+
+/// Compute the sprite rotation index (1-8) based on the thing's facing angle
+/// and the angle from the thing to the viewer (player).
+///
+/// Doom sprites have 8 rotation frames numbered 1-8:
+/// 1=front, 2=front-right, 3=right, 4=back-right,
+/// 5=back, 6=back-left, 7=left, 8=front-left.
+///
+/// The rotation is determined by computing the relative angle between the
+/// direction from the thing to the viewer and the thing's facing direction,
+/// then quantising into one of 8 sectors (each 45 degrees wide).
+pub fn compute_sprite_rotation(
+    thing_angle: doom_types::Bam,
+    thing_x: doom_types::Fixed16_16,
+    thing_y: doom_types::Fixed16_16,
+    viewer_x: doom_types::Fixed16_16,
+    viewer_y: doom_types::Fixed16_16,
+) -> u8 {
+    // Doom's R_ProjectSprite uses R_PointToAngle(thing->x, thing->y) which
+    // computes the angle FROM the viewpoint TO the thing.
+    let dx = (thing_x - viewer_x).to_int() as f64;
+    let dy = (thing_y - viewer_y).to_int() as f64;
+    let angle_rad = dy.atan2(dx); // standard math angle (CCW from +X)
+    // Convert radians to BAM (0..2^32 maps to 0..2*PI).
+    let angle_to_viewer_bam = doom_types::Bam(
+        (angle_rad.rem_euclid(std::f64::consts::TAU) / std::f64::consts::TAU
+            * (u32::MAX as f64 + 1.0)) as u32,
+    );
+
+    // Doom's R_ProjectSprite offset: (ANG45/2)*9 = 0x1000_0000 * 9 = 0x9000_0000.
+    // This bias rotates the quantisation bins so that sector 0 aligns with
+    // the "front" view (rotation 1) when the viewer is directly in front
+    // of the thing.
+    //
+    // ANG45 = 0x2000_0000, so ANG45/2 = 0x1000_0000.
+    // The 3 most significant bits of `relative` give us a 0-7 sector index.
+    let offset: u32 = 0x9000_0000; // (ANG45 / 2) * 9
+    let relative = angle_to_viewer_bam
+        .0
+        .wrapping_sub(thing_angle.0)
+        .wrapping_add(offset);
+    let sector = (relative >> 29) & 7;
+    (sector as u8) + 1
+}
+
+/// Return the 4-character sprite prefix for a DoomEd thing type.
+///
+/// Returns `None` for thing types that have no world sprite (player starts,
+/// teleport destinations, etc.) or unknown types.
+pub fn thing_sprite_prefix(kind: u16) -> Option<[u8; 4]> {
+    Some(match kind {
+        // Player starts and deathmatch — no world sprite
+        1 | 2 | 3 | 4 | 11 | 14 => return None,
+
+        // ---------- Monsters ----------
+        3004 => *b"POSS", // Zombieman
+        9 => *b"SPOS",    // Shotgun Guy
+        65 => *b"CPOS",   // Chaingunner
+        3001 => *b"TROO", // Imp
+        3002 => *b"SARG", // Demon (Pinky)
+        58 => *b"SARG",   // Spectre (same sprite as Demon)
+        3005 => *b"HEAD", // Cacodemon
+        3003 => *b"BOSS", // Baron of Hell
+        69 => *b"BOS2",   // Hell Knight
+        3006 => *b"SKUL", // Lost Soul
+        68 => *b"BSPI",   // Arachnotron
+        71 => *b"PAIN",   // Pain Elemental
+        66 => *b"SKEL",   // Revenant
+        67 => *b"FATT",   // Mancubus
+        64 => *b"VILE",   // Arch-vile
+        7 => *b"SPID",    // Spider Mastermind
+        16 => *b"CYBR",   // Cyberdemon
+        84 => *b"SSWV",   // Wolfenstein SS
+        72 => *b"KEEN",   // Commander Keen
+        88 => *b"BBRN",   // Boss Brain
+
+        // ---------- Decorations ----------
+        2035 => *b"BAR1", // Barrel
+        70 => *b"FCAN",   // Burning barrel
+        43 => *b"TRE1",   // Burnt tree
+        54 => *b"TRE2",   // Large brown tree
+        2028 => *b"COLU", // Floor lamp
+        85 => *b"TLMP",   // Tall tech lamp
+        86 => *b"TLP2",   // Short tech lamp
+        34 => *b"CAND",   // Candle
+        35 => *b"CBRA",   // Candelabra
+        44 => *b"TBLU",   // Tall blue firestick
+        45 => *b"TGRN",   // Tall green firestick
+        46 => *b"TRED",   // Tall red firestick
+        55 => *b"SMBT",   // Short blue firestick
+        56 => *b"SMGT",   // Short green firestick
+        57 => *b"SMRT",   // Short red firestick
+        48 => *b"ELEC",   // Tall tech column
+        30 => *b"COL1",   // Tall green pillar
+        32 => *b"COL3",   // Tall red pillar
+        31 => *b"COL2",   // Short green pillar
+        33 => *b"COL4",   // Short red pillar
+        36 => *b"COL5",   // Green pillar w/ heart
+        37 => *b"COL6",   // Red pillar w/ skull
+        47 => *b"SMIT",   // Stalagmite
+
+        // ---------- Items ----------
+        2014 => *b"BON1", // Health bonus
+        2015 => *b"BON2", // Armor bonus
+        2011 => *b"STIM", // Stimpack
+        2012 => *b"MEDI", // Medikit
+        2013 => *b"SOUL", // Soulsphere
+        2018 => *b"ARM1", // Green armor
+        2019 => *b"ARM2", // Blue armor
+        2022 => *b"PINV", // Invulnerability
+        2023 => *b"PSTR", // Berserk
+        2024 => *b"PINS", // Partial invisibility
+        2025 => *b"SUIT", // Radiation suit
+        2026 => *b"PMAP", // Computer area map
+        2045 => *b"PVIS", // Light amplification
+        8 => *b"BPAK",    // Backpack
+
+        // ---------- Ammo ----------
+        2007 => *b"CLIP", // Ammo clip
+        2048 => *b"AMMO", // Box of bullets
+        2008 => *b"SHEL", // Shells
+        2049 => *b"SBOX", // Box of shells
+        2010 => *b"ROCK", // Rocket
+        2046 => *b"BROK", // Box of rockets
+        2047 => *b"CELL", // Cell charge
+        17 => *b"CELP",   // Cell pack
+
+        // ---------- Weapon pickups ----------
+        2001 => *b"SHOT", // Shotgun
+        82 => *b"SGN2",   // Super shotgun
+        2002 => *b"MGUN", // Chaingun
+        2003 => *b"LAUN", // Rocket launcher
+        2004 => *b"PLAS", // Plasma rifle
+        2006 => *b"BFUG", // BFG 9000
+        2005 => *b"CSAW", // Chainsaw
+
+        // ---------- Keys ----------
+        5 => *b"BKEY",  // Blue keycard
+        6 => *b"YKEY",  // Yellow keycard
+        13 => *b"RKEY", // Red keycard
+        40 => *b"BSKU", // Blue skull key
+        39 => *b"YSKU", // Yellow skull key
+        38 => *b"RSKU", // Red skull key
+
+        _ => return None,
+    })
+}
+
+/// Returns `true` if this DoomEd thing type has rotational sprites (8 directions).
+///
+/// Monsters generally have 8-directional walking/attack frames.
+/// Items, decorations, and ammo do not (they use rotation 0).
+pub fn thing_has_rotations(kind: u16) -> bool {
+    matches!(
+        kind,
+        3004 | 9
+            | 65
+            | 3001
+            | 3002
+            | 58
+            | 3005
+            | 3003
+            | 69
+            | 3006
+            | 68
+            | 71
+            | 66
+            | 67
+            | 64
+            | 7
+            | 16
+            | 84
+    )
+}
+
+/// Compute the mirrored rotation index for sprite fallback.
+///
+/// Doom WADs often store only rotations 1-5 and mirror 2↔8, 3↔7, 4↔6.
+/// Rotations 1 (front) and 5 (back) are symmetric and never mirrored.
+///
+/// Returns `Some(mirror_rotation)` if this rotation can be mirrored,
+/// or `None` if it is symmetric (1 or 5).
+fn mirror_rotation(rotation: u8) -> Option<u8> {
+    match rotation {
+        2 => Some(8),
+        3 => Some(7),
+        4 => Some(6),
+        6 => Some(4),
+        7 => Some(3),
+        8 => Some(2),
+        _ => None, // 0, 1, 5 have no mirror
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Picture-format parser
 // ---------------------------------------------------------------------------
 
@@ -217,73 +429,17 @@ const FOCAL_LEN: f32 = 160.0;
 const PLAYER_HEIGHT: f32 = 41.0;
 
 // ---------------------------------------------------------------------------
-// Thing sprite lookup
+// Thing sprite lookup (legacy wrapper)
 // ---------------------------------------------------------------------------
 
-/// Map a Doom DoomEd type number to the 8-byte lump name of its idle sprite
-/// (frame A, rotation 0).  Returns `None` for things that have no world sprite
-/// (player starts, teleport destinations, etc.).
+/// Map a DoomEd type to a rotation-0 lump name (legacy convenience wrapper).
+///
+/// Internally delegates to [`thing_sprite_prefix`] + [`sprite_lump_name`] with
+/// frame=0 (A) and rotation=0.
+#[cfg(test)]
 fn thing_sprite(kind: u16) -> Option<[u8; 8]> {
-    let base: &[u8; 4] = match kind {
-        1 => return None, // player 1 start — no world sprite
-        2 => b"SHOT",     // shotgun (dropped)
-        3 => b"BSKU",     // blue skull key
-        5 => b"BKEY",     // blue keycard
-        6 => b"YKEY",     // yellow keycard
-        13 => b"RKEY",    // red keycard
-        38 => b"RSKU",    // red skull key
-        39 => b"YSKU",    // yellow skull key
-        40 => b"BSKU",    // blue skull key (alt number)
-        2001 => b"SHOT",  // shotgun pickup
-        2002 => b"MGUN",  // chaingun pickup
-        2003 => b"LAUN",  // rocket launcher
-        2004 => b"PLAS",  // plasma gun
-        2005 => b"CSAW",  // chainsaw
-        2006 => b"BFUG",  // BFG9000
-        2007 => b"CLIP",  // ammo clip
-        2008 => b"SHEL",  // shotgun shells
-        2010 => b"ROCK",  // rocket
-        2011 => b"STIM",  // stimpack
-        2012 => b"MEDI",  // medikit
-        2013 => b"SOUL",  // soulsphere
-        2014 => b"BON1",  // health bonus
-        2015 => b"BON2",  // armor bonus
-        2018 => b"ARM1",  // green armor
-        2019 => b"ARM2",  // blue armor
-        2022 => b"PINV",  // invulnerability sphere
-        2023 => b"PSTR",  // berserk pack
-        2024 => b"PINS",  // invisibility sphere
-        2025 => b"SUIT",  // radiation suit
-        2026 => b"PMAP",  // computer area map
-        2028 => b"COLU",  // floor lamp
-        2035 => b"BAR1",  // barrel (explosive)
-        2045 => b"PVIS",  // light amplification visor
-        3001 => b"TROO",  // imp
-        3002 => b"SARG",  // demon (pinky)
-        3003 => b"BOSS",  // baron of hell
-        3004 => b"POSS",  // former human (zombie man)
-        3005 => b"HEAD",  // cacodemon
-        3006 => b"SKUL",  // lost soul
-        9 => b"SPOS",     // shotgun guy (former sergeant)
-        58 => b"SARG",    // spectre (same sprite as demon)
-        65 => b"CPOS",    // heavy weapon dude (chaingunner)
-        66 => b"SKEL",    // revenant
-        67 => b"FATT",    // mancubus
-        68 => b"VILE",    // archvile
-        71 => b"PAIN",    // pain elemental
-        72 => b"KEEN",    // commander keen
-        84 => b"SSWV",    // wolfenstein ss
-        88 => b"BBRN",    // boss brain
-        _ => return None, // unknown / no world sprite
-    };
-
-    // Frame A, rotation 0: four base bytes + "A0" + two null bytes.
-    let mut name = [0u8; 8];
-    name[0..4].copy_from_slice(base);
-    name[4] = b'A';
-    name[5] = b'0';
-    // name[6] and name[7] remain 0x00 (null).
-    Some(name)
+    let prefix = thing_sprite_prefix(kind)?;
+    Some(sprite_lump_name(&prefix, 0, 0))
 }
 
 // ---------------------------------------------------------------------------
@@ -351,15 +507,59 @@ pub fn render_things(
 
     // ---------- Render each visible thing ------------------------------------
     for (vx, thing) in visible {
-        // Look up sprite name; skip unknown kinds and player starts.
-        let lump_name = match thing_sprite(thing.kind) {
-            Some(n) => n,
+        // Look up the 4-char sprite prefix; skip unknown kinds and player starts.
+        let prefix = match thing_sprite_prefix(thing.kind) {
+            Some(p) => p,
             None => continue,
         };
-        // Look up the frame in the cache; skip if not loaded (PWAD without sprites).
-        let frame = match cache.get(&lump_name) {
-            Some(f) => f,
-            None => continue,
+
+        // Frame A (index 0) for now. Full state-driven animation will come in
+        // a later batch when render_things gets access to GameState.
+        let frame_idx: u8 = 0;
+
+        // Compute rotation based on thing facing angle vs viewer direction.
+        // Thing.angle is in degrees (0-360); convert to BAM.
+        let thing_angle_bam =
+            doom_types::Bam(((thing.angle as u32 as u64) * (0x1_0000_0000u64 / 360)) as u32);
+        let thing_fx = doom_types::Fixed16_16::from_int(thing.x as i32);
+        let thing_fy = doom_types::Fixed16_16::from_int(thing.y as i32);
+
+        let (frame, flip_x) = if thing_has_rotations(thing.kind) {
+            let rotation =
+                compute_sprite_rotation(thing_angle_bam, thing_fx, thing_fy, player_x, player_y);
+
+            // Try the computed rotation first.
+            let lump_name = sprite_lump_name(&prefix, frame_idx, rotation);
+            if let Some(f) = cache.get(&lump_name) {
+                (f, false)
+            } else if let Some(mirror_rot) = mirror_rotation(rotation) {
+                // Try the mirrored rotation (draw flipped).
+                let mirror_name = sprite_lump_name(&prefix, frame_idx, mirror_rot);
+                if let Some(f) = cache.get(&mirror_name) {
+                    (f, true)
+                } else {
+                    // Fall back to rotation 0 (non-directional).
+                    let fallback = sprite_lump_name(&prefix, frame_idx, 0);
+                    match cache.get(&fallback) {
+                        Some(f) => (f, false),
+                        None => continue,
+                    }
+                }
+            } else {
+                // No mirror available (rotation 1 or 5); fall back to rotation 0.
+                let fallback = sprite_lump_name(&prefix, frame_idx, 0);
+                match cache.get(&fallback) {
+                    Some(f) => (f, false),
+                    None => continue,
+                }
+            }
+        } else {
+            // Non-directional sprite: use rotation 0.
+            let lump_name = sprite_lump_name(&prefix, frame_idx, 0);
+            match cache.get(&lump_name) {
+                Some(f) => (f, false),
+                None => continue,
+            }
         };
 
         let dx = thing.x as f32 - px;
@@ -402,7 +602,13 @@ pub fn render_things(
 
         // --- Draw each scaled sprite column ---
         for col in 0..frame.width as i32 {
-            let sx = screen_x_left + col * screen_w / frame.width as i32;
+            // When flip_x is true, draw columns in reverse for horizontal mirroring.
+            let draw_col = if flip_x {
+                frame.width as i32 - 1 - col
+            } else {
+                col
+            };
+            let sx = screen_x_left + draw_col * screen_w / frame.width as i32;
             if sx < 0 || sx >= SCREEN_W as i32 {
                 continue;
             }
@@ -458,14 +664,60 @@ pub fn draw_sprite(
 
     for col in 0..width {
         let sx = sprite_origin_x + col;
-        if sx < 0 || sx >= 320 {
+        if !(0..320).contains(&sx) {
             continue;
         }
 
         let col_base = col as usize * frame.height as usize;
         for row in 0..height {
             let sy = sprite_origin_y + row;
-            if sy < 0 || sy >= 200 {
+            if !(0..200).contains(&sy) {
+                continue;
+            }
+            if let Some(idx) = frame.pixels[col_base + row as usize] {
+                let final_color = colormap[idx as usize];
+                fb.set_pixel(sx as usize, sy as usize, final_color);
+            }
+        }
+    }
+}
+
+/// Draw a sprite frame onto the framebuffer, optionally flipped horizontally.
+///
+/// This is the extended version of [`draw_sprite`] that supports horizontal
+/// mirroring for rotational sprite fallback (e.g. rotation 8 uses rotation 2
+/// drawn flipped).
+///
+/// When `flip_x` is `true`, columns are drawn in reverse order (right-to-left),
+/// producing a horizontal mirror of the sprite.
+///
+/// Positioning and colormap behaviour are identical to [`draw_sprite`].
+pub fn draw_sprite_ex(
+    fb: &mut Framebuffer,
+    frame: &SpriteFrame,
+    screen_x_center: i32,
+    screen_y_bottom: i32,
+    colormap: &[u8; 256],
+    flip_x: bool,
+) {
+    let sprite_origin_x = screen_x_center - frame.left_offset as i32;
+    let sprite_origin_y = screen_y_bottom - frame.height as i32 + 1;
+
+    let width = frame.width as i32;
+    let height = frame.height as i32;
+
+    for col in 0..width {
+        // When flipped, column 0 of the sprite maps to the rightmost screen column.
+        let draw_col = if flip_x { width - 1 - col } else { col };
+        let sx = sprite_origin_x + draw_col;
+        if !(0..320).contains(&sx) {
+            continue;
+        }
+
+        let col_base = col as usize * frame.height as usize;
+        for row in 0..height {
+            let sy = sprite_origin_y + row;
+            if !(0..200).contains(&sy) {
                 continue;
             }
             if let Some(idx) = frame.pixels[col_base + row as usize] {
@@ -1041,6 +1293,406 @@ mod tests {
             fb.get_pixel(160, 100),
             Some(99),
             "colormap mapping should be applied"
+        );
+    }
+
+    // ==================================================================
+    // Sprite rotation and name resolution tests
+    // ==================================================================
+
+    // ------------------------------------------------------------------
+    // sprite_lump_name: basic construction
+    // ------------------------------------------------------------------
+    #[test]
+    fn sprite_lump_name_builds_correctly() {
+        let name = sprite_lump_name(b"TROO", 0, 1);
+        assert_eq!(&name, b"TROOA1\0\0");
+    }
+
+    #[test]
+    fn sprite_lump_name_frame_b_rotation_0() {
+        let name = sprite_lump_name(b"POSS", 1, 0);
+        assert_eq!(&name, b"POSSB0\0\0");
+    }
+
+    #[test]
+    fn sprite_lump_name_high_frame_and_rotation() {
+        // Frame E (index 4), rotation 8.
+        let name = sprite_lump_name(b"SARG", 4, 8);
+        assert_eq!(&name, b"SARGE8\0\0");
+    }
+
+    // ------------------------------------------------------------------
+    // compute_sprite_rotation: cardinal directions
+    //
+    // Uses Doom's R_ProjectSprite formula:
+    //   ang = R_PointToAngle(thing->x, thing->y) - thing->angle;
+    //   rot = (ang + (ANG45/2)*9) >> 29;
+    //
+    // For an east-facing thing (angle 0):
+    //   Viewer east  (front)  -> rotation 1
+    //   Viewer north           -> rotation 3
+    //   Viewer west  (back)   -> rotation 5
+    //   Viewer south           -> rotation 7
+    // ------------------------------------------------------------------
+    #[test]
+    fn compute_rotation_front_is_1() {
+        // Thing faces east (Bam 0), viewer is to the east (directly in front).
+        let rot = compute_sprite_rotation(
+            doom_types::Bam::ZERO,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(100),
+            doom_types::Fixed16_16::from_int(0),
+        );
+        assert_eq!(rot, 1, "viewer in front should be rotation 1");
+    }
+
+    #[test]
+    fn compute_rotation_back_is_5() {
+        // Thing faces east (Bam 0), viewer is to the west (behind).
+        let rot = compute_sprite_rotation(
+            doom_types::Bam::ZERO,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(-100),
+            doom_types::Fixed16_16::from_int(0),
+        );
+        assert_eq!(rot, 5, "viewer behind should be rotation 5");
+    }
+
+    #[test]
+    fn compute_rotation_viewer_north_is_3() {
+        // Thing faces east (Bam 0), viewer is to the north (positive Y).
+        // Matches Doom's R_ProjectSprite formula.
+        let rot = compute_sprite_rotation(
+            doom_types::Bam::ZERO,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(100),
+        );
+        assert_eq!(rot, 3, "viewer to north should be rotation 3");
+    }
+
+    #[test]
+    fn compute_rotation_viewer_south_is_7() {
+        // Thing faces east, viewer is to the south (negative Y).
+        let rot = compute_sprite_rotation(
+            doom_types::Bam::ZERO,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(-100),
+        );
+        assert_eq!(rot, 7, "viewer to south should be rotation 7");
+    }
+
+    #[test]
+    fn compute_rotation_always_in_1_to_8() {
+        // Smoke test: rotation should always be in [1, 8] for various angles.
+        for angle_deg in (0..360).step_by(15) {
+            let bam = doom_types::Bam(((angle_deg as u64) * (0x1_0000_0000u64 / 360)) as u32);
+            let rot = compute_sprite_rotation(
+                bam,
+                doom_types::Fixed16_16::from_int(0),
+                doom_types::Fixed16_16::from_int(0),
+                doom_types::Fixed16_16::from_int(50),
+                doom_types::Fixed16_16::from_int(30),
+            );
+            assert!(
+                (1..=8).contains(&rot),
+                "rotation {rot} out of range for angle {angle_deg}"
+            );
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // thing_sprite_prefix: known and unknown types
+    // ------------------------------------------------------------------
+    #[test]
+    fn thing_sprite_prefix_known_types() {
+        assert_eq!(thing_sprite_prefix(3001), Some(*b"TROO")); // Imp
+        assert_eq!(thing_sprite_prefix(3004), Some(*b"POSS")); // Zombieman
+        assert_eq!(thing_sprite_prefix(2014), Some(*b"BON1")); // Health bonus
+        assert_eq!(thing_sprite_prefix(16), Some(*b"CYBR")); // Cyberdemon
+        assert_eq!(thing_sprite_prefix(2035), Some(*b"BAR1")); // Barrel
+    }
+
+    #[test]
+    fn thing_sprite_prefix_unknown_returns_none() {
+        assert_eq!(thing_sprite_prefix(9999), None);
+    }
+
+    #[test]
+    fn thing_sprite_prefix_player_starts_return_none() {
+        assert_eq!(thing_sprite_prefix(1), None); // player 1 start
+        assert_eq!(thing_sprite_prefix(2), None); // player 2 start
+        assert_eq!(thing_sprite_prefix(3), None); // player 3 start
+        assert_eq!(thing_sprite_prefix(4), None); // player 4 start
+        assert_eq!(thing_sprite_prefix(11), None); // deathmatch start
+    }
+
+    // ------------------------------------------------------------------
+    // thing_has_rotations: monsters yes, items no
+    // ------------------------------------------------------------------
+    #[test]
+    fn thing_has_rotations_monsters_yes() {
+        assert!(thing_has_rotations(3001)); // Imp
+        assert!(thing_has_rotations(3004)); // Zombieman
+        assert!(thing_has_rotations(16)); // Cyberdemon
+        assert!(thing_has_rotations(66)); // Revenant
+    }
+
+    #[test]
+    fn thing_has_rotations_items_no() {
+        assert!(!thing_has_rotations(2014)); // Health bonus
+        assert!(!thing_has_rotations(2035)); // Barrel
+        assert!(!thing_has_rotations(2028)); // Floor lamp
+        assert!(!thing_has_rotations(5)); // Blue keycard
+    }
+
+    // ------------------------------------------------------------------
+    // mirror_rotation: symmetry pairs
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_mirror_rotation_pairs() {
+        assert_eq!(mirror_rotation(2), Some(8));
+        assert_eq!(mirror_rotation(8), Some(2));
+        assert_eq!(mirror_rotation(3), Some(7));
+        assert_eq!(mirror_rotation(7), Some(3));
+        assert_eq!(mirror_rotation(4), Some(6));
+        assert_eq!(mirror_rotation(6), Some(4));
+    }
+
+    #[test]
+    fn test_mirror_rotation_symmetric_none() {
+        assert_eq!(mirror_rotation(0), None);
+        assert_eq!(mirror_rotation(1), None);
+        assert_eq!(mirror_rotation(5), None);
+    }
+
+    // ------------------------------------------------------------------
+    // thing_sprite legacy wrapper still works
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_thing_sprite_legacy_wrapper() {
+        // Imp: prefix TROO, frame A, rotation 0.
+        let name = thing_sprite(3001);
+        assert_eq!(name, Some(*b"TROOA0\0\0"));
+        // Player start: returns None.
+        assert_eq!(thing_sprite(1), None);
+        // Unknown: returns None.
+        assert_eq!(thing_sprite(9999), None);
+    }
+
+    // ------------------------------------------------------------------
+    // draw_sprite_ex: flipped and non-flipped rendering
+    // ------------------------------------------------------------------
+    #[test]
+    fn draw_sprite_ex_flipped_no_panic() {
+        let mut fb = Framebuffer::new();
+        let frame = SpriteFrame {
+            width: 4,
+            height: 4,
+            left_offset: 2,
+            top_offset: 4,
+            pixels: vec![Some(42); 16],
+        };
+        // Should not panic in either mode.
+        draw_sprite_ex(&mut fb, &frame, 160, 100, &IDENTITY_COLORMAP, true);
+        draw_sprite_ex(&mut fb, &frame, 160, 100, &IDENTITY_COLORMAP, false);
+    }
+
+    #[test]
+    fn draw_sprite_ex_flipped_mirrors_columns() {
+        // Build a 2-column, 1-row sprite: col 0 = palette 10, col 1 = palette 20.
+        let frame = SpriteFrame {
+            width: 2,
+            height: 1,
+            left_offset: 0,
+            top_offset: 0,
+            pixels: vec![Some(10), Some(20)],
+        };
+
+        // Draw non-flipped at center x=100, bottom y=50.
+        // sprite_origin_x = 100 - 0 = 100, so col 0 at x=100, col 1 at x=101.
+        let mut fb_normal = Framebuffer::new();
+        draw_sprite_ex(&mut fb_normal, &frame, 100, 50, &IDENTITY_COLORMAP, false);
+        assert_eq!(fb_normal.get_pixel(100, 50), Some(10));
+        assert_eq!(fb_normal.get_pixel(101, 50), Some(20));
+
+        // Draw flipped: col 0 draws at x=101 (rightmost), col 1 at x=100.
+        let mut fb_flip = Framebuffer::new();
+        draw_sprite_ex(&mut fb_flip, &frame, 100, 50, &IDENTITY_COLORMAP, true);
+        assert_eq!(
+            fb_flip.get_pixel(100, 50),
+            Some(20),
+            "flipped: col 1 pixel at left"
+        );
+        assert_eq!(
+            fb_flip.get_pixel(101, 50),
+            Some(10),
+            "flipped: col 0 pixel at right"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // render_things with rotation: monster uses rotated sprite
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_render_things_uses_rotated_sprite() {
+        // Place an Imp (kind 3001) at (100, 0) facing east.
+        // Player at (0, 0) facing east => Imp is directly ahead, but the
+        // player sees the IMP'S BACK (thing faces away from player).
+        // compute_sprite_rotation => rotation 5 (back view).
+        let mut thing = make_thing(100, 0, 3001); // Imp
+        thing.angle = 0; // facing east in degrees
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        // Insert TROOA5 (the back-view frame the renderer should look for).
+        let dummy = SpriteFrame {
+            width: 2,
+            height: 2,
+            left_offset: 1,
+            top_offset: 0,
+            pixels: vec![Some(77); 4],
+        };
+        cache.insert("TROOA5".to_string(), dummy);
+
+        let mut fb = Framebuffer::new();
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+        );
+        // The imp should be drawn (pixel 77 somewhere on screen).
+        assert!(
+            fb.data.iter().any(|&b| b == 77),
+            "rotated sprite (TROOA5) should be rendered"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // render_things: non-directional item uses rotation 0
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_render_things_item_uses_rotation_0() {
+        // Barrel (kind 2035) at (100, 0) — no rotation.
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        let dummy = SpriteFrame {
+            width: 2,
+            height: 2,
+            left_offset: 1,
+            top_offset: 0,
+            pixels: vec![Some(88); 4],
+        };
+        cache.insert("BAR1A0".to_string(), dummy);
+
+        let mut fb = Framebuffer::new();
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+        );
+        assert!(
+            fb.data.iter().any(|&b| b == 88),
+            "non-directional barrel (BAR1A0) should be rendered"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // render_things: fallback to rotation 0 when rotated sprite missing
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_render_things_fallback_to_rotation_0() {
+        // Imp at (100, 0) facing east. Viewer at origin facing east.
+        // Rotation would be 5 (back view), but only TROOA0 is in cache.
+        let mut thing = make_thing(100, 0, 3001);
+        thing.angle = 0;
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        let dummy = SpriteFrame {
+            width: 2,
+            height: 2,
+            left_offset: 1,
+            top_offset: 0,
+            pixels: vec![Some(55); 4],
+        };
+        cache.insert("TROOA0".to_string(), dummy);
+
+        let mut fb = Framebuffer::new();
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+        );
+        assert!(
+            fb.data.iter().any(|&b| b == 55),
+            "should fall back to TROOA0 when TROOA1 is missing"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // render_things: mirrored rotation fallback
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_render_things_mirror_fallback() {
+        // East-facing Imp at (100, 50), viewer at (0, 0) facing NE-ish.
+        //
+        // Direction from viewer(0,0) to thing(100,50):
+        //   atan2(50, 100) ~ 26.6 deg ~ BAM 0x12E0_0000
+        //   ang = 0x12E0_0000 - 0(thing_angle) = 0x12E0_0000
+        //   relative = 0x12E0_0000 + 0x9000_0000 = 0xA2E0_0000
+        //   sector = (0xA2E0_0000 >> 29) & 7 = 5
+        //   rotation = 6
+        //
+        // mirror_rotation(6) = 4. So if TROOA6 is missing but TROOA4
+        // exists, the renderer should use TROOA4 drawn flipped.
+        let mut thing = make_thing(100, 50, 3001);
+        thing.angle = 0; // east
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        // Only insert TROOA4 (the mirror of rotation 6).
+        let dummy = SpriteFrame {
+            width: 2,
+            height: 2,
+            left_offset: 1,
+            top_offset: 0,
+            pixels: vec![Some(33); 4],
+        };
+        cache.insert("TROOA4".to_string(), dummy);
+
+        // Player needs the thing in front. Player at (0,0) facing east-ish.
+        // cos(0) = 1, sin(0) = 0. vx = 100*1 + 50*0 = 100. In front.
+        let mut fb = Framebuffer::new();
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+        );
+        // The mirror fallback should have drawn the sprite using TROOA4 (flipped).
+        assert!(
+            fb.data.iter().any(|&b| b == 33),
+            "mirror fallback should render the imp via TROOA4 (mirror of rot 6)"
         );
     }
 }

@@ -36,7 +36,7 @@ pub use dehacked::{DehError, DehPatch, FramePatch, ThingPatch, WeaponPatch};
 pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_try_move};
-pub use pickups::p_check_pickups;
+pub use pickups::{doomed_type_to_kind, p_check_pickups, p_touch_special_thing};
 pub use player::{AmmoType, PlayerState, WEAPON_AMMO, WeaponType};
 pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,

@@ -139,6 +139,10 @@ pub enum MobjKind {
     CacoFireball = 69, // Cacodemon ranged attack
     BaronBall = 70,    // Baron/Hell Knight plasma ball
     FatShot = 71,      // Mancubus fireball
+
+    // Pickups — missing items (Batch: item pickups)
+    InvulnerabilitySphere = 72, // DoomEd 2022 — invulnerability power-up
+    Backpack = 73,              // DoomEd 8 — doubles max ammo + gives ammo
 }
 
 // ---------------------------------------------------------------------------

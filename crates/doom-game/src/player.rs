@@ -121,8 +121,10 @@ pub struct PlayerState {
     /// 0 = none, 1 = green security armor, 2 = blue combat armor.
     pub armor_type: u8,
 
-    // --- Ammo (invariant: ammo[i] ≤ MAX_AMMO[i]) ---
+    // --- Ammo (invariant: ammo[i] ≤ max_ammo[i]) ---
     ammo: [u32; NUM_AMMO],
+    /// Per-player maximum ammo (starts as `MAX_AMMO`, doubled by Backpack).
+    pub max_ammo: [u32; NUM_AMMO],
 
     // --- Weapons ---
     /// `true` for each weapon slot the player currently owns.
@@ -172,6 +174,7 @@ impl PlayerState {
             armor: 0,
             armor_type: 0,
             ammo,
+            max_ammo: MAX_AMMO,
             weapons,
             weapon: WeaponType::Pistol,
             pending_weapon: None,
@@ -278,10 +281,19 @@ impl PlayerState {
         self.ammo.get(ammo_type).copied().unwrap_or(0)
     }
 
-    /// Give `amount` units of ammo; clamped to `MAX_AMMO[ammo_type]`.
-    pub fn give_ammo(&mut self, ammo_type: usize, amount: u32) {
-        if let (Some(cur), Some(&max)) = (self.ammo.get_mut(ammo_type), MAX_AMMO.get(ammo_type)) {
+    /// Give `amount` units of ammo; clamped to `max_ammo[ammo_type]`.
+    ///
+    /// Returns `true` if ammo was actually added (player was not already at max).
+    pub fn give_ammo(&mut self, ammo_type: usize, amount: u32) -> bool {
+        if let Some(cur) = self.ammo.get_mut(ammo_type) {
+            let max = self.max_ammo.get(ammo_type).copied().unwrap_or(0);
+            if *cur >= max {
+                return false;
+            }
             *cur = (*cur + amount).min(max);
+            true
+        } else {
+            false
         }
     }
 

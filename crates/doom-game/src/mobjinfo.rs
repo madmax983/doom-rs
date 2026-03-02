@@ -92,13 +92,13 @@ const ITEM: MobjInfo = MobjInfo {
 };
 
 // ---------------------------------------------------------------------------
-// Global MOBJINFO table  (indexed by MobjKind as usize, 0..=71)
+// Global MOBJINFO table  (indexed by MobjKind as usize, 0..=73)
 // ---------------------------------------------------------------------------
 
 /// Actor property table.  Index with `MobjKind as usize`.
 ///
 /// Based on Doom's `mobjinfo[]` in `info.c`.
-pub static MOBJINFO: [MobjInfo; 72] = [
+pub static MOBJINFO: [MobjInfo; 74] = [
     // -----------------------------------------------------------------------
     // 0: Player
     // -----------------------------------------------------------------------
@@ -632,6 +632,16 @@ pub static MOBJINFO: [MobjInfo; 72] = [
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
         ..ITEM
     },
+    // -----------------------------------------------------------------------
+    // 72..=73: Additional pickups (item pickup batch)
+    // -----------------------------------------------------------------------
+    // 72: InvulnerabilitySphere
+    MobjInfo {
+        flags: flags::MF_SPECIAL | flags::MF_COUNTITEM,
+        ..ITEM
+    },
+    // 73: Backpack
+    ITEM,
 ];
 
 // ---------------------------------------------------------------------------
@@ -645,9 +655,9 @@ mod tests {
 
     #[test]
     fn table_covers_all_kinds() {
-        // MobjKind::FatShot = 71 → table must have 72 entries.
-        assert_eq!(MOBJINFO.len(), 72);
-        assert_eq!(MobjKind::FatShot as usize, 71);
+        // MobjKind::Backpack = 73 → table must have 74 entries.
+        assert_eq!(MOBJINFO.len(), 74);
+        assert_eq!(MobjKind::Backpack as usize, 73);
     }
 
     #[test]
