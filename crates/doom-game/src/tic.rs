@@ -137,6 +137,8 @@ impl GameState {
         if let Some(lv) = level.as_deref() {
             let handle = self.player.handle;
             crate::specials::tick_sector_specials(self, lv, handle);
+            // Periodic sector damage with RadSuit protection.
+            crate::specials::tick_sector_damage(self, lv);
         }
 
         // Secret sector detection (special type 9): when the player is standing
@@ -165,6 +167,7 @@ impl GameState {
             crate::specials::tick_ceilings(self, lv);
             crate::specials::tick_floors(self, lv);
             crate::specials::tick_lights(self, lv);
+            crate::specials::tick_sector_lights(self, lv);
         }
 
         // Thinker loop: advance all actor state machines.

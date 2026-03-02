@@ -3,18 +3,25 @@
 //! Port of Doom's `p_spec.c` and `p_ceilng.c` / `p_doors.c` (simplified).
 //!
 //! # Implemented
-//! - `tick_sector_specials`: damage floors (specials 5, 7, 16).
+//! - `tick_sector_specials`: damage floors (specials 5, 7, 16) with periodic damage and RadSuit.
+//! - `tick_sector_damage`: periodic damage (every 32 tics), RadSuit protection, God exit (special 11).
 //! - `tick_doors`: advance active door/floor movers.
 //! - `tick_lights`: advance light specials.
+//! - `init_sector_lights`: create `SectorLightEffect` entries for sector specials 1-3, 8, 12-13, 17.
+//! - `tick_sector_lights`: advance extended sector light effects.
 //! - `spawn_level_specials`: initialise light thinkers on level load.
 //! - `p_use_lines`: player USE activation, dispatches to `activate_linedef`.
-//! - `activate_linedef`: door toggle (types 1, 2, 26–29, 63, 64), exits (11, 51, 52, 124).
+//! - `activate_linedef`: doors, exits, crushers, lifts, floors, teleporters (39, 97, 125, 126).
+//! - `ev_teleport`: teleport an actor to a teleport destination thing (kind 14).
+//! - `player_sector_index`: find which sector the player is standing in.
 
 use doom_map::{Level, SIDEDEF_NONE};
+use doom_types::Fixed16_16;
 
 use crate::mobj::MobjHandle;
 use crate::state::{
-    CeilingMover, DoorMover, ExitRequest, FloorMover, GameState, LightSpecial, MoveDirection,
+    CeilingMover, DoorMover, ExitRequest, FloorMover, GameState, LightEffectType, LightSpecial,
+    MoveDirection, SectorLightEffect,
 };
 
 // ---------------------------------------------------------------------------
@@ -37,10 +44,10 @@ const BLINK_FAST_PERIOD: i32 = 15;
 const BLINK_SLOW_PERIOD: i32 = 35;
 
 // ---------------------------------------------------------------------------
-// tick_sector_specials
+// tick_sector_specials (legacy, kept for backward compatibility)
 // ---------------------------------------------------------------------------
 
-/// Apply sector special damage to the actor each tic.
+/// Apply sector special damage to the actor each tic (legacy version).
 ///
 /// Simplified port of `P_PlayerInSpecialSector`.
 ///
@@ -82,6 +89,323 @@ pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandl
 
         // Only apply one sector's damage per tic (first match wins).
         return;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// tick_sector_damage (periodic, with RadSuit and God exit)
+// ---------------------------------------------------------------------------
+
+/// Period in tics between sector damage applications (Doom standard: 32 tics).
+const SECTOR_DAMAGE_PERIOD: u32 = 32;
+
+/// Apply periodic sector damage to the player based on sector specials.
+///
+/// Damage is only applied every `SECTOR_DAMAGE_PERIOD` tics (based on `level_time`).
+/// RadSuit (`powers[PW_IRONFEET] > 0`) prevents damage for types 4, 5, 7, 16
+/// but NOT type 11 (God exit).
+///
+/// Sector specials:
+/// - **4**: -20% health randomly (nukage, blink) — ~5 damage per period
+/// - **5**: -10% health (hellslime) — ~5 damage per period
+/// - **7**: -5% health (nukage, no blink) — ~2 damage per period
+/// - **11**: -20% health + end level when health <= 10 (God exit) — RadSuit does NOT protect
+/// - **16**: -20% health (super hellslime) — ~20 damage per period
+pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
+    // Only apply damage every SECTOR_DAMAGE_PERIOD tics.
+    if !gs.level_time.is_multiple_of(SECTOR_DAMAGE_PERIOD) {
+        return;
+    }
+
+    let handle = gs.player.handle;
+
+    // Read actor position.
+    let az = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.z.to_int(),
+        None => return,
+    };
+
+    // Check if player has RadSuit active.
+    let has_radsuit = gs.player.powers[crate::player::powers::PW_IRONFEET] > 0;
+
+    for sector in &level.sectors {
+        if sector.special == 0 {
+            continue;
+        }
+
+        // Only apply damage if actor is standing on this floor.
+        if az != sector.floor_height as i32 {
+            continue;
+        }
+
+        match sector.special {
+            4 => {
+                // Nukage, blink 0.5s — ~5 damage per period.
+                if !has_radsuit {
+                    apply_sector_damage(gs, handle, 5);
+                }
+            }
+            5 => {
+                // Hellslime — ~5 damage per period.
+                if !has_radsuit {
+                    apply_sector_damage(gs, handle, 5);
+                }
+            }
+            7 => {
+                // Nukage, no blink — ~2 damage per period.
+                if !has_radsuit {
+                    apply_sector_damage(gs, handle, 2);
+                }
+            }
+            11 => {
+                // God exit — ~20 damage per period, RadSuit does NOT protect.
+                apply_sector_damage(gs, handle, 20);
+                // Check if health is low enough to trigger exit.
+                if let Some(mo) = gs.mobjslab.get(handle) {
+                    if mo.health <= 10 {
+                        gs.exit_request = Some(ExitRequest::Normal);
+                    }
+                }
+            }
+            16 => {
+                // Super hellslime — ~20 damage per period.
+                if !has_radsuit {
+                    apply_sector_damage(gs, handle, 20);
+                }
+            }
+            _ => continue,
+        }
+
+        // Only apply one sector's damage per period (first match wins).
+        return;
+    }
+}
+
+/// Apply damage to an actor from a sector special.
+fn apply_sector_damage(gs: &mut GameState, handle: MobjHandle, damage: i32) {
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.health -= damage;
+        if mo.health < 0 {
+            mo.health = 0;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// player_sector_index
+// ---------------------------------------------------------------------------
+
+/// Find which sector the player is standing in.
+///
+/// Simple linear scan checking if the player's Z coordinate matches a sector's
+/// floor height. Returns the index of the first matching sector, or `None` if
+/// no match is found.
+///
+/// This is a simplified approximation: a proper implementation would use the
+/// BSP tree or blockmap for point-in-sector queries.
+pub fn player_sector_index(gs: &GameState, level: &Level) -> Option<usize> {
+    let handle = gs.player.handle;
+    let az = gs.mobjslab.get(handle)?.z.to_int();
+
+    for (i, sector) in level.sectors.iter().enumerate() {
+        if az == sector.floor_height as i32 {
+            return Some(i);
+        }
+    }
+    None
+}
+
+// ---------------------------------------------------------------------------
+// Teleporters
+// ---------------------------------------------------------------------------
+
+/// DoomEd thing type for Teleport Destination markers.
+const TELEPORT_DEST_THING: u16 = 14;
+
+/// BAM units per degree: 2^32 / 360.
+const BAM_PER_DEGREE: u32 = (0x1_0000_0000u64 / 360) as u32;
+
+/// Teleport an actor to a teleport destination in a sector matching `tag`.
+///
+/// Scans all things in the level for a Teleport Destination (DoomEd type 14)
+/// that is placed in a sector with the matching tag. The actor is moved to
+/// the destination's position, angle, and floor height.
+///
+/// Returns `true` if a teleport destination was found and the actor was moved.
+pub fn ev_teleport(gs: &mut GameState, level: &Level, tag: u16, mobj_handle: MobjHandle) -> bool {
+    // Collect sector indices matching the tag.
+    let tagged_sectors: Vec<usize> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| i)
+        .collect();
+
+    if tagged_sectors.is_empty() {
+        return false;
+    }
+
+    // Find the first Teleport Destination thing (kind == 14) in the level.
+    // In Doom, teleport destinations are placed by mappers inside the target
+    // sector. We simplify by finding any thing with kind==14 and accepting it
+    // if any tagged sector exists.
+    for thing in &level.things {
+        if thing.kind != TELEPORT_DEST_THING {
+            continue;
+        }
+
+        // Check if this teleport destination is roughly in one of the tagged
+        // sectors. Since we don't have point-in-sector, we accept any teleport
+        // destination thing when at least one tagged sector exists.
+        // This matches Doom's approach where teleport destinations are only
+        // placed in the appropriate target sector by the mapper.
+
+        // Get the floor height of the first tagged sector for Z placement.
+        let dest_floor = level.sectors[tagged_sectors[0]].floor_height;
+
+        // Move the actor to the destination.
+        if let Some(mo) = gs.mobjslab.get_mut(mobj_handle) {
+            mo.x = Fixed16_16::from_int(thing.x as i32);
+            mo.y = Fixed16_16::from_int(thing.y as i32);
+            mo.z = Fixed16_16::from_int(dest_floor as i32);
+            mo.angle = doom_types::Bam((thing.angle as u32).wrapping_mul(BAM_PER_DEGREE));
+            // Clear momentum on teleport (Doom standard).
+            mo.momx = Fixed16_16::ZERO;
+            mo.momy = Fixed16_16::ZERO;
+            mo.momz = Fixed16_16::ZERO;
+        } else {
+            return false;
+        }
+
+        return true;
+    }
+
+    false
+}
+
+// ---------------------------------------------------------------------------
+// init_sector_lights / tick_sector_lights
+// ---------------------------------------------------------------------------
+
+/// Scan all sectors and create `SectorLightEffect` entries for extended
+/// light-related sector specials.
+///
+/// Handles sector specials 1, 2, 3, 8, 12, 13, and 17.
+/// Call this once after loading a level, before the first tic.
+pub fn init_sector_lights(gs: &mut GameState, level: &Level) {
+    for (i, sector) in level.sectors.iter().enumerate() {
+        let effect_type = match sector.special {
+            1 => LightEffectType::BlinkRandom,
+            2 => LightEffectType::Blink05s,
+            3 => LightEffectType::Blink1s,
+            8 => LightEffectType::Oscillate,
+            12 => LightEffectType::BlinkSync05s,
+            13 => LightEffectType::BlinkSync1s,
+            17 => LightEffectType::FireFlicker,
+            _ => continue,
+        };
+
+        let min_light = match effect_type {
+            LightEffectType::BlinkRandom => 0,
+            LightEffectType::Blink05s => 0,
+            LightEffectType::Blink1s => 35,
+            LightEffectType::Oscillate => sector.light_level / 2,
+            LightEffectType::BlinkSync05s => 0,
+            LightEffectType::BlinkSync1s => 35,
+            LightEffectType::FireFlicker => sector.light_level.saturating_sub(16).max(0),
+        };
+
+        let timer = match effect_type {
+            LightEffectType::BlinkRandom => BLINK_SLOW_PERIOD as u32,
+            LightEffectType::Blink05s => BLINK_FAST_PERIOD as u32,
+            LightEffectType::Blink1s => BLINK_SLOW_PERIOD as u32,
+            LightEffectType::Oscillate => 1,
+            LightEffectType::BlinkSync05s => BLINK_FAST_PERIOD as u32,
+            LightEffectType::BlinkSync1s => BLINK_SLOW_PERIOD as u32,
+            LightEffectType::FireFlicker => 4,
+        };
+
+        gs.sector_lights.push(SectorLightEffect {
+            sector_index: i,
+            effect_type,
+            base_light: sector.light_level,
+            min_light,
+            timer,
+        });
+    }
+}
+
+/// Advance all extended sector light effects by one tic.
+///
+/// Call this once per tic from `tick()`.
+pub fn tick_sector_lights(gs: &mut GameState, level: &mut Level) {
+    for effect in &mut gs.sector_lights {
+        if effect.sector_index >= level.sectors.len() {
+            continue;
+        }
+
+        effect.timer = effect.timer.saturating_sub(1);
+        if effect.timer > 0 {
+            continue;
+        }
+
+        let sector = &mut level.sectors[effect.sector_index];
+
+        match effect.effect_type {
+            LightEffectType::BlinkRandom => {
+                // Toggle between base and dark at random-ish intervals.
+                if sector.light_level == effect.base_light {
+                    sector.light_level = effect.min_light;
+                    // Use a simple deterministic variation for the next period.
+                    effect.timer = (BLINK_SLOW_PERIOD as u32)
+                        .wrapping_add(effect.sector_index as u32 * 7)
+                        % 40
+                        + 10;
+                } else {
+                    sector.light_level = effect.base_light;
+                    effect.timer = BLINK_SLOW_PERIOD as u32;
+                }
+            }
+            LightEffectType::Blink05s | LightEffectType::BlinkSync05s => {
+                if sector.light_level == effect.base_light {
+                    sector.light_level = effect.min_light;
+                } else {
+                    sector.light_level = effect.base_light;
+                }
+                effect.timer = BLINK_FAST_PERIOD as u32;
+            }
+            LightEffectType::Blink1s | LightEffectType::BlinkSync1s => {
+                if sector.light_level == effect.base_light {
+                    sector.light_level = effect.min_light;
+                } else {
+                    sector.light_level = effect.base_light;
+                }
+                effect.timer = BLINK_SLOW_PERIOD as u32;
+            }
+            LightEffectType::Oscillate => {
+                // Smooth oscillation: ramp light up and down.
+                let range = effect.base_light - effect.min_light;
+                if range <= 0 {
+                    effect.timer = 1;
+                    continue;
+                }
+                // Use level_time to create a smooth oscillation.
+                let phase = (gs.level_time % (range as u32 * 2)) as i16;
+                sector.light_level = if phase < range {
+                    effect.min_light + phase
+                } else {
+                    effect.base_light - (phase - range)
+                };
+                effect.timer = 1;
+            }
+            LightEffectType::FireFlicker => {
+                // Random light variation within a small range.
+                let variation = (gs.rng.next() & 3) as i16;
+                sector.light_level = (effect.base_light - variation * 4).max(effect.min_light);
+                effect.timer = 4;
+            }
+        }
     }
 }
 
@@ -1211,6 +1535,35 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             for (idx, target) in per_sector {
                 activate_floor_raise_single(gs, level, idx, tag, target, 1, true);
             }
+        }
+
+        // -----------------------------------------------------------------
+        // Teleporters
+        // -----------------------------------------------------------------
+
+        // Type 39: W1 Teleport (walk trigger, one-shot).
+        39 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let handle = gs.player.handle;
+            ev_teleport(gs, level, tag, handle);
+        }
+
+        // Type 97: WR Teleport (walk trigger, repeatable).
+        97 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let handle = gs.player.handle;
+            ev_teleport(gs, level, tag, handle);
+        }
+
+        // Type 125: W1 Teleport Monsters Only.
+        125 => {
+            // Monsters-only teleport — no-op for player activation.
+            // In a full implementation, this would only teleport monster actors.
+        }
+
+        // Type 126: WR Teleport Monsters Only (repeatable).
+        126 => {
+            // Monsters-only teleport — no-op for player activation.
         }
 
         _ => {
@@ -2462,5 +2815,701 @@ mod tests {
             gs.exit_request, None,
             "exit_request must be None on creation"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: Teleporters
+    // -----------------------------------------------------------------------
+
+    /// Build a level with a teleport destination thing (kind 14) and a tagged sector.
+    fn make_teleport_level(
+        dest_x: i16,
+        dest_y: i16,
+        dest_angle: u16,
+        dest_sector_floor: i16,
+        sector_tag: u16,
+        ld_special: u16,
+    ) -> doom_map::Level {
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+
+        let sectors = vec![
+            // Sector 0: source sector (player starts here).
+            doom_map::Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            // Sector 1: destination sector (tagged).
+            doom_map::Sector {
+                floor_height: dest_sector_floor,
+                ceil_height: dest_sector_floor + 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: sector_tag,
+            },
+        ];
+
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: -10 },
+            doom_map::Vertex { x: 0, y: 10 },
+        ];
+
+        let sidedefs = vec![
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 0,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 1,
+            },
+        ];
+
+        let linedefs = vec![doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004,
+            special: ld_special,
+            tag: sector_tag,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        }];
+
+        // Teleport destination thing (DoomEd type 14).
+        let things = vec![doom_map::Thing {
+            x: dest_x,
+            y: dest_y,
+            angle: dest_angle,
+            kind: 14,
+            flags: 7,
+        }];
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things,
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    #[test]
+    fn ev_teleport_no_matching_sector_returns_false() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        // Level with no sectors matching tag 99.
+        let level = make_damage_level(0, 0);
+        assert!(!ev_teleport(&mut gs, &level, 99, handle));
+    }
+
+    #[test]
+    fn ev_teleport_moves_mobj_to_destination() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        let level = make_teleport_level(500, 600, 90, 32, 1, 39);
+
+        let result = ev_teleport(&mut gs, &level, 1, handle);
+        assert!(
+            result,
+            "ev_teleport must return true when destination found"
+        );
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(mo.x, doom_types::Fixed16_16::from_int(500));
+        assert_eq!(mo.y, doom_types::Fixed16_16::from_int(600));
+    }
+
+    #[test]
+    fn ev_teleport_sets_angle_to_destination() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        let level = make_teleport_level(100, 200, 180, 0, 1, 39);
+
+        ev_teleport(&mut gs, &level, 1, handle);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        // 180 degrees ~ 0x8000_0000 BAM. Check approximate match.
+        let expected = doom_types::Bam(0x8000_0000);
+        let diff = mo.angle.0.wrapping_sub(expected.0);
+        assert!(
+            diff < 0x0100_0000 || diff > 0xFF00_0000,
+            "angle must be approximately 180 degrees after teleport, got {:08X}",
+            mo.angle.0
+        );
+    }
+
+    #[test]
+    fn ev_teleport_sets_z_to_dest_floor() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        let level = make_teleport_level(100, 200, 0, 64, 1, 39);
+
+        ev_teleport(&mut gs, &level, 1, handle);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(
+            mo.z,
+            doom_types::Fixed16_16::from_int(64),
+            "z must be set to destination sector floor height"
+        );
+    }
+
+    #[test]
+    fn activate_linedef_type_39_triggers_teleport() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let mut level = make_teleport_level(500, 600, 0, 0, 1, 39);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(
+            mo.x,
+            doom_types::Fixed16_16::from_int(500),
+            "type 39 must teleport player"
+        );
+    }
+
+    #[test]
+    fn activate_linedef_type_97_triggers_teleport() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let mut level = make_teleport_level(300, 400, 90, 0, 1, 97);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(
+            mo.x,
+            doom_types::Fixed16_16::from_int(300),
+            "type 97 must teleport player"
+        );
+    }
+
+    #[test]
+    fn activate_linedef_type_125_monsters_only_recognized() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let mut level = make_teleport_level(500, 600, 0, 0, 1, 125);
+
+        // Type 125 is monsters-only — should not teleport the player.
+        activate_linedef(&mut gs, &mut level, 0);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(
+            mo.x,
+            doom_types::Fixed16_16::ZERO,
+            "type 125 (monsters only) must not teleport player"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: Sector Damage (periodic)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn sector_damage_special_5_hurts_player() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let level = make_damage_level(0, 5);
+
+        // Set level_time to a multiple of 32 so damage triggers.
+        gs.level_time = 32;
+        tick_sector_damage(&mut gs, &level);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(mo.health, 95, "hellslime (special 5) must deal 5 damage");
+    }
+
+    #[test]
+    fn sector_damage_special_7_hurts_less() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let level = make_damage_level(0, 7);
+
+        gs.level_time = 32;
+        tick_sector_damage(&mut gs, &level);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(mo.health, 98, "nukage (special 7) must deal 2 damage");
+    }
+
+    #[test]
+    fn sector_damage_special_16_hurts_heavily() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let level = make_damage_level(0, 16);
+
+        gs.level_time = 32;
+        tick_sector_damage(&mut gs, &level);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(
+            mo.health, 80,
+            "super hellslime (special 16) must deal 20 damage"
+        );
+    }
+
+    #[test]
+    fn radsuit_prevents_nukage_damage() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        // Give player RadSuit.
+        gs.player.powers[crate::player::powers::PW_IRONFEET] = 100;
+        let level = make_damage_level(0, 7);
+
+        gs.level_time = 32;
+        tick_sector_damage(&mut gs, &level);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(mo.health, 100, "RadSuit must prevent nukage damage");
+    }
+
+    #[test]
+    fn special_11_damages_and_triggers_exit() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        // Set player health low enough that after 20 damage it triggers exit.
+        gs.mobjslab.get_mut(handle).unwrap().health = 25;
+        let level = make_damage_level(0, 11);
+
+        gs.level_time = 32;
+        tick_sector_damage(&mut gs, &level);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(mo.health, 5, "God exit must deal 20 damage");
+        assert_eq!(
+            gs.exit_request,
+            Some(crate::state::ExitRequest::Normal),
+            "God exit must set ExitRequest::Normal when health <= 10"
+        );
+    }
+
+    #[test]
+    fn no_damage_when_sector_special_is_zero() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let level = make_damage_level(0, 0);
+
+        gs.level_time = 32;
+        tick_sector_damage(&mut gs, &level);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(mo.health, 100, "no damage when sector special is 0");
+    }
+
+    #[test]
+    fn damage_tick_only_applies_every_32_tics() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let level = make_damage_level(0, 5);
+
+        // level_time = 1 (not a multiple of 32) -- no damage.
+        gs.level_time = 1;
+        tick_sector_damage(&mut gs, &level);
+        assert_eq!(gs.mobjslab.get(handle).unwrap().health, 100);
+
+        // level_time = 15 -- no damage.
+        gs.level_time = 15;
+        tick_sector_damage(&mut gs, &level);
+        assert_eq!(gs.mobjslab.get(handle).unwrap().health, 100);
+
+        // level_time = 32 -- damage applied.
+        gs.level_time = 32;
+        tick_sector_damage(&mut gs, &level);
+        assert_eq!(gs.mobjslab.get(handle).unwrap().health, 95);
+    }
+
+    #[test]
+    fn player_full_health_survives_several_nukage_ticks() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let level = make_damage_level(0, 7);
+
+        // Apply damage 5 times (every 32 tics).
+        for i in 1..=5 {
+            gs.level_time = i * 32;
+            tick_sector_damage(&mut gs, &level);
+        }
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(
+            mo.health, 90,
+            "5 nukage ticks at 2 damage each = 10 total damage, 100-10=90"
+        );
+        assert!(mo.health > 0, "player must survive 5 nukage periods");
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: Sector Light Effects
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn init_sector_lights_creates_effects_for_specials_1_2_3() {
+        let mut gs = GameState::new("TEST");
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+        let level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 200,
+                    special: 1, // blink random
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 160,
+                    special: 2, // blink 0.5s
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 128,
+                    special: 3, // blink 1s
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap: make_minimal_blockmap(),
+        };
+
+        init_sector_lights(&mut gs, &level);
+
+        assert_eq!(
+            gs.sector_lights.len(),
+            3,
+            "init_sector_lights must create effects for specials 1, 2, 3"
+        );
+        assert_eq!(
+            gs.sector_lights[0].effect_type,
+            crate::state::LightEffectType::BlinkRandom
+        );
+        assert_eq!(
+            gs.sector_lights[1].effect_type,
+            crate::state::LightEffectType::Blink05s
+        );
+        assert_eq!(
+            gs.sector_lights[2].effect_type,
+            crate::state::LightEffectType::Blink1s
+        );
+    }
+
+    #[test]
+    fn tick_sector_lights_changes_light_levels() {
+        let mut gs = GameState::new("TEST");
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        let mut level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![doom_map::Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 200,
+                special: 2, // blink 0.5s
+                tag: 0,
+            }],
+            reject,
+            blockmap: make_minimal_blockmap(),
+        };
+
+        init_sector_lights(&mut gs, &level);
+        assert_eq!(gs.sector_lights.len(), 1);
+
+        let initial_light = level.sectors[0].light_level;
+
+        // Tick past the period to trigger a toggle.
+        for _ in 0..BLINK_FAST_PERIOD {
+            tick_sector_lights(&mut gs, &mut level);
+        }
+
+        assert_ne!(
+            level.sectors[0].light_level, initial_light,
+            "tick_sector_lights must change light level after period"
+        );
+    }
+
+    #[test]
+    fn light_effect_type_derives_partial_eq() {
+        use crate::state::LightEffectType;
+        assert_eq!(LightEffectType::BlinkRandom, LightEffectType::BlinkRandom);
+        assert_ne!(LightEffectType::Blink05s, LightEffectType::Blink1s);
+    }
+
+    #[test]
+    fn sector_light_effect_clone_works() {
+        use crate::state::{LightEffectType, SectorLightEffect};
+        let effect = SectorLightEffect {
+            sector_index: 0,
+            effect_type: LightEffectType::Oscillate,
+            base_light: 200,
+            min_light: 100,
+            timer: 10,
+        };
+        let cloned = effect.clone();
+        assert_eq!(cloned.sector_index, 0);
+        assert_eq!(cloned.effect_type, LightEffectType::Oscillate);
+        assert_eq!(cloned.base_light, 200);
+        assert_eq!(cloned.min_light, 100);
+        assert_eq!(cloned.timer, 10);
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: player_sector_index
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn player_sector_index_finds_matching_sector() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 32);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 32,
+                    ceil_height: 160,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap: make_minimal_blockmap(),
+        };
+
+        let idx = player_sector_index(&gs, &level);
+        assert_eq!(
+            idx,
+            Some(1),
+            "player at z=32 should match sector 1 (floor=32)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: ev_teleport clears momentum
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn ev_teleport_clears_momentum() {
+        let mut gs = GameState::new("TEST");
+        let mut mo = crate::mobj::Mobj::new(
+            crate::mobj::MobjKind::Player,
+            doom_types::Fixed16_16::ZERO,
+            doom_types::Fixed16_16::ZERO,
+            doom_types::Bam::ZERO,
+        );
+        mo.health = 100;
+        mo.momx = doom_types::Fixed16_16::from_int(5);
+        mo.momy = doom_types::Fixed16_16::from_int(3);
+        let handle = gs.mobjslab.alloc(mo);
+        let level = make_teleport_level(100, 200, 0, 0, 1, 39);
+
+        ev_teleport(&mut gs, &level, 1, handle);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(
+            mo.momx,
+            doom_types::Fixed16_16::ZERO,
+            "momx must be cleared after teleport"
+        );
+        assert_eq!(
+            mo.momy,
+            doom_types::Fixed16_16::ZERO,
+            "momy must be cleared after teleport"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: GameState clone includes sector_lights
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn game_state_clone_includes_sector_lights() {
+        use crate::state::{LightEffectType, SectorLightEffect};
+        let mut gs = GameState::new("TEST");
+        gs.sector_lights.push(SectorLightEffect {
+            sector_index: 0,
+            effect_type: LightEffectType::Blink05s,
+            base_light: 200,
+            min_light: 0,
+            timer: 15,
+        });
+
+        let gs2 = gs.clone();
+        assert_eq!(
+            gs2.sector_lights.len(),
+            1,
+            "clone must include sector_lights"
+        );
+        assert_eq!(gs2.sector_lights[0].base_light, 200);
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: init_sector_lights for extended types (8, 12, 13, 17)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn init_sector_lights_creates_oscillate_and_fire_flicker() {
+        let mut gs = GameState::new("TEST");
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 160,
+                    special: 8, // oscillate
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 17, // fire flicker
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap: make_minimal_blockmap(),
+        };
+
+        init_sector_lights(&mut gs, &level);
+
+        assert_eq!(gs.sector_lights.len(), 2);
+        assert_eq!(
+            gs.sector_lights[0].effect_type,
+            crate::state::LightEffectType::Oscillate
+        );
+        assert_eq!(
+            gs.sector_lights[1].effect_type,
+            crate::state::LightEffectType::FireFlicker
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: radsuit does NOT protect from special 11
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn radsuit_does_not_protect_from_god_exit() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        gs.player.powers[crate::player::powers::PW_IRONFEET] = 100;
+        let level = make_damage_level(0, 11);
+
+        gs.level_time = 32;
+        tick_sector_damage(&mut gs, &level);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(
+            mo.health, 80,
+            "RadSuit must NOT protect from God exit (special 11)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: sector damage special 4
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn sector_damage_special_4_nukage_blink() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let level = make_damage_level(0, 4);
+
+        gs.level_time = 32;
+        tick_sector_damage(&mut gs, &level);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(mo.health, 95, "special 4 (nukage blink) must deal 5 damage");
     }
 }

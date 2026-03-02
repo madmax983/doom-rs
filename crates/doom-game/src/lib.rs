@@ -35,7 +35,7 @@ pub use actions::{
     ACTION_BRUIS_ATTACK, ACTION_CHASE, ACTION_HEAD_ATTACK, ACTION_LOOK, ACTION_NONE,
     dispatch_action,
 };
-pub use cheats::{CheatBuffer, CheatCode, apply_cheat, check_cheats, cheat_message};
+pub use cheats::{CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
 pub use dehacked::{DehError, DehPatch, FramePatch, ThingPatch, WeaponPatch};
 pub use intermission::{IntermissionStats, par_time};
@@ -54,12 +54,14 @@ pub use savegame::{
 pub use snapshot::Snapshot;
 pub use spawn::{Skill, spawn_level_things};
 pub use specials::{
-    USE_RANGE, activate_linedef, highest_adjacent_floor, lowest_adjacent_ceiling,
-    lowest_adjacent_floor, next_highest_floor, p_use_lines, tick_ceilings, tick_floors,
+    USE_RANGE, activate_linedef, ev_teleport, highest_adjacent_floor, init_sector_lights,
+    lowest_adjacent_ceiling, lowest_adjacent_floor, next_highest_floor, p_use_lines,
+    player_sector_index, tick_ceilings, tick_floors, tick_sector_damage, tick_sector_lights,
     tick_sector_specials,
 };
 pub use state::{
-    CeilingMover, DoomRng, ExitRequest, FloorMover, GameState, MoveDirection, RNG_TABLE,
+    CeilingMover, DoomRng, ExitRequest, FloorMover, GameState, LightEffectType, MoveDirection,
+    RNG_TABLE, SectorLightEffect,
 };
 pub use states::STATES;
 pub use tic::{FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt};

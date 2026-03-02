@@ -141,6 +141,47 @@ pub struct LightSpecial {
 }
 
 // ---------------------------------------------------------------------------
+// Sector light effect types (extended)
+// ---------------------------------------------------------------------------
+
+/// Type of light effect applied to a sector.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LightEffectType {
+    /// Special 1: Light oscillates between base and dark at random intervals.
+    BlinkRandom,
+    /// Special 2: Light blinks every ~17 tics.
+    Blink05s,
+    /// Special 3: Light blinks every ~35 tics.
+    Blink1s,
+    /// Special 8: Light smoothly oscillates.
+    Oscillate,
+    /// Special 12: Synchronized blink every ~17 tics.
+    BlinkSync05s,
+    /// Special 13: Synchronized blink every ~35 tics.
+    BlinkSync1s,
+    /// Special 17: Random light variation (fire flicker).
+    FireFlicker,
+}
+
+/// Extended sector light effect with per-sector state tracking.
+///
+/// Created by `specials::init_sector_lights` from sector specials.
+/// Ticked each tic by `specials::tick_sector_lights`.
+#[derive(Debug, Clone)]
+pub struct SectorLightEffect {
+    /// Index into `level.sectors`.
+    pub sector_index: usize,
+    /// Type of light animation.
+    pub effect_type: LightEffectType,
+    /// Base (bright) light level for this sector.
+    pub base_light: i16,
+    /// Minimum (dark) light level for this sector.
+    pub min_light: i16,
+    /// Timer counting down to next state change.
+    pub timer: u32,
+}
+
+// ---------------------------------------------------------------------------
 // Doom's deterministic RNG
 // ---------------------------------------------------------------------------
 
@@ -253,6 +294,9 @@ pub struct GameState {
     /// Active floor movers / lifts (ticked by `specials::tick_floors`).
     pub active_floors: Vec<FloorMover>,
 
+    /// Extended sector light effects (ticked by `specials::tick_sector_lights`).
+    pub sector_lights: Vec<SectorLightEffect>,
+
     /// Level exit requested this tic (cleared to `None` at start of each tick).
     pub exit_request: Option<ExitRequest>,
 
@@ -284,6 +328,7 @@ impl GameState {
             active_lights: Vec::new(),
             active_ceilings: Vec::new(),
             active_floors: Vec::new(),
+            sector_lights: Vec::new(),
             exit_request: None,
             level_time: 0,
         }
