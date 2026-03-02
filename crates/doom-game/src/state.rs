@@ -224,6 +224,8 @@ pub struct GameState {
     pub total_kills: u32,
     /// Total collectable items.
     pub total_items: u32,
+    /// Total secret sectors in the map (sectors with special type 9).
+    pub total_secrets: u32,
 
     /// Active door/floor/ceiling movers (ticked by `specials::tick_doors`).
     pub active_doors: Vec<DoorMover>,
@@ -254,6 +256,7 @@ impl GameState {
             secret_count: 0,
             total_kills: 0,
             total_items: 0,
+            total_secrets: 0,
             active_doors: Vec::new(),
             active_lights: Vec::new(),
             active_ceilings: Vec::new(),

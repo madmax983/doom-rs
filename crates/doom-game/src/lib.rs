@@ -21,6 +21,7 @@ pub mod pickups;
 pub mod player;
 pub mod projectile;
 pub mod snapshot;
+pub mod spawn;
 pub mod specials;
 pub mod state;
 pub mod states;
@@ -42,6 +43,7 @@ pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
 };
 pub use snapshot::Snapshot;
+pub use spawn::{Skill, spawn_level_things};
 pub use specials::{
     USE_RANGE, activate_linedef, highest_adjacent_floor, lowest_adjacent_ceiling,
     lowest_adjacent_floor, next_highest_floor, p_use_lines, tick_ceilings, tick_floors,

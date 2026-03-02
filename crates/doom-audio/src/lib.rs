@@ -1,5 +1,5 @@
 //! OPL2/3 FM synthesis, MUS→MIDI conversion, PCM SFX mixing,
-//! and cpal audio output driver.
+//! positional audio, and cpal audio output driver.
 
 pub mod driver;
 pub mod midi;
@@ -7,12 +7,16 @@ pub mod mixer;
 pub mod mus;
 pub mod opl;
 pub mod sfx;
+pub mod sfx_mixer;
+pub mod spatial;
 
 pub use driver::AudioDriver;
 pub use midi::{GenmidiBank, GenmidiInstrument, MidiPlayer};
 pub use mixer::{Mixer, PcmSample};
 pub use mus::{MusEvent, MusScore};
-pub use sfx::{play_sfx, SfxCache, SfxPriority};
+pub use sfx::{SfxCache, SfxPriority, play_sfx};
+pub use sfx_mixer::{MAX_CHANNELS, SfxChannel, SfxMixer, SfxPriority as SfxPriorityLevel};
+pub use spatial::{MAX_SFX_DIST, SfxEmitter, SpatialParams, compute_spatial};
 
 /// Top-level error type for the doom-audio crate.
 #[derive(Debug, thiserror::Error)]
