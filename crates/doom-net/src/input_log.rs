@@ -1,96 +1,112 @@
-//! Ring-buffered player input log for rollback netcode.
+//! Per-player input history for rollback netcode.
 //!
-//! Stores the last [`crate::rollback::MAX_ROLLBACK_TICS`] `WireTicCmd`s for
-//! each of up to [`MAX_PLAYERS`] players.  Indexing is
-//! `tic % MAX_ROLLBACK_TICS`, matching the `SnapshotRing` layout so that
-//! snapshot and input log slots stay in sync.
+//! [`InputLog`] stores the last N tics worth of `[TicCmd; MAX_PLAYERS]`
+//! arrays in a ring buffer indexed by `tic % capacity`.  Each entry can
+//! be marked as *authoritative* (server-confirmed) or *predicted* (local
+//! extrapolation).
 
-use crate::packet::WireTicCmd;
-use crate::rollback::MAX_ROLLBACK_TICS;
+use crate::packet::{MAX_PLAYERS, MAX_ROLLBACK_TICS, TicCmd};
 
-/// Maximum number of players in a multiplayer session.
-pub use crate::packet::MAX_PLAYERS;
+// ---------------------------------------------------------------------------
+// InputEntry
+// ---------------------------------------------------------------------------
+
+/// One tic's worth of inputs for all players, with an authoritative flag.
+#[derive(Debug, Clone)]
+struct InputEntry {
+    /// The tic number this entry was recorded for.
+    tic: u32,
+    /// Input commands for each player slot.
+    cmds: [TicCmd; MAX_PLAYERS],
+    /// `true` if these inputs came from the server (authoritative).
+    authoritative: bool,
+}
 
 // ---------------------------------------------------------------------------
 // InputLog
 // ---------------------------------------------------------------------------
 
-/// Ring buffer of player inputs for the rollback window.
+/// Ring-buffered input history for the rollback window.
 ///
-/// Stores the last [`MAX_ROLLBACK_TICS`] inputs for each of up to
-/// [`MAX_PLAYERS`] players.  Ring index: `tic % MAX_ROLLBACK_TICS`.
+/// Capacity defaults to [`MAX_ROLLBACK_TICS`] but can be customized.
+#[derive(Debug, Clone)]
 pub struct InputLog {
-    /// `cmds[player][slot]` — `None` = slot not yet written.
-    cmds: [[Option<WireTicCmd>; MAX_ROLLBACK_TICS]; MAX_PLAYERS],
-    /// `tic_nums[player][slot]` — sentinel `u32::MAX` = not written.
-    tic_nums: [[u32; MAX_ROLLBACK_TICS]; MAX_PLAYERS],
+    /// Ring of optional entries, indexed by `tic % capacity`.
+    log: Vec<Option<InputEntry>>,
+    /// Ring capacity.
+    capacity: usize,
+    /// The oldest tic we have recorded (informational).
+    oldest_tic: u32,
 }
 
 impl InputLog {
-    /// Create an empty log (all slots vacant).
+    /// Create an empty log with the given `capacity`.
+    ///
+    /// # Panics
+    /// Panics if `capacity` is 0.
     #[must_use]
-    pub fn new() -> Self {
+    pub fn new(capacity: usize) -> Self {
+        assert!(capacity > 0, "InputLog capacity must be > 0");
+        let mut log = Vec::with_capacity(capacity);
+        log.resize_with(capacity, || None);
         Self {
-            cmds:     [[None; MAX_ROLLBACK_TICS]; MAX_PLAYERS],
-            tic_nums: [[u32::MAX; MAX_ROLLBACK_TICS]; MAX_PLAYERS],
+            log,
+            capacity,
+            oldest_tic: 0,
         }
     }
 
-    /// Store a command for `player` at `tic`, evicting any older occupant.
-    ///
-    /// Silently ignores out-of-bounds player indices.
-    pub fn store(&mut self, player: usize, tic: u32, cmd: WireTicCmd) {
-        if player >= MAX_PLAYERS {
-            return;
-        }
-        let slot = (tic as usize) % MAX_ROLLBACK_TICS;
-        self.cmds[player][slot]     = Some(cmd);
-        self.tic_nums[player][slot] = tic;
-    }
-
-    /// Retrieve the command for `player` at `tic`, if available.
-    ///
-    /// Returns `None` if the slot has been evicted, never written, or
-    /// `player` is out of bounds.
+    /// Create a log with the default capacity ([`MAX_ROLLBACK_TICS`]).
     #[must_use]
-    pub fn get(&self, player: usize, tic: u32) -> Option<WireTicCmd> {
-        if player >= MAX_PLAYERS {
-            return None;
-        }
-        let slot = (tic as usize) % MAX_ROLLBACK_TICS;
-        if self.tic_nums[player][slot] == tic {
-            self.cmds[player][slot]
-        } else {
-            None
-        }
+    pub fn with_default_capacity() -> Self {
+        Self::new(MAX_ROLLBACK_TICS)
     }
 
-    /// Returns `true` if inputs are available for all `num_players` players at `tic`.
-    ///
-    /// `num_players` is clamped to [`MAX_PLAYERS`].
+    /// Record inputs for `tic`.  Marks the entry as non-authoritative
+    /// (predicted) by default.
+    pub fn record(&mut self, tic: u32, cmds: [TicCmd; MAX_PLAYERS]) {
+        let slot = (tic as usize) % self.capacity;
+        self.log[slot] = Some(InputEntry {
+            tic,
+            cmds,
+            authoritative: false,
+        });
+    }
+
+    /// Retrieve the inputs for `tic`, if stored and the tic matches.
     #[must_use]
-    pub fn is_tic_complete(&self, tic: u32, num_players: usize) -> bool {
-        let count = num_players.min(MAX_PLAYERS);
-        (0..count).all(|p| self.get(p, tic).is_some())
-    }
-
-    /// Returns `true` if player `player` has a recorded input for every tic
-    /// in the inclusive range `lo..=hi`.
-    ///
-    /// Returns `false` if `player` is out of bounds or any tic in the range
-    /// has been evicted or never written.
-    #[must_use]
-    pub fn is_contiguous(&self, player: usize, lo: u32, hi: u32) -> bool {
-        if player >= MAX_PLAYERS {
-            return false;
+    pub fn get(&self, tic: u32) -> Option<&[TicCmd; MAX_PLAYERS]> {
+        let slot = (tic as usize) % self.capacity;
+        match &self.log[slot] {
+            Some(entry) if entry.tic == tic => Some(&entry.cmds),
+            _ => None,
         }
-        (lo..=hi).all(|t| self.get(player, t).is_some())
     }
-}
 
-impl Default for InputLog {
-    fn default() -> Self {
-        Self::new()
+    /// Returns `true` if we have authoritative (server-confirmed) inputs
+    /// for `tic`.
+    #[must_use]
+    pub fn has_authoritative(&self, tic: u32) -> bool {
+        let slot = (tic as usize) % self.capacity;
+        matches!(&self.log[slot], Some(entry) if entry.tic == tic && entry.authoritative)
+    }
+
+    /// Overwrite the entry for `tic` with server-confirmed inputs.
+    ///
+    /// Marks the entry as authoritative.
+    pub fn set_authoritative(&mut self, tic: u32, cmds: [TicCmd; MAX_PLAYERS]) {
+        let slot = (tic as usize) % self.capacity;
+        self.log[slot] = Some(InputEntry {
+            tic,
+            cmds,
+            authoritative: true,
+        });
+    }
+
+    /// The oldest tic number tracked (informational, updated on record).
+    #[must_use]
+    pub const fn oldest_tic(&self) -> u32 {
+        self.oldest_tic
     }
 }
 
@@ -102,88 +118,94 @@ impl Default for InputLog {
 mod tests {
     use super::*;
 
-    fn cmd(forward: i8) -> WireTicCmd {
-        WireTicCmd {
-            forward_move: forward,
-            ..WireTicCmd::default()
-        }
+    fn make_cmds(forward: i8) -> [TicCmd; MAX_PLAYERS] {
+        let mut cmds = [TicCmd::default(); MAX_PLAYERS];
+        cmds[0].forward_move = forward;
+        cmds
     }
 
     #[test]
-    fn input_log_new_empty() {
-        let log = InputLog::new();
-        assert!(log.get(0, 0).is_none(), "fresh log must return None for any (player, tic)");
+    fn new_creates_empty_log() {
+        let log = InputLog::new(8);
+        assert!(log.get(0).is_none(), "fresh log must return None");
+        assert!(log.get(7).is_none(), "fresh log must return None");
     }
 
     #[test]
-    fn input_log_store_and_get() {
-        let mut log = InputLog::new();
-        log.store(0, 10, cmd(50));
-        let result = log.get(0, 10);
-        assert!(result.is_some(), "get(0, 10) must return Some after store");
-        assert_eq!(result.unwrap().forward_move, 50);
+    fn record_then_get_returns_cmds() {
+        let mut log = InputLog::new(8);
+        let cmds = make_cmds(42);
+        log.record(5, cmds);
+        let got = log.get(5);
+        assert!(got.is_some());
+        assert_eq!(got.unwrap()[0].forward_move, 42);
     }
 
     #[test]
-    fn input_log_wrong_player_returns_none() {
-        let mut log = InputLog::new();
-        log.store(0, 10, cmd(50));
-        assert!(
-            log.get(1, 10).is_none(),
-            "get(1, 10) must return None when only player 0 was stored"
+    fn get_unrecorded_tic_returns_none() {
+        let mut log = InputLog::new(8);
+        log.record(5, make_cmds(42));
+        assert!(log.get(6).is_none(), "unrecorded tic must return None");
+    }
+
+    #[test]
+    fn set_authoritative_overwrites_predicted() {
+        let mut log = InputLog::new(8);
+        log.record(3, make_cmds(10));
+        assert!(!log.has_authoritative(3), "initially not authoritative");
+
+        let auth_cmds = make_cmds(99);
+        log.set_authoritative(3, auth_cmds);
+        assert!(log.has_authoritative(3), "must be authoritative after set");
+        assert_eq!(
+            log.get(3).unwrap()[0].forward_move,
+            99,
+            "authoritative cmds must overwrite predicted"
         );
     }
 
     #[test]
-    fn input_log_out_of_bounds_player() {
-        let log = InputLog::new();
-        // Must not panic for player indices beyond MAX_PLAYERS.
-        assert!(log.get(MAX_PLAYERS + 5, 0).is_none());
-    }
-
-    #[test]
-    fn input_log_is_tic_complete_true() {
-        let mut log = InputLog::new();
-        log.store(0, 3, cmd(1));
-        log.store(1, 3, cmd(2));
+    fn has_authoritative_returns_false_for_unrecorded() {
+        let log = InputLog::new(8);
         assert!(
-            log.is_tic_complete(3, 2),
-            "tic 3 must be complete when both players have inputs"
+            !log.has_authoritative(0),
+            "has_authoritative must return false for unrecorded tic"
         );
     }
 
     #[test]
-    fn input_log_is_tic_complete_false() {
-        let mut log = InputLog::new();
-        log.store(0, 3, cmd(1));
-        // Player 1 missing at tic 3.
+    fn has_authoritative_returns_false_for_predicted() {
+        let mut log = InputLog::new(8);
+        log.record(7, make_cmds(1));
         assert!(
-            !log.is_tic_complete(3, 2),
-            "tic 3 must not be complete when player 1 is missing"
+            !log.has_authoritative(7),
+            "predicted entry must not be authoritative"
         );
     }
 
     #[test]
-    fn input_log_contiguous_true() {
-        let mut log = InputLog::new();
-        log.store(0, 5, cmd(1));
-        log.store(0, 6, cmd(2));
-        log.store(0, 7, cmd(3));
-        assert!(
-            log.is_contiguous(0, 5, 7),
-            "tics 5..=7 must be contiguous when all three are stored"
-        );
+    fn slot_collision_evicts_old_entry() {
+        let mut log = InputLog::new(8);
+        log.record(0, make_cmds(10));
+        assert!(log.get(0).is_some());
+
+        // tic 8 collides with slot 0.
+        log.record(8, make_cmds(20));
+        assert!(log.get(0).is_none(), "tic 0 evicted by tic 8");
+        assert_eq!(log.get(8).unwrap()[0].forward_move, 20);
     }
 
     #[test]
-    fn input_log_contiguous_false() {
-        let mut log = InputLog::new();
-        log.store(0, 5, cmd(1));
-        // tic 6 is missing.
-        log.store(0, 7, cmd(3));
-        assert!(
-            !log.is_contiguous(0, 5, 7),
-            "tics 5..=7 must not be contiguous when tic 6 is missing"
-        );
+    fn set_authoritative_on_empty_slot() {
+        let mut log = InputLog::new(8);
+        log.set_authoritative(4, make_cmds(77));
+        assert!(log.has_authoritative(4));
+        assert_eq!(log.get(4).unwrap()[0].forward_move, 77);
+    }
+
+    #[test]
+    #[should_panic(expected = "capacity must be > 0")]
+    fn zero_capacity_panics() {
+        let _log = InputLog::new(0);
     }
 }

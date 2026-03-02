@@ -1,44 +1,35 @@
-//! Wire format: `TicPacket` (bincode), CRC32 desync detection.
+//! Wire protocol types for doom-net.
 //!
-//! `TicCmd` in doom-game is `repr(C)` without `bincode::Encode`/`Decode`.
-//! We define `WireTicCmd` as the canonical wire representation and provide
-//! `From` impls to convert to/from `doom_game::TicCmd`.
+//! [`TicPacket`] is the single datagram type exchanged between clients and the
+//! server.  Serialisation is manual little-endian, no `serde` or `bincode` on
+//! the hot path.
 //!
-//! # Bincode version
-//! Uses bincode 2.x with `bincode::config::standard()`.
-//! Encode: `bincode::encode_to_vec(&value, config)`
-//! Decode: `bincode::decode_from_slice::<T, _>(bytes, config)`
-
-use crate::NetError;
+//! [`TicCmd`] is the doom-net wire-format player input command, layout-compatible
+//! with `doom_game::TicCmd`.  It is defined here so that doom-net only depends on
+//! `doom-types`, not `doom-game`.
 
 /// Maximum number of players in a multiplayer session.
 pub const MAX_PLAYERS: usize = 4;
 
+/// Maximum number of tics the rollback system can rewind.
+pub const MAX_ROLLBACK_TICS: usize = 8;
+
 // ---------------------------------------------------------------------------
-// WireTicCmd — wire-format player input
+// TicCmd -- wire-format player input
 // ---------------------------------------------------------------------------
 
-/// Wire-format player input command.
+/// One tic of player input -- the wire-compatible command struct.
 ///
-/// Mirrors `doom_game::TicCmd` field-for-field (omitting the private `_pad`).
-/// Derives `bincode::Encode`/`Decode` for deterministic serialization and
-/// `serde::Serialize`/`Deserialize` for interop.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Default,
-    PartialEq,
-    Eq,
-    bincode::Encode,
-    bincode::Decode,
-)]
-pub struct WireTicCmd {
+/// Layout mirrors `doom_game::TicCmd` field-for-field so that the two types
+/// can be transmuted or field-copied at the doom-game/doom-net boundary.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[repr(C)]
+pub struct TicCmd {
     /// Forward/backward movement (-128..127, positive = forward).
     pub forward_move: i8,
     /// Lateral strafe (-128..127, positive = right).
     pub side_move: i8,
-    /// Angle delta in 16-bit BAM units.
+    /// Angle delta in 16-bit BAM units (shifted left 16 -> 32-bit BAM).
     pub angle_turn: i16,
     /// Button bitfield (`bt::BT_*` flags).
     pub buttons: u8,
@@ -46,79 +37,111 @@ pub struct WireTicCmd {
     pub chatchar: u8,
 }
 
-impl From<doom_game::TicCmd> for WireTicCmd {
-    fn from(cmd: doom_game::TicCmd) -> Self {
-        Self {
-            forward_move: cmd.forward_move,
-            side_move:    cmd.side_move,
-            angle_turn:   cmd.angle_turn,
-            buttons:      cmd.buttons,
-            chatchar:     cmd.chatchar,
-        }
-    }
-}
-
-impl From<WireTicCmd> for doom_game::TicCmd {
-    fn from(w: WireTicCmd) -> Self {
-        // `TicCmd::default()` zeroes all fields including the private `_pad`.
-        // We then overwrite only the public wire fields.
-        let mut cmd = doom_game::TicCmd::default();
-        cmd.forward_move = w.forward_move;
-        cmd.side_move    = w.side_move;
-        cmd.angle_turn   = w.angle_turn;
-        cmd.buttons      = w.buttons;
-        cmd.chatchar     = w.chatchar;
-        cmd
-    }
-}
-
 // ---------------------------------------------------------------------------
-// TicPacket — one UDP datagram
+// TicCmd wire size
 // ---------------------------------------------------------------------------
 
-/// One network packet carrying inputs for one tic from one player.
+/// Wire size of one [`TicCmd`] when serialized:
+/// `i8 + i8 + i16 + u8 + u8` = 6 bytes.
+const TICCMD_WIRE_SIZE: usize = 6;
+
+/// Wire size of one [`TicPacket`]:
+/// `u32 tic + u8 sender + u32 ack_tic + u32 state_checksum + 4 * 6 cmds`
+/// = 4 + 1 + 4 + 4 + 24 = 37 bytes.
+pub const TIC_PACKET_SIZE: usize = 4 + 1 + 4 + 4 + (TICCMD_WIRE_SIZE * MAX_PLAYERS);
+
+// ---------------------------------------------------------------------------
+// TicPacket
+// ---------------------------------------------------------------------------
+
+/// One network packet carrying inputs for one tic.
 ///
-/// Encoded with bincode 2 `standard()` config for deterministic wire bytes.
-#[derive(Debug, Clone, PartialEq, bincode::Encode, bincode::Decode)]
+/// Wire layout (little-endian, 37 bytes):
+/// ```text
+/// [ tic: u32 ] [ sender: u8 ] [ ack_tic: u32 ] [ state_checksum: u32 ]
+/// [ cmds[0]: 6B ] [ cmds[1]: 6B ] [ cmds[2]: 6B ] [ cmds[3]: 6B ]
+/// ```
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(C)]
 pub struct TicPacket {
     /// The game tic this packet covers.
     pub tic: u32,
-    /// Input commands — one per player slot (unused slots = zeroed `WireTicCmd`).
-    pub cmds: [WireTicCmd; MAX_PLAYERS],
-    /// CRC32 of the sender's `GameState` at the END of `tic - 1`.
-    ///
-    /// Used for desync detection.  `0` = not available.
-    pub state_checksum: u32,
-    /// Which player slot sent this packet (0-based).
+    /// Which player slot sent this packet (0-based, 255 = server).
     pub sender: u8,
-    /// Last tic the sender has received from the server (ACK flow control).
+    /// Last tic the sender has received from the remote (ACK flow control).
     pub ack_tic: u32,
+    /// CRC32 of the sender's game state at the END of `tic - 1`.
+    pub state_checksum: u32,
+    /// Input commands -- one per player slot (unused slots = zeroed).
+    pub cmds: [TicCmd; MAX_PLAYERS],
 }
 
 impl TicPacket {
-    /// Encode the packet to bytes using bincode 2 `standard()`.
-    ///
-    /// Returns an empty `Vec` on encode failure (should not happen for valid
-    /// data — the type invariants guarantee encodability).
+    /// Serialize this packet to a `Vec<u8>` in little-endian format.
     #[must_use]
-    pub fn encode(&self) -> Vec<u8> {
-        // SAFETY-NOTE: encode_to_vec only fails if the type contains
-        // unencodable values (e.g. unsupported lengths). WireTicCmd and all
-        // primitive fields here are always encodable; the unwrap_or_default
-        // is the documented fallback as per quality standards.
-        bincode::encode_to_vec(self, bincode::config::standard()).unwrap_or_default()
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(TIC_PACKET_SIZE);
+
+        buf.extend_from_slice(&self.tic.to_le_bytes());
+        buf.push(self.sender);
+        buf.extend_from_slice(&self.ack_tic.to_le_bytes());
+        buf.extend_from_slice(&self.state_checksum.to_le_bytes());
+
+        for cmd in &self.cmds {
+            buf.push(cmd.forward_move as u8);
+            buf.push(cmd.side_move as u8);
+            buf.extend_from_slice(&cmd.angle_turn.to_le_bytes());
+            buf.push(cmd.buttons);
+            buf.push(cmd.chatchar);
+        }
+
+        buf
     }
 
-    /// Decode a packet from bytes.
+    /// Deserialize a packet from a little-endian byte slice.
     ///
-    /// Returns `Err(NetError::Decode)` if the bytes are malformed or empty.
-    pub fn decode(data: &[u8]) -> Result<Self, NetError> {
-        if data.is_empty() {
-            return Err(NetError::Decode("empty packet".to_string()));
+    /// Returns `None` if `data` is too short.
+    #[must_use]
+    pub fn from_bytes(data: &[u8]) -> Option<Self> {
+        if data.len() < TIC_PACKET_SIZE {
+            return None;
         }
-        bincode::decode_from_slice(data, bincode::config::standard())
-            .map(|(packet, _consumed)| packet)
-            .map_err(|e| NetError::Decode(e.to_string()))
+
+        let mut offset = 0;
+
+        let tic = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?);
+        offset += 4;
+
+        let sender = data[offset];
+        offset += 1;
+
+        let ack_tic = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?);
+        offset += 4;
+
+        let state_checksum = u32::from_le_bytes(data[offset..offset + 4].try_into().ok()?);
+        offset += 4;
+
+        let mut cmds = [TicCmd::default(); MAX_PLAYERS];
+        for cmd in &mut cmds {
+            cmd.forward_move = data[offset].cast_signed();
+            offset += 1;
+            cmd.side_move = data[offset].cast_signed();
+            offset += 1;
+            cmd.angle_turn = i16::from_le_bytes(data[offset..offset + 2].try_into().ok()?);
+            offset += 2;
+            cmd.buttons = data[offset];
+            offset += 1;
+            cmd.chatchar = data[offset];
+            offset += 1;
+        }
+
+        Some(Self {
+            tic,
+            sender,
+            ack_tic,
+            state_checksum,
+            cmds,
+        })
     }
 }
 
@@ -131,65 +154,147 @@ mod tests {
     use super::*;
 
     fn sample_packet() -> TicPacket {
-        let mut cmds = [WireTicCmd::default(); MAX_PLAYERS];
-        cmds[0] = WireTicCmd {
+        let mut cmds = [TicCmd::default(); MAX_PLAYERS];
+        cmds[0] = TicCmd {
             forward_move: 50,
-            side_move:    -10,
-            angle_turn:   640,
-            buttons:      0x01,
-            chatchar:     0,
+            side_move: -10,
+            angle_turn: 640,
+            buttons: 0x01,
+            chatchar: 0,
+        };
+        cmds[1] = TicCmd {
+            forward_move: -20,
+            side_move: 30,
+            angle_turn: -512,
+            buttons: 0x03,
+            chatchar: b'Z',
         };
         TicPacket {
-            tic:            42,
-            cmds,
+            tic: 42,
+            sender: 0,
+            ack_tic: 41,
             state_checksum: 0xDEAD_BEEF,
-            sender:         0,
-            ack_tic:        41,
+            cmds,
         }
     }
 
     #[test]
-    fn packet_encode_decode_roundtrip() {
+    fn to_bytes_produces_correct_size() {
+        let pkt = sample_packet();
+        let bytes = pkt.to_bytes();
+        assert_eq!(
+            bytes.len(),
+            TIC_PACKET_SIZE,
+            "to_bytes must produce exactly TIC_PACKET_SIZE bytes"
+        );
+    }
+
+    #[test]
+    fn roundtrip_to_bytes_from_bytes() {
         let original = sample_packet();
-        let bytes    = original.encode();
-        let decoded  = TicPacket::decode(&bytes).expect("decode must succeed");
-        assert_eq!(original, decoded);
+        let bytes = original.to_bytes();
+        let decoded = TicPacket::from_bytes(&bytes).expect("from_bytes must succeed");
+        assert_eq!(original, decoded, "roundtrip must preserve packet");
     }
 
     #[test]
-    fn packet_encode_is_deterministic() {
-        let packet = sample_packet();
-        let a = packet.encode();
-        let b = packet.encode();
-        assert_eq!(a, b, "two encodes of the same packet must be byte-identical");
+    fn from_bytes_too_short_returns_none() {
+        let short = vec![0u8; TIC_PACKET_SIZE - 1];
+        assert!(
+            TicPacket::from_bytes(&short).is_none(),
+            "from_bytes with short data must return None"
+        );
     }
 
     #[test]
-    fn wire_ticcmd_from_game_ticcmd() {
-        let mut game_cmd = doom_game::TicCmd::default();
-        game_cmd.forward_move = 100;
-        game_cmd.side_move    = -50;
-        game_cmd.angle_turn   = 1024;
-        game_cmd.buttons      = 0x03;
-        game_cmd.chatchar     = b'A';
-        let wire: WireTicCmd = game_cmd.into();
-        assert_eq!(wire.forward_move, 100);
-        assert_eq!(wire.side_move,    -50);
-        assert_eq!(wire.angle_turn,   1024);
-        assert_eq!(wire.buttons,      0x03);
-        assert_eq!(wire.chatchar,     b'A');
-
-        let back: doom_game::TicCmd = wire.into();
-        assert_eq!(back.forward_move, game_cmd.forward_move);
-        assert_eq!(back.side_move,    game_cmd.side_move);
-        assert_eq!(back.angle_turn,   game_cmd.angle_turn);
-        assert_eq!(back.buttons,      game_cmd.buttons);
-        assert_eq!(back.chatchar,     game_cmd.chatchar);
+    fn from_bytes_exact_size_works() {
+        let pkt = sample_packet();
+        let bytes = pkt.to_bytes();
+        assert_eq!(bytes.len(), TIC_PACKET_SIZE);
+        let decoded = TicPacket::from_bytes(&bytes);
+        assert!(
+            decoded.is_some(),
+            "from_bytes with exact size must return Some"
+        );
     }
 
     #[test]
-    fn empty_packet_decodes_to_err() {
-        let result = TicPacket::decode(&[]);
-        assert!(result.is_err(), "decoding empty bytes must return Err, not panic");
+    fn packet_preserves_sender() {
+        let mut pkt = sample_packet();
+        pkt.sender = 3;
+        let bytes = pkt.to_bytes();
+        let decoded = TicPacket::from_bytes(&bytes).expect("decode");
+        assert_eq!(decoded.sender, 3, "sender field must survive roundtrip");
+    }
+
+    #[test]
+    fn packet_preserves_tic_number() {
+        let mut pkt = sample_packet();
+        pkt.tic = 0xFFFF_FFFE;
+        let bytes = pkt.to_bytes();
+        let decoded = TicPacket::from_bytes(&bytes).expect("decode");
+        assert_eq!(decoded.tic, 0xFFFF_FFFE, "tic field must survive roundtrip");
+    }
+
+    #[test]
+    fn packet_preserves_all_four_cmds() {
+        let pkt = sample_packet();
+        let bytes = pkt.to_bytes();
+        let decoded = TicPacket::from_bytes(&bytes).expect("decode");
+        for i in 0..MAX_PLAYERS {
+            assert_eq!(
+                decoded.cmds[i].forward_move, pkt.cmds[i].forward_move,
+                "cmd[{i}].forward_move mismatch"
+            );
+            assert_eq!(
+                decoded.cmds[i].side_move, pkt.cmds[i].side_move,
+                "cmd[{i}].side_move mismatch"
+            );
+            assert_eq!(
+                decoded.cmds[i].angle_turn, pkt.cmds[i].angle_turn,
+                "cmd[{i}].angle_turn mismatch"
+            );
+            assert_eq!(
+                decoded.cmds[i].buttons, pkt.cmds[i].buttons,
+                "cmd[{i}].buttons mismatch"
+            );
+            assert_eq!(
+                decoded.cmds[i].chatchar, pkt.cmds[i].chatchar,
+                "cmd[{i}].chatchar mismatch"
+            );
+        }
+    }
+
+    #[test]
+    fn from_bytes_with_extra_trailing_data_still_works() {
+        let pkt = sample_packet();
+        let mut bytes = pkt.to_bytes();
+        bytes.extend_from_slice(&[0xFF; 16]); // extra garbage at end
+        let decoded = TicPacket::from_bytes(&bytes).expect("decode with trailing data");
+        assert_eq!(decoded, pkt, "trailing data must be ignored");
+    }
+
+    #[test]
+    fn packet_preserves_state_checksum() {
+        let pkt = sample_packet();
+        let bytes = pkt.to_bytes();
+        let decoded = TicPacket::from_bytes(&bytes).expect("decode");
+        assert_eq!(
+            decoded.state_checksum, 0xDEAD_BEEF,
+            "state_checksum must survive roundtrip"
+        );
+    }
+
+    #[test]
+    fn packet_preserves_ack_tic() {
+        let pkt = sample_packet();
+        let bytes = pkt.to_bytes();
+        let decoded = TicPacket::from_bytes(&bytes).expect("decode");
+        assert_eq!(decoded.ack_tic, 41, "ack_tic must survive roundtrip");
+    }
+
+    #[test]
+    fn empty_bytes_returns_none() {
+        assert!(TicPacket::from_bytes(&[]).is_none());
     }
 }

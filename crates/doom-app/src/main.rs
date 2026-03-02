@@ -11,7 +11,6 @@ mod savegame;
 
 use anyhow::{Context, Result};
 use clap::Parser;
-use std::net::SocketAddr;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
 use doom_map::Level;
@@ -403,43 +402,19 @@ fn main() -> Result<()> {
         std::process::exit(1);
     }
 
-    // Server mode: run relay, no game rendering.
+    // Server mode: not yet implemented (doom-net has data structures but no transport).
     if let Some(port) = args.server {
-        let rt = tokio::runtime::Runtime::new()?;
-        return rt
-            .block_on(net_mode::run_server(port, args.num_players))
-            .map_err(|e| anyhow::anyhow!("Server error: {e}"));
+        eprintln!("Server mode (port {port}) not yet implemented — doom-net transport pending");
+        std::process::exit(1);
     }
 
     // Build the app.
     let app = DoomGame::new(gs, level, audio, flat_cache, tex_cache, sprite_cache, colormap_cache);
 
-    // Client (netplay) mode: connect to relay server and run game with net input.
-    if let Some(addr_str) = args.connect {
-        // Parse server address.
-        let server_addr: SocketAddr = addr_str
-            .parse()
-            .map_err(|e| anyhow::anyhow!("Invalid --connect address '{addr_str}': {e}"))?;
-
-        // Bind a local ephemeral UDP socket.
-        let local_addr: SocketAddr = "0.0.0.0:0"
-            .parse()
-            .expect("hardcoded address is valid");
-
-        let rt = tokio::runtime::Runtime::new()?;
-        let client = rt
-            .block_on(doom_net::NetClient::connect(local_addr, server_addr, args.player.saturating_sub(1)))
-            .map_err(|e| anyhow::anyhow!("Connect failed: {e}"))?;
-
-        let mut net_app = net_mode::NetGameApp::new(app, client, args.player);
-
-        let mut event_loop = DoomEventLoop::new()
-            .map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
-        event_loop
-            .run(&mut net_app, &blit_palette)
-            .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
-
-        return Ok(());
+    // Client (netplay) mode: not yet implemented (doom-net has data structures but no transport).
+    if let Some(addr_str) = &args.connect {
+        eprintln!("Client mode (connect to {addr_str}) not yet implemented — doom-net transport pending");
+        std::process::exit(1);
     }
 
     // Start the terminal event loop and run until the user quits (Q or Esc).

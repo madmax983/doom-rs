@@ -12,6 +12,7 @@
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
 pub mod actions;
+pub mod cheats;
 pub mod combat;
 pub mod dehacked;
 pub mod intermission;
@@ -34,6 +35,7 @@ pub use actions::{
     ACTION_BRUIS_ATTACK, ACTION_CHASE, ACTION_HEAD_ATTACK, ACTION_LOOK, ACTION_NONE,
     dispatch_action,
 };
+pub use cheats::{CheatBuffer, CheatCode, apply_cheat, check_cheats, cheat_message};
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
 pub use dehacked::{DehError, DehPatch, FramePatch, ThingPatch, WeaponPatch};
 pub use intermission::{IntermissionStats, par_time};

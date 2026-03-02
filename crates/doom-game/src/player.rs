@@ -143,6 +143,12 @@ pub struct PlayerState {
     // --- Power-ups: remaining tics (0 = not active) ---
     pub powers: [u32; NUM_POWERS],
 
+    // --- Cheat flags ---
+    /// God mode (IDDQD) — player takes no damage.
+    pub god_mode: bool,
+    /// Noclip (IDCLIP / IDSPISPOPD) — player passes through walls.
+    pub noclip: bool,
+
     // --- Keys ---
     /// Bitmask of collected keys (KEY_BLUE_CARD, etc.).
     pub keys: u8,
@@ -189,6 +195,8 @@ impl PlayerState {
             attack_down: false,
             use_down: false,
             powers: [0; NUM_POWERS],
+            god_mode: false,
+            noclip: false,
             keys: 0,
             bonus_count: 0,
             damage_count: 0,
