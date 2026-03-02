@@ -54,14 +54,15 @@ pub use savegame::{
 pub use snapshot::Snapshot;
 pub use spawn::{Skill, spawn_level_things};
 pub use specials::{
-    USE_RANGE, activate_linedef, ev_teleport, highest_adjacent_floor, init_sector_lights,
-    lowest_adjacent_ceiling, lowest_adjacent_floor, next_highest_floor, p_use_lines,
-    player_sector_index, tick_ceilings, tick_floors, tick_sector_damage, tick_sector_lights,
+    StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_do_donut, ev_perpetual_platform,
+    ev_teleport, highest_adjacent_floor, init_sector_lights, lowest_adjacent_ceiling,
+    lowest_adjacent_floor, next_highest_floor, p_use_lines, player_sector_index, sector_linedefs,
+    tick_ceilings, tick_floors, tick_platforms, tick_sector_damage, tick_sector_lights,
     tick_sector_specials,
 };
 pub use state::{
     CeilingMover, DoomRng, ExitRequest, FloorMover, GameState, LightEffectType, MoveDirection,
-    RNG_TABLE, SectorLightEffect,
+    PerpetualPlatform, PlatformStatus, RNG_TABLE, SectorLightEffect,
 };
 pub use states::STATES;
 pub use tic::{FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt};

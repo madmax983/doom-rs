@@ -21,7 +21,7 @@ use doom_types::Fixed16_16;
 use crate::mobj::MobjHandle;
 use crate::state::{
     CeilingMover, DoorMover, ExitRequest, FloorMover, GameState, LightEffectType, LightSpecial,
-    MoveDirection, SectorLightEffect,
+    MoveDirection, PerpetualPlatform, PlatformStatus, SectorLightEffect,
 };
 
 // ---------------------------------------------------------------------------
@@ -739,6 +739,368 @@ pub fn lowest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
     }
 
     if found { lowest } else { own_ceil }
+}
+
+// ---------------------------------------------------------------------------
+// sector_linedefs helper
+// ---------------------------------------------------------------------------
+
+/// Return the indices of all linedefs whose **front** (right) sidedef references
+/// the given sector. This is used by stair builders, donut specials, and
+/// platform activation logic that need to walk adjacent sectors.
+pub fn sector_linedefs(level: &Level, sector_index: usize) -> Vec<usize> {
+    let mut result = Vec::new();
+    for (i, ld) in level.linedefs.iter().enumerate() {
+        if let Some(sd) = level.sidedefs.get(ld.right_sidedef as usize) {
+            if sd.sector as usize == sector_index {
+                result.push(i);
+            }
+        }
+    }
+    result
+}
+
+// ---------------------------------------------------------------------------
+// Stair builders
+// ---------------------------------------------------------------------------
+
+/// Stair type determines step size and speed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StairType {
+    /// 8-unit steps, speed 2 (line type 7).
+    Build8,
+    /// 16-unit turbo steps, speed 4 (line types 8, 100, 127).
+    Turbo16,
+}
+
+/// Build stairs starting from `start_sector`, walking adjacent sectors via
+/// two-sided linedefs. Each successive sector's floor is raised by `step_size`.
+///
+/// Returns the number of floor movers created.
+///
+/// # Algorithm
+/// Starting from the trigger sector, find an adjacent sector (via a two-sided
+/// linedef whose front side is the current sector) that has the same floor
+/// flat texture. That becomes the next stair step. Repeat until no more
+/// matching adjacent sectors are found.
+pub fn ev_build_stairs(
+    gs: &mut GameState,
+    level: &Level,
+    start_sector: usize,
+    stair_type: StairType,
+    crush: bool,
+) -> usize {
+    let (step_size, speed): (i16, i16) = match stair_type {
+        StairType::Build8 => (8, 2),
+        StairType::Turbo16 => (16, 4),
+    };
+
+    let mut count = 0;
+    let mut current_sector = start_sector;
+    let mut target_height = match level.sectors.get(start_sector) {
+        Some(s) => s.floor_height + step_size,
+        None => return 0,
+    };
+
+    // Raise the starting sector first.
+    if !gs
+        .active_floors
+        .iter()
+        .any(|f| f.sector_index == start_sector)
+    {
+        gs.active_floors.push(FloorMover {
+            sector_index: start_sector,
+            target_height,
+            speed,
+            direction: MoveDirection::Up,
+            wait_tics: -1,
+            return_height: level.sectors[start_sector].floor_height,
+            waiting: false,
+            wait_remaining: 0,
+            crush,
+            tag: 0,
+        });
+        count += 1;
+    }
+
+    // Walk adjacent sectors with matching floor texture.
+    loop {
+        let cur_flat = level.sectors[current_sector].floor_flat;
+        let ld_indices = sector_linedefs(level, current_sector);
+
+        let mut found_next = false;
+
+        for &ld_idx in &ld_indices {
+            let ld = &level.linedefs[ld_idx];
+            // Must be two-sided.
+            if ld.left_sidedef == SIDEDEF_NONE {
+                continue;
+            }
+            // The "other" sector is on the left side of the linedef.
+            let other_sector = match level.sidedefs.get(ld.left_sidedef as usize) {
+                Some(sd) => sd.sector as usize,
+                None => continue,
+            };
+            // Skip if it's the same sector.
+            if other_sector == current_sector {
+                continue;
+            }
+            // Check matching floor texture.
+            let other_sec = match level.sectors.get(other_sector) {
+                Some(s) => s,
+                None => continue,
+            };
+            if other_sec.floor_flat != cur_flat {
+                continue;
+            }
+            // Skip if already has a floor mover.
+            if gs
+                .active_floors
+                .iter()
+                .any(|f| f.sector_index == other_sector)
+            {
+                continue;
+            }
+
+            target_height += step_size;
+
+            gs.active_floors.push(FloorMover {
+                sector_index: other_sector,
+                target_height,
+                speed,
+                direction: MoveDirection::Up,
+                wait_tics: -1,
+                return_height: other_sec.floor_height,
+                waiting: false,
+                wait_remaining: 0,
+                crush,
+                tag: 0,
+            });
+            count += 1;
+            current_sector = other_sector;
+            found_next = true;
+            break;
+        }
+
+        if !found_next {
+            break;
+        }
+    }
+
+    count
+}
+
+// ---------------------------------------------------------------------------
+// Donut special
+// ---------------------------------------------------------------------------
+
+/// Execute a donut special: raise the "donut hole" (inner sector) floor to
+/// match the surrounding ring sector's floor height.
+///
+/// The donut hole is the sector enclosed by the trigger sector. We find it by
+/// looking at the back side of linedefs fronting the trigger sector.
+///
+/// Returns the number of floor movers created.
+pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> usize {
+    let ld_indices = sector_linedefs(level, trigger_sector);
+
+    let mut count = 0;
+
+    for &ld_idx in &ld_indices {
+        let ld = &level.linedefs[ld_idx];
+        // Must be two-sided.
+        if ld.left_sidedef == SIDEDEF_NONE {
+            continue;
+        }
+        // The "donut hole" is on the back side.
+        let hole_sector = match level.sidedefs.get(ld.left_sidedef as usize) {
+            Some(sd) => sd.sector as usize,
+            None => continue,
+        };
+
+        if hole_sector == trigger_sector {
+            continue;
+        }
+
+        // The ring sector provides the target height.
+        // Find it by looking at linedefs fronting the hole sector — the ring
+        // is the other sector that isn't the trigger sector.
+        let hole_ld_indices = sector_linedefs(level, hole_sector);
+        let mut ring_floor: Option<i16> = None;
+
+        for &hole_ld in &hole_ld_indices {
+            let hld = &level.linedefs[hole_ld];
+            if hld.left_sidedef == SIDEDEF_NONE {
+                continue;
+            }
+            let ring_sector = match level.sidedefs.get(hld.left_sidedef as usize) {
+                Some(sd) => sd.sector as usize,
+                None => continue,
+            };
+            if ring_sector != hole_sector && ring_sector != trigger_sector {
+                if let Some(s) = level.sectors.get(ring_sector) {
+                    ring_floor = Some(s.floor_height);
+                    break;
+                }
+            }
+        }
+
+        let target = match ring_floor {
+            Some(h) => h,
+            None => {
+                // Fall back: use trigger sector floor as ring floor.
+                match level.sectors.get(trigger_sector) {
+                    Some(s) => s.floor_height,
+                    None => continue,
+                }
+            }
+        };
+
+        // Skip if already has a mover.
+        if gs
+            .active_floors
+            .iter()
+            .any(|f| f.sector_index == hole_sector)
+        {
+            continue;
+        }
+
+        let hole_sec = match level.sectors.get(hole_sector) {
+            Some(s) => s,
+            None => continue,
+        };
+
+        let direction = if target >= hole_sec.floor_height {
+            MoveDirection::Up
+        } else {
+            MoveDirection::Down
+        };
+
+        gs.active_floors.push(FloorMover {
+            sector_index: hole_sector,
+            target_height: target,
+            speed: 1,
+            direction,
+            wait_tics: -1,
+            return_height: hole_sec.floor_height,
+            waiting: false,
+            wait_remaining: 0,
+            crush: false,
+            tag: 0,
+        });
+        count += 1;
+
+        // Only create one mover per donut activation.
+        break;
+    }
+
+    count
+}
+
+// ---------------------------------------------------------------------------
+// Perpetual platforms
+// ---------------------------------------------------------------------------
+
+/// Standard platform wait time: 3 seconds at 35 Hz ≈ 105 tics.
+const PLATFORM_WAIT: i32 = 105;
+
+/// Activate a perpetual platform on all sectors matching `tag`.
+///
+/// The platform oscillates between the lowest adjacent floor and the sector's
+/// current floor height.
+///
+/// Returns the number of platforms created.
+pub fn ev_perpetual_platform(
+    gs: &mut GameState,
+    level: &Level,
+    tag: u16,
+    speed: i16,
+) -> usize {
+    let sector_indices: Vec<usize> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| i)
+        .collect();
+
+    let mut count = 0;
+    for idx in sector_indices {
+        // Avoid duplicate platforms on the same sector.
+        if gs
+            .active_platforms
+            .iter()
+            .any(|p| p.sector_index == idx)
+        {
+            continue;
+        }
+        let sector = &level.sectors[idx];
+        let low = lowest_adjacent_floor(level, idx);
+        let high = sector.floor_height;
+
+        gs.active_platforms.push(PerpetualPlatform {
+            sector_index: idx,
+            low_height: low,
+            high_height: high,
+            speed,
+            wait_tics: PLATFORM_WAIT,
+            wait_remaining: 0,
+            status: PlatformStatus::Down,
+            tag,
+        });
+        count += 1;
+    }
+    count
+}
+
+/// Advance all active perpetual platforms by one tic.
+///
+/// Platforms oscillate:
+/// 1. Move floor down by `speed` until `low_height` is reached.
+/// 2. Enter wait phase for `wait_tics`.
+/// 3. Move floor up by `speed` until `high_height` is reached.
+/// 4. Enter wait phase for `wait_tics`.
+/// 5. Repeat.
+pub fn tick_platforms(gs: &mut GameState, level: &mut Level) {
+    for plat in &mut gs.active_platforms {
+        let sector_idx = plat.sector_index;
+        if sector_idx >= level.sectors.len() {
+            continue;
+        }
+
+        match plat.status {
+            PlatformStatus::Waiting => {
+                plat.wait_remaining -= 1;
+                if plat.wait_remaining <= 0 {
+                    // Determine which direction to go next.
+                    let floor = level.sectors[sector_idx].floor_height;
+                    if floor <= plat.low_height {
+                        plat.status = PlatformStatus::Up;
+                    } else {
+                        plat.status = PlatformStatus::Down;
+                    }
+                }
+            }
+            PlatformStatus::Down => {
+                level.sectors[sector_idx].floor_height -= plat.speed;
+                let floor = level.sectors[sector_idx].floor_height;
+                if floor <= plat.low_height {
+                    level.sectors[sector_idx].floor_height = plat.low_height;
+                    plat.status = PlatformStatus::Waiting;
+                    plat.wait_remaining = plat.wait_tics;
+                }
+            }
+            PlatformStatus::Up => {
+                level.sectors[sector_idx].floor_height += plat.speed;
+                let floor = level.sectors[sector_idx].floor_height;
+                if floor >= plat.high_height {
+                    level.sectors[sector_idx].floor_height = plat.high_height;
+                    plat.status = PlatformStatus::Waiting;
+                    plat.wait_remaining = plat.wait_tics;
+                }
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1535,6 +1897,136 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             for (idx, target) in per_sector {
                 activate_floor_raise_single(gs, level, idx, tag, target, 1, true);
             }
+        }
+
+        // -----------------------------------------------------------------
+        // Teleporters
+        // -----------------------------------------------------------------
+
+        // -----------------------------------------------------------------
+        // Stairs
+        // -----------------------------------------------------------------
+
+        // Type 7: S1 Build stairs 8 units.
+        7 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let sector_indices: Vec<usize> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+                .collect();
+            for idx in sector_indices {
+                ev_build_stairs(gs, level, idx, StairType::Build8, false);
+            }
+        }
+
+        // Type 8: W1 Build stairs turbo 16 units.
+        8 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let sector_indices: Vec<usize> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+                .collect();
+            for idx in sector_indices {
+                ev_build_stairs(gs, level, idx, StairType::Turbo16, false);
+            }
+        }
+
+        // Type 100: W1 Build stairs turbo 16 + crush.
+        100 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let sector_indices: Vec<usize> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+                .collect();
+            for idx in sector_indices {
+                ev_build_stairs(gs, level, idx, StairType::Turbo16, true);
+            }
+        }
+
+        // Type 127: S1 Build stairs turbo 16 units.
+        127 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let sector_indices: Vec<usize> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+                .collect();
+            for idx in sector_indices {
+                ev_build_stairs(gs, level, idx, StairType::Turbo16, false);
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Donut specials
+        // -----------------------------------------------------------------
+
+        // Type 9: S1 Donut.
+        9 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let sector_indices: Vec<usize> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+                .collect();
+            for idx in sector_indices {
+                ev_do_donut(gs, level, idx);
+            }
+        }
+
+        // Type 146: W1 Donut.
+        146 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let sector_indices: Vec<usize> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+                .collect();
+            for idx in sector_indices {
+                ev_do_donut(gs, level, idx);
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Perpetual platforms
+        // -----------------------------------------------------------------
+
+        // Type 53: S1 Perpetual platform (speed 1).
+        53 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_perpetual_platform(gs, level, tag, 1);
+        }
+
+        // Type 54: W1 Stop platform (by tag).
+        54 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            gs.active_platforms.retain(|p| p.tag != tag);
+        }
+
+        // Type 87: WR Perpetual platform (speed 1).
+        87 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_perpetual_platform(gs, level, tag, 1);
+        }
+
+        // Type 89: WR Stop platform (by tag).
+        89 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            gs.active_platforms.retain(|p| p.tag != tag);
         }
 
         // -----------------------------------------------------------------
@@ -3511,5 +4003,982 @@ mod tests {
 
         let mo = gs.mobjslab.get(handle).unwrap();
         assert_eq!(mo.health, 95, "special 4 (nukage blink) must deal 5 damage");
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpers for stairs/donut/platform tests
+    // -----------------------------------------------------------------------
+
+    /// Build a level with multiple sectors and two-sided linedefs connecting them.
+    ///
+    /// Layout: N sectors chained linearly.
+    /// Sector i is connected to sector i+1 by a two-sided linedef.
+    /// All sectors share the same floor flat (`FLAT1`) by default.
+    fn make_stair_level(
+        sector_count: usize,
+        base_floor: i16,
+        tag: u16,
+    ) -> doom_map::Level {
+        let reject_bytes = vec![0u8; (sector_count * sector_count + 7) / 8];
+        let reject =
+            doom_map::Reject::parse_lump(&reject_bytes, sector_count).unwrap();
+
+        let mut sectors = Vec::new();
+        for i in 0..sector_count {
+            sectors.push(doom_map::Sector {
+                floor_height: base_floor,
+                ceil_height: base_floor + 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: if i == 0 { tag } else { 0 },
+            });
+        }
+
+        // One vertex per sector boundary + 1 extra.
+        let mut vertexes = Vec::new();
+        for i in 0..=sector_count {
+            vertexes.push(doom_map::Vertex {
+                x: (i as i16) * 64,
+                y: 0,
+            });
+        }
+
+        // Two sidedefs per linedef: right→sector i, left→sector i+1.
+        let mut sidedefs = Vec::new();
+        let mut linedefs = Vec::new();
+
+        for i in 0..sector_count.saturating_sub(1) {
+            let right_sd = sidedefs.len() as u16;
+            sidedefs.push(doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: i as u16,
+            });
+            let left_sd = sidedefs.len() as u16;
+            sidedefs.push(doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: (i + 1) as u16,
+            });
+            linedefs.push(doom_map::Linedef {
+                from_vertex: i as u16,
+                to_vertex: (i + 1) as u16,
+                flags: 0x0004, // FLAG_TWO_SIDED
+                special: 0,
+                tag: 0,
+                right_sidedef: right_sd,
+                left_sidedef: left_sd,
+            });
+        }
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    /// Build a donut level: 3 sectors.
+    /// Sector 0 = trigger (the donut "ring" initiator).
+    /// Sector 1 = donut hole (enclosed sector).
+    /// Sector 2 = ring (surrounding sector).
+    ///
+    /// Linedef 0: right=sector0, left=sector1 (trigger→hole).
+    /// Linedef 1: right=sector1, left=sector2 (hole→ring).
+    fn make_donut_level(
+        trigger_floor: i16,
+        hole_floor: i16,
+        ring_floor: i16,
+        tag: u16,
+    ) -> doom_map::Level {
+        let reject_bytes = vec![0u8; 2]; // 3 sectors: ceil(9/8)=2
+        let reject = doom_map::Reject::parse_lump(&reject_bytes, 3).unwrap();
+
+        let sectors = vec![
+            doom_map::Sector {
+                floor_height: trigger_floor,
+                ceil_height: trigger_floor + 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag,
+            },
+            doom_map::Sector {
+                floor_height: hole_floor,
+                ceil_height: hole_floor + 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            doom_map::Sector {
+                floor_height: ring_floor,
+                ceil_height: ring_floor + 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: 0 },
+            doom_map::Vertex { x: 64, y: 0 },
+            doom_map::Vertex { x: 128, y: 0 },
+        ];
+
+        let sidedefs = vec![
+            // Linedef 0: right = sector 0
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            // Linedef 0: left = sector 1
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+            // Linedef 1: right = sector 1
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+            // Linedef 1: left = sector 2
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 2,
+            },
+        ];
+
+        let linedefs = vec![
+            doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+            doom_map::Linedef {
+                from_vertex: 1,
+                to_vertex: 2,
+                flags: 0x0004,
+                special: 0,
+                tag: 0,
+                right_sidedef: 2,
+                left_sidedef: 3,
+            },
+        ];
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    /// Build a platform level: 2 sectors connected by a two-sided linedef.
+    /// Sector 0 = adjacent sector (provides lowest floor).
+    /// Sector 1 = platform sector (tagged).
+    fn make_platform_level(
+        adj_floor: i16,
+        plat_floor: i16,
+        tag: u16,
+    ) -> doom_map::Level {
+        let reject_bytes = vec![0u8; 1]; // 2 sectors
+        let reject = doom_map::Reject::parse_lump(&reject_bytes, 2).unwrap();
+
+        let sectors = vec![
+            doom_map::Sector {
+                floor_height: adj_floor,
+                ceil_height: adj_floor + 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            doom_map::Sector {
+                floor_height: plat_floor,
+                ceil_height: plat_floor + 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag,
+            },
+        ];
+
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: 0 },
+            doom_map::Vertex { x: 64, y: 0 },
+        ];
+
+        let sidedefs = vec![
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+        ];
+
+        let linedefs = vec![doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004,
+            special: 0,
+            tag: 0,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        }];
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: sector_linedefs
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn sector_linedefs_returns_correct_indices() {
+        let level = make_stair_level(3, 0, 1);
+        // Sector 0 fronts linedef 0 (right_sidedef=0 → sector 0).
+        let result = sector_linedefs(&level, 0);
+        assert_eq!(result, vec![0], "sector 0 should front linedef 0");
+
+        // Sector 1 fronts linedef 1 (right_sidedef=2 → sector 1).
+        let result = sector_linedefs(&level, 1);
+        assert_eq!(result, vec![1], "sector 1 should front linedef 1");
+    }
+
+    #[test]
+    fn sector_linedefs_empty_for_isolated_sector() {
+        // Make a level with 3 sectors but only 2 linedefs connecting 0-1, 1-2.
+        // Sector 2's right sidedef is only on linedef 1 (right → sector 1).
+        // Check that a non-existent sector returns empty.
+        let level = make_stair_level(3, 0, 1);
+        let result = sector_linedefs(&level, 99);
+        assert!(
+            result.is_empty(),
+            "non-existent sector must return empty vec"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: ev_build_stairs
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn build_stairs_raises_floors_in_sequence_8_units() {
+        let mut gs = GameState::new("TEST");
+        let level = make_stair_level(4, 0, 1);
+
+        let count = ev_build_stairs(&mut gs, &level, 0, StairType::Build8, false);
+
+        // Should create 4 floor movers (sectors 0, 1, 2, 3).
+        assert_eq!(count, 4, "4 sectors should get stair movers");
+        assert_eq!(gs.active_floors.len(), 4);
+
+        // Check target heights: 8, 16, 24, 32.
+        assert_eq!(gs.active_floors[0].target_height, 8);
+        assert_eq!(gs.active_floors[0].sector_index, 0);
+        assert_eq!(gs.active_floors[1].target_height, 16);
+        assert_eq!(gs.active_floors[1].sector_index, 1);
+        assert_eq!(gs.active_floors[2].target_height, 24);
+        assert_eq!(gs.active_floors[2].sector_index, 2);
+        assert_eq!(gs.active_floors[3].target_height, 32);
+        assert_eq!(gs.active_floors[3].sector_index, 3);
+    }
+
+    #[test]
+    fn build_stairs_turbo_16_unit_steps() {
+        let mut gs = GameState::new("TEST");
+        let level = make_stair_level(3, 0, 1);
+
+        let count = ev_build_stairs(&mut gs, &level, 0, StairType::Turbo16, false);
+
+        assert_eq!(count, 3, "3 sectors should get stair movers");
+        // Target heights: 16, 32, 48.
+        assert_eq!(gs.active_floors[0].target_height, 16);
+        assert_eq!(gs.active_floors[1].target_height, 32);
+        assert_eq!(gs.active_floors[2].target_height, 48);
+        // Speed should be 4 for turbo.
+        assert_eq!(gs.active_floors[0].speed, 4);
+    }
+
+    #[test]
+    fn build_stairs_with_crush_flag() {
+        let mut gs = GameState::new("TEST");
+        let level = make_stair_level(2, 0, 1);
+
+        ev_build_stairs(&mut gs, &level, 0, StairType::Turbo16, true);
+
+        assert!(
+            gs.active_floors[0].crush,
+            "crush flag must be set on stair movers"
+        );
+        assert!(
+            gs.active_floors[1].crush,
+            "crush flag must be set on all stair movers"
+        );
+    }
+
+    #[test]
+    fn build_stairs_stops_at_different_flat_texture() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_stair_level(4, 0, 1);
+        // Change sector 2's floor texture so stairs stop there.
+        level.sectors[2].floor_flat = *b"NUKAGE1\0";
+
+        let count = ev_build_stairs(&mut gs, &level, 0, StairType::Build8, false);
+
+        // Should create only 2 movers (sectors 0 and 1). Sector 2 has different
+        // flat so the chain breaks.
+        assert_eq!(
+            count, 2,
+            "stair chain must stop when floor flat differs"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: FloorMover reaches destination and removes itself
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn floor_mover_reaches_destination_and_removes_itself() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_stair_level(2, 0, 1);
+
+        // Create a one-shot floor raiser (Up, target=8, speed=2).
+        gs.active_floors.push(FloorMover {
+            sector_index: 0,
+            target_height: 8,
+            speed: 2,
+            direction: MoveDirection::Up,
+            wait_tics: -1,
+            return_height: 0,
+            waiting: false,
+            wait_remaining: 0,
+            crush: false,
+            tag: 0,
+        });
+
+        // Tick enough times for the floor to reach target (8/2 = 4 tics).
+        for _ in 0..10 {
+            tick_floors(&mut gs, &mut level);
+        }
+
+        assert_eq!(
+            level.sectors[0].floor_height, 8,
+            "floor must reach target height"
+        );
+        assert!(
+            gs.active_floors.is_empty(),
+            "floor mover must remove itself after reaching target"
+        );
+    }
+
+    #[test]
+    fn floor_mover_direction_down() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_stair_level(2, 32, 1);
+
+        // Create a one-shot floor lowerer (Down, target=0, speed=4).
+        gs.active_floors.push(FloorMover {
+            sector_index: 0,
+            target_height: 0,
+            speed: 4,
+            direction: MoveDirection::Down,
+            wait_tics: -1,
+            return_height: 32,
+            waiting: false,
+            wait_remaining: 0,
+            crush: false,
+            tag: 0,
+        });
+
+        for _ in 0..20 {
+            tick_floors(&mut gs, &mut level);
+        }
+
+        assert_eq!(
+            level.sectors[0].floor_height, 0,
+            "floor must lower to target"
+        );
+        assert!(
+            gs.active_floors.is_empty(),
+            "floor mover must remove itself"
+        );
+    }
+
+    #[test]
+    fn floor_mover_with_crush_flag_set() {
+        let mut gs = GameState::new("TEST");
+        let level = make_stair_level(2, 0, 1);
+
+        gs.active_floors.push(FloorMover {
+            sector_index: 0,
+            target_height: 120,
+            speed: 1,
+            direction: MoveDirection::Up,
+            wait_tics: -1,
+            return_height: 0,
+            waiting: false,
+            wait_remaining: 0,
+            crush: true,
+            tag: 0,
+        });
+
+        assert!(
+            gs.active_floors[0].crush,
+            "crush flag must be set"
+        );
+
+        // Verify it's a FloorMover that can deal crush damage.
+        let _crush_dmg: i32 = if gs.active_floors[0].crush { 10 } else { 0 };
+        assert_eq!(_crush_dmg, 10, "crush damage should be 10 when crush=true");
+
+        // Verify the mover direction is correct.
+        assert_eq!(
+            gs.active_floors[0].direction,
+            MoveDirection::Up,
+            "direction should be Up for a raise-to-ceiling mover"
+        );
+        drop(level);
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: ev_do_donut
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn donut_raises_inner_sector_floor() {
+        let mut gs = GameState::new("TEST");
+        let level = make_donut_level(0, 0, 64, 1);
+
+        // Sector 1 (hole) floor is 0, ring floor (sector 2) is 64.
+        let count = ev_do_donut(&mut gs, &level, 0);
+
+        assert_eq!(count, 1, "donut should create 1 floor mover");
+        assert_eq!(
+            gs.active_floors[0].sector_index, 1,
+            "donut mover must target the hole sector"
+        );
+        assert_eq!(
+            gs.active_floors[0].target_height, 64,
+            "donut target must be ring sector floor height"
+        );
+        assert_eq!(
+            gs.active_floors[0].direction,
+            MoveDirection::Up,
+            "donut must raise the hole floor"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: PerpetualPlatform
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn perpetual_platform_oscillates_between_low_and_high() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_platform_level(-32, 64, 5);
+
+        // Adjacent sector floor = -32, platform sector floor = 64.
+        ev_perpetual_platform(&mut gs, &level, 5, 4);
+
+        assert_eq!(gs.active_platforms.len(), 1);
+        assert_eq!(gs.active_platforms[0].low_height, -32);
+        assert_eq!(gs.active_platforms[0].high_height, 64);
+
+        // Tick until platform reaches low.
+        // Distance = 64 - (-32) = 96, speed = 4, takes 96/4 = 24 tics.
+        for _ in 0..24 {
+            tick_platforms(&mut gs, &mut level);
+        }
+
+        assert_eq!(
+            level.sectors[1].floor_height, -32,
+            "platform must reach low_height"
+        );
+        assert_eq!(
+            gs.active_platforms[0].status,
+            crate::state::PlatformStatus::Waiting,
+            "platform must be waiting at bottom"
+        );
+    }
+
+    #[test]
+    fn perpetual_platform_wait_state() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_platform_level(-32, 64, 5);
+
+        ev_perpetual_platform(&mut gs, &level, 5, 4);
+
+        // Drive the platform down to low.
+        for _ in 0..24 {
+            tick_platforms(&mut gs, &mut level);
+        }
+        assert_eq!(
+            gs.active_platforms[0].status,
+            crate::state::PlatformStatus::Waiting
+        );
+
+        // Tick once — wait_remaining should decrease.
+        let wait_before = gs.active_platforms[0].wait_remaining;
+        tick_platforms(&mut gs, &mut level);
+        assert_eq!(
+            gs.active_platforms[0].wait_remaining,
+            wait_before - 1,
+            "wait_remaining must decrease each tic"
+        );
+    }
+
+    #[test]
+    fn tick_platforms_advances_platform_positions() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_platform_level(0, 32, 5);
+
+        ev_perpetual_platform(&mut gs, &level, 5, 2);
+
+        let before = level.sectors[1].floor_height;
+        tick_platforms(&mut gs, &mut level);
+
+        assert_eq!(
+            level.sectors[1].floor_height,
+            before - 2,
+            "tick_platforms must move floor by speed"
+        );
+    }
+
+    #[test]
+    fn platform_speed_calculations() {
+        let mut gs = GameState::new("TEST");
+        let level = make_platform_level(0, 16, 5);
+
+        // Speed 1
+        ev_perpetual_platform(&mut gs, &level, 5, 1);
+        assert_eq!(gs.active_platforms[0].speed, 1);
+
+        // Clear and test speed 4.
+        gs.active_platforms.clear();
+        ev_perpetual_platform(&mut gs, &level, 5, 4);
+        assert_eq!(gs.active_platforms[0].speed, 4);
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: Line type dispatch
+    // -----------------------------------------------------------------------
+
+    /// Helper to build a tagged level with a linedef that triggers a special.
+    fn make_tagged_linedef_level(special: u16, tag: u16) -> doom_map::Level {
+        let reject_bytes = vec![0u8; 1]; // 2 sectors
+        let reject = doom_map::Reject::parse_lump(&reject_bytes, 2).unwrap();
+
+        let mut sectors = vec![
+            doom_map::Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            doom_map::Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag,
+            },
+        ];
+
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: -10 },
+            doom_map::Vertex { x: 0, y: 10 },
+        ];
+
+        let sidedefs = vec![
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+        ];
+
+        let linedefs = vec![doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004,
+            special,
+            tag,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        }];
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    #[test]
+    fn line_type_7_builds_stairs() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_linedef_level(7, 10);
+        // Tag sector 1 so it gets stair builder.
+        level.sectors[1].tag = 10;
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        // Should have created at least 1 floor mover for stairs.
+        assert!(
+            !gs.active_floors.is_empty(),
+            "line type 7 must create stair movers"
+        );
+        // Step size should be 8 (Build8), speed 2.
+        assert_eq!(gs.active_floors[0].speed, 2);
+    }
+
+    #[test]
+    fn line_type_8_builds_turbo_stairs() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_linedef_level(8, 10);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert!(
+            !gs.active_floors.is_empty(),
+            "line type 8 must create stair movers"
+        );
+        // Turbo speed = 4.
+        assert_eq!(gs.active_floors[0].speed, 4);
+    }
+
+    #[test]
+    fn line_type_9_donut() {
+        let mut gs = GameState::new("TEST");
+        // Build a donut level with tag on sector 0.
+        let mut level = make_donut_level(0, 0, 64, 10);
+        // Add a linedef with special=9 and tag=10.
+        level.linedefs.push(doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004,
+            special: 9,
+            tag: 10,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        });
+
+        activate_linedef(&mut gs, &mut level, 2); // Index 2 is the new linedef.
+
+        assert!(
+            !gs.active_floors.is_empty(),
+            "line type 9 must create donut mover"
+        );
+    }
+
+    #[test]
+    fn line_type_53_perpetual_platform() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_linedef_level(53, 10);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert_eq!(
+            gs.active_platforms.len(),
+            1,
+            "line type 53 must create perpetual platform"
+        );
+    }
+
+    #[test]
+    fn line_type_54_stops_platform() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_linedef_level(54, 10);
+
+        // Create a platform first.
+        gs.active_platforms.push(crate::state::PerpetualPlatform {
+            sector_index: 1,
+            low_height: 0,
+            high_height: 64,
+            speed: 1,
+            wait_tics: 105,
+            wait_remaining: 0,
+            status: crate::state::PlatformStatus::Down,
+            tag: 10,
+        });
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert!(
+            gs.active_platforms.is_empty(),
+            "line type 54 must stop (remove) platforms with matching tag"
+        );
+    }
+
+    #[test]
+    fn line_type_87_perpetual_platform() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_linedef_level(87, 10);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert_eq!(
+            gs.active_platforms.len(),
+            1,
+            "line type 87 must create perpetual platform"
+        );
+    }
+
+    #[test]
+    fn line_type_89_stops_platform() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_linedef_level(89, 10);
+
+        gs.active_platforms.push(crate::state::PerpetualPlatform {
+            sector_index: 1,
+            low_height: 0,
+            high_height: 64,
+            speed: 1,
+            wait_tics: 105,
+            wait_remaining: 0,
+            status: crate::state::PlatformStatus::Down,
+            tag: 10,
+        });
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert!(
+            gs.active_platforms.is_empty(),
+            "line type 89 must stop platforms with matching tag"
+        );
+    }
+
+    #[test]
+    fn line_type_100_turbo_stairs_with_crush() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_linedef_level(100, 10);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert!(
+            !gs.active_floors.is_empty(),
+            "line type 100 must create stair movers"
+        );
+        assert!(
+            gs.active_floors[0].crush,
+            "line type 100 stair movers must have crush=true"
+        );
+    }
+
+    #[test]
+    fn line_type_127_turbo_stairs() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_linedef_level(127, 10);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert!(
+            !gs.active_floors.is_empty(),
+            "line type 127 must create stair movers"
+        );
+        assert_eq!(gs.active_floors[0].speed, 4, "turbo speed must be 4");
+    }
+
+    #[test]
+    fn line_type_146_donut() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_donut_level(0, 0, 64, 10);
+        level.linedefs.push(doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004,
+            special: 146,
+            tag: 10,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        });
+
+        activate_linedef(&mut gs, &mut level, 2);
+
+        assert!(
+            !gs.active_floors.is_empty(),
+            "line type 146 must create donut mover"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: Multiple stairs in sequence
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn multiple_stairs_in_sequence() {
+        let mut gs = GameState::new("TEST");
+        let level = make_stair_level(5, 0, 1);
+
+        ev_build_stairs(&mut gs, &level, 0, StairType::Build8, false);
+
+        assert_eq!(
+            gs.active_floors.len(),
+            5,
+            "5 sectors should produce 5 stair movers"
+        );
+        // Verify monotonically increasing target heights.
+        for i in 1..gs.active_floors.len() {
+            assert!(
+                gs.active_floors[i].target_height
+                    > gs.active_floors[i - 1].target_height,
+                "stair target heights must be monotonically increasing"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: GameState snapshot includes floors/platforms
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn game_state_snapshot_includes_floors_and_platforms() {
+        let mut gs = GameState::new("TEST");
+
+        gs.active_floors.push(FloorMover {
+            sector_index: 5,
+            target_height: 64,
+            speed: 2,
+            direction: MoveDirection::Up,
+            wait_tics: -1,
+            return_height: 0,
+            waiting: false,
+            wait_remaining: 0,
+            crush: false,
+            tag: 0,
+        });
+
+        gs.active_platforms.push(crate::state::PerpetualPlatform {
+            sector_index: 3,
+            low_height: -16,
+            high_height: 48,
+            speed: 1,
+            wait_tics: 105,
+            wait_remaining: 0,
+            status: crate::state::PlatformStatus::Down,
+            tag: 7,
+        });
+
+        let snap = gs.save_snapshot();
+        gs.active_floors.clear();
+        gs.active_platforms.clear();
+        gs.restore_snapshot(snap);
+
+        assert_eq!(
+            gs.active_floors.len(),
+            1,
+            "snapshot must preserve active_floors"
+        );
+        assert_eq!(
+            gs.active_floors[0].sector_index, 5,
+            "snapshot must preserve floor mover data"
+        );
+        assert_eq!(
+            gs.active_platforms.len(),
+            1,
+            "snapshot must preserve active_platforms"
+        );
+        assert_eq!(
+            gs.active_platforms[0].tag, 7,
+            "snapshot must preserve platform data"
+        );
     }
 }

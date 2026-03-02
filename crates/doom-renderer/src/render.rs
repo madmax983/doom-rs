@@ -78,6 +78,14 @@ const NO_FLAT: [u8; 8] = *b"-\0\0\0\0\0\0\0";
 /// Walls are textured when `tex_cache` is provided; floors/ceilings are
 /// textured when `flat_cache` is provided.  Light shading is applied when
 /// `colormap` is provided.
+///
+/// Returns the per-column z-buffer (`[f32; 320]`) populated during wall
+/// rendering.  Each entry holds the perpendicular depth (in map units) of
+/// the nearest *one-sided* wall drawn in that column, or [`f32::MAX`] if
+/// no wall was drawn.  Two-sided segs (portals) do **not** write to the
+/// z-buffer.  The returned array can be passed to
+/// [`render_things`](crate::sprite::render_things) for sprite-vs-wall
+/// per-column occlusion.
 pub fn render_level(
     level: &Level,
     player_x: i32,
@@ -89,7 +97,7 @@ pub fn render_level(
     tex_cache: Option<&TextureCache>,
     colormap: Option<&ColormapCache>,
     anim: Option<&AnimState>,
-) {
+) -> [f32; SCREEN_W] {
     // ------------------------------------------------------------------
     // Step 1: Draw background (ceiling top half, floor bottom half)
     // ------------------------------------------------------------------
@@ -116,8 +124,11 @@ pub fn render_level(
     // Per-column light index (0=full bright, 31=darkest) for floor/ceiling shading.
     let mut col_light = [0u8; SCREEN_W];
 
-    // Z-buffer (per-column minimum depth, in view-space units).
-    let mut z_buf = [i32::MAX; SCREEN_W];
+    // Z-buffer (per-column minimum depth, in view-space units, f32).
+    // Initialised to f32::MAX so every wall is nearer than "infinity".
+    // Only one-sided segs write to this buffer; two-sided segs (portals)
+    // leave z_buf untouched so sprites behind portals remain visible.
+    let mut z_buf = [f32::MAX; SCREEN_W];
 
     // Sky tracking: the ceiling region that needs sky rendering per column.
     // sky_ceil_top[x] = topmost pixel of the sky region (usually 0).
@@ -437,10 +448,11 @@ pub fn render_level(
                 // -----------------------------------------------------------------
 
                 // Z-buffer occlusion.
-                if depth_i32 >= z_buf[x] {
+                let depth_f32 = depth_i32 as f32;
+                if depth_f32 >= z_buf[x] {
                     continue;
                 }
-                z_buf[x] = depth_i32;
+                z_buf[x] = depth_f32;
 
                 // Wall height in pixels.
                 let wall_h_world = (ceil_h - floor_h).max(0);
@@ -552,7 +564,7 @@ pub fn render_level(
 
     if flat_cache.is_none() {
         // No FlatCache — background fill from Step 1 is good enough.
-        return;
+        return z_buf;
     }
     let cache = flat_cache.unwrap();
 
@@ -746,6 +758,8 @@ pub fn render_level(
             );
         }
     }
+
+    z_buf
 }
 
 // ---------------------------------------------------------------------------

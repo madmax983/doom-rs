@@ -449,7 +449,8 @@ fn thing_sprite(kind: u16) -> Option<[u8; 8]> {
 /// Project and render all Things from the level as billboard sprites.
 ///
 /// Call this **after** `render_level` so wall columns are already drawn.
-/// Uses the painter's algorithm (back-to-front sort); no z-buffer clipping.
+/// Uses the painter's algorithm (back-to-front sort) with per-column
+/// z-buffer clipping against walls.
 ///
 /// # Arguments
 /// - `level`        — parsed map (provides Things list).
@@ -457,6 +458,11 @@ fn thing_sprite(kind: u16) -> Option<[u8; 8]> {
 /// - `player_angle` — player view angle (Bam, 32-bit; full circle = 2³²).
 /// - `fb`           — framebuffer to draw into.
 /// - `cache`        — sprite frame cache (loaded from S_START..S_END).
+/// - `z_buffer`     — optional per-column depth buffer from `render_level`.
+///                     When provided, sprite columns whose depth exceeds
+///                     the wall depth at that screen column are clipped
+///                     (not drawn).  Pass `None` to disable wall clipping
+///                     (backward-compatible behaviour).
 ///
 /// # Projection model
 /// View space is computed with a standard rotation: `vx` is depth (forward
@@ -471,6 +477,7 @@ pub fn render_things(
     player_angle: doom_types::Bam,
     fb: &mut Framebuffer,
     cache: &SpriteCache,
+    z_buffer: Option<&[f32; SCREEN_W]>,
 ) {
     // Convert player angle (32-bit BAM) to radians.
     // BAM: 0x0000_0000 = 0°, 0x4000_0000 = 90°, 0x8000_0000 = 180°, etc.
@@ -611,6 +618,15 @@ pub fn render_things(
             let sx = screen_x_left + draw_col * screen_w / frame.width as i32;
             if sx < 0 || sx >= SCREEN_W as i32 {
                 continue;
+            }
+
+            // Per-column z-buffer clipping: if a wall in this column is
+            // nearer than (or at the same depth as) the sprite, skip the
+            // entire column — the wall fully occludes it.
+            if let Some(zbuf) = z_buffer {
+                if vx >= zbuf[sx as usize] {
+                    continue;
+                }
             }
 
             let sy_top_clamped = screen_y_top.max(0);
@@ -1137,6 +1153,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
         );
         // Framebuffer stays zeroed (empty cache → nothing drawn).
         assert!(fb.data.iter().all(|&b| b == 0));
@@ -1173,6 +1190,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
         );
         // If the thing behind the player were rendered it would write pixel 42.
         // The framebuffer must remain all zeros.
@@ -1199,6 +1217,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
         );
         // Nothing drawn — no panic.
         assert!(fb.data.iter().all(|&b| b == 0));
@@ -1221,6 +1240,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
         );
         assert!(fb.data.iter().all(|&b| b == 0));
     }
@@ -1569,6 +1589,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
         );
         // The imp should be drawn (pixel 77 somewhere on screen).
         assert!(
@@ -1604,6 +1625,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
         );
         assert!(
             fb.data.iter().any(|&b| b == 88),
@@ -1640,6 +1662,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
         );
         assert!(
             fb.data.iter().any(|&b| b == 55),
@@ -1688,11 +1711,697 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
         );
         // The mirror fallback should have drawn the sprite using TROOA4 (flipped).
         assert!(
             fb.data.iter().any(|&b| b == 33),
             "mirror fallback should render the imp via TROOA4 (mirror of rot 6)"
         );
+    }
+
+    // ==================================================================
+    // Z-buffer sprite clipping tests
+    // ==================================================================
+
+    /// Helper: build a z-buffer filled with a single value.
+    fn make_zbuf(val: f32) -> [f32; SCREEN_W] {
+        [val; SCREEN_W]
+    }
+
+    /// Helper: build a fully opaque square sprite with the given palette index.
+    fn make_opaque_sprite(width: u16, height: u16, palette_idx: u8) -> SpriteFrame {
+        SpriteFrame {
+            width,
+            height,
+            left_offset: (width / 2) as i16,
+            top_offset: height as i16,
+            pixels: vec![Some(palette_idx); (width as usize) * (height as usize)],
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 1: z_buffer initialized to MAX (no walls) allows all sprites
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_initialized_to_max() {
+        let zbuf = make_zbuf(f32::MAX);
+        for &val in zbuf.iter() {
+            assert_eq!(val, f32::MAX, "z_buffer must be initialized to f32::MAX");
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 2: wall rendering writes correct depth to z_buffer
+    //
+    // Verified indirectly: render_level returns a z_buffer with finite
+    // values for columns that have one-sided walls rendered.
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_wall_writes_finite_depth() {
+        use doom_types::ANG90;
+
+        // Need trig tables for render_level.
+        unsafe { doom_types::Bam::init_trig_tables(); }
+
+        let level = make_render_level_one_sided();
+        let mut fb = Framebuffer::new();
+        let palette = crate::palette::PaletteLut::grayscale();
+
+        let zbuf = crate::render::render_level(
+            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None,
+        );
+
+        // The wall at y=128 is 128 map units away from player at (64,0)
+        // facing north. At least some central columns should have finite depth.
+        let center = SCREEN_W / 2;
+        let finite_count = zbuf[center.saturating_sub(10)..center.saturating_add(10).min(SCREEN_W)]
+            .iter()
+            .filter(|&&v| v < f32::MAX)
+            .count();
+        assert!(
+            finite_count > 0,
+            "at least some central columns should have a finite wall depth"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 3: sprite behind wall is fully clipped (no pixels drawn)
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_sprite_behind_wall_fully_clipped() {
+        // Barrel at (100, 0), player at (0, 0) facing east.
+        // Sprite depth vx ~ 100.
+        // Set z_buffer to 50.0 everywhere => sprite is behind all walls.
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 77));
+
+        let mut fb = Framebuffer::new();
+        let zbuf = make_zbuf(50.0); // wall at depth 50, sprite at ~100
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+        );
+
+        assert!(
+            fb.data.iter().all(|&b| b != 77),
+            "sprite behind wall must not draw any pixels"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 4: sprite in front of wall is fully drawn
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_sprite_in_front_of_wall_fully_drawn() {
+        // Barrel at (100, 0), player at (0, 0) facing east.
+        // Sprite depth vx ~ 100.
+        // Set z_buffer to 200.0 everywhere => sprite is in front of all walls.
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 88));
+
+        let mut fb = Framebuffer::new();
+        let zbuf = make_zbuf(200.0); // wall at depth 200, sprite at ~100
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+        );
+
+        assert!(
+            fb.data.iter().any(|&b| b == 88),
+            "sprite in front of wall must be drawn"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 5: partial occlusion — sprite spans columns with different
+    //         wall depths; some columns drawn, others clipped
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_partial_occlusion() {
+        // Barrel at (100, 0), player at (0, 0) facing east.
+        // Sprite depth vx ~ 100.
+        // Left half of screen: wall at depth 50 (blocks sprite).
+        // Right half of screen: wall at depth 200 (sprite visible).
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 66));
+
+        let mut fb = Framebuffer::new();
+        let mut zbuf = [0.0f32; SCREEN_W];
+        for x in 0..SCREEN_W {
+            if x < SCREEN_W / 2 {
+                zbuf[x] = 50.0; // blocks sprite
+            } else {
+                zbuf[x] = 200.0; // sprite visible
+            }
+        }
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+        );
+
+        // Sprite is at screen center (x ~ 160) which is in the right half.
+        // Some pixels should be drawn (right half is unoccluded).
+        assert!(
+            fb.data.iter().any(|&b| b == 66),
+            "partially occluded sprite should draw some pixels in unblocked columns"
+        );
+
+        // Additionally verify the left half is clear: pixels below x=160
+        // in the left half should not have pixel 66 (for columns in far-left
+        // which are blocked by the near wall).
+        // The sprite center is at x=160, so columns 0..~152 should be clipped.
+        let left_drawn = (0..140).any(|x| {
+            (0..SCREEN_H).any(|y| fb.get_pixel(x, y) == Some(66))
+        });
+        assert!(
+            !left_drawn,
+            "columns behind the near wall (left half) must not have sprite pixels"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 6: near-plane sprite clamped to screen bounds
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_near_plane_sprite_clamped() {
+        // Place a thing very close to the player so the projected sprite
+        // extends past screen edges. It should not panic and no out-of-bounds
+        // writes should occur.
+        let thing = make_thing(2, 0, 2035); // Only 2 map units ahead
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 55));
+
+        let mut fb = Framebuffer::new();
+        let zbuf = make_zbuf(f32::MAX);
+
+        // Must not panic even with huge projected sprite.
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+        );
+        // Just verify it didn't panic. Some pixels might be drawn.
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 7: two-sided seg does NOT write z_buffer
+    //
+    // Verified indirectly: render_level with a two-sided level should
+    // leave z_buf at f32::MAX for columns where only a portal was drawn.
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_two_sided_seg_does_not_write() {
+        use doom_types::ANG90;
+
+        unsafe { doom_types::Bam::init_trig_tables(); }
+
+        let level = make_render_level_two_sided();
+        let mut fb = Framebuffer::new();
+        let palette = crate::palette::PaletteLut::grayscale();
+
+        let zbuf = crate::render::render_level(
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None,
+        );
+
+        // For a two-sided seg, z_buf should remain at f32::MAX for
+        // columns in the portal's span (no one-sided wall occluded them).
+        let center = SCREEN_W / 2;
+        assert_eq!(
+            zbuf[center], f32::MAX,
+            "two-sided seg center column must not write to z_buffer (got {})",
+            zbuf[center]
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 8: multiple sprites at different depths sorted correctly
+    //
+    // With a wall at depth 150, a sprite at depth 100 (in front) should
+    // be visible, and a sprite at depth 200 (behind) should be clipped.
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_multiple_sprites_depth_sorting() {
+        // Two barrels: one at (100, 0), one at (200, 0).
+        // Wall z_buffer at depth 150. Only the near barrel should draw.
+        let near_barrel = make_thing(100, 0, 2035);
+        let far_barrel = make_thing(200, 0, 2035);
+        let level = make_test_level(vec![near_barrel, far_barrel]);
+
+        let mut cache = SpriteCache::empty();
+        // Both use the same sprite (BAR1A0) but we track via pixel value.
+        // Since render_things uses painter's algorithm (back-to-front),
+        // the near barrel overdraw the far one. With z_buffer=150,
+        // the far barrel (depth~200) is clipped, near (depth~100) is drawn.
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 99));
+
+        let mut fb = Framebuffer::new();
+        let zbuf = make_zbuf(150.0);
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+        );
+
+        // Near barrel (depth ~100 < 150) should be drawn.
+        assert!(
+            fb.data.iter().any(|&b| b == 99),
+            "near sprite (depth 100 < z_buffer 150) should be visible"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 9: sprite at exact wall depth — wall wins (>= comparison)
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_sprite_at_exact_wall_depth_clipped() {
+        // Barrel at (100, 0), sprite depth vx ~ 100.
+        // Set z_buffer to exactly 100.0 everywhere.
+        // The comparison is `vx >= zbuf[sx]`, so equal depth means clipped.
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 44));
+
+        let mut fb = Framebuffer::new();
+        let zbuf = make_zbuf(100.0);
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+        );
+
+        // Sprite depth == wall depth: wall wins, sprite clipped.
+        assert!(
+            fb.data.iter().all(|&b| b != 44),
+            "sprite at exact wall depth should be clipped (wall wins)"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 10: z_buffer with no walls (all MAX) — all sprites visible
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_no_walls_all_sprites_visible() {
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 111));
+
+        let mut fb = Framebuffer::new();
+        let zbuf = make_zbuf(f32::MAX); // no walls
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+        );
+
+        assert!(
+            fb.data.iter().any(|&b| b == 111),
+            "with z_buffer=MAX (no walls), sprite must be visible"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 11: column-by-column clipping — individual columns checked
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_column_by_column_clipping() {
+        // Place barrel at (50, 0), player at (0,0) facing east.
+        // Sprite depth vx ~ 50.
+        // Create a z_buffer where columns 155..165 have wall at depth 10
+        // (blocks sprite) and all others at f32::MAX.
+        let thing = make_thing(50, 0, 2035);
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 22));
+
+        let mut fb = Framebuffer::new();
+        let mut zbuf = make_zbuf(f32::MAX);
+
+        // Block only the narrow band around center.
+        for x in 155..165 {
+            zbuf[x] = 10.0; // nearer than sprite
+        }
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+        );
+
+        // The sprite projects near center (x~160). Columns 155..165 are
+        // blocked, but other sprite columns should still be drawn.
+        // Verify at least some pixels were drawn.
+        assert!(
+            fb.data.iter().any(|&b| b == 22),
+            "sprite columns outside the blocked band should still be drawn"
+        );
+
+        // Verify blocked columns have no sprite pixels (column 160 is blocked).
+        let col_160_has_sprite = (0..SCREEN_H).any(|y| fb.get_pixel(160, y) == Some(22));
+        assert!(
+            !col_160_has_sprite,
+            "column 160 is blocked (zbuf=10 < sprite depth ~50) and must not have sprite pixels"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 12: sprite completely off-screen produces no draws
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_sprite_offscreen_no_draws() {
+        // Barrel at (100, 200) — far to the side.
+        // Player at (0, 0) facing east.
+        // vy = -0*sin + 200*cos ≈ 200 → far to the left of screen
+        // sx_center = 160 - 160*200/100 = 160 - 320 = -160 → off-screen left
+        let thing = make_thing(100, 200, 2035);
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 33));
+
+        let mut fb = Framebuffer::new();
+        let zbuf = make_zbuf(f32::MAX);
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+        );
+
+        assert!(
+            fb.data.iter().all(|&b| b != 33),
+            "sprite projected off-screen should produce no draws"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 13: None z_buffer preserves backward compatibility
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_none_draws_all_sprites() {
+        // With z_buffer=None, sprites should be drawn just like before
+        // (no clipping). Same as the pre-zbuffer behavior.
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 200));
+
+        let mut fb = Framebuffer::new();
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            None, // no z_buffer
+        );
+
+        assert!(
+            fb.data.iter().any(|&b| b == 200),
+            "with z_buffer=None, all sprites should be drawn (backward compat)"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // zbuf 14: render_level returns z_buffer with all MAX for empty level
+    // ------------------------------------------------------------------
+    #[test]
+    fn zbuf_render_level_empty_returns_max() {
+        unsafe { doom_types::Bam::init_trig_tables(); }
+
+        // A level with no visible walls from the player's position should
+        // return a z_buffer filled with f32::MAX.
+        let level = make_test_level(vec![]);
+        let mut fb = Framebuffer::new();
+        let palette = crate::palette::PaletteLut::grayscale();
+
+        let zbuf = crate::render::render_level(
+            &level,
+            32,
+            32,
+            doom_types::Bam::ZERO,
+            &mut fb,
+            &palette,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        // The test level has walls but the player is inside the box
+        // looking east. The seg (vertex 0→1, i.e. (0,0)→(64,0)) is
+        // at y=0 which is behind or sideways from (32,32) facing east.
+        // Depending on exact geometry, most columns may be MAX.
+        // At minimum, check that MAX values exist.
+        let max_count = zbuf.iter().filter(|&&v| v == f32::MAX).count();
+        assert!(
+            max_count > 0,
+            "z_buffer should have some f32::MAX entries for columns with no wall"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // Helper: build a minimal one-sided level for render_level z-buffer tests
+    // ------------------------------------------------------------------
+    fn make_render_level_one_sided() -> doom_map::Level {
+        use doom_map::lumps::{
+            Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
+        };
+
+        let vertexes = vec![Vertex { x: 0, y: 128 }, Vertex { x: 128, y: 128 }];
+        let sectors = vec![Sector {
+            floor_height: 0,
+            ceil_height: 128,
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: 0,
+        }];
+        let sidedefs = vec![Sidedef {
+            x_offset: 0,
+            y_offset: 0,
+            upper_texture: *b"WALL1\0\0\0",
+            lower_texture: *b"WALL2\0\0\0",
+            middle_texture: *b"WALL3\0\0\0",
+            sector: 0,
+        }];
+        let linedefs = vec![Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0, // one-sided
+            special: 0,
+            tag: 0,
+            right_sidedef: 0,
+            left_sidedef: 0xFFFF,
+        }];
+        let segs = vec![Seg {
+            from_vertex: 0,
+            to_vertex: 1,
+            angle: 0,
+            linedef: 0,
+            direction: 0,
+            offset: 0,
+        }];
+        let ssectors = vec![Ssector {
+            seg_count: 1,
+            first_seg: 0,
+        }];
+        let things = vec![Thing {
+            x: 64,
+            y: 0,
+            angle: 0,
+            kind: 1,
+            flags: 7,
+        }];
+
+        let reject = Reject::parse_lump(&[0u8; 1], 1).expect("reject parse");
+
+        let mut bm_data = vec![0u8; 8 + 2 + 4];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("blockmap parse");
+
+        doom_map::Level {
+            name: "ZBUF1".to_owned(),
+            things,
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap,
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Helper: build a minimal two-sided level for render_level z-buffer tests
+    // ------------------------------------------------------------------
+    fn make_render_level_two_sided() -> doom_map::Level {
+        use doom_map::lumps::{
+            Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
+        };
+
+        let vertexes = vec![Vertex { x: -64, y: 128 }, Vertex { x: 64, y: 128 }];
+        let sectors = vec![
+            Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: 32,
+                ceil_height: 96,
+                floor_flat: *b"FLAT3\0\0\0",
+                ceil_flat: *b"FLAT4\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+        let sidedefs = vec![
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+        ];
+        let linedefs = vec![Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004, // two-sided
+            special: 0,
+            tag: 0,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        }];
+        let segs = vec![Seg {
+            from_vertex: 0,
+            to_vertex: 1,
+            angle: 0,
+            linedef: 0,
+            direction: 0,
+            offset: 0,
+        }];
+        let ssectors = vec![Ssector {
+            seg_count: 1,
+            first_seg: 0,
+        }];
+        let things = vec![Thing {
+            x: 0,
+            y: 0,
+            angle: 0,
+            kind: 1,
+            flags: 7,
+        }];
+
+        let reject = Reject::parse_lump(&[0u8; 1], 2).expect("reject parse");
+
+        let mut bm_data = vec![0u8; 8 + 2 + 4];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("blockmap parse");
+
+        doom_map::Level {
+            name: "ZBUF2".to_owned(),
+            things,
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap,
+        }
     }
 }

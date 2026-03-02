@@ -120,6 +120,46 @@ pub struct FloorMover {
     pub tag: u16,
 }
 
+// ---------------------------------------------------------------------------
+// Perpetual platform
+// ---------------------------------------------------------------------------
+
+/// Current movement status of a perpetual platform.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PlatformStatus {
+    /// Platform is moving upward.
+    Up,
+    /// Platform is moving downward.
+    Down,
+    /// Platform is waiting at a stop before reversing.
+    Waiting,
+}
+
+/// A perpetual platform that oscillates between low and high heights.
+///
+/// Used for line types 53, 54, 87, 89.
+/// Added to `GameState::active_platforms` when activated.
+/// Ticked each tic by `specials::tick_platforms`.
+#[derive(Clone, Debug)]
+pub struct PerpetualPlatform {
+    /// Index into `level.sectors`.
+    pub sector_index: usize,
+    /// Lowest floor height (lowest adjacent floor).
+    pub low_height: i16,
+    /// Highest floor height (original sector floor height).
+    pub high_height: i16,
+    /// Movement speed in map units per tic.
+    pub speed: i16,
+    /// Tics to wait at each stop before reversing.
+    pub wait_tics: i32,
+    /// Tics remaining in the current wait phase.
+    pub wait_remaining: i32,
+    /// Current movement status.
+    pub status: PlatformStatus,
+    /// Tag from the activating linedef.
+    pub tag: u16,
+}
+
 /// A flickering or blinking light special.
 ///
 /// Added to `GameState::active_lights` by `specials::spawn_level_specials`.
@@ -293,6 +333,8 @@ pub struct GameState {
     pub active_ceilings: Vec<CeilingMover>,
     /// Active floor movers / lifts (ticked by `specials::tick_floors`).
     pub active_floors: Vec<FloorMover>,
+    /// Active perpetual platforms (ticked by `specials::tick_platforms`).
+    pub active_platforms: Vec<PerpetualPlatform>,
 
     /// Extended sector light effects (ticked by `specials::tick_sector_lights`).
     pub sector_lights: Vec<SectorLightEffect>,
@@ -328,6 +370,7 @@ impl GameState {
             active_lights: Vec::new(),
             active_ceilings: Vec::new(),
             active_floors: Vec::new(),
+            active_platforms: Vec::new(),
             sector_lights: Vec::new(),
             exit_request: None,
             level_time: 0,
