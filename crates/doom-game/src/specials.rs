@@ -13,7 +13,7 @@
 use doom_map::{Level, SIDEDEF_NONE};
 
 use crate::mobj::MobjHandle;
-use crate::state::{DoorMover, GameState, LightSpecial};
+use crate::state::{CeilingMover, DoorMover, FloorMover, GameState, LightSpecial, MoveDirection};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -219,6 +219,530 @@ pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
             _ => {} // Other specials handled by tick_sector_specials.
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Adjacent sector height helpers
+// ---------------------------------------------------------------------------
+
+/// Find the lowest floor height among all sectors adjacent to `sector_index`.
+///
+/// Adjacent means: the sector shares a two-sided linedef with the given sector.
+/// If the sector has no adjacent sectors, returns the sector's own floor height.
+pub fn lowest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
+    let own_floor = level
+        .sectors
+        .get(sector_index)
+        .map(|s| s.floor_height)
+        .unwrap_or(0);
+    let mut lowest = i16::MAX;
+    let mut found = false;
+
+    for ld in &level.linedefs {
+        // Only two-sided linedefs connect sectors.
+        if ld.left_sidedef == SIDEDEF_NONE {
+            continue;
+        }
+        let right_sector = level
+            .sidedefs
+            .get(ld.right_sidedef as usize)
+            .map(|s| s.sector as usize);
+        let left_sector = level
+            .sidedefs
+            .get(ld.left_sidedef as usize)
+            .map(|s| s.sector as usize);
+
+        let other = if right_sector == Some(sector_index) {
+            left_sector
+        } else if left_sector == Some(sector_index) {
+            right_sector
+        } else {
+            continue;
+        };
+
+        if let Some(other_idx) = other {
+            if let Some(other_sec) = level.sectors.get(other_idx) {
+                found = true;
+                if other_sec.floor_height < lowest {
+                    lowest = other_sec.floor_height;
+                }
+            }
+        }
+    }
+
+    if found { lowest } else { own_floor }
+}
+
+/// Find the highest floor height among all sectors adjacent to `sector_index`.
+///
+/// Used for "lower to highest adjacent floor" specials.
+/// If no adjacent sectors, returns the sector's own floor height.
+pub fn highest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
+    let own_floor = level
+        .sectors
+        .get(sector_index)
+        .map(|s| s.floor_height)
+        .unwrap_or(0);
+    let mut highest = i16::MIN;
+    let mut found = false;
+
+    for ld in &level.linedefs {
+        if ld.left_sidedef == SIDEDEF_NONE {
+            continue;
+        }
+        let right_sector = level
+            .sidedefs
+            .get(ld.right_sidedef as usize)
+            .map(|s| s.sector as usize);
+        let left_sector = level
+            .sidedefs
+            .get(ld.left_sidedef as usize)
+            .map(|s| s.sector as usize);
+
+        let other = if right_sector == Some(sector_index) {
+            left_sector
+        } else if left_sector == Some(sector_index) {
+            right_sector
+        } else {
+            continue;
+        };
+
+        if let Some(other_idx) = other {
+            if let Some(other_sec) = level.sectors.get(other_idx) {
+                found = true;
+                if other_sec.floor_height > highest {
+                    highest = other_sec.floor_height;
+                }
+            }
+        }
+    }
+
+    if found { highest } else { own_floor }
+}
+
+/// Find the next floor height above the current sector's floor among adjacent sectors.
+///
+/// Scans all adjacent sector floors and returns the smallest one that is strictly
+/// greater than the current sector's floor height. If none is found, returns the
+/// sector's own floor height (no change).
+pub fn next_highest_floor(level: &Level, sector_index: usize) -> i16 {
+    let own_floor = level
+        .sectors
+        .get(sector_index)
+        .map(|s| s.floor_height)
+        .unwrap_or(0);
+    let mut next = i16::MAX;
+    let mut found = false;
+
+    for ld in &level.linedefs {
+        if ld.left_sidedef == SIDEDEF_NONE {
+            continue;
+        }
+        let right_sector = level
+            .sidedefs
+            .get(ld.right_sidedef as usize)
+            .map(|s| s.sector as usize);
+        let left_sector = level
+            .sidedefs
+            .get(ld.left_sidedef as usize)
+            .map(|s| s.sector as usize);
+
+        let other = if right_sector == Some(sector_index) {
+            left_sector
+        } else if left_sector == Some(sector_index) {
+            right_sector
+        } else {
+            continue;
+        };
+
+        if let Some(other_idx) = other {
+            if let Some(other_sec) = level.sectors.get(other_idx) {
+                if other_sec.floor_height > own_floor && other_sec.floor_height < next {
+                    found = true;
+                    next = other_sec.floor_height;
+                }
+            }
+        }
+    }
+
+    if found { next } else { own_floor }
+}
+
+/// Find the lowest ceiling height among all sectors adjacent to `sector_index`.
+///
+/// Used for "raise floor to lowest adjacent ceiling" specials.
+/// If no adjacent sectors, returns the sector's own ceiling height.
+pub fn lowest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
+    let own_ceil = level
+        .sectors
+        .get(sector_index)
+        .map(|s| s.ceil_height)
+        .unwrap_or(0);
+    let mut lowest = i16::MAX;
+    let mut found = false;
+
+    for ld in &level.linedefs {
+        if ld.left_sidedef == SIDEDEF_NONE {
+            continue;
+        }
+        let right_sector = level
+            .sidedefs
+            .get(ld.right_sidedef as usize)
+            .map(|s| s.sector as usize);
+        let left_sector = level
+            .sidedefs
+            .get(ld.left_sidedef as usize)
+            .map(|s| s.sector as usize);
+
+        let other = if right_sector == Some(sector_index) {
+            left_sector
+        } else if left_sector == Some(sector_index) {
+            right_sector
+        } else {
+            continue;
+        };
+
+        if let Some(other_idx) = other {
+            if let Some(other_sec) = level.sectors.get(other_idx) {
+                found = true;
+                if other_sec.ceil_height < lowest {
+                    lowest = other_sec.ceil_height;
+                }
+            }
+        }
+    }
+
+    if found { lowest } else { own_ceil }
+}
+
+// ---------------------------------------------------------------------------
+// tick_ceilings (crushers)
+// ---------------------------------------------------------------------------
+
+/// Advance all active ceiling movers / crushers by one tic.
+///
+/// Call this once per tic from `tick()`.
+///
+/// Crusher oscillation:
+/// 1. Move ceiling by `speed` in `direction`.
+/// 2. If moving Down and reaches `bottom_height`: reverse to Up.
+///    If in crush range, apply `crush_damage` to the player (simplified).
+/// 3. If moving Up and reaches `top_height`: reverse to Down (perpetual)
+///    or remove (one-shot).
+pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
+    let mut i = 0;
+    while i < gs.active_ceilings.len() {
+        let sector_idx = gs.active_ceilings[i].sector_index;
+        let speed = gs.active_ceilings[i].speed;
+        let direction = gs.active_ceilings[i].direction;
+        let top = gs.active_ceilings[i].top_height;
+        let bottom = gs.active_ceilings[i].bottom_height;
+        let crush_dmg = gs.active_ceilings[i].crush_damage;
+        let remove_when_done = gs.active_ceilings[i].remove_when_done;
+
+        if sector_idx >= level.sectors.len() {
+            gs.active_ceilings.remove(i);
+            continue;
+        }
+
+        match direction {
+            MoveDirection::Down => {
+                level.sectors[sector_idx].ceil_height -= speed;
+                let ceil = level.sectors[sector_idx].ceil_height;
+                let floor = level.sectors[sector_idx].floor_height;
+
+                // Crush damage: when ceiling is close to floor (within 8 units).
+                if ceil <= floor + 8 && crush_dmg > 0 {
+                    // Simplified: damage player if they are in this sector.
+                    // A proper implementation would iterate all mobjs in the sector.
+                    let player_handle = gs.player.handle;
+                    if let Some(pmo) = gs.mobjslab.get(player_handle) {
+                        if pmo.z.to_int() == floor as i32 {
+                            // Very simplified sector check: just damage if z matches.
+                            if let Some(pmo_mut) = gs.mobjslab.get_mut(player_handle) {
+                                pmo_mut.health -= crush_dmg;
+                                if pmo_mut.health < 0 {
+                                    pmo_mut.health = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if ceil <= bottom {
+                    level.sectors[sector_idx].ceil_height = bottom;
+                    gs.active_ceilings[i].direction = MoveDirection::Up;
+                }
+            }
+            MoveDirection::Up => {
+                level.sectors[sector_idx].ceil_height += speed;
+                let ceil = level.sectors[sector_idx].ceil_height;
+
+                if ceil >= top {
+                    level.sectors[sector_idx].ceil_height = top;
+                    if remove_when_done {
+                        gs.active_ceilings.remove(i);
+                        continue;
+                    }
+                    // Perpetual: reverse back to Down.
+                    gs.active_ceilings[i].direction = MoveDirection::Down;
+                }
+            }
+        }
+
+        i += 1;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// tick_floors (lifts / floor raisers)
+// ---------------------------------------------------------------------------
+
+/// Advance all active floor movers by one tic.
+///
+/// Call this once per tic from `tick()`.
+///
+/// Lift behavior (wait_tics > 0):
+/// 1. Floor lowers to target_height.
+/// 2. Enters wait phase for wait_tics.
+/// 3. Floor raises back to return_height.
+/// 4. Removed when return_height reached.
+///
+/// Floor raiser/lowerer behavior (wait_tics == -1):
+/// 1. Floor moves to target_height.
+/// 2. Removed when target reached.
+pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
+    let mut i = 0;
+    while i < gs.active_floors.len() {
+        let sector_idx = gs.active_floors[i].sector_index;
+        if sector_idx >= level.sectors.len() {
+            gs.active_floors.remove(i);
+            continue;
+        }
+
+        // Waiting phase.
+        if gs.active_floors[i].waiting {
+            gs.active_floors[i].wait_remaining -= 1;
+            if gs.active_floors[i].wait_remaining <= 0 {
+                // Wait over — reverse direction to return.
+                gs.active_floors[i].waiting = false;
+                gs.active_floors[i].direction = MoveDirection::Up;
+                gs.active_floors[i].target_height = gs.active_floors[i].return_height;
+            }
+            i += 1;
+            continue;
+        }
+
+        let speed = gs.active_floors[i].speed;
+        let direction = gs.active_floors[i].direction;
+        let target = gs.active_floors[i].target_height;
+        let wait_tics = gs.active_floors[i].wait_tics;
+        let crush = gs.active_floors[i].crush;
+        let crush_dmg: i32 = if crush { 10 } else { 0 };
+
+        match direction {
+            MoveDirection::Down => {
+                level.sectors[sector_idx].floor_height -= speed;
+                let floor = level.sectors[sector_idx].floor_height;
+
+                if floor <= target {
+                    level.sectors[sector_idx].floor_height = target;
+                    if wait_tics > 0 {
+                        // Enter wait phase (e.g., lift at bottom).
+                        gs.active_floors[i].waiting = true;
+                        gs.active_floors[i].wait_remaining = wait_tics;
+                    } else {
+                        // One-shot: remove.
+                        gs.active_floors.remove(i);
+                        continue;
+                    }
+                }
+            }
+            MoveDirection::Up => {
+                level.sectors[sector_idx].floor_height += speed;
+                let floor = level.sectors[sector_idx].floor_height;
+
+                // Crush damage when raising into something.
+                if crush && crush_dmg > 0 {
+                    let ceil = level.sectors[sector_idx].ceil_height;
+                    if floor >= ceil - 8 {
+                        let player_handle = gs.player.handle;
+                        if let Some(pmo) = gs.mobjslab.get_mut(player_handle) {
+                            if pmo.z.to_int() >= (floor - 8) as i32 {
+                                pmo.health -= crush_dmg;
+                                if pmo.health < 0 {
+                                    pmo.health = 0;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if floor >= target {
+                    level.sectors[sector_idx].floor_height = target;
+                    if wait_tics > 0 && gs.active_floors[i].return_height != target {
+                        // Returning phase complete — remove.
+                        gs.active_floors.remove(i);
+                        continue;
+                    }
+                    // One-shot raiser: remove.
+                    gs.active_floors.remove(i);
+                    continue;
+                }
+            }
+        }
+
+        i += 1;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Crusher / lift / floor activation helpers
+// ---------------------------------------------------------------------------
+
+/// Standard lift wait time: 3 seconds at 35 Hz = 105 tics.
+const LIFT_WAIT: i32 = 105;
+
+/// Activate a crusher on all sectors matching `tag`.
+fn activate_crusher(
+    gs: &mut GameState,
+    level: &Level,
+    tag: u16,
+    speed: i16,
+    crush_damage: i32,
+    silent: bool,
+    remove_when_done: bool,
+) {
+    let sector_indices: Vec<usize> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| i)
+        .collect();
+
+    for idx in sector_indices {
+        // Avoid duplicate crushers on the same sector.
+        if gs.active_ceilings.iter().any(|c| c.sector_index == idx) {
+            continue;
+        }
+        let sector = &level.sectors[idx];
+        gs.active_ceilings.push(CeilingMover {
+            sector_index: idx,
+            top_height: sector.ceil_height,
+            bottom_height: sector.floor_height + 8,
+            speed,
+            crush_damage,
+            direction: MoveDirection::Down,
+            silent,
+            remove_when_done,
+            tag,
+        });
+    }
+}
+
+/// Stop all crushers matching `tag` (line type 57).
+fn stop_crushers(gs: &mut GameState, tag: u16) {
+    gs.active_ceilings.retain(|c| c.tag != tag);
+}
+
+/// Activate a lift (lower-wait-raise) on all sectors matching `tag`.
+fn activate_lift(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    let sector_indices: Vec<usize> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| i)
+        .collect();
+
+    for idx in sector_indices {
+        // Avoid duplicate floor movers on the same sector.
+        if gs.active_floors.iter().any(|f| f.sector_index == idx) {
+            continue;
+        }
+        let sector = &level.sectors[idx];
+        let low = lowest_adjacent_floor(level, idx);
+        gs.active_floors.push(FloorMover {
+            sector_index: idx,
+            target_height: low,
+            speed,
+            direction: MoveDirection::Down,
+            wait_tics: LIFT_WAIT,
+            return_height: sector.floor_height,
+            waiting: false,
+            wait_remaining: 0,
+            crush: false,
+            tag,
+        });
+    }
+}
+
+/// Activate a floor raiser (one-shot, no wait) on a single sector.
+fn activate_floor_raise_single(
+    gs: &mut GameState,
+    level: &Level,
+    sector_idx: usize,
+    tag: u16,
+    target_height: i16,
+    speed: i16,
+    crush: bool,
+) {
+    if gs
+        .active_floors
+        .iter()
+        .any(|f| f.sector_index == sector_idx)
+    {
+        return;
+    }
+    let Some(sector) = level.sectors.get(sector_idx) else {
+        return;
+    };
+    gs.active_floors.push(FloorMover {
+        sector_index: sector_idx,
+        target_height,
+        speed,
+        direction: MoveDirection::Up,
+        wait_tics: -1,
+        return_height: sector.floor_height,
+        waiting: false,
+        wait_remaining: 0,
+        crush,
+        tag,
+    });
+}
+
+/// Activate a floor lowerer (one-shot, no wait) on a single sector.
+fn activate_floor_lower_single(
+    gs: &mut GameState,
+    level: &Level,
+    sector_idx: usize,
+    tag: u16,
+    target_height: i16,
+    speed: i16,
+) {
+    if gs
+        .active_floors
+        .iter()
+        .any(|f| f.sector_index == sector_idx)
+    {
+        return;
+    }
+    let Some(sector) = level.sectors.get(sector_idx) else {
+        return;
+    };
+    gs.active_floors.push(FloorMover {
+        sector_index: sector_idx,
+        target_height,
+        speed,
+        direction: MoveDirection::Down,
+        wait_tics: -1,
+        return_height: sector.floor_height,
+        waiting: false,
+        wait_remaining: 0,
+        crush: false,
+        tag,
+    });
 }
 
 // ---------------------------------------------------------------------------
@@ -473,6 +997,202 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
 
         // --- Type 11: Exit — no-op stub ---
         11 => {}
+
+        // -----------------------------------------------------------------
+        // Crushers
+        // -----------------------------------------------------------------
+
+        // Type 6: Fast crusher ceiling (perpetual, speed=2).
+        6 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_crusher(gs, level, tag, 2, 10, false, false);
+        }
+
+        // Type 25: Slow crusher ceiling (perpetual, speed=1).
+        25 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_crusher(gs, level, tag, 1, 10, false, false);
+        }
+
+        // Type 44: Ceiling lower to 8 above floor (one-shot, no crush damage).
+        44 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_crusher(gs, level, tag, 2, 0, true, true);
+        }
+
+        // Type 57: Stop crusher (remove all crushers matching tag).
+        57 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            stop_crushers(gs, tag);
+        }
+
+        // -----------------------------------------------------------------
+        // Lifts (lower-wait-raise)
+        // -----------------------------------------------------------------
+
+        // Type 62: Plat lower-wait-raise (speed 4).
+        62 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_lift(gs, level, tag, 4);
+        }
+
+        // Type 66: Plat lower-wait-raise (speed 4, repeatable).
+        66 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_lift(gs, level, tag, 4);
+        }
+
+        // Type 10: Plat down-wait-up-stay (door-like lift).
+        10 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_lift(gs, level, tag, 4);
+        }
+
+        // Type 21: Plat down-wait-up-stay (switch).
+        21 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_lift(gs, level, tag, 4);
+        }
+
+        // Type 88: Plat down-wait-up-stay-monster (walk trigger).
+        88 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_lift(gs, level, tag, 4);
+        }
+
+        // Type 121: Plat lower-wait-raise (turbo speed 8).
+        121 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            activate_lift(gs, level, tag, 8);
+        }
+
+        // -----------------------------------------------------------------
+        // Floor raisers
+        // -----------------------------------------------------------------
+
+        // Type 5: Floor raise to lowest adjacent ceiling.
+        5 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, lowest_adjacent_ceiling(level, i)))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_raise_single(gs, level, idx, tag, target, 1, true);
+            }
+        }
+
+        // Type 18: Floor raise to next highest adjacent floor.
+        18 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, next_highest_floor(level, i)))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_raise_single(gs, level, idx, tag, target, 1, false);
+            }
+        }
+
+        // Type 22: Floor raise to next highest adjacent floor (switch variant).
+        22 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, next_highest_floor(level, i)))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_raise_single(gs, level, idx, tag, target, 1, false);
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Floor lowerers
+        // -----------------------------------------------------------------
+
+        // Type 23: Floor lower to lowest adjacent floor.
+        23 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, lowest_adjacent_floor(level, i)))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_lower_single(gs, level, idx, tag, target, 1);
+            }
+        }
+
+        // Type 19: Floor lower to highest adjacent floor.
+        19 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, highest_adjacent_floor(level, i)))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_lower_single(gs, level, idx, tag, target, 1);
+            }
+        }
+
+        // Type 38: Floor lower to lowest adjacent floor (walk trigger).
+        38 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, lowest_adjacent_floor(level, i)))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_lower_single(gs, level, idx, tag, target, 1);
+            }
+        }
+
+        // Type 36: Floor lower to 8 above highest adjacent floor.
+        36 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, highest_adjacent_floor(level, i) + 8))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_lower_single(gs, level, idx, tag, target, 1);
+            }
+        }
+
+        // Type 56: Floor raise to 8 below lowest adjacent ceiling (crush).
+        56 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, lowest_adjacent_ceiling(level, i) - 8))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_raise_single(gs, level, idx, tag, target, 1, true);
+            }
+        }
 
         _ => {
             // Unknown special — silently ignored.
@@ -932,5 +1652,730 @@ mod tests {
             level.sectors[0].light_level, initial_light,
             "light must toggle after one period"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Helpers for crusher / lift / floor tests
+    // -----------------------------------------------------------------------
+
+    /// Build a level with multiple sectors connected by two-sided linedefs.
+    ///
+    /// Layout: 3 sectors, 2 two-sided linedefs connecting them in a chain.
+    /// - Sector 0: floor=`floors[0]`, ceil=`ceils[0]`, tag=`tags[0]`
+    /// - Sector 1: floor=`floors[1]`, ceil=`ceils[1]`, tag=`tags[1]`
+    /// - Sector 2: floor=`floors[2]`, ceil=`ceils[2]`, tag=`tags[2]`
+    /// - Linedef 0 connects sector 0 and sector 1 (special=`ld_special`, tag=`ld_tag`)
+    /// - Linedef 1 connects sector 1 and sector 2 (special=0, tag=0)
+    fn make_multi_sector_level(
+        floors: [i16; 3],
+        ceils: [i16; 3],
+        tags: [u16; 3],
+        ld_special: u16,
+        ld_tag: u16,
+    ) -> doom_map::Level {
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+
+        let sectors = vec![
+            doom_map::Sector {
+                floor_height: floors[0],
+                ceil_height: ceils[0],
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: tags[0],
+            },
+            doom_map::Sector {
+                floor_height: floors[1],
+                ceil_height: ceils[1],
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: tags[1],
+            },
+            doom_map::Sector {
+                floor_height: floors[2],
+                ceil_height: ceils[2],
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: tags[2],
+            },
+        ];
+
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: 0 },
+            doom_map::Vertex { x: 64, y: 0 },
+            doom_map::Vertex { x: 128, y: 0 },
+            doom_map::Vertex { x: 192, y: 0 },
+        ];
+
+        // Sidedef pairs for two linedefs.
+        let sidedefs = vec![
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 0,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 1,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 1,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 2,
+            },
+        ];
+
+        let linedefs = vec![
+            doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004, // FLAG_TWO_SIDED
+                special: ld_special,
+                tag: ld_tag,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+            doom_map::Linedef {
+                from_vertex: 1,
+                to_vertex: 2,
+                flags: 0x0004,
+                special: 0,
+                tag: 0,
+                right_sidedef: 2,
+                left_sidedef: 3,
+            },
+        ];
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    /// Build a simple level with one sector for crusher/floor tests.
+    /// The sector has the given tag, and a linedef triggers it.
+    fn make_tagged_sector_level(
+        floor: i16,
+        ceil: i16,
+        tag: u16,
+        ld_special: u16,
+    ) -> doom_map::Level {
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+
+        let sectors = vec![
+            // Sector 0: front sector (where the player stands).
+            doom_map::Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            // Sector 1: the target sector being moved.
+            doom_map::Sector {
+                floor_height: floor,
+                ceil_height: ceil,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag,
+            },
+        ];
+
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: -10 },
+            doom_map::Vertex { x: 0, y: 10 },
+        ];
+
+        let sidedefs = vec![
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 0,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 1,
+            },
+        ];
+
+        let linedefs = vec![doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004,
+            special: ld_special,
+            tag,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        }];
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: adjacent sector height helpers
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn lowest_adjacent_floor_finds_minimum() {
+        // Sector 0: floor=0, Sector 1: floor=64, Sector 2: floor=32
+        // Sector 1 is adjacent to both 0 and 2.
+        let level = make_multi_sector_level([0, 64, 32], [128, 128, 128], [0, 0, 0], 0, 0);
+
+        // Adjacent to sector 1: sectors 0 (floor=0) and 2 (floor=32).
+        let result = lowest_adjacent_floor(&level, 1);
+        assert_eq!(
+            result, 0,
+            "lowest adjacent floor to sector 1 should be 0 (sector 0)"
+        );
+    }
+
+    #[test]
+    fn highest_adjacent_floor_finds_maximum() {
+        let level = make_multi_sector_level([10, 64, 50], [128, 128, 128], [0, 0, 0], 0, 0);
+
+        // Adjacent to sector 1: sectors 0 (floor=10) and 2 (floor=50).
+        let result = highest_adjacent_floor(&level, 1);
+        assert_eq!(
+            result, 50,
+            "highest adjacent floor to sector 1 should be 50 (sector 2)"
+        );
+    }
+
+    #[test]
+    fn next_highest_floor_finds_next_step() {
+        // Sector 1: floor=0, adjacent to sector 0 (floor=32) and sector 2 (floor=64).
+        let level = make_multi_sector_level([32, 0, 64], [128, 128, 128], [0, 0, 0], 0, 0);
+
+        let result = next_highest_floor(&level, 1);
+        assert_eq!(result, 32, "next highest floor above 0 should be 32");
+    }
+
+    #[test]
+    fn next_highest_floor_no_higher_returns_own() {
+        // Sector 1: floor=100, adjacent floors are 20 and 50 (both lower).
+        let level = make_multi_sector_level([20, 100, 50], [200, 200, 200], [0, 0, 0], 0, 0);
+
+        let result = next_highest_floor(&level, 1);
+        assert_eq!(result, 100, "no higher floor => returns own floor");
+    }
+
+    #[test]
+    fn lowest_adjacent_ceiling_finds_minimum() {
+        // Sector 1 adjacent to sector 0 (ceil=128) and sector 2 (ceil=96).
+        let level = make_multi_sector_level([0, 0, 0], [128, 200, 96], [0, 0, 0], 0, 0);
+
+        let result = lowest_adjacent_ceiling(&level, 1);
+        assert_eq!(
+            result, 96,
+            "lowest adjacent ceiling to sector 1 should be 96 (sector 2)"
+        );
+    }
+
+    #[test]
+    fn lowest_adjacent_floor_no_neighbors_returns_own() {
+        // A sector with no linedefs connecting to others.
+        let level = make_damage_level(42, 0);
+        let result = lowest_adjacent_floor(&level, 0);
+        assert_eq!(result, 42, "no adjacent sectors => returns own floor");
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: CeilingMover (crushers)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn crusher_oscillates_between_heights() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 6);
+
+        // Activate line type 6 (fast crusher, perpetual).
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1, "one crusher must be created");
+
+        let initial_ceil = level.sectors[1].ceil_height;
+        assert_eq!(initial_ceil, 128);
+
+        // Tick until ceiling descends: 128 to 8 = 120 units / speed 2 = 60 tics.
+        for _ in 0..60 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+        assert_eq!(
+            level.sectors[1].ceil_height, 8,
+            "ceiling must reach bottom_height"
+        );
+
+        // Should have reversed to Up.
+        assert_eq!(
+            gs.active_ceilings[0].direction,
+            MoveDirection::Up,
+            "crusher must reverse to Up after hitting bottom"
+        );
+
+        // Tick until it returns to the top: 120 units / speed 2 = 60 tics.
+        for _ in 0..60 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+
+        // Should have reached top and reversed back to Down (perpetual).
+        assert_eq!(
+            gs.active_ceilings[0].direction,
+            MoveDirection::Down,
+            "perpetual crusher must reverse to Down after reaching top"
+        );
+        assert_eq!(
+            level.sectors[1].ceil_height, 128,
+            "crusher must return to top_height"
+        );
+
+        // Verify perpetual: tick a few more — should descend again.
+        for _ in 0..5 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+        assert_eq!(
+            level.sectors[1].ceil_height, 118,
+            "perpetual crusher must continue oscillating"
+        );
+    }
+
+    #[test]
+    fn one_shot_crusher_removes_itself() {
+        let mut gs = GameState::new("TEST");
+        // Line type 44: one-shot ceiling lower (remove_when_done=true).
+        let mut level = make_tagged_sector_level(0, 128, 1, 44);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+
+        // Tick down to bottom_height (8). 128 -> 8 = 120 units / speed 2 = 60 tics.
+        for _ in 0..60 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].ceil_height, 8);
+
+        // Reverses to Up; tick back to 128. 120 / 2 = 60 tics.
+        for _ in 0..60 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+
+        // One-shot crusher should be removed when reaching top.
+        assert!(
+            gs.active_ceilings.is_empty(),
+            "one-shot crusher must remove itself after returning to top"
+        );
+        assert_eq!(level.sectors[1].ceil_height, 128);
+    }
+
+    #[test]
+    fn crusher_stops_on_line_type_57() {
+        let mut gs = GameState::new("TEST");
+        // Start a crusher with tag=5.
+        let mut level = make_tagged_sector_level(0, 128, 5, 6);
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+
+        // Tick a few times.
+        for _ in 0..5 {
+            tick_ceilings(&mut gs, &mut level);
+        }
+        assert!(
+            !gs.active_ceilings.is_empty(),
+            "crusher should still be running"
+        );
+
+        // Now add a linedef with special 57 and the same tag.
+        level.linedefs.push(doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004,
+            special: 57,
+            tag: 5,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        });
+
+        // Activate line type 57 (stop crusher).
+        let stop_idx = level.linedefs.len() - 1;
+        activate_linedef(&mut gs, &mut level, stop_idx);
+
+        assert!(
+            gs.active_ceilings.is_empty(),
+            "line type 57 must stop all crushers with matching tag"
+        );
+    }
+
+    #[test]
+    fn slow_crusher_type_25_speed_1() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 25);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+        assert_eq!(
+            gs.active_ceilings[0].speed, 1,
+            "type 25 must use speed 1 (slow)"
+        );
+
+        // Tick once — should move by 1.
+        tick_ceilings(&mut gs, &mut level);
+        assert_eq!(level.sectors[1].ceil_height, 127);
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: FloorMover (lifts)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn lift_lower_wait_raise() {
+        let mut gs = GameState::new("TEST");
+
+        // Sector 0: floor=0 (front), Sector 1: floor=64 (target, tag=1).
+        // Sector 0 is adjacent to sector 1 with floor=0 → lowest adjacent = 0.
+        let mut level = make_tagged_sector_level(64, 128, 1, 62);
+
+        assert_eq!(level.sectors[1].floor_height, 64, "precondition: floor=64");
+
+        // Activate line type 62 (lift lower-wait-raise, speed 4).
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1, "one floor mover must be created");
+
+        // Lowest adjacent floor is sector 0's floor = 0.
+        assert_eq!(
+            gs.active_floors[0].target_height, 0,
+            "lift target = lowest adjacent = 0"
+        );
+        assert_eq!(
+            gs.active_floors[0].return_height, 64,
+            "return height = original floor"
+        );
+
+        // Tick until floor lowers to 0: 64 units / speed 4 = 16 tics.
+        for _ in 0..16 {
+            tick_floors(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].floor_height, 0, "floor must lower to 0");
+
+        // Should now be in wait phase.
+        assert!(gs.active_floors[0].waiting, "lift must enter wait phase");
+        assert_eq!(
+            gs.active_floors[0].wait_remaining, LIFT_WAIT,
+            "wait_remaining must be set to LIFT_WAIT"
+        );
+
+        // Tick through the wait phase (105 tics).
+        for _ in 0..LIFT_WAIT {
+            tick_floors(&mut gs, &mut level);
+        }
+        assert!(!gs.active_floors[0].waiting, "wait phase must end");
+
+        // Should now be heading back up to return_height (64).
+        // 64 units / speed 4 = 16 tics.
+        for _ in 0..16 {
+            tick_floors(&mut gs, &mut level);
+        }
+        assert_eq!(
+            level.sectors[1].floor_height, 64,
+            "floor must raise back to 64"
+        );
+
+        // Lift should be removed after returning.
+        assert!(
+            gs.active_floors.is_empty(),
+            "lift must remove itself after return"
+        );
+    }
+
+    #[test]
+    fn turbo_lift_type_121_speed_8() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(64, 128, 1, 121);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].speed, 8,
+            "type 121 must use speed 8 (turbo)"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: FloorMover (floor raisers / lowerers)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn floor_raise_to_next_highest() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: floor=32, Sector 1: floor=0 (target, tag=1), Sector 2: floor=64.
+        // Sector 1 is adjacent to 0 (floor=32) and 2 (floor=64).
+        // next_highest_floor above 0 = 32.
+        let mut level = make_multi_sector_level(
+            [32, 0, 64],
+            [128, 128, 128],
+            [0, 1, 0],
+            18, // type 18: floor raise to next highest adjacent floor
+            1,  // tag 1 targets sector 1
+        );
+
+        assert_eq!(level.sectors[1].floor_height, 0);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 32,
+            "target = next highest floor = 32"
+        );
+
+        // Tick until floor reaches 32: 32 units / speed 1 = 32 tics.
+        for _ in 0..32 {
+            tick_floors(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].floor_height, 32, "floor must reach 32");
+
+        // One-shot raiser should be removed.
+        assert!(
+            gs.active_floors.is_empty(),
+            "one-shot floor raiser must remove itself"
+        );
+    }
+
+    #[test]
+    fn floor_lower_to_lowest_adjacent() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: floor=0, Sector 1: floor=64 (target, tag=1), Sector 2: floor=32.
+        // Sector 1 adjacent to 0 (floor=0) and 2 (floor=32).
+        // lowest_adjacent_floor = 0.
+        let mut level = make_multi_sector_level(
+            [0, 64, 32],
+            [128, 128, 128],
+            [0, 1, 0],
+            23, // type 23: floor lower to lowest adjacent
+            1,
+        );
+
+        assert_eq!(level.sectors[1].floor_height, 64);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 0,
+            "target = lowest adjacent = 0"
+        );
+
+        // Tick until floor reaches 0: 64 units / speed 1 = 64 tics.
+        for _ in 0..64 {
+            tick_floors(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].floor_height, 0, "floor must lower to 0");
+
+        assert!(
+            gs.active_floors.is_empty(),
+            "one-shot floor lowerer must remove itself"
+        );
+    }
+
+    #[test]
+    fn floor_raise_to_lowest_ceiling_type_5() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: ceil=128, Sector 1: floor=0 ceil=200 tag=1, Sector 2: ceil=96.
+        // Sector 1 adjacent to 0 (ceil=128) and 2 (ceil=96).
+        // lowest_adjacent_ceiling = 96.
+        let mut level = make_multi_sector_level(
+            [0, 0, 0],
+            [128, 200, 96],
+            [0, 1, 0],
+            5, // type 5: floor raise to lowest adjacent ceiling
+            1,
+        );
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 96,
+            "target = lowest adjacent ceiling = 96"
+        );
+        assert!(gs.active_floors[0].crush, "type 5 must have crush=true");
+    }
+
+    #[test]
+    fn floor_lower_to_highest_adjacent_type_19() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=48.
+        // highest_adjacent_floor = 48.
+        let mut level = make_multi_sector_level(
+            [10, 64, 48],
+            [128, 128, 128],
+            [0, 1, 0],
+            19, // type 19: floor lower to highest adjacent floor
+            1,
+        );
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 48,
+            "target = highest adjacent = 48"
+        );
+    }
+
+    #[test]
+    fn floor_lower_type_36_to_8_above_highest() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=30.
+        // highest_adjacent_floor = 30, target = 30 + 8 = 38.
+        let mut level = make_multi_sector_level(
+            [10, 64, 30],
+            [128, 128, 128],
+            [0, 1, 0],
+            36, // type 36
+            1,
+        );
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 38,
+            "target = highest_adj(30) + 8 = 38"
+        );
+    }
+
+    #[test]
+    fn floor_raise_type_56_to_8_below_lowest_ceiling() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: ceil=128, Sector 1: floor=0 ceil=200 tag=1, Sector 2: ceil=100.
+        // lowest_adjacent_ceiling = 100, target = 100 - 8 = 92.
+        let mut level = make_multi_sector_level([0, 0, 0], [128, 200, 100], [0, 1, 0], 56, 1);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 92,
+            "target = lowest_adj_ceil(100) - 8 = 92"
+        );
+        assert!(gs.active_floors[0].crush, "type 56 must have crush=true");
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: duplicate mover prevention
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn duplicate_crusher_prevented() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(0, 128, 1, 6);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_ceilings.len(), 1);
+
+        // Try to activate again — should not add a duplicate.
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.active_ceilings.len(),
+            1,
+            "must not create duplicate crushers"
+        );
+    }
+
+    #[test]
+    fn duplicate_lift_prevented() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_sector_level(64, 128, 1, 62);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1, "must not create duplicate lifts");
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: GameState clone includes new fields
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn game_state_clone_includes_ceilings_and_floors() {
+        let mut gs = GameState::new("TEST");
+        gs.active_ceilings.push(CeilingMover {
+            sector_index: 0,
+            top_height: 128,
+            bottom_height: 8,
+            speed: 2,
+            crush_damage: 10,
+            direction: MoveDirection::Down,
+            silent: false,
+            remove_when_done: false,
+            tag: 1,
+        });
+        gs.active_floors.push(FloorMover {
+            sector_index: 0,
+            target_height: 0,
+            speed: 4,
+            direction: MoveDirection::Down,
+            wait_tics: 105,
+            return_height: 64,
+            waiting: false,
+            wait_remaining: 0,
+            crush: false,
+            tag: 1,
+        });
+
+        let gs2 = gs.clone();
+        assert_eq!(gs2.active_ceilings.len(), 1, "clone must include ceilings");
+        assert_eq!(gs2.active_floors.len(), 1, "clone must include floors");
+        assert_eq!(gs2.active_ceilings[0].top_height, 128);
+        assert_eq!(gs2.active_floors[0].target_height, 0);
     }
 }

@@ -240,7 +240,7 @@ impl DoomApp for DoomGame {
             // Draw the first-person 3D view.
             // We pass a grayscale palette; render_level currently ignores it
             // (wall colors are derived from light levels only).
-            render_level(&self.level, px, py, angle, fb, &palette, self.flat_cache.as_ref(), self.tex_cache.as_ref(), self.colormap_cache.as_ref());
+            render_level(&self.level, px, py, angle, fb, &palette, self.flat_cache.as_ref(), self.tex_cache.as_ref(), self.colormap_cache.as_ref(), None);
 
             // Project level Things as billboard sprites (painter's algorithm,
             // back-to-front). Must run after render_level so walls are already

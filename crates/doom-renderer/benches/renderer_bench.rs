@@ -21,10 +21,7 @@ use doom_types::Bam;
 /// helper in `render.rs` tests).  Constructed once per benchmark group so
 /// we're measuring render time, not level-construction time.
 fn make_minimal_level() -> Level {
-    let vertexes = vec![
-        Vertex { x: 0, y: 128 },
-        Vertex { x: 128, y: 128 },
-    ];
+    let vertexes = vec![Vertex { x: 0, y: 128 }, Vertex { x: 128, y: 128 }];
     let sectors = vec![Sector {
         floor_height: 0,
         ceil_height: 128,
@@ -59,8 +56,17 @@ fn make_minimal_level() -> Level {
         direction: 0,
         offset: 0,
     }];
-    let ssectors = vec![Ssector { seg_count: 1, first_seg: 0 }];
-    let things = vec![Thing { x: 0, y: 0, angle: 0, kind: 1, flags: 7 }];
+    let ssectors = vec![Ssector {
+        seg_count: 1,
+        first_seg: 0,
+    }];
+    let things = vec![Thing {
+        x: 0,
+        y: 0,
+        angle: 0,
+        kind: 1,
+        flags: 7,
+    }];
 
     // Reject: 1 sector → ceil(1/8) = 1 byte
     let reject = Reject::parse_lump(&[0u8; 1], 1).expect("reject parse");
@@ -101,9 +107,9 @@ fn bench_draw_column(c: &mut Criterion) {
     let source = [0u8; 128];
 
     let params = DrawColumnParams {
-        x: 160,          // center column
+        x: 160, // center column
         y_top: 0,
-        y_bot: 199,      // full height = 200 pixels
+        y_bot: 199, // full height = 200 pixels
         frac: 0,
         fracstep: 1 << 16, // 1 texel per pixel
         source: &source,
@@ -123,9 +129,9 @@ fn bench_draw_span(c: &mut Criterion) {
     let source = [0u8; 4096];
 
     let params = DrawSpanParams {
-        y: 100,           // middle row
+        y: 100, // middle row
         x1: 0,
-        x2: 319,          // full width = 320 pixels
+        x2: 319, // full width = 320 pixels
         ds_xfrac: 0,
         ds_yfrac: 0,
         ds_xstep: 1 << 16,
@@ -174,6 +180,7 @@ fn bench_render_level_minimal(c: &mut Criterion) {
                 black_box(player_angle),
                 &mut fb,
                 black_box(&palette),
+                None,
                 None,
                 None,
                 None,

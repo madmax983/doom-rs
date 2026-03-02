@@ -33,6 +33,76 @@ pub struct DoorMover {
     pub countdown: i32,
 }
 
+// ---------------------------------------------------------------------------
+// Ceiling / floor mover types
+// ---------------------------------------------------------------------------
+
+/// Direction a ceiling or floor is currently moving.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MoveDirection {
+    Up,
+    Down,
+}
+
+/// A ceiling crusher that oscillates between top and bottom heights,
+/// damaging actors caught in between.
+///
+/// Added to `GameState::active_ceilings` when a crusher linedef is activated.
+/// Ticked each tic by `specials::tick_ceilings`.
+#[derive(Clone, Debug)]
+pub struct CeilingMover {
+    /// Index into `level.sectors`.
+    pub sector_index: usize,
+    /// Original ceiling height (return position).
+    pub top_height: i16,
+    /// Lowest point the ceiling descends to (usually 8 units above floor).
+    pub bottom_height: i16,
+    /// Movement speed in map units per tic (typically 1 for slow, 2 for fast).
+    pub speed: i16,
+    /// Damage per tic when crushing an actor (typically 10).
+    pub crush_damage: i32,
+    /// Current movement direction.
+    pub direction: MoveDirection,
+    /// Some crushers make no sound.
+    pub silent: bool,
+    /// `true` for one-shot crushers that remove themselves when done,
+    /// `false` for perpetual oscillating crushers.
+    pub remove_when_done: bool,
+    /// Tag from the activating linedef (used by line type 57 to stop crushers).
+    pub tag: u16,
+}
+
+/// A floor that moves to a target height, optionally waits, then returns.
+///
+/// Used for lifts (lower-wait-raise) and floor raisers/lowerers (one-shot).
+/// Added to `GameState::active_floors` when activated.
+/// Ticked each tic by `specials::tick_floors`.
+#[derive(Clone, Debug)]
+pub struct FloorMover {
+    /// Index into `level.sectors`.
+    pub sector_index: usize,
+    /// Destination floor height.
+    pub target_height: i16,
+    /// Movement speed in map units per tic (typically 1-4).
+    pub speed: i16,
+    /// Current movement direction.
+    pub direction: MoveDirection,
+    /// Tics to wait at destination before returning.
+    /// `-1` = no wait (one-shot mover that removes itself at target).
+    /// `>0` = wait then reverse.
+    pub wait_tics: i32,
+    /// Height to return to after waiting (original floor height for lifts).
+    pub return_height: i16,
+    /// Currently in the wait phase.
+    pub waiting: bool,
+    /// Tics remaining in the wait phase.
+    pub wait_remaining: i32,
+    /// Does this floor damage actors when raising into them?
+    pub crush: bool,
+    /// Tag from the activating linedef.
+    pub tag: u16,
+}
+
 /// A flickering or blinking light special.
 ///
 /// Added to `GameState::active_lights` by `specials::spawn_level_specials`.
@@ -159,6 +229,10 @@ pub struct GameState {
     pub active_doors: Vec<DoorMover>,
     /// Active light specials (ticked by `specials::tick_lights`).
     pub active_lights: Vec<LightSpecial>,
+    /// Active ceiling movers / crushers (ticked by `specials::tick_ceilings`).
+    pub active_ceilings: Vec<CeilingMover>,
+    /// Active floor movers / lifts (ticked by `specials::tick_floors`).
+    pub active_floors: Vec<FloorMover>,
 }
 
 impl GameState {
@@ -182,6 +256,8 @@ impl GameState {
             total_items: 0,
             active_doors: Vec::new(),
             active_lights: Vec::new(),
+            active_ceilings: Vec::new(),
+            active_floors: Vec::new(),
         }
     }
 }

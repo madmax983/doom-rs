@@ -42,8 +42,12 @@ pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
 };
 pub use snapshot::Snapshot;
-pub use specials::{USE_RANGE, activate_linedef, p_use_lines, tick_sector_specials};
-pub use state::{DoomRng, GameState, RNG_TABLE};
+pub use specials::{
+    USE_RANGE, activate_linedef, highest_adjacent_floor, lowest_adjacent_ceiling,
+    lowest_adjacent_floor, next_highest_floor, p_use_lines, tick_ceilings, tick_floors,
+    tick_sector_specials,
+};
+pub use state::{CeilingMover, DoomRng, FloorMover, GameState, MoveDirection, RNG_TABLE};
 pub use states::STATES;
 pub use tic::{FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt};
 pub use weapons::{fire_weapon, player_can_fire};

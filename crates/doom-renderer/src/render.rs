@@ -28,6 +28,7 @@
 use doom_map::Level;
 use doom_types::Bam;
 
+use crate::anim::AnimState;
 use crate::colormap::ColormapCache;
 use crate::column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column};
 use crate::flat_cache::FlatCache;
@@ -68,6 +69,10 @@ const NO_FLAT: [u8; 8] = *b"-\0\0\0\0\0\0\0";
 ///                          back to flat-shaded solid colors for walls.
 /// `colormap`             — optional COLORMAP cache for per-sector light shading;
 ///                          pass `None` to use identity (full-bright) colormaps.
+/// `anim`                 — optional animation state; when provided, flat and wall
+///                          texture names are resolved through animation sequences
+///                          so animated textures (nukage, lava, fire walls, etc.)
+///                          cycle at the correct rate.
 ///
 /// This is a software renderer using per-seg perspective projection.
 /// Walls are textured when `tex_cache` is provided; floors/ceilings are
@@ -83,6 +88,7 @@ pub fn render_level(
     flat_cache: Option<&FlatCache>,
     tex_cache: Option<&TextureCache>,
     colormap: Option<&ColormapCache>,
+    anim: Option<&AnimState>,
 ) {
     // ------------------------------------------------------------------
     // Step 1: Draw background (ceiling top half, floor bottom half)
@@ -332,7 +338,10 @@ pub fn render_level(
                     let upper_h_px = (upper_bot - w_top).max(1);
 
                     if let Some(cache) = tex_cache {
-                        if let Some(tex) = cache.get(&sidedef.upper_texture) {
+                        let upper_name = anim.map_or(sidedef.upper_texture, |a| {
+                            a.resolve_wall(&sidedef.upper_texture)
+                        });
+                        if let Some(tex) = cache.get(&upper_name) {
                             let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
                             let tex_h = tex.height as u32;
                             let fracstep = (tex_h << 16) / (upper_h_px as u32).max(1);
@@ -386,7 +395,10 @@ pub fn render_level(
                     let lower_h_px = (w_bot - lower_top).max(1);
 
                     if let Some(cache) = tex_cache {
-                        if let Some(tex) = cache.get(&sidedef.lower_texture) {
+                        let lower_name = anim.map_or(sidedef.lower_texture, |a| {
+                            a.resolve_wall(&sidedef.lower_texture)
+                        });
+                        if let Some(tex) = cache.get(&lower_name) {
                             let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
                             let tex_h = tex.height as u32;
                             let fracstep = (tex_h << 16) / (lower_h_px as u32).max(1);
@@ -454,7 +466,10 @@ pub fn render_level(
 
                 // Draw the wall column — textured if a TextureCache is available.
                 if let Some(cache) = tex_cache {
-                    if let Some(tex) = cache.get(&sidedef.middle_texture) {
+                    let mid_name = anim.map_or(sidedef.middle_texture, |a| {
+                        a.resolve_wall(&sidedef.middle_texture)
+                    });
+                    if let Some(tex) = cache.get(&mid_name) {
                         // Perspective-correct horizontal texture coordinate (U).
                         let t_screen = (t as f32) / (span_w as f32).max(1.0);
                         let denom = (vx_left as f32
@@ -614,11 +629,13 @@ pub fn render_level(
                           init_yfrac: u32,
                           xstep_u: u32,
                           ystep_u: u32,
-                          colormap_cache: Option<&ColormapCache>| {
+                          colormap_cache: Option<&ColormapCache>,
+                          anim_state: Option<&AnimState>| {
             if name == &NO_FLAT || is_sky_flat(name) {
                 return;
             }
-            let source = cache.get(name);
+            let resolved = anim_state.map_or(*name, |a| a.resolve_flat(name));
+            let source = cache.get(&resolved);
             // Advance xfrac/yfrac from column 0 to x1.
             let steps = x1 as u32;
             let span_xfrac = init_xfrac.wrapping_add(xstep_u.wrapping_mul(steps));
@@ -695,6 +712,7 @@ pub fn render_level(
                         xstep_u,
                         ystep_u,
                         colormap,
+                        anim,
                     );
                     run_start = if other.is_some() {
                         let (name, li) = other.unwrap();
@@ -724,6 +742,7 @@ pub fn render_level(
                 xstep_u,
                 ystep_u,
                 colormap,
+                anim,
             );
         }
     }
@@ -974,7 +993,18 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 0, Bam::ZERO, &mut fb, &palette, None, None, None);
+        render_level(
+            &level,
+            0,
+            0,
+            Bam::ZERO,
+            &mut fb,
+            &palette,
+            None,
+            None,
+            None,
+            None,
+        );
 
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
         assert!(
@@ -991,7 +1021,9 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None, None);
+        render_level(
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None,
+        );
     }
 
     #[test]
@@ -1010,6 +1042,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         let mut fb2 = Framebuffer::new();
@@ -1020,6 +1053,7 @@ mod tests {
             Bam::ZERO,
             &mut fb2,
             &palette,
+            None,
             None,
             None,
             None,
@@ -1066,6 +1100,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         );
 
         // Background colour index 25 was written to the top half.
@@ -1089,6 +1124,7 @@ mod tests {
             Bam::ZERO,
             &mut fb,
             &palette,
+            None,
             None,
             None,
             None,
@@ -1167,6 +1203,7 @@ mod tests {
             Some(&cache),
             None,
             None,
+            None,
         );
 
         // Should not panic and should produce some non-zero output.
@@ -1212,7 +1249,9 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // Player at y=0, wall at y=128, facing ANG90 = North (+Y direction).
-        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None, None);
+        render_level(
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None,
+        );
 
         // The wall spans some columns around center (x=160).
         // We check that the framebuffer has been written in the upper half for
@@ -1258,7 +1297,9 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None, None);
+        render_level(
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None,
+        );
 
         // We cannot directly inspect wall_top/wall_bot from outside, but we can
         // verify the visual outcome:
@@ -1309,7 +1350,9 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // Player at (64, 0) looking toward the wall at y=128 (ANG90 = North = +Y).
-        render_level(&level, 64, 0, ANG90, &mut fb, &palette, None, None, None);
+        render_level(
+            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None,
+        );
 
         // The wall should occupy vertical pixels around the center column.
         // Flat-shade color = 32 + (192 >> 3).min(31) = 32 + 24 = 56.

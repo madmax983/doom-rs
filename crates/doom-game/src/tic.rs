@@ -134,9 +134,11 @@ impl GameState {
             crate::specials::tick_sector_specials(self, lv, handle);
         }
 
-        // Animated doors and light specials (mutable level borrow).
+        // Animated doors, ceilings, floors, and light specials (mutable level borrow).
         if let Some(lv) = level.as_deref_mut() {
             crate::specials::tick_doors(self, lv);
+            crate::specials::tick_ceilings(self, lv);
+            crate::specials::tick_floors(self, lv);
             crate::specials::tick_lights(self, lv);
         }
 

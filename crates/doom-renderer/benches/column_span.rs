@@ -1,5 +1,5 @@
 //! Criterion benchmarks for column and span drawing.
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 pub fn bench_placeholder(c: &mut Criterion) {
     c.bench_function("placeholder", |b| b.iter(|| 1 + 1));
