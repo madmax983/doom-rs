@@ -176,6 +176,7 @@ fn bench_render_level_minimal(c: &mut Criterion) {
                 black_box(&palette),
                 None,
                 None,
+                None,
             )
         })
     });

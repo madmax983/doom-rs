@@ -15,7 +15,7 @@ use std::net::SocketAddr;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
 use doom_map::Level;
-use doom_renderer::{FlatCache, Framebuffer, PaletteLut, SpriteCache, TextureCache, draw_automap, draw_status_bar, draw_weapon_sprite, render_level, render_things};
+use doom_renderer::{ColormapCache, FlatCache, Framebuffer, PaletteLut, SpriteCache, TextureCache, draw_automap, draw_status_bar, draw_weapon_sprite, render_level, render_things};
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -95,6 +95,8 @@ pub(crate) struct DoomGame {
     tex_cache: Option<TextureCache>,
     /// Sprite frame cache (loaded from S_START..S_END).
     sprite_cache: Option<SpriteCache>,
+    /// Colormap cache (COLORMAP lump, 34 × 256 bytes for light-level shading).
+    colormap_cache: Option<ColormapCache>,
 }
 
 impl DoomGame {
@@ -105,6 +107,7 @@ impl DoomGame {
         flat_cache: Option<FlatCache>,
         tex_cache: Option<TextureCache>,
         sprite_cache: Option<SpriteCache>,
+        colormap_cache: Option<ColormapCache>,
     ) -> Self {
         Self {
             gs,
@@ -119,6 +122,7 @@ impl DoomGame {
             flat_cache,
             tex_cache,
             sprite_cache,
+            colormap_cache,
         }
     }
 }
@@ -236,7 +240,7 @@ impl DoomApp for DoomGame {
             // Draw the first-person 3D view.
             // We pass a grayscale palette; render_level currently ignores it
             // (wall colors are derived from light levels only).
-            render_level(&self.level, px, py, angle, fb, &palette, self.flat_cache.as_ref(), self.tex_cache.as_ref());
+            render_level(&self.level, px, py, angle, fb, &palette, self.flat_cache.as_ref(), self.tex_cache.as_ref(), self.colormap_cache.as_ref());
 
             // Project level Things as billboard sprites (painter's algorithm,
             // back-to-front). Must run after render_level so walls are already
@@ -372,6 +376,9 @@ fn main() -> Result<()> {
         if cache.is_empty() { None } else { Some(cache) }
     };
 
+    // Load colormap cache (COLORMAP lump: 34 × 256 bytes, light-level shading).
+    let colormap_cache = Some(ColormapCache::from_wad_file(&wad));
+
     // Try to open the audio subsystem.  Returns None in headless/CI environments.
     let audio = AudioSystem::try_open(&wad);
 
@@ -405,7 +412,7 @@ fn main() -> Result<()> {
     }
 
     // Build the app.
-    let app = DoomGame::new(gs, level, audio, flat_cache, tex_cache, sprite_cache);
+    let app = DoomGame::new(gs, level, audio, flat_cache, tex_cache, sprite_cache, colormap_cache);
 
     // Client (netplay) mode: connect to relay server and run game with net input.
     if let Some(addr_str) = args.connect {

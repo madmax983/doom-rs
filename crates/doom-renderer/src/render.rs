@@ -28,6 +28,7 @@
 use doom_map::Level;
 use doom_types::Bam;
 
+use crate::colormap::ColormapCache;
 use crate::column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column};
 use crate::flat_cache::FlatCache;
 use crate::framebuffer::Framebuffer;
@@ -64,10 +65,13 @@ const NO_FLAT: [u8; 8] = *b"-\0\0\0\0\0\0\0";
 ///                          back to solid-color floors and ceilings.
 /// `tex_cache`            — optional wall texture cache; pass `None` to fall
 ///                          back to flat-shaded solid colors for walls.
+/// `colormap`             — optional COLORMAP cache for per-sector light shading;
+///                          pass `None` to use identity (full-bright) colormaps.
 ///
 /// This is a software renderer using per-seg perspective projection.
 /// Walls are textured when `tex_cache` is provided; floors/ceilings are
-/// textured when `flat_cache` is provided.
+/// textured when `flat_cache` is provided.  Light shading is applied when
+/// `colormap` is provided.
 pub fn render_level(
     level: &Level,
     player_x: i32,
@@ -77,6 +81,7 @@ pub fn render_level(
     _palette: &PaletteLut,
     flat_cache: Option<&FlatCache>,
     tex_cache: Option<&TextureCache>,
+    colormap: Option<&ColormapCache>,
 ) {
     // ------------------------------------------------------------------
     // Step 1: Draw background (ceiling top half, floor bottom half)
@@ -100,6 +105,9 @@ pub fn render_level(
     // Flat names to use for ceiling/floor per column.
     let mut ceil_flat: [[u8; 8]; SCREEN_W] = [NO_FLAT; SCREEN_W];
     let mut floor_flat: [[u8; 8]; SCREEN_W] = [NO_FLAT; SCREEN_W];
+
+    // Per-column light index (0=full bright, 31=darkest) for floor/ceiling shading.
+    let mut col_light = [0u8; SCREEN_W];
 
     // Z-buffer (per-column minimum depth, in view-space units).
     let mut z_buf = [i32::MAX; SCREEN_W];
@@ -167,6 +175,9 @@ pub fn render_level(
         let floor_h = sector.floor_height as i32;
         let ceil_h  = sector.ceil_height as i32;
         let light   = ((sector.light_level as u32) >> 3).min(31) as u8;
+
+        // Pick the colormap row for this sector's light level.
+        let cm: &[u8; 256] = colormap.map(|c| c.get(light)).unwrap_or(&IDENTITY_COLORMAP);
 
         // Resolve the back sector for two-sided linedefs.
         let is_two_sided = linedef.is_two_sided();
@@ -277,9 +288,11 @@ pub fn render_level(
                 if let Some(bs) = back_sector {
                     ceil_flat[x]  = bs.ceil_flat;
                     floor_flat[x] = bs.floor_flat;
+                    col_light[x]  = ((bs.light_level as u32) >> 3).min(31) as u8;
                 } else {
                     ceil_flat[x]  = sector.ceil_flat;
                     floor_flat[x] = sector.floor_flat;
+                    col_light[x]  = light;
                 }
 
                 // Perspective-correct U coordinate helper (shared for upper/lower).
@@ -318,7 +331,7 @@ pub fn render_level(
                                     frac: frac_start,
                                     fracstep,
                                     source: col_data,
-                                    colormap: &IDENTITY_COLORMAP,
+                                    colormap: cm,
                                 },
                             );
                         } else {
@@ -359,7 +372,7 @@ pub fn render_level(
                                     frac: frac_start,
                                     fracstep,
                                     source: col_data,
-                                    colormap: &IDENTITY_COLORMAP,
+                                    colormap: cm,
                                 },
                             );
                         } else {
@@ -397,6 +410,7 @@ pub fn render_level(
                 // Record which sector's flats belong to this column.
                 ceil_flat[x]  = sector.ceil_flat;
                 floor_flat[x] = sector.floor_flat;
+                col_light[x]  = light;
 
                 // Draw the wall column — textured if a TextureCache is available.
                 if let Some(cache) = tex_cache {
@@ -435,7 +449,7 @@ pub fn render_level(
                                 frac: frac_start,
                                 fracstep,
                                 source: col_data,
-                                colormap: &IDENTITY_COLORMAP,
+                                colormap: cm,
                             },
                         );
                         continue; // skip flat-color fallback
@@ -539,17 +553,20 @@ pub fn render_level(
         // Scan columns and group into runs of the same flat.
         let mut run_start: Option<usize> = None;
         let mut run_flat_name: [u8; 8] = NO_FLAT;
+        let mut run_light: u8 = 0;
 
         let flush_span = |cache: &FlatCache,
                           fb: &mut Framebuffer,
                           x1: usize,
                           x2: usize,
                           name: &[u8; 8],
+                          light_idx: u8,
                           y: i32,
                           init_xfrac: u32,
                           init_yfrac: u32,
                           xstep_u: u32,
-                          ystep_u: u32| {
+                          ystep_u: u32,
+                          colormap_cache: Option<&ColormapCache>| {
             if name == &NO_FLAT {
                 return;
             }
@@ -558,6 +575,10 @@ pub fn render_level(
             let steps = x1 as u32;
             let span_xfrac = init_xfrac.wrapping_add(xstep_u.wrapping_mul(steps));
             let span_yfrac = init_yfrac.wrapping_add(ystep_u.wrapping_mul(steps));
+
+            let span_cm: &[u8; 256] = colormap_cache
+                .map(|c| c.get(light_idx))
+                .unwrap_or(&IDENTITY_COLORMAP);
 
             let params = DrawSpanParams {
                 y: y as usize,
@@ -568,7 +589,7 @@ pub fn render_level(
                 ds_xstep: xstep_u,
                 ds_ystep: ystep_u,
                 source,
-                colormap: &IDENTITY_COLORMAP,
+                colormap: span_cm,
             };
             draw_span(fb, &params);
         };
@@ -578,40 +599,43 @@ pub fn render_level(
             let wb = wall_bot[x];
 
             // Determine which flat this (x, y) pixel needs.
-            let this_flat: Option<[u8; 8]> = if dy < 0 {
+            let this_flat: Option<([u8; 8], u8)> = if dy < 0 {
                 // Above horizon — ceiling rows.
                 if y < wt {
                     // This column's ceiling is visible here.
-                    Some(ceil_flat[x])
+                    Some((ceil_flat[x], col_light[x]))
                 } else {
                     None // occluded by wall
                 }
             } else {
                 // Below horizon — floor rows.
                 if y > wb {
-                    Some(floor_flat[x])
+                    Some((floor_flat[x], col_light[x]))
                 } else {
                     None // occluded by wall or unrendered
                 }
             };
 
             match (run_start, this_flat) {
-                (None, Some(name)) => {
+                (None, Some((name, li))) => {
                     // Start a new run.
                     run_start = Some(x);
                     run_flat_name = name;
+                    run_light = li;
                 }
-                (Some(_start), Some(name)) if name == run_flat_name => {
-                    // Continue the existing run.
+                (Some(_start), Some((name, _li))) if name == run_flat_name => {
+                    // Continue the existing run (light of run start is used for whole span).
                 }
                 (Some(start), other) => {
                     // End the current run and flush it.
                     flush_span(
-                        cache, fb, start, x - 1, &run_flat_name, y,
-                        init_xfrac, init_yfrac, xstep_u, ystep_u,
+                        cache, fb, start, x - 1, &run_flat_name, run_light, y,
+                        init_xfrac, init_yfrac, xstep_u, ystep_u, colormap,
                     );
                     run_start = if other.is_some() {
-                        run_flat_name = other.unwrap();
+                        let (name, li) = other.unwrap();
+                        run_flat_name = name;
+                        run_light = li;
                         Some(x)
                     } else {
                         None
@@ -624,8 +648,8 @@ pub fn render_level(
         // Flush any remaining run.
         if let Some(start) = run_start {
             flush_span(
-                cache, fb, start, SCREEN_W - 1, &run_flat_name, y,
-                init_xfrac, init_yfrac, xstep_u, ystep_u,
+                cache, fb, start, SCREEN_W - 1, &run_flat_name, run_light, y,
+                init_xfrac, init_yfrac, xstep_u, ystep_u, colormap,
             );
         }
     }
@@ -863,7 +887,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 0, Bam::ZERO, &mut fb, &palette, None, None);
+        render_level(&level, 0, 0, Bam::ZERO, &mut fb, &palette, None, None, None);
 
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
         assert!(has_nonzero, "framebuffer should be non-zero after rendering background");
@@ -877,7 +901,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None);
+        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None, None);
     }
 
     #[test]
@@ -886,10 +910,10 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         let mut fb1 = Framebuffer::new();
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb1, &palette, None, None);
+        render_level(&level, 64, 0, Bam::ZERO, &mut fb1, &palette, None, None, None);
 
         let mut fb2 = Framebuffer::new();
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb2, &palette, None, None);
+        render_level(&level, 64, 0, Bam::ZERO, &mut fb2, &palette, None, None, None);
 
         assert_eq!(fb1.data.as_slice(), fb2.data.as_slice());
     }
@@ -922,7 +946,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 64, Bam::ZERO, &mut fb, &palette, None, None);
+        render_level(&level, 0, 64, Bam::ZERO, &mut fb, &palette, None, None, None);
 
         // Background colour index 25 was written to the top half.
         assert_eq!(fb.get_pixel(0, 0), Some(25));
@@ -938,7 +962,7 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // tex_cache = None should fall back to flat-shaded walls without panic.
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb, &palette, None, None);
+        render_level(&level, 64, 0, Bam::ZERO, &mut fb, &palette, None, None, None);
 
         // Should produce some output (background fill at minimum).
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
@@ -997,7 +1021,7 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // Player at (64, 0) facing forward — exercises the wall path.
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb, &palette, Some(&cache), None);
+        render_level(&level, 64, 0, Bam::ZERO, &mut fb, &palette, Some(&cache), None, None);
 
         // Should not panic and should produce some non-zero output.
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
@@ -1037,7 +1061,7 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // Player at y=0, wall at y=128, facing ANG90 = North (+Y direction).
-        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None);
+        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None, None);
 
         // The wall spans some columns around center (x=160).
         // We check that the framebuffer has been written in the upper half for
@@ -1083,7 +1107,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None);
+        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None, None);
 
         // We cannot directly inspect wall_top/wall_bot from outside, but we can
         // verify the visual outcome:
@@ -1134,7 +1158,7 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // Player at (64, 0) looking toward the wall at y=128 (ANG90 = North = +Y).
-        render_level(&level, 64, 0, ANG90, &mut fb, &palette, None, None);
+        render_level(&level, 64, 0, ANG90, &mut fb, &palette, None, None, None);
 
         // The wall should occupy vertical pixels around the center column.
         // Flat-shade color = 32 + (192 >> 3).min(31) = 32 + 24 = 56.

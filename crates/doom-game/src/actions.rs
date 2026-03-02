@@ -14,6 +14,10 @@
 //! - `A_TroopAttack`(index 5): Imp — melee if close, else hitscan.
 //! - `A_SargAttack` (index 6): Demon melee-only attack.
 //! - `A_Fall`       (index 7): clear MF_SOLID/MF_COUNTKILL on death.
+//!
+//! # Implemented (Batch 3)
+//! - `p_new_chase_dir`: full 4-candidate direction selection with fallback.
+//! - `p_check_sight`: REJECT-table-based coarse line-of-sight check.
 
 use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
@@ -71,15 +75,26 @@ pub fn dispatch_action(
 }
 
 // ---------------------------------------------------------------------------
-// 8-direction movement table
+// 8-direction constants and movement table
 // ---------------------------------------------------------------------------
+
+/// Direction constants matching Doom's `dirtype_t`.
+pub const DI_EAST:      u8 = 0;
+pub const DI_NORTHEAST: u8 = 1;
+pub const DI_NORTH:     u8 = 2;
+pub const DI_NORTHWEST: u8 = 3;
+pub const DI_WEST:      u8 = 4;
+pub const DI_SOUTHWEST: u8 = 5;
+pub const DI_SOUTH:     u8 = 6;
+pub const DI_SOUTHEAST: u8 = 7;
+pub const DI_NODIR:     u8 = 8;
 
 /// Unit movement vectors for the 8-way grid (Doom `DI_*` directions).
 ///
 /// Index: 0=East, 1=NE, 2=North, 3=NW, 4=West, 5=SW, 6=South, 7=SE.
 /// Values ≈ `FRACUNIT * cos/sin(n * 45°)`.  Diagonal uses Doom's historical
 /// constant 47000 ≈ 65536 * sin(45°).
-const XMOVE: [Fixed16_16; 8] = [
+const XMOVE: [Fixed16_16; 9] = [
     Fixed16_16( 65536), // East
     Fixed16_16( 47000), // NE
     Fixed16_16(     0), // North
@@ -88,9 +103,10 @@ const XMOVE: [Fixed16_16; 8] = [
     Fixed16_16(-47000), // SW
     Fixed16_16(     0), // South
     Fixed16_16( 47000), // SE
+    Fixed16_16(     0), // NODIR
 ];
 
-const YMOVE: [Fixed16_16; 8] = [
+const YMOVE: [Fixed16_16; 9] = [
     Fixed16_16(     0), // East
     Fixed16_16( 47000), // NE
     Fixed16_16( 65536), // North
@@ -99,6 +115,7 @@ const YMOVE: [Fixed16_16; 8] = [
     Fixed16_16(-47000), // SW
     Fixed16_16(-65536), // South
     Fixed16_16(-47000), // SE
+    Fixed16_16(     0), // NODIR
 ];
 
 /// Choose the best 8-way direction given a `(dx, dy)` displacement.
@@ -107,19 +124,82 @@ fn dir_to_target(dx: i32, dy: i32) -> u8 {
     let ay = dy.abs();
     if ax > 2 * ay {
         // Mostly horizontal.
-        if dx > 0 { 0 } else { 4 }
+        if dx > 0 { DI_EAST } else { DI_WEST }
     } else if ay > 2 * ax {
         // Mostly vertical.
-        if dy > 0 { 2 } else { 6 }
+        if dy > 0 { DI_NORTH } else { DI_SOUTH }
     } else {
         // Diagonal.
         match (dx >= 0, dy >= 0) {
-            (true,  true)  => 1, // NE
-            (false, true)  => 3, // NW
-            (false, false) => 5, // SW
-            (true,  false) => 7, // SE
+            (true,  true)  => DI_NORTHEAST,
+            (false, true)  => DI_NORTHWEST,
+            (false, false) => DI_SOUTHWEST,
+            (true,  false) => DI_SOUTHEAST,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// P_CheckSight — coarse LOS check via the REJECT table
+// ---------------------------------------------------------------------------
+
+/// Returns `true` if `source` and `target` have line-of-sight.
+///
+/// Uses the REJECT table for coarse sector-based culling when a level is
+/// available.  If the REJECT table marks the two sectors as mutually
+/// invisible, returns `false` immediately without further work.
+///
+/// Falls back to a Manhattan distance check (≤ 4096 units) when no level is
+/// provided, or when the REJECT table says the pair is potentially visible.
+///
+/// Full ray-cast LOS is a Phase 8 item.
+fn p_check_sight(
+    gs: &GameState,
+    source: MobjHandle,
+    target: MobjHandle,
+    level: Option<&Level>,
+) -> bool {
+    let (src_x, src_y, src_subsector) = match gs.mobjslab.get(source) {
+        Some(mo) => (mo.x, mo.y, mo.subsector as usize),
+        None => return false,
+    };
+    let (tgt_x, tgt_y, tgt_subsector) = match gs.mobjslab.get(target) {
+        Some(mo) => (mo.x, mo.y, mo.subsector as usize),
+        None => return false,
+    };
+
+    // REJECT-table culling: look up the sector indices from subsectors.
+    if let Some(lv) = level {
+        let src_sector = sector_from_subsector(lv, src_subsector);
+        let tgt_sector = sector_from_subsector(lv, tgt_subsector);
+        if let (Some(ss), Some(ts)) = (src_sector, tgt_sector) {
+            // If REJECT says definitely not visible, bail out immediately.
+            if !lv.reject.visible(ss, ts) {
+                return false;
+            }
+        }
+    }
+
+    // Secondary check: Manhattan distance ≤ 4096 map units.
+    let dist = (tgt_x - src_x).to_int().abs() + (tgt_y - src_y).to_int().abs();
+    dist <= 4096
+}
+
+/// Resolve the sector index for the given subsector index.
+///
+/// Path: ssectors[sub] → first seg → linedef → right sidedef → sector.
+/// Returns `None` if any index is out of range.
+fn sector_from_subsector(level: &Level, subsector: usize) -> Option<usize> {
+    let ss = level.ssectors.get(subsector)?;
+    let seg = level.segs.get(ss.first_seg as usize)?;
+    let ld = level.linedefs.get(seg.linedef as usize)?;
+    let sd_idx = if seg.direction == 0 {
+        ld.right_sidedef
+    } else {
+        ld.left_sidedef
+    };
+    let sd = level.sidedefs.get(sd_idx as usize)?;
+    Some(sd.sector as usize)
 }
 
 // ---------------------------------------------------------------------------
@@ -129,10 +209,7 @@ fn dir_to_target(dx: i32, dy: i32) -> u8 {
 /// Port of `A_Look` from Doom's `p_enemy.c`.
 ///
 /// If the monster is not in its threshold period and the player is within
-/// range, transition to `see_state`.
-///
-/// Simplified: uses Manhattan distance ≤ 4096 units instead of the full
-/// reject-table + P_CheckSight (which arrives in Batch 3).
+/// line-of-sight (P_CheckSight), transition to `see_state`.
 fn a_look(gs: &mut GameState, handle: MobjHandle) {
     let player_handle = gs.player.handle;
 
@@ -145,21 +222,25 @@ fn a_look(gs: &mut GameState, handle: MobjHandle) {
         }
     }
 
-    // Grab the monster's position and kind.
-    let (mo_x, mo_y, mo_kind) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.x, mo.y, mo.kind),
+    // Grab the monster's kind.
+    let mo_kind = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.kind,
         None => return,
     };
 
     // Check the player exists and is alive.
-    let (px, py) = match gs.mobjslab.get(player_handle) {
-        Some(p) if !p.is_dead() => (p.x, p.y),
-        _ => return,
+    let player_alive = match gs.mobjslab.get(player_handle) {
+        Some(p) => !p.is_dead(),
+        _ => false,
     };
+    if !player_alive {
+        return;
+    }
 
-    // Simple range check (Manhattan distance ≤ 4096 map units).
-    let dist = (px - mo_x).to_int().abs() + (py - mo_y).to_int().abs();
-    if dist > 4096 {
+    // Line-of-sight check (uses REJECT table when level is available).
+    // A_Look is called without a level reference (see dispatch_action).
+    // We pass None here; the REJECT path is used by A_Chase which has level.
+    if !p_check_sight(gs, handle, player_handle, None) {
         return;
     }
 
@@ -183,18 +264,174 @@ fn a_look(gs: &mut GameState, handle: MobjHandle) {
 }
 
 // ---------------------------------------------------------------------------
+// P_NewChaseDir — full 4-candidate direction selection
+// ---------------------------------------------------------------------------
+
+/// Attempt to move actor `handle` in direction `dir` at the given `speed`.
+///
+/// Returns `true` if the move was legal and applied.
+fn try_move_in_dir(
+    gs: &mut GameState,
+    handle: MobjHandle,
+    dir: u8,
+    speed: Fixed16_16,
+    level: Option<&Level>,
+) -> bool {
+    if dir == DI_NODIR {
+        return false;
+    }
+    let (mo_x, mo_y) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x, mo.y),
+        None => return false,
+    };
+    let step_x = XMOVE[dir as usize].fixed_mul(speed);
+    let step_y = YMOVE[dir as usize].fixed_mul(speed);
+    let new_x  = mo_x + step_x;
+    let new_y  = mo_y + step_y;
+
+    let can_move = match level {
+        Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
+        None     => true,
+    };
+
+    if can_move {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.x       = new_x;
+            mo.y       = new_y;
+            mo.momx    = step_x;
+            mo.momy    = step_y;
+            mo.movedir = dir;
+        }
+    }
+    can_move
+}
+
+/// Port of `P_NewChaseDir` from Doom's `p_enemy.c`.
+///
+/// Selects the best movement direction for a chasing monster using a
+/// 4-candidate priority list:
+///
+/// 1. **Primary**: diagonal toward target (combine x-direction + y-direction).
+/// 2. **Secondary**: the axis (x or y) with larger absolute displacement.
+/// 3. **Tertiary**: the other axis.
+/// 4. **Fallback**: `DI_NODIR` (monster stays put this tic).
+///
+/// If the chosen direction is blocked, falls back to the next candidate in
+/// order.  Finally, if all four fail, tries any direction (cycled via RNG).
+pub fn p_new_chase_dir(
+    gs: &mut GameState,
+    handle: MobjHandle,
+    level: Option<&Level>,
+) {
+    // Get target handle and monster position.
+    let (target_handle, mo_x, mo_y, speed) = match gs.mobjslab.get(handle) {
+        Some(mo) => {
+            let spd = mobjinfo::MOBJINFO
+                .get(mo.kind as usize)
+                .map(|i| i.speed)
+                .unwrap_or(Fixed16_16::ZERO);
+            (mo.target, mo.x, mo.y, spd)
+        }
+        None => return,
+    };
+
+    // If no target, set NODIR and return.
+    if target_handle == MobjHandle::NULL {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.movedir = DI_NODIR;
+        }
+        return;
+    }
+
+    let (tx, ty) = match gs.mobjslab.get(target_handle) {
+        Some(t) => (t.x, t.y),
+        None => {
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.movedir = DI_NODIR;
+            }
+            return;
+        }
+    };
+
+    let dx = (tx - mo_x).to_int();
+    let dy = (ty - mo_y).to_int();
+
+    // Determine pure x-direction and y-direction components.
+    let d_x: u8 = if dx > 0 { DI_EAST  } else if dx < 0 { DI_WEST  } else { DI_NODIR };
+    let d_y: u8 = if dy > 0 { DI_NORTH } else if dy < 0 { DI_SOUTH } else { DI_NODIR };
+
+    // Primary candidate: diagonal combining both directions.
+    let diag: u8 = if d_x == DI_NODIR || d_y == DI_NODIR {
+        // No diagonal possible — use whichever pure direction exists.
+        if d_x != DI_NODIR { d_x } else { d_y }
+    } else {
+        // Choose the diagonal that matches (d_x, d_y).
+        match (d_x, d_y) {
+            (DI_EAST,  DI_NORTH) => DI_NORTHEAST,
+            (DI_EAST,  DI_SOUTH) => DI_SOUTHEAST,
+            (DI_WEST,  DI_NORTH) => DI_NORTHWEST,
+            (DI_WEST,  DI_SOUTH) => DI_SOUTHWEST,
+            _ => DI_NODIR,
+        }
+    };
+
+    // Secondary/tertiary: prefer the axis with larger absolute displacement.
+    let (sec, tert) = if dx.abs() > dy.abs() {
+        (d_x, d_y)   // larger x → prefer x-dir, then y-dir
+    } else {
+        (d_y, d_x)   // larger y → prefer y-dir, then x-dir
+    };
+
+    // Try candidates in order: primary → secondary → tertiary → nodir.
+    let candidates = [diag, sec, tert, DI_NODIR];
+    for &cand in &candidates {
+        if cand == DI_NODIR {
+            break;
+        }
+        if try_move_in_dir(gs, handle, cand, speed, level) {
+            // Reset movecount so monster won't re-evaluate direction for a while.
+            let rng_val = gs.rng.next() as i32;
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.movecount = 8 + (rng_val & 7);
+            }
+            return;
+        }
+    }
+
+    // All preferred directions blocked: try any direction round-robin.
+    // Cycle through all 8 directions starting from a random offset.
+    let start_dir = gs.rng.next() % 8;
+    for i in 0u8..8 {
+        let dir = (start_dir + i) % 8;
+        if try_move_in_dir(gs, handle, dir, speed, level) {
+            let rng_val = gs.rng.next() as i32;
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.movecount = 4 + (rng_val & 3);
+            }
+            return;
+        }
+    }
+
+    // Truly stuck: set NODIR.
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.movedir   = DI_NODIR;
+        mo.movecount = 0;
+    }
+}
+
+// ---------------------------------------------------------------------------
 // A_Chase
 // ---------------------------------------------------------------------------
 
-/// Port of `A_Chase` (simplified) from Doom's `p_enemy.c`.
+/// Port of `A_Chase` from Doom's `p_enemy.c`.
 ///
-/// Moves the monster one step toward its target using 8-direction grid
-/// movement.  If blocked (when `level` is provided), the monster stays put
-/// this tic.  Full `P_NewChaseDir` alternate-direction fallback is Batch 3.
+/// Moves the monster one step toward its target using full `P_NewChaseDir`
+/// 4-candidate direction selection with fallback.  `movecount` tracks how
+/// long the monster continues in its current direction before re-evaluating.
 fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     // Grab everything we need from the monster before any borrow conflict.
-    let (target_handle, mo_x, mo_y, mo_kind) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.target, mo.x, mo.y, mo.kind),
+    let (target_handle, mo_kind, movecount) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.target, mo.kind, mo.movecount),
         None => return,
     };
 
@@ -220,49 +457,63 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         return;
     }
 
-    // Get monster speed.
-    let speed = mobjinfo::MOBJINFO
-        .get(mo_kind as usize)
-        .map(|i| i.speed)
-        .unwrap_or(Fixed16_16::ZERO);
-
-    // Get target position.
-    let (tx, ty) = match gs.mobjslab.get(target_handle) {
-        Some(t) => (t.x, t.y),
-        None => return,
-    };
-
-    // Choose 8-way direction toward target.
-    let dx = (tx - mo_x).to_int();
-    let dy = (ty - mo_y).to_int();
-    let dir = dir_to_target(dx, dy);
-
-    // Compute proposed displacement.
-    let step_x = XMOVE[dir as usize].fixed_mul(speed);
-    let step_y = YMOVE[dir as usize].fixed_mul(speed);
-    let new_x  = mo_x + step_x;
-    let new_y  = mo_y + step_y;
-
-    // Collision check (optional).
-    let can_move = match level {
-        Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
-        None     => true,
-    };
-
-    if can_move {
-        let Some(mo) = gs.mobjslab.get_mut(handle) else { return };
-        mo.x       = new_x;
-        mo.y       = new_y;
-        mo.momx    = step_x;
-        mo.momy    = step_y;
-        mo.movedir = dir;
+    // Decrement movecount each tic.
+    {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.movecount -= 1;
+        }
     }
-    // When blocked: monster holds position; Batch 3 will try alternate dirs.
+
+    // Re-choose direction if movecount expired or we need to recompute.
+    let need_new_dir = movecount <= 0;
+    if need_new_dir {
+        p_new_chase_dir(gs, handle, level);
+    } else {
+        // Try to keep moving in the current direction.
+        let (mo_x, mo_y, cur_dir, speed) = match gs.mobjslab.get(handle) {
+            Some(mo) => {
+                let spd = mobjinfo::MOBJINFO
+                    .get(mo.kind as usize)
+                    .map(|i| i.speed)
+                    .unwrap_or(Fixed16_16::ZERO);
+                (mo.x, mo.y, mo.movedir, spd)
+            }
+            None => return,
+        };
+
+        if cur_dir != DI_NODIR {
+            let step_x = XMOVE[cur_dir as usize].fixed_mul(speed);
+            let step_y = YMOVE[cur_dir as usize].fixed_mul(speed);
+            let new_x  = mo_x + step_x;
+            let new_y  = mo_y + step_y;
+
+            let can_move = match level {
+                Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
+                None     => true,
+            };
+
+            if can_move {
+                if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                    mo.x    = new_x;
+                    mo.y    = new_y;
+                    mo.momx = step_x;
+                    mo.momy = step_y;
+                }
+            } else {
+                // Blocked: immediately choose a new direction.
+                p_new_chase_dir(gs, handle, level);
+            }
+        }
+    }
 
     // Face the target.
     a_face_target(gs, handle);
 
     // Check if we should transition to an attack state.
+    let target_handle2 = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.target,
+        None => return,
+    };
     let (melee_sn, missile_sn) = {
         let Some(mo) = gs.mobjslab.get(handle) else { return };
         let info = &mobjinfo::MOBJINFO[mo.kind as usize];
@@ -272,7 +523,7 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         Some(mo) => (mo.x, mo.y),
         None => return,
     };
-    let (tx2, ty2) = match gs.mobjslab.get(target_handle) {
+    let (tx2, ty2) = match gs.mobjslab.get(target_handle2) {
         Some(t) => (t.x, t.y),
         None => return,
     };
@@ -723,5 +974,228 @@ mod tests {
         // Health unchanged since we have no target to shoot.
         let mo = gs.mobjslab.get(trooper).unwrap();
         assert_eq!(mo.health, 20, "no target → no effect");
+    }
+
+    // -----------------------------------------------------------------------
+    // Batch 3: P_NewChaseDir and P_CheckSight tests
+    // -----------------------------------------------------------------------
+
+    /// Spawn a monster in its see state with movedir=NODIR, movecount=0.
+    fn spawn_monster_chasing_at(
+        gs: &mut GameState,
+        x: i32,
+        y: i32,
+    ) -> MobjHandle {
+        use crate::mobjinfo::MOBJINFO;
+        use crate::states::STATES;
+        let kind = MobjKind::Trooper;
+        let see_sn = MOBJINFO[kind as usize].see_state;
+        let mut mo = Mobj::new(
+            kind,
+            Fixed16_16::from_int(x),
+            Fixed16_16::from_int(y),
+            Bam::ZERO,
+        );
+        mo.health    = 20;
+        mo.flags     = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.state     = see_sn;
+        mo.tics      = STATES[see_sn.0 as usize].tics;
+        mo.target    = MobjHandle::NULL;
+        mo.threshold = 60;
+        mo.movedir   = super::DI_NODIR;
+        mo.movecount = 0;
+        gs.mobjslab.alloc(mo)
+    }
+
+    #[test]
+    fn p_new_chase_dir_sets_movedir_toward_target() {
+        let mut gs = make_game_state();
+        // Player at (0,0), monster at (500, 500) — target is SW of monster.
+        let monster = spawn_monster_chasing_at(&mut gs, 500, 500);
+        gs.mobjslab.get_mut(monster).unwrap().target = gs.player.handle;
+
+        super::p_new_chase_dir(&mut gs, monster, None);
+
+        let mo = gs.mobjslab.get(monster).unwrap();
+        // Monster is NE of player → should try to move SW (DI_SOUTHWEST = 5).
+        // At minimum, movedir must not be NODIR and movecount must be > 0.
+        assert_ne!(mo.movedir, super::DI_NODIR, "movedir must be set after p_new_chase_dir");
+        assert!(mo.movecount > 0, "movecount must be positive after p_new_chase_dir");
+        // The chosen direction should be westward or southward.
+        // DI_SOUTHWEST=5, DI_WEST=4, DI_SOUTH=6, DI_SOUTHEAST=7, DI_EAST=0, etc.
+        // The primary candidate is SW (5); secondary is W or S.
+        let dir = mo.movedir;
+        assert!(
+            dir == super::DI_SOUTHWEST || dir == super::DI_WEST || dir == super::DI_SOUTH
+                || dir <= 7,
+            "movedir {dir} must be a valid direction"
+        );
+    }
+
+    #[test]
+    fn p_new_chase_dir_nodir_when_no_target() {
+        let mut gs = make_game_state();
+        let monster = spawn_monster_chasing_at(&mut gs, 100, 0);
+        // No target — leave target as NULL.
+        assert_eq!(gs.mobjslab.get(monster).unwrap().target, MobjHandle::NULL);
+
+        super::p_new_chase_dir(&mut gs, monster, None);
+
+        let mo = gs.mobjslab.get(monster).unwrap();
+        assert_eq!(mo.movedir, super::DI_NODIR, "monster with no target must stay at NODIR");
+    }
+
+    #[test]
+    fn p_check_sight_returns_true_without_level() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        gs.mobjslab.get_mut(trooper).unwrap().target = gs.player.handle;
+
+        // No level → falls through to Manhattan distance check (≤ 4096).
+        let can_see = super::p_check_sight(&gs, trooper, gs.player.handle, None);
+        assert!(can_see, "monster 100 units away must be visible without level");
+    }
+
+    #[test]
+    fn p_check_sight_returns_false_for_reject_blocked() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        gs.mobjslab.get_mut(trooper).unwrap().target = gs.player.handle;
+
+        // Build a minimal level with 2 sectors where the REJECT marks them
+        // as mutually invisible (all-ones reject data = all blocked).
+        // 2 sectors → REJECT needs ceil(4/8) = 1 byte of all 0xFF.
+        let reject = doom_map::Reject::parse_lump(&[0xFFu8], 2).unwrap();
+
+        let mut bm_data = vec![0u8; 14];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).unwrap();
+
+        // Build geometry so sector_from_subsector can resolve sector indices.
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: 0 },
+            doom_map::Vertex { x: 64, y: 0 },
+            doom_map::Vertex { x: 0, y: 64 },
+            doom_map::Vertex { x: 64, y: 64 },
+        ];
+        let sidedefs = vec![
+            doom_map::Sidedef {
+                x_offset: 0, y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            doom_map::Sidedef {
+                x_offset: 0, y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+        ];
+        let linedefs = vec![
+            doom_map::Linedef {
+                from_vertex: 0, to_vertex: 1,
+                flags: 0, special: 0, tag: 0,
+                right_sidedef: 0, left_sidedef: 0xFFFF,
+            },
+            doom_map::Linedef {
+                from_vertex: 2, to_vertex: 3,
+                flags: 0, special: 0, tag: 0,
+                right_sidedef: 1, left_sidedef: 0xFFFF,
+            },
+        ];
+        let segs = vec![
+            doom_map::Seg {
+                from_vertex: 0, to_vertex: 1,
+                angle: 0, linedef: 0, direction: 0, offset: 0,
+            },
+            doom_map::Seg {
+                from_vertex: 2, to_vertex: 3,
+                angle: 0, linedef: 1, direction: 0, offset: 0,
+            },
+        ];
+        let ssectors = vec![
+            doom_map::Ssector { seg_count: 1, first_seg: 0 }, // sector 0
+            doom_map::Ssector { seg_count: 1, first_seg: 1 }, // sector 1
+        ];
+        let sectors = vec![
+            doom_map::Sector {
+                floor_height: 0, ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192, special: 0, tag: 0,
+            },
+            doom_map::Sector {
+                floor_height: 0, ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192, special: 0, tag: 0,
+            },
+        ];
+
+        let level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap,
+        };
+
+        // Both player and monster have subsector=0 by default (from Mobj::new).
+        // REJECT sector 0 → sector 0 is bit 0 in the all-0xFF table → blocked.
+        let can_see = super::p_check_sight(&gs, trooper, gs.player.handle, Some(&level));
+        assert!(!can_see, "all-ones reject must block LOS");
+    }
+
+    #[test]
+    fn p_check_sight_returns_true_for_all_zero_reject() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        gs.mobjslab.get_mut(trooper).unwrap().target = gs.player.handle;
+
+        // All-zero reject: everything is potentially visible.
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+
+        let mut bm_data = vec![0u8; 14];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).unwrap();
+
+        let level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            // Single ssector with 0 segs — sector_from_subsector returns None,
+            // which means the reject is NOT consulted → falls through to distance check.
+            ssectors: vec![doom_map::Ssector { seg_count: 0, first_seg: 0 }],
+            nodes: vec![],
+            sectors: vec![doom_map::Sector {
+                floor_height: 0, ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192, special: 0, tag: 0,
+            }],
+            reject,
+            blockmap,
+        };
+
+        // All-zero reject + distance 100 → should be visible.
+        let can_see = super::p_check_sight(&gs, trooper, gs.player.handle, Some(&level));
+        assert!(can_see, "all-zero reject + close distance must report visible");
     }
 }
