@@ -21,6 +21,7 @@ pub mod movement;
 pub mod pickups;
 pub mod player;
 pub mod projectile;
+pub mod savegame;
 pub mod snapshot;
 pub mod spawn;
 pub mod specials;
@@ -43,6 +44,10 @@ pub use pickups::{doomed_type_to_kind, p_check_pickups, p_touch_special_thing};
 pub use player::{AmmoType, PlayerState, WEAPON_AMMO, WeaponType};
 pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
+};
+pub use savegame::{
+    MAX_SAVE_SLOTS, SAVE_MAGIC, SaveError, SaveGame, SaveHeader, load_game, save_game,
+    save_slot_filename,
 };
 pub use snapshot::Snapshot;
 pub use spawn::{Skill, spawn_level_things};

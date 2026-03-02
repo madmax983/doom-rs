@@ -35,5 +35,5 @@ pub use sprite::{
     SpriteCache, SpriteFrame, compute_sprite_rotation, draw_sprite, draw_sprite_ex,
     draw_weapon_sprite, render_things, sprite_lump_name, thing_has_rotations, thing_sprite_prefix,
 };
-pub use statusbar::draw_status_bar;
+pub use statusbar::{StatusBarData, draw_status_bar, draw_status_bar_data};
 pub use texture::TextureCache;
