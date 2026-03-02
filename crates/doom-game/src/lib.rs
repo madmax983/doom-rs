@@ -14,6 +14,7 @@
 pub mod actions;
 pub mod combat;
 pub mod dehacked;
+pub mod intermission;
 pub mod mobj;
 pub mod mobjinfo;
 pub mod movement;
@@ -34,6 +35,7 @@ pub use actions::{
 };
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
 pub use dehacked::{DehError, DehPatch, FramePatch, ThingPatch, WeaponPatch};
+pub use intermission::{IntermissionStats, par_time};
 pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_try_move};
@@ -49,7 +51,9 @@ pub use specials::{
     lowest_adjacent_floor, next_highest_floor, p_use_lines, tick_ceilings, tick_floors,
     tick_sector_specials,
 };
-pub use state::{CeilingMover, DoomRng, FloorMover, GameState, MoveDirection, RNG_TABLE};
+pub use state::{
+    CeilingMover, DoomRng, ExitRequest, FloorMover, GameState, MoveDirection, RNG_TABLE,
+};
 pub use states::STATES;
 pub use tic::{FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt};
 pub use weapons::{fire_weapon, player_can_fire};

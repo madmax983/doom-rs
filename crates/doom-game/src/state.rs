@@ -8,6 +8,23 @@ use crate::mobj::MobjSlab;
 use crate::player::PlayerState;
 
 // ---------------------------------------------------------------------------
+// Exit request
+// ---------------------------------------------------------------------------
+
+/// The type of level exit the player triggered.
+///
+/// Set by `activate_linedef` when a switch or walk-trigger exit line is
+/// activated.  Cleared to `None` at the start of each tick so the caller
+/// can observe it exactly once.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExitRequest {
+    /// Normal exit (next sequential map).
+    Normal,
+    /// Secret exit (secret map).
+    Secret,
+}
+
+// ---------------------------------------------------------------------------
 // Sector mover / light thinker types
 // ---------------------------------------------------------------------------
 
@@ -235,6 +252,12 @@ pub struct GameState {
     pub active_ceilings: Vec<CeilingMover>,
     /// Active floor movers / lifts (ticked by `specials::tick_floors`).
     pub active_floors: Vec<FloorMover>,
+
+    /// Level exit requested this tic (cleared to `None` at start of each tick).
+    pub exit_request: Option<ExitRequest>,
+
+    /// Number of tics elapsed in the current level (incremented each tick).
+    pub level_time: u32,
 }
 
 impl GameState {
@@ -261,6 +284,8 @@ impl GameState {
             active_lights: Vec::new(),
             active_ceilings: Vec::new(),
             active_floors: Vec::new(),
+            exit_request: None,
+            level_time: 0,
         }
     }
 }

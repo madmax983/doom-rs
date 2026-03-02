@@ -95,6 +95,11 @@ impl GameState {
     /// and sector specials) and `Some(&mut level)` in real gameplay.
     pub fn tick(&mut self, cmd: TicCmd, mut level: Option<&mut Level>) {
         self.tic_num = self.tic_num.wrapping_add(1);
+        self.level_time = self.level_time.wrapping_add(1);
+
+        // Clear any exit request from the previous tic so callers see it
+        // exactly once.
+        self.exit_request = None;
 
         // Movement + attack (immutable level borrow).
         self.p_move_player(cmd, level.as_deref());
@@ -132,6 +137,26 @@ impl GameState {
         if let Some(lv) = level.as_deref() {
             let handle = self.player.handle;
             crate::specials::tick_sector_specials(self, lv, handle);
+        }
+
+        // Secret sector detection (special type 9): when the player is standing
+        // on a secret sector, increment their secret_count and clear the sector
+        // special so it only counts once.
+        if !self.player.is_dead() {
+            if let Some(lv) = level.as_deref_mut() {
+                let player_z = self
+                    .mobjslab
+                    .get(self.player.handle)
+                    .map(|mo| mo.z.to_int());
+                if let Some(pz) = player_z {
+                    for sector in &mut lv.sectors {
+                        if sector.special == 9 && pz == sector.floor_height as i32 {
+                            self.player.secret_count += 1;
+                            sector.special = 0;
+                        }
+                    }
+                }
+            }
         }
 
         // Animated doors, ceilings, floors, and light specials (mutable level borrow).
@@ -467,5 +492,124 @@ mod tests {
             gs.player.weapon, original_weapon,
             "Should not switch to unowned weapon"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: level_time
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn level_time_increments_each_tick() {
+        let mut gs = make_game_state();
+        assert_eq!(gs.level_time, 0, "level_time starts at 0");
+        gs.tick(TicCmd::default(), None);
+        assert_eq!(gs.level_time, 1, "level_time must be 1 after first tick");
+        gs.tick(TicCmd::default(), None);
+        assert_eq!(gs.level_time, 2, "level_time must be 2 after second tick");
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: exit_request cleared each tick
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn exit_request_cleared_at_tick_start() {
+        let mut gs = make_game_state();
+        gs.exit_request = Some(crate::state::ExitRequest::Normal);
+        gs.tick(TicCmd::default(), None);
+        assert_eq!(
+            gs.exit_request, None,
+            "exit_request must be cleared at the start of each tick"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: secret sector detection (special type 9)
+    // -----------------------------------------------------------------------
+
+    fn make_secret_level(floor_height: i16) -> doom_map::Level {
+        let bm = make_minimal_blockmap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![doom_map::Sector {
+                floor_height,
+                ceil_height: floor_height + 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 9, // secret sector
+                tag: 0,
+            }],
+            reject,
+            blockmap: bm,
+        }
+    }
+
+    fn make_minimal_blockmap() -> doom_map::Blockmap {
+        let mut bm_data = vec![0u8; 14];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        doom_map::Blockmap::parse_lump(&bm_data).unwrap()
+    }
+
+    #[test]
+    fn secret_sector_increments_secret_count() {
+        let mut gs = make_game_state();
+        // Player mobj is at z=0, matching the secret sector floor.
+        let mut level = make_secret_level(0);
+        assert_eq!(gs.player.secret_count, 0);
+
+        gs.tick(TicCmd::default(), Some(&mut level));
+
+        assert_eq!(
+            gs.player.secret_count, 1,
+            "entering a secret sector (special=9) must increment secret_count"
+        );
+    }
+
+    #[test]
+    fn secret_sector_only_counts_once() {
+        let mut gs = make_game_state();
+        let mut level = make_secret_level(0);
+
+        gs.tick(TicCmd::default(), Some(&mut level));
+        assert_eq!(gs.player.secret_count, 1);
+        assert_eq!(
+            level.sectors[0].special, 0,
+            "secret sector special must be cleared after discovery"
+        );
+
+        // Tick again — sector no longer has special=9, count must not increase.
+        gs.tick(TicCmd::default(), Some(&mut level));
+        assert_eq!(
+            gs.player.secret_count, 1,
+            "secret_count must not increment again after sector special is cleared"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: ExitRequest derive traits
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn exit_request_clone_copy_partial_eq() {
+        use crate::state::ExitRequest;
+        let a = ExitRequest::Normal;
+        let b = a; // Copy
+        let c = a.clone(); // Clone
+        assert_eq!(a, b, "ExitRequest must implement Copy");
+        assert_eq!(a, c, "ExitRequest must implement Clone");
+        assert_ne!(ExitRequest::Normal, ExitRequest::Secret, "Normal != Secret");
     }
 }

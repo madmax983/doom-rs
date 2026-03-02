@@ -8,12 +8,14 @@
 //! - `tick_lights`: advance light specials.
 //! - `spawn_level_specials`: initialise light thinkers on level load.
 //! - `p_use_lines`: player USE activation, dispatches to `activate_linedef`.
-//! - `activate_linedef`: door toggle (types 1, 2, 26, 27, 28, 29, 63, 64).
+//! - `activate_linedef`: door toggle (types 1, 2, 26–29, 63, 64), exits (11, 51, 52, 124).
 
 use doom_map::{Level, SIDEDEF_NONE};
 
 use crate::mobj::MobjHandle;
-use crate::state::{CeilingMover, DoorMover, FloorMover, GameState, LightSpecial, MoveDirection};
+use crate::state::{
+    CeilingMover, DoorMover, ExitRequest, FloorMover, GameState, LightSpecial, MoveDirection,
+};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -995,8 +997,25 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             }
         }
 
-        // --- Type 11: Exit — no-op stub ---
-        11 => {}
+        // --- Type 11: S1 Exit (normal) ---
+        11 => {
+            gs.exit_request = Some(ExitRequest::Normal);
+        }
+
+        // --- Type 51: S1 Secret Exit ---
+        51 => {
+            gs.exit_request = Some(ExitRequest::Secret);
+        }
+
+        // --- Type 52: W1 Exit (walk trigger, normal) ---
+        52 => {
+            gs.exit_request = Some(ExitRequest::Normal);
+        }
+
+        // --- Type 124: W1 Secret Exit (walk trigger) ---
+        124 => {
+            gs.exit_request = Some(ExitRequest::Secret);
+        }
 
         // -----------------------------------------------------------------
         // Crushers
@@ -2377,5 +2396,71 @@ mod tests {
         assert_eq!(gs2.active_floors.len(), 1, "clone must include floors");
         assert_eq!(gs2.active_ceilings[0].top_height, 128);
         assert_eq!(gs2.active_floors[0].target_height, 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: exit line types (11, 51, 52, 124)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn exit_type_11_sets_normal_exit() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level_with_special(0, 11);
+
+        assert_eq!(gs.exit_request, None, "precondition: no exit request");
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.exit_request,
+            Some(crate::state::ExitRequest::Normal),
+            "type 11 must set ExitRequest::Normal"
+        );
+    }
+
+    #[test]
+    fn exit_type_51_sets_secret_exit() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level_with_special(0, 51);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.exit_request,
+            Some(crate::state::ExitRequest::Secret),
+            "type 51 must set ExitRequest::Secret"
+        );
+    }
+
+    #[test]
+    fn exit_type_52_walk_sets_normal_exit() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level_with_special(0, 52);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.exit_request,
+            Some(crate::state::ExitRequest::Normal),
+            "type 52 (walk trigger) must set ExitRequest::Normal"
+        );
+    }
+
+    #[test]
+    fn exit_type_124_walk_sets_secret_exit() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level_with_special(0, 124);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.exit_request,
+            Some(crate::state::ExitRequest::Secret),
+            "type 124 (walk trigger) must set ExitRequest::Secret"
+        );
+    }
+
+    #[test]
+    fn exit_request_is_none_by_default() {
+        let gs = GameState::new("TEST");
+        assert_eq!(
+            gs.exit_request, None,
+            "exit_request must be None on creation"
+        );
     }
 }

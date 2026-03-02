@@ -22,7 +22,7 @@ pub mod texture;
 pub mod visplane;
 
 pub use anim::{AnimSequence, AnimState};
-pub use automap::draw_automap;
+pub use automap::{AutomapState, draw_automap, draw_automap_ex, line_color};
 pub use colormap::ColormapCache;
 pub use column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column, draw_column_solid};
 pub use flat_cache::FlatCache;
