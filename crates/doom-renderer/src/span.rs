@@ -88,9 +88,13 @@ mod tests {
         // Fill the flat with value 7 everywhere.
         source.fill(7);
         let p = DrawSpanParams {
-            y: 10, x1: 0, x2: 9,
-            ds_xfrac: 0, ds_yfrac: 0,
-            ds_xstep: 1 << 16, ds_ystep: 0,
+            y: 10,
+            x1: 0,
+            x2: 9,
+            ds_xfrac: 0,
+            ds_yfrac: 0,
+            ds_xstep: 1 << 16,
+            ds_ystep: 0,
             source: &source,
             colormap: &IDENTITY_COLORMAP,
         };

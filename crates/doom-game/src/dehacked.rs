@@ -189,13 +189,12 @@ impl DehPatch {
                 let total = old_len + new_len;
                 if remaining.len() < total {
                     // Not enough data — store what we have and stop.
-                    let old_text = remaining.get(..old_len.min(remaining.len()))
+                    let old_text = remaining
+                        .get(..old_len.min(remaining.len()))
                         .unwrap_or(remaining)
                         .to_owned();
                     let start = old_len.min(remaining.len());
-                    let new_text = remaining.get(start..)
-                        .unwrap_or("")
-                        .to_owned();
+                    let new_text = remaining.get(start..).unwrap_or("").to_owned();
                     patch.texts.push((old_text, new_text));
                     break;
                 }
@@ -242,10 +241,7 @@ impl DehPatch {
 
         // Thing N [optional name]
         if let Some(thing_part) = trimmed.strip_prefix("Thing ") {
-            let num_str = thing_part
-                .split_whitespace()
-                .next()
-                .unwrap_or("");
+            let num_str = thing_part.split_whitespace().next().unwrap_or("");
             if let Ok(n) = num_str.parse::<usize>() {
                 let old = std::mem::replace(
                     section,
@@ -261,10 +257,7 @@ impl DehPatch {
 
         // Frame N
         if let Some(frame_part) = trimmed.strip_prefix("Frame ") {
-            let num_str = frame_part
-                .split_whitespace()
-                .next()
-                .unwrap_or("");
+            let num_str = frame_part.split_whitespace().next().unwrap_or("");
             if let Ok(n) = num_str.parse::<usize>() {
                 let old = std::mem::replace(
                     section,
@@ -280,10 +273,7 @@ impl DehPatch {
 
         // Weapon N [optional name]
         if let Some(weapon_part) = trimmed.strip_prefix("Weapon ") {
-            let num_str = weapon_part
-                .split_whitespace()
-                .next()
-                .unwrap_or("");
+            let num_str = weapon_part.split_whitespace().next().unwrap_or("");
             if let Ok(n) = num_str.parse::<usize>() {
                 let old = std::mem::replace(
                     section,
@@ -305,25 +295,25 @@ impl DehPatch {
             Section::Thing(tp) => {
                 let (key, val) = Self::split_field(trimmed)?;
                 match key {
-                    "Hit points"     => tp.hit_points    = Some(Self::parse_i32(val)?),
-                    "Speed"          => tp.speed         = Some(Self::parse_i32(val)?),
-                    "Radius"         => tp.radius        = Some(Self::parse_i32(val)?),
-                    "Height"         => tp.height        = Some(Self::parse_i32(val)?),
-                    "Damage"         => tp.damage        = Some(Self::parse_i32(val)?),
-                    "Reaction time"  => tp.reaction_time = Some(Self::parse_i32(val)?),
-                    "Pain chance"    => tp.pain_chance   = Some(Self::parse_i32(val)?),
-                    "Bits"           => tp.bits          = Some(Self::parse_u32(val)?),
-                    "Mass"           => tp.mass          = Some(Self::parse_i32(val)?),
+                    "Hit points" => tp.hit_points = Some(Self::parse_i32(val)?),
+                    "Speed" => tp.speed = Some(Self::parse_i32(val)?),
+                    "Radius" => tp.radius = Some(Self::parse_i32(val)?),
+                    "Height" => tp.height = Some(Self::parse_i32(val)?),
+                    "Damage" => tp.damage = Some(Self::parse_i32(val)?),
+                    "Reaction time" => tp.reaction_time = Some(Self::parse_i32(val)?),
+                    "Pain chance" => tp.pain_chance = Some(Self::parse_i32(val)?),
+                    "Bits" => tp.bits = Some(Self::parse_u32(val)?),
+                    "Mass" => tp.mass = Some(Self::parse_i32(val)?),
                     _ => {} // Unknown thing field — silently ignore.
                 }
             }
             Section::Frame(fp) => {
                 let (key, val) = Self::split_field(trimmed)?;
                 match key {
-                    "Sprite number"    => fp.sprite_number    = Some(Self::parse_u8(val)?),
+                    "Sprite number" => fp.sprite_number = Some(Self::parse_u8(val)?),
                     "Sprite subnumber" => fp.sprite_subnumber = Some(Self::parse_u8(val)?),
-                    "Duration"         => fp.duration         = Some(Self::parse_i32(val)?),
-                    "Next frame"       => fp.next_frame       = Some(Self::parse_usize(val)?),
+                    "Duration" => fp.duration = Some(Self::parse_i32(val)?),
+                    "Next frame" => fp.next_frame = Some(Self::parse_usize(val)?),
                     _ => {}
                 }
             }
@@ -331,7 +321,7 @@ impl DehPatch {
                 let (key, val) = Self::split_field(trimmed)?;
                 match key {
                     "Ammo type" => wp.ammo_type = Some(Self::parse_i32(val)?),
-                    "Min Ammo"  => wp.min_ammo  = Some(Self::parse_i32(val)?),
+                    "Min Ammo" => wp.min_ammo = Some(Self::parse_i32(val)?),
                     _ => {}
                 }
             }
@@ -519,8 +509,8 @@ mod tests {
 
     #[test]
     fn deh_parse_frame_duration() {
-        let patch = DehPatch::parse("Frame 5\nDuration = 10\n")
-            .expect("valid Frame section must parse OK");
+        let patch =
+            DehPatch::parse("Frame 5\nDuration = 10\n").expect("valid Frame section must parse OK");
         assert_eq!(patch.frames.len(), 1);
         let f = &patch.frames[0];
         assert_eq!(f.frame_num, 5);
@@ -548,8 +538,8 @@ mod tests {
     #[test]
     fn deh_parse_text_section() {
         // "Text 3 4" → read 3 bytes ("old") then 4 bytes ("neww")
-        let patch = DehPatch::parse("Text 3 4\noldneww\n")
-            .expect("valid Text section must parse OK");
+        let patch =
+            DehPatch::parse("Text 3 4\noldneww\n").expect("valid Text section must parse OK");
         assert_eq!(patch.texts.len(), 1);
         // The raw bytes after the header line include a leading '\n' before "oldneww".
         // Our parser skips the header line then reads from `remaining`.
@@ -592,13 +582,13 @@ mod tests {
 
     #[test]
     fn deh_apply_thing_health() {
-        let patch = DehPatch::parse("Thing 1\nHit points = 999\n")
-            .expect("parse must succeed");
+        let patch = DehPatch::parse("Thing 1\nHit points = 999\n").expect("parse must succeed");
 
         let mut mobjinfo: Vec<MobjInfo> = MOBJINFO.to_vec();
         let mut states: Vec<MobjStateEntry> = STATES.to_vec();
 
-        patch.apply(&mut mobjinfo, &mut states)
+        patch
+            .apply(&mut mobjinfo, &mut states)
             .expect("apply must succeed");
 
         assert_eq!(

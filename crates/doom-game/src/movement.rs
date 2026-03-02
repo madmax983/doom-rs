@@ -13,9 +13,9 @@
 //!    d. Two-sided → check opening height ≥ actor height and step ≤ 24 units.
 //! 4. Return `true` if no blocking linedef was found.
 
+use crate::mobj::{MobjHandle, MobjSlab, flags};
 use doom_map::Level;
 use doom_types::Fixed16_16;
-use crate::mobj::{MobjHandle, MobjSlab, flags};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -61,16 +61,16 @@ pub fn p_try_move(
     }
 
     // Proposed bounding box.
-    let left   = new_x - radius;
-    let right  = new_x + radius;
+    let left = new_x - radius;
+    let right = new_x + radius;
     let bottom = new_y - radius;
-    let top    = new_y + radius;
+    let top = new_y + radius;
 
     let bm = &level.blockmap;
     let x_origin = bm.x_origin as i32;
     let y_origin = bm.y_origin as i32;
-    let x_count  = bm.x_count  as i32;
-    let y_count  = bm.y_count  as i32;
+    let x_count = bm.x_count as i32;
+    let y_count = bm.y_count as i32;
 
     // Convert a world coordinate to a blockmap column/row index.
     let to_block = |world: Fixed16_16, origin: i32, count: i32| -> usize {
@@ -78,10 +78,10 @@ pub fn p_try_move(
         cell.max(0).min(count - 1) as usize
     };
 
-    let col_lo = to_block(left,   x_origin, x_count);
-    let col_hi = to_block(right,  x_origin, x_count);
+    let col_lo = to_block(left, x_origin, x_count);
+    let col_hi = to_block(right, x_origin, x_count);
     let row_lo = to_block(bottom, y_origin, y_count);
-    let row_hi = to_block(top,    y_origin, y_count);
+    let row_hi = to_block(top, y_origin, y_count);
 
     // Iterate blockmap cells covered by the bounding box.
     for row in row_lo..=row_hi {
@@ -92,7 +92,7 @@ pub fn p_try_move(
                 };
 
                 let v1 = &level.vertexes[ld.from_vertex as usize];
-                let v2 = &level.vertexes[ld.to_vertex   as usize];
+                let v2 = &level.vertexes[ld.to_vertex as usize];
 
                 let lx1 = Fixed16_16::from_int(v1.x as i32);
                 let ly1 = Fixed16_16::from_int(v1.y as i32);
@@ -104,15 +104,12 @@ pub fn p_try_move(
                 let lx_max = lx1.max(lx2);
                 let ly_min = ly1.min(ly2);
                 let ly_max = ly1.max(ly2);
-                if right <= lx_min || left >= lx_max
-                    || top <= ly_min || bottom >= ly_max
-                {
+                if right <= lx_min || left >= lx_max || top <= ly_min || bottom >= ly_max {
                     continue;
                 }
 
                 // --- Line-straddling test ---
-                if !bbox_straddles_line(left, bottom, right, top,
-                                        lx1, ly1, lx2, ly2) {
+                if !bbox_straddles_line(left, bottom, right, top, lx1, ly1, lx2, ly2) {
                     continue;
                 }
 
@@ -129,14 +126,12 @@ pub fn p_try_move(
                     return false;
                 };
                 let front = &level.sectors[right_sd.sector as usize];
-                let back  = &level.sectors[left_sd.sector  as usize];
+                let back = &level.sectors[left_sd.sector as usize];
 
-                let open_floor = Fixed16_16::from_int(
-                    front.floor_height.max(back.floor_height) as i32,
-                );
-                let open_ceil = Fixed16_16::from_int(
-                    front.ceil_height.min(back.ceil_height) as i32,
-                );
+                let open_floor =
+                    Fixed16_16::from_int(front.floor_height.max(back.floor_height) as i32);
+                let open_ceil =
+                    Fixed16_16::from_int(front.ceil_height.min(back.ceil_height) as i32);
 
                 // Gap too small for actor to fit.
                 if open_ceil - open_floor < height {
@@ -165,10 +160,10 @@ pub fn p_try_move(
 /// of the bbox based on the line's quadrant, then check if they have opposite
 /// signs of the cross product with the line direction.
 fn bbox_straddles_line(
-    left:   Fixed16_16,
+    left: Fixed16_16,
     bottom: Fixed16_16,
-    right:  Fixed16_16,
-    top:    Fixed16_16,
+    right: Fixed16_16,
+    top: Fixed16_16,
     x1: Fixed16_16,
     y1: Fixed16_16,
     x2: Fixed16_16,
@@ -225,21 +220,21 @@ mod tests {
 
         doom_map::Level {
             name: "TEST".to_string(),
-            things:   vec![],
+            things: vec![],
             linedefs: vec![],
             sidedefs: vec![],
             vertexes: vec![],
-            segs:     vec![],
+            segs: vec![],
             ssectors: vec![],
-            nodes:    vec![],
-            sectors:  vec![doom_map::Sector {
+            nodes: vec![],
+            sectors: vec![doom_map::Sector {
                 floor_height: 0,
-                ceil_height:  128,
-                floor_flat:   *b"FLAT1\0\0\0",
-                ceil_flat:    *b"FLAT2\0\0\0",
-                light_level:  192,
-                special:      0,
-                tag:          0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
             }],
             reject,
             blockmap,
@@ -248,8 +243,12 @@ mod tests {
 
     fn make_player_slab() -> (MobjSlab, MobjHandle) {
         let mut slab = MobjSlab::new();
-        let mut mo = Mobj::new(MobjKind::Player,
-            Fixed16_16::ZERO, Fixed16_16::ZERO, Bam::ZERO);
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
         mo.health = 100;
         mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
         mo.radius = Fixed16_16::from_int(16);
@@ -263,8 +262,13 @@ mod tests {
         let level = make_open_level();
         let (slab, handle) = make_player_slab();
         assert!(
-            p_try_move(&slab, handle,
-                Fixed16_16::from_int(50), Fixed16_16::from_int(50), &level),
+            p_try_move(
+                &slab,
+                handle,
+                Fixed16_16::from_int(50),
+                Fixed16_16::from_int(50),
+                &level
+            ),
             "empty level must allow all movement"
         );
     }
@@ -275,8 +279,13 @@ mod tests {
         let (mut slab, handle) = make_player_slab();
         slab.get_mut(handle).unwrap().flags |= flags::MF_NOCLIP;
         // Even with impossible coordinates, noclip always succeeds.
-        assert!(p_try_move(&slab, handle,
-            Fixed16_16::from_int(99999), Fixed16_16::from_int(99999), &level));
+        assert!(p_try_move(
+            &slab,
+            handle,
+            Fixed16_16::from_int(99999),
+            Fixed16_16::from_int(99999),
+            &level
+        ));
     }
 
     #[test]
@@ -284,18 +293,27 @@ mod tests {
         let level = make_open_level();
         let (mut slab, handle) = make_player_slab();
         slab.free(handle);
-        assert!(!p_try_move(&slab, handle,
-            Fixed16_16::from_int(10), Fixed16_16::from_int(10), &level));
+        assert!(!p_try_move(
+            &slab,
+            handle,
+            Fixed16_16::from_int(10),
+            Fixed16_16::from_int(10),
+            &level
+        ));
     }
 
     #[test]
     fn bbox_straddles_line_basic() {
         // Horizontal wall at y=0.  Actor bbox from y=-10 to y=+10 straddles it.
         let straddles = bbox_straddles_line(
-            Fixed16_16::from_int(-10), Fixed16_16::from_int(-10),
-            Fixed16_16::from_int( 10), Fixed16_16::from_int( 10),
-            Fixed16_16::from_int(-100), Fixed16_16::ZERO,
-            Fixed16_16::from_int( 100), Fixed16_16::ZERO,
+            Fixed16_16::from_int(-10),
+            Fixed16_16::from_int(-10),
+            Fixed16_16::from_int(10),
+            Fixed16_16::from_int(10),
+            Fixed16_16::from_int(-100),
+            Fixed16_16::ZERO,
+            Fixed16_16::from_int(100),
+            Fixed16_16::ZERO,
         );
         assert!(straddles);
     }
@@ -304,10 +322,14 @@ mod tests {
     fn bbox_does_not_straddle_far_line() {
         // Wall at y=1000, actor at y=-10..+10.
         let straddles = bbox_straddles_line(
-            Fixed16_16::from_int(-10), Fixed16_16::from_int(-10),
-            Fixed16_16::from_int( 10), Fixed16_16::from_int( 10),
-            Fixed16_16::from_int(-100), Fixed16_16::from_int(1000),
-            Fixed16_16::from_int( 100), Fixed16_16::from_int(1000),
+            Fixed16_16::from_int(-10),
+            Fixed16_16::from_int(-10),
+            Fixed16_16::from_int(10),
+            Fixed16_16::from_int(10),
+            Fixed16_16::from_int(-100),
+            Fixed16_16::from_int(1000),
+            Fixed16_16::from_int(100),
+            Fixed16_16::from_int(1000),
         );
         assert!(!straddles);
     }

@@ -63,7 +63,10 @@ impl FlatCache {
         // Trim null bytes and uppercase for lookup.
         let len = name.iter().position(|&b| b == 0).unwrap_or(8);
         let key = String::from_utf8_lossy(&name[..len]).to_uppercase();
-        self.flats.get(&key).map(|b| b.as_ref()).unwrap_or(&self.default_flat)
+        self.flats
+            .get(&key)
+            .map(|b| b.as_ref())
+            .unwrap_or(&self.default_flat)
     }
 
     /// Number of flats successfully loaded.
@@ -130,7 +133,11 @@ mod tests {
         let wad = WadFile::parse(empty_wad_bytes).expect("parse empty WAD");
         let cache = FlatCache::load(&wad);
         let default = cache.get(b"-\0\0\0\0\0\0\0");
-        assert_eq!(default.len(), FLAT_SIZE, "default flat must be {FLAT_SIZE} bytes");
+        assert_eq!(
+            default.len(),
+            FLAT_SIZE,
+            "default flat must be {FLAT_SIZE} bytes"
+        );
         assert!(
             default.iter().all(|&b| b == 0),
             "default flat must be all zeroes"
@@ -143,11 +150,8 @@ mod tests {
     fn test_flat_cache_name_trimming() {
         // Build a WAD with F_START, one flat, F_END.
         let flat_data = vec![42u8; FLAT_SIZE];
-        let lumps: Vec<(&str, &[u8])> = vec![
-            ("F_START", b""),
-            ("FLOOR4_8", &flat_data),
-            ("F_END", b""),
-        ];
+        let lumps: Vec<(&str, &[u8])> =
+            vec![("F_START", b""), ("FLOOR4_8", &flat_data), ("F_END", b"")];
         let wad_bytes = make_iwad(&lumps);
         let wad = WadFile::parse(wad_bytes).expect("parse WAD");
         let cache = FlatCache::load(&wad);
@@ -159,8 +163,7 @@ mod tests {
         // Same name as uppercase bytes with null terminator.
         let b = cache.get(b"FLOOR4_8");
         assert_eq!(
-            a as *const _,
-            b as *const _,
+            a as *const _, b as *const _,
             "same name should return same pointer"
         );
     }
@@ -189,11 +192,7 @@ mod tests {
             *b = (i % 255) as u8;
         }
 
-        let lumps: Vec<(&str, &[u8])> = vec![
-            ("F_START", b""),
-            ("NUKAGE1", &flat),
-            ("F_END", b""),
-        ];
+        let lumps: Vec<(&str, &[u8])> = vec![("F_START", b""), ("NUKAGE1", &flat), ("F_END", b"")];
         let wad_bytes = make_iwad(&lumps);
         let wad = WadFile::parse(wad_bytes).expect("parse WAD");
         let cache = FlatCache::load(&wad);

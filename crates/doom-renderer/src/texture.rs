@@ -51,7 +51,11 @@ impl TextureCache {
     pub fn load(wad: &WadFile) -> Self {
         let pnames = match wad.find_lump_data("PNAMES") {
             Some(d) => parse_pnames(d),
-            None => return TextureCache { textures: HashMap::new() },
+            None => {
+                return TextureCache {
+                    textures: HashMap::new(),
+                };
+            }
         };
 
         let mut textures = HashMap::new();
@@ -132,7 +136,7 @@ struct MapPatch {
     origin_x: i16,
     origin_y: i16,
     patch: u16, // index into pnames
-    // stepdir and colormap are unused
+                // stepdir and colormap are unused
 }
 
 /// Parse one TEXTURE1 or TEXTURE2 lump and insert composed textures into `out`.
@@ -154,9 +158,12 @@ fn parse_texture_lump(
         if off_idx + 4 > data.len() {
             break;
         }
-        let tex_offset =
-            u32::from_le_bytes([data[off_idx], data[off_idx + 1], data[off_idx + 2], data[off_idx + 3]])
-                as usize;
+        let tex_offset = u32::from_le_bytes([
+            data[off_idx],
+            data[off_idx + 1],
+            data[off_idx + 2],
+            data[off_idx + 3],
+        ]) as usize;
 
         if tex_offset + 20 > data.len() {
             continue;
@@ -175,10 +182,8 @@ fn parse_texture_lump(
         let name_len = name_bytes.iter().position(|&b| b == 0).unwrap_or(8);
         let name = String::from_utf8_lossy(&name_bytes[..name_len]).to_uppercase();
 
-        let width =
-            u16::from_le_bytes([data[tex_offset + 10], data[tex_offset + 11]]) as u32;
-        let height =
-            u16::from_le_bytes([data[tex_offset + 12], data[tex_offset + 13]]) as u32;
+        let width = u16::from_le_bytes([data[tex_offset + 10], data[tex_offset + 11]]) as u32;
+        let height = u16::from_le_bytes([data[tex_offset + 12], data[tex_offset + 13]]) as u32;
         // columndir at [tex_offset+14..tex_offset+18] — skipped
         let patch_count =
             u16::from_le_bytes([data[tex_offset + 18], data[tex_offset + 19]]) as usize;
@@ -219,7 +224,14 @@ fn parse_texture_lump(
                 Some(d) => d,
                 None => continue,
             };
-            blit_patch(patch_data, mp.origin_x, mp.origin_y, width, height_pow2, &mut texdata);
+            blit_patch(
+                patch_data,
+                mp.origin_x,
+                mp.origin_y,
+                width,
+                height_pow2,
+                &mut texdata,
+            );
         }
 
         // Pad the extra rows (height..height_pow2) by cycling the real rows.
@@ -236,7 +248,11 @@ fn parse_texture_lump(
 
         out.insert(
             name,
-            WallTexture { width, height: height_pow2, data: texdata },
+            WallTexture {
+                width,
+                height: height_pow2,
+                data: texdata,
+            },
         );
     }
 }
@@ -250,14 +266,7 @@ fn parse_texture_lump(
 /// `tex_w` and `tex_h` are the destination texture dimensions (height is
 /// already power-of-2 padded).  The origin coordinates can be negative
 /// (patch overhangs the texture edge) — those pixels are simply skipped.
-fn blit_patch(
-    patch: &[u8],
-    origin_x: i16,
-    origin_y: i16,
-    tex_w: u32,
-    tex_h: u32,
-    dest: &mut [u8],
-) {
+fn blit_patch(patch: &[u8], origin_x: i16, origin_y: i16, tex_w: u32, tex_h: u32, dest: &mut [u8]) {
     if patch.len() < 8 {
         return;
     }
@@ -485,14 +494,14 @@ mod tests {
 
         // Column data: one post per column.
         for _ in 0..w {
-            out.push(0);          // topdelta = 0
-            out.push(h as u8);    // length
-            out.push(0);          // padding before pixels
+            out.push(0); // topdelta = 0
+            out.push(h as u8); // length
+            out.push(0); // padding before pixels
             for _ in 0..h {
                 out.push(colour); // pixel data
             }
-            out.push(0);          // padding after pixels
-            out.push(0xFF);       // end of column
+            out.push(0); // padding after pixels
+            out.push(0xFF); // end of column
         }
 
         out
@@ -530,7 +539,10 @@ mod tests {
         let tex = cache.get(b"BRICK1\0\0").expect("texture should be present");
         assert_eq!(tex.width, 8, "texture width must match");
         // Height is padded to next pow2: 8 is already a power of 2.
-        assert_eq!(tex.height, 8, "texture height must match (no padding needed)");
+        assert_eq!(
+            tex.height, 8,
+            "texture height must match (no padding needed)"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -538,9 +550,14 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn test_texture_get_none_for_dash() {
-        let cache = TextureCache { textures: HashMap::new() };
+        let cache = TextureCache {
+            textures: HashMap::new(),
+        };
         let result = cache.get(b"-\0\0\0\0\0\0\0");
-        assert!(result.is_none(), "'-' must return None (no-texture sentinel)");
+        assert!(
+            result.is_none(),
+            "'-' must return None (no-texture sentinel)"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -621,11 +638,7 @@ mod tests {
 
         // Column 0, rows 0..4 should all be 99.
         for row in 0..4 {
-            assert_eq!(
-                tex.data[0 * h + row],
-                99,
-                "column 0 row {row} should be 99"
-            );
+            assert_eq!(tex.data[0 * h + row], 99, "column 0 row {row} should be 99");
         }
     }
 }

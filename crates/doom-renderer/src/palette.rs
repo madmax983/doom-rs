@@ -38,7 +38,11 @@ pub struct Rgb {
 
 impl Rgb {
     pub const BLACK: Self = Self { r: 0, g: 0, b: 0 };
-    pub const WHITE: Self = Self { r: 255, g: 255, b: 255 };
+    pub const WHITE: Self = Self {
+        r: 255,
+        g: 255,
+        b: 255,
+    };
 
     #[inline]
     pub const fn new(r: u8, g: u8, b: u8) -> Self {
@@ -69,7 +73,10 @@ impl PaletteLut {
         for chunk in data.chunks_exact(3) {
             lut.push(Rgb::new(chunk[0], chunk[1], chunk[2]));
         }
-        Ok(Self { data: lut, n_palettes: PLAYPAL_COUNT })
+        Ok(Self {
+            data: lut,
+            n_palettes: PLAYPAL_COUNT,
+        })
     }
 
     /// Build a default grayscale LUT for testing (all 14 palettes identical).
@@ -82,7 +89,10 @@ impl PaletteLut {
                 data.push(Rgb::new(i as u8, i as u8, i as u8));
             }
         }
-        Self { data, n_palettes: PLAYPAL_COUNT }
+        Self {
+            data,
+            n_palettes: PLAYPAL_COUNT,
+        }
     }
 
     /// Build a simple 4-color test LUT: 0=black, 1=red, 2=green, 3=blue, 4+=white.
@@ -100,7 +110,10 @@ impl PaletteLut {
                 data.push(rgb);
             }
         }
-        Self { data, n_palettes: PLAYPAL_COUNT }
+        Self {
+            data,
+            n_palettes: PLAYPAL_COUNT,
+        }
     }
 
     /// Look up `Rgb` for `(palette, color_index)`.
@@ -113,11 +126,15 @@ impl PaletteLut {
     }
 
     /// Number of palettes.
-    pub fn n_palettes(&self) -> usize { self.n_palettes }
+    pub fn n_palettes(&self) -> usize {
+        self.n_palettes
+    }
 }
 
 impl Default for PaletteLut {
-    fn default() -> Self { Self::grayscale() }
+    fn default() -> Self {
+        Self::grayscale()
+    }
 }
 
 #[cfg(test)]
@@ -145,7 +162,11 @@ mod tests {
     #[test]
     fn from_playpal_rejects_wrong_size() {
         let bad = vec![0u8; 100];
-        assert!(PaletteError::WrongSize { actual: 100 }.to_string().contains("100"));
+        assert!(
+            PaletteError::WrongSize { actual: 100 }
+                .to_string()
+                .contains("100")
+        );
         assert!(matches!(
             PaletteLut::from_playpal(&bad),
             Err(PaletteError::WrongSize { .. })
@@ -156,7 +177,9 @@ mod tests {
     fn from_playpal_parses_correctly() {
         let mut raw = vec![0u8; PLAYPAL_SIZE];
         // Palette 0, color 0 = (10, 20, 30)
-        raw[0] = 10; raw[1] = 20; raw[2] = 30;
+        raw[0] = 10;
+        raw[1] = 20;
+        raw[2] = 30;
         // Palette 1, color 0 = (40, 50, 60)
         raw[PLAYPAL_COLORS * 3] = 40;
         raw[PLAYPAL_COLORS * 3 + 1] = 50;

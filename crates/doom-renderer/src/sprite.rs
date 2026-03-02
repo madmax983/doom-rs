@@ -112,7 +112,9 @@ impl SpriteCache {
 
     /// Construct an empty cache (useful in tests).
     pub fn empty() -> Self {
-        Self { frames: HashMap::new() }
+        Self {
+            frames: HashMap::new(),
+        }
     }
 }
 
@@ -130,10 +132,10 @@ pub fn parse_picture(data: &[u8]) -> Option<SpriteFrame> {
         return None;
     }
 
-    let width  = u16::from_le_bytes([data[0], data[1]]) as usize;
+    let width = u16::from_le_bytes([data[0], data[1]]) as usize;
     let height = u16::from_le_bytes([data[2], data[3]]) as usize;
-    let left   = i16::from_le_bytes([data[4], data[5]]);
-    let top    = i16::from_le_bytes([data[6], data[7]]);
+    let left = i16::from_le_bytes([data[4], data[5]]);
+    let top = i16::from_le_bytes([data[6], data[7]]);
 
     // Zero-dimension pictures are not renderable.
     if width == 0 || height == 0 {
@@ -150,9 +152,7 @@ pub fn parse_picture(data: &[u8]) -> Option<SpriteFrame> {
 
     for col in 0..width {
         let table_pos = 8 + col * 4;
-        let off = u32::from_le_bytes(
-            data[table_pos..table_pos + 4].try_into().ok()?
-        ) as usize;
+        let off = u32::from_le_bytes(data[table_pos..table_pos + 4].try_into().ok()?) as usize;
 
         // Parse the column's posts.
         let mut pos = off;
@@ -196,10 +196,10 @@ pub fn parse_picture(data: &[u8]) -> Option<SpriteFrame> {
     }
 
     Some(SpriteFrame {
-        width:       width as u16,
-        height:      height as u16,
+        width: width as u16,
+        height: height as u16,
         left_offset: left,
-        top_offset:  top,
+        top_offset: top,
         pixels,
     })
 }
@@ -225,56 +225,56 @@ const PLAYER_HEIGHT: f32 = 41.0;
 /// (player starts, teleport destinations, etc.).
 fn thing_sprite(kind: u16) -> Option<[u8; 8]> {
     let base: &[u8; 4] = match kind {
-        1    => return None,    // player 1 start — no world sprite
-        2    => b"SHOT",        // shotgun (dropped)
-        3    => b"BSKU",        // blue skull key
-        5    => b"BKEY",        // blue keycard
-        6    => b"YKEY",        // yellow keycard
-        13   => b"RKEY",        // red keycard
-        38   => b"RSKU",        // red skull key
-        39   => b"YSKU",        // yellow skull key
-        40   => b"BSKU",        // blue skull key (alt number)
-        2001 => b"SHOT",        // shotgun pickup
-        2002 => b"MGUN",        // chaingun pickup
-        2003 => b"LAUN",        // rocket launcher
-        2004 => b"PLAS",        // plasma gun
-        2005 => b"CSAW",        // chainsaw
-        2006 => b"BFUG",        // BFG9000
-        2007 => b"CLIP",        // ammo clip
-        2008 => b"SHEL",        // shotgun shells
-        2010 => b"ROCK",        // rocket
-        2011 => b"STIM",        // stimpack
-        2012 => b"MEDI",        // medikit
-        2013 => b"SOUL",        // soulsphere
-        2014 => b"BON1",        // health bonus
-        2015 => b"BON2",        // armor bonus
-        2018 => b"ARM1",        // green armor
-        2019 => b"ARM2",        // blue armor
-        2022 => b"PINV",        // invulnerability sphere
-        2023 => b"PSTR",        // berserk pack
-        2024 => b"PINS",        // invisibility sphere
-        2025 => b"SUIT",        // radiation suit
-        2026 => b"PMAP",        // computer area map
-        2028 => b"COLU",        // floor lamp
-        2035 => b"BAR1",        // barrel (explosive)
-        2045 => b"PVIS",        // light amplification visor
-        3001 => b"TROO",        // imp
-        3002 => b"SARG",        // demon (pinky)
-        3003 => b"BOSS",        // baron of hell
-        3004 => b"POSS",        // former human (zombie man)
-        3005 => b"HEAD",        // cacodemon
-        3006 => b"SKUL",        // lost soul
-        9    => b"SPOS",        // shotgun guy (former sergeant)
-        58   => b"SARG",        // spectre (same sprite as demon)
-        65   => b"CPOS",        // heavy weapon dude (chaingunner)
-        66   => b"SKEL",        // revenant
-        67   => b"FATT",        // mancubus
-        68   => b"VILE",        // archvile
-        71   => b"PAIN",        // pain elemental
-        72   => b"KEEN",        // commander keen
-        84   => b"SSWV",        // wolfenstein ss
-        88   => b"BBRN",        // boss brain
-        _    => return None,    // unknown / no world sprite
+        1 => return None, // player 1 start — no world sprite
+        2 => b"SHOT",     // shotgun (dropped)
+        3 => b"BSKU",     // blue skull key
+        5 => b"BKEY",     // blue keycard
+        6 => b"YKEY",     // yellow keycard
+        13 => b"RKEY",    // red keycard
+        38 => b"RSKU",    // red skull key
+        39 => b"YSKU",    // yellow skull key
+        40 => b"BSKU",    // blue skull key (alt number)
+        2001 => b"SHOT",  // shotgun pickup
+        2002 => b"MGUN",  // chaingun pickup
+        2003 => b"LAUN",  // rocket launcher
+        2004 => b"PLAS",  // plasma gun
+        2005 => b"CSAW",  // chainsaw
+        2006 => b"BFUG",  // BFG9000
+        2007 => b"CLIP",  // ammo clip
+        2008 => b"SHEL",  // shotgun shells
+        2010 => b"ROCK",  // rocket
+        2011 => b"STIM",  // stimpack
+        2012 => b"MEDI",  // medikit
+        2013 => b"SOUL",  // soulsphere
+        2014 => b"BON1",  // health bonus
+        2015 => b"BON2",  // armor bonus
+        2018 => b"ARM1",  // green armor
+        2019 => b"ARM2",  // blue armor
+        2022 => b"PINV",  // invulnerability sphere
+        2023 => b"PSTR",  // berserk pack
+        2024 => b"PINS",  // invisibility sphere
+        2025 => b"SUIT",  // radiation suit
+        2026 => b"PMAP",  // computer area map
+        2028 => b"COLU",  // floor lamp
+        2035 => b"BAR1",  // barrel (explosive)
+        2045 => b"PVIS",  // light amplification visor
+        3001 => b"TROO",  // imp
+        3002 => b"SARG",  // demon (pinky)
+        3003 => b"BOSS",  // baron of hell
+        3004 => b"POSS",  // former human (zombie man)
+        3005 => b"HEAD",  // cacodemon
+        3006 => b"SKUL",  // lost soul
+        9 => b"SPOS",     // shotgun guy (former sergeant)
+        58 => b"SARG",    // spectre (same sprite as demon)
+        65 => b"CPOS",    // heavy weapon dude (chaingunner)
+        66 => b"SKEL",    // revenant
+        67 => b"FATT",    // mancubus
+        68 => b"VILE",    // archvile
+        71 => b"PAIN",    // pain elemental
+        72 => b"KEEN",    // commander keen
+        84 => b"SSWV",    // wolfenstein ss
+        88 => b"BBRN",    // boss brain
+        _ => return None, // unknown / no world sprite
     };
 
     // Frame A, rotation 0: four base bytes + "A0" + two null bytes.
@@ -318,8 +318,8 @@ pub fn render_things(
 ) {
     // Convert player angle (32-bit BAM) to radians.
     // BAM: 0x0000_0000 = 0°, 0x4000_0000 = 90°, 0x8000_0000 = 180°, etc.
-    let angle_rad = (player_angle.0 as f32)
-        * (std::f32::consts::PI * 2.0 / (u32::MAX as f32 + 1.0));
+    let angle_rad =
+        (player_angle.0 as f32) * (std::f32::consts::PI * 2.0 / (u32::MAX as f32 + 1.0));
     let cos_a = angle_rad.cos();
     let sin_a = angle_rad.sin();
 
@@ -384,14 +384,13 @@ pub fn render_things(
         // Vertical placement: bottom of sprite is at floor level.
         // Player eye is PLAYER_HEIGHT map units above the floor, so the floor
         // projects to HALF_H + PLAYER_HEIGHT * sprite_scale below the horizon.
-        let screen_y_bot =
-            HALF_H + (PLAYER_HEIGHT * sprite_scale).round() as i32;
+        let screen_y_bot = HALF_H + (PLAYER_HEIGHT * sprite_scale).round() as i32;
         let screen_y_top = screen_y_bot - screen_h;
 
         // Horizontal placement: left_offset tells us how many sprite pixels
         // the centre point is to the right of column 0.
-        let screen_x_left = sx_center as i32
-            - (frame.left_offset as i32 * screen_w / frame.width as i32);
+        let screen_x_left =
+            sx_center as i32 - (frame.left_offset as i32 * screen_w / frame.width as i32);
         let screen_x_right = screen_x_left + screen_w;
 
         // Guard against degenerate cases (e.g. 0-width frame).
@@ -413,8 +412,7 @@ pub fn render_things(
 
             for sy in sy_top_clamped..=sy_bot_clamped {
                 // Map screen row back to sprite row.
-                let sprite_row =
-                    (sy - screen_y_top) * frame.height as i32 / col_h.max(1);
+                let sprite_row = (sy - screen_y_top) * frame.height as i32 / col_h.max(1);
                 let sprite_row = sprite_row.clamp(0, frame.height as i32 - 1) as usize;
 
                 let pixel_idx = col as usize * frame.height as usize + sprite_row;
@@ -455,7 +453,7 @@ pub fn draw_sprite(
     // Sprite's top row in screen space.
     let sprite_origin_y = screen_y_bottom - frame.height as i32 + 1;
 
-    let width  = frame.width as i32;
+    let width = frame.width as i32;
     let height = frame.height as i32;
 
     for col in 0..width {
@@ -538,7 +536,7 @@ mod tests {
     fn empty_wad() -> Vec<u8> {
         let mut data = vec![0u8; 12];
         data[0..4].copy_from_slice(b"IWAD");
-        data[4..8].copy_from_slice(&0i32.to_le_bytes());  // numlumps = 0
+        data[4..8].copy_from_slice(&0i32.to_le_bytes()); // numlumps = 0
         data[8..12].copy_from_slice(&12i32.to_le_bytes()); // dir at end of header
         data
     }
@@ -598,7 +596,10 @@ mod tests {
         // Completely empty.
         assert!(parse_picture(&[]).is_none(), "empty slice must return None");
         // 7 bytes — one short of the 8-byte header.
-        assert!(parse_picture(&[0u8; 7]).is_none(), "7-byte slice must return None");
+        assert!(
+            parse_picture(&[0u8; 7]).is_none(),
+            "7-byte slice must return None"
+        );
     }
 
     // ------------------------------------------------------------------
@@ -622,7 +623,7 @@ mod tests {
         assert_eq!(frame.width, 1);
         assert_eq!(frame.height, 2);
         assert_eq!(frame.pixels[0], Some(42), "row 0 should be Some(42)");
-        assert_eq!(frame.pixels[1], None,      "row 1 should be transparent (None)");
+        assert_eq!(frame.pixels[1], None, "row 1 should be transparent (None)");
     }
 
     // ------------------------------------------------------------------
@@ -646,11 +647,11 @@ mod tests {
         let width = 10usize;
         let height = 10usize;
         let frame = SpriteFrame {
-            width:       width as u16,
-            height:      height as u16,
+            width: width as u16,
+            height: height as u16,
             left_offset: 0,
-            top_offset:  0,
-            pixels:      vec![Some(5); width * height],
+            top_offset: 0,
+            pixels: vec![Some(5); width * height],
         };
 
         let mut fb = Framebuffer::new();
@@ -660,7 +661,7 @@ mod tests {
         // sprite_origin_y = screen_y_bottom - height + 1 = 100 - 10 + 1 = 91.
         draw_sprite(&mut fb, &frame, 315, 100, &IDENTITY_COLORMAP);
         // Must not panic.  Visible area: x in [315,319], y in [91,100].
-        assert_eq!(fb.get_pixel(315, 91), Some(5));  // top-left of visible portion
+        assert_eq!(fb.get_pixel(315, 91), Some(5)); // top-left of visible portion
         assert_eq!(fb.get_pixel(319, 100), Some(5)); // bottom-right visible
     }
 
@@ -685,11 +686,11 @@ mod tests {
         let mut cache = SpriteCache::empty();
 
         let frame = SpriteFrame {
-            width:       2,
-            height:      2,
+            width: 2,
+            height: 2,
             left_offset: 1,
-            top_offset:  1,
-            pixels:      vec![Some(10), Some(20), Some(30), Some(40)],
+            top_offset: 1,
+            pixels: vec![Some(10), Some(20), Some(30), Some(40)],
         };
         cache.insert("TROOA1".to_string(), frame);
 
@@ -715,11 +716,7 @@ mod tests {
     fn test_sprite_cache_loads_from_wad_markers() {
         let pic = minimal_picture();
         // Lumps: S_START (marker, empty), PISGA0 (sprite), S_END (marker, empty)
-        let wad_bytes = wad_with_lumps(&[
-            ("S_START", &[]),
-            ("PISGA0",  &pic),
-            ("S_END",   &[]),
-        ]);
+        let wad_bytes = wad_with_lumps(&[("S_START", &[]), ("PISGA0", &pic), ("S_END", &[])]);
         let wad = doom_wad::WadFile::parse(wad_bytes).expect("wad parse");
         let cache = SpriteCache::load(&wad);
         // The sprite lump should have been loaded.
@@ -738,7 +735,7 @@ mod tests {
     /// The level contains exactly the things provided and has the minimum
     /// valid BSP (0 nodes, 1 ssector) required by Level::from_wad validation.
     fn make_test_level(things: Vec<doom_map::Thing>) -> doom_map::Level {
-        use doom_wad::{WadKind, REQUIRED_MAP_LUMPS};
+        use doom_wad::{REQUIRED_MAP_LUMPS, WadKind};
 
         let _ = WadKind::Iwad; // suppress unused import warning
         let _ = REQUIRED_MAP_LUMPS;
@@ -863,7 +860,13 @@ mod tests {
 
     /// Build a Thing with given position, kind.
     fn make_thing(x: i16, y: i16, kind: u16) -> doom_map::Thing {
-        doom_map::Thing { x, y, angle: 0, kind, flags: 7 }
+        doom_map::Thing {
+            x,
+            y,
+            angle: 0,
+            kind,
+            flags: 7,
+        }
     }
 
     // ------------------------------------------------------------------
@@ -984,8 +987,8 @@ mod tests {
         let player_angle = doom_types::Bam(0);
 
         // Manually replicate the projection math for a forward thing.
-        let angle_rad = (player_angle.0 as f32)
-            * (std::f32::consts::PI * 2.0 / (u32::MAX as f32 + 1.0));
+        let angle_rad =
+            (player_angle.0 as f32) * (std::f32::consts::PI * 2.0 / (u32::MAX as f32 + 1.0));
         let cos_a = angle_rad.cos();
         let sin_a = angle_rad.sin();
 
@@ -1019,11 +1022,11 @@ mod tests {
     #[test]
     fn test_draw_sprite_applies_colormap() {
         let frame = SpriteFrame {
-            width:       1,
-            height:      1,
+            width: 1,
+            height: 1,
             left_offset: 0,
-            top_offset:  0,
-            pixels:      vec![Some(10)],
+            top_offset: 0,
+            pixels: vec![Some(10)],
         };
 
         // Build a colormap that maps index 10 → 99.
@@ -1034,6 +1037,10 @@ mod tests {
         // Draw at center x=160, bottom y=100.
         // sprite_origin_x = 160 - 0 = 160, sprite_origin_y = 100 - 1 + 1 = 100
         draw_sprite(&mut fb, &frame, 160, 100, &colormap);
-        assert_eq!(fb.get_pixel(160, 100), Some(99), "colormap mapping should be applied");
+        assert_eq!(
+            fb.get_pixel(160, 100),
+            Some(99),
+            "colormap mapping should be applied"
+        );
     }
 }

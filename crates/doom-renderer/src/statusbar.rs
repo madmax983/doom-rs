@@ -5,8 +5,10 @@
 //! No sprite/font data is required — numbers use a built-in 3×5 pixel font;
 //! text labels are drawn as small filled rectangles (palette-colored blocks).
 
-use doom_game::player::{AmmoType, PlayerState, WEAPON_AMMO, KEY_BLUE_CARD, KEY_YELLOW_CARD, KEY_RED_CARD};
 use crate::framebuffer::Framebuffer;
+use doom_game::player::{
+    AmmoType, KEY_BLUE_CARD, KEY_RED_CARD, KEY_YELLOW_CARD, PlayerState, WEAPON_AMMO,
+};
 
 // ---------------------------------------------------------------------------
 // Layout constants
@@ -86,7 +88,11 @@ pub fn draw_status_bar(fb: &mut Framebuffer, player: &PlayerState, god_mode: boo
         let col = 104 + (slot - 2) * 10;
         let row = STATUS_BAR_Y + 8;
         let owned = player.weapons.get(slot).copied().unwrap_or(false);
-        let color = if owned { COLOR_WEAPON_OWNED } else { COLOR_WEAPON_MISSING };
+        let color = if owned {
+            COLOR_WEAPON_OWNED
+        } else {
+            COLOR_WEAPON_MISSING
+        };
         // 5×5 filled square per weapon slot.
         for dy in 0..5usize {
             for dx in 0..5usize {
@@ -113,17 +119,23 @@ pub fn draw_status_bar(fb: &mut Framebuffer, player: &PlayerState, god_mode: boo
 
     // --- KEYS (x=268..319) ---
     draw_key_indicator(
-        fb, 270, STATUS_BAR_Y + 6,
+        fb,
+        270,
+        STATUS_BAR_Y + 6,
         COLOR_KEY_BLUE,
         player.keys & KEY_BLUE_CARD != 0,
     );
     draw_key_indicator(
-        fb, 270, STATUS_BAR_Y + 14,
+        fb,
+        270,
+        STATUS_BAR_Y + 14,
         COLOR_KEY_YELLOW,
         player.keys & KEY_YELLOW_CARD != 0,
     );
     draw_key_indicator(
-        fb, 270, STATUS_BAR_Y + 22,
+        fb,
+        270,
+        STATUS_BAR_Y + 22,
         COLOR_KEY_RED,
         player.keys & KEY_RED_CARD != 0,
     );
@@ -176,14 +188,14 @@ fn draw_digit(fb: &mut Framebuffer, x: usize, y: usize, digit: u8, color: u8) {
 fn draw_number(fb: &mut Framebuffer, x: usize, y: usize, value: i32, color: u8) {
     let clamped = value.clamp(0, 999) as u32;
     let hundreds = (clamped / 100) as u8;
-    let tens     = ((clamped / 10) % 10) as u8;
-    let ones     = (clamped % 10) as u8;
+    let tens = ((clamped / 10) % 10) as u8;
+    let ones = (clamped % 10) as u8;
 
     if hundreds > 0 {
-        draw_digit(fb, x,     y, hundreds, color);
+        draw_digit(fb, x, y, hundreds, color);
     }
     if hundreds > 0 || tens > 0 {
-        draw_digit(fb, x + 4, y, tens,     color);
+        draw_digit(fb, x + 4, y, tens, color);
     }
     draw_digit(fb, x + 8, y, ones, color);
 }
@@ -207,7 +219,10 @@ fn draw_key_indicator(fb: &mut Framebuffer, x: usize, y: usize, color: u8, owned
 fn current_weapon_ammo(player: &PlayerState) -> i32 {
     let weapon_idx = player.weapon as usize;
     // WEAPON_AMMO is indexed by weapon number; guard against out-of-range.
-    let ammo_type = WEAPON_AMMO.get(weapon_idx).copied().unwrap_or(AmmoType::None);
+    let ammo_type = WEAPON_AMMO
+        .get(weapon_idx)
+        .copied()
+        .unwrap_or(AmmoType::None);
     match ammo_type {
         AmmoType::None => 0,
         _ => {
@@ -267,7 +282,11 @@ mod tests {
 
         // Middle row (row 2) of '0' = 0b101 → (0,2) and (2,2) set, (1,2) clear.
         assert_eq!(fb.get_pixel(0, 2), Some(1), "mid-left of '0'");
-        assert_eq!(fb.get_pixel(1, 2), Some(0), "mid-center of '0' should be gap");
+        assert_eq!(
+            fb.get_pixel(1, 2),
+            Some(0),
+            "mid-center of '0' should be gap"
+        );
         assert_eq!(fb.get_pixel(2, 2), Some(1), "mid-right of '0'");
     }
 

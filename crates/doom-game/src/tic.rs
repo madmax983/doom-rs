@@ -52,11 +52,11 @@ pub struct TicCmd {
 /// Button flag constants.
 pub mod bt {
     /// Fire / attack.
-    pub const BT_ATTACK:     u8 = 0x01;
+    pub const BT_ATTACK: u8 = 0x01;
     /// Use / open / activate.
-    pub const BT_USE:        u8 = 0x02;
+    pub const BT_USE: u8 = 0x02;
     /// Change weapon (weapon number encoded in `BT_WEAPONMASK`).
-    pub const BT_CHANGE:     u8 = 0x04;
+    pub const BT_CHANGE: u8 = 0x04;
     /// Bits 3–5 encode the target weapon number.
     pub const BT_WEAPONMASK: u8 = 0x38;
 }
@@ -142,6 +142,9 @@ impl GameState {
 
         // Thinker loop: advance all actor state machines.
         self.run_thinkers(level.as_deref());
+
+        // Move projectiles: advance missile actors and check collisions.
+        crate::projectile::p_move_projectiles(self, level.as_deref());
     }
 
     // -----------------------------------------------------------------------
@@ -153,7 +156,9 @@ impl GameState {
 
         // Thrust block: apply turn + acceleration, then release borrow.
         {
-            let Some(mo) = self.mobjslab.get_mut(handle) else { return };
+            let Some(mo) = self.mobjslab.get_mut(handle) else {
+                return;
+            };
 
             // 1. Turn: cmd.angle_turn is 16-bit BAM; shift to 32-bit BAM space.
             mo.angle = mo.angle + Bam((cmd.angle_turn as i32 as u32).wrapping_shl(16));
@@ -178,11 +183,13 @@ impl GameState {
         };
         let moved = match level {
             Some(lv) => crate::movement::p_try_move(&self.mobjslab, handle, new_x, new_y, lv),
-            None     => true,
+            None => true,
         };
 
         // 5. Apply position + friction + clamp.
-        let Some(mo) = self.mobjslab.get_mut(handle) else { return };
+        let Some(mo) = self.mobjslab.get_mut(handle) else {
+            return;
+        };
         if moved {
             mo.x = new_x;
             mo.y = new_y;
@@ -215,11 +222,17 @@ impl GameState {
         // Step 1: countdown.  Copy out the current StateNum on transition,
         // then release the borrow so dispatch_action can take &mut self.
         let cur_state: StateNum = {
-            let Some(mo) = self.mobjslab.get_mut(handle) else { return };
+            let Some(mo) = self.mobjslab.get_mut(handle) else {
+                return;
+            };
             // Infinite-duration states (tics < 0) hold until externally changed.
-            if mo.tics < 0 { return; }
+            if mo.tics < 0 {
+                return;
+            }
             mo.tics -= 1;
-            if mo.tics > 0 { return; }
+            if mo.tics > 0 {
+                return;
+            }
             mo.state // Copy: StateNum is Copy
         };
 
@@ -242,7 +255,7 @@ impl GameState {
             Some(entry) => {
                 if let Some(mo) = self.mobjslab.get_mut(handle) {
                     mo.state = next_sn;
-                    mo.tics  = entry.tics;
+                    mo.tics = entry.tics;
                 }
                 entry.action
             }
@@ -348,26 +361,26 @@ mod tests {
     fn friction_drains_existing_momentum() {
         let mut gs = make_game_state();
         // Inject momentum directly (bypassing thrust, since trig tables uninitialized).
-        gs.mobjslab
-            .get_mut(gs.player.handle)
-            .unwrap()
-            .momx = Fixed16_16::from_int(4);
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().momx = Fixed16_16::from_int(4);
 
         gs.tick(TicCmd::default(), None);
 
         let mo = gs.mobjslab.get(gs.player.handle).unwrap();
         // After FRICTION (≈ 0.906): 4 → ~3.625. Must be < 4 and > 0.
-        assert!(mo.momx < Fixed16_16::from_int(4), "friction must reduce momx");
-        assert!(mo.momx > Fixed16_16::ZERO, "friction must not zero momx in one step");
+        assert!(
+            mo.momx < Fixed16_16::from_int(4),
+            "friction must reduce momx"
+        );
+        assert!(
+            mo.momx > Fixed16_16::ZERO,
+            "friction must not zero momx in one step"
+        );
     }
 
     #[test]
     fn momentum_carries_position_forward() {
         let mut gs = make_game_state();
-        gs.mobjslab
-            .get_mut(gs.player.handle)
-            .unwrap()
-            .momx = Fixed16_16::from_int(2);
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().momx = Fixed16_16::from_int(2);
 
         gs.tick(TicCmd::default(), None);
 
@@ -380,10 +393,7 @@ mod tests {
     fn maxmove_clamps_excessive_velocity() {
         let mut gs = make_game_state();
         // Inject extreme velocity.
-        gs.mobjslab
-            .get_mut(gs.player.handle)
-            .unwrap()
-            .momx = Fixed16_16::from_int(1000);
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().momx = Fixed16_16::from_int(1000);
 
         gs.tick(TicCmd::default(), None);
 
@@ -402,10 +412,13 @@ mod tests {
         // If the player handle is NULL, p_move_player should silently do nothing.
         let mut gs = GameState::new("test");
         // player.handle defaults to MobjHandle::NULL — no panic expected.
-        gs.tick(TicCmd {
-            forward_move: 50,
-            ..Default::default()
-        }, None);
+        gs.tick(
+            TicCmd {
+                forward_move: 50,
+                ..Default::default()
+            },
+            None,
+        );
         assert_eq!(gs.tic_num, 1);
     }
 

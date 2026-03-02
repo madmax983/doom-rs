@@ -9,9 +9,10 @@
 use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
 
-use crate::combat::{MISSILERANGE, p_line_attack, p_radius_attack};
-use crate::mobj::MobjHandle;
+use crate::combat::{MISSILERANGE, p_line_attack};
+use crate::mobj::{MobjHandle, MobjKind};
 use crate::player::AmmoType;
+use crate::projectile::p_spawn_player_missile;
 use crate::state::GameState;
 
 // ---------------------------------------------------------------------------
@@ -47,101 +48,101 @@ static WEAPON_INFO: [WeaponInfo; 9] = [
     // 0 — Fist
     WeaponInfo {
         ammo_type: None,
-        ammo_use:  0,
+        ammo_use: 0,
         damage_lo: 10,
         damage_hi: 110,
-        pellets:   1,
-        range:     Fixed16_16(64 << 16),
-        spread:    0,
-        is_melee:  true,
+        pellets: 1,
+        range: Fixed16_16(64 << 16),
+        spread: 0,
+        is_melee: true,
     },
     // 1 — Pistol
     WeaponInfo {
         ammo_type: Some(AmmoType::Bullets),
-        ammo_use:  1,
+        ammo_use: 1,
         damage_lo: 5,
         damage_hi: 15,
-        pellets:   1,
-        range:     MISSILERANGE,
-        spread:    0,
-        is_melee:  false,
+        pellets: 1,
+        range: MISSILERANGE,
+        spread: 0,
+        is_melee: false,
     },
     // 2 — Shotgun
     WeaponInfo {
         ammo_type: Some(AmmoType::Shells),
-        ammo_use:  1,
+        ammo_use: 1,
         damage_lo: 5,
         damage_hi: 15,
-        pellets:   7,
-        range:     MISSILERANGE,
-        spread:    0x1400_0000, // ≈ 5.6° per pellet in BAM
-        is_melee:  false,
+        pellets: 7,
+        range: MISSILERANGE,
+        spread: 0x1400_0000, // ≈ 5.6° per pellet in BAM
+        is_melee: false,
     },
     // 3 — Chaingun
     WeaponInfo {
         ammo_type: Some(AmmoType::Bullets),
-        ammo_use:  1,
+        ammo_use: 1,
         damage_lo: 5,
         damage_hi: 15,
-        pellets:   1,
-        range:     MISSILERANGE,
-        spread:    0,
-        is_melee:  false,
+        pellets: 1,
+        range: MISSILERANGE,
+        spread: 0,
+        is_melee: false,
     },
     // 4 — RocketLauncher (pellets=0 → radius attack)
     WeaponInfo {
         ammo_type: Some(AmmoType::Rockets),
-        ammo_use:  1,
+        ammo_use: 1,
         damage_lo: 80,
         damage_hi: 160,
-        pellets:   0,
-        range:     Fixed16_16::ZERO, // unused — radius attack
-        spread:    0,
-        is_melee:  false,
+        pellets: 0,
+        range: Fixed16_16::ZERO, // unused — radius attack
+        spread: 0,
+        is_melee: false,
     },
     // 5 — PlasmaRifle
     WeaponInfo {
         ammo_type: Some(AmmoType::Cells),
-        ammo_use:  1,
+        ammo_use: 1,
         damage_lo: 5,
         damage_hi: 40,
-        pellets:   1,
-        range:     MISSILERANGE,
-        spread:    0,
-        is_melee:  false,
+        pellets: 1,
+        range: MISSILERANGE,
+        spread: 0,
+        is_melee: false,
     },
     // 6 — BFG 9000
     WeaponInfo {
         ammo_type: Some(AmmoType::Cells),
-        ammo_use:  40,
+        ammo_use: 40,
         damage_lo: 100,
         damage_hi: 800,
-        pellets:   1,
-        range:     MISSILERANGE,
-        spread:    0,
-        is_melee:  false,
+        pellets: 1,
+        range: MISSILERANGE,
+        spread: 0,
+        is_melee: false,
     },
     // 7 — Chainsaw
     WeaponInfo {
         ammo_type: None,
-        ammo_use:  0,
+        ammo_use: 0,
         damage_lo: 10,
         damage_hi: 110,
-        pellets:   1,
-        range:     Fixed16_16(64 << 16),
-        spread:    0,
-        is_melee:  true,
+        pellets: 1,
+        range: Fixed16_16(64 << 16),
+        spread: 0,
+        is_melee: true,
     },
     // 8 — SuperShotgun
     WeaponInfo {
         ammo_type: Some(AmmoType::Shells),
-        ammo_use:  2,
+        ammo_use: 2,
         damage_lo: 5,
         damage_hi: 15,
-        pellets:   20,
-        range:     MISSILERANGE,
-        spread:    0x1400_0000, // same spread as regular shotgun
-        is_melee:  false,
+        pellets: 20,
+        range: MISSILERANGE,
+        spread: 0x1400_0000, // same spread as regular shotgun
+        is_melee: false,
     },
 ];
 
@@ -157,14 +158,17 @@ static WEAPON_INFO: [WeaponInfo; 9] = [
 /// If the current weapon requires ammo and the player has insufficient ammo,
 /// this function returns immediately without firing or consuming ammo.
 ///
-/// # Rocket Launcher
-/// When `pellets == 0`, fires `p_radius_attack` with a fixed blast radius of
-/// 128 map units and `mid_damage = (damage_lo + damage_hi) / 2`.
+/// # Projectile weapons
+/// Rocket Launcher, Plasma Rifle, and BFG 9000 spawn projectile actors via
+/// `p_spawn_player_missile`.  Projectile collision is handled by
+/// `p_move_projectiles` during the tick loop.
 ///
 /// # Hitscan weapons
 /// Fires `pellets` separate rays via `p_line_attack`.  Each pellet's angle is
 /// spread evenly around the actor's facing direction.
 pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle) {
+    use crate::player::WeaponType;
+
     let weapon = gs.player.weapon;
     let info = &WEAPON_INFO[weapon as usize];
 
@@ -178,6 +182,23 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
         gs.player.use_ammo(ammo_type as usize, info.ammo_use);
     }
 
+    // --- Projectile weapons: spawn a missile actor ---
+    match weapon {
+        WeaponType::RocketLauncher => {
+            p_spawn_player_missile(gs, handle, MobjKind::Rocket);
+            return;
+        }
+        WeaponType::PlasmaRifle => {
+            p_spawn_player_missile(gs, handle, MobjKind::PlasmaBall);
+            return;
+        }
+        WeaponType::Bfg => {
+            p_spawn_player_missile(gs, handle, MobjKind::BfgBall);
+            return;
+        }
+        _ => {} // hitscan weapons fall through
+    }
+
     // --- Gather source angle (copy out before mutable borrows) ---
     let base_angle: Bam = match gs.mobjslab.get(handle) {
         Some(mo) => mo.angle,
@@ -185,20 +206,13 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
     };
 
     let pellets = info.pellets;
-    let spread  = info.spread;
-    let range   = info.range;
+    let spread = info.spread;
+    let range = info.range;
 
     // Deterministic pseudo-random damage using tic_num.
     let tic = gs.tic_num;
     let damage_range = (info.damage_hi - info.damage_lo + 1) as u32;
-    let damage_lo    = info.damage_lo;
-
-    // --- Rocket Launcher: radius attack ---
-    if pellets == 0 {
-        let mid_damage = (damage_lo + info.damage_hi) / 2;
-        p_radius_attack(gs, handle, mid_damage, Fixed16_16(128 << 16), level);
-        return;
-    }
+    let damage_lo = info.damage_lo;
 
     // --- Hitscan: fire each pellet ---
     for i in 0..pellets {
@@ -211,7 +225,7 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
         } else {
             // Center the spread: pellet i fires at base_angle + spread*(i) - spread*(pellets-1)/2
             let positive_offset = spread.wrapping_mul(i as u32);
-            let center_offset   = spread.wrapping_mul((pellets as u32).wrapping_sub(1)) / 2;
+            let center_offset = spread.wrapping_mul((pellets as u32).wrapping_sub(1)) / 2;
             Bam(base_angle
                 .0
                 .wrapping_add(positive_offset)
@@ -262,9 +276,9 @@ mod tests {
             Bam::ZERO,
         );
         mo.health = 100;
-        mo.flags  = flags::MF_SOLID | flags::MF_SHOOTABLE;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
         let handle = gs.mobjslab.alloc(mo);
-        gs.player  = PlayerState::pistol_start(handle);
+        gs.player = PlayerState::pistol_start(handle);
         gs
     }
 
@@ -427,9 +441,6 @@ mod tests {
         let mut gs = make_game_state();
         gs.player.weapon = WeaponType::Chainsaw;
         let _ = gs.player.use_ammo(AmmoType::Bullets as usize, 200);
-        assert!(
-            player_can_fire(&gs),
-            "chainsaw must always be fireable"
-        );
+        assert!(player_can_fire(&gs), "chainsaw must always be fireable");
     }
 }

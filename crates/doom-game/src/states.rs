@@ -15,10 +15,10 @@ use crate::mobj::{MobjStateEntry, StateNum};
 // ---------------------------------------------------------------------------
 // Action index constants (must match `actions::ACTION_*`)
 // ---------------------------------------------------------------------------
-const NONE:        u8 = 0;
-const LOOK:        u8 = 1;
-const CHASE:       u8 = 2;
-const POS_ATTACK:  u8 = 3;
+const NONE: u8 = 0;
+const LOOK: u8 = 1;
+const CHASE: u8 = 2;
+const POS_ATTACK: u8 = 3;
 const SPOS_ATTACK: u8 = 4;
 const TROO_ATTACK: u8 = 5;
 const SARG_ATTACK: u8 = 6;
@@ -160,154 +160,378 @@ pub mod ids {
 /// transitions to `next_state`).
 pub static STATES: &[MobjStateEntry] = &[
     // 0: S_NULL — hold forever, no action
-    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),      action: NONE  },
-
+    MobjStateEntry {
+        tics: -1,
+        next_state: StateNum(ids::S_NULL),
+        action: NONE,
+    },
     // --- Trooper ---
     // 1: S_POSS_STND — idle, try to see player every 10 tics
-    MobjStateEntry { tics: 10, next_state: StateNum(ids::S_POSS_STND), action: LOOK  },
+    MobjStateEntry {
+        tics: 10,
+        next_state: StateNum(ids::S_POSS_STND),
+        action: LOOK,
+    },
     // 2: S_POSS_RUN1 — chase frame 1
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_POSS_RUN2), action: CHASE },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_POSS_RUN2),
+        action: CHASE,
+    },
     // 3: S_POSS_RUN2 — chase frame 2 (loops back)
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_POSS_RUN1), action: CHASE },
-
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_POSS_RUN1),
+        action: CHASE,
+    },
     // --- Sergeant ---
-    MobjStateEntry { tics: 10, next_state: StateNum(ids::S_SPOS_STND), action: LOOK  },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPOS_RUN2), action: CHASE },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPOS_RUN1), action: CHASE },
-
+    MobjStateEntry {
+        tics: 10,
+        next_state: StateNum(ids::S_SPOS_STND),
+        action: LOOK,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SPOS_RUN2),
+        action: CHASE,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SPOS_RUN1),
+        action: CHASE,
+    },
     // --- Imp ---
-    MobjStateEntry { tics: 10, next_state: StateNum(ids::S_TROO_STND), action: LOOK  },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_TROO_RUN2), action: CHASE },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_TROO_RUN1), action: CHASE },
-
+    MobjStateEntry {
+        tics: 10,
+        next_state: StateNum(ids::S_TROO_STND),
+        action: LOOK,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_TROO_RUN2),
+        action: CHASE,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_TROO_RUN1),
+        action: CHASE,
+    },
     // --- Demon ---
-    MobjStateEntry { tics: 10, next_state: StateNum(ids::S_SARG_STND), action: LOOK  },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SARG_RUN2), action: CHASE },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SARG_RUN1), action: CHASE },
-
+    MobjStateEntry {
+        tics: 10,
+        next_state: StateNum(ids::S_SARG_STND),
+        action: LOOK,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SARG_RUN2),
+        action: CHASE,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SARG_RUN1),
+        action: CHASE,
+    },
     // --- Cacodemon ---
-    MobjStateEntry { tics: 10, next_state: StateNum(ids::S_HEAD_STND), action: LOOK  },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_HEAD_RUN2), action: CHASE },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_HEAD_RUN1), action: CHASE },
-
+    MobjStateEntry {
+        tics: 10,
+        next_state: StateNum(ids::S_HEAD_STND),
+        action: LOOK,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_HEAD_RUN2),
+        action: CHASE,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_HEAD_RUN1),
+        action: CHASE,
+    },
     // --- Baron of Hell ---
-    MobjStateEntry { tics: 10, next_state: StateNum(ids::S_BOSS_STND), action: LOOK  },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_BOSS_RUN2), action: CHASE },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_BOSS_RUN1), action: CHASE },
-
+    MobjStateEntry {
+        tics: 10,
+        next_state: StateNum(ids::S_BOSS_STND),
+        action: LOOK,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_BOSS_RUN2),
+        action: CHASE,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_BOSS_RUN1),
+        action: CHASE,
+    },
     // --- Cyberdemon ---
-    MobjStateEntry { tics: 10, next_state: StateNum(ids::S_CYBER_STND), action: LOOK  },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_CYBER_RUN2), action: CHASE },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_CYBER_RUN1), action: CHASE },
-
+    MobjStateEntry {
+        tics: 10,
+        next_state: StateNum(ids::S_CYBER_STND),
+        action: LOOK,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_CYBER_RUN2),
+        action: CHASE,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_CYBER_RUN1),
+        action: CHASE,
+    },
     // --- Spider Mastermind ---
-    MobjStateEntry { tics: 10, next_state: StateNum(ids::S_SPID_STND), action: LOOK  },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPID_RUN2), action: CHASE },
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPID_RUN1), action: CHASE },
-
+    MobjStateEntry {
+        tics: 10,
+        next_state: StateNum(ids::S_SPID_STND),
+        action: LOOK,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SPID_RUN2),
+        action: CHASE,
+    },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SPID_RUN1),
+        action: CHASE,
+    },
     // -----------------------------------------------------------------------
     // Death and pain states
     // -----------------------------------------------------------------------
 
     // --- Trooper death / pain ---
     // 25: S_POSS_DIE1
-    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_POSS_DIE2),  action: NONE },
+    MobjStateEntry {
+        tics: 8,
+        next_state: StateNum(ids::S_POSS_DIE2),
+        action: NONE,
+    },
     // 26: S_POSS_DIE2 — holds forever (next_state = S_NULL)
-    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    MobjStateEntry {
+        tics: -1,
+        next_state: StateNum(ids::S_NULL),
+        action: NONE,
+    },
     // 27: S_POSS_PAIN — returns to idle
-    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_POSS_STND),  action: NONE },
-
+    MobjStateEntry {
+        tics: 6,
+        next_state: StateNum(ids::S_POSS_STND),
+        action: NONE,
+    },
     // --- Sergeant death / pain ---
     // 28: S_SPOS_DIE1
-    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_SPOS_DIE2),  action: NONE },
+    MobjStateEntry {
+        tics: 8,
+        next_state: StateNum(ids::S_SPOS_DIE2),
+        action: NONE,
+    },
     // 29: S_SPOS_DIE2
-    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    MobjStateEntry {
+        tics: -1,
+        next_state: StateNum(ids::S_NULL),
+        action: NONE,
+    },
     // 30: S_SPOS_PAIN
-    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_SPOS_STND),  action: NONE },
-
+    MobjStateEntry {
+        tics: 6,
+        next_state: StateNum(ids::S_SPOS_STND),
+        action: NONE,
+    },
     // --- Imp death / pain ---
     // 31: S_TROO_DIE1
-    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_TROO_DIE2),  action: NONE },
+    MobjStateEntry {
+        tics: 8,
+        next_state: StateNum(ids::S_TROO_DIE2),
+        action: NONE,
+    },
     // 32: S_TROO_DIE2
-    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    MobjStateEntry {
+        tics: -1,
+        next_state: StateNum(ids::S_NULL),
+        action: NONE,
+    },
     // 33: S_TROO_PAIN
-    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_TROO_STND),  action: NONE },
-
+    MobjStateEntry {
+        tics: 6,
+        next_state: StateNum(ids::S_TROO_STND),
+        action: NONE,
+    },
     // --- Demon death / pain ---
     // 34: S_SARG_DIE1
-    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_SARG_DIE2),  action: NONE },
+    MobjStateEntry {
+        tics: 8,
+        next_state: StateNum(ids::S_SARG_DIE2),
+        action: NONE,
+    },
     // 35: S_SARG_DIE2
-    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    MobjStateEntry {
+        tics: -1,
+        next_state: StateNum(ids::S_NULL),
+        action: NONE,
+    },
     // 36: S_SARG_PAIN
-    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_SARG_STND),  action: NONE },
-
+    MobjStateEntry {
+        tics: 6,
+        next_state: StateNum(ids::S_SARG_STND),
+        action: NONE,
+    },
     // --- Cacodemon death / pain ---
     // 37: S_HEAD_DIE1
-    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_HEAD_DIE2),  action: NONE },
+    MobjStateEntry {
+        tics: 8,
+        next_state: StateNum(ids::S_HEAD_DIE2),
+        action: NONE,
+    },
     // 38: S_HEAD_DIE2
-    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    MobjStateEntry {
+        tics: -1,
+        next_state: StateNum(ids::S_NULL),
+        action: NONE,
+    },
     // 39: S_HEAD_PAIN
-    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_HEAD_STND),  action: NONE },
-
+    MobjStateEntry {
+        tics: 6,
+        next_state: StateNum(ids::S_HEAD_STND),
+        action: NONE,
+    },
     // --- Baron of Hell death / pain ---
     // 40: S_BOSS_DIE1
-    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_BOSS_DIE2),  action: NONE },
+    MobjStateEntry {
+        tics: 8,
+        next_state: StateNum(ids::S_BOSS_DIE2),
+        action: NONE,
+    },
     // 41: S_BOSS_DIE2
-    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    MobjStateEntry {
+        tics: -1,
+        next_state: StateNum(ids::S_NULL),
+        action: NONE,
+    },
     // 42: S_BOSS_PAIN
-    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_BOSS_STND),  action: NONE },
-
+    MobjStateEntry {
+        tics: 6,
+        next_state: StateNum(ids::S_BOSS_STND),
+        action: NONE,
+    },
     // --- Cyberdemon death / pain ---
     // 43: S_CYBER_DIE1
-    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_CYBER_DIE2), action: NONE },
+    MobjStateEntry {
+        tics: 8,
+        next_state: StateNum(ids::S_CYBER_DIE2),
+        action: NONE,
+    },
     // 44: S_CYBER_DIE2
-    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    MobjStateEntry {
+        tics: -1,
+        next_state: StateNum(ids::S_NULL),
+        action: NONE,
+    },
     // 45: S_CYBER_PAIN
-    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_CYBER_STND), action: NONE },
-
+    MobjStateEntry {
+        tics: 6,
+        next_state: StateNum(ids::S_CYBER_STND),
+        action: NONE,
+    },
     // --- Spider Mastermind death / pain ---
     // 46: S_SPID_DIE1
-    MobjStateEntry { tics:  8, next_state: StateNum(ids::S_SPID_DIE2),  action: NONE },
+    MobjStateEntry {
+        tics: 8,
+        next_state: StateNum(ids::S_SPID_DIE2),
+        action: NONE,
+    },
     // 47: S_SPID_DIE2
-    MobjStateEntry { tics: -1, next_state: StateNum(ids::S_NULL),       action: NONE },
+    MobjStateEntry {
+        tics: -1,
+        next_state: StateNum(ids::S_NULL),
+        action: NONE,
+    },
     // 48: S_SPID_PAIN
-    MobjStateEntry { tics:  6, next_state: StateNum(ids::S_SPID_STND),  action: NONE },
-
+    MobjStateEntry {
+        tics: 6,
+        next_state: StateNum(ids::S_SPID_STND),
+        action: NONE,
+    },
     // -----------------------------------------------------------------------
     // Attack states (Batch 5)
     // -----------------------------------------------------------------------
 
     // --- Trooper (Zombie Man) attack ---
     // 49: S_POSS_ATK1 — windup (no action)
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_POSS_ATK2),  action: NONE        },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_POSS_ATK2),
+        action: NONE,
+    },
     // 50: S_POSS_ATK2 — fire hitscan
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_POSS_ATK3),  action: POS_ATTACK  },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_POSS_ATK3),
+        action: POS_ATTACK,
+    },
     // 51: S_POSS_ATK3 — recovery → resume chasing
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_POSS_RUN1),  action: NONE        },
-
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_POSS_RUN1),
+        action: NONE,
+    },
     // --- Sergeant (Shotgun Guy) attack ---
     // 52: S_SPOS_ATK1 — windup
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPOS_ATK2),  action: NONE        },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SPOS_ATK2),
+        action: NONE,
+    },
     // 53: S_SPOS_ATK2 — fire 3-pellet burst
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPOS_ATK3),  action: SPOS_ATTACK },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SPOS_ATK3),
+        action: SPOS_ATTACK,
+    },
     // 54: S_SPOS_ATK3 — recovery → resume chasing
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SPOS_RUN1),  action: NONE        },
-
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SPOS_RUN1),
+        action: NONE,
+    },
     // --- Imp attack ---
     // 55: S_TROO_ATK1 — windup
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_TROO_ATK2),  action: NONE        },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_TROO_ATK2),
+        action: NONE,
+    },
     // 56: S_TROO_ATK2 — melee if close, else hitscan
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_TROO_ATK3),  action: TROO_ATTACK },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_TROO_ATK3),
+        action: TROO_ATTACK,
+    },
     // 57: S_TROO_ATK3 — recovery → resume chasing
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_TROO_RUN1),  action: NONE        },
-
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_TROO_RUN1),
+        action: NONE,
+    },
     // --- Demon attack ---
     // 58: S_SARG_ATK1 — windup
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SARG_ATK2),  action: NONE        },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SARG_ATK2),
+        action: NONE,
+    },
     // 59: S_SARG_ATK2 — melee only
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SARG_ATK3),  action: SARG_ATTACK },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SARG_ATK3),
+        action: SARG_ATTACK,
+    },
     // 60: S_SARG_ATK3 — recovery → resume chasing
-    MobjStateEntry { tics:  4, next_state: StateNum(ids::S_SARG_RUN1),  action: NONE        },
+    MobjStateEntry {
+        tics: 4,
+        next_state: StateNum(ids::S_SARG_RUN1),
+        action: NONE,
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -402,9 +626,21 @@ mod tests {
 
     #[test]
     fn attack_atk2_fires_correct_action() {
-        assert_eq!(STATES[ids::S_POSS_ATK2 as usize].action, actions::ACTION_POS_ATTACK);
-        assert_eq!(STATES[ids::S_SPOS_ATK2 as usize].action, actions::ACTION_SPOS_ATTACK);
-        assert_eq!(STATES[ids::S_TROO_ATK2 as usize].action, actions::ACTION_TROO_ATTACK);
-        assert_eq!(STATES[ids::S_SARG_ATK2 as usize].action, actions::ACTION_SARG_ATTACK);
+        assert_eq!(
+            STATES[ids::S_POSS_ATK2 as usize].action,
+            actions::ACTION_POS_ATTACK
+        );
+        assert_eq!(
+            STATES[ids::S_SPOS_ATK2 as usize].action,
+            actions::ACTION_SPOS_ATTACK
+        );
+        assert_eq!(
+            STATES[ids::S_TROO_ATK2 as usize].action,
+            actions::ACTION_TROO_ATTACK
+        );
+        assert_eq!(
+            STATES[ids::S_SARG_ATK2 as usize].action,
+            actions::ACTION_SARG_ATTACK
+        );
     }
 }

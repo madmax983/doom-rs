@@ -92,8 +92,11 @@ mod tests {
         colormap[1] = 42;
 
         let p = DrawColumnParams {
-            x: 0, y_top: 0, y_bot: 3,
-            frac: 0, fracstep: 1 << 16, // step 1 texel/pixel
+            x: 0,
+            y_top: 0,
+            y_bot: 3,
+            frac: 0,
+            fracstep: 1 << 16, // step 1 texel/pixel
             source: &source,
             colormap: &colormap,
         };

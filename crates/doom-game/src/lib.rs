@@ -17,26 +17,33 @@ pub mod dehacked;
 pub mod mobj;
 pub mod mobjinfo;
 pub mod movement;
+pub mod pickups;
 pub mod player;
+pub mod projectile;
 pub mod snapshot;
 pub mod specials;
 pub mod state;
 pub mod states;
-pub mod pickups;
 pub mod tic;
 pub mod weapons;
 
-pub use actions::{ACTION_CHASE, ACTION_LOOK, ACTION_NONE, dispatch_action};
-pub use dehacked::{DehError, DehPatch, FramePatch, ThingPatch, WeaponPatch};
+pub use actions::{
+    ACTION_BRUIS_ATTACK, ACTION_CHASE, ACTION_HEAD_ATTACK, ACTION_LOOK, ACTION_NONE,
+    dispatch_action,
+};
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
+pub use dehacked::{DehError, DehPatch, FramePatch, ThingPatch, WeaponPatch};
 pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
-pub use mobjinfo::{MobjInfo, MOBJINFO};
+pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_try_move};
-pub use player::{AmmoType, PlayerState, WeaponType, WEAPON_AMMO};
+pub use pickups::p_check_pickups;
+pub use player::{AmmoType, PlayerState, WEAPON_AMMO, WeaponType};
+pub use projectile::{
+    ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
+};
 pub use snapshot::Snapshot;
 pub use specials::{USE_RANGE, activate_linedef, p_use_lines, tick_sector_specials};
 pub use state::{DoomRng, GameState, RNG_TABLE};
 pub use states::STATES;
 pub use tic::{FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt};
-pub use pickups::p_check_pickups;
 pub use weapons::{fire_weapon, player_can_fire};

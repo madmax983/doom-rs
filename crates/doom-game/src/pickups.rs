@@ -120,7 +120,8 @@ fn apply_pickup(gs: &mut GameState, kind: MobjKind) {
 
         // ---- Armor ----
         MobjKind::ArmorBonus => {
-            gs.player.give_armor(gs.player.armor() + 1, gs.player.armor_type.max(1));
+            gs.player
+                .give_armor(gs.player.armor() + 1, gs.player.armor_type.max(1));
         }
         MobjKind::GreenArmor => {
             gs.player.give_armor(100, 1);

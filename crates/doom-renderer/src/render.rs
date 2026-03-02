@@ -33,6 +33,7 @@ use crate::column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column};
 use crate::flat_cache::FlatCache;
 use crate::framebuffer::Framebuffer;
 use crate::palette::PaletteLut;
+use crate::sky::{draw_sky_columns, is_sky_flat};
 use crate::span::{DrawSpanParams, draw_span};
 use crate::texture::TextureCache;
 
@@ -112,6 +113,13 @@ pub fn render_level(
     // Z-buffer (per-column minimum depth, in view-space units).
     let mut z_buf = [i32::MAX; SCREEN_W];
 
+    // Sky tracking: the ceiling region that needs sky rendering per column.
+    // sky_ceil_top[x] = topmost pixel of the sky region (usually 0).
+    // sky_ceil_bot[x] = bottommost pixel of the sky region.
+    // When sky_ceil_bot[x] < sky_ceil_top[x], no sky is drawn for that column.
+    let mut sky_ceil_top = [0i32; SCREEN_W];
+    let mut sky_ceil_bot = [-1i32; SCREEN_W]; // no sky by default
+
     // ------------------------------------------------------------------
     // Step 3: Precompute trig — Fixed16_16 raw i32 values
     // ------------------------------------------------------------------
@@ -173,8 +181,8 @@ pub fn render_level(
         };
 
         let floor_h = sector.floor_height as i32;
-        let ceil_h  = sector.ceil_height as i32;
-        let light   = ((sector.light_level as u32) >> 3).min(31) as u8;
+        let ceil_h = sector.ceil_height as i32;
+        let light = ((sector.light_level as u32) >> 3).min(31) as u8;
 
         // Pick the colormap row for this sector's light level.
         let cm: &[u8; 256] = colormap.map(|c| c.get(light)).unwrap_or(&IDENTITY_COLORMAP);
@@ -188,7 +196,9 @@ pub fn render_level(
                 linedef.right_sidedef
             };
             if back_sidedef_idx != 0xFFFF {
-                level.sidedefs.get(back_sidedef_idx as usize)
+                level
+                    .sidedefs
+                    .get(back_sidedef_idx as usize)
                     .and_then(|sd| level.sectors.get(sd.sector as usize))
             } else {
                 None
@@ -216,7 +226,7 @@ pub fn render_level(
         };
 
         let col_start = sx_left.max(0).min((SCREEN_W - 1) as i64) as usize;
-        let col_end   = sx_right.max(0).min((SCREEN_W - 1) as i64) as usize;
+        let col_end = sx_right.max(0).min((SCREEN_W - 1) as i64) as usize;
 
         if col_start > col_end {
             continue;
@@ -259,9 +269,8 @@ pub fn render_level(
                 // Clamped to [w_top, w_bot] to avoid drawing outside the wall span.
                 let proj = |h: i32| -> i32 {
                     let height_range = (ceil_h - floor_h).max(1);
-                    let pixel_range  = w_bot - w_top;
-                    (w_top + (ceil_h - h) * pixel_range / height_range)
-                        .clamp(w_top, w_bot)
+                    let pixel_range = w_bot - w_top;
+                    (w_top + (ceil_h - h) * pixel_range / height_range).clamp(w_top, w_bot)
                 };
 
                 // Compute screen-space positions of the back sector's ceiling and floor.
@@ -286,28 +295,40 @@ pub fn render_level(
 
                 // Record back sector flats (what the player sees through the portal).
                 if let Some(bs) = back_sector {
-                    ceil_flat[x]  = bs.ceil_flat;
+                    ceil_flat[x] = bs.ceil_flat;
                     floor_flat[x] = bs.floor_flat;
-                    col_light[x]  = ((bs.light_level as u32) >> 3).min(31) as u8;
+                    col_light[x] = ((bs.light_level as u32) >> 3).min(31) as u8;
                 } else {
-                    ceil_flat[x]  = sector.ceil_flat;
+                    ceil_flat[x] = sector.ceil_flat;
                     floor_flat[x] = sector.floor_flat;
-                    col_light[x]  = light;
+                    col_light[x] = light;
                 }
 
                 // Perspective-correct U coordinate helper (shared for upper/lower).
                 let t_screen = (t as f32) / (span_w as f32).max(1.0);
-                let denom = (vx_left as f32
-                    + t_screen * (vx_right as f32 - vx_left as f32))
-                    .max(1.0);
+                let denom =
+                    (vx_left as f32 + t_screen * (vx_right as f32 - vx_left as f32)).max(1.0);
                 let t_persp = t_screen * (vx_right as f32) / denom;
-                let u_world = seg.offset as f32
-                    + sidedef.x_offset as f32
-                    + t_persp * seg_world_len;
+                let u_world = seg.offset as f32 + sidedef.x_offset as f32 + t_persp * seg_world_len;
+
+                // ---- Sky detection for two-sided portals -------------------------
+                // When both front and back ceilings are F_SKY1, skip the upper
+                // texture entirely — sky shows through the portal (outdoor areas).
+                let front_is_sky = is_sky_flat(&sector.ceil_flat);
+                let back_is_sky = back_sector.is_some_and(|bs| is_sky_flat(&bs.ceil_flat));
+
+                // If the front sector has a sky ceiling, record the sky region
+                // for this column (from screen top to wherever the ceiling starts).
+                if front_is_sky {
+                    sky_ceil_top[x] = 0;
+                    sky_ceil_bot[x] = (w_top - 1).max(-1);
+                }
 
                 // ---- Upper band (front_ceil > back_ceil) -------------------------
                 let has_upper = upper_bot > w_top;
-                if has_upper {
+                // Skip upper texture if both front and back are sky (sky-to-sky portal).
+                let skip_upper_for_sky = front_is_sky && back_is_sky;
+                if has_upper && !skip_upper_for_sky {
                     let upper_h_px = (upper_bot - w_top).max(1);
 
                     if let Some(cache) = tex_cache {
@@ -315,8 +336,7 @@ pub fn render_level(
                             let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
                             let tex_h = tex.height as u32;
                             let fracstep = (tex_h << 16) / (upper_h_px as u32).max(1);
-                            let texturemid =
-                                ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
+                            let texturemid = ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
                             let frac_start = ((texturemid << 16) as i64
                                 - (HALF_H as i64 - w_top as i64) * fracstep as i64)
                                 as u32;
@@ -337,13 +357,27 @@ pub fn render_level(
                         } else {
                             // Texture not in cache — flat-shade fallback.
                             let wall_color = (32u8).saturating_add(light);
-                            fb.draw_column(x, w_top as usize, (upper_bot - 1).max(w_top) as usize, wall_color);
+                            fb.draw_column(
+                                x,
+                                w_top as usize,
+                                (upper_bot - 1).max(w_top) as usize,
+                                wall_color,
+                            );
                         }
                     } else {
                         // No tex_cache — flat-shade fallback.
                         let wall_color = (32u8).saturating_add(light);
-                        fb.draw_column(x, w_top as usize, (upper_bot - 1).max(w_top) as usize, wall_color);
+                        fb.draw_column(
+                            x,
+                            w_top as usize,
+                            (upper_bot - 1).max(w_top) as usize,
+                            wall_color,
+                        );
                     }
+                } else if has_upper && skip_upper_for_sky {
+                    // Sky-to-sky portal: extend the sky region down through
+                    // the upper band (sky is visible all the way to the portal opening).
+                    sky_ceil_bot[x] = (upper_bot - 1).max(sky_ceil_bot[x]);
                 }
 
                 // ---- Lower band (back_floor > front_floor) -----------------------
@@ -356,8 +390,7 @@ pub fn render_level(
                             let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
                             let tex_h = tex.height as u32;
                             let fracstep = (tex_h << 16) / (lower_h_px as u32).max(1);
-                            let texturemid =
-                                ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
+                            let texturemid = ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
                             let frac_start = ((texturemid << 16) as i64
                                 - (HALF_H as i64 - lower_top as i64) * fracstep as i64)
                                 as u32;
@@ -408,9 +441,16 @@ pub fn render_level(
                 wall_bot[x] = w_bot;
 
                 // Record which sector's flats belong to this column.
-                ceil_flat[x]  = sector.ceil_flat;
+                ceil_flat[x] = sector.ceil_flat;
                 floor_flat[x] = sector.floor_flat;
-                col_light[x]  = light;
+                col_light[x] = light;
+
+                // If the sector's ceiling is F_SKY1, mark this column for sky
+                // rendering from the top of the screen to just above the wall.
+                if is_sky_flat(&sector.ceil_flat) {
+                    sky_ceil_top[x] = 0;
+                    sky_ceil_bot[x] = (w_top - 1).max(-1);
+                }
 
                 // Draw the wall column — textured if a TextureCache is available.
                 if let Some(cache) = tex_cache {
@@ -422,23 +462,20 @@ pub fn render_level(
                             .max(1.0);
                         let t_persp = t_screen * (vx_right as f32) / denom;
 
-                        let u_world = seg.offset as f32
-                            + sidedef.x_offset as f32
-                            + t_persp * seg_world_len;
+                        let u_world =
+                            seg.offset as f32 + sidedef.x_offset as f32 + t_persp * seg_world_len;
                         let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
 
                         // Vertical texture coordinate (V).
                         let tex_h = tex.height as u32;
                         let fracstep = (tex_h << 16) / (wall_h_px as u32).max(1);
-                        let texturemid =
-                            ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
+                        let texturemid = ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
                         let frac_start = ((texturemid << 16) as i64
                             - (HALF_H as i64 - w_top as i64) * fracstep as i64)
                             as u32;
 
                         let col_start_idx = u_tex * tex_h as usize;
-                        let col_data =
-                            &tex.data[col_start_idx..col_start_idx + tex_h as usize];
+                        let col_data = &tex.data[col_start_idx..col_start_idx + tex_h as usize];
 
                         draw_column(
                             fb,
@@ -460,6 +497,19 @@ pub fn render_level(
                 let wall_color = (32u8).saturating_add(light);
                 fb.draw_column(x, w_top as usize, w_bot as usize, wall_color);
             }
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Step 4b: Draw sky columns
+    // ------------------------------------------------------------------
+    // After the wall pass, render sky for any column whose sector has a
+    // F_SKY1 ceiling.  The sky texture is looked up from the TextureCache
+    // (hardcoded to SKY1 for now).  Sky overwrites the background fill in
+    // the ceiling region with parallax-mapped sky texture columns.
+    if let Some(cache) = tex_cache {
+        if let Some(sky_tex) = cache.get(b"SKY1\0\0\0\0") {
+            draw_sky_columns(fb, &sky_ceil_top, &sky_ceil_bot, player_angle, sky_tex);
         }
     }
 
@@ -529,10 +579,8 @@ pub fn render_level(
         // world_left   = world_centre + right * (0 - HALF_W) * dist / FOCAL_LEN
         //
         // In 16.16 fixed-point (accumulator form):
-        let world_x_centre = (player_x as i64) * 65536
-            + (cos_i * dist);  // already in map units → shift 16 → ×65536
-        let world_y_centre = (player_y as i64) * 65536
-            + (sin_i * dist);
+        let world_x_centre = (player_x as i64) * 65536 + (cos_i * dist); // already in map units → shift 16 → ×65536
+        let world_y_centre = (player_y as i64) * 65536 + (sin_i * dist);
 
         // Adjust from screen centre to left edge (column 0):
         //   lateral_offset = (0 - HALF_W) * dist / FOCAL_LEN
@@ -567,7 +615,7 @@ pub fn render_level(
                           xstep_u: u32,
                           ystep_u: u32,
                           colormap_cache: Option<&ColormapCache>| {
-            if name == &NO_FLAT {
+            if name == &NO_FLAT || is_sky_flat(name) {
                 return;
             }
             let source = cache.get(name);
@@ -602,8 +650,14 @@ pub fn render_level(
             let this_flat: Option<([u8; 8], u8)> = if dy < 0 {
                 // Above horizon — ceiling rows.
                 if y < wt {
-                    // This column's ceiling is visible here.
-                    Some((ceil_flat[x], col_light[x]))
+                    // Sky sectors are rendered by draw_sky_columns (Step 4b),
+                    // so skip them here to avoid overwriting sky with flat data.
+                    if is_sky_flat(&ceil_flat[x]) {
+                        None
+                    } else {
+                        // This column's ceiling is visible here.
+                        Some((ceil_flat[x], col_light[x]))
+                    }
                 } else {
                     None // occluded by wall
                 }
@@ -629,8 +683,18 @@ pub fn render_level(
                 (Some(start), other) => {
                     // End the current run and flush it.
                     flush_span(
-                        cache, fb, start, x - 1, &run_flat_name, run_light, y,
-                        init_xfrac, init_yfrac, xstep_u, ystep_u, colormap,
+                        cache,
+                        fb,
+                        start,
+                        x - 1,
+                        &run_flat_name,
+                        run_light,
+                        y,
+                        init_xfrac,
+                        init_yfrac,
+                        xstep_u,
+                        ystep_u,
+                        colormap,
                     );
                     run_start = if other.is_some() {
                         let (name, li) = other.unwrap();
@@ -648,8 +712,18 @@ pub fn render_level(
         // Flush any remaining run.
         if let Some(start) = run_start {
             flush_span(
-                cache, fb, start, SCREEN_W - 1, &run_flat_name, run_light, y,
-                init_xfrac, init_yfrac, xstep_u, ystep_u, colormap,
+                cache,
+                fb,
+                start,
+                SCREEN_W - 1,
+                &run_flat_name,
+                run_light,
+                y,
+                init_xfrac,
+                init_yfrac,
+                xstep_u,
+                ystep_u,
+                colormap,
             );
         }
     }
@@ -663,12 +737,7 @@ pub fn render_level(
 ///
 /// Returns `None` if both endpoints are behind the near plane after clipping.
 /// Returns `Some((vx1, vy1, vx2, vy2))` with the clipped coordinates.
-fn clip_seg_to_near_plane(
-    vx1: i64,
-    vy1: i64,
-    vx2: i64,
-    vy2: i64,
-) -> Option<(i64, i64, i64, i64)> {
+fn clip_seg_to_near_plane(vx1: i64, vy1: i64, vx2: i64, vy2: i64) -> Option<(i64, i64, i64, i64)> {
     const NEAR: i64 = 1;
 
     if vx1 <= 0 && vx2 <= 0 {
@@ -712,10 +781,7 @@ mod tests {
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
-        let vertexes = vec![
-            Vertex { x: 0, y: 128 },
-            Vertex { x: 128, y: 128 },
-        ];
+        let vertexes = vec![Vertex { x: 0, y: 128 }, Vertex { x: 128, y: 128 }];
         let sectors = vec![Sector {
             floor_height: 0,
             ceil_height: 128,
@@ -750,8 +816,17 @@ mod tests {
             direction: 0,
             offset: 0,
         }];
-        let ssectors = vec![Ssector { seg_count: 1, first_seg: 0 }];
-        let things = vec![Thing { x: 0, y: 0, angle: 0, kind: 1, flags: 7 }];
+        let ssectors = vec![Ssector {
+            seg_count: 1,
+            first_seg: 0,
+        }];
+        let things = vec![Thing {
+            x: 0,
+            y: 0,
+            angle: 0,
+            kind: 1,
+            flags: 7,
+        }];
 
         let reject = Reject::parse_lump(&[0u8; 1], 1).expect("reject parse");
 
@@ -786,34 +861,35 @@ mod tests {
     ///
     /// The portal opening is at y=128 (the wall seg).
     /// Player is at (0, 0) looking toward the wall at y=128.
-    fn make_two_sided_level(front_floor: i16, front_ceil: i16,
-                            back_floor: i16,  back_ceil: i16) -> Level {
+    fn make_two_sided_level(
+        front_floor: i16,
+        front_ceil: i16,
+        back_floor: i16,
+        back_ceil: i16,
+    ) -> Level {
         use doom_map::lumps::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
-        let vertexes = vec![
-            Vertex { x: -64, y: 128 },
-            Vertex { x:  64, y: 128 },
-        ];
+        let vertexes = vec![Vertex { x: -64, y: 128 }, Vertex { x: 64, y: 128 }];
         let sectors = vec![
             // Sector 0 — front (player stands here)
             Sector {
                 floor_height: front_floor,
-                ceil_height:  front_ceil,
-                floor_flat:   *b"FLAT1\0\0\0",
-                ceil_flat:    *b"FLAT2\0\0\0",
-                light_level:  192,
+                ceil_height: front_ceil,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
                 special: 0,
                 tag: 0,
             },
             // Sector 1 — back (player looks into this)
             Sector {
                 floor_height: back_floor,
-                ceil_height:  back_ceil,
-                floor_flat:   *b"FLAT3\0\0\0",
-                ceil_flat:    *b"FLAT4\0\0\0",
-                light_level:  192,
+                ceil_height: back_ceil,
+                floor_flat: *b"FLAT3\0\0\0",
+                ceil_flat: *b"FLAT4\0\0\0",
+                light_level: 192,
                 special: 0,
                 tag: 0,
             },
@@ -821,14 +897,16 @@ mod tests {
         // right sidedef (sector 0, front), left sidedef (sector 1, back)
         let sidedefs = vec![
             Sidedef {
-                x_offset: 0, y_offset: 0,
+                x_offset: 0,
+                y_offset: 0,
                 upper_texture: *b"UPPER\0\0\0",
                 lower_texture: *b"LOWER\0\0\0",
                 middle_texture: *b"-\0\0\0\0\0\0\0",
                 sector: 0,
             },
             Sidedef {
-                x_offset: 0, y_offset: 0,
+                x_offset: 0,
+                y_offset: 0,
                 upper_texture: *b"UPPER\0\0\0",
                 lower_texture: *b"LOWER\0\0\0",
                 middle_texture: *b"-\0\0\0\0\0\0\0",
@@ -853,8 +931,17 @@ mod tests {
             direction: 0,
             offset: 0,
         }];
-        let ssectors = vec![Ssector { seg_count: 1, first_seg: 0 }];
-        let things = vec![Thing { x: 0, y: 0, angle: 0, kind: 1, flags: 7 }];
+        let ssectors = vec![Ssector {
+            seg_count: 1,
+            first_seg: 0,
+        }];
+        let things = vec![Thing {
+            x: 0,
+            y: 0,
+            angle: 0,
+            kind: 1,
+            flags: 7,
+        }];
 
         let reject = Reject::parse_lump(&[0u8; 1], 2).expect("reject parse");
 
@@ -890,7 +977,10 @@ mod tests {
         render_level(&level, 0, 0, Bam::ZERO, &mut fb, &palette, None, None, None);
 
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
-        assert!(has_nonzero, "framebuffer should be non-zero after rendering background");
+        assert!(
+            has_nonzero,
+            "framebuffer should be non-zero after rendering background"
+        );
     }
 
     #[test]
@@ -910,10 +1000,30 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         let mut fb1 = Framebuffer::new();
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb1, &palette, None, None, None);
+        render_level(
+            &level,
+            64,
+            0,
+            Bam::ZERO,
+            &mut fb1,
+            &palette,
+            None,
+            None,
+            None,
+        );
 
         let mut fb2 = Framebuffer::new();
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb2, &palette, None, None, None);
+        render_level(
+            &level,
+            64,
+            0,
+            Bam::ZERO,
+            &mut fb2,
+            &palette,
+            None,
+            None,
+            None,
+        );
 
         assert_eq!(fb1.data.as_slice(), fb2.data.as_slice());
     }
@@ -946,7 +1056,17 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 64, Bam::ZERO, &mut fb, &palette, None, None, None);
+        render_level(
+            &level,
+            0,
+            64,
+            Bam::ZERO,
+            &mut fb,
+            &palette,
+            None,
+            None,
+            None,
+        );
 
         // Background colour index 25 was written to the top half.
         assert_eq!(fb.get_pixel(0, 0), Some(25));
@@ -962,11 +1082,24 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // tex_cache = None should fall back to flat-shaded walls without panic.
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb, &palette, None, None, None);
+        render_level(
+            &level,
+            64,
+            0,
+            Bam::ZERO,
+            &mut fb,
+            &palette,
+            None,
+            None,
+            None,
+        );
 
         // Should produce some output (background fill at minimum).
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
-        assert!(has_nonzero, "render with tex_cache=None must produce non-zero output");
+        assert!(
+            has_nonzero,
+            "render with tex_cache=None must produce non-zero output"
+        );
     }
 
     /// Passing a FlatCache with a known flat renders textured pixels into
@@ -977,7 +1110,10 @@ mod tests {
 
         // Build a minimal in-memory WAD with F_START / FLAT1 / FLAT2 / F_END.
         let mut flat_data = vec![0u8; FLAT_SIZE];
-        flat_data.iter_mut().enumerate().for_each(|(i, b)| *b = (i % 200) as u8);
+        flat_data
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, b)| *b = (i % 200) as u8);
 
         let make_iwad = |lumps: &[(&str, &[u8])]| {
             let mut data: Vec<u8> = Vec::new();
@@ -1021,11 +1157,24 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // Player at (64, 0) facing forward — exercises the wall path.
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb, &palette, Some(&cache), None, None);
+        render_level(
+            &level,
+            64,
+            0,
+            Bam::ZERO,
+            &mut fb,
+            &palette,
+            Some(&cache),
+            None,
+            None,
+        );
 
         // Should not panic and should produce some non-zero output.
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
-        assert!(has_nonzero, "render with flat cache must produce non-zero output");
+        assert!(
+            has_nonzero,
+            "render with flat cache must produce non-zero output"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -1036,7 +1185,9 @@ mod tests {
     fn init_trig() {
         // SAFETY: test environment, called at most once per process due to the
         // AtomicBool guard inside init_trig_tables.
-        unsafe { doom_types::Bam::init_trig_tables(); }
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
     }
 
     /// A two-sided seg with front_ceil > back_ceil produces pixels in the
@@ -1126,7 +1277,7 @@ mod tests {
         // we check a row just above and just below center that should be inside
         // the portal opening.
         let row_above_center = center_y.saturating_sub(5); // y=95, inside portal gap
-        let row_below_center = center_y + 5;               // y=105, inside portal gap
+        let row_below_center = center_y + 5; // y=105, inside portal gap
 
         let px_above = fb.get_pixel(center_x, row_above_center).unwrap_or(0);
         let px_below = fb.get_pixel(center_x, row_below_center).unwrap_or(0);

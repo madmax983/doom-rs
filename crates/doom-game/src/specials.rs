@@ -163,8 +163,11 @@ pub fn tick_lights(gs: &mut GameState, level: &mut Level) {
             light.is_bright = !light.is_bright;
             light.timer = light.period;
             if light.sector < level.sectors.len() {
-                level.sectors[light.sector].light_level =
-                    if light.is_bright { light.bright } else { light.dark };
+                level.sectors[light.sector].light_level = if light.is_bright {
+                    light.bright
+                } else {
+                    light.dark
+                };
             }
         }
     }
@@ -821,7 +824,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
 
         assert_eq!(
-            gs.active_doors.len(), 1,
+            gs.active_doors.len(),
+            1,
             "door must open when player has blue card"
         );
     }
@@ -838,7 +842,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
 
         assert_eq!(
-            gs.active_doors.len(), 1,
+            gs.active_doors.len(),
+            1,
             "door must open when player has blue skull"
         );
     }
@@ -882,7 +887,8 @@ mod tests {
         spawn_level_specials(&mut gs, &level);
 
         assert_eq!(
-            gs.active_lights.len(), 1,
+            gs.active_lights.len(),
+            1,
             "spawn_level_specials must create one light thinker for special=1"
         );
     }

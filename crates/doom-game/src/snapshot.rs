@@ -168,7 +168,12 @@ mod tests {
     #[test]
     fn snapshot_is_deep_copy_of_actors() {
         let mut gs = GameState::new("E1M1");
-        let mo = Mobj::new(MobjKind::Player, Fixed16_16::ZERO, Fixed16_16::ZERO, Bam::ZERO);
+        let mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
         let handle = gs.mobjslab.alloc(mo);
 
         let snap = gs.save_snapshot();
@@ -203,7 +208,12 @@ mod tests {
     #[test]
     fn restore_brings_back_freed_actor() {
         let mut gs = GameState::new("E1M1");
-        let mo = Mobj::new(MobjKind::Imp, Fixed16_16::from_int(100), Fixed16_16::ZERO, Bam::ZERO);
+        let mo = Mobj::new(
+            MobjKind::Imp,
+            Fixed16_16::from_int(100),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
         let handle = gs.mobjslab.alloc(mo);
 
         let snap = gs.save_snapshot();

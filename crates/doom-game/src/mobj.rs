@@ -47,91 +47,98 @@ impl MobjHandle {
 #[repr(u16)]
 pub enum MobjKind {
     // Players
-    Player          = 0,
+    Player = 0,
 
     // Monsters
-    Trooper         = 1,   // Zombie man
-    Sergeant        = 2,   // Shotgun guy
-    Imp             = 3,
-    Demon           = 4,
-    Spectre         = 5,
-    LostSoul        = 6,
-    Cacodemon       = 7,
-    BaronOfHell     = 8,
-    HellKnight      = 9,
-    Arachnotron     = 10,
-    PainElemental   = 11,
-    Revenant        = 12,
-    Mancubus        = 13,
-    ArchVile        = 14,
+    Trooper = 1,  // Zombie man
+    Sergeant = 2, // Shotgun guy
+    Imp = 3,
+    Demon = 4,
+    Spectre = 5,
+    LostSoul = 6,
+    Cacodemon = 7,
+    BaronOfHell = 8,
+    HellKnight = 9,
+    Arachnotron = 10,
+    PainElemental = 11,
+    Revenant = 12,
+    Mancubus = 13,
+    ArchVile = 14,
     SpiderMastermind = 15,
-    Cyberdemon      = 16,
-    WolfSS          = 17,
+    Cyberdemon = 16,
+    WolfSS = 17,
 
     // Visual effects
-    BulletPuff      = 18,
-    Blood           = 19,
-    SmokeTrail      = 20,
-    SpawnFire       = 21,
+    BulletPuff = 18,
+    Blood = 19,
+    SmokeTrail = 20,
+    SpawnFire = 21,
 
     // Projectiles
-    Rocket          = 22,
-    PlasmaBall      = 23,
-    BfgBall         = 24,
-    ArachPlaz       = 25,
-    Tracer          = 26,
+    Rocket = 22,
+    PlasmaBall = 23,
+    BfgBall = 24,
+    ArachPlaz = 25,
+    Tracer = 26,
 
     // Pickups — weapons
-    BfgPickup       = 27,
-    Chaingun        = 28,
-    Chainsaw        = 29,
-    RocketLauncher  = 30,
-    PlasmaRifle     = 31,
-    Shotgun         = 32,
-    SuperShotgun    = 33,
+    BfgPickup = 27,
+    Chaingun = 28,
+    Chainsaw = 29,
+    RocketLauncher = 30,
+    PlasmaRifle = 31,
+    Shotgun = 32,
+    SuperShotgun = 33,
 
     // Pickups — ammo
-    Clip            = 34,
-    ClipBox         = 35,
-    RocketAmmo      = 36,
-    RocketBox       = 37,
-    Cell            = 38,
-    CellPack        = 39,
-    Shell           = 40,
-    ShellBox        = 41,
+    Clip = 34,
+    ClipBox = 35,
+    RocketAmmo = 36,
+    RocketBox = 37,
+    Cell = 38,
+    CellPack = 39,
+    Shell = 40,
+    ShellBox = 41,
 
     // Pickups — health & armor
-    HealthBonus     = 42,
-    ArmorBonus      = 43,
-    GreenArmor      = 44,
-    BlueArmor       = 45,
-    Stimpack        = 46,
-    Medikit         = 47,
-    Megasphere      = 48,
-    Soulsphere      = 49,
+    HealthBonus = 42,
+    ArmorBonus = 43,
+    GreenArmor = 44,
+    BlueArmor = 45,
+    Stimpack = 46,
+    Medikit = 47,
+    Megasphere = 48,
+    Soulsphere = 49,
 
     // Pickups — keys
-    BlueCard        = 50,
-    RedCard         = 51,
-    YellowCard      = 52,
-    BlueSkull       = 53,
-    RedSkull        = 54,
-    YellowSkull     = 55,
+    BlueCard = 50,
+    RedCard = 51,
+    YellowCard = 52,
+    BlueSkull = 53,
+    RedSkull = 54,
+    YellowSkull = 55,
 
     // Pickups — power-ups
-    Berserk         = 56,
-    BlurSphere      = 57,
-    RadSuit         = 58,
-    Allmap          = 59,
-    Infrared        = 60,
+    Berserk = 56,
+    BlurSphere = 57,
+    RadSuit = 58,
+    Allmap = 59,
+    Infrared = 60,
 
     // Misc
-    Column          = 61,
-    TechLamp        = 62,
-    TechLamp2       = 63,
-    Barrel          = 64,
-    BossBrain       = 65,
-    CommanderKeen   = 66,
+    Column = 61,
+    TechLamp = 62,
+    TechLamp2 = 63,
+    Barrel = 64,
+    BossBrain = 65,
+    CommanderKeen = 66,
+
+    // Additional projectiles (Batch 21)
+    BfgExtra = 67,     // BFG tracers (secondary damage)
+    ImpFireball = 68,  // Imp ranged attack
+    CacoFireball = 69, // Cacodemon ranged attack
+    BaronBall = 70,    // Baron/Hell Knight plasma ball
+    FatShot = 71,      // Mancubus fireball
 }
 
 // ---------------------------------------------------------------------------
@@ -141,55 +148,55 @@ pub enum MobjKind {
 /// Mobj behavior flags — combine with `|`.
 pub mod flags {
     /// Can be picked up as a bonus item.
-    pub const MF_SPECIAL:       u32 = 0x0000_0001;
+    pub const MF_SPECIAL: u32 = 0x0000_0001;
     /// Blocks movement of other solid actors.
-    pub const MF_SOLID:         u32 = 0x0000_0002;
+    pub const MF_SOLID: u32 = 0x0000_0002;
     /// Can receive hitscan / projectile damage.
-    pub const MF_SHOOTABLE:     u32 = 0x0000_0004;
+    pub const MF_SHOOTABLE: u32 = 0x0000_0004;
     /// Not linked into sector thing lists (no position query).
-    pub const MF_NOSECTOR:      u32 = 0x0000_0008;
+    pub const MF_NOSECTOR: u32 = 0x0000_0008;
     /// Not linked into blockmap.
-    pub const MF_NOBLOCKMAP:    u32 = 0x0000_0010;
+    pub const MF_NOBLOCKMAP: u32 = 0x0000_0010;
     /// Won't react until first hit (ambush/deaf monster).
-    pub const MF_AMBUSH:        u32 = 0x0000_0020;
+    pub const MF_AMBUSH: u32 = 0x0000_0020;
     /// Will try to attack immediately on next tic.
-    pub const MF_JUSTHIT:       u32 = 0x0000_0040;
+    pub const MF_JUSTHIT: u32 = 0x0000_0040;
     /// Has just attacked.
-    pub const MF_JUSTATTACKED:  u32 = 0x0000_0080;
+    pub const MF_JUSTATTACKED: u32 = 0x0000_0080;
     /// Spawned hanging from ceiling.
-    pub const MF_SPAWNCEILING:  u32 = 0x0000_0100;
+    pub const MF_SPAWNCEILING: u32 = 0x0000_0100;
     /// Floats — unaffected by gravity (cacodemon, etc.).
-    pub const MF_NOGRAVITY:     u32 = 0x0000_0200;
+    pub const MF_NOGRAVITY: u32 = 0x0000_0200;
     /// Can fall off ledges.
-    pub const MF_DROPOFF:       u32 = 0x0000_0400;
+    pub const MF_DROPOFF: u32 = 0x0000_0400;
     /// Actor picks up items.
-    pub const MF_PICKUP:        u32 = 0x0000_0800;
+    pub const MF_PICKUP: u32 = 0x0000_0800;
     /// No clipping — passes through walls/actors.
-    pub const MF_NOCLIP:        u32 = 0x0000_1000;
+    pub const MF_NOCLIP: u32 = 0x0000_1000;
     /// Float-target altitude adjustment in progress.
-    pub const MF_FLOAT:         u32 = 0x0000_2000;
+    pub const MF_FLOAT: u32 = 0x0000_2000;
     /// Teleporting; bypass collision this tic.
-    pub const MF_TELEPORT:      u32 = 0x0000_4000;
+    pub const MF_TELEPORT: u32 = 0x0000_4000;
     /// Is a missile projectile; explodes on contact.
-    pub const MF_MISSILE:       u32 = 0x0000_8000;
+    pub const MF_MISSILE: u32 = 0x0000_8000;
     /// Dropped by a dying enemy (counts differently for item %).
-    pub const MF_DROPPED:       u32 = 0x0001_0000;
+    pub const MF_DROPPED: u32 = 0x0001_0000;
     /// Partial invisibility (spectre blur effect).
-    pub const MF_SHADOW:        u32 = 0x0002_0000;
+    pub const MF_SHADOW: u32 = 0x0002_0000;
     /// No blood splat on hit.
-    pub const MF_NOBLOOD:       u32 = 0x0004_0000;
+    pub const MF_NOBLOOD: u32 = 0x0004_0000;
     /// Lying dead as a corpse.
-    pub const MF_CORPSE:        u32 = 0x0008_0000;
+    pub const MF_CORPSE: u32 = 0x0008_0000;
     /// Altitude-adjusting float in progress.
-    pub const MF_INFLOAT:       u32 = 0x0010_0000;
+    pub const MF_INFLOAT: u32 = 0x0010_0000;
     /// Counts toward kill percentage.
-    pub const MF_COUNTKILL:     u32 = 0x0020_0000;
+    pub const MF_COUNTKILL: u32 = 0x0020_0000;
     /// Counts toward item percentage.
-    pub const MF_COUNTITEM:     u32 = 0x0040_0000;
+    pub const MF_COUNTITEM: u32 = 0x0040_0000;
     /// Lost soul flying skull attack.
-    pub const MF_SKULLFLY:      u32 = 0x0080_0000;
+    pub const MF_SKULLFLY: u32 = 0x0080_0000;
     /// Not placed in deathmatch games.
-    pub const MF_NOTDMATCH:     u32 = 0x0100_0000;
+    pub const MF_NOTDMATCH: u32 = 0x0100_0000;
 }
 
 // ---------------------------------------------------------------------------
@@ -392,12 +399,24 @@ impl MobjSlab {
                 Slot::Occupied { .. } => unreachable!("free list points to occupied slot"),
             };
             self.free_head = next;
-            self.slots[free_idx as usize] = Slot::Occupied { mobj, generation: new_gen };
-            MobjHandle { index: free_idx, generation: new_gen }
+            self.slots[free_idx as usize] = Slot::Occupied {
+                mobj,
+                generation: new_gen,
+            };
+            MobjHandle {
+                index: free_idx,
+                generation: new_gen,
+            }
         } else {
             let idx = self.slots.len() as u32;
-            self.slots.push(Slot::Occupied { mobj, generation: new_gen });
-            MobjHandle { index: idx, generation: new_gen }
+            self.slots.push(Slot::Occupied {
+                mobj,
+                generation: new_gen,
+            });
+            MobjHandle {
+                index: idx,
+                generation: new_gen,
+            }
         }
     }
 
@@ -411,7 +430,9 @@ impl MobjSlab {
             Slot::Occupied { generation, .. } if *generation == handle.generation => {}
             _ => return false,
         }
-        self.slots[idx] = Slot::Free { next_free: self.free_head };
+        self.slots[idx] = Slot::Free {
+            next_free: self.free_head,
+        };
         self.free_head = Some(handle.index);
         true
     }
@@ -420,9 +441,7 @@ impl MobjSlab {
     pub fn get(&self, handle: MobjHandle) -> Option<&Mobj> {
         let idx = handle.index as usize;
         match self.slots.get(idx)? {
-            Slot::Occupied { mobj, generation } if *generation == handle.generation => {
-                Some(mobj)
-            }
+            Slot::Occupied { mobj, generation } if *generation == handle.generation => Some(mobj),
             _ => None,
         }
     }
@@ -431,22 +450,23 @@ impl MobjSlab {
     pub fn get_mut(&mut self, handle: MobjHandle) -> Option<&mut Mobj> {
         let idx = handle.index as usize;
         match self.slots.get_mut(idx)? {
-            Slot::Occupied { mobj, generation } if *generation == handle.generation => {
-                Some(mobj)
-            }
+            Slot::Occupied { mobj, generation } if *generation == handle.generation => Some(mobj),
             _ => None,
         }
     }
 
     /// Iterate all live handles in slot order.
     pub fn iter_handles(&self) -> impl Iterator<Item = MobjHandle> + '_ {
-        self.slots.iter().enumerate().filter_map(|(i, slot)| match slot {
-            Slot::Occupied { generation, .. } => Some(MobjHandle {
-                index: i as u32,
-                generation: *generation,
-            }),
-            Slot::Free { .. } => None,
-        })
+        self.slots
+            .iter()
+            .enumerate()
+            .filter_map(|(i, slot)| match slot {
+                Slot::Occupied { generation, .. } => Some(MobjHandle {
+                    index: i as u32,
+                    generation: *generation,
+                }),
+                Slot::Free { .. } => None,
+            })
     }
 
     /// Number of live actors.
@@ -487,7 +507,12 @@ mod tests {
     use super::*;
 
     fn make_player_mobj() -> Mobj {
-        let mut mo = Mobj::new(MobjKind::Player, Fixed16_16::ZERO, Fixed16_16::ZERO, Bam::ZERO);
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
         mo.health = 100;
         mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
         mo

@@ -11,9 +11,13 @@
 //! # Implemented (Batch 5)
 //! - `A_PosAttack`  (index 3): Trooper hitscan attack.
 //! - `A_SPosAttack` (index 4): Sergeant 3-pellet shotgun burst.
-//! - `A_TroopAttack`(index 5): Imp — melee if close, else hitscan.
+//! - `A_TroopAttack`(index 5): Imp — melee if close, else fireball projectile.
 //! - `A_SargAttack` (index 6): Demon melee-only attack.
 //! - `A_Fall`       (index 7): clear MF_SOLID/MF_COUNTKILL on death.
+//!
+//! # Implemented (Batch 21)
+//! - `A_HeadAttack`  (index 8): Cacodemon fireball projectile.
+//! - `A_BruisAttack` (index 9): Baron/Hell Knight plasma ball projectile.
 //!
 //! # Implemented (Batch 3)
 //! - `p_new_chase_dir`: full 4-candidate direction selection with fallback.
@@ -22,7 +26,7 @@
 use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
 
-use crate::mobj::MobjHandle;
+use crate::mobj::{MobjHandle, MobjKind};
 use crate::state::GameState;
 use crate::{mobjinfo, states};
 
@@ -46,6 +50,10 @@ pub const ACTION_TROO_ATTACK: u8 = 5;
 pub const ACTION_SARG_ATTACK: u8 = 6;
 /// `A_Fall`: clear MF_SOLID and MF_COUNTKILL so corpses are passable.
 pub const ACTION_FALL: u8 = 7;
+/// `A_HeadAttack`: Cacodemon fireball projectile.
+pub const ACTION_HEAD_ATTACK: u8 = 8;
+/// `A_BruisAttack`: Baron/Hell Knight plasma ball projectile.
+pub const ACTION_BRUIS_ATTACK: u8 = 9;
 
 // ---------------------------------------------------------------------------
 // Public dispatcher
@@ -55,22 +63,19 @@ pub const ACTION_FALL: u8 = 7;
 ///
 /// Called by `GameState::advance_mobj_state` each time an actor enters a
 /// new state.
-pub fn dispatch_action(
-    gs: &mut GameState,
-    handle: MobjHandle,
-    action: u8,
-    level: Option<&Level>,
-) {
+pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level: Option<&Level>) {
     match action {
-        ACTION_NONE         => {}
-        ACTION_LOOK         => a_look(gs, handle),
-        ACTION_CHASE        => a_chase(gs, handle, level),
-        ACTION_POS_ATTACK   => a_pos_attack(gs, handle, level),
-        ACTION_SPOS_ATTACK  => a_spos_attack(gs, handle, level),
-        ACTION_TROO_ATTACK  => a_troo_attack(gs, handle, level),
-        ACTION_SARG_ATTACK  => a_sarg_attack(gs, handle),
-        ACTION_FALL         => a_fall(gs, handle),
-        _                   => {}
+        ACTION_NONE => {}
+        ACTION_LOOK => a_look(gs, handle),
+        ACTION_CHASE => a_chase(gs, handle, level),
+        ACTION_POS_ATTACK => a_pos_attack(gs, handle, level),
+        ACTION_SPOS_ATTACK => a_spos_attack(gs, handle, level),
+        ACTION_TROO_ATTACK => a_troo_attack(gs, handle, level),
+        ACTION_SARG_ATTACK => a_sarg_attack(gs, handle),
+        ACTION_FALL => a_fall(gs, handle),
+        ACTION_HEAD_ATTACK => a_head_attack(gs, handle),
+        ACTION_BRUIS_ATTACK => a_bruis_attack(gs, handle),
+        _ => {}
     }
 }
 
@@ -79,15 +84,15 @@ pub fn dispatch_action(
 // ---------------------------------------------------------------------------
 
 /// Direction constants matching Doom's `dirtype_t`.
-pub const DI_EAST:      u8 = 0;
+pub const DI_EAST: u8 = 0;
 pub const DI_NORTHEAST: u8 = 1;
-pub const DI_NORTH:     u8 = 2;
+pub const DI_NORTH: u8 = 2;
 pub const DI_NORTHWEST: u8 = 3;
-pub const DI_WEST:      u8 = 4;
+pub const DI_WEST: u8 = 4;
 pub const DI_SOUTHWEST: u8 = 5;
-pub const DI_SOUTH:     u8 = 6;
+pub const DI_SOUTH: u8 = 6;
 pub const DI_SOUTHEAST: u8 = 7;
-pub const DI_NODIR:     u8 = 8;
+pub const DI_NODIR: u8 = 8;
 
 /// Unit movement vectors for the 8-way grid (Doom `DI_*` directions).
 ///
@@ -95,27 +100,27 @@ pub const DI_NODIR:     u8 = 8;
 /// Values ≈ `FRACUNIT * cos/sin(n * 45°)`.  Diagonal uses Doom's historical
 /// constant 47000 ≈ 65536 * sin(45°).
 const XMOVE: [Fixed16_16; 9] = [
-    Fixed16_16( 65536), // East
-    Fixed16_16( 47000), // NE
-    Fixed16_16(     0), // North
+    Fixed16_16(65536),  // East
+    Fixed16_16(47000),  // NE
+    Fixed16_16(0),      // North
     Fixed16_16(-47000), // NW
     Fixed16_16(-65536), // West
     Fixed16_16(-47000), // SW
-    Fixed16_16(     0), // South
-    Fixed16_16( 47000), // SE
-    Fixed16_16(     0), // NODIR
+    Fixed16_16(0),      // South
+    Fixed16_16(47000),  // SE
+    Fixed16_16(0),      // NODIR
 ];
 
 const YMOVE: [Fixed16_16; 9] = [
-    Fixed16_16(     0), // East
-    Fixed16_16( 47000), // NE
-    Fixed16_16( 65536), // North
-    Fixed16_16( 47000), // NW
-    Fixed16_16(     0), // West
+    Fixed16_16(0),      // East
+    Fixed16_16(47000),  // NE
+    Fixed16_16(65536),  // North
+    Fixed16_16(47000),  // NW
+    Fixed16_16(0),      // West
     Fixed16_16(-47000), // SW
     Fixed16_16(-65536), // South
     Fixed16_16(-47000), // SE
-    Fixed16_16(     0), // NODIR
+    Fixed16_16(0),      // NODIR
 ];
 
 /// Choose the best 8-way direction given a `(dx, dy)` displacement.
@@ -131,10 +136,10 @@ fn dir_to_target(dx: i32, dy: i32) -> u8 {
     } else {
         // Diagonal.
         match (dx >= 0, dy >= 0) {
-            (true,  true)  => DI_NORTHEAST,
-            (false, true)  => DI_NORTHWEST,
+            (true, true) => DI_NORTHEAST,
+            (false, true) => DI_NORTHWEST,
             (false, false) => DI_SOUTHWEST,
-            (true,  false) => DI_SOUTHEAST,
+            (true, false) => DI_SOUTHEAST,
         }
     }
 }
@@ -215,7 +220,9 @@ fn a_look(gs: &mut GameState, handle: MobjHandle) {
 
     // Decrement threshold counter while the monster is still "alerted."
     {
-        let Some(mo) = gs.mobjslab.get_mut(handle) else { return };
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
         if mo.threshold > 0 {
             mo.threshold -= 1;
             return;
@@ -255,11 +262,13 @@ fn a_look(gs: &mut GameState, handle: MobjHandle) {
     };
 
     // Transition monster to see_state.
-    let Some(mo) = gs.mobjslab.get_mut(handle) else { return };
-    mo.target    = player_handle;
+    let Some(mo) = gs.mobjslab.get_mut(handle) else {
+        return;
+    };
+    mo.target = player_handle;
     mo.threshold = 60; // stay alerted for 60 tics
-    mo.state     = see_sn;
-    mo.tics      = new_tics;
+    mo.state = see_sn;
+    mo.tics = new_tics;
     // The action for see_state fires naturally when tics next reaches zero.
 }
 
@@ -286,20 +295,20 @@ fn try_move_in_dir(
     };
     let step_x = XMOVE[dir as usize].fixed_mul(speed);
     let step_y = YMOVE[dir as usize].fixed_mul(speed);
-    let new_x  = mo_x + step_x;
-    let new_y  = mo_y + step_y;
+    let new_x = mo_x + step_x;
+    let new_y = mo_y + step_y;
 
     let can_move = match level {
         Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
-        None     => true,
+        None => true,
     };
 
     if can_move {
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
-            mo.x       = new_x;
-            mo.y       = new_y;
-            mo.momx    = step_x;
-            mo.momy    = step_y;
+            mo.x = new_x;
+            mo.y = new_y;
+            mo.momx = step_x;
+            mo.momy = step_y;
             mo.movedir = dir;
         }
     }
@@ -318,11 +327,7 @@ fn try_move_in_dir(
 ///
 /// If the chosen direction is blocked, falls back to the next candidate in
 /// order.  Finally, if all four fail, tries any direction (cycled via RNG).
-pub fn p_new_chase_dir(
-    gs: &mut GameState,
-    handle: MobjHandle,
-    level: Option<&Level>,
-) {
+pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     // Get target handle and monster position.
     let (target_handle, mo_x, mo_y, speed) = match gs.mobjslab.get(handle) {
         Some(mo) => {
@@ -357,8 +362,20 @@ pub fn p_new_chase_dir(
     let dy = (ty - mo_y).to_int();
 
     // Determine pure x-direction and y-direction components.
-    let d_x: u8 = if dx > 0 { DI_EAST  } else if dx < 0 { DI_WEST  } else { DI_NODIR };
-    let d_y: u8 = if dy > 0 { DI_NORTH } else if dy < 0 { DI_SOUTH } else { DI_NODIR };
+    let d_x: u8 = if dx > 0 {
+        DI_EAST
+    } else if dx < 0 {
+        DI_WEST
+    } else {
+        DI_NODIR
+    };
+    let d_y: u8 = if dy > 0 {
+        DI_NORTH
+    } else if dy < 0 {
+        DI_SOUTH
+    } else {
+        DI_NODIR
+    };
 
     // Primary candidate: diagonal combining both directions.
     let diag: u8 = if d_x == DI_NODIR || d_y == DI_NODIR {
@@ -367,19 +384,19 @@ pub fn p_new_chase_dir(
     } else {
         // Choose the diagonal that matches (d_x, d_y).
         match (d_x, d_y) {
-            (DI_EAST,  DI_NORTH) => DI_NORTHEAST,
-            (DI_EAST,  DI_SOUTH) => DI_SOUTHEAST,
-            (DI_WEST,  DI_NORTH) => DI_NORTHWEST,
-            (DI_WEST,  DI_SOUTH) => DI_SOUTHWEST,
+            (DI_EAST, DI_NORTH) => DI_NORTHEAST,
+            (DI_EAST, DI_SOUTH) => DI_SOUTHEAST,
+            (DI_WEST, DI_NORTH) => DI_NORTHWEST,
+            (DI_WEST, DI_SOUTH) => DI_SOUTHWEST,
             _ => DI_NODIR,
         }
     };
 
     // Secondary/tertiary: prefer the axis with larger absolute displacement.
     let (sec, tert) = if dx.abs() > dy.abs() {
-        (d_x, d_y)   // larger x → prefer x-dir, then y-dir
+        (d_x, d_y) // larger x → prefer x-dir, then y-dir
     } else {
-        (d_y, d_x)   // larger y → prefer y-dir, then x-dir
+        (d_y, d_x) // larger y → prefer y-dir, then x-dir
     };
 
     // Try candidates in order: primary → secondary → tertiary → nodir.
@@ -414,7 +431,7 @@ pub fn p_new_chase_dir(
 
     // Truly stuck: set NODIR.
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
-        mo.movedir   = DI_NODIR;
+        mo.movedir = DI_NODIR;
         mo.movecount = 0;
     }
 }
@@ -449,7 +466,7 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
             .unwrap_or_default();
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
             mo.target = MobjHandle::NULL;
-            mo.state  = spawn_sn;
+            mo.state = spawn_sn;
             if let Some(e) = states::STATES.get(spawn_sn.0 as usize) {
                 mo.tics = e.tics;
             }
@@ -484,18 +501,18 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         if cur_dir != DI_NODIR {
             let step_x = XMOVE[cur_dir as usize].fixed_mul(speed);
             let step_y = YMOVE[cur_dir as usize].fixed_mul(speed);
-            let new_x  = mo_x + step_x;
-            let new_y  = mo_y + step_y;
+            let new_x = mo_x + step_x;
+            let new_y = mo_y + step_y;
 
             let can_move = match level {
                 Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
-                None     => true,
+                None => true,
             };
 
             if can_move {
                 if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                    mo.x    = new_x;
-                    mo.y    = new_y;
+                    mo.x = new_x;
+                    mo.y = new_y;
                     mo.momx = step_x;
                     mo.momy = step_y;
                 }
@@ -515,7 +532,9 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         None => return,
     };
     let (melee_sn, missile_sn) = {
-        let Some(mo) = gs.mobjslab.get(handle) else { return };
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
         let info = &mobjinfo::MOBJINFO[mo.kind as usize];
         (info.melee_state, info.missile_state)
     };
@@ -530,28 +549,24 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let dist = (tx2 - mo_x2).to_int().abs() + (ty2 - mo_y2).to_int().abs();
 
     // Melee: enter melee state if within MELEERANGE and melee_state != S_NULL.
-    if melee_sn != crate::mobj::StateNum::NULL
-        && dist <= crate::combat::MELEERANGE.to_int()
-    {
+    if melee_sn != crate::mobj::StateNum::NULL && dist <= crate::combat::MELEERANGE.to_int() {
         if let Some(entry) = states::STATES.get(melee_sn.0 as usize) {
             let new_tics = entry.tics;
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
                 mo.state = melee_sn;
-                mo.tics  = new_tics;
+                mo.tics = new_tics;
             }
         }
         return;
     }
 
     // Ranged: enter missile state if within MISSILERANGE and missile_state != S_NULL.
-    if missile_sn != crate::mobj::StateNum::NULL
-        && dist <= crate::combat::MISSILERANGE.to_int()
-    {
+    if missile_sn != crate::mobj::StateNum::NULL && dist <= crate::combat::MISSILERANGE.to_int() {
         if let Some(entry) = states::STATES.get(missile_sn.0 as usize) {
             let new_tics = entry.tics;
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
                 mo.state = missile_sn;
-                mo.tics  = new_tics;
+                mo.tics = new_tics;
             }
         }
     }
@@ -575,8 +590,8 @@ fn a_face_target(gs: &mut GameState, handle: MobjHandle) {
         None => return,
     };
 
-    let dx  = (tx - mo_x).to_int();
-    let dy  = (ty - mo_y).to_int();
+    let dx = (tx - mo_x).to_int();
+    let dy = (ty - mo_y).to_int();
     let dir = dir_to_target(dx, dy);
 
     // Convert 8-way direction index to Bam: each step is 45° = ANG45.
@@ -627,7 +642,14 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     };
 
     let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
-    crate::combat::p_line_attack(gs, handle, angle, crate::combat::MISSILERANGE, damage, level);
+    crate::combat::p_line_attack(
+        gs,
+        handle,
+        angle,
+        crate::combat::MISSILERANGE,
+        damage,
+        level,
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -660,7 +682,12 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         let offset = Bam(spread.0.wrapping_mul(i).wrapping_sub(spread.0));
         let shot_angle = Bam(angle.0.wrapping_add(offset.0));
         crate::combat::p_line_attack(
-            gs, handle, shot_angle, crate::combat::MISSILERANGE, damage, level,
+            gs,
+            handle,
+            shot_angle,
+            crate::combat::MISSILERANGE,
+            damage,
+            level,
         );
     }
 }
@@ -671,8 +698,9 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
 
 /// Port of `A_TroopAttack` from Doom's `p_enemy.c`.
 ///
-/// Uses melee if the target is within `MELEERANGE`, otherwise hitscan.
-fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+/// Uses melee if the target is within `MELEERANGE`, otherwise spawns an
+/// `ImpFireball` projectile aimed at the target.
+fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>) {
     let (target, mo_x, mo_y) = match gs.mobjslab.get(handle) {
         Some(mo) if mo.target != MobjHandle::NULL => (mo.target, mo.x, mo.y),
         _ => return,
@@ -682,10 +710,6 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     }
 
     a_face_target(gs, handle);
-    let angle = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.angle,
-        None => return,
-    };
 
     let (tx, ty) = match gs.mobjslab.get(target) {
         Some(t) => (t.x, t.y),
@@ -693,14 +717,12 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     };
 
     let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
-    let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
 
     if dist <= crate::combat::MELEERANGE.to_int() {
+        let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
         crate::combat::damage_mobj(gs, target, handle, damage);
     } else {
-        crate::combat::p_line_attack(
-            gs, handle, angle, crate::combat::MISSILERANGE, damage, level,
-        );
+        crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::ImpFireball);
     }
 }
 
@@ -733,6 +755,46 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
 }
 
 // ---------------------------------------------------------------------------
+// A_HeadAttack (Cacodemon fireball projectile)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_HeadAttack` from Doom's `p_enemy.c`.
+///
+/// Faces the target, then spawns a `CacoFireball` projectile.
+fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::CacoFireball);
+}
+
+// ---------------------------------------------------------------------------
+// A_BruisAttack (Baron/Hell Knight plasma ball)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_BruisAttack` from Doom's `p_enemy.c`.
+///
+/// Faces the target, then spawns a `BaronBall` projectile.
+fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::BaronBall);
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -754,16 +816,16 @@ mod tests {
             Bam::ZERO,
         );
         mo.health = 100;
-        mo.flags  = flags::MF_SOLID | flags::MF_SHOOTABLE;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
         let handle = gs.mobjslab.alloc(mo);
-        gs.player  = PlayerState::pistol_start(handle);
+        gs.player = PlayerState::pistol_start(handle);
         gs
     }
 
     fn spawn_trooper(gs: &mut GameState, x: i32, y: i32) -> MobjHandle {
+        use crate::mobj::MobjKind;
         use crate::mobjinfo::MOBJINFO;
         use crate::states::STATES;
-        use crate::mobj::MobjKind;
         let kind = MobjKind::Trooper;
         let spawn_sn = MOBJINFO[kind as usize].spawn_state;
         let mut mo = Mobj::new(
@@ -773,9 +835,9 @@ mod tests {
             Bam::ZERO,
         );
         mo.health = 20;
-        mo.flags  = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
-        mo.state  = spawn_sn;
-        mo.tics   = STATES[spawn_sn.0 as usize].tics;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.state = spawn_sn;
+        mo.tics = STATES[spawn_sn.0 as usize].tics;
         gs.mobjslab.alloc(mo)
     }
 
@@ -827,7 +889,10 @@ mod tests {
 
         let mo = gs.mobjslab.get(trooper).unwrap();
         // Should still be in spawn state (idle).
-        assert_eq!(mo.state, spawn_sn, "trooper must stay idle when player is out of range");
+        assert_eq!(
+            mo.state, spawn_sn,
+            "trooper must stay idle when player is out of range"
+        );
     }
 
     #[test]
@@ -845,7 +910,8 @@ mod tests {
         // Trooper should have moved west (toward x=0).
         assert!(
             mo.x < Fixed16_16::from_int(100),
-            "trooper x={:?} must decrease toward player", mo.x
+            "trooper x={:?} must decrease toward player",
+            mo.x
         );
     }
 
@@ -892,7 +958,7 @@ mod tests {
         health: i32,
     ) -> MobjHandle {
         use crate::mobjinfo::MOBJINFO;
-        use crate::states::{ids, STATES};
+        use crate::states::{STATES, ids};
         let see_sn = MOBJINFO[kind as usize].see_state;
         let fallback_sn = if see_sn.0 != 0 {
             see_sn
@@ -905,11 +971,11 @@ mod tests {
             Fixed16_16::from_int(y),
             Bam::ZERO,
         );
-        mo.health  = health;
-        mo.flags   = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
-        mo.state   = fallback_sn;
-        mo.tics    = STATES[fallback_sn.0 as usize].tics;
-        mo.target  = gs.player.handle;
+        mo.health = health;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.state = fallback_sn;
+        mo.tics = STATES[fallback_sn.0 as usize].tics;
+        mo.target = gs.player.handle;
         mo.threshold = 60;
         gs.mobjslab.alloc(mo)
     }
@@ -934,7 +1000,10 @@ mod tests {
                 break;
             }
         }
-        assert!(found_atk, "trooper must enter an ATK state when player is in range");
+        assert!(
+            found_atk,
+            "trooper must enter an ATK state when player is in range"
+        );
     }
 
     #[test]
@@ -953,11 +1022,7 @@ mod tests {
         dispatch_action(&mut gs, trooper, ACTION_FALL, None);
 
         let mo = gs.mobjslab.get(trooper).unwrap();
-        assert_eq!(
-            mo.flags & flags::MF_SOLID,
-            0,
-            "a_fall must clear MF_SOLID"
-        );
+        assert_eq!(mo.flags & flags::MF_SOLID, 0, "a_fall must clear MF_SOLID");
         assert_eq!(
             mo.flags & flags::MF_COUNTKILL,
             0,
@@ -981,11 +1046,7 @@ mod tests {
     // -----------------------------------------------------------------------
 
     /// Spawn a monster in its see state with movedir=NODIR, movecount=0.
-    fn spawn_monster_chasing_at(
-        gs: &mut GameState,
-        x: i32,
-        y: i32,
-    ) -> MobjHandle {
+    fn spawn_monster_chasing_at(gs: &mut GameState, x: i32, y: i32) -> MobjHandle {
         use crate::mobjinfo::MOBJINFO;
         use crate::states::STATES;
         let kind = MobjKind::Trooper;
@@ -996,13 +1057,13 @@ mod tests {
             Fixed16_16::from_int(y),
             Bam::ZERO,
         );
-        mo.health    = 20;
-        mo.flags     = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
-        mo.state     = see_sn;
-        mo.tics      = STATES[see_sn.0 as usize].tics;
-        mo.target    = MobjHandle::NULL;
+        mo.health = 20;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.state = see_sn;
+        mo.tics = STATES[see_sn.0 as usize].tics;
+        mo.target = MobjHandle::NULL;
         mo.threshold = 60;
-        mo.movedir   = super::DI_NODIR;
+        mo.movedir = super::DI_NODIR;
         mo.movecount = 0;
         gs.mobjslab.alloc(mo)
     }
@@ -1019,14 +1080,23 @@ mod tests {
         let mo = gs.mobjslab.get(monster).unwrap();
         // Monster is NE of player → should try to move SW (DI_SOUTHWEST = 5).
         // At minimum, movedir must not be NODIR and movecount must be > 0.
-        assert_ne!(mo.movedir, super::DI_NODIR, "movedir must be set after p_new_chase_dir");
-        assert!(mo.movecount > 0, "movecount must be positive after p_new_chase_dir");
+        assert_ne!(
+            mo.movedir,
+            super::DI_NODIR,
+            "movedir must be set after p_new_chase_dir"
+        );
+        assert!(
+            mo.movecount > 0,
+            "movecount must be positive after p_new_chase_dir"
+        );
         // The chosen direction should be westward or southward.
         // DI_SOUTHWEST=5, DI_WEST=4, DI_SOUTH=6, DI_SOUTHEAST=7, DI_EAST=0, etc.
         // The primary candidate is SW (5); secondary is W or S.
         let dir = mo.movedir;
         assert!(
-            dir == super::DI_SOUTHWEST || dir == super::DI_WEST || dir == super::DI_SOUTH
+            dir == super::DI_SOUTHWEST
+                || dir == super::DI_WEST
+                || dir == super::DI_SOUTH
                 || dir <= 7,
             "movedir {dir} must be a valid direction"
         );
@@ -1042,7 +1112,11 @@ mod tests {
         super::p_new_chase_dir(&mut gs, monster, None);
 
         let mo = gs.mobjslab.get(monster).unwrap();
-        assert_eq!(mo.movedir, super::DI_NODIR, "monster with no target must stay at NODIR");
+        assert_eq!(
+            mo.movedir,
+            super::DI_NODIR,
+            "monster with no target must stay at NODIR"
+        );
     }
 
     #[test]
@@ -1053,7 +1127,10 @@ mod tests {
 
         // No level → falls through to Manhattan distance check (≤ 4096).
         let can_see = super::p_check_sight(&gs, trooper, gs.player.handle, None);
-        assert!(can_see, "monster 100 units away must be visible without level");
+        assert!(
+            can_see,
+            "monster 100 units away must be visible without level"
+        );
     }
 
     #[test]
@@ -1084,14 +1161,16 @@ mod tests {
         ];
         let sidedefs = vec![
             doom_map::Sidedef {
-                x_offset: 0, y_offset: 0,
+                x_offset: 0,
+                y_offset: 0,
                 upper_texture: *b"\0\0\0\0\0\0\0\0",
                 lower_texture: *b"\0\0\0\0\0\0\0\0",
                 middle_texture: *b"\0\0\0\0\0\0\0\0",
                 sector: 0,
             },
             doom_map::Sidedef {
-                x_offset: 0, y_offset: 0,
+                x_offset: 0,
+                y_offset: 0,
                 upper_texture: *b"\0\0\0\0\0\0\0\0",
                 lower_texture: *b"\0\0\0\0\0\0\0\0",
                 middle_texture: *b"\0\0\0\0\0\0\0\0",
@@ -1100,40 +1179,70 @@ mod tests {
         ];
         let linedefs = vec![
             doom_map::Linedef {
-                from_vertex: 0, to_vertex: 1,
-                flags: 0, special: 0, tag: 0,
-                right_sidedef: 0, left_sidedef: 0xFFFF,
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 0xFFFF,
             },
             doom_map::Linedef {
-                from_vertex: 2, to_vertex: 3,
-                flags: 0, special: 0, tag: 0,
-                right_sidedef: 1, left_sidedef: 0xFFFF,
+                from_vertex: 2,
+                to_vertex: 3,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 1,
+                left_sidedef: 0xFFFF,
             },
         ];
         let segs = vec![
             doom_map::Seg {
-                from_vertex: 0, to_vertex: 1,
-                angle: 0, linedef: 0, direction: 0, offset: 0,
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
             },
             doom_map::Seg {
-                from_vertex: 2, to_vertex: 3,
-                angle: 0, linedef: 1, direction: 0, offset: 0,
+                from_vertex: 2,
+                to_vertex: 3,
+                angle: 0,
+                linedef: 1,
+                direction: 0,
+                offset: 0,
             },
         ];
         let ssectors = vec![
-            doom_map::Ssector { seg_count: 1, first_seg: 0 }, // sector 0
-            doom_map::Ssector { seg_count: 1, first_seg: 1 }, // sector 1
+            doom_map::Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            }, // sector 0
+            doom_map::Ssector {
+                seg_count: 1,
+                first_seg: 1,
+            }, // sector 1
         ];
         let sectors = vec![
             doom_map::Sector {
-                floor_height: 0, ceil_height: 128,
-                floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT2\0\0\0",
-                light_level: 192, special: 0, tag: 0,
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
             },
             doom_map::Sector {
-                floor_height: 0, ceil_height: 128,
-                floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT2\0\0\0",
-                light_level: 192, special: 0, tag: 0,
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
             },
         ];
 
@@ -1183,12 +1292,19 @@ mod tests {
             segs: vec![],
             // Single ssector with 0 segs — sector_from_subsector returns None,
             // which means the reject is NOT consulted → falls through to distance check.
-            ssectors: vec![doom_map::Ssector { seg_count: 0, first_seg: 0 }],
+            ssectors: vec![doom_map::Ssector {
+                seg_count: 0,
+                first_seg: 0,
+            }],
             nodes: vec![],
             sectors: vec![doom_map::Sector {
-                floor_height: 0, ceil_height: 128,
-                floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT2\0\0\0",
-                light_level: 192, special: 0, tag: 0,
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
             }],
             reject,
             blockmap,
@@ -1196,6 +1312,9 @@ mod tests {
 
         // All-zero reject + distance 100 → should be visible.
         let can_see = super::p_check_sight(&gs, trooper, gs.player.handle, Some(&level));
-        assert!(can_see, "all-zero reject + close distance must report visible");
+        assert!(
+            can_see,
+            "all-zero reject + close distance must report visible"
+        );
     }
 }

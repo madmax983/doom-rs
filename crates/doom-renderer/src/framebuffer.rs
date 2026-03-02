@@ -25,10 +25,14 @@ impl Framebuffer {
     }
 
     /// Width in pixels.
-    pub const fn width() -> usize { FB_WIDTH }
+    pub const fn width() -> usize {
+        FB_WIDTH
+    }
 
     /// Height in pixels.
-    pub const fn height() -> usize { FB_HEIGHT }
+    pub const fn height() -> usize {
+        FB_HEIGHT
+    }
 
     /// Clear the entire framebuffer to a single palette index.
     #[inline]
@@ -62,7 +66,7 @@ impl Framebuffer {
         let y_end = (y + h).min(FB_HEIGHT);
         for row in y..y_end {
             let start = row * FB_WIDTH + x;
-            let end   = row * FB_WIDTH + x_end;
+            let end = row * FB_WIDTH + x_end;
             self.data[start..end].fill(index);
         }
     }
@@ -91,7 +95,7 @@ impl Framebuffer {
             return;
         }
         let start = y * FB_WIDTH + x_start.min(FB_WIDTH);
-        let end   = y * FB_WIDTH + (x_end + 1).min(FB_WIDTH);
+        let end = y * FB_WIDTH + (x_end + 1).min(FB_WIDTH);
         if start < end {
             self.data[start..end].fill(index);
         }
@@ -105,7 +109,9 @@ impl Framebuffer {
 }
 
 impl Default for Framebuffer {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl core::fmt::Debug for Framebuffer {
@@ -141,8 +147,8 @@ mod tests {
     #[test]
     fn out_of_bounds_set_is_noop() {
         let mut fb = Framebuffer::new();
-        fb.set_pixel(320, 0, 1);  // x == FB_WIDTH
-        fb.set_pixel(0, 200, 1);  // y == FB_HEIGHT
+        fb.set_pixel(320, 0, 1); // x == FB_WIDTH
+        fb.set_pixel(0, 200, 1); // y == FB_HEIGHT
         // No panic, no change to valid pixels.
         assert!(fb.data.iter().all(|&b| b == 0));
     }

@@ -50,7 +50,9 @@ impl ColormapCache {
         if let Some(b) = bytes {
             let expected = COLORMAP_ROWS * COLORMAP_SIZE;
             if b.len() >= expected {
-                return Self { data: b[..expected].to_vec() };
+                return Self {
+                    data: b[..expected].to_vec(),
+                };
             }
         }
         Self {
@@ -91,9 +93,7 @@ mod tests {
     fn identity_fallback_has_correct_rows() {
         // Build a fallback cache (no WAD) directly.
         let cache = ColormapCache {
-            data: (0..COLORMAP_ROWS)
-                .flat_map(|_| 0u8..=255)
-                .collect(),
+            data: (0..COLORMAP_ROWS).flat_map(|_| 0u8..=255).collect(),
         };
         // Row 0 must be the identity mapping.
         let row = cache.get(0);

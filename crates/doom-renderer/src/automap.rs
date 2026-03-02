@@ -21,11 +21,11 @@ const SCREEN_W: i32 = 320;
 const SCREEN_H: i32 = 200;
 
 // Palette indices matching Doom's automap colours.
-const COLOR_ONE_SIDED: u8  = 176; // red/orange — solid wall
-const COLOR_TWO_SIDED: u8  =  96; // gray-brown — passable line
-const COLOR_SPECIAL:   u8  = 231; // yellow — two-sided with special
-const COLOR_PLAYER:    u8  = 255; // white — player marker
-const COLOR_BACKGROUND: u8 =   0; // black
+const COLOR_ONE_SIDED: u8 = 176; // red/orange — solid wall
+const COLOR_TWO_SIDED: u8 = 96; // gray-brown — passable line
+const COLOR_SPECIAL: u8 = 231; // yellow — two-sided with special
+const COLOR_PLAYER: u8 = 255; // white — player marker
+const COLOR_BACKGROUND: u8 = 0; // black
 
 // Padding fraction applied to each side of the computed map bounds.
 const PADDING_FRAC: f32 = 0.05;
@@ -139,10 +139,18 @@ fn map_bounds(level: &Level) -> Option<(i32, i32, i32, i32)> {
     for v in iter {
         let vx = i32::from(v.x);
         let vy = i32::from(v.y);
-        if vx < min_x { min_x = vx; }
-        if vx > max_x { max_x = vx; }
-        if vy < min_y { min_y = vy; }
-        if vy > max_y { max_y = vy; }
+        if vx < min_x {
+            min_x = vx;
+        }
+        if vx > max_x {
+            max_x = vx;
+        }
+        if vy < min_y {
+            min_y = vy;
+        }
+        if vy > max_y {
+            max_y = vy;
+        }
     }
 
     Some((min_x, max_x, min_y, max_y))
@@ -204,8 +212,8 @@ fn draw_line(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: u8
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_map::lumps::{Linedef as LdRaw, Vertex as VxRaw, Ssector, Sector, Reject, Blockmap};
     use doom_map::Level;
+    use doom_map::lumps::{Blockmap, Linedef as LdRaw, Reject, Sector, Ssector, Vertex as VxRaw};
 
     // -----------------------------------------------------------------------
     // Minimal Level builder
@@ -220,17 +228,20 @@ mod tests {
         // One placeholder sector (needed for reject table size).
         let sector = Sector {
             floor_height: 0,
-            ceil_height:  128,
-            floor_flat:   *b"FLAT1\0\0\0",
-            ceil_flat:    *b"FLAT2\0\0\0",
-            light_level:  192,
-            special:      0,
-            tag:          0,
+            ceil_height: 128,
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: 0,
         };
 
         // One ssector that references zero segs (seg_count=0, first_seg=0).
         // N_SSECTORS(1) == N_NODES(0) + 1 — the BSP invariant holds.
-        let ssector = Ssector { seg_count: 0, first_seg: 0 };
+        let ssector = Ssector {
+            seg_count: 0,
+            first_seg: 0,
+        };
 
         // Minimal blockmap: 1×1 cell grid rooted at (0,0).
         let mut bm_bytes = vec![0u8; 8 + 2 + 4];
@@ -238,8 +249,8 @@ mod tests {
         bm_bytes[2..4].copy_from_slice(&0i16.to_le_bytes()); // y_origin
         bm_bytes[4..6].copy_from_slice(&1u16.to_le_bytes()); // x_count
         bm_bytes[6..8].copy_from_slice(&1u16.to_le_bytes()); // y_count
-        bm_bytes[8..10].copy_from_slice(&5u16.to_le_bytes());      // offset words
-        bm_bytes[10..12].copy_from_slice(&0u16.to_le_bytes());     // sentinel
+        bm_bytes[8..10].copy_from_slice(&5u16.to_le_bytes()); // offset words
+        bm_bytes[10..12].copy_from_slice(&0u16.to_le_bytes()); // sentinel
         bm_bytes[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes()); // terminator
         let blockmap = Blockmap::parse_lump(&bm_bytes).expect("blockmap parse");
 
@@ -247,15 +258,15 @@ mod tests {
         let reject = Reject::parse_lump(&[0u8; 1], 1).expect("reject parse");
 
         Level {
-            name:     "TEST".to_owned(),
-            things:   vec![],
+            name: "TEST".to_owned(),
+            things: vec![],
             linedefs,
             sidedefs: vec![],
             vertexes,
-            segs:     vec![],
+            segs: vec![],
             ssectors: vec![ssector],
-            nodes:    vec![],
-            sectors:  vec![sector],
+            nodes: vec![],
+            sectors: vec![sector],
             reject,
             blockmap,
         }
@@ -282,18 +293,15 @@ mod tests {
 
     #[test]
     fn draw_automap_single_linedef_marks_pixels() {
-        let vertexes = vec![
-            VxRaw { x:   0, y:   0 },
-            VxRaw { x: 100, y: 100 },
-        ];
+        let vertexes = vec![VxRaw { x: 0, y: 0 }, VxRaw { x: 100, y: 100 }];
         let linedefs = vec![LdRaw {
-            from_vertex:   0,
-            to_vertex:     1,
-            flags:         0,   // one-sided
-            special:       0,
-            tag:           0,
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0, // one-sided
+            special: 0,
+            tag: 0,
             right_sidedef: 0xFFFF,
-            left_sidedef:  0xFFFF,
+            left_sidedef: 0xFFFF,
         }];
         let level = make_level(vertexes, linedefs);
         let mut fb = Framebuffer::new();
@@ -303,7 +311,10 @@ mod tests {
 
         // At least one pixel should be non-black.
         let has_non_black = fb.data.iter().any(|&b| b != 0);
-        assert!(has_non_black, "expected at least one non-black pixel after drawing a linedef");
+        assert!(
+            has_non_black,
+            "expected at least one non-black pixel after drawing a linedef"
+        );
     }
 
     // -----------------------------------------------------------------------

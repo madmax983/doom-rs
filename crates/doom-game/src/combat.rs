@@ -30,15 +30,12 @@ pub const MELEERANGE: Fixed16_16 = Fixed16_16(64 << 16);
 ///
 /// Returns immediately if `target` does not have `MF_SHOOTABLE` or is
 /// already dead.
-pub fn damage_mobj(
-    gs: &mut GameState,
-    target: MobjHandle,
-    inflictor: MobjHandle,
-    damage: i32,
-) {
+pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle, damage: i32) {
     // Guard: must exist, be shootable, and be alive.
     {
-        let Some(mo) = gs.mobjslab.get(target) else { return };
+        let Some(mo) = gs.mobjslab.get(target) else {
+            return;
+        };
         if mo.flags & flags::MF_SHOOTABLE == 0 {
             return;
         }
@@ -49,7 +46,9 @@ pub fn damage_mobj(
 
     // Apply damage + inflictor.
     let new_health = {
-        let Some(mo) = gs.mobjslab.get_mut(target) else { return };
+        let Some(mo) = gs.mobjslab.get_mut(target) else {
+            return;
+        };
         mo.health = (mo.health - damage).max(0);
         if inflictor != MobjHandle::NULL {
             mo.target = inflictor;
@@ -62,7 +61,9 @@ pub fn damage_mobj(
         // Death transition
         // -------------------------------------------------------------------
         let death_sn: StateNum = {
-            let Some(mo) = gs.mobjslab.get(target) else { return };
+            let Some(mo) = gs.mobjslab.get(target) else {
+                return;
+            };
             crate::mobjinfo::MOBJINFO[mo.kind as usize].death_state
         };
         if death_sn != StateNum::NULL {
@@ -70,7 +71,7 @@ pub fn damage_mobj(
                 let new_tics = entry.tics;
                 if let Some(mo) = gs.mobjslab.get_mut(target) {
                     mo.state = death_sn;
-                    mo.tics  = new_tics;
+                    mo.tics = new_tics;
                 }
             }
         }
@@ -79,7 +80,9 @@ pub fn damage_mobj(
         // Pain transition (always triggers when eligible; Batch 5 adds RNG)
         // -------------------------------------------------------------------
         let (pain_sn, pain_chance): (StateNum, u8) = {
-            let Some(mo) = gs.mobjslab.get(target) else { return };
+            let Some(mo) = gs.mobjslab.get(target) else {
+                return;
+            };
             let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
             (info.pain_state, info.pain_chance)
         };
@@ -88,7 +91,7 @@ pub fn damage_mobj(
                 let new_tics = entry.tics;
                 if let Some(mo) = gs.mobjslab.get_mut(target) {
                     mo.state = pain_sn;
-                    mo.tics  = new_tics;
+                    mo.tics = new_tics;
                 }
             }
         }
@@ -283,8 +286,8 @@ mod tests {
     }
 
     fn spawn_trooper(gs: &mut GameState, x: i32, y: i32) -> MobjHandle {
-        use crate::mobjinfo::MOBJINFO;
         use crate::mobj::MobjKind;
+        use crate::mobjinfo::MOBJINFO;
         use crate::states::STATES;
         let kind = MobjKind::Trooper;
         let spawn_sn = MOBJINFO[kind as usize].spawn_state;
@@ -410,7 +413,10 @@ mod tests {
 
         let mo = gs.mobjslab.get(trooper).unwrap();
         assert_eq!(mo.health, 0, "health must remain 0");
-        assert_eq!(mo.state, state_after_kill, "state must not change after death");
+        assert_eq!(
+            mo.state, state_after_kill,
+            "state must not change after death"
+        );
     }
 
     #[test]
@@ -503,6 +509,9 @@ mod tests {
         p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
 
         let health = gs.mobjslab.get(trooper).unwrap().health;
-        assert_eq!(health, 20, "trooper outside blast radius must be unaffected");
+        assert_eq!(
+            health, 20,
+            "trooper outside blast radius must be unaffected"
+        );
     }
 }
