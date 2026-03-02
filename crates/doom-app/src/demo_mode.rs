@@ -195,7 +195,7 @@ mod tests {
     }
 
     fn make_doom_game() -> DoomGame {
-        DoomGame::new(make_game_state(), make_test_level(), None, None)
+        DoomGame::new(make_game_state(), make_test_level(), None, None, None, None)
     }
 
     fn make_recorder(n_tics: usize) -> DemoRecorder {

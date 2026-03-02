@@ -17,11 +17,12 @@
 use doom_map::Level;
 use doom_types::Bam;
 
-use crate::column::IDENTITY_COLORMAP;
+use crate::column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column};
 use crate::flat_cache::FlatCache;
 use crate::framebuffer::Framebuffer;
 use crate::palette::PaletteLut;
 use crate::span::{DrawSpanParams, draw_span};
+use crate::texture::TextureCache;
 
 // ---------------------------------------------------------------------------
 // Screen constants
@@ -50,10 +51,12 @@ const NO_FLAT: [u8; 8] = *b"-\0\0\0\0\0\0\0";
 /// `palette`              — PLAYPAL palette for color lookup (index 0 = normal).
 /// `flat_cache`           — optional flat texture cache; pass `None` to fall
 ///                          back to solid-color floors and ceilings.
+/// `tex_cache`            — optional wall texture cache; pass `None` to fall
+///                          back to flat-shaded solid colors for walls.
 ///
 /// This is a software renderer using per-seg perspective projection.
-/// Walls are flat-shaded; floors/ceilings are textured when `flat_cache`
-/// is provided.
+/// Walls are textured when `tex_cache` is provided; floors/ceilings are
+/// textured when `flat_cache` is provided.
 pub fn render_level(
     level: &Level,
     player_x: i32,
@@ -62,6 +65,7 @@ pub fn render_level(
     fb: &mut Framebuffer,
     _palette: &PaletteLut,
     flat_cache: Option<&FlatCache>,
+    tex_cache: Option<&TextureCache>,
 ) {
     // ------------------------------------------------------------------
     // Step 1: Draw background (ceiling top half, floor bottom half)
@@ -205,7 +209,77 @@ pub fn render_level(
             ceil_flat[x]  = sector.ceil_flat;
             floor_flat[x] = sector.floor_flat;
 
-            // Draw the wall column.
+            // Draw the wall column — textured if a TextureCache is available.
+            if let Some(cache) = tex_cache {
+                if let Some(tex) = cache.get(&sidedef.middle_texture) {
+                    // Perspective-correct horizontal texture coordinate (U).
+                    //
+                    // t_screen ∈ [0,1] across the screen span.
+                    // We correct for non-linear perspective by weighting with
+                    // the view-space depths at each end of the span.
+                    //
+                    //   t_persp = t_screen * vx_right
+                    //             / (vx_left + t_screen * (vx_right - vx_left))
+                    //
+                    // u_world = seg.offset + x_offset + t_persp * seg_world_len
+                    // u_tex   = u_world.rem_euclid(tex.width)
+
+                    // Compute seg world length from vertex positions (precomputed
+                    // here inside the column loop; for very hot code paths this
+                    // could be hoisted, but it only runs once per column hit).
+                    let v1 = &level.vertexes[seg.from_vertex as usize];
+                    let v2 = &level.vertexes[seg.to_vertex as usize];
+                    let dx = (v2.x as f32) - (v1.x as f32);
+                    let dy = (v2.y as f32) - (v1.y as f32);
+                    let seg_world_len = (dx * dx + dy * dy).sqrt();
+
+                    let t_screen = (t as f32) / (span_w as f32).max(1.0);
+                    // Denominator: vx_left + t_screen*(vx_right-vx_left), clamped to ≥1.
+                    let denom = (vx_left as f32 + t_screen * (vx_right as f32 - vx_left as f32)).max(1.0);
+                    let t_persp = t_screen * (vx_right as f32) / denom;
+
+                    let u_world = seg.offset as f32
+                        + sidedef.x_offset as f32
+                        + t_persp * seg_world_len;
+                    let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
+
+                    // Vertical texture coordinate (V).
+                    //
+                    // fracstep: how many texels to advance per screen pixel.
+                    //   fracstep = tex.height << 16 / wall_h_px
+                    //
+                    // frac at y_top: the texture V at the top of the wall column.
+                    //   At HALF_H the texture shows texel (tex.height/2 + y_offset).
+                    //   frac = ((tex.height/2 + y_offset) << 16)
+                    //          - (HALF_H - w_top) * fracstep
+                    let tex_h = tex.height as u32;
+                    let fracstep = (tex_h << 16) / (wall_h_px as u32).max(1);
+                    let texturemid = ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
+                    let frac_start = ((texturemid << 16) as i64
+                        - (HALF_H as i64 - w_top as i64) * fracstep as i64)
+                        as u32;
+
+                    // Column data slice: tex.data[u_tex*tex_h .. u_tex*tex_h + tex_h].
+                    let col_start = u_tex * tex_h as usize;
+                    let col_data = &tex.data[col_start..col_start + tex_h as usize];
+
+                    draw_column(
+                        fb,
+                        &DrawColumnParams {
+                            x,
+                            y_top: w_top as usize,
+                            y_bot: w_bot as usize,
+                            frac: frac_start,
+                            fracstep,
+                            source: col_data,
+                            colormap: &IDENTITY_COLORMAP,
+                        },
+                    );
+                    continue; // skip flat-color fallback
+                }
+            }
+
+            // Fallback: flat-shaded solid color (no texture or texture not found).
             let wall_color = (32u8).saturating_add(light);
             fb.draw_column(x, w_top as usize, w_bot as usize, wall_color);
         }
@@ -522,7 +596,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 0, Bam::ZERO, &mut fb, &palette, None);
+        render_level(&level, 0, 0, Bam::ZERO, &mut fb, &palette, None, None);
 
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
         assert!(has_nonzero, "framebuffer should be non-zero after rendering background");
@@ -536,7 +610,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None);
+        render_level(&level, 0, 0, ANG90, &mut fb, &palette, None, None);
     }
 
     #[test]
@@ -545,10 +619,10 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         let mut fb1 = Framebuffer::new();
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb1, &palette, None);
+        render_level(&level, 64, 0, Bam::ZERO, &mut fb1, &palette, None, None);
 
         let mut fb2 = Framebuffer::new();
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb2, &palette, None);
+        render_level(&level, 64, 0, Bam::ZERO, &mut fb2, &palette, None, None);
 
         assert_eq!(fb1.data.as_slice(), fb2.data.as_slice());
     }
@@ -581,12 +655,27 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(&level, 0, 64, Bam::ZERO, &mut fb, &palette, None);
+        render_level(&level, 0, 64, Bam::ZERO, &mut fb, &palette, None, None);
 
         // Background colour index 25 was written to the top half.
         assert_eq!(fb.get_pixel(0, 0), Some(25));
         // Background colour index 119 was written to the bottom half.
         assert_eq!(fb.get_pixel(0, SCREEN_H - 1), Some(119));
+    }
+
+    /// Regression: passing `tex_cache = None` must not panic (backward compat).
+    #[test]
+    fn test_render_level_with_tex_cache_none_smoke() {
+        let level = make_minimal_level();
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        // tex_cache = None should fall back to flat-shaded walls without panic.
+        render_level(&level, 64, 0, Bam::ZERO, &mut fb, &palette, None, None);
+
+        // Should produce some output (background fill at minimum).
+        let has_nonzero = fb.data.iter().any(|&b| b != 0);
+        assert!(has_nonzero, "render with tex_cache=None must produce non-zero output");
     }
 
     /// Passing a FlatCache with a known flat renders textured pixels into
@@ -641,7 +730,7 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // Player at (64, 0) facing forward — exercises the wall path.
-        render_level(&level, 64, 0, Bam::ZERO, &mut fb, &palette, Some(&cache));
+        render_level(&level, 64, 0, Bam::ZERO, &mut fb, &palette, Some(&cache), None);
 
         // Should not panic and should produce some non-zero output.
         let has_nonzero = fb.data.iter().any(|&b| b != 0);

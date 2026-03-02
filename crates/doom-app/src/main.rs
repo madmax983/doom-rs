@@ -15,7 +15,8 @@ use std::net::SocketAddr;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
 use doom_map::Level;
-use doom_renderer::{FlatCache, Framebuffer, PaletteLut, draw_automap, draw_status_bar, render_level};
+use doom_renderer::{FlatCache, Framebuffer, PaletteLut, SpriteCache, TextureCache, draw_automap, draw_status_bar, draw_weapon_sprite, render_level};
+use doom_renderer::IDENTITY_COLORMAP;
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
@@ -90,10 +91,21 @@ pub(crate) struct DoomGame {
     prev_attack_down: bool,
     /// Flat texture cache (floor/ceiling textures loaded from the WAD).
     flat_cache: Option<FlatCache>,
+    /// Wall texture cache (TEXTURE1/TEXTURE2 composed textures from the WAD).
+    tex_cache: Option<TextureCache>,
+    /// Sprite frame cache (loaded from S_START..S_END).
+    sprite_cache: Option<SpriteCache>,
 }
 
 impl DoomGame {
-    fn new(gs: GameState, level: Level, audio: Option<AudioSystem>, flat_cache: Option<FlatCache>) -> Self {
+    fn new(
+        gs: GameState,
+        level: Level,
+        audio: Option<AudioSystem>,
+        flat_cache: Option<FlatCache>,
+        tex_cache: Option<TextureCache>,
+        sprite_cache: Option<SpriteCache>,
+    ) -> Self {
         Self {
             gs,
             level,
@@ -105,6 +117,8 @@ impl DoomGame {
             audio,
             prev_attack_down: false,
             flat_cache,
+            tex_cache,
+            sprite_cache,
         }
     }
 }
@@ -222,7 +236,12 @@ impl DoomApp for DoomGame {
             // Draw the first-person 3D view.
             // We pass a grayscale palette; render_level currently ignores it
             // (wall colors are derived from light levels only).
-            render_level(&self.level, px, py, angle, fb, &palette, self.flat_cache.as_ref());
+            render_level(&self.level, px, py, angle, fb, &palette, self.flat_cache.as_ref(), self.tex_cache.as_ref());
+
+            // Draw weapon sprite overlay (pistol idle frame A).
+            if let Some(ref cache) = self.sprite_cache {
+                draw_weapon_sprite(fb, b"PISGA0\0\0", cache, &IDENTITY_COLORMAP);
+            }
 
             // Draw HUD status bar over the bottom 32 rows.
             let god_mode =
@@ -327,6 +346,18 @@ fn main() -> Result<()> {
     let flat_cache = FlatCache::load(&wad);
     let flat_cache = if flat_cache.is_empty() { None } else { Some(flat_cache) };
 
+    // Load wall texture cache (TEXTURE1/TEXTURE2 composed textures).
+    let tex_cache = {
+        let cache = TextureCache::load(&wad);
+        if cache.is_empty() { None } else { Some(cache) }
+    };
+
+    // Load sprite cache (sprite frames between S_START and S_END).
+    let sprite_cache = {
+        let cache = SpriteCache::load(&wad);
+        if cache.is_empty() { None } else { Some(cache) }
+    };
+
     // Try to open the audio subsystem.  Returns None in headless/CI environments.
     let audio = AudioSystem::try_open(&wad);
 
@@ -360,7 +391,7 @@ fn main() -> Result<()> {
     }
 
     // Build the app.
-    let app = DoomGame::new(gs, level, audio, flat_cache);
+    let app = DoomGame::new(gs, level, audio, flat_cache, tex_cache, sprite_cache);
 
     // Client (netplay) mode: connect to relay server and run game with net input.
     if let Some(addr_str) = args.connect {
