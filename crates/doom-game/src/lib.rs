@@ -12,6 +12,7 @@
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
 pub mod actions;
+pub mod automap;
 pub mod cheats;
 pub mod combat;
 pub mod dehacked;
@@ -38,6 +39,11 @@ pub use actions::{
     ACTION_BRUIS_ATTACK, ACTION_CHASE, ACTION_HEAD_ATTACK, ACTION_LOOK, ACTION_NONE,
     dispatch_action,
 };
+pub use automap::{
+    AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
+    draw_grid, draw_line, draw_thing_marker, init_seen_lines, line_color, mark_lines_seen,
+    mark_subsector_lines_seen, thing_marker_color, world_to_screen,
+};
 pub use cheats::{CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
 pub use dehacked::{
@@ -57,7 +63,15 @@ pub use savegame::{
     MAX_SAVE_SLOTS, SAVE_MAGIC, SaveError, SaveGame, SaveHeader, load_game, save_game,
     save_slot_filename,
 };
+pub use sight::{
+    p_aim_line_slope, p_check_sight, p_look_for_players, point_on_side, ray_crosses_linedef,
+    sector_from_subsector,
+};
 pub use snapshot::Snapshot;
+pub use sound::{
+    ML_SOUNDBLOCK, adjacent_sectors, clear_sound_targets, get_sound_target, init_sound_state,
+    monster_should_wake, p_noise_alert,
+};
 pub use spawn::{Skill, spawn_level_things};
 pub use specials::{
     StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_ceiling_crush_and_raise,
@@ -72,14 +86,6 @@ pub use state::{
     CeilingMover, CeilingType, ConveyorBelt, DoomRng, ExitRequest, FloorMover, GameState,
     LiftMover, LiftStatus, LightEffectType, MoveDirection, PerpetualPlatform, PlatformStatus,
     RNG_TABLE, ScrollingWall, SectorLightEffect,
-};
-pub use sight::{
-    p_aim_line_slope, p_check_sight, p_look_for_players, point_on_side, ray_crosses_linedef,
-    sector_from_subsector,
-};
-pub use sound::{
-    ML_SOUNDBLOCK, adjacent_sectors, clear_sound_targets, get_sound_target, init_sound_state,
-    monster_should_wake, p_noise_alert,
 };
 pub use states::STATES;
 pub use tic::{FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt};

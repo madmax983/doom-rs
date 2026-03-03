@@ -492,7 +492,6 @@ pub struct GameState {
     pub level_time: u32,
 
     // --- Sound propagation state ---
-
     /// Per-sector sound target: which actor made noise that this sector "heard".
     ///
     /// Indexed by sector index.  `None` = no noise has reached this sector.
@@ -511,6 +510,14 @@ pub struct GameState {
     /// Incremented each time `p_noise_alert` is called to mark a new
     /// flood-fill pass.
     pub sound_gen: u32,
+
+    // --- Automap visibility state ---
+    /// Per-linedef visibility flag: `true` if the player has visited a
+    /// subsector adjacent to this linedef.
+    ///
+    /// Sized to `level.linedefs.len()` by `automap::init_seen_lines` or
+    /// lazily resized by `mark_lines_seen`.
+    pub seen_lines: Vec<bool>,
 }
 
 impl GameState {
@@ -547,6 +554,7 @@ impl GameState {
             sound_targets: Vec::new(),
             sound_traversed: Vec::new(),
             sound_gen: 0,
+            seen_lines: Vec::new(),
         }
     }
 
@@ -585,6 +593,20 @@ impl GameState {
         let a = self.p_random() as i32;
         let b = self.p_random() as i32;
         a - b
+    }
+
+    // -----------------------------------------------------------------------
+    // Automap visibility — mark linedefs seen during BSP traversal
+    // -----------------------------------------------------------------------
+
+    /// Mark all linedefs adjacent to the given subsector as "seen" on the
+    /// automap.
+    ///
+    /// Should be called during BSP traversal (rendering) for each subsector
+    /// the player can see. The `seen_lines` vector is lazily resized to match
+    /// the level's linedef count if needed.
+    pub fn mark_lines_seen(&mut self, subsector_idx: usize, level: &doom_map::Level) {
+        crate::automap::mark_lines_seen(&mut self.seen_lines, subsector_idx, level);
     }
 
     /// Return the accumulated scroll offset for a given linedef index.
