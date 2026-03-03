@@ -37,7 +37,9 @@ pub use actions::{
 };
 pub use cheats::{CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
-pub use dehacked::{DehError, DehPatch, FramePatch, ThingPatch, WeaponPatch};
+pub use dehacked::{
+    AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
+};
 pub use intermission::{IntermissionStats, par_time};
 pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
