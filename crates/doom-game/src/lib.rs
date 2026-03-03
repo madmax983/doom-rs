@@ -25,6 +25,7 @@ pub mod projectile;
 pub mod savegame;
 pub mod sight;
 pub mod snapshot;
+pub mod sound;
 pub mod spawn;
 pub mod specials;
 pub mod state;
@@ -73,6 +74,10 @@ pub use state::{
 pub use sight::{
     p_aim_line_slope, p_check_sight, p_look_for_players, point_on_side, ray_crosses_linedef,
     sector_from_subsector,
+};
+pub use sound::{
+    ML_SOUNDBLOCK, adjacent_sectors, clear_sound_targets, get_sound_target, init_sound_state,
+    monster_should_wake, p_noise_alert,
 };
 pub use states::STATES;
 pub use tic::{FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt};

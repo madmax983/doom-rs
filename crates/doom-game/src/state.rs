@@ -4,7 +4,7 @@
 //! It must never contain `Arc`, `Rc`, raw pointers, `HashMap`, or any
 //! non-deterministic source (no `Instant::now()`, no OS calls).
 
-use crate::mobj::MobjSlab;
+use crate::mobj::{MobjHandle, MobjSlab};
 use crate::player::PlayerState;
 
 // ---------------------------------------------------------------------------
@@ -490,6 +490,27 @@ pub struct GameState {
 
     /// Number of tics elapsed in the current level (incremented each tick).
     pub level_time: u32,
+
+    // --- Sound propagation state ---
+
+    /// Per-sector sound target: which actor made noise that this sector "heard".
+    ///
+    /// Indexed by sector index.  `None` = no noise has reached this sector.
+    /// Resized to `level.sectors.len()` by `sound::init_sound_state`.
+    pub sound_targets: Vec<Option<MobjHandle>>,
+
+    /// Per-sector generation counter for flood-fill visited tracking.
+    ///
+    /// Avoids clearing the whole vec each time `p_noise_alert` runs.
+    /// A sector is considered "visited this generation" when
+    /// `sound_traversed[s] >= sound_gen`.
+    pub sound_traversed: Vec<u32>,
+
+    /// Current sound generation counter.
+    ///
+    /// Incremented each time `p_noise_alert` is called to mark a new
+    /// flood-fill pass.
+    pub sound_gen: u32,
 }
 
 impl GameState {
@@ -523,6 +544,9 @@ impl GameState {
             conveyors: Vec::new(),
             exit_request: None,
             level_time: 0,
+            sound_targets: Vec::new(),
+            sound_traversed: Vec::new(),
+            sound_gen: 0,
         }
     }
 

@@ -23,6 +23,7 @@ pub mod sprite;
 pub mod statusbar;
 pub mod texture;
 pub mod visplane;
+pub mod weapon_anim;
 
 pub use anim::{AnimSequence, AnimState, AnimType, SwitchList};
 pub use automap::{AutomapState, draw_automap, draw_automap_ex, line_color};
@@ -46,3 +47,7 @@ pub use sprite::{
 };
 pub use statusbar::{StatusBarData, draw_status_bar, draw_status_bar_data};
 pub use texture::TextureCache;
+pub use weapon_anim::{
+    MAX_BOB, RAISE_SPEED, WEAPON_BASE_X, WEAPON_BASE_Y, WEAPON_BOTTOM, WEAPON_TOP,
+    WeaponAnimState, WeaponBob, WeaponSprite, draw_weapon_animated, weapon_sprite_name,
+};
