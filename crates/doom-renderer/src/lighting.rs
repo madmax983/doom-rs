@@ -86,11 +86,7 @@ pub fn compute_flat_light(base_cm_index: u8, distance: f32) -> u8 {
 /// brightness, while columns near the edges are penalised (darker).  This
 /// simulates the angular falloff inherent in perspective projection.
 #[inline]
-pub fn compute_wall_light_with_falloff(
-    base_cm_index: u8,
-    distance: f32,
-    screen_x: usize,
-) -> u8 {
+pub fn compute_wall_light_with_falloff(base_cm_index: u8, distance: f32, screen_x: usize) -> u8 {
     let base_lit = compute_wall_light(base_cm_index, distance);
     // Angular penalty: how far this column is from screen centre, scaled
     // into 0..~10 extra darkness levels at the very edge.
@@ -206,7 +202,11 @@ impl LightParams {
     pub fn new(sector_light: u8, is_fullbright: bool) -> Self {
         let fb = is_fullbright || sector_light == 255;
         Self {
-            base: if fb { 0 } else { light_to_colormap_index(sector_light) },
+            base: if fb {
+                0
+            } else {
+                light_to_colormap_index(sector_light)
+            },
             fullbright: fb,
         }
     }
@@ -277,11 +277,7 @@ impl LightParams {
 
     /// Obtain the 256-byte colormap row for a floor/ceiling span.
     #[inline]
-    pub fn get_flat_colormap<'a>(
-        &self,
-        distance: f32,
-        cache: &'a ColormapCache,
-    ) -> &'a [u8; 256] {
+    pub fn get_flat_colormap<'a>(&self, distance: f32, cache: &'a ColormapCache) -> &'a [u8; 256] {
         let idx = self.colormap_for_flat(distance);
         cache.get(idx as u8)
     }
@@ -338,7 +334,10 @@ mod tests {
         let mut prev = light_to_colormap_index(0);
         for light in 1..=255u8 {
             let cur = light_to_colormap_index(light);
-            assert!(cur <= prev, "index should decrease (or stay) as light increases");
+            assert!(
+                cur <= prev,
+                "index should decrease (or stay) as light increases"
+            );
             prev = cur;
         }
     }
@@ -589,10 +588,7 @@ mod tests {
     #[test]
     fn colormap_for_flat_equals_distance() {
         let lp = LightParams::new(128, false);
-        assert_eq!(
-            lp.colormap_for_flat(300.0),
-            lp.colormap_for_distance(300.0)
-        );
+        assert_eq!(lp.colormap_for_flat(300.0), lp.colormap_for_distance(300.0));
     }
 
     // -----------------------------------------------------------------------

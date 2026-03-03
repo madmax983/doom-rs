@@ -58,6 +58,6 @@ pub use sprite::{
 pub use statusbar::{StatusBarData, draw_status_bar, draw_status_bar_data};
 pub use texture::TextureCache;
 pub use weapon_anim::{
-    MAX_BOB, RAISE_SPEED, WEAPON_BASE_X, WEAPON_BASE_Y, WEAPON_BOTTOM, WEAPON_TOP,
-    WeaponAnimState, WeaponBob, WeaponSprite, draw_weapon_animated, weapon_sprite_name,
+    MAX_BOB, RAISE_SPEED, WEAPON_BASE_X, WEAPON_BASE_Y, WEAPON_BOTTOM, WEAPON_TOP, WeaponAnimState,
+    WeaponBob, WeaponSprite, draw_weapon_animated, weapon_sprite_name,
 };

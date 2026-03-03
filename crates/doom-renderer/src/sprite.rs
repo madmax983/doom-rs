@@ -1762,14 +1762,16 @@ mod tests {
         use doom_types::ANG90;
 
         // Need trig tables for render_level.
-        unsafe { doom_types::Bam::init_trig_tables(); }
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
 
         let level = make_render_level_one_sided();
         let mut fb = Framebuffer::new();
         let palette = crate::palette::PaletteLut::grayscale();
 
         let zbuf = crate::render::render_level(
-            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None,
+            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
         );
 
         // The wall at y=128 is 128 map units away from player at (64,0)
@@ -1898,9 +1900,7 @@ mod tests {
         // in the left half should not have pixel 66 (for columns in far-left
         // which are blocked by the near wall).
         // The sprite center is at x=160, so columns 0..~152 should be clipped.
-        let left_drawn = (0..140).any(|x| {
-            (0..SCREEN_H).any(|y| fb.get_pixel(x, y) == Some(66))
-        });
+        let left_drawn = (0..140).any(|x| (0..SCREEN_H).any(|y| fb.get_pixel(x, y) == Some(66)));
         assert!(
             !left_drawn,
             "columns behind the near wall (left half) must not have sprite pixels"
@@ -1947,21 +1947,24 @@ mod tests {
     fn zbuf_two_sided_seg_does_not_write() {
         use doom_types::ANG90;
 
-        unsafe { doom_types::Bam::init_trig_tables(); }
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
 
         let level = make_render_level_two_sided();
         let mut fb = Framebuffer::new();
         let palette = crate::palette::PaletteLut::grayscale();
 
         let zbuf = crate::render::render_level(
-            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None,
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
         );
 
         // For a two-sided seg, z_buf should remain at f32::MAX for
         // columns in the portal's span (no one-sided wall occluded them).
         let center = SCREEN_W / 2;
         assert_eq!(
-            zbuf[center], f32::MAX,
+            zbuf[center],
+            f32::MAX,
             "two-sided seg center column must not write to z_buffer (got {})",
             zbuf[center]
         );
@@ -2191,7 +2194,9 @@ mod tests {
     // ------------------------------------------------------------------
     #[test]
     fn zbuf_render_level_empty_returns_max() {
-        unsafe { doom_types::Bam::init_trig_tables(); }
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
 
         // A level with no visible walls from the player's position should
         // return a z_buffer filled with f32::MAX.
@@ -2210,6 +2215,7 @@ mod tests {
             None,
             None,
             None,
+            false,
         );
 
         // The test level has walls but the player is inside the box

@@ -184,6 +184,7 @@ fn bench_render_level_minimal(c: &mut Criterion) {
                 None,
                 None,
                 None,
+                false,
             )
         })
     });
