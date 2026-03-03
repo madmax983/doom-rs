@@ -61,6 +61,26 @@ pub const ACTION_HEAD_ATTACK: u8 = 8;
 pub const ACTION_BRUIS_ATTACK: u8 = 9;
 /// `A_FaceTarget`: snap angle to face current target.
 pub const ACTION_FACE_TARGET: u8 = 10;
+/// `A_CPosAttack`: Chaingunner hitscan attack.
+pub const ACTION_CPOS_ATTACK: u8 = 11;
+/// `A_CyberAttack`: Cyberdemon spawns a Rocket projectile.
+pub const ACTION_CYBER_ATTACK: u8 = 12;
+/// `A_SkelMissile`: Revenant spawns a Tracer projectile.
+pub const ACTION_SKEL_MISSILE: u8 = 13;
+/// `A_FatAttack1`: Mancubus fireball spread #1 (+FATSPREAD).
+pub const ACTION_FAT_ATTACK1: u8 = 14;
+/// `A_FatAttack2`: Mancubus fireball spread #2 (−FATSPREAD).
+pub const ACTION_FAT_ATTACK2: u8 = 15;
+/// `A_FatAttack3`: Mancubus fireball spread #3 (±FATSPREAD/2).
+pub const ACTION_FAT_ATTACK3: u8 = 16;
+/// `A_SkullAttack`: Lost Soul charge attack.
+pub const ACTION_SKULL_ATTACK: u8 = 17;
+/// `A_BspiAttack`: Arachnotron spawns ArachnotronPlasma.
+pub const ACTION_BSPI_ATTACK: u8 = 18;
+/// `A_SpidAttack`: Spider Mastermind hitscan attack.
+pub const ACTION_SPID_ATTACK: u8 = 19;
+/// `A_PainAttack`: Pain Elemental spawns Lost Soul.
+pub const ACTION_PAIN_ATTACK: u8 = 20;
 
 // ---------------------------------------------------------------------------
 // Public dispatcher
@@ -83,6 +103,16 @@ pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level
         ACTION_HEAD_ATTACK => a_head_attack(gs, handle),
         ACTION_BRUIS_ATTACK => a_bruis_attack(gs, handle),
         ACTION_FACE_TARGET => a_face_target(gs, handle),
+        ACTION_CPOS_ATTACK => a_cpos_attack(gs, handle, level),
+        ACTION_CYBER_ATTACK => a_cyber_attack(gs, handle),
+        ACTION_SKEL_MISSILE => a_skel_missile(gs, handle),
+        ACTION_FAT_ATTACK1 => a_fat_attack1(gs, handle),
+        ACTION_FAT_ATTACK2 => a_fat_attack2(gs, handle),
+        ACTION_FAT_ATTACK3 => a_fat_attack3(gs, handle),
+        ACTION_SKULL_ATTACK => a_skull_attack(gs, handle),
+        ACTION_BSPI_ATTACK => a_bspi_attack(gs, handle),
+        ACTION_SPID_ATTACK => a_spid_attack(gs, handle, level),
+        ACTION_PAIN_ATTACK => a_pain_attack(gs, handle),
         _ => {}
     }
 }
@@ -1081,6 +1111,379 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::BaronBall);
+}
+
+// ---------------------------------------------------------------------------
+// A_CPosAttack (Chaingunner — hitscan like Zombieman)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_CPosAttack` from Doom's `p_enemy.c`.
+///
+/// Fires a single hitscan bolt at the current target with angle spread.
+/// Same behavior as the Zombieman's `A_PosAttack`.
+fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    let angle = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.angle,
+        None => return,
+    };
+
+    let spread = crate::random::p_missile_angle_spread(gs);
+    let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
+    let damage = crate::random::p_damage_with_variance(gs, 3);
+    crate::combat::p_line_attack(
+        gs,
+        handle,
+        shot_angle,
+        crate::combat::MISSILERANGE,
+        damage,
+        level,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// A_CyberAttack (Cyberdemon — spawns Rocket projectile)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_CyberAttack` from Doom's `p_enemy.c`.
+///
+/// Faces the target, then spawns a `Rocket` projectile aimed at the target.
+fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::Rocket);
+}
+
+// ---------------------------------------------------------------------------
+// A_SkelMissile (Revenant — spawns Tracer projectile)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_SkelMissile` from Doom's `p_enemy.c`.
+///
+/// Faces the target, then spawns a `Tracer` (homing) projectile.
+fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::Tracer);
+}
+
+// ---------------------------------------------------------------------------
+// FATSPREAD constant for Mancubus attack spread
+// ---------------------------------------------------------------------------
+
+/// Mancubus fireball angular spread in BAM units.
+///
+/// Corresponds to Doom's `FATSPREAD` constant (ANG90/8 = 0x0400_0000).
+const FATSPREAD: u32 = 0x0400_0000;
+
+// ---------------------------------------------------------------------------
+// A_FatAttack1/2/3 (Mancubus spread fire)
+// ---------------------------------------------------------------------------
+
+/// Spawn a `FatShot` projectile at the given angle offset from the actor's
+/// facing direction.
+///
+/// Helper shared by `a_fat_attack1`, `a_fat_attack2`, `a_fat_attack3`.
+fn fat_shoot(gs: &mut GameState, handle: MobjHandle, angle_offset: u32) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+
+    // Spawn the missile aimed at target, then adjust its angle + momentum.
+    if let Some(proj_h) = crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::FatShot)
+    {
+        // Read the source angle (already set by face_target).
+        let mo_angle = gs.mobjslab.get(handle).map(|mo| mo.angle.0).unwrap_or(0);
+        let new_angle = Bam(mo_angle.wrapping_add(angle_offset));
+
+        // Adjust the projectile's angle and recompute momentum from the new angle.
+        if let Some(proj) = gs.mobjslab.get_mut(proj_h) {
+            proj.angle = new_angle;
+            let speed_f = proj.momx.to_int() as f32;
+            let spd_y = proj.momy.to_int() as f32;
+            let speed = (speed_f * speed_f + spd_y * spd_y).sqrt().max(1.0);
+            let angle_rad = new_angle.0 as f64 / (u32::MAX as f64 + 1.0) * std::f64::consts::TAU;
+            let cos = angle_rad.cos() as f32;
+            let sin = angle_rad.sin() as f32;
+            proj.momx = Fixed16_16::from_int((cos * speed) as i32);
+            proj.momy = Fixed16_16::from_int((sin * speed) as i32);
+        }
+    }
+}
+
+/// Port of `A_FatAttack1` from Doom's `p_enemy.c`.
+///
+/// Mancubus spread fire #1: face target, then fire two `FatShot` projectiles
+/// at +FATSPREAD and 0.
+fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    fat_shoot(gs, handle, FATSPREAD);
+    fat_shoot(gs, handle, 0);
+}
+
+/// Port of `A_FatAttack2` from Doom's `p_enemy.c`.
+///
+/// Mancubus spread fire #2: face target, then fire two `FatShot` projectiles
+/// at −FATSPREAD and 0.
+fn a_fat_attack2(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    fat_shoot(gs, handle, 0u32.wrapping_sub(FATSPREAD));
+    fat_shoot(gs, handle, 0);
+}
+
+/// Port of `A_FatAttack3` from Doom's `p_enemy.c`.
+///
+/// Mancubus spread fire #3: face target, then fire two `FatShot` projectiles
+/// at +FATSPREAD/2 and −FATSPREAD/2.
+fn a_fat_attack3(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    fat_shoot(gs, handle, FATSPREAD / 2);
+    fat_shoot(gs, handle, 0u32.wrapping_sub(FATSPREAD / 2));
+}
+
+// ---------------------------------------------------------------------------
+// A_SkullAttack (Lost Soul charge)
+// ---------------------------------------------------------------------------
+
+/// Speed of the Lost Soul charge attack in map units per tic.
+const SKULLSPEED: i32 = 20;
+
+/// Port of `A_SkullAttack` from Doom's `p_enemy.c`.
+///
+/// Sets `MF_SKULLFLY` and computes momentum toward the target at `SKULLSPEED`.
+fn a_skull_attack(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    let target_alive = gs
+        .mobjslab
+        .get(target)
+        .map(|t| !t.is_dead())
+        .unwrap_or(false);
+    if !target_alive {
+        return;
+    }
+
+    // Set the skull-fly flag so the Lost Soul damages on contact.
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.flags |= flags::MF_SKULLFLY;
+    }
+
+    // Read positions for velocity computation.
+    let (sx, sy) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x, mo.y),
+        None => return,
+    };
+    let (tx, ty) = match gs.mobjslab.get(target) {
+        Some(mo) => (mo.x, mo.y),
+        None => return,
+    };
+
+    // Face the target.
+    a_face_target(gs, handle);
+
+    // Compute momentum toward target at SKULLSPEED.
+    let dx_f = (tx - sx).to_int() as f32;
+    let dy_f = (ty - sy).to_int() as f32;
+    let dist = (dx_f * dx_f + dy_f * dy_f).sqrt().max(1.0);
+    let speed = SKULLSPEED as f32;
+
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.momx = Fixed16_16::from_int((dx_f / dist * speed) as i32);
+        mo.momy = Fixed16_16::from_int((dy_f / dist * speed) as i32);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A_BspiAttack (Arachnotron — spawns ArachPlaz projectile)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_BspiAttack` from Doom's `p_enemy.c`.
+///
+/// Faces the target, then spawns an `ArachPlaz` projectile.
+fn a_bspi_attack(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::ArachPlaz);
+}
+
+// ---------------------------------------------------------------------------
+// A_SpidAttack (Spider Mastermind — hitscan like Chaingunner)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_SpidAttack` from Doom's `p_enemy.c`.
+///
+/// Fires a single hitscan bolt with angle spread, identical to the
+/// Chaingunner attack pattern.
+fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+
+    a_face_target(gs, handle);
+    let angle = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.angle,
+        None => return,
+    };
+
+    let spread = crate::random::p_missile_angle_spread(gs);
+    let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
+    let damage = crate::random::p_damage_with_variance(gs, 3);
+    crate::combat::p_line_attack(
+        gs,
+        handle,
+        shot_angle,
+        crate::combat::MISSILERANGE,
+        damage,
+        level,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// A_PainAttack (Pain Elemental — spawns Lost Soul)
+// ---------------------------------------------------------------------------
+
+/// Maximum number of Lost Souls permitted in the level at once.
+///
+/// Doom enforces a cap of 21; `A_PainAttack` skips spawning if the count
+/// is at or above this threshold.
+const LOST_SOUL_MAX: usize = 21;
+
+/// Port of `A_PainAttack` from Doom's `p_enemy.c`.
+///
+/// Faces the target, then spawns a `LostSoul` if the current count of Lost
+/// Souls in the level is below `LOST_SOUL_MAX` (21).
+fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs
+        .mobjslab
+        .get(target)
+        .map(|t| t.is_dead())
+        .unwrap_or(false)
+    {
+        return;
+    }
+
+    a_face_target(gs, handle);
+
+    // Count existing Lost Souls. If at cap, do not spawn.
+    let lost_soul_count = gs
+        .mobjslab
+        .iter_handles()
+        .filter(|h| {
+            gs.mobjslab
+                .get(*h)
+                .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
+                .unwrap_or(false)
+        })
+        .count();
+
+    if lost_soul_count >= LOST_SOUL_MAX {
+        return;
+    }
+
+    // Spawn a new Lost Soul at the Pain Elemental's position, aimed at the target.
+    // We use the angle of the PE to spawn the skull slightly forward.
+    let (sx, sy, sz, s_angle) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x, mo.y, mo.z, mo.angle),
+        None => return,
+    };
+
+    // Spawn the Lost Soul slightly ahead of the Pain Elemental.
+    // Use f64 for the offset direction calculation (non-deterministic path — spawn position only).
+    let angle_rad = s_angle.0 as f64 / (u32::MAX as f64 + 1.0) * std::f64::consts::TAU;
+    let offset = 4; // map units forward
+    let spawn_x = sx + Fixed16_16::from_int((angle_rad.cos() * offset as f64) as i32);
+    let spawn_y = sy + Fixed16_16::from_int((angle_rad.sin() * offset as f64) as i32);
+
+    let mut skull = crate::mobj::Mobj::new(MobjKind::LostSoul, spawn_x, spawn_y, s_angle);
+    skull.z = sz + Fixed16_16::from_int(8); // spawn slightly above PE
+    skull.health = 100; // default Lost Soul health
+    skull.flags = flags::MF_SOLID
+        | flags::MF_SHOOTABLE
+        | flags::MF_NOGRAVITY
+        | flags::MF_FLOAT
+        | flags::MF_COUNTKILL
+        | flags::MF_SKULLFLY;
+    skull.radius = Fixed16_16::from_int(16);
+    skull.height = Fixed16_16::from_int(56);
+
+    // Set momentum toward target (skull attack charge).
+    let (tx, ty) = match gs.mobjslab.get(target) {
+        Some(t) => (t.x, t.y),
+        None => return,
+    };
+    let dx_f = (tx - spawn_x).to_int() as f32;
+    let dy_f = (ty - spawn_y).to_int() as f32;
+    let dist = (dx_f * dx_f + dy_f * dy_f).sqrt().max(1.0);
+    let speed = SKULLSPEED as f32;
+    skull.momx = Fixed16_16::from_int((dx_f / dist * speed) as i32);
+    skull.momy = Fixed16_16::from_int((dy_f / dist * speed) as i32);
+    skull.target = target;
+
+    gs.mobjslab.alloc(skull);
 }
 
 // ---------------------------------------------------------------------------
@@ -2258,5 +2661,513 @@ mod tests {
     fn xmove_ymove_tables_have_nine_entries() {
         assert_eq!(XMOVE.len(), 9);
         assert_eq!(YMOVE.len(), 9);
+    }
+
+    // -----------------------------------------------------------------------
+    // Batch 31: New monster attack function tests
+    // -----------------------------------------------------------------------
+
+    /// Spawn a generic monster of `kind` at `(x, y)` targeting the player.
+    fn spawn_monster_targeting_player(
+        gs: &mut GameState,
+        kind: MobjKind,
+        x: i32,
+        y: i32,
+        health: i32,
+    ) -> MobjHandle {
+        let mut mo = Mobj::new(
+            kind,
+            Fixed16_16::from_int(x),
+            Fixed16_16::from_int(y),
+            Bam::ZERO,
+        );
+        mo.health = health;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.target = gs.player.handle;
+        mo.radius = Fixed16_16::from_int(20);
+        mo.height = Fixed16_16::from_int(56);
+        gs.mobjslab.alloc(mo)
+    }
+
+    // --- Dispatch wiring tests ---
+
+    #[test]
+    fn dispatch_cpos_attack_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::Sergeant, 100, 0, 30);
+        dispatch_action(&mut gs, h, ACTION_CPOS_ATTACK, None);
+    }
+
+    #[test]
+    fn dispatch_cyber_attack_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::Cyberdemon, 200, 0, 4000);
+        dispatch_action(&mut gs, h, ACTION_CYBER_ATTACK, None);
+    }
+
+    #[test]
+    fn dispatch_skel_missile_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::Revenant, 200, 0, 300);
+        dispatch_action(&mut gs, h, ACTION_SKEL_MISSILE, None);
+    }
+
+    #[test]
+    fn dispatch_fat_attack1_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::Mancubus, 200, 0, 600);
+        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK1, None);
+    }
+
+    #[test]
+    fn dispatch_fat_attack2_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::Mancubus, 200, 0, 600);
+        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK2, None);
+    }
+
+    #[test]
+    fn dispatch_fat_attack3_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::Mancubus, 200, 0, 600);
+        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK3, None);
+    }
+
+    #[test]
+    fn dispatch_skull_attack_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::LostSoul, 200, 0, 100);
+        dispatch_action(&mut gs, h, ACTION_SKULL_ATTACK, None);
+    }
+
+    #[test]
+    fn dispatch_bspi_attack_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::Arachnotron, 200, 0, 500);
+        dispatch_action(&mut gs, h, ACTION_BSPI_ATTACK, None);
+    }
+
+    #[test]
+    fn dispatch_spid_attack_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::SpiderMastermind, 200, 0, 3000);
+        dispatch_action(&mut gs, h, ACTION_SPID_ATTACK, None);
+    }
+
+    #[test]
+    fn dispatch_pain_attack_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::PainElemental, 200, 0, 400);
+        dispatch_action(&mut gs, h, ACTION_PAIN_ATTACK, None);
+    }
+
+    // --- Cyberdemon spawns Rocket ---
+
+    #[test]
+    fn cyber_attack_spawns_rocket_projectile() {
+        let mut gs = make_game_state();
+        let cyber = spawn_monster_targeting_player(&mut gs, MobjKind::Cyberdemon, 200, 0, 4000);
+
+        let count_before = gs.mobjslab.len();
+        a_cyber_attack(&mut gs, cyber);
+        let count_after = gs.mobjslab.len();
+
+        assert!(
+            count_after > count_before,
+            "cyberdemon attack must spawn a projectile"
+        );
+
+        // Find the Rocket.
+        let rocket = gs.mobjslab.iter_handles().find(|h| {
+            gs.mobjslab
+                .get(*h)
+                .map(|m| m.kind == MobjKind::Rocket)
+                .unwrap_or(false)
+        });
+        assert!(rocket.is_some(), "must spawn a Rocket MobjKind");
+    }
+
+    // --- Revenant spawns Tracer ---
+
+    #[test]
+    fn skel_missile_spawns_tracer_projectile() {
+        let mut gs = make_game_state();
+        let skel = spawn_monster_targeting_player(&mut gs, MobjKind::Revenant, 200, 0, 300);
+
+        a_skel_missile(&mut gs, skel);
+
+        let tracer = gs.mobjslab.iter_handles().find(|h| {
+            gs.mobjslab
+                .get(*h)
+                .map(|m| m.kind == MobjKind::Tracer)
+                .unwrap_or(false)
+        });
+        assert!(tracer.is_some(), "must spawn a Tracer MobjKind");
+    }
+
+    // --- Arachnotron spawns ArachPlaz ---
+
+    #[test]
+    fn bspi_attack_spawns_arachplaz() {
+        let mut gs = make_game_state();
+        let bspi = spawn_monster_targeting_player(&mut gs, MobjKind::Arachnotron, 200, 0, 500);
+
+        a_bspi_attack(&mut gs, bspi);
+
+        let plaz = gs.mobjslab.iter_handles().find(|h| {
+            gs.mobjslab
+                .get(*h)
+                .map(|m| m.kind == MobjKind::ArachPlaz)
+                .unwrap_or(false)
+        });
+        assert!(plaz.is_some(), "must spawn an ArachPlaz MobjKind");
+    }
+
+    // --- Mancubus spawns FatShot (two per attack) ---
+
+    #[test]
+    fn fat_attack1_spawns_two_fatshots() {
+        let mut gs = make_game_state();
+        let manc = spawn_monster_targeting_player(&mut gs, MobjKind::Mancubus, 200, 0, 600);
+
+        let count_before = gs.mobjslab.len();
+        a_fat_attack1(&mut gs, manc);
+        let count_after = gs.mobjslab.len();
+
+        // Two FatShots should be spawned.
+        assert_eq!(
+            count_after - count_before,
+            2,
+            "fat_attack1 must spawn exactly 2 projectiles"
+        );
+
+        let fatshot_count = gs
+            .mobjslab
+            .iter_handles()
+            .filter(|h| {
+                gs.mobjslab
+                    .get(*h)
+                    .map(|m| m.kind == MobjKind::FatShot)
+                    .unwrap_or(false)
+            })
+            .count();
+        assert_eq!(fatshot_count, 2, "both projectiles must be FatShot");
+    }
+
+    #[test]
+    fn fat_attack2_spawns_two_fatshots() {
+        let mut gs = make_game_state();
+        let manc = spawn_monster_targeting_player(&mut gs, MobjKind::Mancubus, 200, 0, 600);
+
+        a_fat_attack2(&mut gs, manc);
+
+        let fatshot_count = gs
+            .mobjslab
+            .iter_handles()
+            .filter(|h| {
+                gs.mobjslab
+                    .get(*h)
+                    .map(|m| m.kind == MobjKind::FatShot)
+                    .unwrap_or(false)
+            })
+            .count();
+        assert_eq!(fatshot_count, 2, "fat_attack2 must spawn 2 FatShots");
+    }
+
+    #[test]
+    fn fat_attack3_spawns_two_fatshots() {
+        let mut gs = make_game_state();
+        let manc = spawn_monster_targeting_player(&mut gs, MobjKind::Mancubus, 200, 0, 600);
+
+        a_fat_attack3(&mut gs, manc);
+
+        let fatshot_count = gs
+            .mobjslab
+            .iter_handles()
+            .filter(|h| {
+                gs.mobjslab
+                    .get(*h)
+                    .map(|m| m.kind == MobjKind::FatShot)
+                    .unwrap_or(false)
+            })
+            .count();
+        assert_eq!(fatshot_count, 2, "fat_attack3 must spawn 2 FatShots");
+    }
+
+    // --- Lost Soul skull attack ---
+
+    #[test]
+    fn skull_attack_sets_skullfly_flag() {
+        let mut gs = make_game_state();
+        let skull = spawn_monster_targeting_player(&mut gs, MobjKind::LostSoul, 200, 0, 100);
+
+        a_skull_attack(&mut gs, skull);
+
+        let mo = gs.mobjslab.get(skull).unwrap();
+        assert_ne!(
+            mo.flags & flags::MF_SKULLFLY,
+            0,
+            "skull attack must set MF_SKULLFLY"
+        );
+    }
+
+    #[test]
+    fn skull_attack_sets_momentum_toward_target() {
+        let mut gs = make_game_state();
+        // Skull at (200,0), player at (0,0) — skull should fly west.
+        let skull = spawn_monster_targeting_player(&mut gs, MobjKind::LostSoul, 200, 0, 100);
+
+        a_skull_attack(&mut gs, skull);
+
+        let mo = gs.mobjslab.get(skull).unwrap();
+        assert!(
+            mo.momx < Fixed16_16::ZERO,
+            "momx should be negative (flying west toward player), got {:?}",
+            mo.momx
+        );
+        // Speed should be approximately SKULLSPEED (20).
+        let speed_sq = mo.momx.to_int() * mo.momx.to_int() + mo.momy.to_int() * mo.momy.to_int();
+        let speed = (speed_sq as f32).sqrt();
+        assert!(
+            speed >= 15.0 && speed <= 25.0,
+            "skull speed should be ~20, got {speed}"
+        );
+    }
+
+    // --- Pain Elemental spawns Lost Soul ---
+
+    #[test]
+    fn pain_attack_spawns_lost_soul() {
+        let mut gs = make_game_state();
+        let pe = spawn_monster_targeting_player(&mut gs, MobjKind::PainElemental, 200, 0, 400);
+
+        let count_before = gs
+            .mobjslab
+            .iter_handles()
+            .filter(|h| {
+                gs.mobjslab
+                    .get(*h)
+                    .map(|m| m.kind == MobjKind::LostSoul)
+                    .unwrap_or(false)
+            })
+            .count();
+
+        a_pain_attack(&mut gs, pe);
+
+        let count_after = gs
+            .mobjslab
+            .iter_handles()
+            .filter(|h| {
+                gs.mobjslab
+                    .get(*h)
+                    .map(|m| m.kind == MobjKind::LostSoul)
+                    .unwrap_or(false)
+            })
+            .count();
+
+        assert_eq!(
+            count_after,
+            count_before + 1,
+            "pain attack must spawn exactly 1 Lost Soul"
+        );
+    }
+
+    #[test]
+    fn pain_attack_respects_lost_soul_cap() {
+        let mut gs = make_game_state();
+        let pe = spawn_monster_targeting_player(&mut gs, MobjKind::PainElemental, 200, 0, 400);
+
+        // Spawn 21 Lost Souls to reach the cap.
+        for i in 0..21 {
+            let mut skull = Mobj::new(
+                MobjKind::LostSoul,
+                Fixed16_16::from_int(500 + i * 10),
+                Fixed16_16::from_int(500),
+                Bam::ZERO,
+            );
+            skull.health = 100;
+            skull.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
+            gs.mobjslab.alloc(skull);
+        }
+
+        let count_before = gs
+            .mobjslab
+            .iter_handles()
+            .filter(|h| {
+                gs.mobjslab
+                    .get(*h)
+                    .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
+                    .unwrap_or(false)
+            })
+            .count();
+
+        a_pain_attack(&mut gs, pe);
+
+        let count_after = gs
+            .mobjslab
+            .iter_handles()
+            .filter(|h| {
+                gs.mobjslab
+                    .get(*h)
+                    .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
+                    .unwrap_or(false)
+            })
+            .count();
+
+        assert_eq!(
+            count_before, count_after,
+            "pain attack must NOT spawn Lost Soul when cap ({}) is reached",
+            LOST_SOUL_MAX
+        );
+    }
+
+    #[test]
+    fn pain_attack_spawns_when_under_cap() {
+        let mut gs = make_game_state();
+        let pe = spawn_monster_targeting_player(&mut gs, MobjKind::PainElemental, 200, 0, 400);
+
+        // Spawn 20 Lost Souls — one below the cap.
+        for i in 0..20 {
+            let mut skull = Mobj::new(
+                MobjKind::LostSoul,
+                Fixed16_16::from_int(500 + i * 10),
+                Fixed16_16::from_int(500),
+                Bam::ZERO,
+            );
+            skull.health = 100;
+            skull.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
+            gs.mobjslab.alloc(skull);
+        }
+
+        a_pain_attack(&mut gs, pe);
+
+        let count = gs
+            .mobjslab
+            .iter_handles()
+            .filter(|h| {
+                gs.mobjslab
+                    .get(*h)
+                    .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
+                    .unwrap_or(false)
+            })
+            .count();
+
+        assert_eq!(count, 21, "pain attack should spawn 1 more (20->21)");
+    }
+
+    // --- No-target / dead-target edge cases ---
+
+    #[test]
+    fn all_attacks_noop_without_target() {
+        let mut gs = make_game_state();
+        // Monster with no target set (NULL).
+        let mut mo = Mobj::new(
+            MobjKind::Sergeant,
+            Fixed16_16::from_int(100),
+            Fixed16_16::from_int(0),
+            Bam::ZERO,
+        );
+        mo.health = 30;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
+        let h = gs.mobjslab.alloc(mo);
+
+        // None of these should panic.
+        dispatch_action(&mut gs, h, ACTION_CPOS_ATTACK, None);
+        dispatch_action(&mut gs, h, ACTION_CYBER_ATTACK, None);
+        dispatch_action(&mut gs, h, ACTION_SKEL_MISSILE, None);
+        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK1, None);
+        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK2, None);
+        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK3, None);
+        dispatch_action(&mut gs, h, ACTION_SKULL_ATTACK, None);
+        dispatch_action(&mut gs, h, ACTION_BSPI_ATTACK, None);
+        dispatch_action(&mut gs, h, ACTION_SPID_ATTACK, None);
+        dispatch_action(&mut gs, h, ACTION_PAIN_ATTACK, None);
+    }
+
+    #[test]
+    fn all_attacks_noop_with_dead_target() {
+        let mut gs = make_game_state();
+        // Kill the player.
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().health = 0;
+
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::Cyberdemon, 200, 0, 4000);
+
+        let slab_len_before = gs.mobjslab.len();
+        dispatch_action(&mut gs, h, ACTION_CYBER_ATTACK, None);
+        // Cyberdemon should NOT spawn a rocket when target is dead.
+        assert_eq!(
+            gs.mobjslab.len(),
+            slab_len_before,
+            "must not spawn projectile when target is dead"
+        );
+    }
+
+    #[test]
+    fn all_attacks_noop_with_stale_handle() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::Cyberdemon, 200, 0, 4000);
+        gs.mobjslab.free(h);
+
+        // None should panic.
+        dispatch_action(&mut gs, h, ACTION_CPOS_ATTACK, None);
+        dispatch_action(&mut gs, h, ACTION_CYBER_ATTACK, None);
+        dispatch_action(&mut gs, h, ACTION_SKEL_MISSILE, None);
+        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK1, None);
+        dispatch_action(&mut gs, h, ACTION_SKULL_ATTACK, None);
+        dispatch_action(&mut gs, h, ACTION_BSPI_ATTACK, None);
+        dispatch_action(&mut gs, h, ACTION_SPID_ATTACK, None);
+        dispatch_action(&mut gs, h, ACTION_PAIN_ATTACK, None);
+    }
+
+    // --- Constants ---
+
+    #[test]
+    fn fatspread_constant_is_correct() {
+        assert_eq!(FATSPREAD, 0x0400_0000, "FATSPREAD must be ANG90/8");
+    }
+
+    #[test]
+    fn skullspeed_constant_is_20() {
+        assert_eq!(SKULLSPEED, 20, "Lost Soul charge speed must be 20");
+    }
+
+    #[test]
+    fn lost_soul_max_is_21() {
+        assert_eq!(LOST_SOUL_MAX, 21, "Lost Soul cap must be 21");
+    }
+
+    #[test]
+    fn action_constants_are_unique() {
+        let constants = [
+            ACTION_NONE,
+            ACTION_LOOK,
+            ACTION_CHASE,
+            ACTION_POS_ATTACK,
+            ACTION_SPOS_ATTACK,
+            ACTION_TROO_ATTACK,
+            ACTION_SARG_ATTACK,
+            ACTION_FALL,
+            ACTION_HEAD_ATTACK,
+            ACTION_BRUIS_ATTACK,
+            ACTION_FACE_TARGET,
+            ACTION_CPOS_ATTACK,
+            ACTION_CYBER_ATTACK,
+            ACTION_SKEL_MISSILE,
+            ACTION_FAT_ATTACK1,
+            ACTION_FAT_ATTACK2,
+            ACTION_FAT_ATTACK3,
+            ACTION_SKULL_ATTACK,
+            ACTION_BSPI_ATTACK,
+            ACTION_SPID_ATTACK,
+            ACTION_PAIN_ATTACK,
+        ];
+        for i in 0..constants.len() {
+            for j in (i + 1)..constants.len() {
+                assert_ne!(
+                    constants[i], constants[j],
+                    "action constants at indices {i} and {j} must be unique"
+                );
+            }
+        }
     }
 }

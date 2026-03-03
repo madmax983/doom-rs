@@ -36,8 +36,10 @@ pub mod tic;
 pub mod weapons;
 
 pub use actions::{
-    ACTION_BRUIS_ATTACK, ACTION_CHASE, ACTION_FACE_TARGET, ACTION_HEAD_ATTACK, ACTION_LOOK,
-    ACTION_NONE, dispatch_action, p_move, p_new_chase_dir,
+    ACTION_BRUIS_ATTACK, ACTION_BSPI_ATTACK, ACTION_CHASE, ACTION_CPOS_ATTACK, ACTION_CYBER_ATTACK,
+    ACTION_FACE_TARGET, ACTION_FAT_ATTACK1, ACTION_FAT_ATTACK2, ACTION_FAT_ATTACK3,
+    ACTION_HEAD_ATTACK, ACTION_LOOK, ACTION_NONE, ACTION_PAIN_ATTACK, ACTION_SKEL_MISSILE,
+    ACTION_SKULL_ATTACK, ACTION_SPID_ATTACK, dispatch_action, p_move, p_new_chase_dir,
 };
 pub use automap::{
     AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
