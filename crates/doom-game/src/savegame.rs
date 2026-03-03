@@ -14,8 +14,9 @@ use doom_types::{Bam, Fixed16_16};
 use crate::mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum};
 use crate::player::{NUM_POWERS, PlayerState, WeaponType};
 use crate::state::{
-    CeilingMover, CeilingType, DoomRng, DoorMover, ExitRequest, FloorMover, GameState, LiftMover,
-    LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus,
+    CeilingMover, CeilingType, ConveyorBelt, DoomRng, DoorMover, ExitRequest, FloorMover,
+    GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
+    PlatformStatus, ScrollingWall,
 };
 
 // ---------------------------------------------------------------------------
@@ -814,6 +815,50 @@ fn read_lift_mover(r: &mut ReadCursor<'_>) -> Result<LiftMover, SaveError> {
 }
 
 // ---------------------------------------------------------------------------
+// ScrollingWall serialization
+// ---------------------------------------------------------------------------
+
+fn write_scrolling_wall(w: &mut WriteCursor, sw: &ScrollingWall) {
+    w.write_u32(sw.linedef_index as u32);
+    w.write_i16(sw.speed_x);
+    w.write_i16(sw.speed_y);
+    w.write_i32(sw.accumulated_x);
+    w.write_i32(sw.accumulated_y);
+}
+
+fn read_scrolling_wall(r: &mut ReadCursor<'_>) -> Result<ScrollingWall, SaveError> {
+    Ok(ScrollingWall {
+        linedef_index: r.read_u32()? as usize,
+        speed_x: r.read_i16()?,
+        speed_y: r.read_i16()?,
+        accumulated_x: r.read_i32()?,
+        accumulated_y: r.read_i32()?,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// ConveyorBelt serialization
+// ---------------------------------------------------------------------------
+
+fn write_conveyor_belt(w: &mut WriteCursor, cb: &ConveyorBelt) {
+    w.write_u32(cb.sector_index as u32);
+    w.write_i32(cb.push_x);
+    w.write_i32(cb.push_y);
+    w.write_i16(cb.direction);
+    w.write_i16(cb.speed);
+}
+
+fn read_conveyor_belt(r: &mut ReadCursor<'_>) -> Result<ConveyorBelt, SaveError> {
+    Ok(ConveyorBelt {
+        sector_index: r.read_u32()? as usize,
+        push_x: r.read_i32()?,
+        push_y: r.read_i32()?,
+        direction: r.read_i16()?,
+        speed: r.read_i16()?,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Top-level save/load
 // ---------------------------------------------------------------------------
 
@@ -898,6 +943,18 @@ pub fn save_game(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &
     w.write_u32(gs.lifts.len() as u32);
     for lift in &gs.lifts {
         write_lift_mover(&mut w, lift);
+    }
+
+    // --- Scrolling walls ---
+    w.write_u32(gs.scrolling_walls.len() as u32);
+    for sw in &gs.scrolling_walls {
+        write_scrolling_wall(&mut w, sw);
+    }
+
+    // --- Conveyor belts ---
+    w.write_u32(gs.conveyors.len() as u32);
+    for cb in &gs.conveyors {
+        write_conveyor_belt(&mut w, cb);
     }
 
     // --- Mobjs ---
@@ -1034,6 +1091,20 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
         lifts.push(read_lift_mover(&mut r)?);
     }
 
+    // --- Scrolling walls ---
+    let scroller_count = r.read_u32()? as usize;
+    let mut scrolling_walls = Vec::with_capacity(scroller_count);
+    for _ in 0..scroller_count {
+        scrolling_walls.push(read_scrolling_wall(&mut r)?);
+    }
+
+    // --- Conveyor belts ---
+    let conveyor_count = r.read_u32()? as usize;
+    let mut conveyors = Vec::with_capacity(conveyor_count);
+    for _ in 0..conveyor_count {
+        conveyors.push(read_conveyor_belt(&mut r)?);
+    }
+
     // --- Mobjs ---
     let mobj_count = r.read_u32()? as usize;
     let mut mobjslab = MobjSlab::new();
@@ -1087,6 +1158,8 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     state.active_floors = active_floors;
     state.active_platforms = active_platforms;
     state.lifts = lifts;
+    state.scrolling_walls = scrolling_walls;
+    state.conveyors = conveyors;
     state.exit_request = exit_request;
     state.level_time = level_time;
 

@@ -280,6 +280,55 @@ pub struct SectorLightEffect {
 }
 
 // ---------------------------------------------------------------------------
+// Scrolling wall / conveyor belt types
+// ---------------------------------------------------------------------------
+
+/// A wall whose texture scrolls horizontally or vertically each tic.
+///
+/// Added to `GameState::scrolling_walls` during level setup by
+/// `specials::init_scrolling_walls`. Ticked each tic by
+/// `specials::tick_scrollers`.
+///
+/// Line type 48: scroll left (speed_x = 1, speed_y = 0).
+/// Line type 85: scroll right (speed_x = -1, speed_y = 0).
+#[derive(Clone, Debug)]
+pub struct ScrollingWall {
+    /// Index into `level.linedefs` for the scrolling linedef.
+    pub linedef_index: usize,
+    /// Horizontal scroll speed in texels per tic (positive = scroll left).
+    pub speed_x: i16,
+    /// Vertical scroll speed in texels per tic (positive = scroll down, 0 for most).
+    pub speed_y: i16,
+    /// Accumulated horizontal offset (grows each tic by `speed_x`).
+    pub accumulated_x: i32,
+    /// Accumulated vertical offset (grows each tic by `speed_y`).
+    pub accumulated_y: i32,
+}
+
+/// A conveyor belt sector that pushes actors standing on it.
+///
+/// Added to `GameState::conveyors` during level setup by
+/// `specials::init_conveyors`. Ticked each tic by
+/// `specials::tick_conveyors`.
+///
+/// Line type 253: scroll floor + push things.
+/// Line type 254: scroll floor + push things + scroll wall.
+/// Line type 255: scroll wall using linedef offsets (generalized).
+#[derive(Clone, Debug)]
+pub struct ConveyorBelt {
+    /// Index into `level.sectors` for the conveyor sector.
+    pub sector_index: usize,
+    /// Push force X component (fixed-point or map units per tic).
+    pub push_x: i32,
+    /// Push force Y component.
+    pub push_y: i32,
+    /// Direction angle in degrees (0-359, for reference).
+    pub direction: i16,
+    /// Push magnitude (speed of the conveyor).
+    pub speed: i16,
+}
+
+// ---------------------------------------------------------------------------
 // Doom's deterministic RNG
 // ---------------------------------------------------------------------------
 
@@ -399,6 +448,12 @@ pub struct GameState {
     /// Extended sector light effects (ticked by `specials::tick_sector_lights`).
     pub sector_lights: Vec<SectorLightEffect>,
 
+    /// Active scrolling wall textures (ticked by `specials::tick_scrollers`).
+    pub scrolling_walls: Vec<ScrollingWall>,
+
+    /// Active conveyor belt sectors (ticked by `specials::tick_conveyors`).
+    pub conveyors: Vec<ConveyorBelt>,
+
     /// Level exit requested this tic (cleared to `None` at start of each tick).
     pub exit_request: Option<ExitRequest>,
 
@@ -433,9 +488,25 @@ impl GameState {
             active_platforms: Vec::new(),
             lifts: Vec::new(),
             sector_lights: Vec::new(),
+            scrolling_walls: Vec::new(),
+            conveyors: Vec::new(),
             exit_request: None,
             level_time: 0,
         }
+    }
+
+    /// Return the accumulated scroll offset for a given linedef index.
+    ///
+    /// Returns `(0, 0)` if no `ScrollingWall` exists for this linedef.
+    /// The renderer adds these offsets to the sidedef's `x_offset`/`y_offset`
+    /// when drawing the wall texture.
+    pub fn get_scroll_offset(&self, linedef_index: usize) -> (i32, i32) {
+        for sw in &self.scrolling_walls {
+            if sw.linedef_index == linedef_index {
+                return (sw.accumulated_x, sw.accumulated_y);
+            }
+        }
+        (0, 0)
     }
 }
 

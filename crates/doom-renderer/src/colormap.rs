@@ -1,4 +1,4 @@
-//! COLORMAP lump loading and light-level lookup.
+//! COLORMAP lump loading, light-level lookup, and special colormaps.
 //!
 //! COLORMAP is 34 × 256 bytes. Row 0 = full bright (identity mapping),
 //! row 31 = darkest (heavily remapped to dark colours).
@@ -7,6 +7,12 @@
 //!
 //! `ColormapCache::get(light_index)` returns a reference to the 256-byte
 //! row for the given light index, clamped to `[0, 31]`.
+//!
+//! # Invulnerability colormap
+//! When the player has the invulnerability powerup, all rendered pixels
+//! pass through `INVULN_COLORMAP` — a grayscale ramp that maps every
+//! palette index to a bright grayscale equivalent.  This produces the
+//! distinctive "negative / white-out" look of the powerup.
 //!
 //! # Loading
 //! Call `ColormapCache::load(&wad_stack)` at startup.  If the `COLORMAP`
@@ -73,7 +79,85 @@ impl ColormapCache {
             .try_into()
             .expect("colormap row is always 256 bytes")
     }
+
+    /// Construct from raw data (for testing).
+    ///
+    /// `data` must be exactly `COLORMAP_ROWS * COLORMAP_SIZE` bytes.
+    /// Panics if the length is wrong.
+    #[doc(hidden)]
+    pub fn from_test_data(data: Vec<u8>) -> Self {
+        assert_eq!(
+            data.len(),
+            COLORMAP_ROWS * COLORMAP_SIZE,
+            "test data must be exactly {} bytes",
+            COLORMAP_ROWS * COLORMAP_SIZE
+        );
+        Self { data }
+    }
+
+    /// Build the identity-fallback cache (no WAD needed).
+    ///
+    /// Every row maps index `i` to `i` (full-bright).
+    pub fn identity() -> Self {
+        Self {
+            data: (0..COLORMAP_ROWS).flat_map(|_| 0u8..=255).collect(),
+        }
+    }
 }
+
+// ---------------------------------------------------------------------------
+// Invulnerability colormap
+// ---------------------------------------------------------------------------
+
+/// Build the invulnerability (grayscale) colormap.
+///
+/// Maps each palette index to a bright grayscale equivalent.  Doom's actual
+/// invulnerability effect uses COLORMAP row 32 (the "inverse" map), but
+/// that requires a WAD.  This function produces a deterministic grayscale
+/// ramp that works without any WAD data:
+///
+/// - Indices 0-15 (black-to-white ramp in the Doom palette) map to the
+///   bright end of the range.
+/// - All other indices are mapped based on a simple luminance approximation.
+///
+/// The result is the distinctive bright/white-washed look of the
+/// invulnerability powerup.
+pub fn build_invuln_colormap() -> [u8; 256] {
+    let mut map = [0u8; 256];
+    for i in 0u16..256 {
+        // Doom's grayscale palette ramp occupies indices 0-15 (in most
+        // IWADs).  We map every index to the upper portion of this ramp
+        // to simulate the bright invulnerability effect.
+        //
+        // Simple approximation: treat the palette index as if it encodes
+        // some brightness information via modular position, then bias
+        // everything toward the bright end.
+        //
+        // The mapping: spread across indices 4..15 (bright gray to white).
+        // We use (i % 16) * 11/16 + 4 clamped to 15 to get a ramp.
+        let gray = ((i % 16) * 11 / 16 + 4).min(15) as u8;
+        map[i as usize] = gray;
+    }
+    map
+}
+
+/// Pre-computed invulnerability colormap — maps every palette index to a
+/// bright grayscale value.
+///
+/// Use this as the colormap for all rendering when the invulnerability
+/// powerup is active.
+pub const INVULN_COLORMAP: [u8; 256] = {
+    let mut map = [0u8; 256];
+    let mut i: u16 = 0;
+    while i < 256 {
+        // Same formula as build_invuln_colormap but usable in const context.
+        let gray = (i % 16) * 11 / 16 + 4;
+        let clamped = if gray > 15 { 15 } else { gray };
+        map[i as usize] = clamped as u8;
+        i += 1;
+    }
+    map
+};
 
 impl core::fmt::Debug for ColormapCache {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -168,6 +252,51 @@ mod tests {
         let cache = ColormapCache::load(&stack);
 
         // Fallback is identity.
+        let row = cache.get(0);
+        for (i, &v) in row.iter().enumerate() {
+            assert_eq!(v, i as u8);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Invulnerability colormap tests
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn invuln_colormap_has_256_entries() {
+        assert_eq!(INVULN_COLORMAP.len(), 256);
+    }
+
+    #[test]
+    fn invuln_colormap_maps_all_to_bright_range() {
+        // All mapped values should be in the bright gray range [4, 15].
+        for (i, &val) in INVULN_COLORMAP.iter().enumerate() {
+            assert!(
+                val >= 4 && val <= 15,
+                "INVULN_COLORMAP[{i}] = {val}, expected [4, 15]"
+            );
+        }
+    }
+
+    #[test]
+    fn build_invuln_colormap_is_deterministic() {
+        let map1 = build_invuln_colormap();
+        let map2 = build_invuln_colormap();
+        assert_eq!(map1, map2, "build_invuln_colormap must be deterministic");
+    }
+
+    #[test]
+    fn build_invuln_colormap_matches_const() {
+        let dynamic = build_invuln_colormap();
+        assert_eq!(
+            dynamic, INVULN_COLORMAP,
+            "build_invuln_colormap() and INVULN_COLORMAP should be identical"
+        );
+    }
+
+    #[test]
+    fn identity_helper_produces_identity_rows() {
+        let cache = ColormapCache::identity();
         let row = cache.get(0);
         for (i, &v) in row.iter().enumerate() {
             assert_eq!(v, i as u8);

@@ -20,9 +20,9 @@ use doom_types::Fixed16_16;
 
 use crate::mobj::MobjHandle;
 use crate::state::{
-    CeilingMover, CeilingType, DoorMover, ExitRequest, FloorMover, GameState, LiftMover,
-    LiftStatus, LightEffectType, LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus,
-    SectorLightEffect,
+    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, GameState,
+    LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection, PerpetualPlatform,
+    PlatformStatus, ScrollingWall, SectorLightEffect,
 };
 
 // ---------------------------------------------------------------------------
@@ -2566,6 +2566,154 @@ fn segment_crosses_line(
 
     // Different signs (XOR of sign bits < 0) means the segment straddles the line.
     (c1 ^ c2) < 0
+}
+
+// ---------------------------------------------------------------------------
+// Scrolling walls
+// ---------------------------------------------------------------------------
+
+/// Scan all linedefs in the level for scrolling wall specials and register
+/// them in `gs.scrolling_walls`.
+///
+/// Supported line types:
+/// - **48**: Scroll texture left (speed_x = 1, speed_y = 0). The most common
+///   scrolling wall in vanilla Doom (used for animated conveyor belts, water
+///   textures on walls, etc.).
+/// - **85**: Scroll texture right (speed_x = -1, speed_y = 0). Boom extension
+///   but widely used in modern WADs.
+pub fn init_scrolling_walls(gs: &mut GameState, level: &Level) {
+    for (i, ld) in level.linedefs.iter().enumerate() {
+        let (sx, sy) = match ld.special {
+            48 => (1i16, 0i16),  // scroll left
+            85 => (-1i16, 0i16), // scroll right
+            _ => continue,
+        };
+        gs.scrolling_walls.push(ScrollingWall {
+            linedef_index: i,
+            speed_x: sx,
+            speed_y: sy,
+            accumulated_x: 0,
+            accumulated_y: 0,
+        });
+    }
+}
+
+/// Advance all scrolling wall accumulators by one tic.
+///
+/// Called once per tic from `GameState::tick`. The accumulated offsets are
+/// read by the renderer (via `GameState::get_scroll_offset`) and added to
+/// the sidedef's `x_offset` / `y_offset` when drawing.
+pub fn tick_scrollers(gs: &mut GameState) {
+    for sw in &mut gs.scrolling_walls {
+        sw.accumulated_x = sw.accumulated_x.wrapping_add(sw.speed_x as i32);
+        sw.accumulated_y = sw.accumulated_y.wrapping_add(sw.speed_y as i32);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Conveyor belts
+// ---------------------------------------------------------------------------
+
+/// Scan all linedefs in the level for conveyor belt specials and register
+/// them in `gs.conveyors`.
+///
+/// Supported line types:
+/// - **253**: Scroll floor + push things (conveyor belt).
+/// - **254**: Scroll floor + push things + scroll wall.
+/// - **255**: Scroll wall using linedef offsets (generalized scroller).
+///
+/// The push direction and magnitude are derived from the linedef's sidedef
+/// texture offsets (`x_offset` and `y_offset` of the right sidedef).
+/// The sector affected is the one on the front side of the linedef (the
+/// sector referenced by the right sidedef).
+pub fn init_conveyors(gs: &mut GameState, level: &Level) {
+    for (_i, ld) in level.linedefs.iter().enumerate() {
+        match ld.special {
+            253 | 254 | 255 => {}
+            _ => continue,
+        }
+
+        // The right sidedef must exist for the conveyor to function.
+        let sd_idx = ld.right_sidedef;
+        if sd_idx == SIDEDEF_NONE || (sd_idx as usize) >= level.sidedefs.len() {
+            continue;
+        }
+        let sd = &level.sidedefs[sd_idx as usize];
+        let sector_idx = sd.sector as usize;
+        if sector_idx >= level.sectors.len() {
+            continue;
+        }
+
+        // Derive push force from sidedef offsets: x_offset = horizontal push,
+        // y_offset = vertical push. This matches the Boom convention.
+        let push_x = sd.x_offset as i32;
+        let push_y = sd.y_offset as i32;
+
+        // Direction and speed are derived for informational purposes.
+        // Direction: atan2(push_y, push_x) in degrees. For simplicity, store 0.
+        // Speed: magnitude of push vector, simplified as max of abs values.
+        let speed = (push_x.abs().max(push_y.abs())) as i16;
+
+        gs.conveyors.push(ConveyorBelt {
+            sector_index: sector_idx,
+            push_x,
+            push_y,
+            direction: 0,
+            speed,
+        });
+    }
+}
+
+/// Apply conveyor belt push forces to all actors standing in conveyor sectors.
+///
+/// Called once per tic from `GameState::tick`. For each conveyor belt, any
+/// actor whose `floor_z` (approximated as `z`) matches the sector floor is
+/// pushed by the conveyor's force vector.
+///
+/// This is a simplified implementation — real Doom uses momentum-based push
+/// rather than direct position adjustment.
+pub fn tick_conveyors(gs: &mut GameState, level: Option<&Level>) {
+    if gs.conveyors.is_empty() {
+        return;
+    }
+
+    // Collect conveyor data to avoid borrow conflict with mobjslab.
+    let conveyors: Vec<(usize, i32, i32, i16)> = gs
+        .conveyors
+        .iter()
+        .map(|c| (c.sector_index, c.push_x, c.push_y, 0i16))
+        .collect();
+
+    // Get sector floor heights if level is available.
+    let floor_heights: Vec<i16> = match level {
+        Some(lv) => lv.sectors.iter().map(|s| s.floor_height).collect(),
+        None => return, // Cannot determine sector membership without level geometry.
+    };
+
+    // Iterate all live actors and apply push if standing in a conveyor sector.
+    let handles: Vec<_> = gs.mobjslab.iter_handles().collect();
+    for handle in handles {
+        let (mz, _mx, _my) = match gs.mobjslab.get(handle) {
+            Some(mo) => (mo.z.to_int(), mo.x, mo.y),
+            None => continue,
+        };
+
+        for &(sector_idx, px, py, _) in &conveyors {
+            if sector_idx >= floor_heights.len() {
+                continue;
+            }
+            let floor_h = floor_heights[sector_idx] as i32;
+
+            // Simple containment check: actor z matches sector floor.
+            if mz == floor_h {
+                if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                    mo.x = mo.x + Fixed16_16::from_raw(px);
+                    mo.y = mo.y + Fixed16_16::from_raw(py);
+                }
+                break; // Only apply one conveyor per actor per tic.
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -6931,5 +7079,609 @@ mod tests {
         assert_eq!(gs.active_doors[0].speed, BLAZING_DOOR_SPEED);
         // open-stay: no auto-close.
         assert_eq!(gs.active_doors[0].countdown, -1);
+    }
+
+    // =======================================================================
+    // Scrolling walls + conveyor belt tests
+    // =======================================================================
+
+    /// Build a level with linedefs having the given special types.
+    /// Each linedef has a right sidedef pointing at sector 0.
+    fn make_scrolling_level(specials: &[u16]) -> doom_map::Level {
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+
+        let sectors = vec![doom_map::Sector {
+            floor_height: 0,
+            ceil_height: 128,
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: 0,
+        }];
+
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: 0 },
+            doom_map::Vertex { x: 64, y: 0 },
+        ];
+
+        let sidedefs = vec![doom_map::Sidedef {
+            x_offset: 0,
+            y_offset: 0,
+            upper_texture: *b"\0\0\0\0\0\0\0\0",
+            lower_texture: *b"\0\0\0\0\0\0\0\0",
+            middle_texture: *b"\0\0\0\0\0\0\0\0",
+            sector: 0,
+        }];
+
+        let linedefs: Vec<doom_map::Linedef> = specials
+            .iter()
+            .map(|&sp| doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0,
+                special: sp,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: SIDEDEF_NONE,
+            })
+            .collect();
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    /// Build a level with a conveyor linedef (type 253) with the given sidedef offsets.
+    fn make_conveyor_level(line_type: u16, x_offset: i16, y_offset: i16) -> doom_map::Level {
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+
+        let sectors = vec![doom_map::Sector {
+            floor_height: 0,
+            ceil_height: 128,
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: 0,
+        }];
+
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: 0 },
+            doom_map::Vertex { x: 64, y: 0 },
+        ];
+
+        let sidedefs = vec![doom_map::Sidedef {
+            x_offset,
+            y_offset,
+            upper_texture: *b"\0\0\0\0\0\0\0\0",
+            lower_texture: *b"\0\0\0\0\0\0\0\0",
+            middle_texture: *b"\0\0\0\0\0\0\0\0",
+            sector: 0,
+        }];
+
+        let linedefs = vec![doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0,
+            special: line_type,
+            tag: 0,
+            right_sidedef: 0,
+            left_sidedef: SIDEDEF_NONE,
+        }];
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 1: ScrollingWall creation with correct fields
+    // -----------------------------------------------------------------------
+    #[test]
+    fn scrolling_wall_creation_correct_fields() {
+        use crate::state::ScrollingWall;
+        let sw = ScrollingWall {
+            linedef_index: 7,
+            speed_x: 1,
+            speed_y: -2,
+            accumulated_x: 0,
+            accumulated_y: 0,
+        };
+        assert_eq!(sw.linedef_index, 7);
+        assert_eq!(sw.speed_x, 1);
+        assert_eq!(sw.speed_y, -2);
+        assert_eq!(sw.accumulated_x, 0);
+        assert_eq!(sw.accumulated_y, 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 2: tick_scrollers advances accumulated_x
+    // -----------------------------------------------------------------------
+    #[test]
+    fn tick_scrollers_advances_accumulated_x() {
+        use crate::state::ScrollingWall;
+        let mut gs = GameState::new("TEST");
+        gs.scrolling_walls.push(ScrollingWall {
+            linedef_index: 0,
+            speed_x: 1,
+            speed_y: 0,
+            accumulated_x: 0,
+            accumulated_y: 0,
+        });
+
+        tick_scrollers(&mut gs);
+
+        assert_eq!(
+            gs.scrolling_walls[0].accumulated_x, 1,
+            "accumulated_x must advance by speed_x each tic"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 3: tick_scrollers advances accumulated_y (vertical scroll)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn tick_scrollers_advances_accumulated_y() {
+        use crate::state::ScrollingWall;
+        let mut gs = GameState::new("TEST");
+        gs.scrolling_walls.push(ScrollingWall {
+            linedef_index: 0,
+            speed_x: 0,
+            speed_y: 3,
+            accumulated_x: 0,
+            accumulated_y: 0,
+        });
+
+        tick_scrollers(&mut gs);
+
+        assert_eq!(
+            gs.scrolling_walls[0].accumulated_y, 3,
+            "accumulated_y must advance by speed_y each tic"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 4: Scroll left (type 48) has positive speed_x
+    // -----------------------------------------------------------------------
+    #[test]
+    fn scroll_left_type_48_positive_speed_x() {
+        let mut gs = GameState::new("TEST");
+        let level = make_scrolling_level(&[48]);
+        init_scrolling_walls(&mut gs, &level);
+
+        assert_eq!(gs.scrolling_walls.len(), 1);
+        assert_eq!(
+            gs.scrolling_walls[0].speed_x, 1,
+            "line type 48 (scroll left) must have speed_x = 1"
+        );
+        assert_eq!(gs.scrolling_walls[0].speed_y, 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 5: Scroll right (type 85) has negative speed_x
+    // -----------------------------------------------------------------------
+    #[test]
+    fn scroll_right_type_85_negative_speed_x() {
+        let mut gs = GameState::new("TEST");
+        let level = make_scrolling_level(&[85]);
+        init_scrolling_walls(&mut gs, &level);
+
+        assert_eq!(gs.scrolling_walls.len(), 1);
+        assert_eq!(
+            gs.scrolling_walls[0].speed_x, -1,
+            "line type 85 (scroll right) must have speed_x = -1"
+        );
+        assert_eq!(gs.scrolling_walls[0].speed_y, 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 6: get_scroll_offset returns correct values after ticking
+    // -----------------------------------------------------------------------
+    #[test]
+    fn get_scroll_offset_correct_after_ticking() {
+        use crate::state::ScrollingWall;
+        let mut gs = GameState::new("TEST");
+        gs.scrolling_walls.push(ScrollingWall {
+            linedef_index: 5,
+            speed_x: 2,
+            speed_y: -1,
+            accumulated_x: 0,
+            accumulated_y: 0,
+        });
+
+        tick_scrollers(&mut gs);
+        tick_scrollers(&mut gs);
+        tick_scrollers(&mut gs);
+
+        let (ox, oy) = gs.get_scroll_offset(5);
+        assert_eq!(ox, 6, "3 tics * speed_x=2 = 6");
+        assert_eq!(oy, -3, "3 tics * speed_y=-1 = -3");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 7: get_scroll_offset returns (0,0) for non-scrolling linedef
+    // -----------------------------------------------------------------------
+    #[test]
+    fn get_scroll_offset_zero_for_non_scrolling() {
+        let gs = GameState::new("TEST");
+        let (ox, oy) = gs.get_scroll_offset(99);
+        assert_eq!(ox, 0, "non-scrolling linedef must return x=0");
+        assert_eq!(oy, 0, "non-scrolling linedef must return y=0");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 8: Multiple scrolling walls tick independently
+    // -----------------------------------------------------------------------
+    #[test]
+    fn multiple_scrolling_walls_tick_independently() {
+        use crate::state::ScrollingWall;
+        let mut gs = GameState::new("TEST");
+        gs.scrolling_walls.push(ScrollingWall {
+            linedef_index: 0,
+            speed_x: 1,
+            speed_y: 0,
+            accumulated_x: 0,
+            accumulated_y: 0,
+        });
+        gs.scrolling_walls.push(ScrollingWall {
+            linedef_index: 1,
+            speed_x: -3,
+            speed_y: 2,
+            accumulated_x: 0,
+            accumulated_y: 0,
+        });
+
+        tick_scrollers(&mut gs);
+        tick_scrollers(&mut gs);
+
+        assert_eq!(
+            gs.scrolling_walls[0].accumulated_x, 2,
+            "wall 0: 2 tics * speed_x=1"
+        );
+        assert_eq!(gs.scrolling_walls[0].accumulated_y, 0);
+        assert_eq!(
+            gs.scrolling_walls[1].accumulated_x, -6,
+            "wall 1: 2 tics * speed_x=-3"
+        );
+        assert_eq!(
+            gs.scrolling_walls[1].accumulated_y, 4,
+            "wall 1: 2 tics * speed_y=2"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 9: Accumulated offset grows linearly over multiple tics
+    // -----------------------------------------------------------------------
+    #[test]
+    fn accumulated_offset_grows_linearly() {
+        use crate::state::ScrollingWall;
+        let mut gs = GameState::new("TEST");
+        gs.scrolling_walls.push(ScrollingWall {
+            linedef_index: 0,
+            speed_x: 5,
+            speed_y: 0,
+            accumulated_x: 0,
+            accumulated_y: 0,
+        });
+
+        for expected_tic in 1..=100 {
+            tick_scrollers(&mut gs);
+            assert_eq!(
+                gs.scrolling_walls[0].accumulated_x,
+                expected_tic * 5,
+                "offset must grow linearly: {} tics * 5",
+                expected_tic
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 10: ConveyorBelt creation with correct fields
+    // -----------------------------------------------------------------------
+    #[test]
+    fn conveyor_belt_creation_correct_fields() {
+        use crate::state::ConveyorBelt;
+        let cb = ConveyorBelt {
+            sector_index: 3,
+            push_x: 100,
+            push_y: -50,
+            direction: 45,
+            speed: 100,
+        };
+        assert_eq!(cb.sector_index, 3);
+        assert_eq!(cb.push_x, 100);
+        assert_eq!(cb.push_y, -50);
+        assert_eq!(cb.direction, 45);
+        assert_eq!(cb.speed, 100);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 11: init_scrolling_walls finds all type-48 linedefs
+    // -----------------------------------------------------------------------
+    #[test]
+    fn init_scrolling_walls_finds_all_type_48() {
+        let mut gs = GameState::new("TEST");
+        let level = make_scrolling_level(&[48, 0, 48, 48, 0]);
+        init_scrolling_walls(&mut gs, &level);
+
+        assert_eq!(
+            gs.scrolling_walls.len(),
+            3,
+            "must find exactly 3 type-48 linedefs out of 5"
+        );
+        assert_eq!(gs.scrolling_walls[0].linedef_index, 0);
+        assert_eq!(gs.scrolling_walls[1].linedef_index, 2);
+        assert_eq!(gs.scrolling_walls[2].linedef_index, 3);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 12: init_scrolling_walls skips non-scrolling linedefs
+    // -----------------------------------------------------------------------
+    #[test]
+    fn init_scrolling_walls_skips_non_scrolling() {
+        let mut gs = GameState::new("TEST");
+        let level = make_scrolling_level(&[0, 1, 2, 26, 97, 100]);
+        init_scrolling_walls(&mut gs, &level);
+
+        assert_eq!(
+            gs.scrolling_walls.len(),
+            0,
+            "none of these line types are scrolling walls"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 13: init_conveyors creates conveyors for type 253
+    // -----------------------------------------------------------------------
+    #[test]
+    fn init_conveyors_creates_for_type_253() {
+        let mut gs = GameState::new("TEST");
+        let level = make_conveyor_level(253, 10, 5);
+        init_conveyors(&mut gs, &level);
+
+        assert_eq!(gs.conveyors.len(), 1, "must create 1 conveyor for type 253");
+        assert_eq!(gs.conveyors[0].sector_index, 0);
+        assert_eq!(gs.conveyors[0].push_x, 10);
+        assert_eq!(gs.conveyors[0].push_y, 5);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 14: tick_conveyors applies push force (simplified test)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn tick_conveyors_applies_push_force() {
+        use crate::state::ConveyorBelt;
+        let mut gs = GameState::new("TEST");
+        let level = make_conveyor_level(253, 0, 0);
+
+        // Create an actor at z=0 (matching sector 0 floor_height=0).
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        let handle = gs.mobjslab.alloc(mo);
+
+        // Manually add a conveyor with known push values.
+        gs.conveyors.push(ConveyorBelt {
+            sector_index: 0,
+            push_x: 256, // 256 raw = a small push
+            push_y: 128,
+            direction: 0,
+            speed: 1,
+        });
+
+        tick_conveyors(&mut gs, Some(&level));
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(
+            mo.x,
+            Fixed16_16::from_raw(256),
+            "actor x must be pushed by push_x"
+        );
+        assert_eq!(
+            mo.y,
+            Fixed16_16::from_raw(128),
+            "actor y must be pushed by push_y"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 15: GameState clone includes scrolling_walls and conveyors
+    // -----------------------------------------------------------------------
+    #[test]
+    fn game_state_clone_includes_scrolling_walls_and_conveyors() {
+        use crate::state::{ConveyorBelt, ScrollingWall};
+        let mut gs = GameState::new("TEST");
+        gs.scrolling_walls.push(ScrollingWall {
+            linedef_index: 0,
+            speed_x: 1,
+            speed_y: 0,
+            accumulated_x: 42,
+            accumulated_y: 0,
+        });
+        gs.conveyors.push(ConveyorBelt {
+            sector_index: 3,
+            push_x: 10,
+            push_y: 20,
+            direction: 0,
+            speed: 10,
+        });
+
+        let gs2 = gs.clone();
+
+        assert_eq!(gs2.scrolling_walls.len(), 1);
+        assert_eq!(gs2.scrolling_walls[0].accumulated_x, 42);
+        assert_eq!(gs2.conveyors.len(), 1);
+        assert_eq!(gs2.conveyors[0].push_x, 10);
+
+        // Ensure independence.
+        gs.scrolling_walls[0].accumulated_x = 999;
+        assert_eq!(
+            gs2.scrolling_walls[0].accumulated_x, 42,
+            "clone must be independent"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 16: Save/load roundtrip for ScrollingWall
+    // -----------------------------------------------------------------------
+    #[test]
+    fn save_load_roundtrip_scrolling_wall() {
+        use crate::state::ScrollingWall;
+        let mut gs = GameState::new("E1M1");
+        let mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::from_int(100),
+            Fixed16_16::from_int(200),
+            Bam(0x4000_0000),
+        );
+        let handle = gs.mobjslab.alloc(mo);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+
+        gs.scrolling_walls.push(ScrollingWall {
+            linedef_index: 7,
+            speed_x: -2,
+            speed_y: 3,
+            accumulated_x: 1234,
+            accumulated_y: -5678,
+        });
+
+        let mut level_name = [0u8; 8];
+        level_name[..4].copy_from_slice(b"E1M1");
+        let data = crate::savegame::save_game(&gs, &level_name, 2, "test");
+        let loaded = crate::savegame::load_game(&data).unwrap();
+
+        assert_eq!(loaded.state.scrolling_walls.len(), 1);
+        let sw = &loaded.state.scrolling_walls[0];
+        assert_eq!(sw.linedef_index, 7);
+        assert_eq!(sw.speed_x, -2);
+        assert_eq!(sw.speed_y, 3);
+        assert_eq!(sw.accumulated_x, 1234);
+        assert_eq!(sw.accumulated_y, -5678);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 17: Save/load roundtrip for ConveyorBelt
+    // -----------------------------------------------------------------------
+    #[test]
+    fn save_load_roundtrip_conveyor_belt() {
+        use crate::state::ConveyorBelt;
+        let mut gs = GameState::new("E1M1");
+        let mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::from_int(100),
+            Fixed16_16::from_int(200),
+            Bam(0x4000_0000),
+        );
+        let handle = gs.mobjslab.alloc(mo);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+
+        gs.conveyors.push(ConveyorBelt {
+            sector_index: 5,
+            push_x: -999,
+            push_y: 777,
+            direction: 90,
+            speed: 50,
+        });
+
+        let mut level_name = [0u8; 8];
+        level_name[..4].copy_from_slice(b"E1M1");
+        let data = crate::savegame::save_game(&gs, &level_name, 2, "test");
+        let loaded = crate::savegame::load_game(&data).unwrap();
+
+        assert_eq!(loaded.state.conveyors.len(), 1);
+        let cb = &loaded.state.conveyors[0];
+        assert_eq!(cb.sector_index, 5);
+        assert_eq!(cb.push_x, -999);
+        assert_eq!(cb.push_y, 777);
+        assert_eq!(cb.direction, 90);
+        assert_eq!(cb.speed, 50);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 18: Scroll offset wrapping / large values don't overflow
+    // -----------------------------------------------------------------------
+    #[test]
+    fn scroll_offset_large_values_no_overflow() {
+        use crate::state::ScrollingWall;
+        let mut gs = GameState::new("TEST");
+        gs.scrolling_walls.push(ScrollingWall {
+            linedef_index: 0,
+            speed_x: i16::MAX,
+            speed_y: i16::MIN,
+            accumulated_x: i32::MAX - 100,
+            accumulated_y: i32::MIN + 100,
+        });
+
+        // This must not panic — wrapping_add handles overflow gracefully.
+        tick_scrollers(&mut gs);
+
+        // The values should have wrapped around via wrapping_add.
+        let sw = &gs.scrolling_walls[0];
+        let expected_x = (i32::MAX - 100).wrapping_add(i16::MAX as i32);
+        let expected_y = (i32::MIN + 100).wrapping_add(i16::MIN as i32);
+        assert_eq!(sw.accumulated_x, expected_x, "wrapping_add must handle overflow");
+        assert_eq!(sw.accumulated_y, expected_y, "wrapping_add must handle underflow");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 19: init_scrolling_walls handles mixed types (48 + 85)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn init_scrolling_walls_mixed_types_48_and_85() {
+        let mut gs = GameState::new("TEST");
+        let level = make_scrolling_level(&[48, 85, 0, 48]);
+        init_scrolling_walls(&mut gs, &level);
+
+        assert_eq!(gs.scrolling_walls.len(), 3);
+        // Linedef 0: type 48 → speed_x = 1
+        assert_eq!(gs.scrolling_walls[0].speed_x, 1);
+        // Linedef 1: type 85 → speed_x = -1
+        assert_eq!(gs.scrolling_walls[1].speed_x, -1);
+        // Linedef 3: type 48 → speed_x = 1
+        assert_eq!(gs.scrolling_walls[2].speed_x, 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 20: init_conveyors handles types 254 and 255
+    // -----------------------------------------------------------------------
+    #[test]
+    fn init_conveyors_handles_type_254_and_255() {
+        let mut gs = GameState::new("TEST");
+        let level_254 = make_conveyor_level(254, 20, 10);
+        init_conveyors(&mut gs, &level_254);
+        assert_eq!(gs.conveyors.len(), 1, "type 254 must create a conveyor");
+        assert_eq!(gs.conveyors[0].push_x, 20);
+
+        let mut gs2 = GameState::new("TEST");
+        let level_255 = make_conveyor_level(255, -5, 15);
+        init_conveyors(&mut gs2, &level_255);
+        assert_eq!(gs2.conveyors.len(), 1, "type 255 must create a conveyor");
+        assert_eq!(gs2.conveyors[0].push_x, -5);
+        assert_eq!(gs2.conveyors[0].push_y, 15);
     }
 }

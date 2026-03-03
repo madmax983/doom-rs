@@ -172,6 +172,12 @@ impl GameState {
             crate::specials::tick_sector_lights(self, lv);
         }
 
+        // Scrolling walls (no level mutation needed).
+        crate::specials::tick_scrollers(self);
+
+        // Conveyor belts: push actors standing in conveyor sectors.
+        crate::specials::tick_conveyors(self, level.as_deref());
+
         // Thinker loop: advance all actor state machines.
         self.run_thinkers(level.as_deref());
 
