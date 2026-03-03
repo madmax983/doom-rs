@@ -27,7 +27,11 @@ use std::collections::HashMap;
 
 use doom_wad::WadFile;
 
+use crate::colormap::ColormapCache;
 use crate::framebuffer::Framebuffer;
+use crate::fuzz::draw_fuzz_column;
+use crate::lighting::LightParams;
+use crate::render_flags::RenderFlag;
 
 // ---------------------------------------------------------------------------
 // Core types
@@ -429,6 +433,88 @@ const FOCAL_LEN: f32 = 160.0;
 const PLAYER_HEIGHT: f32 = 41.0;
 
 // ---------------------------------------------------------------------------
+// Sector lookup for sprites
+// ---------------------------------------------------------------------------
+
+/// Look up the sector index for a world-space point `(x, y)` using the level's BSP tree.
+///
+/// Walks the BSP to find the subsector containing the point, then traces
+/// subsector -> first seg -> linedef -> sidedef -> sector.
+///
+/// Returns `None` if the level has no nodes/ssectors, or if any index is
+/// out of bounds (graceful degradation for malformed levels).
+#[must_use]
+pub fn sector_for_point(level: &doom_map::Level, x: i32, y: i32) -> Option<usize> {
+    // Use the BSP tree to locate the subsector.
+    // Try to create the BSP; if the level's geometry is invalid/empty,
+    // return None gracefully rather than panicking.
+    let bsp =
+        doom_map::bsp::BspTree::validate(&level.nodes, &level.ssectors, level.segs.len()).ok()?;
+    let ssector = bsp.point_in_subsector(x, y)?;
+
+    // Follow the chain: ssector -> first seg -> linedef -> sidedef -> sector.
+    let seg = level.segs.get(ssector.first_seg as usize)?;
+    let linedef = level.linedefs.get(seg.linedef as usize)?;
+
+    // If the seg faces the same direction as the linedef, use right_sidedef;
+    // otherwise use left_sidedef.
+    let sidedef_idx = if seg.direction == 0 {
+        linedef.right_sidedef
+    } else {
+        linedef.left_sidedef
+    };
+
+    // 0xFFFF means "no sidedef" — shouldn't happen for valid geometry but
+    // handle it gracefully.
+    if sidedef_idx == 0xFFFF {
+        return None;
+    }
+
+    let sidedef = level.sidedefs.get(sidedef_idx as usize)?;
+    Some(sidedef.sector as usize)
+}
+
+/// Determine the [`RenderFlag`] for a DoomEd thing type.
+///
+/// Spectres (type 58) get `Fuzz`, projectile/explosion/glow types get
+/// `FullBright`, everything else gets `Normal`.
+///
+/// This is a simplified mapping based on the DoomEd type alone. In a
+/// full implementation, the thing's current animation state would also
+/// influence the flag (e.g. muzzle flash frames are fullbright).
+#[must_use]
+pub fn render_flag_for_thing(kind: u16) -> RenderFlag {
+    match kind {
+        // Spectre — fuzz effect
+        58 => RenderFlag::Fuzz,
+
+        // Projectiles (glow / self-luminous)
+        // These are DoomEd types but also cover spawned projectile types
+        // that might appear in the level's thing list during gameplay.
+
+        // Items that glow
+        2013 => RenderFlag::FullBright, // Soulsphere
+        2022 => RenderFlag::FullBright, // Invulnerability sphere
+        2045 => RenderFlag::FullBright, // Light amplification visor
+
+        // Firestick / torch decorations (glow)
+        44 | 45 | 46 => RenderFlag::FullBright, // Tall firesticks (blue/green/red)
+        55 | 56 | 57 => RenderFlag::FullBright, // Short firesticks (blue/green/red)
+        70 => RenderFlag::FullBright,           // Burning barrel
+        34 => RenderFlag::FullBright,           // Candle
+        35 => RenderFlag::FullBright,           // Candelabra
+
+        // Lamps and light sources
+        2028 => RenderFlag::FullBright, // Floor lamp
+        85 => RenderFlag::FullBright,   // Tall tech lamp
+        86 => RenderFlag::FullBright,   // Short tech lamp
+        48 => RenderFlag::FullBright,   // Tall tech column (animated)
+
+        _ => RenderFlag::Normal,
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Thing sprite lookup (legacy wrapper)
 // ---------------------------------------------------------------------------
 
@@ -446,22 +532,30 @@ fn thing_sprite(kind: u16) -> Option<[u8; 8]> {
 // Billboard sprite projection
 // ---------------------------------------------------------------------------
 
-/// Project and render all Things from the level as billboard sprites.
+/// Project and render all Things from the level as billboard sprites with
+/// distance-attenuated sector lighting.
 ///
 /// Call this **after** `render_level` so wall columns are already drawn.
 /// Uses the painter's algorithm (back-to-front sort) with per-column
 /// z-buffer clipping against walls.
 ///
 /// # Arguments
-/// - `level`        — parsed map (provides Things list).
+/// - `level`        — parsed map (provides Things list, BSP, sectors).
 /// - `player_x/y`  — player world position (Fixed16_16).
-/// - `player_angle` — player view angle (Bam, 32-bit; full circle = 2³²).
+/// - `player_angle` — player view angle (Bam, 32-bit; full circle = 2^32).
 /// - `fb`           — framebuffer to draw into.
 /// - `cache`        — sprite frame cache (loaded from S_START..S_END).
 /// - `z_buffer`     — optional per-column depth buffer from `render_level`.
 ///                     When provided, sprite columns whose depth exceeds
 ///                     the wall depth at that screen column are clipped
 ///                     (not drawn).  Pass `None` to disable wall clipping
+///                     (backward-compatible behaviour).
+/// - `colormap`     — optional colormap cache for distance-attenuated lighting.
+///                     When provided, each sprite column is shaded based on
+///                     the thing's sector light level and distance from the
+///                     player.  Fullbright things (projectiles, lamps) and
+///                     fuzz-effect things (spectres) are handled specially.
+///                     Pass `None` to render all sprites at full brightness
 ///                     (backward-compatible behaviour).
 ///
 /// # Projection model
@@ -478,9 +572,10 @@ pub fn render_things(
     fb: &mut Framebuffer,
     cache: &SpriteCache,
     z_buffer: Option<&[f32; SCREEN_W]>,
+    colormap: Option<&ColormapCache>,
 ) {
     // Convert player angle (32-bit BAM) to radians.
-    // BAM: 0x0000_0000 = 0°, 0x4000_0000 = 90°, 0x8000_0000 = 180°, etc.
+    // BAM: 0x0000_0000 = 0, 0x4000_0000 = 90, 0x8000_0000 = 180, etc.
     let angle_rad =
         (player_angle.0 as f32) * (std::f32::consts::PI * 2.0 / (u32::MAX as f32 + 1.0));
     let cos_a = angle_rad.cos();
@@ -491,6 +586,9 @@ pub fn render_things(
     // to convert to f32 map units.
     let px = player_x.raw() as f32 / 65536.0;
     let py = player_y.raw() as f32 / 65536.0;
+
+    // Fuzz position counter shared across all fuzz-effect sprites in this frame.
+    let mut fuzz_pos: usize = 0;
 
     // ---------- Collect visible things with their view-space depths ----------
     let mut visible: Vec<(f32, &doom_map::Thing)> = level
@@ -519,6 +617,9 @@ pub fn render_things(
             Some(p) => p,
             None => continue,
         };
+
+        // Determine the rendering mode for this thing.
+        let render_flag = render_flag_for_thing(thing.kind);
 
         // Frame A (index 0) for now. Full state-driven animation will come in
         // a later batch when render_things gets access to GameState.
@@ -607,6 +708,28 @@ pub fn render_things(
 
         let col_h = screen_y_bot - screen_y_top;
 
+        // --- Compute lighting for this sprite ---
+        // Look up the sector this thing is in to get its light level.
+        // The colormap used depends on:
+        //   - RenderFlag::FullBright => always colormap 0 (identity)
+        //   - RenderFlag::Fuzz => use fuzz effect (draw_fuzz_column)
+        //   - RenderFlag::Normal => sector light + distance attenuation
+        let light_params = if render_flag == RenderFlag::FullBright {
+            LightParams::new(255, true)
+        } else if colormap.is_some() {
+            // Look up sector light level via BSP.
+            let sector_light = sector_for_point(level, i32::from(thing.x), i32::from(thing.y))
+                .and_then(|si| level.sectors.get(si))
+                .map_or(255, |s| s.light_level.clamp(0, 255) as u8);
+            LightParams::new(sector_light, false)
+        } else {
+            // No colormap cache => render fullbright (backward compat).
+            LightParams::new(255, true)
+        };
+        // Suppress the unused-variable warning when colormap is None and
+        // light_params was set but never read in the fuzz path.
+        let _ = &light_params;
+
         // --- Draw each scaled sprite column ---
         for col in 0..frame.width as i32 {
             // When flip_x is true, draw columns in reverse for horizontal mirroring.
@@ -629,6 +752,29 @@ pub fn render_things(
                 }
             }
 
+            // Handle fuzz effect (Spectre) — draw_fuzz_column reads existing
+            // fb pixels and darkens them; the sprite's texture is not drawn.
+            if render_flag == RenderFlag::Fuzz {
+                let sy_top_clamped = screen_y_top.max(0) as usize;
+                let sy_bot_clamped = screen_y_bot.min(SCREEN_H as i32 - 1) as usize;
+                if sy_top_clamped <= sy_bot_clamped {
+                    draw_fuzz_column(
+                        fb,
+                        sx as usize,
+                        sy_top_clamped,
+                        sy_bot_clamped,
+                        &mut fuzz_pos,
+                        colormap,
+                    );
+                }
+                continue;
+            }
+
+            // Compute the colormap row for this sprite column based on
+            // distance and sector light.
+            let sprite_colormap: Option<&[u8; 256]> =
+                colormap.map(|cm| light_params.get_colormap(vx, cm));
+
             let sy_top_clamped = screen_y_top.max(0);
             let sy_bot_clamped = screen_y_bot.min(SCREEN_H as i32 - 1);
 
@@ -638,8 +784,13 @@ pub fn render_things(
                 let sprite_row = sprite_row.clamp(0, frame.height as i32 - 1) as usize;
 
                 let pixel_idx = col as usize * frame.height as usize + sprite_row;
-                if let Some(Some(idx)) = frame.pixels.get(pixel_idx) {
-                    fb.data[sy as usize * SCREEN_W + sx as usize] = *idx;
+                if let Some(Some(raw_idx)) = frame.pixels.get(pixel_idx) {
+                    // Apply colormap shading if available.
+                    let final_color = match sprite_colormap {
+                        Some(cm) => cm[*raw_idx as usize],
+                        None => *raw_idx,
+                    };
+                    fb.data[sy as usize * SCREEN_W + sx as usize] = final_color;
                 }
             }
         }
@@ -1154,6 +1305,7 @@ mod tests {
             &mut fb,
             &cache,
             None,
+            None,
         );
         // Framebuffer stays zeroed (empty cache → nothing drawn).
         assert!(fb.data.iter().all(|&b| b == 0));
@@ -1191,6 +1343,7 @@ mod tests {
             &mut fb,
             &cache,
             None,
+            None,
         );
         // If the thing behind the player were rendered it would write pixel 42.
         // The framebuffer must remain all zeros.
@@ -1218,6 +1371,7 @@ mod tests {
             &mut fb,
             &cache,
             None,
+            None,
         );
         // Nothing drawn — no panic.
         assert!(fb.data.iter().all(|&b| b == 0));
@@ -1240,6 +1394,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
             None,
         );
         assert!(fb.data.iter().all(|&b| b == 0));
@@ -1590,6 +1745,7 @@ mod tests {
             &mut fb,
             &cache,
             None,
+            None,
         );
         // The imp should be drawn (pixel 77 somewhere on screen).
         assert!(
@@ -1625,6 +1781,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
             None,
         );
         assert!(
@@ -1662,6 +1819,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
             None,
         );
         assert!(
@@ -1711,6 +1869,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
             None,
         );
         // The mirror fallback should have drawn the sprite using TROOA4 (flipped).
@@ -1812,6 +1971,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
         );
 
         assert!(
@@ -1845,6 +2005,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
         );
 
         assert!(
@@ -1887,6 +2048,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
         );
 
         // Sprite is at screen center (x ~ 160) which is in the right half.
@@ -1933,6 +2095,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
         );
         // Just verify it didn't panic. Some pixels might be drawn.
     }
@@ -2002,6 +2165,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
         );
 
         // Near barrel (depth ~100 < 150) should be drawn.
@@ -2036,6 +2200,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
         );
 
         // Sprite depth == wall depth: wall wins, sprite clipped.
@@ -2067,6 +2232,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
         );
 
         assert!(
@@ -2106,6 +2272,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
         );
 
         // The sprite projects near center (x~160). Columns 155..165 are
@@ -2150,6 +2317,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
         );
 
         assert!(
@@ -2181,6 +2349,7 @@ mod tests {
             &mut fb,
             &cache,
             None, // no z_buffer
+            None, // no colormap
         );
 
         assert!(
@@ -2409,5 +2578,798 @@ mod tests {
             reject,
             blockmap,
         }
+    }
+
+    // ==================================================================
+    // Distance-attenuated sprite lighting tests
+    // ==================================================================
+
+    use crate::colormap::{COLORMAP_ROWS, COLORMAP_SIZE, ColormapCache};
+    use crate::lighting::LightParams;
+    use crate::render_flags::RenderFlag;
+
+    /// Build a `ColormapCache` where row `n` maps every index to `n`.
+    /// This makes it easy to verify which colormap row was selected.
+    fn test_colormap_cache() -> ColormapCache {
+        let mut data = vec![0u8; COLORMAP_ROWS * COLORMAP_SIZE];
+        for row in 0..COLORMAP_ROWS {
+            let start = row * COLORMAP_SIZE;
+            data[start..start + COLORMAP_SIZE].fill(row as u8);
+        }
+        ColormapCache::from_test_data(data)
+    }
+
+    /// Build a test level with a specific sector light level.
+    fn make_test_level_with_light(
+        things: Vec<doom_map::Thing>,
+        light_level: i16,
+    ) -> doom_map::Level {
+        use doom_wad::{REQUIRED_MAP_LUMPS, WadKind};
+
+        let _ = WadKind::Iwad;
+        let _ = REQUIRED_MAP_LUMPS;
+
+        // ---- sector with custom light level ----
+        let mut sector_data = vec![0u8; 26];
+        sector_data[0..2].copy_from_slice(&0i16.to_le_bytes());
+        sector_data[2..4].copy_from_slice(&128i16.to_le_bytes());
+        sector_data[4..12].copy_from_slice(b"FLAT1\0\0\0");
+        sector_data[12..20].copy_from_slice(b"FLAT2\0\0\0");
+        sector_data[20..22].copy_from_slice(&light_level.to_le_bytes());
+        sector_data[22..24].copy_from_slice(&0u16.to_le_bytes());
+        sector_data[24..26].copy_from_slice(&0u16.to_le_bytes());
+
+        // ---- vertices ----
+        let mut vert_data = vec![0u8; 4 * 4];
+        let verts: [(i16, i16); 4] = [(0, 0), (64, 0), (64, 64), (0, 64)];
+        for (i, (x, y)) in verts.iter().enumerate() {
+            vert_data[i * 4..i * 4 + 2].copy_from_slice(&x.to_le_bytes());
+            vert_data[i * 4 + 2..i * 4 + 4].copy_from_slice(&y.to_le_bytes());
+        }
+
+        // ---- sidedefs ----
+        let mut sd_data = vec![0u8; 4 * 30];
+        for i in 0..4 {
+            sd_data[i * 30 + 20..i * 30 + 28].copy_from_slice(b"WALL1\0\0\0");
+            sd_data[i * 30 + 28..i * 30 + 30].copy_from_slice(&0u16.to_le_bytes());
+        }
+
+        // ---- linedefs ----
+        let mut ld_data = vec![0u8; 4 * 14];
+        let edges: [(u16, u16); 4] = [(0, 1), (1, 2), (2, 3), (3, 0)];
+        for (i, (from, to)) in edges.iter().enumerate() {
+            let b = &mut ld_data[i * 14..i * 14 + 14];
+            b[0..2].copy_from_slice(&from.to_le_bytes());
+            b[2..4].copy_from_slice(&to.to_le_bytes());
+            b[4..6].copy_from_slice(&0u16.to_le_bytes());
+            b[6..8].copy_from_slice(&0u16.to_le_bytes());
+            b[8..10].copy_from_slice(&0u16.to_le_bytes());
+            b[10..12].copy_from_slice(&(i as u16).to_le_bytes());
+            b[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        }
+
+        // ---- seg ----
+        let mut seg_data = vec![0u8; 12];
+        seg_data[0..2].copy_from_slice(&0u16.to_le_bytes());
+        seg_data[2..4].copy_from_slice(&1u16.to_le_bytes());
+
+        // ---- ssector ----
+        let mut ss_data = vec![0u8; 4];
+        ss_data[0..2].copy_from_slice(&1u16.to_le_bytes());
+        ss_data[2..4].copy_from_slice(&0u16.to_le_bytes());
+
+        // ---- things ----
+        let mut thing_data = vec![0u8; things.len() * 10];
+        for (i, t) in things.iter().enumerate() {
+            let b = &mut thing_data[i * 10..i * 10 + 10];
+            b[0..2].copy_from_slice(&t.x.to_le_bytes());
+            b[2..4].copy_from_slice(&t.y.to_le_bytes());
+            b[4..6].copy_from_slice(&t.angle.to_le_bytes());
+            b[6..8].copy_from_slice(&t.kind.to_le_bytes());
+            b[8..10].copy_from_slice(&t.flags.to_le_bytes());
+        }
+
+        // ---- reject ----
+        let reject_data = vec![0u8; 1];
+
+        // ---- blockmap ----
+        let mut bm_data = vec![0u8; 8 + 2 + 4];
+        bm_data[0..2].copy_from_slice(&0i16.to_le_bytes());
+        bm_data[2..4].copy_from_slice(&0i16.to_le_bytes());
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+
+        let lump_payloads: &[(&[u8; 8], &[u8])] = &[
+            (b"E1M1\0\0\0\0", &[]),
+            (b"THINGS\0\0", &thing_data),
+            (b"LINEDEFS", &ld_data),
+            (b"SIDEDEFS", &sd_data),
+            (b"VERTEXES", &vert_data),
+            (b"SEGS\0\0\0\0", &seg_data),
+            (b"SSECTORS", &ss_data),
+            (b"NODES\0\0\0", &[]),
+            (b"SECTORS\0", &sector_data),
+            (b"REJECT\0\0", &reject_data),
+            (b"BLOCKMAP", &bm_data),
+        ];
+
+        let mut data: Vec<u8> = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
+        data.extend_from_slice(&0i32.to_le_bytes());
+
+        let mut offsets: Vec<(usize, usize)> = Vec::new();
+        for (_, payload) in lump_payloads {
+            let pos = data.len();
+            data.extend_from_slice(payload);
+            offsets.push((pos, payload.len()));
+        }
+
+        let dir_offset = data.len() as i32;
+        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+        for (i, (name_bytes, _)) in lump_payloads.iter().enumerate() {
+            let (filepos, size) = offsets[i];
+            data.extend_from_slice(&(filepos as i32).to_le_bytes());
+            data.extend_from_slice(&(size as i32).to_le_bytes());
+            data.extend_from_slice(*name_bytes);
+        }
+
+        let wad = doom_wad::WadFile::parse(data).expect("test WAD parse failed");
+        doom_map::Level::from_wad(&wad, "E1M1").expect("test level load failed")
+    }
+
+    // ------------------------------------------------------------------
+    // 1. sector_for_point returns correct sector index
+    // ------------------------------------------------------------------
+    #[test]
+    fn sector_for_point_returns_sector_0() {
+        let level = make_test_level(vec![]);
+        // Point inside the sector bounding box.
+        let si = sector_for_point(&level, 32, 32);
+        assert_eq!(si, Some(0), "point (32,32) should be in sector 0");
+    }
+
+    // ------------------------------------------------------------------
+    // 2. sector_for_point returns None for empty level
+    // ------------------------------------------------------------------
+    #[test]
+    fn sector_for_point_empty_ssectors() {
+        // Build a minimal level with no segs/ssectors.
+        use doom_map::lumps::{Blockmap, Reject};
+        let reject = Reject::parse_lump(&[0u8; 1], 1).expect("reject");
+        let mut bm_data = vec![0u8; 14];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("bm");
+        let level = doom_map::Level {
+            name: "EMPTY".to_owned(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![],
+            reject,
+            blockmap,
+        };
+        // With no ssectors, BSP lookup should return None.
+        let si = sector_for_point(&level, 0, 0);
+        assert!(si.is_none(), "empty level should return None");
+    }
+
+    // ------------------------------------------------------------------
+    // 3. render_flag_for_thing returns Fuzz for spectre
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_flag_spectre_is_fuzz() {
+        assert_eq!(render_flag_for_thing(58), RenderFlag::Fuzz);
+    }
+
+    // ------------------------------------------------------------------
+    // 4. render_flag_for_thing returns FullBright for lamp
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_flag_lamp_is_fullbright() {
+        assert_eq!(render_flag_for_thing(2028), RenderFlag::FullBright);
+    }
+
+    // ------------------------------------------------------------------
+    // 5. render_flag_for_thing returns Normal for zombieman
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_flag_zombieman_is_normal() {
+        assert_eq!(render_flag_for_thing(3004), RenderFlag::Normal);
+    }
+
+    // ------------------------------------------------------------------
+    // 6. render_flag_for_thing returns FullBright for all glow items
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_flag_glow_items() {
+        let glow_types: &[u16] = &[
+            2013, 2022, 2045, // soulsphere, invuln, light-amp
+            44, 45, 46, // tall firesticks
+            55, 56, 57, // short firesticks
+            70, 34, 35, // burning barrel, candle, candelabra
+            85, 86, 48, // tech lamps, tech column
+        ];
+        for &kind in glow_types {
+            assert_eq!(
+                render_flag_for_thing(kind),
+                RenderFlag::FullBright,
+                "thing type {kind} should be FullBright"
+            );
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 7. render_flag_for_thing returns Normal for regular monsters
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_flag_monsters_normal() {
+        let monsters: &[u16] = &[3004, 9, 65, 3001, 3002, 3005, 3003, 69, 3006];
+        for &kind in monsters {
+            assert_eq!(
+                render_flag_for_thing(kind),
+                RenderFlag::Normal,
+                "monster type {kind} should be Normal"
+            );
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 8. render_things with colormap applies shading to sprites
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_with_colormap_applies_shading() {
+        // Sector light = 128 (mid-brightness), thing at (100, 0).
+        // With our test colormap, shaded pixels should NOT be the raw
+        // palette index any more (they get mapped through a non-identity row).
+        let thing = make_thing(100, 0, 2035); // barrel
+        let level = make_test_level_with_light(vec![thing], 128);
+
+        let mut cache = SpriteCache::empty();
+        // Insert a bright sprite (all pixels = 200).
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 200));
+
+        let cm = test_colormap_cache();
+        let mut fb = Framebuffer::new();
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            None,
+            Some(&cm),
+        );
+
+        // Pixels were drawn but NOT at the raw palette index 200.
+        // With our test cache, the colormap row maps everything to the
+        // row index (a single value), so we should see that value.
+        let has_drawn = fb.data.iter().any(|&b| b != 0);
+        assert!(has_drawn, "sprite should be drawn with colormap");
+
+        // The raw palette index 200 should NOT appear because the
+        // sector light is 128 (not fullbright), meaning some colormap
+        // row > 0 was used, mapping index 200 to the row number.
+        let has_raw = fb.data.iter().any(|&b| b == 200);
+        assert!(
+            !has_raw,
+            "raw palette index should not appear when colormap is applied \
+             (sector light = 128)"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 9. render_things fullbright thing draws at raw palette index
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_fullbright_thing_not_shaded() {
+        // Floor lamp (kind 2028) is fullbright, even in a dark sector.
+        let thing = make_thing(50, 0, 2028); // floor lamp
+        let level = make_test_level_with_light(vec![thing], 0); // pitch dark
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("COLUA0".to_string(), make_opaque_sprite(8, 16, 123));
+
+        let cm = test_colormap_cache();
+        let mut fb = Framebuffer::new();
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            None,
+            Some(&cm),
+        );
+
+        // Fullbright thing should use colormap row 0 (identity in our test cache).
+        // Row 0 maps all indices to 0. So all drawn pixels should be 0.
+        // Actually, in our test_colormap_cache, row 0 maps everything to 0.
+        // For fullbright things, colormap row 0 is used.
+        let has_drawn = fb.data.iter().any(|&b| b != 0);
+        // Row 0 maps everything to 0, so drawn pixels should also be 0.
+        // Since the fb was already 0, let's verify via a different approach:
+        // use an identity cache instead.
+        let id_cache = ColormapCache::identity();
+        let mut fb2 = Framebuffer::new();
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb2,
+            &cache,
+            None,
+            Some(&id_cache),
+        );
+        // With identity cache, fullbright uses row 0 which is identity.
+        // So the raw palette index 123 should appear.
+        assert!(
+            fb2.data.iter().any(|&b| b == 123),
+            "fullbright lamp should render at raw palette index with identity colormap"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 10. render_things dark sector makes normal sprites darker
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_dark_sector_produces_dark_pixels() {
+        // In a pitch-dark sector (light=0), non-fullbright sprites should
+        // be mapped through the darkest colormap row.
+        let thing = make_thing(100, 0, 2035); // barrel (Normal)
+        let level = make_test_level_with_light(vec![thing], 0);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 150));
+
+        let cm = test_colormap_cache();
+        let mut fb = Framebuffer::new();
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            None,
+            Some(&cm),
+        );
+
+        // In our test cache, dark rows (high index) map everything to that
+        // row index. With light=0, base_cm_index = (255-0)>>3 = 31.
+        // compute_wall_light at distance ~100 with base 31 will produce a
+        // high row index. Whatever the resulting row, it should NOT be
+        // the raw palette index 150.
+        let has_raw = fb.data.iter().any(|&b| b == 150);
+        assert!(
+            !has_raw,
+            "dark sector (light=0) should shade sprites away from raw palette index"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 11. render_things bright sector (255) renders sprites unshaded
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_bright_sector_identity() {
+        // With light=255, the sector is auto-fullbright, so the colormap
+        // row 0 (identity) is used — raw palette index should appear.
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level_with_light(vec![thing], 255);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 77));
+
+        let id_cache = ColormapCache::identity();
+        let mut fb = Framebuffer::new();
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            None,
+            Some(&id_cache),
+        );
+
+        assert!(
+            fb.data.iter().any(|&b| b == 77),
+            "bright sector (255) should render sprites at raw palette index"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 12. render_things None colormap backward compat (no shading)
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_none_colormap_no_shading() {
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level_with_light(vec![thing], 0); // dark sector
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 55));
+
+        let mut fb = Framebuffer::new();
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            None,
+            None, // no colormap => fullbright
+        );
+
+        // Without colormap, sprites render at raw palette index.
+        assert!(
+            fb.data.iter().any(|&b| b == 55),
+            "None colormap should render sprites unshaded (backward compat)"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 13. render_things spectre uses fuzz effect
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_spectre_draws_fuzz() {
+        // Spectre (kind 58) should use draw_fuzz_column, not normal sprite.
+        // The fuzz effect reads existing fb pixels, so the sprite's palette
+        // index should NOT appear in the framebuffer.
+        let thing = make_thing(50, 0, 58);
+        let level = make_test_level_with_light(vec![thing], 192);
+
+        let mut cache = SpriteCache::empty();
+        // Spectre uses SARG prefix.
+        cache.insert("SARGA0".to_string(), make_opaque_sprite(16, 32, 222));
+
+        // Pre-fill fb with a known value so fuzz has something to darken.
+        let mut fb = Framebuffer::new();
+        fb.clear(180);
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            None,
+            None,
+        );
+
+        // The spectre's raw palette index 222 should NOT appear.
+        let has_222 = fb.data.iter().any(|&b| b == 222);
+        assert!(
+            !has_222,
+            "spectre should use fuzz effect, not draw sprite texture"
+        );
+
+        // Some pixels should have changed from 180 (fuzz darkens them).
+        let changed = fb.data.iter().filter(|&&b| b != 180).count();
+        assert!(
+            changed > 0,
+            "fuzz effect should modify at least some framebuffer pixels"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 14. render_things spectre with colormap passes colormap to fuzz
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_spectre_with_colormap() {
+        let thing = make_thing(50, 0, 58);
+        let level = make_test_level_with_light(vec![thing], 192);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("SARGA0".to_string(), make_opaque_sprite(16, 32, 222));
+
+        // Build a colormap where row 6 (fuzz dark) maps everything to 42.
+        let mut cm_data = vec![0u8; COLORMAP_ROWS * COLORMAP_SIZE];
+        for i in 0..256 {
+            cm_data[6 * COLORMAP_SIZE + i] = 42;
+        }
+        let cm = ColormapCache::from_test_data(cm_data);
+
+        let mut fb = Framebuffer::new();
+        fb.clear(100);
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            None,
+            Some(&cm),
+        );
+
+        // Fuzz with colormap row 6 should produce pixel value 42.
+        assert!(
+            fb.data.iter().any(|&b| b == 42),
+            "spectre with colormap should use colormap row 6 for darkening"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 15. LightParams fullbright always returns row 0
+    // ------------------------------------------------------------------
+    #[test]
+    fn light_params_fullbright_returns_row_0() {
+        let lp = LightParams::new(128, true);
+        let cm = test_colormap_cache();
+        let row = lp.get_colormap(500.0, &cm);
+        // Row 0 in our test cache has all bytes = 0.
+        assert_eq!(row[100], 0, "fullbright should use row 0");
+    }
+
+    // ------------------------------------------------------------------
+    // 16. LightParams normal returns darker row for dark sector
+    // ------------------------------------------------------------------
+    #[test]
+    fn light_params_dark_sector_returns_high_row() {
+        let lp = LightParams::new(0, false); // pitch dark
+        let cm = test_colormap_cache();
+        let row = lp.get_colormap(200.0, &cm);
+        // Dark sector + distance 200 should select a high row index.
+        // In our test cache, the row value equals the row index.
+        assert!(row[0] > 0, "dark sector should use a non-zero colormap row");
+    }
+
+    // ------------------------------------------------------------------
+    // 17. LightParams distance affects colormap row
+    // ------------------------------------------------------------------
+    #[test]
+    fn light_params_closer_is_brighter() {
+        let lp = LightParams::new(128, false);
+        let cm = test_colormap_cache();
+        let near_row = lp.get_colormap(50.0, &cm);
+        let far_row = lp.get_colormap(1000.0, &cm);
+        // Closer should yield a brighter (lower index) row.
+        assert!(
+            near_row[0] <= far_row[0],
+            "near sprite ({}) should be brighter than far ({}) ",
+            near_row[0],
+            far_row[0]
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 18. render_flag_for_thing returns Normal for items/ammo/weapons
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_flag_items_normal() {
+        let normal_items: &[u16] = &[
+            2014, 2015, 2011, 2012, // health/armor bonuses, stim, medi
+            2018, 2019, // armors
+            2007, 2048, 2008, 2049, // ammo
+            2001, 82, 2002, 2003, // weapons
+            2035, // barrel
+        ];
+        for &kind in normal_items {
+            assert_eq!(
+                render_flag_for_thing(kind),
+                RenderFlag::Normal,
+                "item type {kind} should be Normal"
+            );
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 19. render_things with z_buffer AND colormap
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_zbuf_and_colormap_combined() {
+        // Barrel at (100, 0), z_buffer at 200 (sprite visible),
+        // dark sector (light=64).
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level_with_light(vec![thing], 64);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 150));
+
+        let cm = test_colormap_cache();
+        let zbuf = make_zbuf(200.0);
+        let mut fb = Framebuffer::new();
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+            Some(&cm),
+        );
+
+        // Sprite is in front of wall (depth ~100 < 200), so it's drawn.
+        let has_drawn = fb.data.iter().any(|&b| b != 0);
+        assert!(has_drawn, "sprite in front of wall should be drawn");
+
+        // Raw palette index 150 should not appear (dark sector shading).
+        let has_raw = fb.data.iter().any(|&b| b == 150);
+        assert!(!has_raw, "dark sector colormap should shade the sprite");
+    }
+
+    // ------------------------------------------------------------------
+    // 20. render_things with z_buffer clips even with colormap
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_zbuf_clips_with_colormap() {
+        // Barrel at (100, 0), z_buffer at 50 (sprite behind wall).
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level_with_light(vec![thing], 192);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 88));
+
+        let cm = test_colormap_cache();
+        let zbuf = make_zbuf(50.0);
+        let mut fb = Framebuffer::new();
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+            Some(&cm),
+        );
+
+        // Sprite is behind wall — nothing drawn.
+        assert!(
+            fb.data.iter().all(|&b| b == 0),
+            "sprite behind wall should be fully clipped even with colormap"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 21. sector_for_point handles different positions
+    // ------------------------------------------------------------------
+    #[test]
+    fn sector_for_point_various_positions() {
+        let level = make_test_level(vec![]);
+        // All points should resolve to sector 0 in our single-sector level.
+        for (x, y) in [(0, 0), (10, 10), (32, 32), (63, 63)] {
+            let si = sector_for_point(&level, x, y);
+            assert_eq!(si, Some(0), "point ({x},{y}) should be in sector 0");
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // 22. render_flag_for_thing returns Normal for unknown types
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_flag_unknown_type_is_normal() {
+        assert_eq!(render_flag_for_thing(9999), RenderFlag::Normal);
+        assert_eq!(render_flag_for_thing(0), RenderFlag::Normal);
+        assert_eq!(render_flag_for_thing(12345), RenderFlag::Normal);
+    }
+
+    // ------------------------------------------------------------------
+    // 23. render_things with identity colormap preserves raw indices
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_identity_colormap_preserves_indices() {
+        // With an identity colormap, even shaded sprites should have their
+        // raw palette index preserved (identity maps i -> i).
+        let thing = make_thing(100, 0, 2035);
+        let level = make_test_level_with_light(vec![thing], 128);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 77));
+
+        let id_cache = ColormapCache::identity();
+        let mut fb = Framebuffer::new();
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            None,
+            Some(&id_cache),
+        );
+
+        // Identity cache maps every index to itself, regardless of row.
+        assert!(
+            fb.data.iter().any(|&b| b == 77),
+            "identity colormap should preserve raw palette index"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // 24. render_things multiple things with mixed render flags
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_mixed_flags() {
+        // Place a normal barrel and a fullbright lamp side by side.
+        let barrel = make_thing(100, -30, 2035); // Normal
+        let lamp = make_thing(100, 30, 2028); // FullBright
+
+        let level = make_test_level_with_light(vec![barrel, lamp], 0); // pitch dark
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 150));
+        cache.insert("COLUA0".to_string(), make_opaque_sprite(8, 16, 200));
+
+        let cm = test_colormap_cache();
+        let mut fb = Framebuffer::new();
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            None,
+            Some(&cm),
+        );
+
+        // The barrel (Normal) in a dark sector should be shaded.
+        // The lamp (FullBright) should use row 0 which maps everything to 0.
+        // Some pixels should be drawn.
+        let has_drawn = fb.data.iter().any(|&b| b != 0);
+        assert!(has_drawn, "at least one sprite should be drawn");
+    }
+
+    // ------------------------------------------------------------------
+    // 25. render_things fuzz + zbuf: fuzz respects z_buffer clipping
+    // ------------------------------------------------------------------
+    #[test]
+    fn render_things_fuzz_respects_zbuf() {
+        // Spectre at (100, 0), z_buffer at 50 => sprite behind wall.
+        let thing = make_thing(100, 0, 58);
+        let level = make_test_level_with_light(vec![thing], 192);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("SARGA0".to_string(), make_opaque_sprite(16, 32, 222));
+
+        let zbuf = make_zbuf(50.0);
+        let mut fb = Framebuffer::new();
+        fb.clear(180);
+
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+            None,
+        );
+
+        // Fuzz sprite behind wall: all pixels should remain at 180.
+        assert!(
+            fb.data.iter().all(|&b| b == 180),
+            "fuzz sprite behind wall should not modify framebuffer"
+        );
     }
 }

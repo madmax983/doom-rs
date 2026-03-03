@@ -343,6 +343,7 @@ impl DoomApp for DoomGame {
                     fb,
                     cache,
                     Some(&z_buf),
+                    self.colormap_cache.as_ref(),
                 );
             }
 
