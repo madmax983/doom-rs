@@ -13,6 +13,7 @@ pub mod flat_cache;
 pub mod framebuffer;
 pub mod fuzz;
 pub mod intermission;
+pub mod lighting;
 pub mod palette;
 pub mod palette_flash;
 pub mod render;
@@ -36,6 +37,10 @@ pub use fuzz::{FUZZ_TABLE, draw_fuzz_column};
 pub use intermission::{
     IntermissionPhase, IntermissionRenderer, draw_intermission, draw_intermission_text,
     draw_percentage, draw_time, format_map_name,
+};
+pub use lighting::{
+    LightParams, compute_flat_light, compute_wall_light, compute_wall_light_with_falloff,
+    light_to_colormap_index, shade_column, shade_pixel, shade_span,
 };
 pub use palette::{PaletteLut, Rgb};
 pub use palette_flash::PaletteFlash;
