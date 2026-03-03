@@ -22,6 +22,7 @@ pub mod movement;
 pub mod pickups;
 pub mod player;
 pub mod projectile;
+pub mod random;
 pub mod savegame;
 pub mod sight;
 pub mod snapshot;
@@ -51,6 +52,7 @@ pub use player::{AmmoType, PlayerState, WEAPON_AMMO, WeaponType};
 pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
 };
+pub use random::{p_damage_with_variance, p_missile_angle_spread, p_random_chance, randomize_tics};
 pub use savegame::{
     MAX_SAVE_SLOTS, SAVE_MAGIC, SaveError, SaveGame, SaveHeader, load_game, save_game,
     save_slot_filename,

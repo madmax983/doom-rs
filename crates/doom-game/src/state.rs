@@ -550,6 +550,43 @@ impl GameState {
         }
     }
 
+    // -----------------------------------------------------------------------
+    // P_Random helpers — deterministic RNG used for all game randomness
+    // -----------------------------------------------------------------------
+
+    /// Return the next random byte from Doom's deterministic RNG table and
+    /// advance the index.
+    ///
+    /// Port of `P_Random()` from `m_random.c`.
+    #[inline]
+    pub fn p_random(&mut self) -> u8 {
+        self.rng.next()
+    }
+
+    /// Return a random value in `[min, max]` using `p_random`.
+    ///
+    /// If `min >= max`, returns `min`.
+    pub fn p_random_range(&mut self, min: i32, max: i32) -> i32 {
+        if min >= max {
+            return min;
+        }
+        let span = (max - min + 1) as u32;
+        let r = self.p_random() as u32;
+        min + (r % span) as i32
+    }
+
+    /// Return `p_random() as i32 - p_random() as i32`.
+    ///
+    /// Result is in `[-255, 255]`.  Used for angle spread and other symmetric
+    /// randomness (e.g. bullet spread, melee miss offset).
+    ///
+    /// Port of `P_SubRandom()` from various Doom source files.
+    pub fn p_subrandom(&mut self) -> i32 {
+        let a = self.p_random() as i32;
+        let b = self.p_random() as i32;
+        a - b
+    }
+
     /// Return the accumulated scroll offset for a given linedef index.
     ///
     /// Returns `(0, 0)` if no `ScrollingWall` exists for this linedef.

@@ -12,6 +12,7 @@ pub mod column;
 pub mod flat_cache;
 pub mod framebuffer;
 pub mod fuzz;
+pub mod intermission;
 pub mod palette;
 pub mod palette_flash;
 pub mod render;
@@ -32,6 +33,10 @@ pub use column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column, draw_column_s
 pub use flat_cache::FlatCache;
 pub use framebuffer::Framebuffer;
 pub use fuzz::{FUZZ_TABLE, draw_fuzz_column};
+pub use intermission::{
+    IntermissionPhase, IntermissionRenderer, draw_intermission, draw_intermission_text,
+    draw_percentage, draw_time, format_map_name,
+};
 pub use palette::{PaletteLut, Rgb};
 pub use palette_flash::PaletteFlash;
 pub use render::render_level;
