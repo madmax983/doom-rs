@@ -14,8 +14,8 @@ use doom_types::{Bam, Fixed16_16};
 use crate::mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum};
 use crate::player::{NUM_POWERS, PlayerState, WeaponType};
 use crate::state::{
-    CeilingMover, CeilingType, DoomRng, DoorMover, ExitRequest, FloorMover, GameState,
-    LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus,
+    CeilingMover, CeilingType, DoomRng, DoorMover, ExitRequest, FloorMover, GameState, LiftMover,
+    LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus,
 };
 
 // ---------------------------------------------------------------------------
@@ -771,6 +771,48 @@ fn read_perpetual_platform(r: &mut ReadCursor<'_>) -> Result<PerpetualPlatform, 
     })
 }
 
+fn write_lift_status(w: &mut WriteCursor, status: LiftStatus) {
+    let byte = match status {
+        LiftStatus::Lowering => 0u8,
+        LiftStatus::Waiting => 1u8,
+        LiftStatus::Raising => 2u8,
+        LiftStatus::Done => 3u8,
+    };
+    w.write_u8(byte);
+}
+
+fn read_lift_status(r: &mut ReadCursor<'_>) -> Result<LiftStatus, SaveError> {
+    match r.read_u8()? {
+        0 => Ok(LiftStatus::Lowering),
+        1 => Ok(LiftStatus::Waiting),
+        2 => Ok(LiftStatus::Raising),
+        3 => Ok(LiftStatus::Done),
+        _ => Err(SaveError::Truncated),
+    }
+}
+
+fn write_lift_mover(w: &mut WriteCursor, lm: &LiftMover) {
+    w.write_u32(lm.sector_index as u32);
+    w.write_i16(lm.low_height);
+    w.write_i16(lm.high_height);
+    w.write_i16(lm.speed);
+    w.write_i32(lm.wait_tics);
+    w.write_i32(lm.wait_remaining);
+    write_lift_status(w, lm.status);
+}
+
+fn read_lift_mover(r: &mut ReadCursor<'_>) -> Result<LiftMover, SaveError> {
+    Ok(LiftMover {
+        sector_index: r.read_u32()? as usize,
+        low_height: r.read_i16()?,
+        high_height: r.read_i16()?,
+        speed: r.read_i16()?,
+        wait_tics: r.read_i32()?,
+        wait_remaining: r.read_i32()?,
+        status: read_lift_status(r)?,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Top-level save/load
 // ---------------------------------------------------------------------------
@@ -850,6 +892,12 @@ pub fn save_game(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &
     w.write_u32(gs.active_platforms.len() as u32);
     for plat in &gs.active_platforms {
         write_perpetual_platform(&mut w, plat);
+    }
+
+    // --- Lifts ---
+    w.write_u32(gs.lifts.len() as u32);
+    for lift in &gs.lifts {
+        write_lift_mover(&mut w, lift);
     }
 
     // --- Mobjs ---
@@ -979,6 +1027,13 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
         active_platforms.push(read_perpetual_platform(&mut r)?);
     }
 
+    // --- Lifts ---
+    let lift_count = r.read_u32()? as usize;
+    let mut lifts = Vec::with_capacity(lift_count);
+    for _ in 0..lift_count {
+        lifts.push(read_lift_mover(&mut r)?);
+    }
+
     // --- Mobjs ---
     let mobj_count = r.read_u32()? as usize;
     let mut mobjslab = MobjSlab::new();
@@ -1031,6 +1086,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     state.active_ceilings = active_ceilings;
     state.active_floors = active_floors;
     state.active_platforms = active_platforms;
+    state.lifts = lifts;
     state.exit_request = exit_request;
     state.level_time = level_time;
 

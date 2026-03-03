@@ -179,6 +179,45 @@ pub struct PerpetualPlatform {
     pub tag: u16,
 }
 
+// ---------------------------------------------------------------------------
+// Lift mover types
+// ---------------------------------------------------------------------------
+
+/// Current movement status of a lift.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LiftStatus {
+    /// Lift floor is lowering toward `low_height`.
+    Lowering,
+    /// Lift is waiting at the bottom before raising.
+    Waiting,
+    /// Lift floor is raising back toward `high_height`.
+    Raising,
+    /// Lift has completed its cycle and should be removed.
+    Done,
+}
+
+/// A lift (platform) that lowers, waits, then raises back.
+///
+/// Added to `GameState::lifts` when a lift linedef is activated.
+/// Ticked each tic by `specials::tick_lifts`.
+#[derive(Clone, Debug)]
+pub struct LiftMover {
+    /// Index into `level.sectors`.
+    pub sector_index: usize,
+    /// Lowest adjacent floor height (destination when lowering).
+    pub low_height: i16,
+    /// Original floor height before lowering (destination when raising).
+    pub high_height: i16,
+    /// Movement speed in map units per tic.
+    pub speed: i16,
+    /// Tics to wait at bottom before raising (typically 105 = 3 seconds).
+    pub wait_tics: i32,
+    /// Countdown remaining in the wait phase.
+    pub wait_remaining: i32,
+    /// Current movement status.
+    pub status: LiftStatus,
+}
+
 /// A flickering or blinking light special.
 ///
 /// Added to `GameState::active_lights` by `specials::spawn_level_specials`.
@@ -354,6 +393,8 @@ pub struct GameState {
     pub active_floors: Vec<FloorMover>,
     /// Active perpetual platforms (ticked by `specials::tick_platforms`).
     pub active_platforms: Vec<PerpetualPlatform>,
+    /// Active lifts (lower-wait-raise) (ticked by `specials::tick_lifts`).
+    pub lifts: Vec<LiftMover>,
 
     /// Extended sector light effects (ticked by `specials::tick_sector_lights`).
     pub sector_lights: Vec<SectorLightEffect>,
@@ -390,6 +431,7 @@ impl GameState {
             active_ceilings: Vec::new(),
             active_floors: Vec::new(),
             active_platforms: Vec::new(),
+            lifts: Vec::new(),
             sector_lights: Vec::new(),
             exit_request: None,
             level_time: 0,

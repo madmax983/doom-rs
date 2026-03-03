@@ -34,7 +34,7 @@ use crate::column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column};
 use crate::flat_cache::FlatCache;
 use crate::framebuffer::Framebuffer;
 use crate::palette::PaletteLut;
-use crate::sky::{draw_sky_columns, is_sky_flat};
+use crate::sky::{draw_sky_columns, draw_sky_fallback, is_sky_flat};
 use crate::span::{DrawSpanParams, draw_span};
 use crate::texture::TextureCache;
 
@@ -534,9 +534,13 @@ pub fn render_level(
     // F_SKY1 ceiling.  The sky texture is looked up from the TextureCache
     // (hardcoded to SKY1 for now).  Sky overwrites the background fill in
     // the ceiling region with parallax-mapped sky texture columns.
-    if let Some(cache) = tex_cache {
-        if let Some(sky_tex) = cache.get(b"SKY1\0\0\0\0") {
-            draw_sky_columns(fb, &sky_ceil_top, &sky_ceil_bot, player_angle, sky_tex);
+    {
+        let sky_tex = tex_cache.and_then(|c| c.get(b"SKY1\0\0\0\0"));
+        if let Some(stex) = sky_tex {
+            draw_sky_columns(fb, &sky_ceil_top, &sky_ceil_bot, player_angle, stex);
+        } else {
+            // No sky texture available — fall back to a solid dark-blue fill.
+            draw_sky_fallback(fb, &sky_ceil_top, &sky_ceil_bot);
         }
     }
 

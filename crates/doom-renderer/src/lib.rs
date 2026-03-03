@@ -29,7 +29,10 @@ pub use flat_cache::FlatCache;
 pub use framebuffer::Framebuffer;
 pub use palette::{PaletteLut, Rgb};
 pub use render::render_level;
-pub use sky::{SKY_FLAT_NAME, column_to_angle, draw_sky_columns, is_sky_flat, sky_texture_name};
+pub use sky::{
+    SKY_FALLBACK_COLOR, SKY_FLAT_NAME, column_to_angle, draw_sky_columns, draw_sky_fallback,
+    is_sky_flat, sky_texel_column, sky_texture_for_episode, sky_texture_name,
+};
 pub use span::{DrawSpanParams, FLAT_DIM, FLAT_MASK, draw_span, draw_span_solid};
 pub use sprite::{
     SpriteCache, SpriteFrame, compute_sprite_rotation, draw_sprite, draw_sprite_ex,

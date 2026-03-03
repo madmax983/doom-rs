@@ -20,8 +20,9 @@ use doom_types::Fixed16_16;
 
 use crate::mobj::MobjHandle;
 use crate::state::{
-    CeilingMover, CeilingType, DoorMover, ExitRequest, FloorMover, GameState, LightEffectType,
-    LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus, SectorLightEffect,
+    CeilingMover, CeilingType, DoorMover, ExitRequest, FloorMover, GameState, LiftMover,
+    LiftStatus, LightEffectType, LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus,
+    SectorLightEffect,
 };
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,9 @@ const DOOR_SPEED: i16 = 2;
 
 /// Tics a door stays open before auto-closing (3.5 seconds at 35 Hz ≈ 120 tics).
 const DOOR_WAIT: i32 = 120;
+
+/// Door speed for blazing (fast) doors in map units per tic.
+const BLAZING_DOOR_SPEED: i16 = 8;
 
 /// Period for fast blinking lights (tics).
 const BLINK_FAST_PERIOD: i32 = 15;
@@ -1438,6 +1442,111 @@ fn activate_lift(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// LiftMover activation and tick
+// ---------------------------------------------------------------------------
+
+/// Activate a lift (lower-wait-raise) on all sectors matching `tag` using the
+/// dedicated `LiftMover` system.
+///
+/// For each matching sector, computes the lowest adjacent floor height as
+/// `low_height`, stores the current floor as `high_height`, and creates a
+/// `LiftMover` starting in `Lowering` status.
+///
+/// Returns the number of lifts created.
+pub fn ev_do_lift(
+    gs: &mut GameState,
+    level: &Level,
+    tag: u16,
+    speed: i16,
+    wait_tics: i32,
+) -> usize {
+    let sector_indices: Vec<usize> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| i)
+        .collect();
+
+    let mut count = 0;
+    for idx in sector_indices {
+        // Avoid duplicate lifts on the same sector.
+        if gs.lifts.iter().any(|l| l.sector_index == idx) {
+            continue;
+        }
+        let sector = &level.sectors[idx];
+        let low = lowest_adjacent_floor(level, idx);
+        gs.lifts.push(LiftMover {
+            sector_index: idx,
+            low_height: low,
+            high_height: sector.floor_height,
+            speed,
+            wait_tics,
+            wait_remaining: 0,
+            status: LiftStatus::Lowering,
+        });
+        count += 1;
+    }
+    count
+}
+
+/// Advance all active lifts by one tic.
+///
+/// Call this once per tic from `tick()`.
+///
+/// Lift cycle:
+/// 1. `Lowering`: move floor down by `speed`. When `floor <= low_height`,
+///    snap to `low_height`, transition to `Waiting`, set `wait_remaining`.
+/// 2. `Waiting`: decrement `wait_remaining`. When 0, transition to `Raising`.
+/// 3. `Raising`: move floor up by `speed`. When `floor >= high_height`,
+///    snap to `high_height`, transition to `Done`.
+/// 4. `Done`: remove from active list.
+pub fn tick_lifts(gs: &mut GameState, level: &mut Level) {
+    let mut i = 0;
+    while i < gs.lifts.len() {
+        let sector_idx = gs.lifts[i].sector_index;
+        if sector_idx >= level.sectors.len() {
+            gs.lifts.remove(i);
+            continue;
+        }
+
+        match gs.lifts[i].status {
+            LiftStatus::Lowering => {
+                let speed = gs.lifts[i].speed;
+                let low = gs.lifts[i].low_height;
+                level.sectors[sector_idx].floor_height -= speed;
+                if level.sectors[sector_idx].floor_height <= low {
+                    level.sectors[sector_idx].floor_height = low;
+                    gs.lifts[i].status = LiftStatus::Waiting;
+                    gs.lifts[i].wait_remaining = gs.lifts[i].wait_tics;
+                }
+            }
+            LiftStatus::Waiting => {
+                gs.lifts[i].wait_remaining -= 1;
+                if gs.lifts[i].wait_remaining <= 0 {
+                    gs.lifts[i].status = LiftStatus::Raising;
+                }
+            }
+            LiftStatus::Raising => {
+                let speed = gs.lifts[i].speed;
+                let high = gs.lifts[i].high_height;
+                level.sectors[sector_idx].floor_height += speed;
+                if level.sectors[sector_idx].floor_height >= high {
+                    level.sectors[sector_idx].floor_height = high;
+                    gs.lifts[i].status = LiftStatus::Done;
+                }
+            }
+            LiftStatus::Done => {
+                gs.lifts.remove(i);
+                continue;
+            }
+        }
+
+        i += 1;
+    }
+}
+
 /// Activate a floor raiser (one-shot, no wait) on a single sector.
 fn activate_floor_raise_single(
     gs: &mut GameState,
@@ -1554,6 +1663,61 @@ fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         target_height: target,
         current_height: sector.ceil_height,
         speed: -DOOR_SPEED,
+        is_ceiling: true,
+        wait_tics: -1,
+        countdown: -1,
+    });
+}
+
+/// Enqueue a blazing (fast) door mover that opens and optionally auto-closes.
+///
+/// Same as `open_door` but with `BLAZING_DOOR_SPEED` (8 units/tic).
+fn open_blazing_door(
+    gs: &mut GameState,
+    level: &Level,
+    sector_idx: usize,
+    auto_close: bool,
+) {
+    let sector = match level.sectors.get(sector_idx) {
+        Some(s) => s,
+        None => return,
+    };
+
+    let target = sector.ceil_height.max(sector.floor_height + 128);
+
+    if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
+        return;
+    }
+
+    gs.active_doors.push(DoorMover {
+        sector: sector_idx,
+        target_height: target,
+        current_height: sector.ceil_height,
+        speed: BLAZING_DOOR_SPEED,
+        is_ceiling: true,
+        wait_tics: if auto_close { DOOR_WAIT } else { -1 },
+        countdown: if auto_close { DOOR_WAIT } else { -1 },
+    });
+}
+
+/// Enqueue a blazing (fast) door mover that closes a door.
+fn close_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
+    let sector = match level.sectors.get(sector_idx) {
+        Some(s) => s,
+        None => return,
+    };
+
+    let target = sector.floor_height + 4;
+
+    if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
+        return;
+    }
+
+    gs.active_doors.push(DoorMover {
+        sector: sector_idx,
+        target_height: target,
+        current_height: sector.ceil_height,
+        speed: -BLAZING_DOOR_SPEED,
         is_ceiling: true,
         wait_tics: -1,
         countdown: -1,
@@ -2158,6 +2322,213 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 126: WR Teleport Monsters Only (repeatable).
         126 => {
             // Monsters-only teleport — no-op for player activation.
+        }
+
+        // -----------------------------------------------------------------
+        // Blazing doors (fast doors, speed=8)
+        // -----------------------------------------------------------------
+
+        // Type 105: WR Blazing door open-close.
+        105 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let sector_indices: Vec<usize> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+                .collect();
+            for idx in sector_indices {
+                open_blazing_door(gs, level, idx, true);
+            }
+        }
+
+        // Type 106: WR Blazing door open-stay.
+        106 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let sector_indices: Vec<usize> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+                .collect();
+            for idx in sector_indices {
+                open_blazing_door(gs, level, idx, false);
+            }
+        }
+
+        // Type 107: WR Blazing door close.
+        107 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let sector_indices: Vec<usize> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+                .collect();
+            for idx in sector_indices {
+                close_blazing_door(gs, level, idx);
+            }
+        }
+
+        // Type 108: W1 Blazing door open-close.
+        108 => {
+            if left_sidedef == SIDEDEF_NONE {
+                return;
+            }
+            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
+                Some(sd) => sd.sector as usize,
+                None => return,
+            };
+            open_blazing_door(gs, level, sector_idx, true);
+        }
+
+        // Type 109: W1 Blazing door open-stay.
+        109 => {
+            if left_sidedef == SIDEDEF_NONE {
+                return;
+            }
+            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
+                Some(sd) => sd.sector as usize,
+                None => return,
+            };
+            open_blazing_door(gs, level, sector_idx, false);
+        }
+
+        // Type 110: W1 Blazing door close.
+        110 => {
+            if left_sidedef == SIDEDEF_NONE {
+                return;
+            }
+            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
+                Some(sd) => sd.sector as usize,
+                None => return,
+            };
+            close_blazing_door(gs, level, sector_idx);
+        }
+
+        // -----------------------------------------------------------------
+        // Additional keyed door line types
+        // -----------------------------------------------------------------
+
+        // Type 99: SR Blue key door open-stay.
+        99 => {
+            if gs.player.has_key(crate::player::KEY_BLUE_CARD)
+                || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
+            {
+                if left_sidedef == SIDEDEF_NONE {
+                    return;
+                }
+                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
+                    Some(sd) => sd.sector as usize,
+                    None => return,
+                };
+                open_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // Type 133: S1 Blue key door open-stay (blazing).
+        133 => {
+            if gs.player.has_key(crate::player::KEY_BLUE_CARD)
+                || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
+            {
+                if left_sidedef == SIDEDEF_NONE {
+                    return;
+                }
+                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
+                    Some(sd) => sd.sector as usize,
+                    None => return,
+                };
+                open_blazing_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // Type 134: SR Red key door open-stay.
+        134 => {
+            if gs.player.has_key(crate::player::KEY_RED_CARD)
+                || gs.player.has_key(crate::player::KEY_RED_SKULL)
+            {
+                if left_sidedef == SIDEDEF_NONE {
+                    return;
+                }
+                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
+                    Some(sd) => sd.sector as usize,
+                    None => return,
+                };
+                open_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // Type 135: S1 Red key door open-stay (blazing).
+        135 => {
+            if gs.player.has_key(crate::player::KEY_RED_CARD)
+                || gs.player.has_key(crate::player::KEY_RED_SKULL)
+            {
+                if left_sidedef == SIDEDEF_NONE {
+                    return;
+                }
+                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
+                    Some(sd) => sd.sector as usize,
+                    None => return,
+                };
+                open_blazing_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // Type 136: SR Yellow key door open-stay.
+        136 => {
+            if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
+                || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
+            {
+                if left_sidedef == SIDEDEF_NONE {
+                    return;
+                }
+                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
+                    Some(sd) => sd.sector as usize,
+                    None => return,
+                };
+                open_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // Type 137: S1 Yellow key door open-stay (blazing).
+        137 => {
+            if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
+                || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
+            {
+                if left_sidedef == SIDEDEF_NONE {
+                    return;
+                }
+                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
+                    Some(sd) => sd.sector as usize,
+                    None => return,
+                };
+                open_blazing_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // -----------------------------------------------------------------
+        // Additional lift line types (using LiftMover)
+        // -----------------------------------------------------------------
+
+        // Type 120: WR Lift blazing (speed 8, wait 105).
+        120 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
+        }
+
+        // Type 122: S1 Lift blazing (speed 8, wait 105).
+        122 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
+        }
+
+        // Type 123: SR Lift blazing (speed 8, wait 105).
+        123 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
         }
 
         _ => {
@@ -5802,5 +6173,763 @@ mod tests {
             gs.active_ceilings[0].speed, 4,
             "FastCrushAndRaise must NOT slow down"
         );
+    }
+
+    // =====================================================================
+    // Tests: LiftMover and related features
+    // =====================================================================
+
+    // -----------------------------------------------------------------------
+    // Helper: build a level suitable for lift tests
+    //
+    // Layout:
+    // - Sector 0: floor=0, ceil=128, tag=0 (front / player sector)
+    // - Sector 1: floor=64, ceil=192, tag=`tag` (the lift sector)
+    // - Sector 2: floor=`adj_floor`, ceil=128, tag=0 (adjacent to sector 1)
+    //
+    // Linedefs:
+    //   LD0: sector 0 ↔ sector 1 (right=SD0→sec0, left=SD1→sec1) special=ld_special, tag=tag
+    //   LD1: sector 1 ↔ sector 2 (right=SD2→sec1, left=SD3→sec2)
+    // -----------------------------------------------------------------------
+    fn make_lift_test_level(
+        adj_floor: i16,
+        ld_special: u16,
+        tag: u16,
+    ) -> doom_map::Level {
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+
+        let sectors = vec![
+            doom_map::Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            doom_map::Sector {
+                floor_height: 64,
+                ceil_height: 192,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag,
+            },
+            doom_map::Sector {
+                floor_height: adj_floor,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: 0 },
+            doom_map::Vertex { x: 64, y: 0 },
+            doom_map::Vertex { x: 128, y: 0 },
+            doom_map::Vertex { x: 192, y: 0 },
+        ];
+
+        let sidedefs = vec![
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 0,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 1,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 1,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 2,
+            },
+        ];
+
+        let linedefs = vec![
+            doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special: ld_special,
+                tag,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+            doom_map::Linedef {
+                from_vertex: 1,
+                to_vertex: 2,
+                flags: 0x0004,
+                special: 0,
+                tag: 0,
+                right_sidedef: 2,
+                left_sidedef: 3,
+            },
+        ];
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 1: LiftMover creation with correct fields
+    // -----------------------------------------------------------------------
+    #[test]
+    fn lift_mover_creation_correct_fields() {
+        use crate::state::{LiftMover, LiftStatus};
+        let lm = LiftMover {
+            sector_index: 1,
+            low_height: 0,
+            high_height: 64,
+            speed: 4,
+            wait_tics: 105,
+            wait_remaining: 0,
+            status: LiftStatus::Lowering,
+        };
+        assert_eq!(lm.sector_index, 1);
+        assert_eq!(lm.low_height, 0);
+        assert_eq!(lm.high_height, 64);
+        assert_eq!(lm.speed, 4);
+        assert_eq!(lm.wait_tics, 105);
+        assert_eq!(lm.wait_remaining, 0);
+        assert_eq!(lm.status, LiftStatus::Lowering);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 2: lowest_adjacent_floor computes correct height (for lift)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn lowest_adjacent_floor_for_lift() {
+        // Sector 1 (floor=64, tag=5) is adjacent to sector 0 (floor=0) and sector 2 (floor=16).
+        let level = make_lift_test_level(16, 0, 5);
+        let low = lowest_adjacent_floor(&level, 1);
+        assert_eq!(low, 0, "lowest adjacent floor to sector 1 should be 0 (sector 0)");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 3: tick_lifts lowers floor to low_height
+    // -----------------------------------------------------------------------
+    #[test]
+    fn tick_lifts_lowers_floor() {
+        use crate::state::LiftStatus;
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 0, 5);
+
+        // Sector 1 floor starts at 64. Low = 0 (sector 0's floor). Speed 4.
+        ev_do_lift(&mut gs, &level, 5, 4, 105);
+        assert_eq!(gs.lifts.len(), 1);
+        assert_eq!(gs.lifts[0].status, LiftStatus::Lowering);
+
+        // After 1 tic, floor = 64 - 4 = 60.
+        tick_lifts(&mut gs, &mut level);
+        assert_eq!(level.sectors[1].floor_height, 60);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 4: Lift transitions: Lowering → Waiting
+    // -----------------------------------------------------------------------
+    #[test]
+    fn lift_transition_lowering_to_waiting() {
+        use crate::state::LiftStatus;
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 0, 5);
+        // Sector 1 floor=64, low=0 (from sec 0), speed=4.
+        ev_do_lift(&mut gs, &level, 5, 4, 105);
+
+        // 64/4 = 16 tics to reach low_height=0.
+        for _ in 0..16 {
+            tick_lifts(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].floor_height, 0, "floor must reach low_height");
+        assert_eq!(gs.lifts[0].status, LiftStatus::Waiting);
+        assert_eq!(gs.lifts[0].wait_remaining, 105);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 5: Lift transitions: Waiting countdown → Raising
+    // -----------------------------------------------------------------------
+    #[test]
+    fn lift_transition_waiting_to_raising() {
+        use crate::state::LiftStatus;
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 0, 5);
+        ev_do_lift(&mut gs, &level, 5, 4, 105);
+
+        // Lower to bottom.
+        for _ in 0..16 {
+            tick_lifts(&mut gs, &mut level);
+        }
+        assert_eq!(gs.lifts[0].status, LiftStatus::Waiting);
+
+        // Wait 105 tics.
+        for _ in 0..105 {
+            tick_lifts(&mut gs, &mut level);
+        }
+        assert_eq!(gs.lifts[0].status, LiftStatus::Raising);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 6: Lift transitions: Raising → Done (removed)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn lift_transition_raising_to_done() {
+        use crate::state::LiftStatus;
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 0, 5);
+        ev_do_lift(&mut gs, &level, 5, 4, 105);
+
+        // Lower (16 tics), wait (105 tics), then raise.
+        for _ in 0..16 {
+            tick_lifts(&mut gs, &mut level);
+        }
+        for _ in 0..105 {
+            tick_lifts(&mut gs, &mut level);
+        }
+        assert_eq!(gs.lifts[0].status, LiftStatus::Raising);
+
+        // Raise from 0 to 64 at speed 4: 16 tics.
+        for _ in 0..16 {
+            tick_lifts(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].floor_height, 64, "floor must return to high_height");
+        // LiftStatus::Done triggers removal on next tick.
+        tick_lifts(&mut gs, &mut level);
+        assert!(gs.lifts.is_empty(), "lift must be removed when Done");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 7: Full lift cycle: lower-wait-raise
+    // -----------------------------------------------------------------------
+    #[test]
+    fn full_lift_cycle() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 0, 5);
+        ev_do_lift(&mut gs, &level, 5, 4, 105);
+
+        // Lower (16 tics) + wait (105 tics) + raise (16 tics) + removal (1 tic).
+        let total_tics = 16 + 105 + 16 + 1;
+        for _ in 0..total_tics {
+            tick_lifts(&mut gs, &mut level);
+        }
+
+        assert_eq!(level.sectors[1].floor_height, 64, "floor must be back at original");
+        assert!(gs.lifts.is_empty(), "lift must be removed after full cycle");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 8: Blazing lift with speed 8
+    // -----------------------------------------------------------------------
+    #[test]
+    fn blazing_lift_speed_8() {
+        use crate::state::LiftStatus;
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 0, 5);
+        ev_do_lift(&mut gs, &level, 5, 8, 105);
+
+        assert_eq!(gs.lifts[0].speed, 8, "blazing lift must have speed 8");
+
+        // 64/8 = 8 tics to lower.
+        for _ in 0..8 {
+            tick_lifts(&mut gs, &mut level);
+        }
+        assert_eq!(level.sectors[1].floor_height, 0);
+        assert_eq!(gs.lifts[0].status, LiftStatus::Waiting);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 9: ev_do_lift with tag matching multiple sectors
+    // -----------------------------------------------------------------------
+    #[test]
+    fn ev_do_lift_multiple_sectors() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 0, 5);
+        // Give sector 2 the same tag so two sectors match.
+        level.sectors[2].tag = 5;
+        level.sectors[2].floor_height = 32;
+
+        let count = ev_do_lift(&mut gs, &level, 5, 4, 105);
+        assert_eq!(count, 2, "should create lifts for both tagged sectors");
+        assert_eq!(gs.lifts.len(), 2);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 10: Line type 10 dispatches lift
+    // -----------------------------------------------------------------------
+    #[test]
+    fn line_type_10_dispatches_lift() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 10, 5);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert!(
+            gs.active_floors.len() == 1,
+            "line type 10 should create a FloorMover lift"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 11: Line type 21 dispatches lift
+    // -----------------------------------------------------------------------
+    #[test]
+    fn line_type_21_dispatches_lift() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 21, 5);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert!(
+            gs.active_floors.len() == 1,
+            "line type 21 should create a FloorMover lift"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 12: Line type 62 dispatches lift
+    // -----------------------------------------------------------------------
+    #[test]
+    fn line_type_62_dispatches_lift() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 62, 5);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert!(
+            gs.active_floors.len() == 1,
+            "line type 62 should create a FloorMover lift"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 13: Line type 88 dispatches lift
+    // -----------------------------------------------------------------------
+    #[test]
+    fn line_type_88_dispatches_lift() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 88, 5);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert!(
+            gs.active_floors.len() == 1,
+            "line type 88 should create a FloorMover lift"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 14: Line type 120 dispatches blazing lift (LiftMover)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn line_type_120_dispatches_blazing_lift() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 120, 5);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.lifts.len(),
+            1,
+            "line type 120 should create a LiftMover"
+        );
+        assert_eq!(gs.lifts[0].speed, 8, "line type 120 should be blazing speed 8");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 15: Blazing door line type 105 creates fast door
+    // -----------------------------------------------------------------------
+    #[test]
+    fn blazing_door_type_105_creates_fast_door() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_linedef_level(105, 5);
+        level.sectors[1].tag = 5;
+        level.sectors[1].ceil_height = 0; // Door starts closed.
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert_eq!(gs.active_doors.len(), 1, "should create a door mover");
+        assert_eq!(
+            gs.active_doors[0].speed, BLAZING_DOOR_SPEED,
+            "blazing door must have speed 8"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 16: Blazing door line type 108 creates fast door
+    // -----------------------------------------------------------------------
+    #[test]
+    fn blazing_door_type_108_creates_fast_door() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level_with_special(0, 108);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert_eq!(gs.active_doors.len(), 1, "should create a door mover");
+        assert_eq!(
+            gs.active_doors[0].speed, BLAZING_DOOR_SPEED,
+            "blazing door type 108 must have speed 8"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 17: Keyed door type 99 requires blue key
+    // -----------------------------------------------------------------------
+    #[test]
+    fn keyed_door_type_99_requires_blue_key() {
+        use crate::player::PlayerState;
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = PlayerState::pistol_start(handle);
+        let mut level = make_door_level_with_special(0, 99);
+
+        // Without key — should not open.
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.active_doors.len(),
+            0,
+            "blue keyed door must not open without key"
+        );
+
+        // Give blue card and try again.
+        gs.player.give_key(crate::player::KEY_BLUE_CARD);
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.active_doors.len(),
+            1,
+            "blue keyed door must open with blue card"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 18: Keyed door type 134 requires red key
+    // -----------------------------------------------------------------------
+    #[test]
+    fn keyed_door_type_134_requires_red_key() {
+        use crate::player::PlayerState;
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = PlayerState::pistol_start(handle);
+        let mut level = make_door_level_with_special(0, 134);
+
+        // Without key — should not open.
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.active_doors.len(),
+            0,
+            "red keyed door must not open without key"
+        );
+
+        // Give red card and try again.
+        gs.player.give_key(crate::player::KEY_RED_CARD);
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.active_doors.len(),
+            1,
+            "red keyed door must open with red card"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 19: Keyed door type 136 requires yellow key
+    // -----------------------------------------------------------------------
+    #[test]
+    fn keyed_door_type_136_requires_yellow_key() {
+        use crate::player::PlayerState;
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = PlayerState::pistol_start(handle);
+        let mut level = make_door_level_with_special(0, 136);
+
+        // Without key — should not open.
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.active_doors.len(),
+            0,
+            "yellow keyed door must not open without key"
+        );
+
+        // Give yellow card and try again.
+        gs.player.give_key(crate::player::KEY_YELLOW_CARD);
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(
+            gs.active_doors.len(),
+            1,
+            "yellow keyed door must open with yellow card"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 20: GameState clone includes lifts
+    // -----------------------------------------------------------------------
+    #[test]
+    fn game_state_clone_includes_lifts() {
+        use crate::state::{LiftMover, LiftStatus};
+        let mut gs = GameState::new("TEST");
+        gs.lifts.push(LiftMover {
+            sector_index: 1,
+            low_height: 0,
+            high_height: 64,
+            speed: 4,
+            wait_tics: 105,
+            wait_remaining: 50,
+            status: LiftStatus::Waiting,
+        });
+
+        let gs2 = gs.clone();
+        assert_eq!(gs2.lifts.len(), 1);
+        assert_eq!(gs2.lifts[0].sector_index, 1);
+        assert_eq!(gs2.lifts[0].status, LiftStatus::Waiting);
+        assert_eq!(gs2.lifts[0].wait_remaining, 50);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 21: Save/load roundtrip for LiftMover
+    // -----------------------------------------------------------------------
+    #[test]
+    fn save_load_roundtrip_lift_mover() {
+        use crate::mobj::{Mobj, MobjKind, flags};
+        use crate::player::PlayerState;
+        use crate::savegame::{load_game, save_game};
+        use crate::state::{LiftMover, LiftStatus};
+
+        let mut gs = GameState::new("E1M1");
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::from_int(10),
+            Fixed16_16::from_int(20),
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
+        let handle = gs.mobjslab.alloc(mo);
+        gs.player = PlayerState::pistol_start(handle);
+
+        gs.lifts.push(LiftMover {
+            sector_index: 3,
+            low_height: -32,
+            high_height: 64,
+            speed: 8,
+            wait_tics: 105,
+            wait_remaining: 42,
+            status: LiftStatus::Waiting,
+        });
+
+        let mut level_name = [0u8; 8];
+        level_name[..4].copy_from_slice(b"E1M1");
+        let data = save_game(&gs, &level_name, 2, "test lift save");
+        let loaded = load_game(&data).unwrap();
+
+        assert_eq!(loaded.state.lifts.len(), 1, "must restore 1 lift");
+        assert_eq!(loaded.state.lifts[0].sector_index, 3);
+        assert_eq!(loaded.state.lifts[0].low_height, -32);
+        assert_eq!(loaded.state.lifts[0].high_height, 64);
+        assert_eq!(loaded.state.lifts[0].speed, 8);
+        assert_eq!(loaded.state.lifts[0].wait_tics, 105);
+        assert_eq!(loaded.state.lifts[0].wait_remaining, 42);
+        assert_eq!(loaded.state.lifts[0].status, LiftStatus::Waiting);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 22: Line type 122 dispatches S1 blazing lift
+    // -----------------------------------------------------------------------
+    #[test]
+    fn line_type_122_dispatches_blazing_lift() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 122, 5);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.lifts.len(), 1, "line type 122 should create a LiftMover");
+        assert_eq!(gs.lifts[0].speed, 8);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 23: Line type 123 dispatches SR blazing lift
+    // -----------------------------------------------------------------------
+    #[test]
+    fn line_type_123_dispatches_blazing_lift() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_lift_test_level(16, 123, 5);
+
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.lifts.len(), 1, "line type 123 should create a LiftMover");
+        assert_eq!(gs.lifts[0].speed, 8);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 24: Blazing door type 109 open-stay
+    // -----------------------------------------------------------------------
+    #[test]
+    fn blazing_door_type_109_open_stay() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level_with_special(0, 109);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert_eq!(gs.active_doors.len(), 1);
+        assert_eq!(gs.active_doors[0].speed, BLAZING_DOOR_SPEED);
+        // open-stay → countdown = -1 (no auto-close).
+        assert_eq!(gs.active_doors[0].countdown, -1);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 25: Blazing door type 110 closes door
+    // -----------------------------------------------------------------------
+    #[test]
+    fn blazing_door_type_110_closes() {
+        let mut gs = GameState::new("TEST");
+        // Door starts open (ceil=128 > floor=0).
+        let mut level = make_door_level_with_special(128, 110);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert_eq!(gs.active_doors.len(), 1);
+        // Close = negative speed.
+        assert_eq!(gs.active_doors[0].speed, -BLAZING_DOOR_SPEED);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 26: Keyed blazing door type 133 (S1 Blue blazing)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn keyed_blazing_door_type_133() {
+        use crate::player::PlayerState;
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = PlayerState::pistol_start(handle);
+        let mut level = make_door_level_with_special(0, 133);
+
+        // Without key — should not open.
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_doors.len(), 0);
+
+        // Give blue skull and try again.
+        gs.player.give_key(crate::player::KEY_BLUE_SKULL);
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_doors.len(), 1);
+        assert_eq!(
+            gs.active_doors[0].speed, BLAZING_DOOR_SPEED,
+            "keyed blazing door must use fast speed"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 27: Keyed blazing door type 135 (S1 Red blazing)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn keyed_blazing_door_type_135() {
+        use crate::player::PlayerState;
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = PlayerState::pistol_start(handle);
+        let mut level = make_door_level_with_special(0, 135);
+
+        // Without key — should not open.
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_doors.len(), 0);
+
+        // Give red skull and try again.
+        gs.player.give_key(crate::player::KEY_RED_SKULL);
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_doors.len(), 1);
+        assert_eq!(gs.active_doors[0].speed, BLAZING_DOOR_SPEED);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 28: Keyed blazing door type 137 (S1 Yellow blazing)
+    // -----------------------------------------------------------------------
+    #[test]
+    fn keyed_blazing_door_type_137() {
+        use crate::player::PlayerState;
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = PlayerState::pistol_start(handle);
+        let mut level = make_door_level_with_special(0, 137);
+
+        // Without key — should not open.
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_doors.len(), 0);
+
+        // Give yellow skull and try again.
+        gs.player.give_key(crate::player::KEY_YELLOW_SKULL);
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_doors.len(), 1);
+        assert_eq!(gs.active_doors[0].speed, BLAZING_DOOR_SPEED);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 29: ev_do_lift avoids duplicate lifts on same sector
+    // -----------------------------------------------------------------------
+    #[test]
+    fn ev_do_lift_avoids_duplicates() {
+        let mut gs = GameState::new("TEST");
+        let level = make_lift_test_level(16, 0, 5);
+
+        let count1 = ev_do_lift(&mut gs, &level, 5, 4, 105);
+        let count2 = ev_do_lift(&mut gs, &level, 5, 4, 105);
+
+        assert_eq!(count1, 1, "first call should create 1 lift");
+        assert_eq!(count2, 0, "second call should not create duplicates");
+        assert_eq!(gs.lifts.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 30: LiftStatus derives
+    // -----------------------------------------------------------------------
+    #[test]
+    fn lift_status_derives() {
+        use crate::state::LiftStatus;
+        let a = LiftStatus::Lowering;
+        let b = a; // Copy
+        let c = a.clone(); // Clone
+        assert_eq!(a, b);
+        assert_eq!(a, c);
+        assert_ne!(LiftStatus::Lowering, LiftStatus::Raising);
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 31: Blazing door type 106 open-stay via tag
+    // -----------------------------------------------------------------------
+    #[test]
+    fn blazing_door_type_106_open_stay_by_tag() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_tagged_linedef_level(106, 5);
+        level.sectors[1].tag = 5;
+        level.sectors[1].ceil_height = 0; // Door starts closed.
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert_eq!(gs.active_doors.len(), 1);
+        assert_eq!(gs.active_doors[0].speed, BLAZING_DOOR_SPEED);
+        // open-stay: no auto-close.
+        assert_eq!(gs.active_doors[0].countdown, -1);
     }
 }

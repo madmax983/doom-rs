@@ -167,6 +167,7 @@ impl GameState {
             crate::specials::tick_ceilings(self, lv);
             crate::specials::tick_floors(self, lv);
             crate::specials::tick_platforms(self, lv);
+            crate::specials::tick_lifts(self, lv);
             crate::specials::tick_lights(self, lv);
             crate::specials::tick_sector_lights(self, lv);
         }
