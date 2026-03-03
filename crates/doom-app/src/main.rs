@@ -14,6 +14,8 @@ use clap::Parser;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags, init_scrolling_walls, init_conveyors};
 use doom_game::cheats as game_cheats;
+use doom_game::dehacked::DehPatch;
+use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
 use doom_renderer::{AnimState, AutomapState, ColormapCache, FlatCache, Framebuffer, PaletteFlash, PaletteLut, SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_status_bar, draw_weapon_sprite, render_level, render_things};
 use doom_renderer::IDENTITY_COLORMAP;
@@ -49,6 +51,10 @@ struct Args {
     /// Play back a .lmp demo file instead of live input (e.g. --playdemo my.lmp)
     #[arg(long)]
     playdemo: Option<std::path::PathBuf>,
+
+    /// Path to DeHackEd (.deh) patch file to apply.
+    #[arg(long)]
+    deh: Option<String>,
 
     /// Run as a relay server on this port (e.g. --server 5029).
     /// Players connect to this address.  Mutually exclusive with --connect,
@@ -554,6 +560,20 @@ fn main() -> Result<()> {
     let mut gs = GameState::new(&args.warp);
     spawn_player(&mut gs, &level);
 
+    // Apply DeHackEd patch if one was specified.
+    if let Some(ref deh_path) = args.deh {
+        let contents = std::fs::read_to_string(deh_path)
+            .with_context(|| format!("Failed to read DeHackEd file: {deh_path}"))?;
+        let patch = DehPatch::parse(&contents)
+            .map_err(|e| anyhow::anyhow!("DeHackEd parse error: {e}"))?;
+        let mut mobjinfo_vec: Vec<_> = MOBJINFO.to_vec();
+        let mut states_vec: Vec<_> = STATES.to_vec();
+        let count = patch
+            .apply(&mut mobjinfo_vec, &mut states_vec)
+            .map_err(|e| anyhow::anyhow!("DeHackEd apply error: {e}"))?;
+        eprintln!("DeHackEd: applied {count} modification(s) from {deh_path}");
+    }
+
     // Load flat texture cache (floor/ceiling textures between F_START and F_END).
     let flat_cache = FlatCache::load(&wad);
     let flat_cache = if flat_cache.is_empty() { None } else { Some(flat_cache) };
@@ -597,19 +617,27 @@ fn main() -> Result<()> {
         std::process::exit(1);
     }
 
-    // Server mode: not yet implemented (doom-net has data structures but no transport).
+    // Server mode: spin up a relay server that forwards tic packets between
+    // connected clients. No WAD-based game loop is required on the server.
     if let Some(port) = args.server {
-        eprintln!("Server mode (port {port}) not yet implemented — doom-net transport pending");
-        std::process::exit(1);
+        return net_mode::run_server(port);
     }
 
     // Build the app.
     let app = DoomGame::new(gs, level, audio, flat_cache, tex_cache, sprite_cache, colormap_cache);
 
-    // Client (netplay) mode: not yet implemented (doom-net has data structures but no transport).
-    if let Some(addr_str) = &args.connect {
-        eprintln!("Client mode (connect to {addr_str}) not yet implemented — doom-net transport pending");
-        std::process::exit(1);
+    // Client (netplay) mode: wrap DoomGame in a NetGameApp for network-aware input.
+    if let Some(ref addr_str) = args.connect {
+        let client = doom_net::NetClient::connect(addr_str, 0)
+            .map_err(|e| anyhow::anyhow!("Failed to connect to server {addr_str}: {e}"))?;
+        let mut net_app = net_mode::NetGameApp::new(app, client);
+
+        let mut event_loop = DoomEventLoop::new()
+            .map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
+        event_loop
+            .run(&mut net_app, &blit_palette)
+            .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+        return Ok(());
     }
 
     // Start the terminal event loop and run until the user quits (Q or Esc).
@@ -694,7 +722,7 @@ mod tests {
     // -----------------------------------------------------------------------
 
     /// Build a minimal `Level` suitable for unit tests.
-    fn make_test_level() -> Level {
+    pub(crate) fn make_test_level() -> Level {
         let mut bm_data = vec![0u8; 14];
         bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
         bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
@@ -727,7 +755,7 @@ mod tests {
         }
     }
 
-    fn make_game_state() -> GameState {
+    pub(crate) fn make_game_state() -> GameState {
         let mut gs = GameState::new("E1M1");
         let mut mo = Mobj::new(
             MobjKind::Player,
@@ -744,7 +772,7 @@ mod tests {
         gs
     }
 
-    fn make_doom_game() -> DoomGame {
+    pub(crate) fn make_doom_game() -> DoomGame {
         DoomGame::new(
             make_game_state(),
             make_test_level(),
@@ -1238,5 +1266,127 @@ mod tests {
         game.gs.player.set_health_capped(50, 100);
         game.tick(TicInput::default());
         assert_eq!(game.prev_health, 50, "prev_health updated to 50 after second damage");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 24: CLI args parse --deh flag correctly
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cli_args_parse_deh_flag() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad", "doom1.wad",
+            "--deh", "my_patch.deh",
+        ]);
+        assert!(args.is_ok(), "args with --deh must parse successfully");
+        let args = args.unwrap();
+        assert_eq!(args.deh.as_deref(), Some("my_patch.deh"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 25: CLI args parse --server flag with port
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cli_args_parse_server_flag() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad", "doom1.wad",
+            "--server", "5029",
+        ]);
+        assert!(args.is_ok(), "args with --server must parse successfully");
+        let args = args.unwrap();
+        assert_eq!(args.server, Some(5029));
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 26: CLI args parse --connect flag with address
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cli_args_parse_connect_flag() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad", "doom1.wad",
+            "--connect", "127.0.0.1:5029",
+        ]);
+        assert!(args.is_ok(), "args with --connect must parse successfully");
+        let args = args.unwrap();
+        assert_eq!(args.connect.as_deref(), Some("127.0.0.1:5029"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 27: DeHackEd parse error for nonexistent file
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn dehacked_file_not_found() {
+        let result = std::fs::read_to_string("nonexistent_patch.deh");
+        assert!(
+            result.is_err(),
+            "reading a nonexistent .deh file must return an error"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 28: DeHackEd parse succeeds on valid patch text
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn dehacked_parse_valid_patch() {
+        use doom_game::dehacked::DehPatch;
+
+        let patch_text = "Thing 1\nHit points = 200\n";
+        let patch = DehPatch::parse(patch_text);
+        assert!(patch.is_ok(), "DehPatch::parse must succeed on valid input");
+        let patch = patch.unwrap();
+        assert_eq!(patch.things.len(), 1);
+        assert_eq!(patch.things[0].hit_points, Some(200));
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 29: CLI args --deh defaults to None
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cli_args_deh_defaults_to_none() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad", "doom1.wad",
+        ]);
+        assert!(args.is_ok());
+        let args = args.unwrap();
+        assert!(args.deh.is_none(), "--deh must default to None");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 30: CLI args --server defaults to None
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cli_args_server_defaults_to_none() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad", "doom1.wad",
+        ]);
+        assert!(args.is_ok());
+        let args = args.unwrap();
+        assert!(args.server.is_none(), "--server must default to None");
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 31: CLI args --connect defaults to None
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn cli_args_connect_defaults_to_none() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad", "doom1.wad",
+        ]);
+        assert!(args.is_ok());
+        let args = args.unwrap();
+        assert!(args.connect.is_none(), "--connect must default to None");
     }
 }

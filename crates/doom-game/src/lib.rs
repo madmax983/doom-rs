@@ -23,6 +23,7 @@ pub mod pickups;
 pub mod player;
 pub mod projectile;
 pub mod savegame;
+pub mod sight;
 pub mod snapshot;
 pub mod spawn;
 pub mod specials;
@@ -68,6 +69,10 @@ pub use state::{
     CeilingMover, CeilingType, ConveyorBelt, DoomRng, ExitRequest, FloorMover, GameState,
     LiftMover, LiftStatus, LightEffectType, MoveDirection, PerpetualPlatform, PlatformStatus,
     RNG_TABLE, ScrollingWall, SectorLightEffect,
+};
+pub use sight::{
+    p_aim_line_slope, p_check_sight, p_look_for_players, point_on_side, ray_crosses_linedef,
+    sector_from_subsector,
 };
 pub use states::STATES;
 pub use tic::{FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt};
