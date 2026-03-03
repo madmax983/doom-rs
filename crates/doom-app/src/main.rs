@@ -12,10 +12,10 @@ mod savegame;
 use anyhow::{Context, Result};
 use clap::Parser;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
-use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags};
+use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags, init_scrolling_walls, init_conveyors};
 use doom_game::cheats as game_cheats;
 use doom_map::Level;
-use doom_renderer::{AutomapState, ColormapCache, FlatCache, Framebuffer, PaletteLut, SpriteCache, TextureCache, draw_automap_ex, draw_status_bar, draw_weapon_sprite, render_level, render_things};
+use doom_renderer::{AnimState, AutomapState, ColormapCache, FlatCache, Framebuffer, PaletteFlash, PaletteLut, SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_status_bar, draw_weapon_sprite, render_level, render_things};
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -103,11 +103,19 @@ pub(crate) struct DoomGame {
     sprite_cache: Option<SpriteCache>,
     /// Colormap cache (COLORMAP lump, 34 × 256 bytes for light-level shading).
     colormap_cache: Option<ColormapCache>,
+    /// Animated texture state (flat + wall animation sequences, ticked per tic).
+    anim_state: AnimState,
+    /// Palette flash controller (pain/pickup/rad-suit full-screen tints).
+    palette_flash: PaletteFlash,
+    /// Switch texture pair lookup (SW1xxx <-> SW2xxx bidirectional).
+    switch_list: SwitchList,
+    /// Player health from the previous tic — used to detect damage for pain flash.
+    prev_health: i32,
 }
 
 impl DoomGame {
     fn new(
-        gs: GameState,
+        mut gs: GameState,
         level: Level,
         audio: Option<AudioSystem>,
         flat_cache: Option<FlatCache>,
@@ -115,6 +123,13 @@ impl DoomGame {
         sprite_cache: Option<SpriteCache>,
         colormap_cache: Option<ColormapCache>,
     ) -> Self {
+        // Initialize scrolling wall and conveyor belt specials from level linedefs.
+        init_scrolling_walls(&mut gs, &level);
+        init_conveyors(&mut gs, &level);
+
+        // Capture initial player health for pain-flash delta detection.
+        let initial_health = gs.player.health();
+
         Self {
             gs,
             level,
@@ -131,6 +146,10 @@ impl DoomGame {
             tex_cache,
             sprite_cache,
             colormap_cache,
+            anim_state: AnimState::new(),
+            palette_flash: PaletteFlash::new(),
+            switch_list: SwitchList::new(),
+            prev_health: initial_health,
         }
     }
 }
@@ -238,6 +257,25 @@ impl DoomApp for DoomGame {
 
         self.gs.tick(cmd, Some(&mut self.level));
 
+        // Advance animated texture state (flat and wall animations).
+        self.anim_state.tick();
+
+        // Advance palette flash timer (pain/pickup/rad-suit tints).
+        self.palette_flash.tick();
+
+        // Detect player damage and trigger a pain flash.
+        {
+            let cur_health = self.gs.player.health();
+            if cur_health < self.prev_health {
+                let damage = self.prev_health - cur_health;
+                // Pain palette indices 1-8 (increasing red tint).
+                // Simple formula: one palette step per 8 HP lost, clamped.
+                let palette = ((damage / 8) as usize).clamp(1, 8);
+                self.palette_flash.trigger(palette, 12);
+            }
+            self.prev_health = cur_health;
+        }
+
         // Emit weapon SFX on the leading edge of the attack button, and only
         // when the player is alive and has enough ammo to fire.
         if attack_just_fired
@@ -320,7 +358,7 @@ impl DoomApp for DoomGame {
     }
 
     fn active_palette(&self) -> usize {
-        0
+        self.palette_flash.active_palette()
     }
 }
 
@@ -926,5 +964,279 @@ mod tests {
             game.cheat_message.is_some(),
             "cheat_message must be set after cheat activation"
         );
+    }
+
+    // ===================================================================
+    // Tests for AnimState, PaletteFlash, SwitchList, scrolling walls
+    // ===================================================================
+
+    // -----------------------------------------------------------------------
+    // Test 13: DoomGame creates with AnimState initialized
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn doom_game_creates_with_anim_state_initialized() {
+        let game = make_doom_game();
+        // AnimState should start at tic 0 with all standard sequences loaded.
+        assert_eq!(
+            game.anim_state.tic_count(),
+            0,
+            "AnimState tic_count must start at 0"
+        );
+        assert!(
+            !game.anim_state.sequences().is_empty(),
+            "AnimState must have animation sequences loaded"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 14: DoomGame creates with PaletteFlash initialized
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn doom_game_creates_with_palette_flash_initialized() {
+        let game = make_doom_game();
+        assert_eq!(
+            game.palette_flash.active_palette(),
+            0,
+            "PaletteFlash must start at palette 0 (no flash)"
+        );
+        assert_eq!(
+            game.palette_flash.remaining(),
+            0,
+            "PaletteFlash remaining must be 0 at creation"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 15: active_palette returns 0 by default (no flash)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn active_palette_returns_zero_by_default() {
+        let game = make_doom_game();
+        assert_eq!(
+            game.active_palette(),
+            0,
+            "active_palette() must return 0 when no flash is active"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 16: PaletteFlash tick integration (trigger -> non-zero -> decays)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn palette_flash_tick_integration() {
+        let mut game = make_doom_game();
+
+        // Manually trigger a pain flash (palette 4, 3 tics duration).
+        game.palette_flash.trigger(4, 3);
+        assert_eq!(
+            game.active_palette(),
+            4,
+            "active_palette must be 4 after trigger"
+        );
+
+        // Tick 3 times (palette_flash.tick is called inside game.tick).
+        for _ in 0..3 {
+            game.tick(TicInput::default());
+        }
+
+        // After 3 tics the flash should have expired back to 0.
+        assert_eq!(
+            game.active_palette(),
+            0,
+            "active_palette must return to 0 after flash duration expires"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 17: AnimState tick integration (tic count advances)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn anim_state_tick_integration() {
+        let mut game = make_doom_game();
+        assert_eq!(game.anim_state.tic_count(), 0);
+
+        // Each game.tick() should advance anim_state by one.
+        game.tick(TicInput::default());
+        assert_eq!(
+            game.anim_state.tic_count(),
+            1,
+            "AnimState tic_count must advance by 1 after one tick"
+        );
+
+        for _ in 0..9 {
+            game.tick(TicInput::default());
+        }
+        assert_eq!(
+            game.anim_state.tic_count(),
+            10,
+            "AnimState tic_count must be 10 after 10 ticks"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 18: Scrolling walls initialized during DoomGame::new
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn scrolling_walls_initialized_during_new() {
+        // Our test level has no linedefs with special 48/85, so scrolling_walls
+        // should be empty. The important thing is that init_scrolling_walls ran
+        // without panicking.
+        let game = make_doom_game();
+        let offset = game.gs.get_scroll_offset(0);
+        assert_eq!(
+            offset,
+            (0, 0),
+            "get_scroll_offset must return (0, 0) for a level with no scrolling walls"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 19: Pain flash triggers on health decrease
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn pain_flash_triggers_on_health_decrease() {
+        let mut game = make_doom_game();
+        assert_eq!(game.active_palette(), 0, "no flash initially");
+
+        // Simulate damage by directly reducing the mobj's health and the
+        // player's health (mirroring what damage_mobj does in the game).
+        let handle = game.gs.player.handle;
+        if let Some(mo) = game.gs.mobjslab.get_mut(handle) {
+            mo.health = 70; // was 100, so 30 damage
+        }
+        game.gs.player.set_health_capped(70, 100);
+
+        // prev_health is 100 (captured at creation). After tick, the game
+        // should detect health dropped 100 -> 70 = 30 damage.
+        game.tick(TicInput::default());
+
+        // The flash should now be active. 30 / 8 = 3, clamped to [1,8] = 3.
+        assert_eq!(
+            game.palette_flash.active_palette(),
+            3,
+            "pain flash palette should be 3 for 30 damage (30/8 = 3)"
+        );
+        assert!(
+            game.palette_flash.remaining() > 0,
+            "pain flash should have remaining tics"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 20: SwitchList initialized with pairs
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn switch_list_initialized_with_pairs() {
+        let game = make_doom_game();
+        assert_eq!(
+            game.switch_list.len(),
+            29,
+            "SwitchList must have 29 standard Doom switch pairs"
+        );
+        assert!(
+            !game.switch_list.is_empty(),
+            "SwitchList must not be empty"
+        );
+        // Verify bidirectional lookup works.
+        assert!(
+            game.switch_list.get_opposite(b"SW1EXIT\0").is_some(),
+            "SW1EXIT should have an opposite in the switch list"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 21: Pain flash does NOT trigger when health stays the same
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn no_pain_flash_when_health_unchanged() {
+        let mut game = make_doom_game();
+
+        // Tick without any damage.
+        game.tick(TicInput::default());
+
+        assert_eq!(
+            game.active_palette(),
+            0,
+            "active_palette must remain 0 when player takes no damage"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 22: Pain flash palette scales with damage amount
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn pain_flash_palette_scales_with_damage() {
+        // Small damage (7 HP): palette = max(7/8, 1) = 1
+        {
+            let mut game = make_doom_game();
+            let handle = game.gs.player.handle;
+            if let Some(mo) = game.gs.mobjslab.get_mut(handle) {
+                mo.health = 93;
+            }
+            game.gs.player.set_health_capped(93, 100);
+            game.tick(TicInput::default());
+            assert_eq!(
+                game.palette_flash.active_palette(),
+                1,
+                "7 damage should give palette 1 (7/8=0, clamped to 1)"
+            );
+        }
+
+        // Large damage (80 HP): palette = min(80/8, 8) = 8
+        {
+            let mut game = make_doom_game();
+            let handle = game.gs.player.handle;
+            if let Some(mo) = game.gs.mobjslab.get_mut(handle) {
+                mo.health = 20;
+            }
+            game.gs.player.set_health_capped(20, 100);
+            game.tick(TicInput::default());
+            assert_eq!(
+                game.palette_flash.active_palette(),
+                8,
+                "80 damage should give palette 8 (80/8=10, clamped to 8)"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 23: prev_health tracks across multiple ticks
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn prev_health_tracks_across_ticks() {
+        let mut game = make_doom_game();
+        assert_eq!(game.prev_health, 100, "prev_health starts at 100");
+
+        // First tick with no damage: prev_health should update to current.
+        game.tick(TicInput::default());
+        assert_eq!(game.prev_health, 100, "prev_health still 100 after no-damage tick");
+
+        // Simulate damage between ticks.
+        let handle = game.gs.player.handle;
+        if let Some(mo) = game.gs.mobjslab.get_mut(handle) {
+            mo.health = 80;
+        }
+        game.gs.player.set_health_capped(80, 100);
+        game.tick(TicInput::default());
+        assert_eq!(game.prev_health, 80, "prev_health updated to 80 after damage");
+
+        // Second damage event.
+        if let Some(mo) = game.gs.mobjslab.get_mut(handle) {
+            mo.health = 50;
+        }
+        game.gs.player.set_health_capped(50, 100);
+        game.tick(TicInput::default());
+        assert_eq!(game.prev_health, 50, "prev_health updated to 50 after second damage");
     }
 }

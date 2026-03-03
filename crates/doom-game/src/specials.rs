@@ -20,9 +20,9 @@ use doom_types::Fixed16_16;
 
 use crate::mobj::MobjHandle;
 use crate::state::{
-    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, GameState,
-    LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection, PerpetualPlatform,
-    PlatformStatus, ScrollingWall, SectorLightEffect,
+    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
+    GameState, LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection,
+    PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
 };
 
 // ---------------------------------------------------------------------------
@@ -745,6 +745,396 @@ pub fn lowest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
     if found { lowest } else { own_ceil }
 }
 
+/// Find the highest ceiling height among all sectors adjacent to `sector_index`.
+///
+/// Used for ceiling raise specials.
+/// If no adjacent sectors, returns the sector's own ceiling height.
+pub fn highest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
+    let own_ceil = level
+        .sectors
+        .get(sector_index)
+        .map(|s| s.ceil_height)
+        .unwrap_or(0);
+    let mut highest = i16::MIN;
+    let mut found = false;
+
+    for ld in &level.linedefs {
+        if ld.left_sidedef == SIDEDEF_NONE {
+            continue;
+        }
+        let right_sector = level
+            .sidedefs
+            .get(ld.right_sidedef as usize)
+            .map(|s| s.sector as usize);
+        let left_sector = level
+            .sidedefs
+            .get(ld.left_sidedef as usize)
+            .map(|s| s.sector as usize);
+
+        let other = if right_sector == Some(sector_index) {
+            left_sector
+        } else if left_sector == Some(sector_index) {
+            right_sector
+        } else {
+            continue;
+        };
+
+        if let Some(other_idx) = other {
+            if let Some(other_sec) = level.sectors.get(other_idx) {
+                found = true;
+                if other_sec.ceil_height > highest {
+                    highest = other_sec.ceil_height;
+                }
+            }
+        }
+    }
+
+    if found { highest } else { own_ceil }
+}
+
+/// Find the next floor height above `current_height` among adjacent sectors.
+///
+/// Scans all adjacent sector floors and returns the smallest one that is
+/// strictly greater than `current_height`. If none is found, returns
+/// `current_height` (no change).
+///
+/// This variant accepts an explicit `current_height` parameter, unlike the
+/// zero-arg `next_highest_floor` which uses the sector's own floor height.
+pub fn next_highest_floor_above(level: &Level, sector_index: usize, current_height: i16) -> i16 {
+    let mut next = i16::MAX;
+    let mut found = false;
+
+    for ld in &level.linedefs {
+        if ld.left_sidedef == SIDEDEF_NONE {
+            continue;
+        }
+        let right_sector = level
+            .sidedefs
+            .get(ld.right_sidedef as usize)
+            .map(|s| s.sector as usize);
+        let left_sector = level
+            .sidedefs
+            .get(ld.left_sidedef as usize)
+            .map(|s| s.sector as usize);
+
+        let other = if right_sector == Some(sector_index) {
+            left_sector
+        } else if left_sector == Some(sector_index) {
+            right_sector
+        } else {
+            continue;
+        };
+
+        if let Some(other_idx) = other {
+            if let Some(other_sec) = level.sectors.get(other_idx) {
+                if other_sec.floor_height > current_height && other_sec.floor_height < next {
+                    found = true;
+                    next = other_sec.floor_height;
+                }
+            }
+        }
+    }
+
+    if found { next } else { current_height }
+}
+
+/// Find the shortest lower texture height among linedefs bounding the sector.
+///
+/// Scans all linedefs whose front (right) sidedef references the given sector
+/// and returns the smallest non-zero `y_offset` + texture height proxy. In
+/// vanilla Doom, this examines the `lower_texture` height. We approximate this
+/// by using the sidedef's `y_offset` as the texture height metric: if the
+/// lower texture name is non-empty, we use `y_offset` as the height (or a
+/// default of 128 when `y_offset == 0`).
+///
+/// For simplicity, if no lower textures are found, returns 0 (no raise).
+pub fn shortest_lower_texture(level: &Level, sector_index: usize) -> i16 {
+    let mut shortest = i16::MAX;
+    let mut found = false;
+
+    for ld in &level.linedefs {
+        // Check both sides of the linedef for references to the sector.
+        let right_sd_idx = ld.right_sidedef;
+        let left_sd_idx = ld.left_sidedef;
+
+        // We need the sidedef that faces INTO the sector (front side).
+        let sd = if let Some(sd) = level.sidedefs.get(right_sd_idx as usize) {
+            if sd.sector as usize == sector_index {
+                sd
+            } else if left_sd_idx != SIDEDEF_NONE {
+                if let Some(lsd) = level.sidedefs.get(left_sd_idx as usize) {
+                    if lsd.sector as usize == sector_index {
+                        lsd
+                    } else {
+                        continue;
+                    }
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+        } else {
+            continue;
+        };
+
+        // Check if the lower texture is non-empty (not all zeros/nulls).
+        let has_lower = sd.lower_texture.iter().any(|&b| b != 0);
+        if !has_lower {
+            continue;
+        }
+
+        // Use y_offset as texture height proxy; default to 128 if 0.
+        let height = if sd.y_offset != 0 {
+            sd.y_offset.abs()
+        } else {
+            128
+        };
+
+        if height < shortest {
+            shortest = height;
+            found = true;
+        }
+    }
+
+    if found { shortest } else { 0 }
+}
+
+// ---------------------------------------------------------------------------
+// Floor activation functions (public API)
+// ---------------------------------------------------------------------------
+
+/// Lower floor to lowest adjacent floor on all sectors matching `tag`.
+///
+/// Creates one `FloorMover` per matching sector.
+pub fn ev_floor_lower_to_lowest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    let per_sector: Vec<(usize, i16)> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| (i, lowest_adjacent_floor(level, i)))
+        .collect();
+    for (idx, target) in per_sector {
+        activate_floor_lower_single_typed(gs, level, idx, tag, target, speed, FloorType::LowerToLowest);
+    }
+}
+
+/// Lower floor to highest adjacent floor on all sectors matching `tag`.
+pub fn ev_floor_lower_to_highest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    let per_sector: Vec<(usize, i16)> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| (i, highest_adjacent_floor(level, i)))
+        .collect();
+    for (idx, target) in per_sector {
+        activate_floor_lower_single_typed(gs, level, idx, tag, target, speed, FloorType::LowerToHighest);
+    }
+}
+
+/// Lower floor to next lowest adjacent floor on all sectors matching `tag`.
+///
+/// "Next lowest" means: find the highest adjacent floor that is still below
+/// the sector's current floor. If none, no mover is created.
+pub fn ev_floor_lower_to_nearest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    let per_sector: Vec<(usize, i16)> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, s)| {
+            // Find the highest adjacent floor strictly below our floor.
+            let own_floor = s.floor_height;
+            let mut best = i16::MIN;
+            let mut found = false;
+            for ld in &level.linedefs {
+                if ld.left_sidedef == SIDEDEF_NONE {
+                    continue;
+                }
+                let right_sector = level
+                    .sidedefs
+                    .get(ld.right_sidedef as usize)
+                    .map(|sd| sd.sector as usize);
+                let left_sector = level
+                    .sidedefs
+                    .get(ld.left_sidedef as usize)
+                    .map(|sd| sd.sector as usize);
+                let other = if right_sector == Some(i) {
+                    left_sector
+                } else if left_sector == Some(i) {
+                    right_sector
+                } else {
+                    continue;
+                };
+                if let Some(oi) = other {
+                    if let Some(os) = level.sectors.get(oi) {
+                        if os.floor_height < own_floor && os.floor_height > best {
+                            best = os.floor_height;
+                            found = true;
+                        }
+                    }
+                }
+            }
+            (i, if found { best } else { own_floor })
+        })
+        .collect();
+    for (idx, target) in per_sector {
+        activate_floor_lower_single_typed(gs, level, idx, tag, target, speed, FloorType::LowerToNearest);
+    }
+}
+
+/// Raise floor to lowest adjacent ceiling on all sectors matching `tag`.
+pub fn ev_floor_raise_to_lowest_ceiling(
+    gs: &mut GameState,
+    level: &Level,
+    tag: u16,
+    speed: i16,
+    crush: bool,
+) {
+    let per_sector: Vec<(usize, i16)> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| (i, lowest_adjacent_ceiling(level, i)))
+        .collect();
+    for (idx, target) in per_sector {
+        activate_floor_raise_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            crush,
+            FloorType::RaiseCrush,
+        );
+    }
+}
+
+/// Raise floor to next highest adjacent floor on all sectors matching `tag`.
+pub fn ev_floor_raise_to_nearest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    let per_sector: Vec<(usize, i16)> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| (i, next_highest_floor(level, i)))
+        .collect();
+    for (idx, target) in per_sector {
+        activate_floor_raise_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            false,
+            FloorType::RaiseToNearest,
+        );
+    }
+}
+
+/// Raise floor by shortest lower texture height on all sectors matching `tag`.
+pub fn ev_floor_raise_by_texture(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    let per_sector: Vec<(usize, i16)> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, s)| (i, s.floor_height + shortest_lower_texture(level, i)))
+        .collect();
+    for (idx, target) in per_sector {
+        activate_floor_raise_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            false,
+            FloorType::RaiseByTexture,
+        );
+    }
+}
+
+/// Raise floor by exactly 24 units on all sectors matching `tag`.
+pub fn ev_floor_raise_24(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    let per_sector: Vec<(usize, i16)> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, s)| (i, s.floor_height + 24))
+        .collect();
+    for (idx, target) in per_sector {
+        activate_floor_raise_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            false,
+            FloorType::Raise24,
+        );
+    }
+}
+
+/// Raise floor by exactly 32 units on all sectors matching `tag`.
+pub fn ev_floor_raise_32(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    let per_sector: Vec<(usize, i16)> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, s)| (i, s.floor_height + 32))
+        .collect();
+    for (idx, target) in per_sector {
+        activate_floor_raise_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            false,
+            FloorType::Raise32,
+        );
+    }
+}
+
+/// Raise floor to the sector's own ceiling on all sectors matching `tag`.
+pub fn ev_floor_raise_to_ceiling(
+    gs: &mut GameState,
+    level: &Level,
+    tag: u16,
+    speed: i16,
+    crush: bool,
+) {
+    let per_sector: Vec<(usize, i16)> = level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, s)| (i, s.ceil_height))
+        .collect();
+    for (idx, target) in per_sector {
+        activate_floor_raise_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            crush,
+            FloorType::RaiseToCeiling,
+        );
+    }
+}
+
 // ---------------------------------------------------------------------------
 // sector_linedefs helper
 // ---------------------------------------------------------------------------
@@ -823,6 +1213,7 @@ pub fn ev_build_stairs(
             wait_remaining: 0,
             crush,
             tag: 0,
+            floor_type: FloorType::RaiseToNearest,
         });
         count += 1;
     }
@@ -879,6 +1270,7 @@ pub fn ev_build_stairs(
                 wait_remaining: 0,
                 crush,
                 tag: 0,
+                floor_type: FloorType::RaiseToNearest,
             });
             count += 1;
             current_sector = other_sector;
@@ -991,6 +1383,7 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
             wait_remaining: 0,
             crush: false,
             tag: 0,
+            floor_type: FloorType::LowerToLowest,
         });
         count += 1;
 
@@ -1438,6 +1831,7 @@ fn activate_lift(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
             wait_remaining: 0,
             crush: false,
             tag,
+            floor_type: FloorType::LowerToLowest,
         });
     }
 }
@@ -1547,8 +1941,9 @@ pub fn tick_lifts(gs: &mut GameState, level: &mut Level) {
     }
 }
 
-/// Activate a floor raiser (one-shot, no wait) on a single sector.
-fn activate_floor_raise_single(
+/// Activate a floor raiser (one-shot, no wait) on a single sector with an
+/// explicit `FloorType`.
+fn activate_floor_raise_single_typed(
     gs: &mut GameState,
     level: &Level,
     sector_idx: usize,
@@ -1556,6 +1951,7 @@ fn activate_floor_raise_single(
     target_height: i16,
     speed: i16,
     crush: bool,
+    floor_type: FloorType,
 ) {
     if gs
         .active_floors
@@ -1578,17 +1974,20 @@ fn activate_floor_raise_single(
         wait_remaining: 0,
         crush,
         tag,
+        floor_type,
     });
 }
 
-/// Activate a floor lowerer (one-shot, no wait) on a single sector.
-fn activate_floor_lower_single(
+/// Activate a floor lowerer (one-shot, no wait) on a single sector with an
+/// explicit `FloorType`.
+fn activate_floor_lower_single_typed(
     gs: &mut GameState,
     level: &Level,
     sector_idx: usize,
     tag: u16,
     target_height: i16,
     speed: i16,
+    floor_type: FloorType,
 ) {
     if gs
         .active_floors
@@ -1611,6 +2010,7 @@ fn activate_floor_lower_single(
         wait_remaining: 0,
         crush: false,
         tag,
+        floor_type,
     });
 }
 
@@ -1904,8 +2304,8 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             }
         }
 
-        // --- Type 63/64: remote tag-based door ---
-        63 | 64 => {
+        // --- Type 63: remote tag-based door (open stay) ---
+        63 => {
             let tag = level.linedefs[linedef_idx].tag;
             let sector_indices: Vec<usize> = level
                 .sectors
@@ -1915,7 +2315,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .map(|(i, _)| i)
                 .collect();
             for idx in sector_indices {
-                open_door(gs, level, idx, special == 64);
+                open_door(gs, level, idx, false);
             }
         }
 
@@ -2007,10 +2407,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             activate_lift(gs, level, tag, 4);
         }
 
-        // Type 66: Plat lower-wait-raise (speed 4, repeatable).
+        // Type 66: SR Raise floor 24 + change.
         66 => {
             let tag = level.linedefs[linedef_idx].tag;
-            activate_lift(gs, level, tag, 4);
+            ev_floor_raise_24(gs, level, tag, 1);
         }
 
         // Type 10: Plat down-wait-up-stay (door-like lift).
@@ -2041,116 +2441,55 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Floor raisers
         // -----------------------------------------------------------------
 
-        // Type 5: Floor raise to lowest adjacent ceiling.
+        // Type 5: W1 Floor raise to lowest adjacent ceiling (crush).
         5 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let per_sector: Vec<(usize, i16)> = level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| (i, lowest_adjacent_ceiling(level, i)))
-                .collect();
-            for (idx, target) in per_sector {
-                activate_floor_raise_single(gs, level, idx, tag, target, 1, true);
-            }
+            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, true);
         }
 
-        // Type 18: Floor raise to next highest adjacent floor.
+        // Type 14: S1 Raise floor 32 + change texture/type.
+        14 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_32(gs, level, tag, 1);
+        }
+
+        // Type 15: S1 Raise floor 24 + change texture/type.
+        15 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_24(gs, level, tag, 1);
+        }
+
+        // Type 18: S1 Floor raise to next highest adjacent floor.
         18 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let per_sector: Vec<(usize, i16)> = level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| (i, next_highest_floor(level, i)))
-                .collect();
-            for (idx, target) in per_sector {
-                activate_floor_raise_single(gs, level, idx, tag, target, 1, false);
-            }
+            ev_floor_raise_to_nearest(gs, level, tag, 1);
         }
 
-        // Type 22: Floor raise to next highest adjacent floor (switch variant).
+        // Type 20: S1 Raise floor to next highest + change texture.
+        20 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_to_nearest(gs, level, tag, 1);
+        }
+
+        // Type 22: W1 Floor raise to next highest adjacent floor + change texture.
         22 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let per_sector: Vec<(usize, i16)> = level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| (i, next_highest_floor(level, i)))
-                .collect();
-            for (idx, target) in per_sector {
-                activate_floor_raise_single(gs, level, idx, tag, target, 1, false);
-            }
+            ev_floor_raise_to_nearest(gs, level, tag, 1);
         }
 
-        // -----------------------------------------------------------------
-        // Floor lowerers
-        // -----------------------------------------------------------------
-
-        // Type 23: Floor lower to lowest adjacent floor.
-        23 => {
+        // Type 24: G1 Raise floor to lowest adjacent ceiling.
+        24 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let per_sector: Vec<(usize, i16)> = level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| (i, lowest_adjacent_floor(level, i)))
-                .collect();
-            for (idx, target) in per_sector {
-                activate_floor_lower_single(gs, level, idx, tag, target, 1);
-            }
+            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, false);
         }
 
-        // Type 19: Floor lower to highest adjacent floor.
-        19 => {
+        // Type 30: W1 Raise floor by shortest lower texture.
+        30 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let per_sector: Vec<(usize, i16)> = level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| (i, highest_adjacent_floor(level, i)))
-                .collect();
-            for (idx, target) in per_sector {
-                activate_floor_lower_single(gs, level, idx, tag, target, 1);
-            }
+            ev_floor_raise_by_texture(gs, level, tag, 1);
         }
 
-        // Type 38: Floor lower to lowest adjacent floor (walk trigger).
-        38 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            let per_sector: Vec<(usize, i16)> = level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| (i, lowest_adjacent_floor(level, i)))
-                .collect();
-            for (idx, target) in per_sector {
-                activate_floor_lower_single(gs, level, idx, tag, target, 1);
-            }
-        }
-
-        // Type 36: Floor lower to 8 above highest adjacent floor.
-        36 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            let per_sector: Vec<(usize, i16)> = level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| (i, highest_adjacent_floor(level, i) + 8))
-                .collect();
-            for (idx, target) in per_sector {
-                activate_floor_lower_single(gs, level, idx, tag, target, 1);
-            }
-        }
-
-        // Type 56: Floor raise to 8 below lowest adjacent ceiling (crush).
+        // Type 56: W1 Floor raise to 8 below lowest adjacent ceiling (crush).
         56 => {
             let tag = level.linedefs[linedef_idx].tag;
             let per_sector: Vec<(usize, i16)> = level
@@ -2161,8 +2500,261 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .map(|(i, _)| (i, lowest_adjacent_ceiling(level, i) - 8))
                 .collect();
             for (idx, target) in per_sector {
-                activate_floor_raise_single(gs, level, idx, tag, target, 1, true);
+                activate_floor_raise_single_typed(
+                    gs, level, idx, tag, target, 1, true,
+                    FloorType::RaiseCrush,
+                );
             }
+        }
+
+        // Type 58: W1 Raise floor 24.
+        58 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_24(gs, level, tag, 1);
+        }
+
+        // Type 59: W1 Raise floor 24 + change texture/type.
+        59 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_24(gs, level, tag, 1);
+        }
+
+        // Type 64: SR Raise floor to lowest adjacent ceiling.
+        64 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, false);
+        }
+
+        // Type 65: SR Raise floor to 8 below lowest ceiling + crush.
+        65 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, lowest_adjacent_ceiling(level, i) - 8))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_raise_single_typed(
+                    gs, level, idx, tag, target, 1, true,
+                    FloorType::RaiseCrush,
+                );
+            }
+        }
+
+        // Type 67: SR Raise floor 32 + change.
+        67 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_32(gs, level, tag, 1);
+        }
+
+        // Type 68: SR Raise floor to next highest + change texture.
+        68 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_to_nearest(gs, level, tag, 1);
+        }
+
+        // Type 91: WR Raise floor to lowest adjacent ceiling.
+        91 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, false);
+        }
+
+        // Type 92: WR Raise floor 24.
+        92 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_24(gs, level, tag, 1);
+        }
+
+        // Type 93: WR Raise floor 24 + change.
+        93 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_24(gs, level, tag, 1);
+        }
+
+        // Type 94: WR Raise floor to 8 below lowest ceiling + crush.
+        94 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, lowest_adjacent_ceiling(level, i) - 8))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_raise_single_typed(
+                    gs, level, idx, tag, target, 1, true,
+                    FloorType::RaiseCrush,
+                );
+            }
+        }
+
+        // Type 95: WR Raise floor to next highest + change texture.
+        95 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_to_nearest(gs, level, tag, 1);
+        }
+
+        // Type 96: WR Raise floor by shortest lower texture.
+        96 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_raise_by_texture(gs, level, tag, 1);
+        }
+
+        // -----------------------------------------------------------------
+        // Floor lowerers
+        // -----------------------------------------------------------------
+
+        // Type 19: W1 Lower floor to highest adjacent floor.
+        19 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_lower_to_highest(gs, level, tag, 1);
+        }
+
+        // Type 23: S1 Lower floor to lowest adjacent floor.
+        23 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_lower_to_lowest(gs, level, tag, 1);
+        }
+
+        // Type 36: W1 Lower floor to highest adjacent - 8 (turbo).
+        36 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, highest_adjacent_floor(level, i) + 8))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_lower_single_typed(
+                    gs, level, idx, tag, target, 4,
+                    FloorType::LowerToHighest,
+                );
+            }
+        }
+
+        // Type 37: W1 Lower floor to lowest adjacent + change texture/type.
+        37 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_lower_to_lowest(gs, level, tag, 1);
+        }
+
+        // Type 38: W1 Lower floor to lowest adjacent floor.
+        38 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_lower_to_lowest(gs, level, tag, 1);
+        }
+
+        // Type 45: SR Lower floor to highest adjacent floor.
+        45 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_lower_to_highest(gs, level, tag, 1);
+        }
+
+        // Type 60: SR Lower floor to lowest adjacent floor.
+        60 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_lower_to_lowest(gs, level, tag, 1);
+        }
+
+        // Type 69: SR Lower floor to highest adjacent - 8.
+        69 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, highest_adjacent_floor(level, i) + 8))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_lower_single_typed(
+                    gs, level, idx, tag, target, 1,
+                    FloorType::LowerToHighest,
+                );
+            }
+        }
+
+        // Type 70: SR Lower floor to highest adjacent - 8 (turbo).
+        70 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, highest_adjacent_floor(level, i) + 8))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_lower_single_typed(
+                    gs, level, idx, tag, target, 4,
+                    FloorType::LowerToHighest,
+                );
+            }
+        }
+
+        // Type 71: S1 Lower floor to highest adjacent - 8 (turbo).
+        71 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, highest_adjacent_floor(level, i) + 8))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_lower_single_typed(
+                    gs, level, idx, tag, target, 4,
+                    FloorType::LowerToHighest,
+                );
+            }
+        }
+
+        // Type 82: WR Lower floor to lowest adjacent floor.
+        82 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_lower_to_lowest(gs, level, tag, 1);
+        }
+
+        // Type 83: WR Lower floor to highest adjacent floor.
+        83 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_lower_to_highest(gs, level, tag, 1);
+        }
+
+        // Type 84: WR Lower floor to lowest adjacent + change.
+        84 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_lower_to_lowest(gs, level, tag, 1);
+        }
+
+        // Type 98: WR Lower floor to highest adjacent - 8 (turbo).
+        98 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let per_sector: Vec<(usize, i16)> = level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| (i, highest_adjacent_floor(level, i) + 8))
+                .collect();
+            for (idx, target) in per_sector {
+                activate_floor_lower_single_typed(
+                    gs, level, idx, tag, target, 4,
+                    FloorType::LowerToHighest,
+                );
+            }
+        }
+
+        // Type 102: S1 Lower floor to highest adjacent floor.
+        102 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_floor_lower_to_highest(gs, level, tag, 1);
         }
 
         // -----------------------------------------------------------------
@@ -3856,6 +4448,7 @@ mod tests {
             wait_remaining: 0,
             crush: false,
             tag: 1,
+            floor_type: FloorType::LowerToLowest,
         });
 
         let gs2 = gs.clone();
@@ -5050,6 +5643,7 @@ mod tests {
             wait_remaining: 0,
             crush: false,
             tag: 0,
+            floor_type: FloorType::RaiseToNearest,
         });
 
         // Tick enough times for the floor to reach target (8/2 = 4 tics).
@@ -5084,6 +5678,7 @@ mod tests {
             wait_remaining: 0,
             crush: false,
             tag: 0,
+            floor_type: FloorType::LowerToLowest,
         });
 
         for _ in 0..20 {
@@ -5116,6 +5711,7 @@ mod tests {
             wait_remaining: 0,
             crush: true,
             tag: 0,
+            floor_type: FloorType::RaiseCrush,
         });
 
         assert!(
@@ -5566,6 +6162,7 @@ mod tests {
             wait_remaining: 0,
             crush: false,
             tag: 0,
+            floor_type: FloorType::RaiseToNearest,
         });
 
         gs.active_platforms.push(crate::state::PerpetualPlatform {
@@ -7683,5 +8280,641 @@ mod tests {
         assert_eq!(gs2.conveyors.len(), 1, "type 255 must create a conveyor");
         assert_eq!(gs2.conveyors[0].push_x, -5);
         assert_eq!(gs2.conveyors[0].push_y, 15);
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: Floor Specials Completion (Batch 21)
+    // -----------------------------------------------------------------------
+
+    // --- Sector height query helpers ---
+
+    #[test]
+    fn highest_adjacent_ceiling_returns_correct_value() {
+        // Sector 1 adjacent to sector 0 (ceil=128) and sector 2 (ceil=200).
+        let level = make_multi_sector_level([0, 0, 0], [128, 96, 200], [0, 0, 0], 0, 0);
+        let result = highest_adjacent_ceiling(&level, 1);
+        assert_eq!(
+            result, 200,
+            "highest adjacent ceiling to sector 1 should be 200 (sector 2)"
+        );
+    }
+
+    #[test]
+    fn highest_adjacent_ceiling_no_neighbors_returns_own() {
+        let level = make_damage_level(0, 0);
+        // Sector 0 has ceil=128 and no adjacent sectors.
+        let result = highest_adjacent_ceiling(&level, 0);
+        assert_eq!(result, 128, "no adjacent sectors => returns own ceiling");
+    }
+
+    #[test]
+    fn next_highest_floor_above_returns_next_floor_above_current() {
+        // Sector 1: floor=0, adjacent to sector 0 (floor=32) and sector 2 (floor=64).
+        let level = make_multi_sector_level([32, 0, 64], [128, 128, 128], [0, 0, 0], 0, 0);
+        let result = next_highest_floor_above(&level, 1, 10);
+        assert_eq!(result, 32, "next floor above 10 should be 32 (sector 0)");
+    }
+
+    #[test]
+    fn next_highest_floor_above_returns_current_when_no_higher() {
+        // Sector 1: floor=100, adjacent to 0 (floor=20) and 2 (floor=50). Both below 100.
+        let level = make_multi_sector_level([20, 100, 50], [200, 200, 200], [0, 0, 0], 0, 0);
+        let result = next_highest_floor_above(&level, 1, 100);
+        assert_eq!(result, 100, "no floor above 100 => returns 100");
+    }
+
+    #[test]
+    fn shortest_lower_texture_returns_correct_value() {
+        // Build a level with a lower texture on a sidedef facing sector 1.
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+        let sectors = vec![
+            doom_map::Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 1,
+            },
+            doom_map::Sector {
+                floor_height: 32,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            doom_map::Sector {
+                floor_height: 64,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: 0 },
+            doom_map::Vertex { x: 64, y: 0 },
+            doom_map::Vertex { x: 128, y: 0 },
+        ];
+        let sidedefs = vec![
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 48, // texture height proxy
+                upper_texture: [0; 8],
+                lower_texture: *b"STEP1\0\0\0", // non-empty lower texture
+                middle_texture: [0; 8],
+                sector: 0,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 1,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 72, // another lower texture height
+                upper_texture: [0; 8],
+                lower_texture: *b"STEP2\0\0\0",
+                middle_texture: [0; 8],
+                sector: 0,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 2,
+            },
+        ];
+        let linedefs = vec![
+            doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+            doom_map::Linedef {
+                from_vertex: 1,
+                to_vertex: 2,
+                flags: 0x0004,
+                special: 0,
+                tag: 0,
+                right_sidedef: 2,
+                left_sidedef: 3,
+            },
+        ];
+        let level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        };
+
+        let result = shortest_lower_texture(&level, 0);
+        assert_eq!(
+            result, 48,
+            "shortest lower texture height should be 48 (the smaller y_offset)"
+        );
+    }
+
+    #[test]
+    fn shortest_lower_texture_no_textures_returns_zero() {
+        let level = make_damage_level(0, 0);
+        let result = shortest_lower_texture(&level, 0);
+        assert_eq!(
+            result, 0,
+            "no lower textures => returns 0"
+        );
+    }
+
+    // --- Floor activation functions ---
+
+    #[test]
+    fn ev_floor_lower_to_lowest_creates_correct_mover() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: floor=0, Sector 1: floor=64 tag=1, Sector 2: floor=32.
+        let level = make_multi_sector_level(
+            [0, 64, 32],
+            [128, 128, 128],
+            [0, 1, 0],
+            0, 0,
+        );
+        ev_floor_lower_to_lowest(&mut gs, &level, 1, 2);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(gs.active_floors[0].target_height, 0, "lowest adjacent = 0");
+        assert_eq!(gs.active_floors[0].speed, 2);
+        assert_eq!(gs.active_floors[0].direction, MoveDirection::Down);
+        assert_eq!(gs.active_floors[0].floor_type, FloorType::LowerToLowest);
+    }
+
+    #[test]
+    fn ev_floor_lower_to_highest_creates_correct_mover() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=48.
+        let level = make_multi_sector_level(
+            [10, 64, 48],
+            [128, 128, 128],
+            [0, 1, 0],
+            0, 0,
+        );
+        ev_floor_lower_to_highest(&mut gs, &level, 1, 1);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(gs.active_floors[0].target_height, 48, "highest adjacent = 48");
+        assert_eq!(gs.active_floors[0].floor_type, FloorType::LowerToHighest);
+    }
+
+    #[test]
+    fn ev_floor_raise_to_lowest_ceiling_works() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: ceil=128, Sector 1: floor=0 ceil=200 tag=1, Sector 2: ceil=96.
+        let level = make_multi_sector_level(
+            [0, 0, 0],
+            [128, 200, 96],
+            [0, 1, 0],
+            0, 0,
+        );
+        ev_floor_raise_to_lowest_ceiling(&mut gs, &level, 1, 1, false);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(gs.active_floors[0].target_height, 96, "lowest adj ceil = 96");
+        assert_eq!(gs.active_floors[0].direction, MoveDirection::Up);
+        assert!(!gs.active_floors[0].crush, "crush should be false");
+    }
+
+    #[test]
+    fn ev_floor_raise_to_nearest_works() {
+        let mut gs = GameState::new("TEST");
+        // Sector 1: floor=0, adjacent to sector 0 (floor=32) and sector 2 (floor=64).
+        // next_highest_floor above 0 = 32.
+        let level = make_multi_sector_level(
+            [32, 0, 64],
+            [128, 128, 128],
+            [0, 1, 0],
+            0, 0,
+        );
+        ev_floor_raise_to_nearest(&mut gs, &level, 1, 1);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(gs.active_floors[0].target_height, 32, "next highest = 32");
+        assert_eq!(gs.active_floors[0].floor_type, FloorType::RaiseToNearest);
+    }
+
+    #[test]
+    fn ev_floor_raise_by_texture_works() {
+        let mut gs = GameState::new("TEST");
+        // Build a level where sector 1 (tag=1) has a lower texture with height 48.
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let sectors = vec![
+            doom_map::Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            doom_map::Sector {
+                floor_height: 16,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 1,
+            },
+        ];
+        let vertexes = vec![
+            doom_map::Vertex { x: 0, y: 0 },
+            doom_map::Vertex { x: 64, y: 0 },
+        ];
+        let sidedefs = vec![
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 48,
+                upper_texture: [0; 8],
+                lower_texture: *b"STEP1\0\0\0",
+                middle_texture: [0; 8],
+                sector: 1,
+            },
+            doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 0,
+            },
+        ];
+        let linedefs = vec![doom_map::Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0x0004,
+            special: 0,
+            tag: 0,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        }];
+        let level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        };
+
+        ev_floor_raise_by_texture(&mut gs, &level, 1, 1);
+        assert_eq!(gs.active_floors.len(), 1);
+        // floor=16, shortest lower texture=48, target=16+48=64.
+        assert_eq!(gs.active_floors[0].target_height, 64, "16 + 48 = 64");
+        assert_eq!(gs.active_floors[0].floor_type, FloorType::RaiseByTexture);
+    }
+
+    #[test]
+    fn ev_floor_raise_24_raises_by_exactly_24() {
+        let mut gs = GameState::new("TEST");
+        // Sector 1: floor=10, tag=1.
+        let level = make_multi_sector_level(
+            [0, 10, 0],
+            [128, 128, 128],
+            [0, 1, 0],
+            0, 0,
+        );
+        ev_floor_raise_24(&mut gs, &level, 1, 1);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(gs.active_floors[0].target_height, 34, "10 + 24 = 34");
+        assert_eq!(gs.active_floors[0].floor_type, FloorType::Raise24);
+    }
+
+    #[test]
+    fn ev_floor_raise_32_raises_by_exactly_32() {
+        let mut gs = GameState::new("TEST");
+        // Sector 1: floor=20, tag=1.
+        let level = make_multi_sector_level(
+            [0, 20, 0],
+            [128, 128, 128],
+            [0, 1, 0],
+            0, 0,
+        );
+        ev_floor_raise_32(&mut gs, &level, 1, 1);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(gs.active_floors[0].target_height, 52, "20 + 32 = 52");
+        assert_eq!(gs.active_floors[0].floor_type, FloorType::Raise32);
+    }
+
+    #[test]
+    fn ev_floor_raise_to_ceiling_raises_to_own_ceiling() {
+        let mut gs = GameState::new("TEST");
+        // Sector 1: floor=0, ceil=200, tag=1.
+        let level = make_multi_sector_level(
+            [0, 0, 0],
+            [128, 200, 128],
+            [0, 1, 0],
+            0, 0,
+        );
+        ev_floor_raise_to_ceiling(&mut gs, &level, 1, 1, false);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(gs.active_floors[0].target_height, 200, "target = own ceiling = 200");
+        assert_eq!(gs.active_floors[0].floor_type, FloorType::RaiseToCeiling);
+    }
+
+    // --- Line type dispatch tests ---
+
+    #[test]
+    fn line_type_19_dispatches_lower_to_highest() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=48.
+        let mut level = make_multi_sector_level(
+            [10, 64, 48],
+            [128, 128, 128],
+            [0, 1, 0],
+            19, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 48,
+            "type 19: target = highest adjacent = 48"
+        );
+    }
+
+    #[test]
+    fn line_type_23_dispatches_lower_to_lowest() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_multi_sector_level(
+            [0, 64, 32],
+            [128, 128, 128],
+            [0, 1, 0],
+            23, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 0,
+            "type 23: target = lowest adjacent = 0"
+        );
+    }
+
+    #[test]
+    fn line_type_36_dispatches_highest_minus_8() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=30.
+        // highest_adjacent = 30, target = 30 + 8 = 38.
+        let mut level = make_multi_sector_level(
+            [10, 64, 30],
+            [128, 128, 128],
+            [0, 1, 0],
+            36, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 38,
+            "type 36: target = highest_adj(30) + 8 = 38"
+        );
+        assert_eq!(
+            gs.active_floors[0].speed, 4,
+            "type 36: turbo speed = 4"
+        );
+    }
+
+    #[test]
+    fn line_type_56_dispatches_ceiling_minus_8_with_crush() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: ceil=128, Sector 1: floor=0 ceil=200 tag=1, Sector 2: ceil=100.
+        // lowest_adj_ceil = 100, target = 100 - 8 = 92.
+        let mut level = make_multi_sector_level(
+            [0, 0, 0],
+            [128, 200, 100],
+            [0, 1, 0],
+            56, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 92,
+            "type 56: target = lowest_adj_ceil(100) - 8 = 92"
+        );
+        assert!(gs.active_floors[0].crush, "type 56 must have crush=true");
+    }
+
+    #[test]
+    fn line_type_64_dispatches_raise_to_lowest_ceiling() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: ceil=128, Sector 1: floor=0 ceil=200 tag=1, Sector 2: ceil=96.
+        let mut level = make_multi_sector_level(
+            [0, 0, 0],
+            [128, 200, 96],
+            [0, 1, 0],
+            64, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 96,
+            "type 64: target = lowest_adj_ceil = 96"
+        );
+    }
+
+    #[test]
+    fn line_type_91_dispatches_raise_to_lowest_ceiling() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_multi_sector_level(
+            [0, 0, 0],
+            [128, 200, 80],
+            [0, 1, 0],
+            91, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 80,
+            "type 91: target = lowest_adj_ceil = 80"
+        );
+    }
+
+    #[test]
+    fn multiple_floor_movers_active_simultaneously() {
+        let mut gs = GameState::new("TEST");
+        // Sector 0: floor=0, Sector 1: floor=64 tag=1, Sector 2: floor=32 tag=2.
+        // Both sectors 1 and 2 have different tags.
+        let level = make_multi_sector_level(
+            [0, 64, 32],
+            [128, 128, 128],
+            [0, 1, 2],
+            0, 0,
+        );
+
+        // Create a floor mover for tag 1 (sector 1).
+        ev_floor_lower_to_lowest(&mut gs, &level, 1, 1);
+        assert_eq!(gs.active_floors.len(), 1);
+
+        // Create a floor mover for tag 2 (sector 2).
+        ev_floor_lower_to_lowest(&mut gs, &level, 2, 2);
+        assert_eq!(
+            gs.active_floors.len(),
+            2,
+            "two floor movers must be active simultaneously"
+        );
+
+        // Verify they target different sectors.
+        assert_eq!(gs.active_floors[0].sector_index, 1);
+        assert_eq!(gs.active_floors[1].sector_index, 2);
+    }
+
+    #[test]
+    fn game_state_clone_preserves_floor_type_field() {
+        let mut gs = GameState::new("TEST");
+        gs.active_floors.push(FloorMover {
+            sector_index: 0,
+            target_height: 32,
+            speed: 1,
+            direction: MoveDirection::Up,
+            wait_tics: -1,
+            return_height: 0,
+            waiting: false,
+            wait_remaining: 0,
+            crush: false,
+            tag: 1,
+            floor_type: FloorType::Raise24,
+        });
+
+        let gs2 = gs.clone();
+        assert_eq!(gs2.active_floors.len(), 1);
+        assert_eq!(
+            gs2.active_floors[0].floor_type,
+            FloorType::Raise24,
+            "clone must preserve floor_type field"
+        );
+    }
+
+    // --- Additional line type dispatch tests ---
+
+    #[test]
+    fn line_type_38_dispatches_lower_to_lowest() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_multi_sector_level(
+            [10, 64, 32],
+            [128, 128, 128],
+            [0, 1, 0],
+            38, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 10,
+            "type 38: target = lowest adjacent = 10"
+        );
+    }
+
+    #[test]
+    fn line_type_45_dispatches_lower_to_highest() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_multi_sector_level(
+            [10, 64, 48],
+            [128, 128, 128],
+            [0, 1, 0],
+            45, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 48,
+            "type 45: target = highest adjacent = 48"
+        );
+    }
+
+    #[test]
+    fn line_type_82_dispatches_lower_to_lowest() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_multi_sector_level(
+            [5, 64, 32],
+            [128, 128, 128],
+            [0, 1, 0],
+            82, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 5,
+            "type 82: target = lowest adjacent = 5"
+        );
+    }
+
+    #[test]
+    fn line_type_58_dispatches_raise_24() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_multi_sector_level(
+            [0, 10, 0],
+            [128, 128, 128],
+            [0, 1, 0],
+            58, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 34,
+            "type 58: target = 10 + 24 = 34"
+        );
+    }
+
+    #[test]
+    fn line_type_102_dispatches_lower_to_highest() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_multi_sector_level(
+            [10, 64, 40],
+            [128, 128, 128],
+            [0, 1, 0],
+            102, 1,
+        );
+        activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 40,
+            "type 102: target = highest adjacent = 40"
+        );
+    }
+
+    #[test]
+    fn ev_floor_lower_to_nearest_works() {
+        let mut gs = GameState::new("TEST");
+        // Sector 1: floor=64, adjacent to sector 0 (floor=10) and sector 2 (floor=32).
+        // Next lowest (highest below 64) = 32.
+        let level = make_multi_sector_level(
+            [10, 64, 32],
+            [128, 128, 128],
+            [0, 1, 0],
+            0, 0,
+        );
+        ev_floor_lower_to_nearest(&mut gs, &level, 1, 1);
+        assert_eq!(gs.active_floors.len(), 1);
+        assert_eq!(
+            gs.active_floors[0].target_height, 32,
+            "next lowest adjacent below 64 = 32"
+        );
+        assert_eq!(gs.active_floors[0].floor_type, FloorType::LowerToNearest);
     }
 }

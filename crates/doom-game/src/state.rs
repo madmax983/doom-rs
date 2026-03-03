@@ -108,6 +108,35 @@ pub struct CeilingMover {
     pub ceiling_type: CeilingType,
 }
 
+/// The type of floor motion behavior.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FloorType {
+    /// Lower floor to lowest adjacent floor.
+    LowerToLowest,
+    /// Lower floor to highest adjacent floor.
+    LowerToHighest,
+    /// Lower floor to nearest (next lowest) adjacent floor.
+    LowerToNearest,
+    /// Raise floor to highest adjacent floor (unused as standalone, but included).
+    RaiseToHighest,
+    /// Raise floor to next highest adjacent floor.
+    RaiseToNearest,
+    /// Raise floor by shortest lower texture height.
+    RaiseByTexture,
+    /// Raise floor to sector's own ceiling.
+    RaiseToCeiling,
+    /// Lower floor and change flat/type.
+    LowerAndChange,
+    /// Raise floor and change flat/type.
+    RaiseAndChange,
+    /// Raise floor by exactly 24 units.
+    Raise24,
+    /// Raise floor by exactly 32 units.
+    Raise32,
+    /// Raise floor with crush damage.
+    RaiseCrush,
+}
+
 /// A floor that moves to a target height, optionally waits, then returns.
 ///
 /// Used for lifts (lower-wait-raise) and floor raisers/lowerers (one-shot).
@@ -137,6 +166,8 @@ pub struct FloorMover {
     pub crush: bool,
     /// Tag from the activating linedef.
     pub tag: u16,
+    /// The type of floor motion (for savegame serialization and behavior differentiation).
+    pub floor_type: FloorType,
 }
 
 // ---------------------------------------------------------------------------

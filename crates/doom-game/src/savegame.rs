@@ -15,7 +15,7 @@ use crate::mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum};
 use crate::player::{NUM_POWERS, PlayerState, WeaponType};
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoomRng, DoorMover, ExitRequest, FloorMover,
-    GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
+    FloorType, GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
     PlatformStatus, ScrollingWall,
 };
 
@@ -702,6 +702,42 @@ fn read_ceiling_mover(r: &mut ReadCursor<'_>) -> Result<CeilingMover, SaveError>
     })
 }
 
+fn write_floor_type(w: &mut WriteCursor, ft: FloorType) {
+    let byte = match ft {
+        FloorType::LowerToLowest => 0u8,
+        FloorType::LowerToHighest => 1u8,
+        FloorType::LowerToNearest => 2u8,
+        FloorType::RaiseToHighest => 3u8,
+        FloorType::RaiseToNearest => 4u8,
+        FloorType::RaiseByTexture => 5u8,
+        FloorType::RaiseToCeiling => 6u8,
+        FloorType::LowerAndChange => 7u8,
+        FloorType::RaiseAndChange => 8u8,
+        FloorType::Raise24 => 9u8,
+        FloorType::Raise32 => 10u8,
+        FloorType::RaiseCrush => 11u8,
+    };
+    w.write_u8(byte);
+}
+
+fn read_floor_type(r: &mut ReadCursor<'_>) -> Result<FloorType, SaveError> {
+    match r.read_u8()? {
+        0 => Ok(FloorType::LowerToLowest),
+        1 => Ok(FloorType::LowerToHighest),
+        2 => Ok(FloorType::LowerToNearest),
+        3 => Ok(FloorType::RaiseToHighest),
+        4 => Ok(FloorType::RaiseToNearest),
+        5 => Ok(FloorType::RaiseByTexture),
+        6 => Ok(FloorType::RaiseToCeiling),
+        7 => Ok(FloorType::LowerAndChange),
+        8 => Ok(FloorType::RaiseAndChange),
+        9 => Ok(FloorType::Raise24),
+        10 => Ok(FloorType::Raise32),
+        11 => Ok(FloorType::RaiseCrush),
+        _ => Err(SaveError::Truncated),
+    }
+}
+
 fn write_floor_mover(w: &mut WriteCursor, fm: &FloorMover) {
     w.write_u32(fm.sector_index as u32);
     w.write_i16(fm.target_height);
@@ -713,6 +749,7 @@ fn write_floor_mover(w: &mut WriteCursor, fm: &FloorMover) {
     w.write_i32(fm.wait_remaining);
     w.write_bool(fm.crush);
     w.write_u16(fm.tag);
+    write_floor_type(w, fm.floor_type);
 }
 
 fn read_floor_mover(r: &mut ReadCursor<'_>) -> Result<FloorMover, SaveError> {
@@ -727,6 +764,7 @@ fn read_floor_mover(r: &mut ReadCursor<'_>) -> Result<FloorMover, SaveError> {
         wait_remaining: r.read_i32()?,
         crush: r.read_bool()?,
         tag: r.read_u16()?,
+        floor_type: read_floor_type(r)?,
     })
 }
 
@@ -1429,6 +1467,7 @@ mod tests {
             wait_remaining: 0,
             crush: true,
             tag: 7,
+            floor_type: FloorType::LowerToLowest,
         });
         let data = save_game(&gs, &test_level_name(), 2, "floors test");
         let loaded = load_game(&data).expect("load must succeed");
