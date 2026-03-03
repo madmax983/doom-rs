@@ -36,8 +36,8 @@ pub mod tic;
 pub mod weapons;
 
 pub use actions::{
-    ACTION_BRUIS_ATTACK, ACTION_CHASE, ACTION_HEAD_ATTACK, ACTION_LOOK, ACTION_NONE,
-    dispatch_action,
+    ACTION_BRUIS_ATTACK, ACTION_CHASE, ACTION_FACE_TARGET, ACTION_HEAD_ATTACK, ACTION_LOOK,
+    ACTION_NONE, dispatch_action, p_move, p_new_chase_dir,
 };
 pub use automap::{
     AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
