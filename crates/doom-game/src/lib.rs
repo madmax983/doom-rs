@@ -20,6 +20,7 @@ pub mod intermission;
 pub mod mobj;
 pub mod mobjinfo;
 pub mod movement;
+pub mod phase;
 pub mod pickups;
 pub mod player;
 pub mod projectile;
@@ -56,6 +57,7 @@ pub use intermission::{IntermissionStats, par_time};
 pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_try_move};
+pub use phase::{GamePhase, GamePhaseController, MapId};
 pub use pickups::{doomed_type_to_kind, p_check_pickups, p_touch_special_thing};
 pub use player::{AmmoType, PlayerState, WEAPON_AMMO, WeaponType};
 pub use projectile::{

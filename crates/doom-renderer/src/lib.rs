@@ -12,6 +12,7 @@ pub mod column;
 pub mod flat_cache;
 pub mod framebuffer;
 pub mod fuzz;
+pub mod hud_messages;
 pub mod intermission;
 pub mod lighting;
 pub mod palette;
@@ -26,6 +27,7 @@ pub mod statusbar;
 pub mod texture;
 pub mod visplane;
 pub mod weapon_anim;
+pub mod wipe;
 
 pub use anim::{AnimSequence, AnimState, AnimType, SwitchList};
 pub use automap::{AutomapState, draw_automap, draw_automap_ex, line_color};
@@ -34,6 +36,7 @@ pub use column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column, draw_column_s
 pub use flat_cache::FlatCache;
 pub use framebuffer::Framebuffer;
 pub use fuzz::{FUZZ_TABLE, draw_fuzz_column};
+pub use hud_messages::{HudMessage, HudMessageQueue};
 pub use intermission::{
     IntermissionPhase, IntermissionRenderer, draw_intermission, draw_intermission_text,
     draw_percentage, draw_time, format_map_name,
@@ -43,7 +46,7 @@ pub use lighting::{
     light_to_colormap_index, shade_column, shade_pixel, shade_span,
 };
 pub use palette::{PaletteLut, Rgb};
-pub use palette_flash::PaletteFlash;
+pub use palette_flash::{PaletteFlash, PaletteFlashState};
 pub use render::render_level;
 pub use render_flags::RenderFlag;
 pub use sky::{
@@ -63,3 +66,4 @@ pub use weapon_anim::{
     WEAPON_TOP, WeaponAnimState, WeaponBob, WeaponSprite, draw_weapon_animated, draw_weapon_shaded,
     get_weapon_light_params, weapon_light_bonus, weapon_sprite_name,
 };
+pub use wipe::ScreenWipe;
