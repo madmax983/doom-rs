@@ -17,6 +17,7 @@ pub mod cheats;
 pub mod combat;
 pub mod dehacked;
 pub mod intermission;
+pub mod menu;
 pub mod mobj;
 pub mod mobjinfo;
 pub mod movement;
@@ -55,6 +56,7 @@ pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
 pub use intermission::{IntermissionStats, par_time};
+pub use menu::{GameMenu, MenuAction, MenuItem, MenuPage, MenuResult, TitlePhase, TitleScreen};
 pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_try_move};
@@ -74,7 +76,6 @@ pub use sight::{
     sector_from_subsector,
 };
 pub use snapshot::Snapshot;
-pub use trace::{TraceHit, TraceResult, trace_ray};
 pub use sound::{
     ML_SOUNDBLOCK, adjacent_sectors, clear_sound_targets, get_sound_target, init_sound_state,
     monster_should_wake, p_noise_alert,
@@ -100,6 +101,7 @@ pub use tic::{
     FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt, p_set_mobj_state, tick_all_mobjs,
     tick_player, tick_world,
 };
+pub use trace::{TraceHit, TraceResult, trace_ray};
 pub use weapon_fire::{
     AMMO_PER_SHOT, fire_current_weapon, p_fire_bfg, p_fire_chaingun, p_fire_chainsaw, p_fire_fist,
     p_fire_pistol, p_fire_plasma, p_fire_rocket, p_fire_shotgun, p_fire_super_shotgun,

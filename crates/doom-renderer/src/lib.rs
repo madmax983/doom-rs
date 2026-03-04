@@ -26,6 +26,7 @@ pub mod sprite;
 pub mod sprite_lookup;
 pub mod statusbar;
 pub mod texture;
+pub mod texture_compose;
 pub mod visplane;
 pub mod weapon_anim;
 pub mod wipe;
@@ -70,6 +71,10 @@ pub use sprite_lookup::{
 };
 pub use statusbar::{StatusBarData, draw_status_bar, draw_status_bar_data};
 pub use texture::TextureCache;
+pub use texture_compose::{
+    ComposedTexture, PatchDef, PatchImage, PatchPost, TextureDef, TextureDirectory,
+    compose_texture, parse_patch, parse_pnames, parse_texture_lump,
+};
 pub use weapon_anim::{
     MAX_BOB, RAISE_SPEED, WEAPON_BASE_X, WEAPON_BASE_Y, WEAPON_BOTTOM, WEAPON_FLASH_LIGHT_BONUS,
     WEAPON_TOP, WeaponAnimState, WeaponBob, WeaponSprite, draw_weapon_animated, draw_weapon_shaded,
