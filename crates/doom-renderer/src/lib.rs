@@ -10,11 +10,13 @@ pub mod clip;
 pub mod colormap;
 pub mod column;
 pub mod flat_cache;
+pub mod font;
 pub mod framebuffer;
 pub mod fuzz;
 pub mod hud_messages;
 pub mod intermission;
 pub mod lighting;
+pub mod menu_render;
 pub mod palette;
 pub mod palette_flash;
 pub mod render;
@@ -40,6 +42,7 @@ pub use automap::{
 pub use colormap::{ColormapCache, INVULN_COLORMAP, build_invuln_colormap};
 pub use column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column, draw_column_solid};
 pub use flat_cache::FlatCache;
+pub use font::BitmapFont;
 pub use framebuffer::Framebuffer;
 pub use fuzz::{FUZZ_TABLE, draw_fuzz_column};
 pub use hud_messages::{HudMessage, HudMessageQueue};
@@ -50,6 +53,9 @@ pub use intermission::{
 pub use lighting::{
     LightParams, compute_flat_light, compute_wall_light, compute_wall_light_with_falloff,
     light_to_colormap_index, shade_column, shade_pixel, shade_span,
+};
+pub use menu_render::{
+    darken_framebuffer, draw_large_text, draw_menu, draw_title_screen, menu_colors,
 };
 pub use palette::{PaletteLut, Rgb};
 pub use palette_flash::{PaletteFlash, PaletteFlashState};

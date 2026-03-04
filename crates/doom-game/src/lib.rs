@@ -17,6 +17,7 @@ pub mod cheats;
 pub mod combat;
 pub mod dehacked;
 pub mod intermission;
+pub mod linedef_dispatch;
 pub mod menu;
 pub mod mobj;
 pub mod mobjinfo;
@@ -34,6 +35,7 @@ pub mod spawn;
 pub mod specials;
 pub mod state;
 pub mod states;
+pub mod switch;
 pub mod tic;
 pub mod trace;
 pub mod weapon_fire;
@@ -56,6 +58,10 @@ pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
 pub use intermission::{IntermissionStats, par_time};
+pub use linedef_dispatch::{
+    LinedefEffect, TriggerType, check_cross_lines, classify_trigger, dispatch_linedef,
+    linedef_effect,
+};
 pub use menu::{GameMenu, MenuAction, MenuItem, MenuPage, MenuResult, TitlePhase, TitleScreen};
 pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
@@ -97,6 +103,10 @@ pub use state::{
 };
 pub use states::STATES;
 pub use states::sprite_names;
+pub use switch::{
+    KeyType, SWITCH_PAIRS, clear_linedef_special, find_switch_opposite, player_has_key,
+    toggle_switch_texture,
+};
 pub use tic::{
     FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt, p_set_mobj_state, tick_all_mobjs,
     tick_player, tick_world,
