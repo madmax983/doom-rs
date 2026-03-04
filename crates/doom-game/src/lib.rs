@@ -34,6 +34,7 @@ pub mod specials;
 pub mod state;
 pub mod states;
 pub mod tic;
+pub mod trace;
 pub mod weapon_fire;
 pub mod weapons;
 
@@ -73,6 +74,7 @@ pub use sight::{
     sector_from_subsector,
 };
 pub use snapshot::Snapshot;
+pub use trace::{TraceHit, TraceResult, trace_ray};
 pub use sound::{
     ML_SOUNDBLOCK, adjacent_sectors, clear_sound_targets, get_sound_target, init_sound_state,
     monster_should_wake, p_noise_alert,

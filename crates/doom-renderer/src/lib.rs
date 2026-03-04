@@ -23,6 +23,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+pub mod sprite_lookup;
 pub mod statusbar;
 pub mod texture;
 pub mod visplane;
@@ -62,6 +63,10 @@ pub use sprite::{
     SpriteCache, SpriteFrame, compute_sprite_rotation, draw_sprite, draw_sprite_ex,
     draw_weapon_sprite, render_flag_for_thing, render_things, sector_for_point, sprite_lump_name,
     thing_has_rotations, thing_sprite_prefix,
+};
+pub use sprite_lookup::{
+    ActorRenderInfo, ResolvedSprite, compute_rotation, render_flag_from_state, resolve_sprite,
+    sprite_lump_name_str, sprite_lump_name_with_mirror,
 };
 pub use statusbar::{StatusBarData, draw_status_bar, draw_status_bar_data};
 pub use texture::TextureCache;
