@@ -91,7 +91,10 @@ pub use state::{
     RNG_TABLE, ScrollingWall, SectorLightEffect,
 };
 pub use states::STATES;
-pub use tic::{FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt};
+pub use tic::{
+    FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt, p_set_mobj_state, tick_all_mobjs,
+    tick_player, tick_world,
+};
 pub use weapon_fire::{
     AMMO_PER_SHOT, fire_current_weapon, p_fire_bfg, p_fire_chaingun, p_fire_chainsaw, p_fire_fist,
     p_fire_pistol, p_fire_plasma, p_fire_rocket, p_fire_shotgun, p_fire_super_shotgun,

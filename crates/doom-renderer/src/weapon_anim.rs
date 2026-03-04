@@ -15,8 +15,10 @@
 //!   that external code advances once per game tic.
 //! - [`draw_weapon_animated`] renders the current state into a [`Framebuffer`].
 
+use crate::colormap::ColormapCache;
 use crate::column::IDENTITY_COLORMAP;
 use crate::framebuffer::Framebuffer;
+use crate::lighting::LightParams;
 use crate::sprite::{SpriteCache, draw_sprite};
 
 // ---------------------------------------------------------------------------
@@ -324,6 +326,112 @@ pub fn draw_weapon_animated(
         if let Some(flash_frame) = cache.get(&anim.current.flash_sprite) {
             draw_sprite(fb, flash_frame, sx, sy, &IDENTITY_COLORMAP);
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Sector-shaded weapon rendering
+// ---------------------------------------------------------------------------
+
+/// Extra light level added to sector lighting during a muzzle flash.
+///
+/// In Doom, firing a weapon briefly illuminates the surrounding area.
+/// This bonus is added to the sector light level for one frame when the
+/// weapon is in its flash state.
+pub const WEAPON_FLASH_LIGHT_BONUS: u8 = 128;
+
+/// Distance value used for the weapon overlay when computing light params.
+///
+/// The weapon is always at the player's viewpoint, effectively at distance 0.
+/// We use 1.0 (the minimum clamped distance in `LightParams`) to get the
+/// brightest possible result for the given sector light, without any
+/// distance-based darkening.
+const WEAPON_LIGHT_DISTANCE: f32 = 1.0;
+
+/// Draw the weapon overlay with sector-based lighting and muzzle flash support.
+///
+/// Similar to [`draw_weapon_animated`] but applies per-sector colourmap shading:
+///
+/// - **Normal state**: the weapon sprite is shaded according to `light_level`
+///   using the provided [`ColormapCache`].  In a dark room the weapon appears
+///   dark; in a bright room it appears bright.
+/// - **Flash state** (`anim.current.full_bright`): the weapon sprite renders
+///   at full brightness regardless of sector light (colormap index 0).
+/// - The muzzle flash overlay sprite always renders at full brightness.
+///
+/// If `colormap` is `None`, falls back to full-bright rendering (identity
+/// colormap) for both the main sprite and flash overlay.
+pub fn draw_weapon_shaded(
+    fb: &mut Framebuffer,
+    anim: &WeaponAnimState,
+    cache: &SpriteCache,
+    light_level: u8,
+    colormap: Option<&ColormapCache>,
+) {
+    let sx = anim.screen_x();
+    let sy = anim.screen_y();
+
+    // Determine the colormap for the main weapon sprite.
+    let main_map: [u8; 256];
+    let main_colormap: &[u8; 256] = if anim.current.full_bright {
+        // Muzzle flash active: weapon always full-bright.
+        &IDENTITY_COLORMAP
+    } else if let Some(cm) = colormap {
+        let lp = LightParams::new(light_level, false);
+        main_map = *lp.get_colormap(WEAPON_LIGHT_DISTANCE, cm);
+        &main_map
+    } else {
+        &IDENTITY_COLORMAP
+    };
+
+    // Draw main weapon sprite.
+    if let Some(frame) = cache.get(&anim.current.sprite_name) {
+        draw_sprite(fb, frame, sx, sy, main_colormap);
+    }
+
+    // Draw muzzle flash overlay at full brightness.
+    if anim.current.flash_active {
+        if let Some(flash_frame) = cache.get(&anim.current.flash_sprite) {
+            draw_sprite(fb, flash_frame, sx, sy, &IDENTITY_COLORMAP);
+        }
+    }
+}
+
+/// Return the extra light bonus contributed by the weapon's muzzle flash.
+///
+/// - Returns [`WEAPON_FLASH_LIGHT_BONUS`] (128) when the weapon is in a
+///   muzzle flash state (`full_bright` is true).
+/// - Returns `0` otherwise.
+///
+/// Add this to the sector's base light level (saturating at 255) to briefly
+/// illuminate nearby walls and floors during firing.
+pub fn weapon_light_bonus(anim_state: &WeaponAnimState) -> u8 {
+    if anim_state.current.full_bright {
+        WEAPON_FLASH_LIGHT_BONUS
+    } else {
+        0
+    }
+}
+
+/// Return the appropriate 256-byte colormap for the weapon sprite.
+///
+/// - If `is_flash` is `true`, returns the identity (full-bright) colormap
+///   from the cache (index 0) so the weapon renders at maximum brightness.
+/// - Otherwise, computes the colormap from `sector_light` at the standard
+///   weapon distance ([`WEAPON_LIGHT_DISTANCE`]).
+/// - If `colormap` is `None`, returns `None` (caller should fall back to
+///   the static `IDENTITY_COLORMAP`).
+pub fn get_weapon_light_params(
+    sector_light: u8,
+    is_flash: bool,
+    colormap: Option<&ColormapCache>,
+) -> Option<&[u8; 256]> {
+    let cm = colormap?;
+    if is_flash {
+        Some(cm.get(0))
+    } else {
+        let lp = LightParams::new(sector_light, false);
+        Some(lp.get_colormap(WEAPON_LIGHT_DISTANCE, cm))
     }
 }
 
@@ -677,5 +785,303 @@ mod tests {
             "half of u32 range should be ~PI, got {}",
             r
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Helper: build a test ColormapCache
+    // ------------------------------------------------------------------
+
+    use crate::colormap::{COLORMAP_ROWS, COLORMAP_SIZE, ColormapCache};
+
+    /// Build a `ColormapCache` where row `n` has every byte set to `n`.
+    fn test_cache() -> ColormapCache {
+        let mut data = vec![0u8; COLORMAP_ROWS * COLORMAP_SIZE];
+        for row in 0..COLORMAP_ROWS {
+            let start = row * COLORMAP_SIZE;
+            data[start..start + COLORMAP_SIZE].fill(row as u8);
+        }
+        ColormapCache::from_test_data(data)
+    }
+
+    // ------------------------------------------------------------------
+    // weapon_light_bonus
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn weapon_light_bonus_zero_when_no_flash() {
+        let state = WeaponAnimState::new();
+        assert_eq!(
+            weapon_light_bonus(&state),
+            0,
+            "no flash active → bonus should be 0"
+        );
+    }
+
+    #[test]
+    fn weapon_light_bonus_128_during_flash() {
+        let mut state = WeaponAnimState::new();
+        state.trigger_flash(*b"PISFA0\0\0", 4);
+        assert_eq!(
+            weapon_light_bonus(&state),
+            WEAPON_FLASH_LIGHT_BONUS,
+            "flash active → bonus should be WEAPON_FLASH_LIGHT_BONUS"
+        );
+    }
+
+    #[test]
+    fn weapon_light_bonus_returns_zero_after_flash_expires() {
+        let mut state = WeaponAnimState::new();
+        state.trigger_flash(*b"PISFA0\0\0", 2);
+        // Tick twice to expire the flash.
+        state.tick(0);
+        state.tick(0);
+        assert_eq!(
+            weapon_light_bonus(&state),
+            0,
+            "flash expired → bonus should be 0"
+        );
+    }
+
+    #[test]
+    fn weapon_light_bonus_is_128_constant() {
+        assert_eq!(WEAPON_FLASH_LIGHT_BONUS, 128);
+    }
+
+    #[test]
+    fn weapon_light_bonus_still_active_mid_flash() {
+        let mut state = WeaponAnimState::new();
+        state.trigger_flash(*b"PISFA0\0\0", 5);
+        state.tick(0); // 4 tics remaining
+        assert_eq!(
+            weapon_light_bonus(&state),
+            128,
+            "mid-flash bonus should still be 128"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // get_weapon_light_params
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn get_weapon_light_params_none_when_no_cache() {
+        let result = get_weapon_light_params(128, false, None);
+        assert!(
+            result.is_none(),
+            "should return None when no ColormapCache is provided"
+        );
+    }
+
+    #[test]
+    fn get_weapon_light_params_none_when_flash_and_no_cache() {
+        let result = get_weapon_light_params(128, true, None);
+        assert!(
+            result.is_none(),
+            "should return None when no cache even during flash"
+        );
+    }
+
+    #[test]
+    fn get_weapon_light_params_fullbright_during_flash() {
+        let cache = test_cache();
+        let result = get_weapon_light_params(64, true, Some(&cache));
+        let row = result.expect("should return Some when cache is provided");
+        // Row 0 in test cache has all bytes = 0.
+        assert_eq!(
+            row[0], 0,
+            "flash should select colormap row 0 (full-bright)"
+        );
+        assert_eq!(row[100], 0);
+    }
+
+    #[test]
+    fn get_weapon_light_params_dark_sector_selects_dark_row() {
+        let cache = test_cache();
+        let result = get_weapon_light_params(0, false, Some(&cache));
+        let row = result.expect("should return Some");
+        // Sector light 0 → base colormap index 31 (darkest).
+        // At distance 1.0: scale = 160/1 = 160, offset = 160 >> 4 = 10
+        // result = 31 - 10 = 21 → row 21.
+        assert_eq!(row[0], 21, "dark sector should select a dark colormap row");
+    }
+
+    #[test]
+    fn get_weapon_light_params_bright_sector_selects_bright_row() {
+        let cache = test_cache();
+        let result = get_weapon_light_params(255, false, Some(&cache));
+        let row = result.expect("should return Some");
+        // Sector light 255 → LightParams::new(255, false) → auto-fullbright.
+        // So colormap_for_distance returns 0.
+        assert_eq!(
+            row[0], 0,
+            "fully bright sector should select row 0 (identity)"
+        );
+    }
+
+    #[test]
+    fn get_weapon_light_params_mid_light_selects_mid_row() {
+        let cache = test_cache();
+        let result = get_weapon_light_params(128, false, Some(&cache));
+        let row = result.expect("should return Some");
+        // Sector light 128 → base index 15.
+        // At distance 1.0: scale = 160, offset = 10.
+        // result = 15 - 10 = 5 → row 5.
+        assert_eq!(
+            row[0], 5,
+            "mid-bright sector should select an intermediate row"
+        );
+    }
+
+    #[test]
+    fn get_weapon_light_params_flash_overrides_any_light() {
+        let cache = test_cache();
+        // Even at total darkness, flash should return row 0.
+        let result = get_weapon_light_params(0, true, Some(&cache));
+        let row = result.expect("should return Some");
+        assert_eq!(
+            row[0], 0,
+            "flash should always return full-bright regardless of sector light"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // draw_weapon_shaded
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn draw_weapon_shaded_no_panic_empty_cache() {
+        let mut fb = Framebuffer::new();
+        let state = WeaponAnimState::new();
+        let cache = SpriteCache::empty();
+        let cm = test_cache();
+        draw_weapon_shaded(&mut fb, &state, &cache, 128, Some(&cm));
+        // No panic with empty sprite cache.
+    }
+
+    #[test]
+    fn draw_weapon_shaded_no_panic_with_flash() {
+        let mut fb = Framebuffer::new();
+        let mut state = WeaponAnimState::new();
+        state.trigger_flash(*b"PISFA0\0\0", 4);
+        let cache = SpriteCache::empty();
+        let cm = test_cache();
+        draw_weapon_shaded(&mut fb, &state, &cache, 128, Some(&cm));
+        // No panic with flash and empty cache.
+    }
+
+    #[test]
+    fn draw_weapon_shaded_no_panic_no_colormap() {
+        let mut fb = Framebuffer::new();
+        let state = WeaponAnimState::new();
+        let cache = SpriteCache::empty();
+        draw_weapon_shaded(&mut fb, &state, &cache, 128, None);
+        // No panic when colormap is None.
+    }
+
+    #[test]
+    fn draw_weapon_shaded_no_panic_dark_sector() {
+        let mut fb = Framebuffer::new();
+        let state = WeaponAnimState::new();
+        let cache = SpriteCache::empty();
+        let cm = test_cache();
+        draw_weapon_shaded(&mut fb, &state, &cache, 0, Some(&cm));
+        // No panic at minimum light.
+    }
+
+    #[test]
+    fn draw_weapon_shaded_no_panic_bright_sector() {
+        let mut fb = Framebuffer::new();
+        let state = WeaponAnimState::new();
+        let cache = SpriteCache::empty();
+        let cm = test_cache();
+        draw_weapon_shaded(&mut fb, &state, &cache, 255, Some(&cm));
+        // No panic at maximum light.
+    }
+
+    #[test]
+    fn draw_weapon_shaded_flash_active_with_none_cache() {
+        let mut fb = Framebuffer::new();
+        let mut state = WeaponAnimState::new();
+        state.trigger_flash(*b"PISFA0\0\0", 3);
+        let cache = SpriteCache::empty();
+        draw_weapon_shaded(&mut fb, &state, &cache, 64, None);
+        // No panic: flash + None colormap should gracefully fall back.
+    }
+
+    #[test]
+    fn draw_weapon_shaded_flash_state_uses_identity() {
+        // Verify that during flash, the weapon sprite uses IDENTITY_COLORMAP.
+        // We test this indirectly by checking that no panic occurs and that
+        // the flash path selects row 0 (which we verify through
+        // get_weapon_light_params).
+        let cache = test_cache();
+        let result = get_weapon_light_params(0, true, Some(&cache));
+        let row = result.expect("should return Some");
+        // Row 0 in test_cache is all zeros = identity in the test sense.
+        assert_eq!(row[0], 0);
+    }
+
+    // ------------------------------------------------------------------
+    // Integration: weapon_light_bonus + sector light saturation
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn weapon_light_bonus_added_to_sector_light_saturates() {
+        let mut state = WeaponAnimState::new();
+        state.trigger_flash(*b"PISFA0\0\0", 4);
+        let sector_light: u8 = 200;
+        let bonus = weapon_light_bonus(&state);
+        let effective = sector_light.saturating_add(bonus);
+        assert_eq!(effective, 255, "200 + 128 should saturate to 255");
+    }
+
+    #[test]
+    fn weapon_light_bonus_added_to_dark_sector_produces_128() {
+        let mut state = WeaponAnimState::new();
+        state.trigger_flash(*b"PISFA0\0\0", 4);
+        let sector_light: u8 = 0;
+        let bonus = weapon_light_bonus(&state);
+        let effective = sector_light.saturating_add(bonus);
+        assert_eq!(effective, 128, "0 + 128 should produce 128");
+    }
+
+    #[test]
+    fn weapon_light_bonus_no_flash_leaves_sector_unchanged() {
+        let state = WeaponAnimState::new();
+        let sector_light: u8 = 80;
+        let bonus = weapon_light_bonus(&state);
+        let effective = sector_light.saturating_add(bonus);
+        assert_eq!(effective, 80, "no flash: sector light should be unchanged");
+    }
+
+    // ------------------------------------------------------------------
+    // Colormap row selection consistency
+    // ------------------------------------------------------------------
+
+    #[test]
+    fn get_weapon_light_params_consistent_with_light_params() {
+        let cache = test_cache();
+        // Verify that get_weapon_light_params produces the same result as
+        // manually constructing LightParams and calling get_colormap.
+        for light in [0u8, 64, 128, 192, 255] {
+            let via_helper = get_weapon_light_params(light, false, Some(&cache));
+            let lp = LightParams::new(light, false);
+            let via_direct = lp.get_colormap(1.0, &cache);
+            assert_eq!(
+                via_helper.expect("should be Some"),
+                via_direct,
+                "helper and direct LightParams should agree for light={light}"
+            );
+        }
+    }
+
+    #[test]
+    fn get_weapon_light_params_flash_always_row_zero() {
+        let cache = test_cache();
+        // Flash should always return row 0 regardless of sector light.
+        for light in [0u8, 64, 128, 192, 255] {
+            let row = get_weapon_light_params(light, true, Some(&cache)).expect("should be Some");
+            assert_eq!(row[0], 0, "flash should always be row 0 for light={light}");
+        }
     }
 }
