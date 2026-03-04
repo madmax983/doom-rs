@@ -93,6 +93,7 @@ pub use state::{
     RNG_TABLE, ScrollingWall, SectorLightEffect,
 };
 pub use states::STATES;
+pub use states::sprite_names;
 pub use tic::{
     FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt, p_set_mobj_state, tick_all_mobjs,
     tick_player, tick_world,

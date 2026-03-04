@@ -30,7 +30,11 @@ pub mod weapon_anim;
 pub mod wipe;
 
 pub use anim::{AnimSequence, AnimState, AnimType, SwitchList};
-pub use automap::{AutomapState, draw_automap, draw_automap_ex, line_color};
+pub use automap::{
+    AutomapState, RendererAutomapCanvas, automap_colors, draw_automap, draw_automap_ex,
+    draw_grid_on_fb, draw_line_fb, draw_player_arrow_on_fb, line_color, map_to_screen,
+    render_automap,
+};
 pub use colormap::{ColormapCache, INVULN_COLORMAP, build_invuln_colormap};
 pub use column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column, draw_column_solid};
 pub use flat_cache::FlatCache;

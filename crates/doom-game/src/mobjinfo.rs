@@ -208,7 +208,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         missile_state: sn(ids::S_NULL),
     },
     // -----------------------------------------------------------------------
-    // 6: Lost Soul — MT_SKULL  (no state table entry yet)
+    // 6: Lost Soul — MT_SKULL
     // -----------------------------------------------------------------------
     MobjInfo {
         spawn_health: 100,
@@ -218,12 +218,12 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         mass: 50,
         flags: MF_FLOAT_MONSTER | flags::MF_SKULLFLY,
         pain_chance: 0,
-        spawn_state: sn(ids::S_NULL),
-        see_state: sn(ids::S_NULL),
-        pain_state: sn(ids::S_NULL),
-        death_state: sn(ids::S_NULL),
+        spawn_state: sn(ids::S_SKULL_STND),
+        see_state: sn(ids::S_SKULL_RUN1),
+        pain_state: sn(ids::S_SKULL_PAIN),
+        death_state: sn(ids::S_SKULL_DIE1),
         melee_state: sn(ids::S_NULL),
-        missile_state: sn(ids::S_NULL),
+        missile_state: sn(ids::S_SKULL_ATK1),
     },
     // -----------------------------------------------------------------------
     // 7: Cacodemon — MT_HEAD
@@ -262,7 +262,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         missile_state: sn(ids::S_NULL),
     },
     // -----------------------------------------------------------------------
-    // 9: Hell Knight — shares Baron states for now
+    // 9: Hell Knight — own BOS2 states
     // -----------------------------------------------------------------------
     MobjInfo {
         spawn_health: 500,
@@ -272,15 +272,15 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         mass: 1000,
         flags: MF_MONSTER,
         pain_chance: 50,
-        spawn_state: sn(ids::S_BOSS_STND),
-        see_state: sn(ids::S_BOSS_RUN1),
-        pain_state: sn(ids::S_BOSS_PAIN),
-        death_state: sn(ids::S_BOSS_DIE1),
+        spawn_state: sn(ids::S_BOS2_STND),
+        see_state: sn(ids::S_BOS2_RUN1),
+        pain_state: sn(ids::S_BOS2_PAIN),
+        death_state: sn(ids::S_BOS2_DIE1),
         melee_state: sn(ids::S_NULL),
-        missile_state: sn(ids::S_NULL),
+        missile_state: sn(ids::S_BOS2_ATK1),
     },
     // -----------------------------------------------------------------------
-    // 10: Arachnotron — MT_BABY  (state table entry Batch 3)
+    // 10: Arachnotron — MT_BABY
     // -----------------------------------------------------------------------
     MobjInfo {
         spawn_health: 500,
@@ -290,12 +290,12 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         mass: 600,
         flags: MF_MONSTER,
         pain_chance: 128,
-        spawn_state: sn(ids::S_NULL),
-        see_state: sn(ids::S_NULL),
-        pain_state: sn(ids::S_NULL),
-        death_state: sn(ids::S_NULL),
+        spawn_state: sn(ids::S_BSPI_STND),
+        see_state: sn(ids::S_BSPI_RUN1),
+        pain_state: sn(ids::S_BSPI_PAIN),
+        death_state: sn(ids::S_BSPI_DIE1),
         melee_state: sn(ids::S_NULL),
-        missile_state: sn(ids::S_NULL),
+        missile_state: sn(ids::S_BSPI_ATK1),
     },
     // 11: Pain Elemental
     MobjInfo {
@@ -306,12 +306,12 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         mass: 400,
         flags: MF_FLOAT_MONSTER,
         pain_chance: 128,
-        spawn_state: sn(ids::S_NULL),
-        see_state: sn(ids::S_NULL),
-        pain_state: sn(ids::S_NULL),
-        death_state: sn(ids::S_NULL),
+        spawn_state: sn(ids::S_PAIN_STND),
+        see_state: sn(ids::S_PAIN_RUN1),
+        pain_state: sn(ids::S_PAIN_PAIN1),
+        death_state: sn(ids::S_PAIN_DIE1),
         melee_state: sn(ids::S_NULL),
-        missile_state: sn(ids::S_NULL),
+        missile_state: sn(ids::S_PAIN_ATK1),
     },
     // 12: Revenant
     MobjInfo {
@@ -322,12 +322,12 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         mass: 500,
         flags: MF_MONSTER,
         pain_chance: 100,
-        spawn_state: sn(ids::S_NULL),
-        see_state: sn(ids::S_NULL),
-        pain_state: sn(ids::S_NULL),
-        death_state: sn(ids::S_NULL),
+        spawn_state: sn(ids::S_SKEL_STND),
+        see_state: sn(ids::S_SKEL_RUN1),
+        pain_state: sn(ids::S_SKEL_PAIN),
+        death_state: sn(ids::S_SKEL_DIE1),
         melee_state: sn(ids::S_NULL),
-        missile_state: sn(ids::S_NULL),
+        missile_state: sn(ids::S_SKEL_ATK1),
     },
     // 13: Mancubus
     MobjInfo {
@@ -338,12 +338,12 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         mass: 1000,
         flags: MF_MONSTER,
         pain_chance: 80,
-        spawn_state: sn(ids::S_NULL),
-        see_state: sn(ids::S_NULL),
-        pain_state: sn(ids::S_NULL),
-        death_state: sn(ids::S_NULL),
+        spawn_state: sn(ids::S_FATT_STND),
+        see_state: sn(ids::S_FATT_RUN1),
+        pain_state: sn(ids::S_FATT_PAIN),
+        death_state: sn(ids::S_FATT_DIE1),
         melee_state: sn(ids::S_NULL),
-        missile_state: sn(ids::S_NULL),
+        missile_state: sn(ids::S_FATT_ATK1),
     },
     // 14: ArchVile
     MobjInfo {
@@ -354,12 +354,12 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         mass: 500,
         flags: MF_MONSTER,
         pain_chance: 10,
-        spawn_state: sn(ids::S_NULL),
-        see_state: sn(ids::S_NULL),
-        pain_state: sn(ids::S_NULL),
-        death_state: sn(ids::S_NULL),
+        spawn_state: sn(ids::S_VILE_STND),
+        see_state: sn(ids::S_VILE_RUN1),
+        pain_state: sn(ids::S_VILE_PAIN),
+        death_state: sn(ids::S_VILE_DIE1),
         melee_state: sn(ids::S_NULL),
-        missile_state: sn(ids::S_NULL),
+        missile_state: sn(ids::S_VILE_ATK1),
     },
     // 15: Spider Mastermind — MT_SPIDER
     MobjInfo {

@@ -1,14 +1,8 @@
-//! Mobj state machine table — sparse subset covering core E1 monsters.
+//! Mobj state machine table with sprite/frame data.
 //!
-//! Full Doom has ~900 state entries.  This table covers IDLE (A_Look),
-//! CHASE (A_Chase), ATTACK, pain, and death states for the 8 standard
-//! monsters.
-//!
-//! # Layout
-//! Entry 0 is always `S_NULL` (terminal / hold-forever state).
-//! Within each monster group: STND (idle/look loop) → RUN1 ↔ RUN2 (2-frame
-//! chase loop, each 4 tics).  Attack states: ATK1 (windup) → ATK2 (fire)
-//! → ATK3 (recovery) → RUN1.
+//! Each `MobjStateEntry` carries `sprite` (index into `SPRITE_NAMES`),
+//! `frame` (0=A, 1=B, ... plus fullbright bit 0x80), `tics`, `action`,
+//! and `next_state`.
 
 use crate::mobj::{MobjStateEntry, StateNum};
 
@@ -22,6 +16,124 @@ const POS_ATTACK: u8 = 3;
 const SPOS_ATTACK: u8 = 4;
 const TROO_ATTACK: u8 = 5;
 const SARG_ATTACK: u8 = 6;
+const FALL: u8 = 7;
+const HEAD_ATTACK: u8 = 8;
+const BRUIS_ATTACK: u8 = 9;
+const CPOS_ATTACK: u8 = 11;
+const CYBER_ATTACK: u8 = 12;
+const SKEL_MISSILE: u8 = 13;
+const FAT_ATTACK1: u8 = 14;
+const SKULL_ATTACK: u8 = 17;
+const BSPI_ATTACK: u8 = 18;
+const SPID_ATTACK: u8 = 19;
+const PAIN_ATTACK: u8 = 20;
+
+/// Fullbright bit for frame field.
+const FB: u8 = 0x80;
+
+// ---------------------------------------------------------------------------
+// Sprite name table
+// ---------------------------------------------------------------------------
+
+/// Sprite name constants and lookup table for WAD sprite prefix matching.
+pub mod sprite_names {
+    pub const SPR_TROO: u16 = 0;
+    pub const SPR_SHTG: u16 = 1;
+    pub const SPR_PUNG: u16 = 2;
+    pub const SPR_PISG: u16 = 3;
+    pub const SPR_CHGG: u16 = 4;
+    pub const SPR_ROCK: u16 = 5;
+    pub const SPR_PLSG: u16 = 6;
+    pub const SPR_BFGG: u16 = 7;
+    pub const SPR_SAWG: u16 = 8;
+    pub const SPR_SHT2: u16 = 9;
+    pub const SPR_POSS: u16 = 10;
+    pub const SPR_SPOS: u16 = 11;
+    pub const SPR_SARG: u16 = 12;
+    pub const SPR_HEAD: u16 = 13;
+    pub const SPR_BOSS: u16 = 14;
+    pub const SPR_BOS2: u16 = 15;
+    pub const SPR_CYBR: u16 = 16;
+    pub const SPR_SPID: u16 = 17;
+    pub const SPR_SKUL: u16 = 18;
+    pub const SPR_BSPI: u16 = 19;
+    pub const SPR_PAIN: u16 = 20;
+    pub const SPR_SKEL: u16 = 21;
+    pub const SPR_FATT: u16 = 22;
+    pub const SPR_VILE: u16 = 23;
+    pub const SPR_CPOS: u16 = 24;
+    pub const SPR_KEEN: u16 = 25;
+    pub const SPR_BBRN: u16 = 26;
+    pub const SPR_PLAY: u16 = 27;
+    pub const SPR_BAL1: u16 = 28;
+    pub const SPR_BAL2: u16 = 29;
+    pub const SPR_MANF: u16 = 30;
+    pub const SPR_FATB: u16 = 31;
+    pub const SPR_MISL: u16 = 32;
+    pub const SPR_PLSS: u16 = 33;
+    pub const SPR_PLSE: u16 = 34;
+    pub const SPR_BFS1: u16 = 35;
+    pub const SPR_BFE1: u16 = 36;
+    pub const SPR_BFE2: u16 = 37;
+    pub const SPR_RSKE: u16 = 38;
+    pub const SPR_APLS: u16 = 39;
+    pub const SPR_APBX: u16 = 40;
+    pub const SPR_PUFF: u16 = 41;
+    pub const SPR_BLUD: u16 = 42;
+    pub const SPR_TFOG: u16 = 43;
+    pub const SPR_IFOG: u16 = 44;
+    pub const SPR_CLIP: u16 = 45;
+    pub const SPR_SHEL: u16 = 46;
+    pub const SPR_CELL: u16 = 47;
+    pub const SPR_AMMO: u16 = 48;
+    pub const SPR_SBOX: u16 = 49;
+    pub const SPR_BPAK: u16 = 50;
+    pub const SPR_MEDI: u16 = 51;
+    pub const SPR_STIM: u16 = 52;
+    pub const SPR_BON1: u16 = 53;
+    pub const SPR_BON2: u16 = 54;
+    pub const SPR_SOUL: u16 = 55;
+    pub const SPR_PINV: u16 = 56;
+    pub const SPR_PINS: u16 = 57;
+    pub const SPR_SUIT: u16 = 58;
+    pub const SPR_PMAP: u16 = 59;
+    pub const SPR_PVIS: u16 = 60;
+    pub const SPR_MEGA: u16 = 61;
+    pub const SPR_ARM1: u16 = 62;
+    pub const SPR_ARM2: u16 = 63;
+    pub const SPR_BKEY: u16 = 64;
+    pub const SPR_RKEY: u16 = 65;
+    pub const SPR_YKEY: u16 = 66;
+    pub const SPR_BSKU: u16 = 67;
+    pub const SPR_RSKU: u16 = 68;
+    pub const SPR_YSKU: u16 = 69;
+    pub const SPR_COLU: u16 = 70;
+    pub const SPR_TBLU: u16 = 71;
+    pub const SPR_TGRN: u16 = 72;
+    pub const SPR_TRED: u16 = 73;
+    pub const SPR_SMBT: u16 = 74;
+    pub const SPR_SMGT: u16 = 75;
+    pub const SPR_SMRT: u16 = 76;
+    pub const SPR_CEYE: u16 = 77;
+    pub const SPR_FSKU: u16 = 78;
+    pub const SPR_NONE: u16 = 0xFFFF;
+
+    pub const SPRITE_COUNT: usize = 79;
+
+    /// Sprite name strings for WAD lookup.
+    pub const SPRITE_NAMES: [&str; SPRITE_COUNT] = [
+        "TROO", "SHTG", "PUNG", "PISG", "CHGG", "ROCK", "PLSG", "BFGG", "SAWG", "SHT2", "POSS",
+        "SPOS", "SARG", "HEAD", "BOSS", "BOS2", "CYBR", "SPID", "SKUL", "BSPI", "PAIN", "SKEL",
+        "FATT", "VILE", "CPOS", "KEEN", "BBRN", "PLAY", "BAL1", "BAL2", "MANF", "FATB", "MISL",
+        "PLSS", "PLSE", "BFS1", "BFE1", "BFE2", "RSKE", "APLS", "APBX", "PUFF", "BLUD", "TFOG",
+        "IFOG", "CLIP", "SHEL", "CELL", "AMMO", "SBOX", "BPAK", "MEDI", "STIM", "BON1", "BON2",
+        "SOUL", "PINV", "PINS", "SUIT", "PMAP", "PVIS", "MEGA", "ARM1", "ARM2", "BKEY", "RKEY",
+        "YKEY", "BSKU", "RSKU", "YSKU", "COLU", "TBLU", "TGRN", "TRED", "SMBT", "SMGT", "SMRT",
+        "CEYE", "FSKU",
+    ];
+}
+
+use sprite_names::*;
 
 // ---------------------------------------------------------------------------
 // State ID constants
@@ -33,9 +145,9 @@ pub mod ids {
     pub const S_NULL: u16 = 0;
 
     // --- Trooper (Zombie Man) ---
-    pub const S_POSS_STND: u16 = 1; // idle: tics=10, A_Look, loops to self
-    pub const S_POSS_RUN1: u16 = 2; // chase frame 1: tics=4, A_Chase, →RUN2
-    pub const S_POSS_RUN2: u16 = 3; // chase frame 2: tics=4, A_Chase, →RUN1
+    pub const S_POSS_STND: u16 = 1;
+    pub const S_POSS_RUN1: u16 = 2;
+    pub const S_POSS_RUN2: u16 = 3;
 
     // --- Sergeant (Shotgun Guy) ---
     pub const S_SPOS_STND: u16 = 4;
@@ -72,81 +184,354 @@ pub mod ids {
     pub const S_SPID_RUN1: u16 = 23;
     pub const S_SPID_RUN2: u16 = 24;
 
-    // -----------------------------------------------------------------------
-    // Death and pain states (Batch 3)
-    // Death: 2 frames — DIE1 (active, 8 tics) → DIE2 (holds at S_NULL forever)
-    // Pain:  1 frame  — PAIN (6 tics) → returns to spawn_state (STND)
-    // -----------------------------------------------------------------------
-
-    // --- Trooper ---
+    // Death and pain states
     pub const S_POSS_DIE1: u16 = 25;
     pub const S_POSS_DIE2: u16 = 26;
     pub const S_POSS_PAIN: u16 = 27;
-
-    // --- Sergeant ---
     pub const S_SPOS_DIE1: u16 = 28;
     pub const S_SPOS_DIE2: u16 = 29;
     pub const S_SPOS_PAIN: u16 = 30;
-
-    // --- Imp ---
     pub const S_TROO_DIE1: u16 = 31;
     pub const S_TROO_DIE2: u16 = 32;
     pub const S_TROO_PAIN: u16 = 33;
-
-    // --- Demon ---
     pub const S_SARG_DIE1: u16 = 34;
     pub const S_SARG_DIE2: u16 = 35;
     pub const S_SARG_PAIN: u16 = 36;
-
-    // --- Cacodemon ---
     pub const S_HEAD_DIE1: u16 = 37;
     pub const S_HEAD_DIE2: u16 = 38;
     pub const S_HEAD_PAIN: u16 = 39;
-
-    // --- Baron of Hell ---
     pub const S_BOSS_DIE1: u16 = 40;
     pub const S_BOSS_DIE2: u16 = 41;
     pub const S_BOSS_PAIN: u16 = 42;
-
-    // --- Cyberdemon ---
     pub const S_CYBER_DIE1: u16 = 43;
     pub const S_CYBER_DIE2: u16 = 44;
     pub const S_CYBER_PAIN: u16 = 45;
-
-    // --- Spider Mastermind ---
     pub const S_SPID_DIE1: u16 = 46;
     pub const S_SPID_DIE2: u16 = 47;
     pub const S_SPID_PAIN: u16 = 48;
 
-    // -----------------------------------------------------------------------
-    // Attack states (Batch 5)
-    // ATK1 = windup (4 tics, no action) → ATK2
-    // ATK2 = fire   (4 tics, attack action) → ATK3
-    // ATK3 = recover (4 tics, no action) → RUN1
-    // -----------------------------------------------------------------------
-
-    // --- Trooper attack ---
+    // Attack states
     pub const S_POSS_ATK1: u16 = 49;
     pub const S_POSS_ATK2: u16 = 50;
     pub const S_POSS_ATK3: u16 = 51;
-
-    // --- Sergeant attack ---
     pub const S_SPOS_ATK1: u16 = 52;
     pub const S_SPOS_ATK2: u16 = 53;
     pub const S_SPOS_ATK3: u16 = 54;
-
-    // --- Imp attack ---
     pub const S_TROO_ATK1: u16 = 55;
     pub const S_TROO_ATK2: u16 = 56;
     pub const S_TROO_ATK3: u16 = 57;
-
-    // --- Demon attack ---
     pub const S_SARG_ATK1: u16 = 58;
     pub const S_SARG_ATK2: u16 = 59;
     pub const S_SARG_ATK3: u16 = 60;
 
+    // -----------------------------------------------------------------------
+    // Projectile states (61..90)
+    // -----------------------------------------------------------------------
+    // Imp fireball (BAL1)
+    pub const S_TBALL1: u16 = 61;
+    pub const S_TBALL2: u16 = 62;
+    pub const S_TBALLX1: u16 = 63;
+    pub const S_TBALLX2: u16 = 64;
+    pub const S_TBALLX3: u16 = 65;
+    // Baron/HK fireball (BAL2)
+    pub const S_BRBALL1: u16 = 66;
+    pub const S_BRBALL2: u16 = 67;
+    pub const S_BRBALLX1: u16 = 68;
+    pub const S_BRBALLX2: u16 = 69;
+    pub const S_BRBALLX3: u16 = 70;
+    // Rocket (MISL)
+    pub const S_ROCKET: u16 = 71;
+    pub const S_EXPLODE1: u16 = 72;
+    pub const S_EXPLODE2: u16 = 73;
+    pub const S_EXPLODE3: u16 = 74;
+    // Plasma ball (PLSS/PLSE)
+    pub const S_PLASBALL1: u16 = 75;
+    pub const S_PLASBALL2: u16 = 76;
+    pub const S_PLASEXP1: u16 = 77;
+    pub const S_PLASEXP2: u16 = 78;
+    pub const S_PLASEXP3: u16 = 79;
+    pub const S_PLASEXP4: u16 = 80;
+    // BFG ball (BFS1/BFE1)
+    pub const S_BFGSHOT1: u16 = 81;
+    pub const S_BFGSHOT2: u16 = 82;
+    pub const S_BFGLAND1: u16 = 83;
+    pub const S_BFGLAND2: u16 = 84;
+    pub const S_BFGLAND3: u16 = 85;
+    pub const S_BFGLAND4: u16 = 86;
+    pub const S_BFGLAND5: u16 = 87;
+    pub const S_BFGLAND6: u16 = 88;
+    // Revenant tracer (RSKE)
+    pub const S_TRACER1: u16 = 89;
+    pub const S_TRACER2: u16 = 90;
+    pub const S_TRACEEXP1: u16 = 91;
+    pub const S_TRACEEXP2: u16 = 92;
+    pub const S_TRACEEXP3: u16 = 93;
+    // Arachnotron plasma (APLS/APBX)
+    pub const S_ARACH_PLAZ1: u16 = 94;
+    pub const S_ARACH_PLAZ2: u16 = 95;
+    pub const S_ARACH_PLEX1: u16 = 96;
+    pub const S_ARACH_PLEX2: u16 = 97;
+    pub const S_ARACH_PLEX3: u16 = 98;
+    // Mancubus fireball (FATB/MANF)
+    pub const S_FATSHOT1: u16 = 99;
+    pub const S_FATSHOT2: u16 = 100;
+    pub const S_FATSHOTX1: u16 = 101;
+    pub const S_FATSHOTX2: u16 = 102;
+    pub const S_FATSHOTX3: u16 = 103;
+
+    // -----------------------------------------------------------------------
+    // Effect states (104..118)
+    // -----------------------------------------------------------------------
+    // Bullet puff (PUFF)
+    pub const S_PUFF1: u16 = 104;
+    pub const S_PUFF2: u16 = 105;
+    pub const S_PUFF3: u16 = 106;
+    pub const S_PUFF4: u16 = 107;
+    // Blood splat (BLUD)
+    pub const S_BLOOD1: u16 = 108;
+    pub const S_BLOOD2: u16 = 109;
+    pub const S_BLOOD3: u16 = 110;
+    // Teleport fog (TFOG)
+    pub const S_TFOG1: u16 = 111;
+    pub const S_TFOG2: u16 = 112;
+    pub const S_TFOG3: u16 = 113;
+    pub const S_TFOG4: u16 = 114;
+    pub const S_TFOG5: u16 = 115;
+    // Item respawn fog (IFOG)
+    pub const S_IFOG1: u16 = 116;
+    pub const S_IFOG2: u16 = 117;
+    pub const S_IFOG3: u16 = 118;
+    pub const S_IFOG4: u16 = 119;
+    pub const S_IFOG5: u16 = 120;
+
+    // -----------------------------------------------------------------------
+    // Doom 2 monster states (121..190)
+    // -----------------------------------------------------------------------
+    // Lost Soul (SKUL)
+    pub const S_SKULL_STND: u16 = 121;
+    pub const S_SKULL_STND2: u16 = 122;
+    pub const S_SKULL_RUN1: u16 = 123;
+    pub const S_SKULL_RUN2: u16 = 124;
+    pub const S_SKULL_RUN3: u16 = 125;
+    pub const S_SKULL_RUN4: u16 = 126;
+    pub const S_SKULL_ATK1: u16 = 127;
+    pub const S_SKULL_ATK2: u16 = 128;
+    pub const S_SKULL_ATK3: u16 = 129;
+    pub const S_SKULL_PAIN: u16 = 130;
+    pub const S_SKULL_DIE1: u16 = 131;
+    pub const S_SKULL_DIE2: u16 = 132;
+    pub const S_SKULL_DIE3: u16 = 133;
+    pub const S_SKULL_DIE4: u16 = 134;
+    pub const S_SKULL_DIE5: u16 = 135;
+    // Arachnotron (BSPI)
+    pub const S_BSPI_STND: u16 = 136;
+    pub const S_BSPI_STND2: u16 = 137;
+    pub const S_BSPI_RUN1: u16 = 138;
+    pub const S_BSPI_RUN2: u16 = 139;
+    pub const S_BSPI_RUN3: u16 = 140;
+    pub const S_BSPI_RUN4: u16 = 141;
+    pub const S_BSPI_ATK1: u16 = 142;
+    pub const S_BSPI_ATK2: u16 = 143;
+    pub const S_BSPI_ATK3: u16 = 144;
+    pub const S_BSPI_PAIN: u16 = 145;
+    pub const S_BSPI_DIE1: u16 = 146;
+    pub const S_BSPI_DIE2: u16 = 147;
+    pub const S_BSPI_DIE3: u16 = 148;
+    pub const S_BSPI_DIE4: u16 = 149;
+    pub const S_BSPI_DIE5: u16 = 150;
+    // Pain Elemental (PAIN)
+    pub const S_PAIN_STND: u16 = 151;
+    pub const S_PAIN_STND2: u16 = 152;
+    pub const S_PAIN_RUN1: u16 = 153;
+    pub const S_PAIN_RUN2: u16 = 154;
+    pub const S_PAIN_RUN3: u16 = 155;
+    pub const S_PAIN_RUN4: u16 = 156;
+    pub const S_PAIN_ATK1: u16 = 157;
+    pub const S_PAIN_ATK2: u16 = 158;
+    pub const S_PAIN_ATK3: u16 = 159;
+    pub const S_PAIN_PAIN1: u16 = 160;
+    pub const S_PAIN_DIE1: u16 = 161;
+    pub const S_PAIN_DIE2: u16 = 162;
+    pub const S_PAIN_DIE3: u16 = 163;
+    pub const S_PAIN_DIE4: u16 = 164;
+    pub const S_PAIN_DIE5: u16 = 165;
+    // Revenant (SKEL)
+    pub const S_SKEL_STND: u16 = 166;
+    pub const S_SKEL_STND2: u16 = 167;
+    pub const S_SKEL_RUN1: u16 = 168;
+    pub const S_SKEL_RUN2: u16 = 169;
+    pub const S_SKEL_RUN3: u16 = 170;
+    pub const S_SKEL_RUN4: u16 = 171;
+    pub const S_SKEL_ATK1: u16 = 172;
+    pub const S_SKEL_ATK2: u16 = 173;
+    pub const S_SKEL_ATK3: u16 = 174;
+    pub const S_SKEL_PAIN: u16 = 175;
+    pub const S_SKEL_DIE1: u16 = 176;
+    pub const S_SKEL_DIE2: u16 = 177;
+    pub const S_SKEL_DIE3: u16 = 178;
+    pub const S_SKEL_DIE4: u16 = 179;
+    pub const S_SKEL_DIE5: u16 = 180;
+    // Mancubus (FATT)
+    pub const S_FATT_STND: u16 = 181;
+    pub const S_FATT_STND2: u16 = 182;
+    pub const S_FATT_RUN1: u16 = 183;
+    pub const S_FATT_RUN2: u16 = 184;
+    pub const S_FATT_RUN3: u16 = 185;
+    pub const S_FATT_RUN4: u16 = 186;
+    pub const S_FATT_ATK1: u16 = 187;
+    pub const S_FATT_ATK2: u16 = 188;
+    pub const S_FATT_ATK3: u16 = 189;
+    pub const S_FATT_PAIN: u16 = 190;
+    pub const S_FATT_DIE1: u16 = 191;
+    pub const S_FATT_DIE2: u16 = 192;
+    pub const S_FATT_DIE3: u16 = 193;
+    pub const S_FATT_DIE4: u16 = 194;
+    pub const S_FATT_DIE5: u16 = 195;
+    // Arch-Vile (VILE)
+    pub const S_VILE_STND: u16 = 196;
+    pub const S_VILE_STND2: u16 = 197;
+    pub const S_VILE_RUN1: u16 = 198;
+    pub const S_VILE_RUN2: u16 = 199;
+    pub const S_VILE_RUN3: u16 = 200;
+    pub const S_VILE_RUN4: u16 = 201;
+    pub const S_VILE_ATK1: u16 = 202;
+    pub const S_VILE_ATK2: u16 = 203;
+    pub const S_VILE_ATK3: u16 = 204;
+    pub const S_VILE_PAIN: u16 = 205;
+    pub const S_VILE_DIE1: u16 = 206;
+    pub const S_VILE_DIE2: u16 = 207;
+    pub const S_VILE_DIE3: u16 = 208;
+    pub const S_VILE_DIE4: u16 = 209;
+    pub const S_VILE_DIE5: u16 = 210;
+    // Chaingunner (CPOS)
+    pub const S_CPOS_STND: u16 = 211;
+    pub const S_CPOS_STND2: u16 = 212;
+    pub const S_CPOS_RUN1: u16 = 213;
+    pub const S_CPOS_RUN2: u16 = 214;
+    pub const S_CPOS_RUN3: u16 = 215;
+    pub const S_CPOS_RUN4: u16 = 216;
+    pub const S_CPOS_ATK1: u16 = 217;
+    pub const S_CPOS_ATK2: u16 = 218;
+    pub const S_CPOS_ATK3: u16 = 219;
+    pub const S_CPOS_PAIN: u16 = 220;
+    pub const S_CPOS_DIE1: u16 = 221;
+    pub const S_CPOS_DIE2: u16 = 222;
+    pub const S_CPOS_DIE3: u16 = 223;
+    pub const S_CPOS_DIE4: u16 = 224;
+    pub const S_CPOS_DIE5: u16 = 225;
+    // Hell Knight (BOS2) -- own states
+    pub const S_BOS2_STND: u16 = 226;
+    pub const S_BOS2_RUN1: u16 = 227;
+    pub const S_BOS2_RUN2: u16 = 228;
+    pub const S_BOS2_ATK1: u16 = 229;
+    pub const S_BOS2_ATK2: u16 = 230;
+    pub const S_BOS2_ATK3: u16 = 231;
+    pub const S_BOS2_PAIN: u16 = 232;
+    pub const S_BOS2_DIE1: u16 = 233;
+    pub const S_BOS2_DIE2: u16 = 234;
+
+    // -----------------------------------------------------------------------
+    // Weapon states (235..274)
+    // -----------------------------------------------------------------------
+    // Fist (PUNG)
+    pub const S_PUNCH_UP: u16 = 235;
+    pub const S_PUNCH_DOWN: u16 = 236;
+    pub const S_PUNCH_READY: u16 = 237;
+    pub const S_PUNCH1: u16 = 238;
+    pub const S_PUNCH2: u16 = 239;
+    pub const S_PUNCH3: u16 = 240;
+    pub const S_PUNCH4: u16 = 241;
+    // Pistol (PISG)
+    pub const S_PISTOL_UP: u16 = 242;
+    pub const S_PISTOL_DOWN: u16 = 243;
+    pub const S_PISTOL_READY: u16 = 244;
+    pub const S_PISTOL1: u16 = 245;
+    pub const S_PISTOL2: u16 = 246;
+    pub const S_PISTOL3: u16 = 247;
+    pub const S_PISTOL_FLASH1: u16 = 248;
+    pub const S_PISTOL_FLASH2: u16 = 249;
+    // Shotgun (SHTG)
+    pub const S_SGUN_UP: u16 = 250;
+    pub const S_SGUN_DOWN: u16 = 251;
+    pub const S_SGUN_READY: u16 = 252;
+    pub const S_SGUN1: u16 = 253;
+    pub const S_SGUN2: u16 = 254;
+    pub const S_SGUN3: u16 = 255;
+    pub const S_SGUN4: u16 = 256;
+    pub const S_SGUN_FLASH1: u16 = 257;
+    pub const S_SGUN_FLASH2: u16 = 258;
+    // SSG (SHT2)
+    pub const S_DSGUN_UP: u16 = 259;
+    pub const S_DSGUN_DOWN: u16 = 260;
+    pub const S_DSGUN_READY: u16 = 261;
+    pub const S_DSGUN1: u16 = 262;
+    pub const S_DSGUN2: u16 = 263;
+    pub const S_DSGUN3: u16 = 264;
+    pub const S_DSGUN4: u16 = 265;
+    pub const S_DSGUN5: u16 = 266;
+    pub const S_DSGUN6: u16 = 267;
+    pub const S_DSGUN7: u16 = 268;
+    pub const S_DSGUN_FLASH1: u16 = 269;
+    pub const S_DSGUN_FLASH2: u16 = 270;
+    // Chaingun (CHGG)
+    pub const S_CHAIN_UP: u16 = 271;
+    pub const S_CHAIN_DOWN: u16 = 272;
+    pub const S_CHAIN_READY: u16 = 273;
+    pub const S_CHAIN1: u16 = 274;
+    pub const S_CHAIN2: u16 = 275;
+    pub const S_CHAIN_FLASH1: u16 = 276;
+    pub const S_CHAIN_FLASH2: u16 = 277;
+    // Rocket launcher (ROCK)
+    pub const S_MISSILE_UP: u16 = 278;
+    pub const S_MISSILE_DOWN: u16 = 279;
+    pub const S_MISSILE_READY: u16 = 280;
+    pub const S_MISSILE1: u16 = 281;
+    pub const S_MISSILE2: u16 = 282;
+    pub const S_MISSILE3: u16 = 283;
+    pub const S_MISSILE_FLASH1: u16 = 284;
+    pub const S_MISSILE_FLASH2: u16 = 285;
+    // Plasma gun (PLSG)
+    pub const S_PLASMA_UP: u16 = 286;
+    pub const S_PLASMA_DOWN: u16 = 287;
+    pub const S_PLASMA_READY: u16 = 288;
+    pub const S_PLASMA1: u16 = 289;
+    pub const S_PLASMA2: u16 = 290;
+    // BFG (BFGG)
+    pub const S_BFG_UP: u16 = 291;
+    pub const S_BFG_DOWN: u16 = 292;
+    pub const S_BFG_READY: u16 = 293;
+    pub const S_BFG1: u16 = 294;
+    pub const S_BFG2: u16 = 295;
+    pub const S_BFG_FLASH1: u16 = 296;
+    pub const S_BFG_FLASH2: u16 = 297;
+    // Chainsaw (SAWG)
+    pub const S_SAW_UP: u16 = 298;
+    pub const S_SAW_DOWN: u16 = 299;
+    pub const S_SAW_READY1: u16 = 300;
+    pub const S_SAW_READY2: u16 = 301;
+    pub const S_SAW1: u16 = 302;
+    pub const S_SAW2: u16 = 303;
+    pub const S_SAW3: u16 = 304;
+
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 61;
+    pub const STATES_COUNT: usize = 305;
+}
+
+// ---------------------------------------------------------------------------
+// Helper macro for state entries
+// ---------------------------------------------------------------------------
+
+/// Shorthand for `MobjStateEntry` construction.
+macro_rules! st {
+    ($spr:expr, $fr:expr, $t:expr, $act:expr, $nxt:expr) => {
+        MobjStateEntry {
+            sprite: $spr,
+            frame: $fr,
+            tics: $t,
+            action: $act,
+            next_state: StateNum($nxt),
+        }
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -154,384 +539,388 @@ pub mod ids {
 // ---------------------------------------------------------------------------
 
 /// The global Mobj state machine table.
-///
-/// Index with `StateNum(n)`.  Entry 0 (`S_NULL`) is the terminal/dead state.
-/// Action fires on state *entry* (when `tics` reaches 0 and the state
-/// transitions to `next_state`).
 pub static STATES: &[MobjStateEntry] = &[
-    // 0: S_NULL — hold forever, no action
-    MobjStateEntry {
-        tics: -1,
-        next_state: StateNum(ids::S_NULL),
-        action: NONE,
-    },
-    // --- Trooper ---
-    // 1: S_POSS_STND — idle, try to see player every 10 tics
-    MobjStateEntry {
-        tics: 10,
-        next_state: StateNum(ids::S_POSS_STND),
-        action: LOOK,
-    },
-    // 2: S_POSS_RUN1 — chase frame 1
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_POSS_RUN2),
-        action: CHASE,
-    },
-    // 3: S_POSS_RUN2 — chase frame 2 (loops back)
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_POSS_RUN1),
-        action: CHASE,
-    },
-    // --- Sergeant ---
-    MobjStateEntry {
-        tics: 10,
-        next_state: StateNum(ids::S_SPOS_STND),
-        action: LOOK,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SPOS_RUN2),
-        action: CHASE,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SPOS_RUN1),
-        action: CHASE,
-    },
-    // --- Imp ---
-    MobjStateEntry {
-        tics: 10,
-        next_state: StateNum(ids::S_TROO_STND),
-        action: LOOK,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_TROO_RUN2),
-        action: CHASE,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_TROO_RUN1),
-        action: CHASE,
-    },
-    // --- Demon ---
-    MobjStateEntry {
-        tics: 10,
-        next_state: StateNum(ids::S_SARG_STND),
-        action: LOOK,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SARG_RUN2),
-        action: CHASE,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SARG_RUN1),
-        action: CHASE,
-    },
-    // --- Cacodemon ---
-    MobjStateEntry {
-        tics: 10,
-        next_state: StateNum(ids::S_HEAD_STND),
-        action: LOOK,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_HEAD_RUN2),
-        action: CHASE,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_HEAD_RUN1),
-        action: CHASE,
-    },
-    // --- Baron of Hell ---
-    MobjStateEntry {
-        tics: 10,
-        next_state: StateNum(ids::S_BOSS_STND),
-        action: LOOK,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_BOSS_RUN2),
-        action: CHASE,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_BOSS_RUN1),
-        action: CHASE,
-    },
-    // --- Cyberdemon ---
-    MobjStateEntry {
-        tics: 10,
-        next_state: StateNum(ids::S_CYBER_STND),
-        action: LOOK,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_CYBER_RUN2),
-        action: CHASE,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_CYBER_RUN1),
-        action: CHASE,
-    },
-    // --- Spider Mastermind ---
-    MobjStateEntry {
-        tics: 10,
-        next_state: StateNum(ids::S_SPID_STND),
-        action: LOOK,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SPID_RUN2),
-        action: CHASE,
-    },
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SPID_RUN1),
-        action: CHASE,
-    },
-    // -----------------------------------------------------------------------
-    // Death and pain states
-    // -----------------------------------------------------------------------
+    // 0: S_NULL
+    st!(SPR_NONE, 0, -1, NONE, ids::S_NULL),
+    // === Original monsters (1..60) ===
 
-    // --- Trooper death / pain ---
-    // 25: S_POSS_DIE1
-    MobjStateEntry {
-        tics: 8,
-        next_state: StateNum(ids::S_POSS_DIE2),
-        action: NONE,
-    },
-    // 26: S_POSS_DIE2 — holds forever (next_state = S_NULL)
-    MobjStateEntry {
-        tics: -1,
-        next_state: StateNum(ids::S_NULL),
-        action: NONE,
-    },
-    // 27: S_POSS_PAIN — returns to idle
-    MobjStateEntry {
-        tics: 6,
-        next_state: StateNum(ids::S_POSS_STND),
-        action: NONE,
-    },
-    // --- Sergeant death / pain ---
-    // 28: S_SPOS_DIE1
-    MobjStateEntry {
-        tics: 8,
-        next_state: StateNum(ids::S_SPOS_DIE2),
-        action: NONE,
-    },
-    // 29: S_SPOS_DIE2
-    MobjStateEntry {
-        tics: -1,
-        next_state: StateNum(ids::S_NULL),
-        action: NONE,
-    },
-    // 30: S_SPOS_PAIN
-    MobjStateEntry {
-        tics: 6,
-        next_state: StateNum(ids::S_SPOS_STND),
-        action: NONE,
-    },
-    // --- Imp death / pain ---
-    // 31: S_TROO_DIE1
-    MobjStateEntry {
-        tics: 8,
-        next_state: StateNum(ids::S_TROO_DIE2),
-        action: NONE,
-    },
-    // 32: S_TROO_DIE2
-    MobjStateEntry {
-        tics: -1,
-        next_state: StateNum(ids::S_NULL),
-        action: NONE,
-    },
-    // 33: S_TROO_PAIN
-    MobjStateEntry {
-        tics: 6,
-        next_state: StateNum(ids::S_TROO_STND),
-        action: NONE,
-    },
-    // --- Demon death / pain ---
-    // 34: S_SARG_DIE1
-    MobjStateEntry {
-        tics: 8,
-        next_state: StateNum(ids::S_SARG_DIE2),
-        action: NONE,
-    },
-    // 35: S_SARG_DIE2
-    MobjStateEntry {
-        tics: -1,
-        next_state: StateNum(ids::S_NULL),
-        action: NONE,
-    },
-    // 36: S_SARG_PAIN
-    MobjStateEntry {
-        tics: 6,
-        next_state: StateNum(ids::S_SARG_STND),
-        action: NONE,
-    },
-    // --- Cacodemon death / pain ---
-    // 37: S_HEAD_DIE1
-    MobjStateEntry {
-        tics: 8,
-        next_state: StateNum(ids::S_HEAD_DIE2),
-        action: NONE,
-    },
-    // 38: S_HEAD_DIE2
-    MobjStateEntry {
-        tics: -1,
-        next_state: StateNum(ids::S_NULL),
-        action: NONE,
-    },
-    // 39: S_HEAD_PAIN
-    MobjStateEntry {
-        tics: 6,
-        next_state: StateNum(ids::S_HEAD_STND),
-        action: NONE,
-    },
-    // --- Baron of Hell death / pain ---
-    // 40: S_BOSS_DIE1
-    MobjStateEntry {
-        tics: 8,
-        next_state: StateNum(ids::S_BOSS_DIE2),
-        action: NONE,
-    },
-    // 41: S_BOSS_DIE2
-    MobjStateEntry {
-        tics: -1,
-        next_state: StateNum(ids::S_NULL),
-        action: NONE,
-    },
-    // 42: S_BOSS_PAIN
-    MobjStateEntry {
-        tics: 6,
-        next_state: StateNum(ids::S_BOSS_STND),
-        action: NONE,
-    },
-    // --- Cyberdemon death / pain ---
-    // 43: S_CYBER_DIE1
-    MobjStateEntry {
-        tics: 8,
-        next_state: StateNum(ids::S_CYBER_DIE2),
-        action: NONE,
-    },
-    // 44: S_CYBER_DIE2
-    MobjStateEntry {
-        tics: -1,
-        next_state: StateNum(ids::S_NULL),
-        action: NONE,
-    },
-    // 45: S_CYBER_PAIN
-    MobjStateEntry {
-        tics: 6,
-        next_state: StateNum(ids::S_CYBER_STND),
-        action: NONE,
-    },
-    // --- Spider Mastermind death / pain ---
-    // 46: S_SPID_DIE1
-    MobjStateEntry {
-        tics: 8,
-        next_state: StateNum(ids::S_SPID_DIE2),
-        action: NONE,
-    },
-    // 47: S_SPID_DIE2
-    MobjStateEntry {
-        tics: -1,
-        next_state: StateNum(ids::S_NULL),
-        action: NONE,
-    },
-    // 48: S_SPID_PAIN
-    MobjStateEntry {
-        tics: 6,
-        next_state: StateNum(ids::S_SPID_STND),
-        action: NONE,
-    },
-    // -----------------------------------------------------------------------
-    // Attack states (Batch 5)
-    // -----------------------------------------------------------------------
+    // --- Trooper (1..3) ---
+    st!(SPR_POSS, 0, 10, LOOK, ids::S_POSS_STND), // 1: idle
+    st!(SPR_POSS, 0, 4, CHASE, ids::S_POSS_RUN2), // 2: run1
+    st!(SPR_POSS, 1, 4, CHASE, ids::S_POSS_RUN1), // 3: run2
+    // --- Sergeant (4..6) ---
+    st!(SPR_SPOS, 0, 10, LOOK, ids::S_SPOS_STND),
+    st!(SPR_SPOS, 0, 4, CHASE, ids::S_SPOS_RUN2),
+    st!(SPR_SPOS, 1, 4, CHASE, ids::S_SPOS_RUN1),
+    // --- Imp (7..9) ---
+    st!(SPR_TROO, 0, 10, LOOK, ids::S_TROO_STND),
+    st!(SPR_TROO, 0, 4, CHASE, ids::S_TROO_RUN2),
+    st!(SPR_TROO, 1, 4, CHASE, ids::S_TROO_RUN1),
+    // --- Demon (10..12) ---
+    st!(SPR_SARG, 0, 10, LOOK, ids::S_SARG_STND),
+    st!(SPR_SARG, 0, 4, CHASE, ids::S_SARG_RUN2),
+    st!(SPR_SARG, 1, 4, CHASE, ids::S_SARG_RUN1),
+    // --- Cacodemon (13..15) ---
+    st!(SPR_HEAD, 0, 10, LOOK, ids::S_HEAD_STND),
+    st!(SPR_HEAD, 0, 4, CHASE, ids::S_HEAD_RUN2),
+    st!(SPR_HEAD, 1, 4, CHASE, ids::S_HEAD_RUN1),
+    // --- Baron of Hell (16..18) ---
+    st!(SPR_BOSS, 0, 10, LOOK, ids::S_BOSS_STND),
+    st!(SPR_BOSS, 0, 4, CHASE, ids::S_BOSS_RUN2),
+    st!(SPR_BOSS, 1, 4, CHASE, ids::S_BOSS_RUN1),
+    // --- Cyberdemon (19..21) ---
+    st!(SPR_CYBR, 0, 10, LOOK, ids::S_CYBER_STND),
+    st!(SPR_CYBR, 0, 4, CHASE, ids::S_CYBER_RUN2),
+    st!(SPR_CYBR, 1, 4, CHASE, ids::S_CYBER_RUN1),
+    // --- Spider Mastermind (22..24) ---
+    st!(SPR_SPID, 0, 10, LOOK, ids::S_SPID_STND),
+    st!(SPR_SPID, 0, 4, CHASE, ids::S_SPID_RUN2),
+    st!(SPR_SPID, 1, 4, CHASE, ids::S_SPID_RUN1),
+    // === Death and pain states (25..48) ===
+    // Trooper
+    st!(SPR_POSS, 4, 8, NONE, ids::S_POSS_DIE2), // 25
+    st!(SPR_POSS, 5, -1, NONE, ids::S_NULL),     // 26
+    st!(SPR_POSS, 6, 6, NONE, ids::S_POSS_STND), // 27: pain
+    // Sergeant
+    st!(SPR_SPOS, 4, 8, NONE, ids::S_SPOS_DIE2), // 28
+    st!(SPR_SPOS, 5, -1, NONE, ids::S_NULL),     // 29
+    st!(SPR_SPOS, 6, 6, NONE, ids::S_SPOS_STND), // 30
+    // Imp
+    st!(SPR_TROO, 4, 8, NONE, ids::S_TROO_DIE2), // 31
+    st!(SPR_TROO, 5, -1, NONE, ids::S_NULL),     // 32
+    st!(SPR_TROO, 6, 6, NONE, ids::S_TROO_STND), // 33
+    // Demon
+    st!(SPR_SARG, 4, 8, NONE, ids::S_SARG_DIE2), // 34
+    st!(SPR_SARG, 5, -1, NONE, ids::S_NULL),     // 35
+    st!(SPR_SARG, 6, 6, NONE, ids::S_SARG_STND), // 36
+    // Cacodemon
+    st!(SPR_HEAD, 4, 8, NONE, ids::S_HEAD_DIE2), // 37
+    st!(SPR_HEAD, 5, -1, NONE, ids::S_NULL),     // 38
+    st!(SPR_HEAD, 6, 6, NONE, ids::S_HEAD_STND), // 39
+    // Baron
+    st!(SPR_BOSS, 4, 8, NONE, ids::S_BOSS_DIE2), // 40
+    st!(SPR_BOSS, 5, -1, NONE, ids::S_NULL),     // 41
+    st!(SPR_BOSS, 6, 6, NONE, ids::S_BOSS_STND), // 42
+    // Cyberdemon
+    st!(SPR_CYBR, 4, 8, NONE, ids::S_CYBER_DIE2), // 43
+    st!(SPR_CYBR, 5, -1, NONE, ids::S_NULL),      // 44
+    st!(SPR_CYBR, 6, 6, NONE, ids::S_CYBER_STND), // 45
+    // Spider Mastermind
+    st!(SPR_SPID, 4, 8, NONE, ids::S_SPID_DIE2), // 46
+    st!(SPR_SPID, 5, -1, NONE, ids::S_NULL),     // 47
+    st!(SPR_SPID, 6, 6, NONE, ids::S_SPID_STND), // 48
+    // === Attack states (49..60) ===
+    // Trooper
+    st!(SPR_POSS, 2, 4, NONE, ids::S_POSS_ATK2), // 49
+    st!(SPR_POSS, 3, 4, POS_ATTACK, ids::S_POSS_ATK3), // 50
+    st!(SPR_POSS, 2, 4, NONE, ids::S_POSS_RUN1), // 51
+    // Sergeant
+    st!(SPR_SPOS, 2, 4, NONE, ids::S_SPOS_ATK2), // 52
+    st!(SPR_SPOS, 3, 4, SPOS_ATTACK, ids::S_SPOS_ATK3), // 53
+    st!(SPR_SPOS, 2, 4, NONE, ids::S_SPOS_RUN1), // 54
+    // Imp
+    st!(SPR_TROO, 2, 4, NONE, ids::S_TROO_ATK2), // 55
+    st!(SPR_TROO, 3, 4, TROO_ATTACK, ids::S_TROO_ATK3), // 56
+    st!(SPR_TROO, 2, 4, NONE, ids::S_TROO_RUN1), // 57
+    // Demon
+    st!(SPR_SARG, 2, 4, NONE, ids::S_SARG_ATK2), // 58
+    st!(SPR_SARG, 3, 4, SARG_ATTACK, ids::S_SARG_ATK3), // 59
+    st!(SPR_SARG, 2, 4, NONE, ids::S_SARG_RUN1), // 60
+    // ===================================================================
+    // Projectile states (61..103)
+    // ===================================================================
+    // Imp fireball (BAL1) -- fly
+    st!(SPR_BAL1, 0 | FB, 4, NONE, ids::S_TBALL2), // 61
+    st!(SPR_BAL1, 1 | FB, 4, NONE, ids::S_TBALL1), // 62
+    // Imp fireball -- death
+    st!(SPR_BAL1, 2 | FB, 6, NONE, ids::S_TBALLX2), // 63
+    st!(SPR_BAL1, 3 | FB, 6, NONE, ids::S_TBALLX3), // 64
+    st!(SPR_BAL1, 4 | FB, 6, NONE, ids::S_NULL),    // 65
+    // Baron/HK fireball (BAL2) -- fly
+    st!(SPR_BAL2, 0 | FB, 4, NONE, ids::S_BRBALL2), // 66
+    st!(SPR_BAL2, 1 | FB, 4, NONE, ids::S_BRBALL1), // 67
+    // Baron/HK fireball -- death
+    st!(SPR_BAL2, 2 | FB, 6, NONE, ids::S_BRBALLX2), // 68
+    st!(SPR_BAL2, 3 | FB, 6, NONE, ids::S_BRBALLX3), // 69
+    st!(SPR_BAL2, 4 | FB, 6, NONE, ids::S_NULL),     // 70
+    // Rocket (MISL) -- fly
+    st!(SPR_MISL, 0 | FB, 1, NONE, ids::S_ROCKET), // 71
+    // Rocket -- death
+    st!(SPR_MISL, 1 | FB, 8, NONE, ids::S_EXPLODE2), // 72
+    st!(SPR_MISL, 2 | FB, 6, NONE, ids::S_EXPLODE3), // 73
+    st!(SPR_MISL, 3 | FB, 4, NONE, ids::S_NULL),     // 74
+    // Plasma ball (PLSS) -- fly
+    st!(SPR_PLSS, 0 | FB, 6, NONE, ids::S_PLASBALL2), // 75
+    st!(SPR_PLSS, 1 | FB, 6, NONE, ids::S_PLASBALL1), // 76
+    // Plasma -- death (PLSE)
+    st!(SPR_PLSE, 0 | FB, 4, NONE, ids::S_PLASEXP2), // 77
+    st!(SPR_PLSE, 1 | FB, 4, NONE, ids::S_PLASEXP3), // 78
+    st!(SPR_PLSE, 2 | FB, 4, NONE, ids::S_PLASEXP4), // 79
+    st!(SPR_PLSE, 3 | FB, 4, NONE, ids::S_NULL),     // 80
+    // BFG ball (BFS1) -- fly
+    st!(SPR_BFS1, 0 | FB, 4, NONE, ids::S_BFGSHOT2), // 81
+    st!(SPR_BFS1, 1 | FB, 4, NONE, ids::S_BFGSHOT1), // 82
+    // BFG -- explode (BFE1)
+    st!(SPR_BFE1, 0 | FB, 8, NONE, ids::S_BFGLAND2), // 83
+    st!(SPR_BFE1, 1 | FB, 8, NONE, ids::S_BFGLAND3), // 84
+    st!(SPR_BFE1, 2 | FB, 8, NONE, ids::S_BFGLAND4), // 85
+    st!(SPR_BFE1, 3 | FB, 8, NONE, ids::S_BFGLAND5), // 86
+    st!(SPR_BFE1, 4 | FB, 8, NONE, ids::S_BFGLAND6), // 87
+    st!(SPR_BFE1, 5 | FB, 8, NONE, ids::S_NULL),     // 88
+    // Revenant tracer (RSKE) -- fly
+    st!(SPR_RSKE, 0 | FB, 2, NONE, ids::S_TRACER2), // 89
+    st!(SPR_RSKE, 1 | FB, 2, NONE, ids::S_TRACER1), // 90
+    // Revenant tracer -- death
+    st!(SPR_RSKE, 2 | FB, 6, NONE, ids::S_TRACEEXP2), // 91
+    st!(SPR_RSKE, 3 | FB, 6, NONE, ids::S_TRACEEXP3), // 92
+    st!(SPR_RSKE, 4 | FB, 6, NONE, ids::S_NULL),      // 93
+    // Arachnotron plasma (APLS) -- fly
+    st!(SPR_APLS, 0 | FB, 5, NONE, ids::S_ARACH_PLAZ2), // 94
+    st!(SPR_APLS, 1 | FB, 5, NONE, ids::S_ARACH_PLAZ1), // 95
+    // Arachnotron plasma -- death (APBX)
+    st!(SPR_APBX, 0 | FB, 5, NONE, ids::S_ARACH_PLEX2), // 96
+    st!(SPR_APBX, 1 | FB, 5, NONE, ids::S_ARACH_PLEX3), // 97
+    st!(SPR_APBX, 2 | FB, 5, NONE, ids::S_NULL),        // 98
+    // Mancubus fireball (FATB) -- fly
+    st!(SPR_FATB, 0 | FB, 4, NONE, ids::S_FATSHOT2), // 99
+    st!(SPR_FATB, 1 | FB, 4, NONE, ids::S_FATSHOT1), // 100
+    // Mancubus fireball -- death (MANF)
+    st!(SPR_MANF, 0 | FB, 8, NONE, ids::S_FATSHOTX2), // 101
+    st!(SPR_MANF, 1 | FB, 6, NONE, ids::S_FATSHOTX3), // 102
+    st!(SPR_MANF, 2 | FB, 4, NONE, ids::S_NULL),      // 103
+    // ===================================================================
+    // Effect states (104..120)
+    // ===================================================================
+    // Bullet puff
+    st!(SPR_PUFF, 0 | FB, 4, NONE, ids::S_PUFF2), // 104
+    st!(SPR_PUFF, 1, 4, NONE, ids::S_PUFF3),      // 105
+    st!(SPR_PUFF, 2, 4, NONE, ids::S_PUFF4),      // 106
+    st!(SPR_PUFF, 3, 4, NONE, ids::S_NULL),       // 107
+    // Blood splat
+    st!(SPR_BLUD, 2, 8, NONE, ids::S_BLOOD2), // 108
+    st!(SPR_BLUD, 1, 8, NONE, ids::S_BLOOD3), // 109
+    st!(SPR_BLUD, 0, 8, NONE, ids::S_NULL),   // 110
+    // Teleport fog
+    st!(SPR_TFOG, 0 | FB, 6, NONE, ids::S_TFOG2), // 111
+    st!(SPR_TFOG, 1 | FB, 6, NONE, ids::S_TFOG3), // 112
+    st!(SPR_TFOG, 0 | FB, 6, NONE, ids::S_TFOG4), // 113
+    st!(SPR_TFOG, 1 | FB, 6, NONE, ids::S_TFOG5), // 114
+    st!(SPR_TFOG, 2 | FB, 6, NONE, ids::S_NULL),  // 115
+    // Item respawn fog
+    st!(SPR_IFOG, 0 | FB, 6, NONE, ids::S_IFOG2), // 116
+    st!(SPR_IFOG, 1 | FB, 6, NONE, ids::S_IFOG3), // 117
+    st!(SPR_IFOG, 0 | FB, 6, NONE, ids::S_IFOG4), // 118
+    st!(SPR_IFOG, 1 | FB, 6, NONE, ids::S_IFOG5), // 119
+    st!(SPR_IFOG, 2 | FB, 6, NONE, ids::S_NULL),  // 120
+    // ===================================================================
+    // Doom 2 monster states (121..234)
+    // ===================================================================
 
-    // --- Trooper (Zombie Man) attack ---
-    // 49: S_POSS_ATK1 — windup (no action)
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_POSS_ATK2),
-        action: NONE,
-    },
-    // 50: S_POSS_ATK2 — fire hitscan
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_POSS_ATK3),
-        action: POS_ATTACK,
-    },
-    // 51: S_POSS_ATK3 — recovery → resume chasing
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_POSS_RUN1),
-        action: NONE,
-    },
-    // --- Sergeant (Shotgun Guy) attack ---
-    // 52: S_SPOS_ATK1 — windup
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SPOS_ATK2),
-        action: NONE,
-    },
-    // 53: S_SPOS_ATK2 — fire 3-pellet burst
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SPOS_ATK3),
-        action: SPOS_ATTACK,
-    },
-    // 54: S_SPOS_ATK3 — recovery → resume chasing
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SPOS_RUN1),
-        action: NONE,
-    },
-    // --- Imp attack ---
-    // 55: S_TROO_ATK1 — windup
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_TROO_ATK2),
-        action: NONE,
-    },
-    // 56: S_TROO_ATK2 — melee if close, else hitscan
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_TROO_ATK3),
-        action: TROO_ATTACK,
-    },
-    // 57: S_TROO_ATK3 — recovery → resume chasing
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_TROO_RUN1),
-        action: NONE,
-    },
-    // --- Demon attack ---
-    // 58: S_SARG_ATK1 — windup
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SARG_ATK2),
-        action: NONE,
-    },
-    // 59: S_SARG_ATK2 — melee only
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SARG_ATK3),
-        action: SARG_ATTACK,
-    },
-    // 60: S_SARG_ATK3 — recovery → resume chasing
-    MobjStateEntry {
-        tics: 4,
-        next_state: StateNum(ids::S_SARG_RUN1),
-        action: NONE,
-    },
+    // --- Lost Soul (121..135) ---
+    st!(SPR_SKUL, 0 | FB, 10, LOOK, ids::S_SKULL_STND2), // 121
+    st!(SPR_SKUL, 1 | FB, 10, LOOK, ids::S_SKULL_STND),  // 122
+    st!(SPR_SKUL, 0 | FB, 6, CHASE, ids::S_SKULL_RUN2),  // 123
+    st!(SPR_SKUL, 1 | FB, 6, CHASE, ids::S_SKULL_RUN3),  // 124
+    st!(SPR_SKUL, 2 | FB, 6, CHASE, ids::S_SKULL_RUN4),  // 125
+    st!(SPR_SKUL, 3 | FB, 6, CHASE, ids::S_SKULL_RUN1),  // 126
+    st!(SPR_SKUL, 4 | FB, 4, NONE, ids::S_SKULL_ATK2),   // 127
+    st!(SPR_SKUL, 5 | FB, 4, SKULL_ATTACK, ids::S_SKULL_ATK3), // 128
+    st!(SPR_SKUL, 6 | FB, 4, NONE, ids::S_SKULL_RUN1),   // 129
+    st!(SPR_SKUL, 7, 3, NONE, ids::S_SKULL_RUN1),        // 130: pain
+    st!(SPR_SKUL, 8 | FB, 6, NONE, ids::S_SKULL_DIE2),   // 131: die1
+    st!(SPR_SKUL, 9 | FB, 6, FALL, ids::S_SKULL_DIE3),   // 132
+    st!(SPR_SKUL, 10 | FB, 6, NONE, ids::S_SKULL_DIE4),  // 133
+    st!(SPR_SKUL, 11 | FB, 6, NONE, ids::S_SKULL_DIE5),  // 134
+    st!(SPR_SKUL, 12, -1, NONE, ids::S_NULL),            // 135
+    // --- Arachnotron (136..150) ---
+    st!(SPR_BSPI, 0, 10, LOOK, ids::S_BSPI_STND2), // 136
+    st!(SPR_BSPI, 1, 10, LOOK, ids::S_BSPI_STND),  // 137
+    st!(SPR_BSPI, 0, 3, CHASE, ids::S_BSPI_RUN2),  // 138
+    st!(SPR_BSPI, 0, 3, CHASE, ids::S_BSPI_RUN3),  // 139
+    st!(SPR_BSPI, 1, 3, CHASE, ids::S_BSPI_RUN4),  // 140
+    st!(SPR_BSPI, 1, 3, CHASE, ids::S_BSPI_RUN1),  // 141
+    st!(SPR_BSPI, 2, 10, NONE, ids::S_BSPI_ATK2),  // 142
+    st!(SPR_BSPI, 3 | FB, 4, BSPI_ATTACK, ids::S_BSPI_ATK3), // 143
+    st!(SPR_BSPI, 2, 4, NONE, ids::S_BSPI_RUN1),   // 144
+    st!(SPR_BSPI, 4, 3, NONE, ids::S_BSPI_RUN1),   // 145: pain
+    st!(SPR_BSPI, 5, 8, NONE, ids::S_BSPI_DIE2),   // 146: die1
+    st!(SPR_BSPI, 6, 5, FALL, ids::S_BSPI_DIE3),   // 147
+    st!(SPR_BSPI, 7, 5, NONE, ids::S_BSPI_DIE4),   // 148
+    st!(SPR_BSPI, 8, 5, NONE, ids::S_BSPI_DIE5),   // 149
+    st!(SPR_BSPI, 9, -1, NONE, ids::S_NULL),       // 150
+    // --- Pain Elemental (151..165) ---
+    st!(SPR_PAIN, 0, 10, LOOK, ids::S_PAIN_STND2), // 151
+    st!(SPR_PAIN, 1, 10, LOOK, ids::S_PAIN_STND),  // 152
+    st!(SPR_PAIN, 0, 3, CHASE, ids::S_PAIN_RUN2),  // 153
+    st!(SPR_PAIN, 0, 3, CHASE, ids::S_PAIN_RUN3),  // 154
+    st!(SPR_PAIN, 1, 3, CHASE, ids::S_PAIN_RUN4),  // 155
+    st!(SPR_PAIN, 1, 3, CHASE, ids::S_PAIN_RUN1),  // 156
+    st!(SPR_PAIN, 2, 5, NONE, ids::S_PAIN_ATK2),   // 157
+    st!(SPR_PAIN, 3, 5, PAIN_ATTACK, ids::S_PAIN_ATK3), // 158
+    st!(SPR_PAIN, 4, 5, NONE, ids::S_PAIN_RUN1),   // 159
+    st!(SPR_PAIN, 5, 6, NONE, ids::S_PAIN_RUN1),   // 160: pain
+    st!(SPR_PAIN, 6, 8, NONE, ids::S_PAIN_DIE2),   // 161: die1
+    st!(SPR_PAIN, 7, 8, FALL, ids::S_PAIN_DIE3),   // 162
+    st!(SPR_PAIN, 8, 8, NONE, ids::S_PAIN_DIE4),   // 163
+    st!(SPR_PAIN, 9, 8, NONE, ids::S_PAIN_DIE5),   // 164
+    st!(SPR_PAIN, 10, -1, NONE, ids::S_NULL),      // 165
+    // --- Revenant (166..180) ---
+    st!(SPR_SKEL, 0, 10, LOOK, ids::S_SKEL_STND2), // 166
+    st!(SPR_SKEL, 1, 10, LOOK, ids::S_SKEL_STND),  // 167
+    st!(SPR_SKEL, 0, 2, CHASE, ids::S_SKEL_RUN2),  // 168
+    st!(SPR_SKEL, 1, 2, CHASE, ids::S_SKEL_RUN3),  // 169
+    st!(SPR_SKEL, 2, 2, CHASE, ids::S_SKEL_RUN4),  // 170
+    st!(SPR_SKEL, 3, 2, CHASE, ids::S_SKEL_RUN1),  // 171
+    st!(SPR_SKEL, 4, 6, NONE, ids::S_SKEL_ATK2),   // 172
+    st!(SPR_SKEL, 5, 6, SKEL_MISSILE, ids::S_SKEL_ATK3), // 173
+    st!(SPR_SKEL, 4, 6, NONE, ids::S_SKEL_RUN1),   // 174
+    st!(SPR_SKEL, 6, 5, NONE, ids::S_SKEL_RUN1),   // 175: pain
+    st!(SPR_SKEL, 7, 7, NONE, ids::S_SKEL_DIE2),   // 176: die1
+    st!(SPR_SKEL, 8, 7, FALL, ids::S_SKEL_DIE3),   // 177
+    st!(SPR_SKEL, 9, 7, NONE, ids::S_SKEL_DIE4),   // 178
+    st!(SPR_SKEL, 10, 7, NONE, ids::S_SKEL_DIE5),  // 179
+    st!(SPR_SKEL, 11, -1, NONE, ids::S_NULL),      // 180
+    // --- Mancubus (181..195) ---
+    st!(SPR_FATT, 0, 15, LOOK, ids::S_FATT_STND2), // 181
+    st!(SPR_FATT, 1, 15, LOOK, ids::S_FATT_STND),  // 182
+    st!(SPR_FATT, 0, 4, CHASE, ids::S_FATT_RUN2),  // 183
+    st!(SPR_FATT, 1, 4, CHASE, ids::S_FATT_RUN3),  // 184
+    st!(SPR_FATT, 2, 4, CHASE, ids::S_FATT_RUN4),  // 185
+    st!(SPR_FATT, 3, 4, CHASE, ids::S_FATT_RUN1),  // 186
+    st!(SPR_FATT, 4, 10, NONE, ids::S_FATT_ATK2),  // 187
+    st!(SPR_FATT, 5 | FB, 8, FAT_ATTACK1, ids::S_FATT_ATK3), // 188
+    st!(SPR_FATT, 4, 5, NONE, ids::S_FATT_RUN1),   // 189
+    st!(SPR_FATT, 6, 3, NONE, ids::S_FATT_RUN1),   // 190: pain
+    st!(SPR_FATT, 7, 8, NONE, ids::S_FATT_DIE2),   // 191: die1
+    st!(SPR_FATT, 8, 8, FALL, ids::S_FATT_DIE3),   // 192
+    st!(SPR_FATT, 9, 8, NONE, ids::S_FATT_DIE4),   // 193
+    st!(SPR_FATT, 10, 8, NONE, ids::S_FATT_DIE5),  // 194
+    st!(SPR_FATT, 11, -1, NONE, ids::S_NULL),      // 195
+    // --- Arch-Vile (196..210) ---
+    st!(SPR_VILE, 0, 10, LOOK, ids::S_VILE_STND2), // 196
+    st!(SPR_VILE, 1, 10, LOOK, ids::S_VILE_STND),  // 197
+    st!(SPR_VILE, 0, 2, CHASE, ids::S_VILE_RUN2),  // 198
+    st!(SPR_VILE, 1, 2, CHASE, ids::S_VILE_RUN3),  // 199
+    st!(SPR_VILE, 2, 2, CHASE, ids::S_VILE_RUN4),  // 200
+    st!(SPR_VILE, 3, 2, CHASE, ids::S_VILE_RUN1),  // 201
+    st!(SPR_VILE, 4, 10, NONE, ids::S_VILE_ATK2),  // 202
+    st!(SPR_VILE, 5, 10, NONE, ids::S_VILE_ATK3),  // 203
+    st!(SPR_VILE, 6, 10, NONE, ids::S_VILE_RUN1),  // 204
+    st!(SPR_VILE, 7, 5, NONE, ids::S_VILE_RUN1),   // 205: pain
+    st!(SPR_VILE, 8, 7, NONE, ids::S_VILE_DIE2),   // 206: die1
+    st!(SPR_VILE, 9, 7, FALL, ids::S_VILE_DIE3),   // 207
+    st!(SPR_VILE, 10, 7, NONE, ids::S_VILE_DIE4),  // 208
+    st!(SPR_VILE, 11, 7, NONE, ids::S_VILE_DIE5),  // 209
+    st!(SPR_VILE, 12, -1, NONE, ids::S_NULL),      // 210
+    // --- Chaingunner (211..225) ---
+    st!(SPR_CPOS, 0, 10, LOOK, ids::S_CPOS_STND2), // 211
+    st!(SPR_CPOS, 1, 10, LOOK, ids::S_CPOS_STND),  // 212
+    st!(SPR_CPOS, 0, 3, CHASE, ids::S_CPOS_RUN2),  // 213
+    st!(SPR_CPOS, 1, 3, CHASE, ids::S_CPOS_RUN3),  // 214
+    st!(SPR_CPOS, 2, 3, CHASE, ids::S_CPOS_RUN4),  // 215
+    st!(SPR_CPOS, 3, 3, CHASE, ids::S_CPOS_RUN1),  // 216
+    st!(SPR_CPOS, 4, 4, NONE, ids::S_CPOS_ATK2),   // 217
+    st!(SPR_CPOS, 5 | FB, 4, CPOS_ATTACK, ids::S_CPOS_ATK3), // 218
+    st!(SPR_CPOS, 4, 4, NONE, ids::S_CPOS_RUN1),   // 219
+    st!(SPR_CPOS, 6, 3, NONE, ids::S_CPOS_RUN1),   // 220: pain
+    st!(SPR_CPOS, 7, 5, NONE, ids::S_CPOS_DIE2),   // 221: die1
+    st!(SPR_CPOS, 8, 5, FALL, ids::S_CPOS_DIE3),   // 222
+    st!(SPR_CPOS, 9, 5, NONE, ids::S_CPOS_DIE4),   // 223
+    st!(SPR_CPOS, 10, 5, NONE, ids::S_CPOS_DIE5),  // 224
+    st!(SPR_CPOS, 11, -1, NONE, ids::S_NULL),      // 225
+    // --- Hell Knight own states (226..234) ---
+    st!(SPR_BOS2, 0, 10, LOOK, ids::S_BOS2_STND), // 226
+    st!(SPR_BOS2, 0, 4, CHASE, ids::S_BOS2_RUN2), // 227
+    st!(SPR_BOS2, 1, 4, CHASE, ids::S_BOS2_RUN1), // 228
+    st!(SPR_BOS2, 2, 4, NONE, ids::S_BOS2_ATK2),  // 229
+    st!(SPR_BOS2, 3, 4, BRUIS_ATTACK, ids::S_BOS2_ATK3), // 230
+    st!(SPR_BOS2, 2, 4, NONE, ids::S_BOS2_RUN1),  // 231
+    st!(SPR_BOS2, 6, 6, NONE, ids::S_BOS2_STND),  // 232: pain
+    st!(SPR_BOS2, 4, 8, NONE, ids::S_BOS2_DIE2),  // 233: die1
+    st!(SPR_BOS2, 5, -1, NONE, ids::S_NULL),      // 234: die2
+    // ===================================================================
+    // Weapon states (235..304)
+    // ===================================================================
+
+    // --- Fist (PUNG) 235..241 ---
+    st!(SPR_PUNG, 0, 1, NONE, ids::S_PUNCH_READY), // 235: up
+    st!(SPR_PUNG, 0, 1, NONE, ids::S_PUNCH_READY), // 236: down
+    st!(SPR_PUNG, 0, 1, NONE, ids::S_PUNCH_READY), // 237: ready
+    st!(SPR_PUNG, 1, 4, NONE, ids::S_PUNCH2),      // 238: fire1
+    st!(SPR_PUNG, 2, 4, NONE, ids::S_PUNCH3),      // 239: fire2
+    st!(SPR_PUNG, 3, 5, NONE, ids::S_PUNCH4),      // 240: fire3
+    st!(SPR_PUNG, 2, 4, NONE, ids::S_PUNCH_READY), // 241: fire4
+    // --- Pistol (PISG) 242..249 ---
+    st!(SPR_PISG, 0, 1, NONE, ids::S_PISTOL_READY), // 242: up
+    st!(SPR_PISG, 0, 1, NONE, ids::S_PISTOL_READY), // 243: down
+    st!(SPR_PISG, 0, 1, NONE, ids::S_PISTOL_READY), // 244: ready
+    st!(SPR_PISG, 1, 4, NONE, ids::S_PISTOL2),      // 245: fire1
+    st!(SPR_PISG, 2, 6, NONE, ids::S_PISTOL3),      // 246: fire2
+    st!(SPR_PISG, 1, 4, NONE, ids::S_PISTOL_READY), // 247: fire3
+    st!(SPR_PISG, 3 | FB, 7, NONE, ids::S_PISTOL_FLASH2), // 248: flash1
+    st!(SPR_PISG, 4 | FB, 7, NONE, ids::S_NULL),    // 249: flash2
+    // --- Shotgun (SHTG) 250..258 ---
+    st!(SPR_SHTG, 0, 1, NONE, ids::S_SGUN_READY), // 250: up
+    st!(SPR_SHTG, 0, 1, NONE, ids::S_SGUN_READY), // 251: down
+    st!(SPR_SHTG, 0, 1, NONE, ids::S_SGUN_READY), // 252: ready
+    st!(SPR_SHTG, 1, 3, NONE, ids::S_SGUN2),      // 253: fire1
+    st!(SPR_SHTG, 2, 7, NONE, ids::S_SGUN3),      // 254: fire2
+    st!(SPR_SHTG, 3, 5, NONE, ids::S_SGUN4),      // 255: fire3
+    st!(SPR_SHTG, 2, 5, NONE, ids::S_SGUN_READY), // 256: fire4
+    st!(SPR_SHTG, 4 | FB, 4, NONE, ids::S_SGUN_FLASH2), // 257: flash1
+    st!(SPR_SHTG, 5 | FB, 3, NONE, ids::S_NULL),  // 258: flash2
+    // --- SSG (SHT2) 259..270 ---
+    st!(SPR_SHT2, 0, 1, NONE, ids::S_DSGUN_READY), // 259: up
+    st!(SPR_SHT2, 0, 1, NONE, ids::S_DSGUN_READY), // 260: down
+    st!(SPR_SHT2, 0, 1, NONE, ids::S_DSGUN_READY), // 261: ready
+    st!(SPR_SHT2, 1, 3, NONE, ids::S_DSGUN2),      // 262: fire1
+    st!(SPR_SHT2, 2, 7, NONE, ids::S_DSGUN3),      // 263: fire2
+    st!(SPR_SHT2, 3, 5, NONE, ids::S_DSGUN4),      // 264: fire3
+    st!(SPR_SHT2, 4, 5, NONE, ids::S_DSGUN5),      // 265: fire4
+    st!(SPR_SHT2, 5, 7, NONE, ids::S_DSGUN6),      // 266: fire5
+    st!(SPR_SHT2, 6, 7, NONE, ids::S_DSGUN7),      // 267: fire6
+    st!(SPR_SHT2, 7, 7, NONE, ids::S_DSGUN_READY), // 268: fire7
+    st!(SPR_SHT2, 1 | FB, 5, NONE, ids::S_DSGUN_FLASH2), // 269: flash1
+    st!(SPR_SHT2, 2 | FB, 4, NONE, ids::S_NULL),   // 270: flash2
+    // --- Chaingun (CHGG) 271..277 ---
+    st!(SPR_CHGG, 0, 1, NONE, ids::S_CHAIN_READY), // 271: up
+    st!(SPR_CHGG, 0, 1, NONE, ids::S_CHAIN_READY), // 272: down
+    st!(SPR_CHGG, 0, 1, NONE, ids::S_CHAIN_READY), // 273: ready
+    st!(SPR_CHGG, 0, 4, NONE, ids::S_CHAIN2),      // 274: fire1
+    st!(SPR_CHGG, 1, 4, NONE, ids::S_CHAIN_READY), // 275: fire2
+    st!(SPR_CHGG, 1 | FB, 5, NONE, ids::S_CHAIN_FLASH2), // 276: flash1
+    st!(SPR_CHGG, 2 | FB, 5, NONE, ids::S_NULL),   // 277: flash2
+    // --- Rocket launcher (ROCK) 278..285 ---
+    st!(SPR_ROCK, 0, 1, NONE, ids::S_MISSILE_READY), // 278: up
+    st!(SPR_ROCK, 0, 1, NONE, ids::S_MISSILE_READY), // 279: down
+    st!(SPR_ROCK, 0, 1, NONE, ids::S_MISSILE_READY), // 280: ready
+    st!(SPR_ROCK, 1, 8, NONE, ids::S_MISSILE2),      // 281: fire1
+    st!(SPR_ROCK, 2, 12, NONE, ids::S_MISSILE3),     // 282: fire2
+    st!(SPR_ROCK, 1, 0, NONE, ids::S_MISSILE_READY), // 283: fire3
+    st!(SPR_ROCK, 3 | FB, 3, NONE, ids::S_MISSILE_FLASH2), // 284: flash1
+    st!(SPR_ROCK, 4 | FB, 4, NONE, ids::S_NULL),     // 285: flash2
+    // --- Plasma gun (PLSG) 286..290 ---
+    st!(SPR_PLSG, 0, 1, NONE, ids::S_PLASMA_READY), // 286: up
+    st!(SPR_PLSG, 0, 1, NONE, ids::S_PLASMA_READY), // 287: down
+    st!(SPR_PLSG, 0, 1, NONE, ids::S_PLASMA_READY), // 288: ready
+    st!(SPR_PLSG, 0, 3, NONE, ids::S_PLASMA2),      // 289: fire1
+    st!(SPR_PLSG, 1, 20, NONE, ids::S_PLASMA_READY), // 290: fire2
+    // --- BFG (BFGG) 291..297 ---
+    st!(SPR_BFGG, 0, 1, NONE, ids::S_BFG_READY), // 291: up
+    st!(SPR_BFGG, 0, 1, NONE, ids::S_BFG_READY), // 292: down
+    st!(SPR_BFGG, 0, 1, NONE, ids::S_BFG_READY), // 293: ready
+    st!(SPR_BFGG, 0, 20, NONE, ids::S_BFG2),     // 294: fire1
+    st!(SPR_BFGG, 1, 10, NONE, ids::S_BFG_READY), // 295: fire2
+    st!(SPR_BFGG, 1 | FB, 11, NONE, ids::S_BFG_FLASH2), // 296: flash1
+    st!(SPR_BFGG, 2 | FB, 6, NONE, ids::S_NULL), // 297: flash2
+    // --- Chainsaw (SAWG) 298..304 ---
+    st!(SPR_SAWG, 0, 1, NONE, ids::S_SAW_READY1), // 298: up
+    st!(SPR_SAWG, 0, 1, NONE, ids::S_SAW_READY1), // 299: down
+    st!(SPR_SAWG, 0, 4, NONE, ids::S_SAW_READY2), // 300: ready1
+    st!(SPR_SAWG, 1, 4, NONE, ids::S_SAW_READY1), // 301: ready2
+    st!(SPR_SAWG, 0, 4, NONE, ids::S_SAW2),       // 302: fire1
+    st!(SPR_SAWG, 1, 4, NONE, ids::S_SAW3),       // 303: fire2
+    st!(SPR_SAWG, 1, 0, NONE, ids::S_SAW_READY1), // 304: fire3
 ];
 
 // ---------------------------------------------------------------------------
@@ -549,6 +938,7 @@ mod tests {
         assert_eq!(e.tics, -1);
         assert_eq!(e.next_state, StateNum(ids::S_NULL));
         assert_eq!(e.action, actions::ACTION_NONE);
+        assert_eq!(e.sprite, SPR_NONE);
     }
 
     #[test]
@@ -557,6 +947,8 @@ mod tests {
         assert_eq!(e.tics, 10);
         assert_eq!(e.next_state, StateNum(ids::S_POSS_STND));
         assert_eq!(e.action, actions::ACTION_LOOK);
+        assert_eq!(e.sprite, SPR_POSS);
+        assert_eq!(e.frame, 0);
     }
 
     #[test]
@@ -589,9 +981,7 @@ mod tests {
     fn trooper_death_state_is_two_frames() {
         let die1 = &STATES[ids::S_POSS_DIE1 as usize];
         let die2 = &STATES[ids::S_POSS_DIE2 as usize];
-        // DIE1 must transition to DIE2.
         assert_eq!(die1.next_state, StateNum(ids::S_POSS_DIE2));
-        // DIE2 must hold forever (tics = -1) and chain to S_NULL.
         assert_eq!(die2.tics, -1);
         assert_eq!(die2.next_state, StateNum(ids::S_NULL));
     }
@@ -599,27 +989,22 @@ mod tests {
     #[test]
     fn pain_state_returns_to_idle() {
         let pain = &STATES[ids::S_POSS_PAIN as usize];
-        // Pain state must transition back to the trooper's idle state.
         assert_eq!(pain.next_state, StateNum(ids::S_POSS_STND));
         assert_eq!(pain.tics, 6);
     }
 
     #[test]
     fn attack_states_return_to_run() {
-        // Trooper: ATK3 must return to RUN1.
         let atk3 = &STATES[ids::S_POSS_ATK3 as usize];
         assert_eq!(atk3.next_state, StateNum(ids::S_POSS_RUN1));
         assert_eq!(atk3.action, actions::ACTION_NONE);
 
-        // Sergeant: ATK3 must return to RUN1.
         let spos_atk3 = &STATES[ids::S_SPOS_ATK3 as usize];
         assert_eq!(spos_atk3.next_state, StateNum(ids::S_SPOS_RUN1));
 
-        // Imp: ATK3 must return to RUN1.
         let troo_atk3 = &STATES[ids::S_TROO_ATK3 as usize];
         assert_eq!(troo_atk3.next_state, StateNum(ids::S_TROO_RUN1));
 
-        // Demon: ATK3 must return to RUN1.
         let sarg_atk3 = &STATES[ids::S_SARG_ATK3 as usize];
         assert_eq!(sarg_atk3.next_state, StateNum(ids::S_SARG_RUN1));
     }
@@ -641,6 +1026,485 @@ mod tests {
         assert_eq!(
             STATES[ids::S_SARG_ATK2 as usize].action,
             actions::ACTION_SARG_ATTACK
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Sprite field tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn trooper_spawn_state_sprite_is_poss() {
+        assert_eq!(STATES[ids::S_POSS_STND as usize].sprite, SPR_POSS);
+    }
+
+    #[test]
+    fn sergeant_spawn_state_sprite_is_spos() {
+        assert_eq!(STATES[ids::S_SPOS_STND as usize].sprite, SPR_SPOS);
+    }
+
+    #[test]
+    fn imp_spawn_state_sprite_is_troo() {
+        assert_eq!(STATES[ids::S_TROO_STND as usize].sprite, SPR_TROO);
+    }
+
+    #[test]
+    fn demon_spawn_state_sprite_is_sarg() {
+        assert_eq!(STATES[ids::S_SARG_STND as usize].sprite, SPR_SARG);
+    }
+
+    #[test]
+    fn cacodemon_spawn_state_sprite_is_head() {
+        assert_eq!(STATES[ids::S_HEAD_STND as usize].sprite, SPR_HEAD);
+    }
+
+    #[test]
+    fn baron_spawn_state_sprite_is_boss() {
+        assert_eq!(STATES[ids::S_BOSS_STND as usize].sprite, SPR_BOSS);
+    }
+
+    #[test]
+    fn cyberdemon_spawn_state_sprite_is_cybr() {
+        assert_eq!(STATES[ids::S_CYBER_STND as usize].sprite, SPR_CYBR);
+    }
+
+    #[test]
+    fn spider_spawn_state_sprite_is_spid() {
+        assert_eq!(STATES[ids::S_SPID_STND as usize].sprite, SPR_SPID);
+    }
+
+    // -----------------------------------------------------------------------
+    // Frame field tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn trooper_idle_frame_is_a() {
+        assert_eq!(STATES[ids::S_POSS_STND as usize].frame, 0);
+    }
+
+    #[test]
+    fn trooper_run2_frame_is_b() {
+        assert_eq!(STATES[ids::S_POSS_RUN2 as usize].frame, 1);
+    }
+
+    #[test]
+    fn imp_run2_frame_is_b() {
+        assert_eq!(STATES[ids::S_TROO_RUN2 as usize].frame, 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // Fullbright tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn imp_fireball_fly_is_fullbright() {
+        let s = &STATES[ids::S_TBALL1 as usize];
+        assert_eq!(s.sprite, SPR_BAL1);
+        assert_ne!(s.frame & FB, 0, "imp fireball fly must be fullbright");
+    }
+
+    #[test]
+    fn imp_fireball_death_is_fullbright() {
+        let s = &STATES[ids::S_TBALLX1 as usize];
+        assert_ne!(s.frame & FB, 0, "imp fireball death must be fullbright");
+    }
+
+    #[test]
+    fn rocket_fly_is_fullbright() {
+        let s = &STATES[ids::S_ROCKET as usize];
+        assert_eq!(s.sprite, SPR_MISL);
+        assert_ne!(s.frame & FB, 0);
+    }
+
+    #[test]
+    fn plasma_fly_is_fullbright() {
+        let s = &STATES[ids::S_PLASBALL1 as usize];
+        assert_ne!(s.frame & FB, 0);
+    }
+
+    #[test]
+    fn bfg_fly_is_fullbright() {
+        let s = &STATES[ids::S_BFGSHOT1 as usize];
+        assert_ne!(s.frame & FB, 0);
+    }
+
+    #[test]
+    fn weapon_flash_is_fullbright() {
+        assert_ne!(STATES[ids::S_PISTOL_FLASH1 as usize].frame & FB, 0);
+        assert_ne!(STATES[ids::S_SGUN_FLASH1 as usize].frame & FB, 0);
+        assert_ne!(STATES[ids::S_DSGUN_FLASH1 as usize].frame & FB, 0);
+        assert_ne!(STATES[ids::S_CHAIN_FLASH1 as usize].frame & FB, 0);
+        assert_ne!(STATES[ids::S_MISSILE_FLASH1 as usize].frame & FB, 0);
+        assert_ne!(STATES[ids::S_BFG_FLASH1 as usize].frame & FB, 0);
+    }
+
+    #[test]
+    fn lost_soul_fly_is_fullbright() {
+        assert_ne!(STATES[ids::S_SKULL_STND as usize].frame & FB, 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Projectile chain tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn imp_fireball_fly_loops() {
+        let s1 = &STATES[ids::S_TBALL1 as usize];
+        let s2 = &STATES[ids::S_TBALL2 as usize];
+        assert_eq!(s1.next_state, StateNum(ids::S_TBALL2));
+        assert_eq!(s2.next_state, StateNum(ids::S_TBALL1));
+    }
+
+    #[test]
+    fn imp_fireball_death_terminates() {
+        let last = &STATES[ids::S_TBALLX3 as usize];
+        assert_eq!(last.next_state, StateNum(ids::S_NULL));
+    }
+
+    #[test]
+    fn rocket_fly_loops_to_self() {
+        let s = &STATES[ids::S_ROCKET as usize];
+        assert_eq!(s.next_state, StateNum(ids::S_ROCKET));
+    }
+
+    #[test]
+    fn rocket_death_terminates() {
+        let last = &STATES[ids::S_EXPLODE3 as usize];
+        assert_eq!(last.next_state, StateNum(ids::S_NULL));
+    }
+
+    #[test]
+    fn plasma_death_terminates() {
+        let last = &STATES[ids::S_PLASEXP4 as usize];
+        assert_eq!(last.next_state, StateNum(ids::S_NULL));
+    }
+
+    #[test]
+    fn bfg_explode_terminates() {
+        let last = &STATES[ids::S_BFGLAND6 as usize];
+        assert_eq!(last.next_state, StateNum(ids::S_NULL));
+    }
+
+    #[test]
+    fn revenant_tracer_fly_loops() {
+        let s1 = &STATES[ids::S_TRACER1 as usize];
+        let s2 = &STATES[ids::S_TRACER2 as usize];
+        assert_eq!(s1.next_state, StateNum(ids::S_TRACER2));
+        assert_eq!(s2.next_state, StateNum(ids::S_TRACER1));
+    }
+
+    #[test]
+    fn revenant_tracer_death_terminates() {
+        assert_eq!(
+            STATES[ids::S_TRACEEXP3 as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+    }
+
+    #[test]
+    fn arachnotron_plasma_fly_loops() {
+        let s1 = &STATES[ids::S_ARACH_PLAZ1 as usize];
+        let s2 = &STATES[ids::S_ARACH_PLAZ2 as usize];
+        assert_eq!(s1.next_state, StateNum(ids::S_ARACH_PLAZ2));
+        assert_eq!(s2.next_state, StateNum(ids::S_ARACH_PLAZ1));
+    }
+
+    #[test]
+    fn mancubus_fireball_fly_loops() {
+        let s1 = &STATES[ids::S_FATSHOT1 as usize];
+        let s2 = &STATES[ids::S_FATSHOT2 as usize];
+        assert_eq!(s1.next_state, StateNum(ids::S_FATSHOT2));
+        assert_eq!(s2.next_state, StateNum(ids::S_FATSHOT1));
+    }
+
+    // -----------------------------------------------------------------------
+    // Effect state tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn bullet_puff_terminates() {
+        assert_eq!(
+            STATES[ids::S_PUFF4 as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+    }
+
+    #[test]
+    fn blood_splat_terminates() {
+        assert_eq!(
+            STATES[ids::S_BLOOD3 as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+    }
+
+    #[test]
+    fn teleport_fog_terminates() {
+        assert_eq!(
+            STATES[ids::S_TFOG5 as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+    }
+
+    #[test]
+    fn item_fog_terminates() {
+        assert_eq!(
+            STATES[ids::S_IFOG5 as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+    }
+
+    #[test]
+    fn bullet_puff_first_frame_fullbright() {
+        assert_ne!(STATES[ids::S_PUFF1 as usize].frame & FB, 0);
+    }
+
+    // -----------------------------------------------------------------------
+    // Weapon state chain tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn fist_ready_loops() {
+        let s = &STATES[ids::S_PUNCH_READY as usize];
+        assert_eq!(s.next_state, StateNum(ids::S_PUNCH_READY));
+    }
+
+    #[test]
+    fn pistol_ready_loops() {
+        let s = &STATES[ids::S_PISTOL_READY as usize];
+        assert_eq!(s.next_state, StateNum(ids::S_PISTOL_READY));
+    }
+
+    #[test]
+    fn shotgun_ready_loops() {
+        let s = &STATES[ids::S_SGUN_READY as usize];
+        assert_eq!(s.next_state, StateNum(ids::S_SGUN_READY));
+    }
+
+    #[test]
+    fn chainsaw_ready_loops() {
+        let s = &STATES[ids::S_SAW_READY1 as usize];
+        assert_eq!(s.next_state, StateNum(ids::S_SAW_READY2));
+        let s2 = &STATES[ids::S_SAW_READY2 as usize];
+        assert_eq!(s2.next_state, StateNum(ids::S_SAW_READY1));
+    }
+
+    #[test]
+    fn fist_fire_returns_to_ready() {
+        let last = &STATES[ids::S_PUNCH4 as usize];
+        assert_eq!(last.next_state, StateNum(ids::S_PUNCH_READY));
+    }
+
+    #[test]
+    fn pistol_fire_returns_to_ready() {
+        let last = &STATES[ids::S_PISTOL3 as usize];
+        assert_eq!(last.next_state, StateNum(ids::S_PISTOL_READY));
+    }
+
+    #[test]
+    fn pistol_flash_terminates() {
+        assert_eq!(
+            STATES[ids::S_PISTOL_FLASH2 as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Doom 2 monster state tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn lost_soul_states_not_null() {
+        assert_ne!(
+            STATES[ids::S_SKULL_STND as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+        assert_eq!(STATES[ids::S_SKULL_STND as usize].sprite, SPR_SKUL);
+    }
+
+    #[test]
+    fn arachnotron_states_not_null() {
+        assert_ne!(
+            STATES[ids::S_BSPI_STND as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+        assert_eq!(STATES[ids::S_BSPI_STND as usize].sprite, SPR_BSPI);
+    }
+
+    #[test]
+    fn pain_elemental_states_not_null() {
+        assert_ne!(
+            STATES[ids::S_PAIN_STND as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+        assert_eq!(STATES[ids::S_PAIN_STND as usize].sprite, SPR_PAIN);
+    }
+
+    #[test]
+    fn revenant_states_not_null() {
+        assert_ne!(
+            STATES[ids::S_SKEL_STND as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+        assert_eq!(STATES[ids::S_SKEL_STND as usize].sprite, SPR_SKEL);
+    }
+
+    #[test]
+    fn mancubus_states_not_null() {
+        assert_ne!(
+            STATES[ids::S_FATT_STND as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+        assert_eq!(STATES[ids::S_FATT_STND as usize].sprite, SPR_FATT);
+    }
+
+    #[test]
+    fn archvile_states_not_null() {
+        assert_ne!(
+            STATES[ids::S_VILE_STND as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+        assert_eq!(STATES[ids::S_VILE_STND as usize].sprite, SPR_VILE);
+    }
+
+    #[test]
+    fn chaingunner_states_not_null() {
+        assert_ne!(
+            STATES[ids::S_CPOS_STND as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+        assert_eq!(STATES[ids::S_CPOS_STND as usize].sprite, SPR_CPOS);
+    }
+
+    #[test]
+    fn lost_soul_death_terminates() {
+        assert_eq!(
+            STATES[ids::S_SKULL_DIE5 as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+        assert_eq!(STATES[ids::S_SKULL_DIE5 as usize].tics, -1);
+    }
+
+    #[test]
+    fn arachnotron_death_terminates() {
+        assert_eq!(
+            STATES[ids::S_BSPI_DIE5 as usize].next_state,
+            StateNum(ids::S_NULL)
+        );
+    }
+
+    #[test]
+    fn chaingunner_attack_uses_cpos_action() {
+        assert_eq!(
+            STATES[ids::S_CPOS_ATK2 as usize].action,
+            actions::ACTION_CPOS_ATTACK
+        );
+    }
+
+    #[test]
+    fn revenant_attack_uses_skel_missile() {
+        assert_eq!(
+            STATES[ids::S_SKEL_ATK2 as usize].action,
+            actions::ACTION_SKEL_MISSILE
+        );
+    }
+
+    #[test]
+    fn mancubus_attack_uses_fat_attack() {
+        assert_eq!(
+            STATES[ids::S_FATT_ATK2 as usize].action,
+            actions::ACTION_FAT_ATTACK1
+        );
+    }
+
+    #[test]
+    fn arachnotron_attack_uses_bspi_attack() {
+        assert_eq!(
+            STATES[ids::S_BSPI_ATK2 as usize].action,
+            actions::ACTION_BSPI_ATTACK
+        );
+    }
+
+    #[test]
+    fn pain_elemental_attack_uses_pain_attack() {
+        assert_eq!(
+            STATES[ids::S_PAIN_ATK2 as usize].action,
+            actions::ACTION_PAIN_ATTACK
+        );
+    }
+
+    #[test]
+    fn lost_soul_attack_uses_skull_attack() {
+        assert_eq!(
+            STATES[ids::S_SKULL_ATK2 as usize].action,
+            actions::ACTION_SKULL_ATTACK
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // SPRITE_NAMES table tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn sprite_names_len_matches_count() {
+        assert_eq!(SPRITE_NAMES.len(), SPRITE_COUNT);
+    }
+
+    #[test]
+    fn sprite_names_no_duplicates() {
+        for i in 0..SPRITE_NAMES.len() {
+            for j in (i + 1)..SPRITE_NAMES.len() {
+                assert_ne!(
+                    SPRITE_NAMES[i], SPRITE_NAMES[j],
+                    "duplicate sprite name at indices {i} and {j}: {}",
+                    SPRITE_NAMES[i]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn sprite_names_all_four_chars() {
+        for (i, name) in SPRITE_NAMES.iter().enumerate() {
+            assert_eq!(
+                name.len(),
+                4,
+                "sprite name at index {i} ({name}) is not 4 characters"
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // All state entries have valid sprites
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn all_sprites_valid() {
+        for (i, e) in STATES.iter().enumerate() {
+            assert!(
+                (e.sprite as usize) < SPRITE_COUNT || e.sprite == SPR_NONE,
+                "state {i} has invalid sprite index {}",
+                e.sprite
+            );
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Hell Knight own states
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn hell_knight_has_own_states() {
+        let s = &STATES[ids::S_BOS2_STND as usize];
+        assert_eq!(s.sprite, SPR_BOS2);
+        assert_eq!(s.action, LOOK);
+    }
+
+    #[test]
+    fn hell_knight_death_terminates() {
+        assert_eq!(STATES[ids::S_BOS2_DIE2 as usize].tics, -1);
+        assert_eq!(
+            STATES[ids::S_BOS2_DIE2 as usize].next_state,
+            StateNum(ids::S_NULL)
         );
     }
 }

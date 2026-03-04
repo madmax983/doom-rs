@@ -86,9 +86,9 @@ pub struct FramePatch {
     pub duration: Option<i32>,
     /// Override for `MobjStateEntry::next_state`.
     pub next_frame: Option<usize>,
-    /// Sprite number -- stored but not applied (no `sprite` field on `MobjStateEntry`).
+    /// Sprite number override for `MobjStateEntry::sprite`.
     pub sprite_number: Option<u8>,
-    /// Sprite subnumber -- stored but not applied (no `frame` field on `MobjStateEntry`).
+    /// Sprite subnumber override for `MobjStateEntry::frame`.
     pub sprite_subnumber: Option<u8>,
     /// Action override from `[CODEPTR]` section (index into action table).
     pub action: Option<u16>,
@@ -260,19 +260,13 @@ impl DehPatch {
                         .to_owned();
                     let start = old_len.min(remaining.len());
                     let new_text = remaining.get(start..).unwrap_or("").to_owned();
-                    patch.texts.push(TextReplacement {
-                        old_text,
-                        new_text,
-                    });
+                    patch.texts.push(TextReplacement { old_text, new_text });
                     break;
                 }
 
                 let old_text = remaining[..old_len].to_owned();
                 let new_text = remaining[old_len..total].to_owned();
-                patch.texts.push(TextReplacement {
-                    old_text,
-                    new_text,
-                });
+                patch.texts.push(TextReplacement { old_text, new_text });
                 // Skip the consumed bytes plus any trailing newline.
                 remaining = &remaining[total..];
                 if remaining.starts_with('\n') {
@@ -607,9 +601,8 @@ impl DehPatch {
     /// - `MobjInfo::speed`, `radius`, and `height` are stored as
     ///   [`Fixed16_16`]; integer values from the patch are scaled by `65536`
     ///   (`FRACUNIT`) before assignment.
-    /// - Frame fields `sprite_number` and `sprite_subnumber` are stored in
-    ///   [`FramePatch`] but `MobjStateEntry` has no corresponding fields, so
-    ///   they are ignored during apply.
+    /// - Frame fields `sprite_number` and `sprite_subnumber` are applied to
+    ///   `MobjStateEntry::sprite` and `MobjStateEntry::frame` respectively.
     /// - Weapon patches are stored in [`WeaponPatch`] but the weapon table is
     ///   internal to `weapons.rs` and is not accessible here; those patches
     ///   must be applied by the caller if needed.
@@ -699,8 +692,14 @@ impl DehPatch {
                 state.next_state = StateNum(nf as u16);
                 count += 1;
             }
-            // sprite_number / sprite_subnumber: no corresponding fields on
-            // MobjStateEntry; stored only.
+            if let Some(sn) = patch.sprite_number {
+                state.sprite = sn as u16;
+                count += 1;
+            }
+            if let Some(sf) = patch.sprite_subnumber {
+                state.frame = sf;
+                count += 1;
+            }
         }
 
         // Weapon patches: WeaponInfo is crate-private in weapons.rs and
@@ -914,8 +913,14 @@ Frame 20 = A_Chase
 ";
         let patch = DehPatch::parse(input).expect("CODEPTR section must parse OK");
         assert_eq!(patch.code_pointers.len(), 2);
-        assert_eq!(patch.code_pointers.get(&10).map(String::as_str), Some("A_FireBFG"));
-        assert_eq!(patch.code_pointers.get(&20).map(String::as_str), Some("A_Chase"));
+        assert_eq!(
+            patch.code_pointers.get(&10).map(String::as_str),
+            Some("A_FireBFG")
+        );
+        assert_eq!(
+            patch.code_pointers.get(&20).map(String::as_str),
+            Some("A_Chase")
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -1015,10 +1020,7 @@ Per ammo = 10
             .apply(&mut mobjinfo, &mut states)
             .expect("apply must succeed");
 
-        assert_eq!(
-            states[1].tics, 20,
-            "frame 1 tics must be updated to 20"
-        );
+        assert_eq!(states[1].tics, 20, "frame 1 tics must be updated to 20");
     }
 
     // -----------------------------------------------------------------------
@@ -1027,8 +1029,7 @@ Per ammo = 10
 
     #[test]
     fn deh_apply_state_next_state() {
-        let patch =
-            DehPatch::parse("Frame 1\nNext frame = 5\n").expect("parse must succeed");
+        let patch = DehPatch::parse("Frame 1\nNext frame = 5\n").expect("parse must succeed");
 
         let mut mobjinfo: Vec<MobjInfo> = MOBJINFO.to_vec();
         let mut states: Vec<MobjStateEntry> = STATES.to_vec();
@@ -1356,8 +1357,14 @@ Frame 50 = A_PosAttack
 ";
         let patch = DehPatch::parse(input).expect("parse");
         assert_eq!(patch.code_pointers.len(), 3);
-        assert_eq!(patch.code_pointers.get(&1).map(String::as_str), Some("A_Look"));
-        assert_eq!(patch.code_pointers.get(&2).map(String::as_str), Some("A_Chase"));
+        assert_eq!(
+            patch.code_pointers.get(&1).map(String::as_str),
+            Some("A_Look")
+        );
+        assert_eq!(
+            patch.code_pointers.get(&2).map(String::as_str),
+            Some("A_Chase")
+        );
         assert_eq!(
             patch.code_pointers.get(&50).map(String::as_str),
             Some("A_PosAttack")

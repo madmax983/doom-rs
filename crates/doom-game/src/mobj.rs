@@ -221,6 +221,10 @@ impl StateNum {
 /// One step in an actor's state machine.
 #[derive(Clone, Copy, Debug)]
 pub struct MobjStateEntry {
+    /// Sprite number (index into `sprite_names::SPRITE_NAMES`).
+    pub sprite: u16,
+    /// Frame letter (0=A, 1=B, etc.) with optional fullbright bit (`0x80`).
+    pub frame: u8,
     /// Tics to remain in this state.  Negative = stay indefinitely.
     pub tics: i16,
     /// Next state when `tics` reaches zero.
@@ -230,8 +234,13 @@ pub struct MobjStateEntry {
 }
 
 impl MobjStateEntry {
-    /// A permanent idle state with no action.
+    /// Fullbright flag — OR with `frame` to disable lighting on this frame.
+    pub const FF_FULLBRIGHT: u8 = 0x80;
+
+    /// A permanent idle state with no action and no sprite.
     pub const IDLE: Self = Self {
+        sprite: 0xFFFF,
+        frame: 0,
         tics: -1,
         next_state: StateNum::NULL,
         action: 0,
