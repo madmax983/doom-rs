@@ -500,22 +500,38 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     }
 
     // 4. Compute proposed position, then collision-test (needs shared borrow).
-    let (new_x, new_y) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.x + mo.momx, mo.y + mo.momy),
+    let (old_x, old_y, new_x, new_y) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x, mo.y, mo.x + mo.momx, mo.y + mo.momy),
         None => return,
     };
-    let moved = match level {
+    let mut moved = match level {
         Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
         None => true,
     };
+    let mut final_x = new_x;
+    let mut final_y = new_y;
+
+    if !moved {
+        if let Some(lv) = level {
+            let (sx, sy) =
+                crate::movement::p_slide_move(&gs.mobjslab, handle, old_x, old_y, new_x, new_y, lv);
+            if sx != old_x || sy != old_y {
+                moved = true;
+                final_x = sx;
+                final_y = sy;
+            }
+        }
+    }
 
     // 5. Apply position + friction + clamp.
     let Some(mo) = gs.mobjslab.get_mut(handle) else {
         return;
     };
     if moved {
-        mo.x = new_x;
-        mo.y = new_y;
+        mo.x = final_x;
+        mo.y = final_y;
+        mo.momx = final_x - old_x;
+        mo.momy = final_y - old_y;
     }
     mo.momx = mo.momx.fixed_mul(FRICTION);
     mo.momy = mo.momy.fixed_mul(FRICTION);

@@ -42,6 +42,7 @@ use crate::palette::PaletteLut;
 use crate::sky::{draw_sky_columns, draw_sky_fallback, is_sky_flat};
 use crate::span::{DrawSpanParams, draw_span};
 use crate::texture::TextureCache;
+use crate::visplane::{PlaneKind, VisplaneSet, visplane_to_spans};
 
 // ---------------------------------------------------------------------------
 // Screen constants
@@ -131,6 +132,8 @@ pub fn render_level(
     // Flat names to use for ceiling/floor per column.
     let mut ceil_flat: [[u8; 8]; SCREEN_W] = [NO_FLAT; SCREEN_W];
     let mut floor_flat: [[u8; 8]; SCREEN_W] = [NO_FLAT; SCREEN_W];
+    let mut ceil_height = [0i32; SCREEN_W];
+    let mut floor_height = [0i32; SCREEN_W];
 
     // Per-column raw sector light level (0-255) for floor/ceiling shading.
     // Stored as the raw sector value so that `LightParams` can compute
@@ -329,10 +332,14 @@ pub fn render_level(
                 if let Some(bs) = back_sector {
                     ceil_flat[x] = bs.ceil_flat;
                     floor_flat[x] = bs.floor_flat;
+                    ceil_height[x] = bs.ceil_height as i32;
+                    floor_height[x] = bs.floor_height as i32;
                     col_light[x] = (bs.light_level as u32).min(255) as u8;
                 } else {
                     ceil_flat[x] = sector.ceil_flat;
                     floor_flat[x] = sector.floor_flat;
+                    ceil_height[x] = ceil_h;
+                    floor_height[x] = floor_h;
                     col_light[x] = sector_light;
                 }
 
@@ -500,6 +507,8 @@ pub fn render_level(
                 // Record which sector's flats belong to this column.
                 ceil_flat[x] = sector.ceil_flat;
                 floor_flat[x] = sector.floor_flat;
+                ceil_height[x] = ceil_h;
+                floor_height[x] = floor_h;
                 col_light[x] = sector_light;
 
                 // If the sector's ceiling is F_SKY1, mark this column for sky
@@ -585,133 +594,92 @@ pub fn render_level(
     }
 
     // ------------------------------------------------------------------
-    // Step 5: Draw textured floor and ceiling spans
+    // Step 5: Build visplanes and draw spans
     // ------------------------------------------------------------------
-    // We scan row-by-row.  For each row we identify contiguous screen-column
-    // ranges that share the same flat name (ceiling above wall_top, floor
-    // below wall_bot) and emit one DrawSpanParams per run.
-    //
-    // Perspective-correct texture coordinates follow the standard Doom formula:
-    //
-    //   For a row at screen y:
-    //     dist = (PLAYER_HEIGHT * FOCAL_LEN) / |y - HALF_H|
-    //     xstep = cos(angle) / dist   (per pixel, in 16.16)
-    //     ystep = sin(angle) / dist
-    //     world_x at centre of row = player_x + cos(angle)*dist
-    //     world_y at centre of row = player_y + sin(angle)*dist
-    //     ds_xfrac/ds_yfrac offset for column x relative to centre:
-    //       lateral_delta = (x - HALF_W) * dist / FOCAL_LEN
-    //       world_x += sin(angle) * lateral_delta   (perpendicular direction)
-    //       world_y -= cos(angle) * lateral_delta
-    //
-    // All arithmetic uses i64 to avoid overflow; results are scaled to 16.16.
-
     if flat_cache.is_none() {
         // No FlatCache — background fill from Step 1 is good enough.
         return z_buf;
     }
     let cache = flat_cache.unwrap();
+    let mut visplanes = VisplaneSet::new();
 
-    for y in 0..SCREEN_H as i32 {
-        // Determine whether this row is a ceiling row, floor row, or wall.
-        // We'll handle ceiling (y < HALF_H) and floor (y >= HALF_H) separately.
-
-        // Perspective: distance from player eye to floor/ceiling at screen row y.
-        let dy = y - HALF_H;
-        if dy == 0 {
-            // Horizon row — skip (avoid division by zero and it maps to nothing).
-            continue;
-        }
-
-        // dist = (PLAYER_HEIGHT * FOCAL_LEN) / |dy|  (in map units, i32).
-        let abs_dy = dy.abs();
-        let dist = (PLAYER_HEIGHT as i64 * FOCAL_LEN as i64) / abs_dy as i64;
-        if dist <= 0 {
-            continue;
-        }
-
-        // Per-pixel world-space step in u and v (16.16 fixed-point).
-        // step = (cos_a or sin_a) * (1 / dist), scaled for 64-unit tiles.
-        // xstep and ystep give the world-unit change per screen pixel.
-        // We use the perpendicular (right) vector for lateral stepping.
-        //
-        // view right vector = (sin_a, -cos_a)   (perpendicular to forward)
-        //
-        // world_x changes by: sin_a * (1/FOCAL_LEN) * dist  per screen pixel
-        // world_y changes by: -cos_a * (1/FOCAL_LEN) * dist per screen pixel
-        //
-        // Expressed as 16.16: multiply by 65536 and divide by dist * FOCAL_LEN.
-        // We want units that, after >> 16, give map-unit integers.
-        let xstep = ((sin_i * dist) / FOCAL_LEN as i64) as i32;
-        let ystep = ((-cos_i * dist) / FOCAL_LEN as i64) as i32;
-
-        // World position of the leftmost screen column (x = 0).
-        // world_centre = player + forward * dist
-        // world_left   = world_centre + right * (0 - HALF_W) * dist / FOCAL_LEN
-        //
-        // In 16.16 fixed-point (accumulator form):
-        let world_x_centre = (player_x as i64) * 65536 + (cos_i * dist); // already in map units → shift 16 → ×65536
-        let world_y_centre = (player_y as i64) * 65536 + (sin_i * dist);
-
-        // Adjust from screen centre to left edge (column 0):
-        //   lateral_offset = (0 - HALF_W) * dist / FOCAL_LEN
-        //   world += right * lateral_offset
-        let offset = (-(HALF_W as i64) * dist) / FOCAL_LEN as i64;
-        let world_x_left_fp = world_x_centre + sin_i * offset;
-        let world_y_left_fp = world_y_centre - cos_i * offset;
-
-        // Extract u,v for column 0 (we tile with 64-unit quads → >> 6 gives tile).
-        // The 16.16 world coordinate >> 22 gives the 64-unit tile index, & 63 the
-        // pixel within the tile.  We store as 16.16 where the integer part is the
-        // texel index (0..63).
-        let init_xfrac = ((world_x_left_fp >> 6) & 0xFFFF_FFFF) as u32;
-        let init_yfrac = ((world_y_left_fp >> 6) & 0xFFFF_FFFF) as u32;
-        let xstep_u = (xstep >> 6) as u32;
-        let ystep_u = (ystep >> 6) as u32;
-
-        // Scan columns and group into runs of the same flat.
-        let mut run_start: Option<usize> = None;
-        let mut run_flat_name: [u8; 8] = NO_FLAT;
-        let mut run_light: u8 = 0;
-
-        // The row's perspective distance (map units), used for flat shading.
-        let flat_dist = dist as f32;
-
-        let flush_span = |cache: &FlatCache,
-                          fb: &mut Framebuffer,
-                          x1: usize,
-                          x2: usize,
-                          name: &[u8; 8],
-                          sector_ll: u8,
-                          y: i32,
-                          init_xfrac: u32,
-                          init_yfrac: u32,
-                          xstep_u: u32,
-                          ystep_u: u32,
-                          colormap_cache: Option<&ColormapCache>,
-                          anim_state: Option<&AnimState>,
-                          row_dist: f32,
-                          fullbright: bool| {
-            if name == &NO_FLAT || is_sky_flat(name) {
-                return;
+    for x in 0..SCREEN_W {
+        let ceil_name = ceil_flat[x];
+        if ceil_name != NO_FLAT && !is_sky_flat(&ceil_name) {
+            let top = 0i32;
+            let bottom = (wall_top[x] - 1).min(SCREEN_H as i32 - 1);
+            if bottom >= top {
+                let idx = visplanes.r_find_plane(
+                    PlaneKind::Ceiling,
+                    ceil_height[x],
+                    ceil_name,
+                    col_light[x],
+                );
+                let _ = visplanes.r_check_plane(idx, x, x, top as i16, bottom as i16);
             }
-            let resolved = anim_state.map_or(*name, |a| a.resolve_flat(name));
-            let source = cache.get(&resolved);
-            // Advance xfrac/yfrac from column 0 to x1.
-            let steps = x1 as u32;
+        }
+
+        let floor_name = floor_flat[x];
+        if floor_name != NO_FLAT && !is_sky_flat(&floor_name) {
+            let top = (wall_bot[x] + 1).max(0);
+            let bottom = SCREEN_H as i32 - 1;
+            if bottom >= top {
+                let idx = visplanes.r_find_plane(
+                    PlaneKind::Floor,
+                    floor_height[x],
+                    floor_name,
+                    col_light[x],
+                );
+                let _ = visplanes.r_check_plane(idx, x, x, top as i16, bottom as i16);
+            }
+        }
+    }
+
+    for plane in visplanes.planes() {
+        let resolved = anim.map_or(plane.flat_name, |a| a.resolve_flat(&plane.flat_name));
+        let source = cache.get(&resolved);
+        let spans = visplane_to_spans(plane, SCREEN_H);
+        let flat_lp = LightParams::new(plane.light_level, is_fullbright);
+
+        for span in spans {
+            let y = span.y as i32;
+            let dy = y - HALF_H;
+            if dy == 0 {
+                continue;
+            }
+
+            let abs_dy = dy.abs();
+            let dist = (PLAYER_HEIGHT as i64 * FOCAL_LEN as i64) / abs_dy as i64;
+            if dist <= 0 {
+                continue;
+            }
+
+            let xstep = ((sin_i * dist) / FOCAL_LEN as i64) as i32;
+            let ystep = ((-cos_i * dist) / FOCAL_LEN as i64) as i32;
+
+            let world_x_centre = (player_x as i64) * 65536 + (cos_i * dist);
+            let world_y_centre = (player_y as i64) * 65536 + (sin_i * dist);
+            let offset = (-(HALF_W as i64) * dist) / FOCAL_LEN as i64;
+            let world_x_left_fp = world_x_centre + sin_i * offset;
+            let world_y_left_fp = world_y_centre - cos_i * offset;
+
+            let init_xfrac = ((world_x_left_fp >> 6) & 0xFFFF_FFFF) as u32;
+            let init_yfrac = ((world_y_left_fp >> 6) & 0xFFFF_FFFF) as u32;
+            let xstep_u = (xstep >> 6) as u32;
+            let ystep_u = (ystep >> 6) as u32;
+
+            let steps = span.x1 as u32;
             let span_xfrac = init_xfrac.wrapping_add(xstep_u.wrapping_mul(steps));
             let span_yfrac = init_yfrac.wrapping_add(ystep_u.wrapping_mul(steps));
 
-            // Distance-attenuated colormap for this flat span.
-            let flat_lp = LightParams::new(sector_ll, fullbright);
-            let span_cm: &[u8; 256] = colormap_cache
-                .map(|c| flat_lp.get_flat_colormap(row_dist, c))
+            let span_cm: &[u8; 256] = colormap
+                .map(|c| flat_lp.get_flat_colormap(dist as f32, c))
                 .unwrap_or(&IDENTITY_COLORMAP);
 
             let params = DrawSpanParams {
-                y: y as usize,
-                x1,
-                x2,
+                y: span.y,
+                x1: span.x1,
+                x2: span.x2,
                 ds_xfrac: span_xfrac,
                 ds_yfrac: span_yfrac,
                 ds_xstep: xstep_u,
@@ -720,97 +688,6 @@ pub fn render_level(
                 colormap: span_cm,
             };
             draw_span(fb, &params);
-        };
-
-        for x in 0..SCREEN_W {
-            let wt = wall_top[x];
-            let wb = wall_bot[x];
-
-            // Determine which flat this (x, y) pixel needs.
-            let this_flat: Option<([u8; 8], u8)> = if dy < 0 {
-                // Above horizon — ceiling rows.
-                if y < wt {
-                    // Sky sectors are rendered by draw_sky_columns (Step 4b),
-                    // so skip them here to avoid overwriting sky with flat data.
-                    if is_sky_flat(&ceil_flat[x]) {
-                        None
-                    } else {
-                        // This column's ceiling is visible here.
-                        Some((ceil_flat[x], col_light[x]))
-                    }
-                } else {
-                    None // occluded by wall
-                }
-            } else {
-                // Below horizon — floor rows.
-                if y > wb {
-                    Some((floor_flat[x], col_light[x]))
-                } else {
-                    None // occluded by wall or unrendered
-                }
-            };
-
-            match (run_start, this_flat) {
-                (None, Some((name, li))) => {
-                    // Start a new run.
-                    run_start = Some(x);
-                    run_flat_name = name;
-                    run_light = li;
-                }
-                (Some(_start), Some((name, _li))) if name == run_flat_name => {
-                    // Continue the existing run (light of run start is used for whole span).
-                }
-                (Some(start), other) => {
-                    // End the current run and flush it.
-                    flush_span(
-                        cache,
-                        fb,
-                        start,
-                        x - 1,
-                        &run_flat_name,
-                        run_light,
-                        y,
-                        init_xfrac,
-                        init_yfrac,
-                        xstep_u,
-                        ystep_u,
-                        colormap,
-                        anim,
-                        flat_dist,
-                        is_fullbright,
-                    );
-                    run_start = if other.is_some() {
-                        let (name, li) = other.unwrap();
-                        run_flat_name = name;
-                        run_light = li;
-                        Some(x)
-                    } else {
-                        None
-                    };
-                }
-                (None, None) => {}
-            }
-        }
-
-        // Flush any remaining run.
-        if let Some(start) = run_start {
-            flush_span(
-                cache,
-                fb,
-                start,
-                SCREEN_W - 1,
-                &run_flat_name,
-                run_light,
-                y,
-                init_xfrac,
-                init_yfrac,
-                xstep_u,
-                ystep_u,
-                colormap,
-                anim,
-                flat_dist,
-                is_fullbright,
-            );
         }
     }
 

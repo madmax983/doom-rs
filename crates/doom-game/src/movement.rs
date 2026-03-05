@@ -1,7 +1,6 @@
 //! P_TryMove — blockmap-based collision detection for actor movement.
 //!
-//! Port of Doom's `p_map.c: P_TryMove` (without slide movement or
-//! monster-vs-monster clipping, which arrive in Batch 3).
+//! Port of Doom's `p_map.c: P_TryMove` with a basic `p_slide_move` helper.
 //!
 //! # Algorithm
 //! 1. Compute the actor's proposed bounding box at `(new_x, new_y)`.
@@ -16,6 +15,14 @@
 use crate::mobj::{MobjHandle, MobjSlab, flags};
 use doom_map::Level;
 use doom_types::Fixed16_16;
+
+#[derive(Clone, Copy, Debug)]
+struct BlockingLine {
+    x1: Fixed16_16,
+    y1: Fixed16_16,
+    x2: Fixed16_16,
+    y2: Fixed16_16,
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -50,14 +57,93 @@ pub fn p_try_move(
     new_y: Fixed16_16,
     level: &Level,
 ) -> bool {
+    try_move_with_blocker(slab, handle, new_x, new_y, level).0
+}
+
+/// Attempt a movement with wall-sliding fallback.
+///
+/// Caller provides both the current origin `(old_x, old_y)` and desired target
+/// `(new_x, new_y)`. If `P_TryMove` fails, this projects the move vector onto
+/// the blocking linedef tangent, then falls back to axis-wise slide attempts.
+/// Returns the best legal target, or the original origin if fully blocked.
+#[must_use]
+pub fn p_slide_move(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    old_x: Fixed16_16,
+    old_y: Fixed16_16,
+    new_x: Fixed16_16,
+    new_y: Fixed16_16,
+    level: &Level,
+) -> (Fixed16_16, Fixed16_16) {
+    if slab.get(handle).is_none() {
+        return (old_x, old_y);
+    }
+    if p_try_move(slab, handle, new_x, new_y, level) {
+        return (new_x, new_y);
+    }
+
+    let mut best: Option<(Fixed16_16, Fixed16_16, i128)> = None;
+    let mut consider = |cx: Fixed16_16, cy: Fixed16_16| {
+        if (cx == old_x && cy == old_y) || !p_try_move(slab, handle, cx, cy, level) {
+            return;
+        }
+        let dx = (cx - old_x).0 as i128;
+        let dy = (cy - old_y).0 as i128;
+        let dist_sq = dx * dx + dy * dy;
+        let replace = match best {
+            None => true,
+            Some((_, _, cur)) => dist_sq > cur,
+        };
+        if replace {
+            best = Some((cx, cy, dist_sq));
+        }
+    };
+
+    // 1) Project onto blocking line tangent for a Doom-like slide.
+    let (_, blocker) = try_move_with_blocker(slab, handle, new_x, new_y, level);
+    if let Some(bl) = blocker {
+        let tx = (bl.x2 - bl.x1).0 as i128;
+        let ty = (bl.y2 - bl.y1).0 as i128;
+        let vx = (new_x - old_x).0 as i128;
+        let vy = (new_y - old_y).0 as i128;
+        let mag2 = tx * tx + ty * ty;
+        if mag2 > 0 {
+            let dot = vx * tx + vy * ty;
+            let sx_raw = (tx * dot) / mag2;
+            let sy_raw = (ty * dot) / mag2;
+            let slide_x = old_x + Fixed16_16::from_raw(clamp_i128_to_i32(sx_raw));
+            let slide_y = old_y + Fixed16_16::from_raw(clamp_i128_to_i32(sy_raw));
+            consider(slide_x, slide_y);
+        }
+    }
+
+    // 2) Axis slide fallback (helps with axis-aligned corners).
+    consider(new_x, old_y);
+    consider(old_x, new_y);
+
+    best.map(|(x, y, _)| (x, y)).unwrap_or((old_x, old_y))
+}
+
+fn clamp_i128_to_i32(v: i128) -> i32 {
+    v.clamp(i32::MIN as i128, i32::MAX as i128) as i32
+}
+
+fn try_move_with_blocker(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    new_x: Fixed16_16,
+    new_y: Fixed16_16,
+    level: &Level,
+) -> (bool, Option<BlockingLine>) {
     // Extract what we need, releasing the borrow before iterating blockmap.
     let (radius, height, mo_flags, mo_z) = match slab.get(handle) {
         Some(mo) => (mo.radius, mo.height, mo.flags, mo.z),
-        None => return false,
+        None => return (false, None),
     };
 
     if mo_flags & flags::MF_NOCLIP != 0 {
-        return true;
+        return (true, None);
     }
 
     // Proposed bounding box.
@@ -115,15 +201,39 @@ pub fn p_try_move(
 
                 // --- One-sided: always blocked ---
                 if !ld.is_two_sided() {
-                    return false;
+                    return (
+                        false,
+                        Some(BlockingLine {
+                            x1: lx1,
+                            y1: ly1,
+                            x2: lx2,
+                            y2: ly2,
+                        }),
+                    );
                 }
 
                 // --- Two-sided: check opening ---
                 let Some(right_sd) = level.sidedefs.get(ld.right_sidedef as usize) else {
-                    return false;
+                    return (
+                        false,
+                        Some(BlockingLine {
+                            x1: lx1,
+                            y1: ly1,
+                            x2: lx2,
+                            y2: ly2,
+                        }),
+                    );
                 };
                 let Some(left_sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
-                    return false;
+                    return (
+                        false,
+                        Some(BlockingLine {
+                            x1: lx1,
+                            y1: ly1,
+                            x2: lx2,
+                            y2: ly2,
+                        }),
+                    );
                 };
                 let front = &level.sectors[right_sd.sector as usize];
                 let back = &level.sectors[left_sd.sector as usize];
@@ -135,18 +245,34 @@ pub fn p_try_move(
 
                 // Gap too small for actor to fit.
                 if open_ceil - open_floor < height {
-                    return false;
+                    return (
+                        false,
+                        Some(BlockingLine {
+                            x1: lx1,
+                            y1: ly1,
+                            x2: lx2,
+                            y2: ly2,
+                        }),
+                    );
                 }
 
                 // Step too high to climb.
                 if open_floor - mo_z > MAX_STEP_HEIGHT {
-                    return false;
+                    return (
+                        false,
+                        Some(BlockingLine {
+                            x1: lx1,
+                            y1: ly1,
+                            x2: lx2,
+                            y2: ly2,
+                        }),
+                    );
                 }
             }
         }
     }
 
-    true
+    (true, None)
 }
 
 // ---------------------------------------------------------------------------
@@ -236,6 +362,76 @@ mod tests {
                 special: 0,
                 tag: 0,
             }],
+            reject,
+            blockmap,
+        }
+    }
+
+    fn make_level_with_one_sided_walls(walls: &[(i16, i16, i16, i16)]) -> doom_map::Level {
+        use doom_map::{Blockmap, Linedef, Reject, SIDEDEF_NONE, Sector, Sidedef, Vertex};
+
+        let mut vertexes = Vec::with_capacity(walls.len() * 2);
+        let mut linedefs = Vec::with_capacity(walls.len());
+        for &(x1, y1, x2, y2) in walls {
+            let from_vertex = vertexes.len() as u16;
+            vertexes.push(Vertex { x: x1, y: y1 });
+            let to_vertex = vertexes.len() as u16;
+            vertexes.push(Vertex { x: x2, y: y2 });
+            linedefs.push(Linedef {
+                from_vertex,
+                to_vertex,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: SIDEDEF_NONE,
+            });
+        }
+
+        let sidedefs = vec![Sidedef {
+            x_offset: 0,
+            y_offset: 0,
+            upper_texture: [0; 8],
+            lower_texture: [0; 8],
+            middle_texture: *b"WALL1\0\0\0",
+            sector: 0,
+        }];
+        let sectors = vec![Sector {
+            floor_height: 0,
+            ceil_height: 128,
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: 0,
+        }];
+
+        // 1x1 blockmap at origin with all wall linedefs in the single cell.
+        let mut bm_data = Vec::new();
+        bm_data.extend_from_slice(&0i16.to_le_bytes()); // x_origin
+        bm_data.extend_from_slice(&0i16.to_le_bytes()); // y_origin
+        bm_data.extend_from_slice(&1u16.to_le_bytes()); // x_count
+        bm_data.extend_from_slice(&1u16.to_le_bytes()); // y_count
+        let data_start = 4u16 + 1; // header words + 1 offset word
+        bm_data.extend_from_slice(&data_start.to_le_bytes());
+        bm_data.extend_from_slice(&0u16.to_le_bytes()); // sentinel
+        for ld_idx in 0..linedefs.len() {
+            bm_data.extend_from_slice(&(ld_idx as u16).to_le_bytes());
+        }
+        bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes()); // terminator
+        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+        let reject = Reject::parse_lump(&[0u8], 1).unwrap();
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
             reject,
             blockmap,
         }
@@ -337,5 +533,64 @@ mod tests {
     #[test]
     fn max_step_height_is_24_units() {
         assert_eq!(MAX_STEP_HEIGHT.to_int(), 24);
+    }
+
+    #[test]
+    fn slide_move_slides_along_vertical_wall() {
+        let level = make_level_with_one_sided_walls(&[(64, 0, 64, 128)]);
+        let (slab, handle) = make_player_slab();
+
+        let old_x = Fixed16_16::from_int(32);
+        let old_y = Fixed16_16::from_int(32);
+        let new_x = Fixed16_16::from_int(70);
+        let new_y = Fixed16_16::from_int(96);
+
+        assert!(
+            !p_try_move(&slab, handle, new_x, new_y, &level),
+            "direct move should be blocked by one-sided wall"
+        );
+
+        let (slide_x, slide_y) = p_slide_move(&slab, handle, old_x, old_y, new_x, new_y, &level);
+        assert_eq!(
+            slide_x, old_x,
+            "slide should preserve x against vertical wall"
+        );
+        assert_eq!(slide_y, new_y, "slide should keep forward y progress");
+        assert!(p_try_move(&slab, handle, slide_x, slide_y, &level));
+    }
+
+    #[test]
+    fn slide_move_returns_origin_when_corner_traps_actor() {
+        let level = make_level_with_one_sided_walls(&[(64, 0, 64, 128), (0, 64, 128, 64)]);
+        let (slab, handle) = make_player_slab();
+
+        let old_x = Fixed16_16::from_int(32);
+        let old_y = Fixed16_16::from_int(32);
+        let new_x = Fixed16_16::from_int(70);
+        let new_y = Fixed16_16::from_int(70);
+
+        assert!(!p_try_move(&slab, handle, new_x, new_y, &level));
+        let (slide_x, slide_y) = p_slide_move(&slab, handle, old_x, old_y, new_x, new_y, &level);
+        assert_eq!((slide_x, slide_y), (old_x, old_y));
+    }
+
+    #[test]
+    fn slide_move_with_stale_handle_returns_origin() {
+        let level = make_open_level();
+        let (mut slab, handle) = make_player_slab();
+        slab.free(handle);
+
+        let old_x = Fixed16_16::from_int(10);
+        let old_y = Fixed16_16::from_int(20);
+        let (slide_x, slide_y) = p_slide_move(
+            &slab,
+            handle,
+            old_x,
+            old_y,
+            Fixed16_16::from_int(40),
+            Fixed16_16::from_int(60),
+            &level,
+        );
+        assert_eq!((slide_x, slide_y), (old_x, old_y));
     }
 }
