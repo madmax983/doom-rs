@@ -129,6 +129,12 @@ pub fn render_level(
     let mut wall_top = [SCREEN_H as i32; SCREEN_W];
     let mut wall_bot = [-1i32; SCREEN_W];
 
+    // Wall-pass clipping bounds used to clip visplane spans:
+    // ceilingclip[x] = maximum row where a ceiling span may draw.
+    // floorclip[x]   = minimum row where a floor span may draw.
+    let mut ceilingclip = [SCREEN_H as i32 - 1; SCREEN_W];
+    let mut floorclip = [0i32; SCREEN_W];
+
     // Flat names to use for ceiling/floor per column.
     let mut ceil_flat: [[u8; 8]; SCREEN_W] = [NO_FLAT; SCREEN_W];
     let mut floor_flat: [[u8; 8]; SCREEN_W] = [NO_FLAT; SCREEN_W];
@@ -280,6 +286,7 @@ pub fn render_level(
             let t = (x as i64 - sx_left).max(0);
             let depth = vx_left + t * (vx_right - vx_left) / span_w;
             let depth_i32 = depth.max(1) as i32;
+            let depth_f32 = depth_i32 as f32;
 
             if is_two_sided {
                 // -----------------------------------------------------------------
@@ -288,6 +295,12 @@ pub fn render_level(
                 // For two-sided segs we do NOT update z_buf — the line does not
                 // fully occlude the view.  Things behind can show through the
                 // portal opening.
+                //
+                // But if a nearer one-sided wall already owns this column in z_buf,
+                // this portal is fully occluded and must not affect visplane bounds.
+                if depth_f32 >= z_buf[x] {
+                    continue;
+                }
 
                 // Wall height covers the full front sector span.
                 let wall_h_world = (ceil_h - floor_h).max(0);
@@ -327,6 +340,8 @@ pub fn render_level(
                 // and floor spans fill through it.
                 wall_top[x] = screen_back_ceil;
                 wall_bot[x] = screen_back_floor;
+                ceilingclip[x] = (screen_back_ceil - 1).clamp(-1, SCREEN_H as i32 - 1);
+                floorclip[x] = (screen_back_floor + 1).clamp(0, SCREEN_H as i32);
 
                 // Record back sector flats (what the player sees through the portal).
                 if let Some(bs) = back_sector {
@@ -488,7 +503,6 @@ pub fn render_level(
                 // -----------------------------------------------------------------
 
                 // Z-buffer occlusion.
-                let depth_f32 = depth_i32 as f32;
                 if depth_f32 >= z_buf[x] {
                     continue;
                 }
@@ -503,6 +517,8 @@ pub fn render_level(
 
                 wall_top[x] = w_top;
                 wall_bot[x] = w_bot;
+                ceilingclip[x] = (w_top - 1).clamp(-1, SCREEN_H as i32 - 1);
+                floorclip[x] = (w_bot + 1).clamp(0, SCREEN_H as i32);
 
                 // Record which sector's flats belong to this column.
                 ceil_flat[x] = sector.ceil_flat;
@@ -607,7 +623,7 @@ pub fn render_level(
         let ceil_name = ceil_flat[x];
         if ceil_name != NO_FLAT && !is_sky_flat(&ceil_name) {
             let top = 0i32;
-            let bottom = (wall_top[x] - 1).min(SCREEN_H as i32 - 1);
+            let bottom = ceilingclip[x].min(SCREEN_H as i32 - 1);
             if bottom >= top {
                 let idx = visplanes.r_find_plane(
                     PlaneKind::Ceiling,
@@ -621,7 +637,7 @@ pub fn render_level(
 
         let floor_name = floor_flat[x];
         if floor_name != NO_FLAT && !is_sky_flat(&floor_name) {
-            let top = (wall_bot[x] + 1).max(0);
+            let top = floorclip[x].max(0);
             let bottom = SCREEN_H as i32 - 1;
             if bottom >= top {
                 let idx = visplanes.r_find_plane(
@@ -669,25 +685,59 @@ pub fn render_level(
             let ystep_u = (ystep >> 6) as u32;
 
             let steps = span.x1 as u32;
-            let span_xfrac = init_xfrac.wrapping_add(xstep_u.wrapping_mul(steps));
-            let span_yfrac = init_yfrac.wrapping_add(ystep_u.wrapping_mul(steps));
+            let base_xfrac = init_xfrac.wrapping_add(xstep_u.wrapping_mul(steps));
+            let base_yfrac = init_yfrac.wrapping_add(ystep_u.wrapping_mul(steps));
 
             let span_cm: &[u8; 256] = colormap
                 .map(|c| flat_lp.get_flat_colormap(dist as f32, c))
                 .unwrap_or(&IDENTITY_COLORMAP);
 
-            let params = DrawSpanParams {
-                y: span.y,
-                x1: span.x1,
-                x2: span.x2,
-                ds_xfrac: span_xfrac,
-                ds_yfrac: span_yfrac,
-                ds_xstep: xstep_u,
-                ds_ystep: ystep_u,
-                source,
-                colormap: span_cm,
-            };
-            draw_span(fb, &params);
+            // Clip each emitted visplane run against wall-pass ceiling/floor clips
+            // so flats never overdraw opaque wall pixels.
+            let mut run_start: Option<usize> = None;
+            for x in span.x1..=span.x2 {
+                let visible = match plane.kind {
+                    PlaneKind::Ceiling => y <= ceilingclip[x],
+                    PlaneKind::Floor => y >= floorclip[x],
+                };
+
+                match (run_start, visible) {
+                    (None, true) => run_start = Some(x),
+                    (Some(start), false) => {
+                        let end = x - 1;
+                        let local_steps = (start - span.x1) as u32;
+                        let params = DrawSpanParams {
+                            y: span.y,
+                            x1: start,
+                            x2: end,
+                            ds_xfrac: base_xfrac.wrapping_add(xstep_u.wrapping_mul(local_steps)),
+                            ds_yfrac: base_yfrac.wrapping_add(ystep_u.wrapping_mul(local_steps)),
+                            ds_xstep: xstep_u,
+                            ds_ystep: ystep_u,
+                            source,
+                            colormap: span_cm,
+                        };
+                        draw_span(fb, &params);
+                        run_start = None;
+                    }
+                    _ => {}
+                }
+            }
+            if let Some(start) = run_start {
+                let local_steps = (start - span.x1) as u32;
+                let params = DrawSpanParams {
+                    y: span.y,
+                    x1: start,
+                    x2: span.x2,
+                    ds_xfrac: base_xfrac.wrapping_add(xstep_u.wrapping_mul(local_steps)),
+                    ds_yfrac: base_yfrac.wrapping_add(ystep_u.wrapping_mul(local_steps)),
+                    ds_xstep: xstep_u,
+                    ds_ystep: ystep_u,
+                    source,
+                    colormap: span_cm,
+                };
+                draw_span(fb, &params);
+            }
         }
     }
 
@@ -920,6 +970,144 @@ mod tests {
 
         Level {
             name: "TEST2".to_owned(),
+            things,
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap,
+        }
+    }
+
+    /// Build a level with:
+    /// - Near one-sided wall at y=128 (solid occluder)
+    /// - Far two-sided portal at y=256 (must be occluded by the near wall)
+    ///
+    /// Seg order intentionally places the near wall first and the far portal
+    /// second to catch regressions where later portal processing rewrites
+    /// visplane bounds behind a solid wall.
+    fn make_occluded_portal_level() -> Level {
+        use doom_map::lumps::{
+            Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
+        };
+
+        let vertexes = vec![
+            Vertex { x: -64, y: 128 },
+            Vertex { x: 64, y: 128 },
+            Vertex { x: -64, y: 256 },
+            Vertex { x: 64, y: 256 },
+        ];
+
+        let sectors = vec![
+            Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: 32,
+                ceil_height: 96,
+                floor_flat: *b"FLAT3\0\0\0",
+                ceil_flat: *b"FLAT4\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+
+        let sidedefs = vec![
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"WALL1\0\0\0",
+                sector: 0,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+        ];
+
+        // ld0: near one-sided wall.
+        // ld1: far two-sided portal.
+        let linedefs = vec![
+            Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 0xFFFF,
+            },
+            Linedef {
+                from_vertex: 2,
+                to_vertex: 3,
+                flags: 0x0004, // two-sided
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+        ];
+
+        let segs = vec![
+            Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 2,
+                to_vertex: 3,
+                angle: 0,
+                linedef: 1,
+                direction: 0,
+                offset: 0,
+            },
+        ];
+
+        let ssectors = vec![Ssector {
+            seg_count: segs.len() as u16,
+            first_seg: 0,
+        }];
+        let things = vec![Thing {
+            x: 0,
+            y: 0,
+            angle: 0,
+            kind: 1,
+            flags: 7,
+        }];
+
+        let reject = Reject::parse_lump(&[0u8; 1], 2).expect("reject parse");
+
+        let mut bm_data = vec![0u8; 8 + 2 + 4];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("blockmap parse");
+
+        Level {
+            name: "OCCL".to_owned(),
             things,
             linedefs,
             sidedefs,
@@ -1285,6 +1473,95 @@ mod tests {
         assert!(
             !is_wall_color(px_below),
             "pixel at ({center_x}, {row_below_center}) = {px_below} should NOT be wall-colored (portal opening)"
+        );
+    }
+
+    /// Regression: visplane spans must be clipped against wall-pass
+    /// ceiling/floor clip bounds. A far portal must not repaint pixels that
+    /// belong to a nearer one-sided wall in the same column.
+    #[test]
+    fn test_visplane_clipped_by_near_wall_when_far_portal_exists() {
+        use doom_types::ANG90;
+        use doom_types::limits::FLAT_SIZE;
+
+        init_trig();
+
+        let make_iwad = |lumps: &[(&str, &[u8])]| {
+            let mut data: Vec<u8> = Vec::new();
+            data.extend_from_slice(b"IWAD");
+            data.extend_from_slice(&(lumps.len() as i32).to_le_bytes());
+            data.extend_from_slice(&0i32.to_le_bytes());
+            let mut offsets = Vec::new();
+            for (_, bytes) in lumps {
+                let pos = data.len();
+                data.extend_from_slice(bytes);
+                offsets.push((pos, bytes.len()));
+            }
+            let dir_off = data.len() as i32;
+            data[8..12].copy_from_slice(&dir_off.to_le_bytes());
+            for (i, (name, _)) in lumps.iter().enumerate() {
+                let (fp, sz) = offsets[i];
+                data.extend_from_slice(&(fp as i32).to_le_bytes());
+                data.extend_from_slice(&(sz as i32).to_le_bytes());
+                let mut nb = [0u8; 8];
+                for (j, &b) in name.as_bytes().iter().take(8).enumerate() {
+                    nb[j] = b.to_ascii_uppercase();
+                }
+                data.extend_from_slice(&nb);
+            }
+            data
+        };
+
+        // Distinct flat constants make leaks obvious.
+        let flat1 = vec![10u8; FLAT_SIZE];
+        let flat2 = vec![20u8; FLAT_SIZE];
+        let flat3 = vec![180u8; FLAT_SIZE];
+        let flat4 = vec![200u8; FLAT_SIZE];
+
+        let lumps: Vec<(&str, &[u8])> = vec![
+            ("F_START", b""),
+            ("FLAT1", &flat1),
+            ("FLAT2", &flat2),
+            ("FLAT3", &flat3),
+            ("FLAT4", &flat4),
+            ("F_END", b""),
+        ];
+        let wad_bytes = make_iwad(&lumps);
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("parse WAD");
+        let flat_cache = FlatCache::load(&wad);
+
+        let level = make_occluded_portal_level();
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        render_level(
+            &level,
+            0,
+            0,
+            ANG90,
+            &mut fb,
+            &palette,
+            Some(&flat_cache),
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let center_x = HALF_W as usize;
+        let upper_sample = 70usize;
+        let lower_sample = 130usize;
+        let px_upper = fb.get_pixel(center_x, upper_sample).unwrap_or(0);
+        let px_lower = fb.get_pixel(center_x, lower_sample).unwrap_or(0);
+        let is_wall = |px: u8| (32..64).contains(&px);
+
+        assert!(
+            is_wall(px_upper),
+            "upper sample must remain wall-colored (near wall occludes far portal flats), got {px_upper}"
+        );
+        assert!(
+            is_wall(px_lower),
+            "lower sample must remain wall-colored (near wall occludes far portal flats), got {px_lower}"
         );
     }
 
