@@ -15,8 +15,7 @@
 use std::sync::{Arc, Mutex};
 
 use doom_audio::{
-    AudioDriver, GenmidiBank, MidiPlayer, Mixer, MusScore, SfxCache,
-    mixer::PcmSample,
+    AudioDriver, GenmidiBank, MidiPlayer, Mixer, MusScore, SfxCache, mixer::PcmSample,
     sfx::play_sfx,
 };
 use doom_wad::WadFile;
@@ -94,7 +93,10 @@ impl AudioSystem {
             audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache);
         });
 
-        Some(Self { sender: tx, _driver: driver })
+        Some(Self {
+            sender: tx,
+            _driver: driver,
+        })
     }
 
     /// Create a null (silent) audio system for use in tests.
@@ -113,11 +115,14 @@ impl AudioSystem {
             audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache);
         });
 
-        Some(Self { sender: tx, _driver: driver })
+        Some(Self {
+            sender: tx,
+            _driver: driver,
+        })
     }
 
     /// Send a play-SFX command (fire-and-forget; silently ignored if the
-    /// channel is full or the audio thread has exited).
+    /// audio thread has exited).
     pub fn play_sfx(&self, sfx_id: u16) {
         // If the receiver has dropped, the error is silently swallowed.
         let _ = self.sender.send(AudioEvent::PlaySfx(sfx_id));
@@ -148,15 +153,23 @@ impl AudioSystem {
 /// the cache keyed by its sequential discovery index (starting at 1).
 /// If decoding fails the lump is silently skipped.
 fn populate_sfx_cache(wad: &WadFile, cache: &mut SfxCache) {
-    // Collect candidate lumps: prefer the DS_START/DS_END namespace; fall back
-    // to scanning all lumps with a "DS" prefix.
+    // Collect candidate lumps: prefer the DS_START/DS_END namespace when both
+    // markers exist and enclose at least one DS lump. Otherwise fall back to
+    // scanning all lumps with a "DS" prefix.
     let candidates: Vec<(u16, Vec<u8>)> = {
-        let between: Vec<_> = wad.lumps_between("DS_START", "DS_END").collect();
+        let has_ds_markers =
+            wad.find_lump("DS_START").is_some() && wad.find_lump("DS_END").is_some();
+        let between: Vec<_> = if has_ds_markers {
+            wad.lumps_between("DS_START", "DS_END")
+                .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
+                .collect()
+        } else {
+            Vec::new()
+        };
         if !between.is_empty() {
             between
                 .into_iter()
                 .enumerate()
-                .filter(|(_, l)| l.size > 0)
                 .map(|(i, l)| {
                     let id = (i + 1) as u16;
                     let data = wad.lump_data(l).to_vec();
@@ -255,13 +268,13 @@ pub fn weapon_fire_sfx(weapon: doom_game::WeaponType) -> u16 {
     use doom_game::WeaponType;
     match weapon {
         WeaponType::Fist | WeaponType::Chainsaw => 64, // DSPUNCH / DSSAWFUL
-        WeaponType::Pistol => 32,                       // DSPISTOL
-        WeaponType::Shotgun => 34,                      // DSSHOTGN
-        WeaponType::SuperShotgun => 84,                 // DSDBOPN (approx)
-        WeaponType::Chaingun => 35,                     // DSPISTOL repeated
-        WeaponType::RocketLauncher => 36,               // DSRLAUNC
-        WeaponType::PlasmaRifle => 37,                  // DSPLASMA
-        WeaponType::Bfg => 39,                          // DSBFG
+        WeaponType::Pistol => 32,                      // DSPISTOL
+        WeaponType::Shotgun => 34,                     // DSSHOTGN
+        WeaponType::SuperShotgun => 84,                // DSDBOPN (approx)
+        WeaponType::Chaingun => 35,                    // DSPISTOL repeated
+        WeaponType::RocketLauncher => 36,              // DSRLAUNC
+        WeaponType::PlasmaRifle => 37,                 // DSPLASMA
+        WeaponType::Bfg => 39,                         // DSBFG
     }
 }
 
@@ -272,14 +285,30 @@ pub fn weapon_fire_sfx(weapon: doom_game::WeaponType) -> u16 {
 /// Build the WAD music lump name for a map identifier string.
 ///
 /// - `"E1M1"` → `"D_E1M1"`
+/// - `"MAP1"` → `"D_MAP01"`
 /// - `"MAP01"` → `"D_MAP01"`
 /// - Unknown format → `None`
 pub fn music_lump_for_map(map: &str) -> Option<String> {
     let upper = map.to_ascii_uppercase();
-    if upper.starts_with('E') && upper.len() == 4 {
+    let bytes = upper.as_bytes();
+    if bytes.len() == 4
+        && bytes[0] == b'E'
+        && bytes[2] == b'M'
+        && bytes[1].is_ascii_digit()
+        && bytes[1] != b'0'
+        && bytes[3].is_ascii_digit()
+        && bytes[3] != b'0'
+    {
         Some(format!("D_{upper}"))
-    } else if upper.starts_with("MAP") && upper.len() == 5 {
-        Some(format!("D_{upper}"))
+    } else if let Some(rest) = upper.strip_prefix("MAP") {
+        if rest.is_empty() || rest.len() > 2 || !rest.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let map_num: u8 = rest.parse().ok()?;
+        if map_num == 0 {
+            return None;
+        }
+        Some(format!("D_MAP{map_num:02}"))
     } else {
         None
     }
@@ -292,6 +321,45 @@ pub fn music_lump_for_map(map: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn make_iwad(lumps: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut data: Vec<u8> = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&(lumps.len() as i32).to_le_bytes());
+        data.extend_from_slice(&0i32.to_le_bytes()); // dir offset placeholder
+
+        let mut offsets: Vec<(usize, usize)> = Vec::new();
+        for (_, lump_bytes) in lumps {
+            let pos = data.len();
+            data.extend_from_slice(lump_bytes);
+            offsets.push((pos, lump_bytes.len()));
+        }
+
+        let dir_offset = data.len() as i32;
+        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+
+        for (i, (name, _)) in lumps.iter().enumerate() {
+            let (filepos, size) = offsets[i];
+            data.extend_from_slice(&(filepos as i32).to_le_bytes());
+            data.extend_from_slice(&(size as i32).to_le_bytes());
+            let mut name_buf = [0u8; 8];
+            for (j, &b) in name.as_bytes().iter().take(8).enumerate() {
+                name_buf[j] = b.to_ascii_uppercase();
+            }
+            data.extend_from_slice(&name_buf);
+        }
+
+        data
+    }
+
+    fn valid_sfx_lump_1_sample() -> Vec<u8> {
+        let mut data = Vec::new();
+        data.extend_from_slice(&3u16.to_le_bytes()); // format
+        data.extend_from_slice(&11_025u16.to_le_bytes()); // sample_rate
+        data.extend_from_slice(&1u32.to_le_bytes()); // sample_count
+        data.push(128u8); // one silent sample
+        data
+    }
 
     #[test]
     fn audio_system_try_open_null_does_not_panic() {
@@ -318,6 +386,16 @@ mod tests {
     #[test]
     fn music_lump_for_map_map01() {
         assert_eq!(music_lump_for_map("MAP01"), Some("D_MAP01".to_string()));
+    }
+
+    #[test]
+    fn music_lump_for_map_map1_zero_pads() {
+        assert_eq!(music_lump_for_map("map1"), Some("D_MAP01".to_string()));
+    }
+
+    #[test]
+    fn music_lump_for_map_rejects_malformed_e_format() {
+        assert_eq!(music_lump_for_map("E1MX"), None);
     }
 
     #[test]
@@ -348,5 +426,20 @@ mod tests {
         populate_sfx_cache(&wad, &mut cache);
         // No entries — no panic.
         assert!(cache.get(1).is_none());
+    }
+
+    #[test]
+    fn sfx_cache_without_ds_markers_falls_back_to_ds_prefix_scan() {
+        let sfx = valid_sfx_lump_1_sample();
+        let wad_bytes = make_iwad(&[("THINGS", b"not_sfx"), ("DSPISTOL", sfx.as_slice())]);
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("test WAD must parse");
+
+        let mut cache = SfxCache::new();
+        populate_sfx_cache(&wad, &mut cache);
+
+        assert!(
+            cache.get(1).is_some(),
+            "without DS markers, DS-prefixed lumps should be indexed from 1"
+        );
     }
 }
