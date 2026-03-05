@@ -20,8 +20,8 @@
 
 use crate::bsp::{BspError, BspTree};
 use crate::lumps::{
-    Blockmap, LumpParseError, Linedef, Node, Reject, Sector, Seg, Sidedef, Ssector, Thing,
-    Vertex, SIDEDEF_NONE,
+    Blockmap, Linedef, LumpParseError, Node, Reject, SIDEDEF_NONE, Sector, Seg, Sidedef, Ssector,
+    Thing, Vertex,
 };
 use doom_wad::WadFile;
 use thiserror::Error;
@@ -47,7 +47,12 @@ pub enum LevelError {
 
     /// A linedef references a vertex index that's out of range.
     #[error("map '{map}': linedef {idx} references vertex {v} >= N_VERTEXES ({n})")]
-    LindefVertexOutOfBounds { map: String, idx: usize, v: usize, n: usize },
+    LindefVertexOutOfBounds {
+        map: String,
+        idx: usize,
+        v: usize,
+        n: usize,
+    },
 
     /// A linedef has the two-sided flag but is missing a left sidedef.
     #[error("map '{map}': linedef {idx} is two-sided but left_sidedef is 0xFFFF")]
@@ -55,22 +60,27 @@ pub enum LevelError {
 
     /// A sidedef references a sector that's out of range.
     #[error("map '{map}': sidedef {idx} references sector {s} >= N_SECTORS ({n})")]
-    SidedefSectorOutOfBounds { map: String, idx: usize, s: usize, n: usize },
+    SidedefSectorOutOfBounds {
+        map: String,
+        idx: usize,
+        s: usize,
+        n: usize,
+    },
 }
 
 /// A fully parsed and validated Doom map.
 pub struct Level {
     /// Map name (e.g. "E1M1").
     pub name: String,
-    pub things:   Vec<Thing>,
+    pub things: Vec<Thing>,
     pub linedefs: Vec<Linedef>,
     pub sidedefs: Vec<Sidedef>,
     pub vertexes: Vec<Vertex>,
-    pub segs:     Vec<Seg>,
+    pub segs: Vec<Seg>,
     pub ssectors: Vec<Ssector>,
-    pub nodes:    Vec<Node>,
-    pub sectors:  Vec<Sector>,
-    pub reject:   Reject,
+    pub nodes: Vec<Node>,
+    pub sectors: Vec<Sector>,
+    pub reject: Reject,
     pub blockmap: Blockmap,
 }
 
@@ -103,26 +113,36 @@ impl Level {
 
         // Parse all 10 lumps in spec order.
         // REQUIRED_MAP_LUMPS: THINGS LINEDEFS SIDEDEFS VERTEXES SEGS SSECTORS NODES SECTORS REJECT BLOCKMAP
-        let things   = parse!(0, "THINGS",   Thing::parse_lump);
+        let things = parse!(0, "THINGS", Thing::parse_lump);
         let linedefs = parse!(1, "LINEDEFS", Linedef::parse_lump);
         let sidedefs = parse!(2, "SIDEDEFS", Sidedef::parse_lump);
         let vertexes = parse!(3, "VERTEXES", Vertex::parse_lump);
-        let segs     = parse!(4, "SEGS",     Seg::parse_lump);
+        let segs = parse!(4, "SEGS", Seg::parse_lump);
         let ssectors = parse!(5, "SSECTORS", Ssector::parse_lump);
-        let nodes    = parse!(6, "NODES",    Node::parse_lump);
-        let sectors  = parse!(7, "SECTORS",  Sector::parse_lump);
+        let nodes = parse!(6, "NODES", Node::parse_lump);
+        let sectors = parse!(7, "SECTORS", Sector::parse_lump);
 
-        let reject = Reject::parse_lump(lump_data!(8, "REJECT"), sectors.len())
-            .map_err(|e| LevelError::ParseError { map: name.clone(), source: e })?;
+        let reject = Reject::parse_lump(lump_data!(8, "REJECT"), sectors.len()).map_err(|e| {
+            LevelError::ParseError {
+                map: name.clone(),
+                source: e,
+            }
+        })?;
 
-        let blockmap = Blockmap::parse_lump(lump_data!(9, "BLOCKMAP"))
-            .map_err(|e| LevelError::ParseError { map: name.clone(), source: e })?;
+        let blockmap = Blockmap::parse_lump(lump_data!(9, "BLOCKMAP")).map_err(|e| {
+            LevelError::ParseError {
+                map: name.clone(),
+                source: e,
+            }
+        })?;
 
         // -- Structural validation ------------------------------------------
 
         // BSP invariants (crown jewel: N_SSECTORS == N_NODES + 1)
-        BspTree::validate(&nodes, &ssectors, segs.len())
-            .map_err(|e| LevelError::BspInvalid { map: name.clone(), source: e })?;
+        BspTree::validate(&nodes, &ssectors, segs.len()).map_err(|e| LevelError::BspInvalid {
+            map: name.clone(),
+            source: e,
+        })?;
 
         // Linedef vertex refs in bounds.
         let n_verts = vertexes.len();
@@ -130,7 +150,10 @@ impl Level {
             for v in [ld.from_vertex as usize, ld.to_vertex as usize] {
                 if v >= n_verts {
                     return Err(LevelError::LindefVertexOutOfBounds {
-                        map: name, idx: i, v, n: n_verts,
+                        map: name,
+                        idx: i,
+                        v,
+                        n: n_verts,
                     });
                 }
             }
@@ -148,7 +171,10 @@ impl Level {
         for (i, sd) in sidedefs.iter().enumerate() {
             if sd.sector as usize >= n_sectors {
                 return Err(LevelError::SidedefSectorOutOfBounds {
-                    map: name, idx: i, s: sd.sector as usize, n: n_sectors,
+                    map: name,
+                    idx: i,
+                    s: sd.sector as usize,
+                    n: n_sectors,
                 });
             }
         }
@@ -214,7 +240,7 @@ mod tests {
     /// - 0 nodes (trivial BSP: single subsector)
     /// - 1 seg
     fn build_minimal_wad_bytes() -> Vec<u8> {
-        use doom_wad::{WadKind, REQUIRED_MAP_LUMPS};
+        use doom_wad::{REQUIRED_MAP_LUMPS, WadKind};
 
         // We'll build the WAD manually.
         let marker_name = b"E1M1\0\0\0\0";

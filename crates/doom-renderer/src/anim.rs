@@ -313,18 +313,15 @@ impl AnimState {
         // Update current_frame on each sequence.
         for seq in &mut self.sequences {
             let frame_count = seq.frames.len() as u32;
-            seq.current_frame =
-                ((self.tic_count / seq.tics_per_frame) % frame_count) as usize;
+            seq.current_frame = ((self.tic_count / seq.tics_per_frame) % frame_count) as usize;
         }
         for seq in &mut self.flat_anims {
             let frame_count = seq.frames.len() as u32;
-            seq.current_frame =
-                ((self.tic_count / seq.tics_per_frame) % frame_count) as usize;
+            seq.current_frame = ((self.tic_count / seq.tics_per_frame) % frame_count) as usize;
         }
         for seq in &mut self.wall_anims {
             let frame_count = seq.frames.len() as u32;
-            seq.current_frame =
-                ((self.tic_count / seq.tics_per_frame) % frame_count) as usize;
+            seq.current_frame = ((self.tic_count / seq.tics_per_frame) % frame_count) as usize;
         }
     }
 
@@ -452,34 +449,34 @@ impl SwitchList {
     pub fn new() -> Self {
         let pair_names: &[(&str, &str)] = &[
             ("SW1BRCOM", "SW2BRCOM"),
-            ("SW1BRN1",  "SW2BRN1"),
-            ("SW1BRN2",  "SW2BRN2"),
+            ("SW1BRN1", "SW2BRN1"),
+            ("SW1BRN2", "SW2BRN2"),
             ("SW1BRNGN", "SW2BRNGN"),
             ("SW1BROWN", "SW2BROWN"),
-            ("SW1COMM",  "SW2COMM"),
-            ("SW1COMP",  "SW2COMP"),
-            ("SW1DIRT",  "SW2DIRT"),
-            ("SW1EXIT",  "SW2EXIT"),
-            ("SW1GRAY",  "SW2GRAY"),
+            ("SW1COMM", "SW2COMM"),
+            ("SW1COMP", "SW2COMP"),
+            ("SW1DIRT", "SW2DIRT"),
+            ("SW1EXIT", "SW2EXIT"),
+            ("SW1GRAY", "SW2GRAY"),
             ("SW1GRAY1", "SW2GRAY1"),
             ("SW1METAL", "SW2METAL"),
-            ("SW1PIPE",  "SW2PIPE"),
-            ("SW1SLAD",  "SW2SLAD"),
+            ("SW1PIPE", "SW2PIPE"),
+            ("SW1SLAD", "SW2SLAD"),
             ("SW1STARG", "SW2STARG"),
             ("SW1STON1", "SW2STON1"),
             ("SW1STON2", "SW2STON2"),
             ("SW1STONE", "SW2STONE"),
             ("SW1STRTN", "SW2STRTN"),
-            ("SW1BLUE",  "SW2BLUE"),
-            ("SW1CMT",   "SW2CMT"),
-            ("SW1GARG",  "SW2GARG"),
+            ("SW1BLUE", "SW2BLUE"),
+            ("SW1CMT", "SW2CMT"),
+            ("SW1GARG", "SW2GARG"),
             ("SW1GSTON", "SW2GSTON"),
-            ("SW1HOT",   "SW2HOT"),
-            ("SW1LION",  "SW2LION"),
+            ("SW1HOT", "SW2HOT"),
+            ("SW1LION", "SW2LION"),
             ("SW1SATYR", "SW2SATYR"),
-            ("SW1SKIN",  "SW2SKIN"),
-            ("SW1VINE",  "SW2VINE"),
-            ("SW1WOOD",  "SW2WOOD"),
+            ("SW1SKIN", "SW2SKIN"),
+            ("SW1VINE", "SW2VINE"),
+            ("SW1WOOD", "SW2WOOD"),
         ];
 
         let pairs = pair_names
@@ -1100,7 +1097,9 @@ mod tests {
 
         // Verify WFALL is in the wall animations.
         assert!(
-            anim.wall_sequences().iter().any(|seq| seq.contains(b"WFALL1\0\0")),
+            anim.wall_sequences()
+                .iter()
+                .any(|seq| seq.contains(b"WFALL1\0\0")),
             "WFALL1 should be a known wall animation"
         );
 
@@ -1132,19 +1131,13 @@ mod tests {
 
     #[test]
     fn anim_sequence_with_type_sets_type() {
-        let flat_seq = AnimSequence::with_type(
-            &[*b"TEST1\0\0\0", *b"TEST2\0\0\0"],
-            8,
-            AnimType::Flat,
-        );
+        let flat_seq =
+            AnimSequence::with_type(&[*b"TEST1\0\0\0", *b"TEST2\0\0\0"], 8, AnimType::Flat);
         assert_eq!(flat_seq.anim_type, AnimType::Flat);
         assert_eq!(flat_seq.current_frame, 0);
 
-        let wall_seq = AnimSequence::with_type(
-            &[*b"WALL1\0\0\0", *b"WALL2\0\0\0"],
-            8,
-            AnimType::Wall,
-        );
+        let wall_seq =
+            AnimSequence::with_type(&[*b"WALL1\0\0\0", *b"WALL2\0\0\0"], 8, AnimType::Wall);
         assert_eq!(wall_seq.anim_type, AnimType::Wall);
     }
 

@@ -92,7 +92,11 @@ mod tests {
     fn p_random_advances_rng_index() {
         let mut gs = GameState::new("test");
         gs.p_random();
-        assert_eq!(gs.rng.index(), 1, "rng index must be 1 after one p_random call");
+        assert_eq!(
+            gs.rng.index(),
+            1,
+            "rng index must be 1 after one p_random call"
+        );
     }
 
     #[test]
@@ -117,7 +121,10 @@ mod tests {
         let mut gs2 = GameState::new("test");
         let seq1: Vec<u8> = (0..50).map(|_| gs1.p_random()).collect();
         let seq2: Vec<u8> = (0..50).map(|_| gs2.p_random()).collect();
-        assert_eq!(seq1, seq2, "two fresh GameStates must produce identical sequences");
+        assert_eq!(
+            seq1, seq2,
+            "two fresh GameStates must produce identical sequences"
+        );
     }
 
     #[test]
@@ -126,7 +133,10 @@ mod tests {
         let a = gs.p_random();
         let b = gs.p_random();
         // RNG_TABLE[0]=0, RNG_TABLE[1]=8 — they differ.
-        assert_ne!(a, b, "consecutive p_random calls should produce different values");
+        assert_ne!(
+            a, b,
+            "consecutive p_random calls should produce different values"
+        );
     }
 
     // -----------------------------------------------------------------------

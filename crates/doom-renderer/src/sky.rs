@@ -192,11 +192,7 @@ pub fn draw_sky_columns(
 /// Uses [`SKY_FALLBACK_COLOR`] (dark blue) for all sky pixels.  The
 /// column-to-angle parallax is irrelevant here — every pixel is the
 /// same colour.
-pub fn draw_sky_fallback(
-    fb: &mut Framebuffer,
-    ceil_top: &[i32; 320],
-    ceil_bot: &[i32; 320],
-) {
+pub fn draw_sky_fallback(fb: &mut Framebuffer, ceil_top: &[i32; 320], ceil_bot: &[i32; 320]) {
     let fb_h = Framebuffer::height() as i32;
     for x in 0..320usize {
         let top = ceil_top[x].max(0);

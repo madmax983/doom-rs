@@ -12,13 +12,17 @@ mod savegame;
 use anyhow::{Context, Result};
 use clap::Parser;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
-use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags, init_scrolling_walls, init_conveyors};
 use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
+use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags, init_conveyors, init_scrolling_walls};
 use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
-use doom_renderer::{AnimState, AutomapState, ColormapCache, FlatCache, Framebuffer, PaletteFlash, PaletteLut, SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_status_bar, draw_weapon_sprite, render_level, render_things};
 use doom_renderer::IDENTITY_COLORMAP;
+use doom_renderer::{
+    AnimState, AutomapState, ColormapCache, FlatCache, Framebuffer, PaletteFlash, PaletteLut,
+    SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_status_bar, draw_weapon_sprite,
+    render_level, render_things,
+};
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
@@ -284,10 +288,7 @@ impl DoomApp for DoomGame {
 
         // Emit weapon SFX on the leading edge of the attack button, and only
         // when the player is alive and has enough ammo to fire.
-        if attack_just_fired
-            && !self.gs.player.is_dead()
-            && doom_game::player_can_fire(&self.gs)
-        {
+        if attack_just_fired && !self.gs.player.is_dead() && doom_game::player_can_fire(&self.gs) {
             if let Some(ref audio) = self.audio {
                 let sfx_id = weapon_fire_sfx(self.gs.player.weapon);
                 audio.play_sfx(sfx_id);
@@ -322,14 +323,25 @@ impl DoomApp for DoomGame {
 
             // Draw status bar over the bottom of the automap so it is
             // always visible (matching original Doom behaviour).
-            let god_mode =
-                self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+            let god_mode = self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
             draw_status_bar(fb, &self.gs.player, god_mode);
         } else {
             // Draw the first-person 3D view.
             // We pass a grayscale palette; render_level currently ignores it
             // (wall colors are derived from light levels only).
-            let z_buf = render_level(&self.level, px, py, angle, fb, &palette, self.flat_cache.as_ref(), self.tex_cache.as_ref(), self.colormap_cache.as_ref(), None, false);
+            let z_buf = render_level(
+                &self.level,
+                px,
+                py,
+                angle,
+                fb,
+                &palette,
+                self.flat_cache.as_ref(),
+                self.tex_cache.as_ref(),
+                self.colormap_cache.as_ref(),
+                None,
+                false,
+            );
 
             // Project level Things as billboard sprites (painter's algorithm,
             // back-to-front). Must run after render_level so walls are already
@@ -353,8 +365,7 @@ impl DoomApp for DoomGame {
             }
 
             // Draw HUD status bar over the bottom 32 rows.
-            let god_mode =
-                self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+            let god_mode = self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
             draw_status_bar(fb, &self.gs.player, god_mode);
         }
 
@@ -409,7 +420,9 @@ fn draw_cheat_message_overlay(fb: &mut Framebuffer, msg: &str) {
         let cx = start_x + ci * CHAR_W;
         for (row, &bits) in glyph.iter().enumerate() {
             let sy = TOP_Y + row;
-            if sy >= 200 { break; }
+            if sy >= 200 {
+                break;
+            }
             for col in 0..4 {
                 if bits & (1 << (3 - col)) != 0 {
                     let sx = cx + col;
@@ -470,7 +483,7 @@ fn mini_glyph(ch: char) -> [u8; 6] {
         '.' => [0b0000, 0b0000, 0b0000, 0b0000, 0b0100, 0b0000],
         '(' => [0b0010, 0b0100, 0b0100, 0b0100, 0b0010, 0b0000],
         ')' => [0b0100, 0b0010, 0b0010, 0b0010, 0b0100, 0b0000],
-        _   => [0b1111, 0b1111, 0b1111, 0b1111, 0b1111, 0b0000],
+        _ => [0b1111, 0b1111, 0b1111, 0b1111, 0b1111, 0b0000],
     }
 }
 
@@ -548,8 +561,7 @@ fn main() -> Result<()> {
 
     // Build the PLAYPAL blit palette (for terminal RGB conversion).
     let blit_palette = match wad.find_lump_data("PLAYPAL") {
-        Some(data) => PaletteLut::from_playpal(data)
-            .unwrap_or_else(|_| PaletteLut::grayscale()),
+        Some(data) => PaletteLut::from_playpal(data).unwrap_or_else(|_| PaletteLut::grayscale()),
         None => PaletteLut::grayscale(),
     };
 
@@ -565,8 +577,8 @@ fn main() -> Result<()> {
     if let Some(ref deh_path) = args.deh {
         let contents = std::fs::read_to_string(deh_path)
             .with_context(|| format!("Failed to read DeHackEd file: {deh_path}"))?;
-        let patch = DehPatch::parse(&contents)
-            .map_err(|e| anyhow::anyhow!("DeHackEd parse error: {e}"))?;
+        let patch =
+            DehPatch::parse(&contents).map_err(|e| anyhow::anyhow!("DeHackEd parse error: {e}"))?;
         let mut mobjinfo_vec: Vec<_> = MOBJINFO.to_vec();
         let mut states_vec: Vec<_> = STATES.to_vec();
         let count = patch
@@ -577,7 +589,11 @@ fn main() -> Result<()> {
 
     // Load flat texture cache (floor/ceiling textures between F_START and F_END).
     let flat_cache = FlatCache::load(&wad);
-    let flat_cache = if flat_cache.is_empty() { None } else { Some(flat_cache) };
+    let flat_cache = if flat_cache.is_empty() {
+        None
+    } else {
+        Some(flat_cache)
+    };
 
     // Load wall texture cache (TEXTURE1/TEXTURE2 composed textures).
     let tex_cache = {
@@ -625,7 +641,15 @@ fn main() -> Result<()> {
     }
 
     // Build the app.
-    let app = DoomGame::new(gs, level, audio, flat_cache, tex_cache, sprite_cache, colormap_cache);
+    let app = DoomGame::new(
+        gs,
+        level,
+        audio,
+        flat_cache,
+        tex_cache,
+        sprite_cache,
+        colormap_cache,
+    );
 
     // Client (netplay) mode: wrap DoomGame in a NetGameApp for network-aware input.
     if let Some(ref addr_str) = args.connect {
@@ -642,15 +666,14 @@ fn main() -> Result<()> {
     }
 
     // Start the terminal event loop and run until the user quits (Q or Esc).
-    let mut event_loop = DoomEventLoop::new()
-        .map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
+    let mut event_loop =
+        DoomEventLoop::new().map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
 
     if let Some(demo_path) = args.playdemo {
         // Load and parse the demo file.
         let demo_bytes = std::fs::read(&demo_path)
             .with_context(|| format!("Failed to read demo: {}", demo_path.display()))?;
-        let player = DemoPlayer::parse(&demo_bytes)
-            .with_context(|| "Failed to parse demo")?;
+        let player = DemoPlayer::parse(&demo_bytes).with_context(|| "Failed to parse demo")?;
         let mut playback_app = demo_mode::DemoPlaybackApp::new(app, player);
         event_loop
             .run(&mut playback_app, &blit_palette)
@@ -712,8 +735,8 @@ fn parse_warp_episode_map(warp: &str) -> (u8, u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_game::{GameState, Mobj, MobjKind, PlayerState, flags};
     use doom_game::cheats as game_cheats;
+    use doom_game::{GameState, Mobj, MobjKind, PlayerState, flags};
     use doom_map::{Blockmap, Level, Reject, Sector};
     use doom_renderer::{Framebuffer, StatusBarData};
     use doom_types::{Bam, Fixed16_16};
@@ -777,7 +800,11 @@ mod tests {
         DoomGame::new(
             make_game_state(),
             make_test_level(),
-            None, None, None, None, None,
+            None,
+            None,
+            None,
+            None,
+            None,
         )
     }
 
@@ -794,13 +821,19 @@ mod tests {
         let mut input = TicInput::default();
         input.tab_pressed = true;
         game.tick(input);
-        assert!(game.automap.active, "automap must be active after first Tab");
+        assert!(
+            game.automap.active,
+            "automap must be active after first Tab"
+        );
 
         // Tab again.
         let mut input2 = TicInput::default();
         input2.tab_pressed = true;
         game.tick(input2);
-        assert!(!game.automap.active, "automap must be inactive after second Tab");
+        assert!(
+            !game.automap.active,
+            "automap must be inactive after second Tab"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -877,7 +910,10 @@ mod tests {
         assert_eq!(data.armor, 0, "pistol start armor must be 0");
         assert_eq!(data.keys, 0, "pistol start keys must be 0");
         // Weapon 1 = pistol (bullet ammo).
-        assert_eq!(data.ready_weapon, 1, "pistol start weapon must be 1 (pistol)");
+        assert_eq!(
+            data.ready_weapon, 1,
+            "pistol start weapon must be 1 (pistol)"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -911,8 +947,14 @@ mod tests {
     fn doom_game_new_defaults() {
         let game = make_doom_game();
         assert!(!game.automap.active, "automap must start inactive");
-        assert!(!game.automap_full_reveal, "automap_full_reveal must start false");
-        assert!(game.cheat_message.is_none(), "cheat_message must start None");
+        assert!(
+            !game.automap_full_reveal,
+            "automap_full_reveal must start false"
+        );
+        assert!(
+            game.cheat_message.is_none(),
+            "cheat_message must start None"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -1170,10 +1212,7 @@ mod tests {
             29,
             "SwitchList must have 29 standard Doom switch pairs"
         );
-        assert!(
-            !game.switch_list.is_empty(),
-            "SwitchList must not be empty"
-        );
+        assert!(!game.switch_list.is_empty(), "SwitchList must not be empty");
         // Verify bidirectional lookup works.
         assert!(
             game.switch_list.get_opposite(b"SW1EXIT\0").is_some(),
@@ -1249,7 +1288,10 @@ mod tests {
 
         // First tick with no damage: prev_health should update to current.
         game.tick(TicInput::default());
-        assert_eq!(game.prev_health, 100, "prev_health still 100 after no-damage tick");
+        assert_eq!(
+            game.prev_health, 100,
+            "prev_health still 100 after no-damage tick"
+        );
 
         // Simulate damage between ticks.
         let handle = game.gs.player.handle;
@@ -1258,7 +1300,10 @@ mod tests {
         }
         game.gs.player.set_health_capped(80, 100);
         game.tick(TicInput::default());
-        assert_eq!(game.prev_health, 80, "prev_health updated to 80 after damage");
+        assert_eq!(
+            game.prev_health, 80,
+            "prev_health updated to 80 after damage"
+        );
 
         // Second damage event.
         if let Some(mo) = game.gs.mobjslab.get_mut(handle) {
@@ -1266,7 +1311,10 @@ mod tests {
         }
         game.gs.player.set_health_capped(50, 100);
         game.tick(TicInput::default());
-        assert_eq!(game.prev_health, 50, "prev_health updated to 50 after second damage");
+        assert_eq!(
+            game.prev_health, 50,
+            "prev_health updated to 50 after second damage"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -1275,11 +1323,8 @@ mod tests {
 
     #[test]
     fn cli_args_parse_deh_flag() {
-        let args = Args::try_parse_from([
-            "doom-app",
-            "--wad", "doom1.wad",
-            "--deh", "my_patch.deh",
-        ]);
+        let args =
+            Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--deh", "my_patch.deh"]);
         assert!(args.is_ok(), "args with --deh must parse successfully");
         let args = args.unwrap();
         assert_eq!(args.deh.as_deref(), Some("my_patch.deh"));
@@ -1291,11 +1336,7 @@ mod tests {
 
     #[test]
     fn cli_args_parse_server_flag() {
-        let args = Args::try_parse_from([
-            "doom-app",
-            "--wad", "doom1.wad",
-            "--server", "5029",
-        ]);
+        let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--server", "5029"]);
         assert!(args.is_ok(), "args with --server must parse successfully");
         let args = args.unwrap();
         assert_eq!(args.server, Some(5029));
@@ -1309,8 +1350,10 @@ mod tests {
     fn cli_args_parse_connect_flag() {
         let args = Args::try_parse_from([
             "doom-app",
-            "--wad", "doom1.wad",
-            "--connect", "127.0.0.1:5029",
+            "--wad",
+            "doom1.wad",
+            "--connect",
+            "127.0.0.1:5029",
         ]);
         assert!(args.is_ok(), "args with --connect must parse successfully");
         let args = args.unwrap();
@@ -1352,10 +1395,7 @@ mod tests {
 
     #[test]
     fn cli_args_deh_defaults_to_none() {
-        let args = Args::try_parse_from([
-            "doom-app",
-            "--wad", "doom1.wad",
-        ]);
+        let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]);
         assert!(args.is_ok());
         let args = args.unwrap();
         assert!(args.deh.is_none(), "--deh must default to None");
@@ -1367,10 +1407,7 @@ mod tests {
 
     #[test]
     fn cli_args_server_defaults_to_none() {
-        let args = Args::try_parse_from([
-            "doom-app",
-            "--wad", "doom1.wad",
-        ]);
+        let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]);
         assert!(args.is_ok());
         let args = args.unwrap();
         assert!(args.server.is_none(), "--server must default to None");
@@ -1382,10 +1419,7 @@ mod tests {
 
     #[test]
     fn cli_args_connect_defaults_to_none() {
-        let args = Args::try_parse_from([
-            "doom-app",
-            "--wad", "doom1.wad",
-        ]);
+        let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]);
         assert!(args.is_ok());
         let args = args.unwrap();
         assert!(args.connect.is_none(), "--connect must default to None");

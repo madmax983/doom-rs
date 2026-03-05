@@ -66,11 +66,7 @@ impl SaveHeader {
     ///
     /// Returns `"?"` if the bytes are not valid UTF-8.
     pub fn description_str(&self) -> &str {
-        let end = self
-            .description
-            .iter()
-            .position(|&b| b == 0)
-            .unwrap_or(24);
+        let end = self.description.iter().position(|&b| b == 0).unwrap_or(24);
         std::str::from_utf8(&self.description[..end]).unwrap_or("?")
     }
 }
@@ -199,8 +195,8 @@ pub fn load_game(path: &Path) -> Result<(SaveHeader, SavePayload), SaveError> {
     let data = std::fs::read(path)?;
     let config = bincode::config::standard();
 
-    let (header, consumed): (SaveHeader, usize) = bincode::decode_from_slice(&data, config)
-        .map_err(|e| SaveError::Decode(e.to_string()))?;
+    let (header, consumed): (SaveHeader, usize) =
+        bincode::decode_from_slice(&data, config).map_err(|e| SaveError::Decode(e.to_string()))?;
 
     if header.magic != SaveHeader::MAGIC {
         return Err(SaveError::BadMagic);
@@ -209,9 +205,8 @@ pub fn load_game(path: &Path) -> Result<(SaveHeader, SavePayload), SaveError> {
         return Err(SaveError::BadVersion(header.version));
     }
 
-    let (payload, _): (SavePayload, usize) =
-        bincode::decode_from_slice(&data[consumed..], config)
-            .map_err(|e| SaveError::Decode(e.to_string()))?;
+    let (payload, _): (SavePayload, usize) = bincode::decode_from_slice(&data[consumed..], config)
+        .map_err(|e| SaveError::Decode(e.to_string()))?;
 
     Ok((header, payload))
 }
@@ -247,7 +242,8 @@ pub fn apply_save(gs: &mut GameState, payload: &SavePayload) -> Result<(), SaveE
     // `give_armor` only increases armor (no-op if payload <= current).
     // Since apply_save is called on a freshly-spawned pistol-start state
     // (armor == 0), this always sets the correct value.
-    gs.player.give_armor(payload.player_armor, payload.player_armor_type);
+    gs.player
+        .give_armor(payload.player_armor, payload.player_armor_type);
 
     // Restore ammo: drain each pool then refill to the saved value.
     for i in 0..4usize {
@@ -293,12 +289,11 @@ fn build_payload(gs: &GameState) -> SavePayload {
         .unwrap_or((0, 0, 0));
 
     // Build weapons bitmask: bit i is set if `player.weapons[i]` is true.
-    let weapons_mask: u64 = gs
-        .player
-        .weapons
-        .iter()
-        .enumerate()
-        .fold(0u64, |acc, (i, &has)| if has { acc | (1u64 << i) } else { acc });
+    let weapons_mask: u64 =
+        gs.player.weapons.iter().enumerate().fold(
+            0u64,
+            |acc, (i, &has)| if has { acc | (1u64 << i) } else { acc },
+        );
 
     // Collect ammo pools 0-3.
     let player_ammo = [
@@ -397,11 +392,22 @@ mod tests {
         let (_header, payload) = load_game(&path).expect("load_game must succeed");
 
         assert_eq!(payload.tic_num, gs.tic_num, "payload tic_num must match gs");
-        assert_eq!(payload.rng_index, gs.rng.index(), "rng_index must round-trip");
-        assert_eq!(payload.player_health, gs.player.health(), "health must round-trip");
+        assert_eq!(
+            payload.rng_index,
+            gs.rng.index(),
+            "rng_index must round-trip"
+        );
+        assert_eq!(
+            payload.player_health,
+            gs.player.health(),
+            "health must round-trip"
+        );
         assert_eq!(payload.player_x, 100, "player_x must round-trip");
         assert_eq!(payload.player_y, 200, "player_y must round-trip");
-        assert_eq!(payload.player_angle, 0x4000_0000, "player_angle must round-trip");
+        assert_eq!(
+            payload.player_angle, 0x4000_0000,
+            "player_angle must round-trip"
+        );
 
         // Clean up.
         let _ = std::fs::remove_file(&path);

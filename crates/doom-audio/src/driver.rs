@@ -9,7 +9,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use crate::{midi::MidiPlayer, mixer::Mixer, AudioError};
+use crate::{AudioError, midi::MidiPlayer, mixer::Mixer};
 
 // ---------------------------------------------------------------------------
 // SendStream — a Send wrapper around cpal::Stream
@@ -60,9 +60,7 @@ impl AudioDriver {
         use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
         let host = cpal::default_host();
-        let device = host
-            .default_output_device()
-            .ok_or(AudioError::NoDevice)?;
+        let device = host.default_output_device().ok_or(AudioError::NoDevice)?;
 
         let config = device
             .default_output_config()
@@ -101,8 +99,7 @@ impl AudioDriver {
                     // pcm_buf mirrors that layout; opl_buf is mono.
                     for i in 0..n_mono {
                         let pcm_l = f32::from(pcm_buf[i * 2]) / 32_768.0;
-                        let pcm_r = f32::from(*pcm_buf.get(i * 2 + 1).unwrap_or(&0i16))
-                            / 32_768.0;
+                        let pcm_r = f32::from(*pcm_buf.get(i * 2 + 1).unwrap_or(&0i16)) / 32_768.0;
                         let opl = opl_buf[i] * 0.5; // balance OPL volume
                         if let Some(out_l) = data.get_mut(i * 2) {
                             *out_l = (pcm_l + opl).clamp(-1.0, 1.0);
@@ -159,9 +156,15 @@ mod tests {
     fn driver_null_has_midi() {
         let driver = AudioDriver::null();
         // The midi Arc must be valid and the mutex must not be poisoned.
-        let mp = driver.midi.lock().expect("midi mutex should not be poisoned");
+        let mp = driver
+            .midi
+            .lock()
+            .expect("midi mutex should not be poisoned");
         // A freshly created player has no score loaded.
-        assert!(mp.current_score.is_none(), "null driver midi must start with no score");
+        assert!(
+            mp.current_score.is_none(),
+            "null driver midi must start with no score"
+        );
     }
 
     #[test]
@@ -178,7 +181,14 @@ mod tests {
             },
             instruments: Vec::new(),
             events: vec![
-                (0, MusEvent::PlayNote { channel: 0, note: 60, volume: Some(100) }),
+                (
+                    0,
+                    MusEvent::PlayNote {
+                        channel: 0,
+                        note: 60,
+                        volume: Some(100),
+                    },
+                ),
                 (10, MusEvent::ScoreEnd),
             ],
         };
@@ -186,7 +196,10 @@ mod tests {
         // Lock, load, verify — must not panic.
         let mut mp = driver.midi.lock().expect("midi mutex must not be poisoned");
         mp.load_score(score);
-        assert!(mp.current_score.is_some(), "score must be loaded after load_score");
+        assert!(
+            mp.current_score.is_some(),
+            "score must be loaded after load_score"
+        );
         assert_eq!(mp.event_cursor, 0);
     }
 }

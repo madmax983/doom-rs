@@ -36,13 +36,21 @@ pub enum MusEvent {
     /// Note-off for `note` on `channel`.
     ReleaseNote { channel: u8, note: u8 },
     /// Note-on for `note` on `channel`, with optional velocity override.
-    PlayNote { channel: u8, note: u8, volume: Option<u8> },
+    PlayNote {
+        channel: u8,
+        note: u8,
+        volume: Option<u8>,
+    },
     /// Pitch-wheel change on `channel`.
     PitchWheel { channel: u8, value: u8 },
     /// System-level event on `channel`.
     SystemEvent { channel: u8, controller: u8 },
     /// Controller change on `channel`.
-    Controller { channel: u8, controller: u8, value: u8 },
+    Controller {
+        channel: u8,
+        controller: u8,
+        value: u8,
+    },
     /// Measure (bar) boundary marker — no payload.
     MeasureEnd,
     /// End of score — parsing stops after this event.
@@ -82,9 +90,8 @@ impl MusScore {
         // ---------------------------------------------------------------
         // Read header fields (all u16 LE)
         // ---------------------------------------------------------------
-        let read_u16 = |offset: usize| -> u16 {
-            u16::from_le_bytes([data[offset], data[offset + 1]])
-        };
+        let read_u16 =
+            |offset: usize| -> u16 { u16::from_le_bytes([data[offset], data[offset + 1]]) };
 
         let score_length = read_u16(4);
         let score_start = read_u16(6);
@@ -117,7 +124,9 @@ impl MusScore {
         // ---------------------------------------------------------------
         let start = score_start as usize;
         if data.len() < start {
-            return Err(AudioError::InvalidMus("score_start points past end of data"));
+            return Err(AudioError::InvalidMus(
+                "score_start points past end of data",
+            ));
         }
 
         let mut cursor = start;
@@ -164,7 +173,11 @@ impl MusScore {
                     } else {
                         None
                     };
-                    MusEvent::PlayNote { channel, note, volume }
+                    MusEvent::PlayNote {
+                        channel,
+                        note,
+                        volume,
+                    }
                 }
 
                 // 2: Pitch wheel — 1 extra byte
@@ -182,20 +195,27 @@ impl MusScore {
                         .get(cursor)
                         .ok_or(AudioError::InvalidMus("truncated system event"))?;
                     cursor += 1;
-                    MusEvent::SystemEvent { channel, controller }
+                    MusEvent::SystemEvent {
+                        channel,
+                        controller,
+                    }
                 }
 
                 // 4: Controller — 2 extra bytes
                 4 => {
-                    let controller = *data
-                        .get(cursor)
-                        .ok_or(AudioError::InvalidMus("truncated controller event (controller)"))?;
+                    let controller = *data.get(cursor).ok_or(AudioError::InvalidMus(
+                        "truncated controller event (controller)",
+                    ))?;
                     cursor += 1;
                     let value = *data
                         .get(cursor)
                         .ok_or(AudioError::InvalidMus("truncated controller event (value)"))?;
                     cursor += 1;
-                    MusEvent::Controller { channel, controller, value }
+                    MusEvent::Controller {
+                        channel,
+                        controller,
+                        value,
+                    }
                 }
 
                 // 5: Measure end — no extra bytes
@@ -305,7 +325,11 @@ mod tests {
         assert_eq!(delta, 0);
         assert_eq!(
             *event,
-            MusEvent::PlayNote { channel: 1, note: 69, volume: Some(127) }
+            MusEvent::PlayNote {
+                channel: 1,
+                note: 69,
+                volume: Some(127)
+            }
         );
     }
 
@@ -323,7 +347,10 @@ mod tests {
         assert!(score.events.len() >= 2);
         assert_eq!(
             score.events[0].1,
-            MusEvent::ReleaseNote { channel: 0, note: 60 }
+            MusEvent::ReleaseNote {
+                channel: 0,
+                note: 60
+            }
         );
     }
 }

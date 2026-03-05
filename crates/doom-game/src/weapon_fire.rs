@@ -674,7 +674,10 @@ mod tests {
             .iter_handles()
             .filter_map(|h| gs.mobjslab.get(h))
             .find(|m| m.kind == MobjKind::Rocket);
-        assert!(proj.is_some(), "spawned projectile must be MobjKind::Rocket");
+        assert!(
+            proj.is_some(),
+            "spawned projectile must be MobjKind::Rocket"
+        );
     }
 
     #[test]
@@ -685,7 +688,10 @@ mod tests {
         let count_before: usize = gs.mobjslab.iter_handles().count();
         p_fire_rocket(&mut gs, None);
         let count_after: usize = gs.mobjslab.iter_handles().count();
-        assert_eq!(count_after, count_before, "no projectile when out of rockets");
+        assert_eq!(
+            count_after, count_before,
+            "no projectile when out of rockets"
+        );
     }
 
     // =======================================================================
@@ -766,7 +772,10 @@ mod tests {
         let count_before: usize = gs.mobjslab.iter_handles().count();
         p_fire_bfg(&mut gs, None);
         let count_after: usize = gs.mobjslab.iter_handles().count();
-        assert_eq!(count_after, count_before, "BFG must not fire with < 40 cells");
+        assert_eq!(
+            count_after, count_before,
+            "BFG must not fire with < 40 cells"
+        );
         assert_eq!(
             gs.player.ammo(AmmoType::Cells as usize),
             39,
@@ -954,7 +963,10 @@ mod tests {
     fn has_ammo_bfg_requires_40_cells() {
         let mut gs = make_game_state();
         gs.player.give_ammo(AmmoType::Cells as usize, 39);
-        assert!(!has_ammo(&gs, WeaponType::Bfg), "39 cells not enough for BFG");
+        assert!(
+            !has_ammo(&gs, WeaponType::Bfg),
+            "39 cells not enough for BFG"
+        );
         gs.player.give_ammo(AmmoType::Cells as usize, 1);
         assert!(has_ammo(&gs, WeaponType::Bfg), "40 cells enough for BFG");
     }

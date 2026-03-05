@@ -443,22 +443,10 @@ pub fn draw_intermission(fb: &mut Framebuffer, renderer: &IntermissionRenderer) 
     draw_text(fb, map_x, MAP_TITLE_Y as i32, map_text, COLOR_DEFAULT);
 
     // --- Kill / Item / Secret labels and percentages ---
-    draw_text(
-        fb,
-        LABEL_X as i32,
-        KILLS_Y as i32,
-        b"KILLS",
-        COLOR_DEFAULT,
-    );
+    draw_text(fb, LABEL_X as i32, KILLS_Y as i32, b"KILLS", COLOR_DEFAULT);
     draw_percentage(fb, VALUE_X, KILLS_Y, renderer.shown_kills, COLOR_PERCENT);
 
-    draw_text(
-        fb,
-        LABEL_X as i32,
-        ITEMS_Y as i32,
-        b"ITEMS",
-        COLOR_DEFAULT,
-    );
+    draw_text(fb, LABEL_X as i32, ITEMS_Y as i32, b"ITEMS", COLOR_DEFAULT);
     draw_percentage(fb, VALUE_X, ITEMS_Y, renderer.shown_items, COLOR_PERCENT);
 
     draw_text(
@@ -483,22 +471,10 @@ pub fn draw_intermission(fb: &mut Framebuffer, renderer: &IntermissionRenderer) 
         COLOR_OVER_PAR
     };
 
-    draw_text(
-        fb,
-        LABEL_X as i32,
-        TIME_Y as i32,
-        b"TIME",
-        COLOR_DEFAULT,
-    );
+    draw_text(fb, LABEL_X as i32, TIME_Y as i32, b"TIME", COLOR_DEFAULT);
     draw_time(fb, VALUE_X, TIME_Y, renderer.level_time, time_color);
 
-    draw_text(
-        fb,
-        LABEL_X as i32,
-        PAR_Y as i32,
-        b"PAR",
-        COLOR_DEFAULT,
-    );
+    draw_text(fb, LABEL_X as i32, PAR_Y as i32, b"PAR", COLOR_DEFAULT);
     draw_time(fb, VALUE_X, PAR_Y, renderer.par_time, COLOR_DEFAULT);
 
     // --- Prompt ---

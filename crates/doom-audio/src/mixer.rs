@@ -38,7 +38,9 @@ impl PcmSample {
 
         let format = u16::from_le_bytes([data[0], data[1]]);
         if format != 3 {
-            return Err(AudioError::InvalidSfx("unexpected SFX format tag (expected 3)"));
+            return Err(AudioError::InvalidSfx(
+                "unexpected SFX format tag (expected 3)",
+            ));
         }
 
         let sample_rate = u32::from(u16::from_le_bytes([data[2], data[3]]));
@@ -46,7 +48,9 @@ impl PcmSample {
 
         let end = 8 + sample_count;
         if data.len() < end {
-            return Err(AudioError::InvalidSfx("lump too short for declared sample count"));
+            return Err(AudioError::InvalidSfx(
+                "lump too short for declared sample count",
+            ));
         }
 
         Ok(Self {
@@ -187,7 +191,10 @@ mod tests {
         let mut mixer = Mixer::new(22_050);
         let mut buf = vec![1i16; 64]; // pre-fill non-zero so we can detect change
         mixer.mix_frame(&mut buf);
-        assert!(buf.iter().all(|&s| s == 0), "silent mixer must output all zeros");
+        assert!(
+            buf.iter().all(|&s| s == 0),
+            "silent mixer must output all zeros"
+        );
     }
 
     #[test]
@@ -222,7 +229,10 @@ mod tests {
         let mut buf = vec![0i16; 40];
         mixer.mix_frame(&mut buf);
 
-        assert!(!mixer.channels[0].active, "channel 0 should be inactive after sample ends");
+        assert!(
+            !mixer.channels[0].active,
+            "channel 0 should be inactive after sample ends"
+        );
     }
 
     #[test]

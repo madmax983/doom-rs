@@ -17,6 +17,6 @@ pub mod udmf;
 pub use bsp::{BspChild, BspError, BspTree};
 pub use level::{Level, LevelError};
 pub use lumps::{
-    Blockmap, Linedef, LumpParseError, Node, NodeBBox, Reject, Sector, Seg, Sidedef, Ssector,
-    Thing, Vertex, FLAG_TWO_SIDED, SIDEDEF_NONE,
+    Blockmap, FLAG_TWO_SIDED, Linedef, LumpParseError, Node, NodeBBox, Reject, SIDEDEF_NONE,
+    Sector, Seg, Sidedef, Ssector, Thing, Vertex,
 };

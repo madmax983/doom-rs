@@ -61,12 +61,12 @@ impl Widget for DoomFramebufferWidget<'_> {
             return;
         }
 
-        let term_w  = area.width  as usize;
-        let term_h  = area.height as usize;
-        let fb_w    = Framebuffer::width();
-        let fb_h    = Framebuffer::height();
-        let data    = self.data;
-        let pal     = self.active_palette;
+        let term_w = area.width as usize;
+        let term_h = area.height as usize;
+        let fb_w = Framebuffer::width();
+        let fb_h = Framebuffer::height();
+        let data = self.data;
+        let pal = self.active_palette;
 
         // Bounds check: if the data slice is wrong size, bail silently rather
         // than panic — the game may not have rendered a frame yet.
@@ -79,7 +79,7 @@ impl Widget for DoomFramebufferWidget<'_> {
                 let (top_r, top_g, top_b, bot_r, bot_g, bot_b) = match self.scaling_mode {
                     ScalingMode::Nearest => {
                         // Nearest-neighbor scaling (identical formula to abrash).
-                        let fb_x     = (cx * fb_w) / term_w;
+                        let fb_x = (cx * fb_w) / term_w;
                         let fb_y_top = (cy * 2 * fb_h) / (term_h * 2);
                         let fb_y_bot = ((cy * 2 + 1) * fb_h) / (term_h * 2);
 
@@ -99,17 +99,14 @@ impl Widget for DoomFramebufferWidget<'_> {
                         // fx maps cx in [0, term_w) to [0, fb_w<<16).
                         // fy_top maps the top sub-pixel; fy_bot maps the bottom.
                         // We use u64 intermediate to avoid overflow before >> 16.
-                        let fx: u32 = ((cx as u64 * (fb_w as u64) << 16)
-                            / term_w as u64) as u32;
-                        let fy_top: u32 = ((cy as u64 * 2 * (fb_h as u64) << 16)
-                            / (term_h as u64 * 2)) as u32;
+                        let fx: u32 = ((cx as u64 * (fb_w as u64) << 16) / term_w as u64) as u32;
+                        let fy_top: u32 =
+                            ((cy as u64 * 2 * (fb_h as u64) << 16) / (term_h as u64 * 2)) as u32;
                         let fy_bot: u32 = (((cy as u64 * 2 + 1) * (fb_h as u64) << 16)
                             / (term_h as u64 * 2)) as u32;
 
-                        let (tr, tg, tb) =
-                            sample_bilinear(data, self.lut, pal, fx, fy_top);
-                        let (br, bg, bb) =
-                            sample_bilinear(data, self.lut, pal, fx, fy_bot);
+                        let (tr, tg, tb) = sample_bilinear(data, self.lut, pal, fx, fy_top);
+                        let (br, bg, bb) = sample_bilinear(data, self.lut, pal, fx, fy_bot);
                         (tr, tg, tb, br, bg, bb)
                     }
                 };
@@ -137,9 +134,9 @@ mod tests {
 
     #[test]
     fn zero_size_area_is_noop() {
-        let fb  = make_fb_with(0);
+        let fb = make_fb_with(0);
         let lut = PaletteLut::grayscale();
-        let w   = DoomFramebufferWidget::new(&fb, &lut, 0);
+        let w = DoomFramebufferWidget::new(&fb, &lut, 0);
         let area = Rect::new(0, 0, 0, 0);
         let mut buf = Buffer::empty(Rect::new(0, 0, 10, 10));
         w.render(area, &mut buf);
@@ -148,10 +145,10 @@ mod tests {
 
     #[test]
     fn renders_correct_color_from_palette() {
-        let mut fb  = Framebuffer::new();
+        let mut fb = Framebuffer::new();
         // Palette index 1 = red in the test_primary LUT.
         fb.clear(1);
-        let lut  = PaletteLut::test_primary();
+        let lut = PaletteLut::test_primary();
         let area = Rect::new(0, 0, 1, 1);
         let mut buf = Buffer::empty(area);
         DoomFramebufferWidget::new(&fb, &lut, 0).render(area, &mut buf);
@@ -164,7 +161,7 @@ mod tests {
     #[test]
     fn palette_switch_changes_color_without_fb_change() {
         // Index 0 = black in all palettes (by convention grayscale).
-        let fb  = make_fb_with(0);
+        let fb = make_fb_with(0);
         let lut = PaletteLut::grayscale();
         for pal in 0..14 {
             let area = Rect::new(0, 0, 1, 1);
@@ -178,22 +175,27 @@ mod tests {
 
     #[test]
     fn wrong_data_length_is_noop() {
-        let lut  = PaletteLut::grayscale();
-        let bad  = [0u8; 10]; // wrong size
+        let lut = PaletteLut::grayscale();
+        let bad = [0u8; 10]; // wrong size
         let area = Rect::new(0, 0, 4, 2);
         let mut buf = Buffer::empty(area);
         // Manually construct to bypass Framebuffer type.
-        DoomFramebufferWidget { data: &bad, lut: &lut, active_palette: 0, scaling_mode: ScalingMode::Nearest }
-            .render(area, &mut buf);
+        DoomFramebufferWidget {
+            data: &bad,
+            lut: &lut,
+            active_palette: 0,
+            scaling_mode: ScalingMode::Nearest,
+        }
+        .render(area, &mut buf);
         // No panic; buffer remains empty/default.
     }
 
     #[test]
     fn scaling_nearest_neighbor_fills_all_cells() {
         // Fill with color index 2 (green in test_primary).
-        let mut fb  = Framebuffer::new();
+        let mut fb = Framebuffer::new();
         fb.clear(2);
-        let lut  = PaletteLut::test_primary();
+        let lut = PaletteLut::test_primary();
         let area = Rect::new(0, 0, 20, 10);
         let mut buf = Buffer::empty(area);
         DoomFramebufferWidget::new(&fb, &lut, 0).render(area, &mut buf);
@@ -201,7 +203,11 @@ mod tests {
             for cx in 0..20u16 {
                 let cell = buf.cell((cx, cy)).unwrap();
                 assert_eq!(cell.symbol(), "▀", "cell ({cx},{cy}) missing ▀");
-                assert_eq!(cell.fg, Color::Rgb(0, 255, 0), "cell ({cx},{cy}) wrong color");
+                assert_eq!(
+                    cell.fg,
+                    Color::Rgb(0, 255, 0),
+                    "cell ({cx},{cy}) wrong color"
+                );
             }
         }
     }
@@ -211,7 +217,7 @@ mod tests {
         // Uniform green field → bilinear should produce the same color as nearest.
         let mut fb = Framebuffer::new();
         fb.clear(2); // green in test_primary
-        let lut  = PaletteLut::test_primary();
+        let lut = PaletteLut::test_primary();
         let area = Rect::new(0, 0, 20, 10);
         let mut buf = Buffer::empty(area);
         DoomFramebufferWidget::new(&fb, &lut, 0)
@@ -230,10 +236,9 @@ mod tests {
 
     #[test]
     fn bilinear_zero_size_area_is_noop() {
-        let fb  = make_fb_with(0);
+        let fb = make_fb_with(0);
         let lut = PaletteLut::grayscale();
-        let w   = DoomFramebufferWidget::new(&fb, &lut, 0)
-            .with_scaling(ScalingMode::Bilinear);
+        let w = DoomFramebufferWidget::new(&fb, &lut, 0).with_scaling(ScalingMode::Bilinear);
         let area = Rect::new(0, 0, 0, 0);
         let mut buf = Buffer::empty(Rect::new(0, 0, 10, 10));
         w.render(area, &mut buf);
@@ -242,10 +247,9 @@ mod tests {
 
     #[test]
     fn with_scaling_builder_sets_mode() {
-        let fb  = make_fb_with(0);
+        let fb = make_fb_with(0);
         let lut = PaletteLut::grayscale();
-        let w   = DoomFramebufferWidget::new(&fb, &lut, 0)
-            .with_scaling(ScalingMode::Bilinear);
+        let w = DoomFramebufferWidget::new(&fb, &lut, 0).with_scaling(ScalingMode::Bilinear);
         assert_eq!(w.scaling_mode, ScalingMode::Bilinear);
     }
 }

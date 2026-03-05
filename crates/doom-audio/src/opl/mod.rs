@@ -56,7 +56,11 @@ struct OperatorState {
 
 impl Default for OperatorState {
     fn default() -> Self {
-        Self { phase_acc: 0, env_level: 0.0, env_phase: EnvPhase::Off }
+        Self {
+            phase_acc: 0,
+            env_level: 0.0,
+            env_phase: EnvPhase::Off,
+        }
     }
 }
 
@@ -312,8 +316,7 @@ impl OplChip {
                     }
 
                     // ADSR envelope (linear approximation).
-                    let sustain_target =
-                        1.0 - op_reg.sustain_level as f32 / 15.0;
+                    let sustain_target = 1.0 - op_reg.sustain_level as f32 / 15.0;
                     match op_st.env_phase {
                         EnvPhase::Attack => {
                             let ar = op_reg.attack_rate as f32;
@@ -349,29 +352,20 @@ impl OplChip {
                     // Phase increment.
                     let mult = MULT[op_reg.mult as usize & 0x0F];
                     let op_freq = freq_hz * mult;
-                    let phase_inc =
-                        (op_freq / sr * 4_294_967_296.0) as u32;
+                    let phase_inc = (op_freq / sr * 4_294_967_296.0) as u32;
                     op_st.phase_acc = op_st.phase_acc.wrapping_add(phase_inc);
 
                     op_outputs[op_idx] =
-                        opl_waveform(op_reg.waveform, op_st.phase_acc)
-                            * op_st.env_level;
+                        opl_waveform(op_reg.waveform, op_st.phase_acc) * op_st.env_level;
                 }
 
                 // -- 2-operator FM: modulator → carrier phase modulation ------
-                let mod_depth = (63i32
-                    - ch.operators[0].total_level as i32)
-                    .max(0) as f32
-                    / 63.0;
-                let fm_offset =
-                    (op_outputs[0] * mod_depth * 65536.0 * 4.0) as i32 as u32;
-                let car_phase =
-                    self.synth[ch_idx].ops[1].phase_acc.wrapping_add(fm_offset);
+                let mod_depth = (63i32 - ch.operators[0].total_level as i32).max(0) as f32 / 63.0;
+                let fm_offset = (op_outputs[0] * mod_depth * 65536.0 * 4.0) as i32 as u32;
+                let car_phase = self.synth[ch_idx].ops[1].phase_acc.wrapping_add(fm_offset);
                 let car_waveform = ch.operators[1].waveform;
                 let car_env = self.synth[ch_idx].ops[1].env_level;
-                let car_vol = (63i32 - ch.operators[1].total_level as i32)
-                    .max(0) as f32
-                    / 63.0;
+                let car_vol = (63i32 - ch.operators[1].total_level as i32).max(0) as f32 / 63.0;
                 let channel_out = if self.synth[ch_idx].ops[1].env_phase != EnvPhase::Off {
                     opl_waveform(car_waveform, car_phase) * car_env * car_vol
                 } else {
@@ -399,7 +393,10 @@ mod tests {
     fn opl_new_is_silent() {
         let chip = OplChip::new();
         for ch in 0..9 {
-            assert!(!chip.channel(ch).key_on, "channel {ch} should be silent on init");
+            assert!(
+                !chip.channel(ch).key_on,
+                "channel {ch} should be silent on init"
+            );
         }
     }
 

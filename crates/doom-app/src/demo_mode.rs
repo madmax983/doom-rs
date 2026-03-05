@@ -140,21 +140,21 @@ fn make_test_level() -> doom_map::Level {
 
     Level {
         name: "TEST".to_owned(),
-        things:   vec![],
+        things: vec![],
         linedefs: vec![],
         sidedefs: vec![],
         vertexes: vec![],
-        segs:     vec![],
+        segs: vec![],
         ssectors: vec![],
-        nodes:    vec![],
-        sectors:  vec![Sector {
+        nodes: vec![],
+        sectors: vec![Sector {
             floor_height: 0,
-            ceil_height:  128,
-            floor_flat:   *b"FLAT1\0\0\0",
-            ceil_flat:    *b"FLAT2\0\0\0",
-            light_level:  192,
-            special:      0,
-            tag:          0,
+            ceil_height: 128,
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: 0,
         }],
         reject,
         blockmap,
@@ -195,7 +195,15 @@ mod tests {
     }
 
     fn make_doom_game() -> DoomGame {
-        DoomGame::new(make_game_state(), make_test_level(), None, None, None, None, None)
+        DoomGame::new(
+            make_game_state(),
+            make_test_level(),
+            None,
+            None,
+            None,
+            None,
+            None,
+        )
     }
 
     fn make_recorder(n_tics: usize) -> DemoRecorder {
@@ -320,8 +328,7 @@ mod tests {
         app.tick(TicInput::default());
 
         assert_eq!(
-            app.inner.gs.tic_num,
-            tic_after_demo,
+            app.inner.gs.tic_num, tic_after_demo,
             "tic_num must not advance after demo is exhausted"
         );
     }

@@ -25,11 +25,19 @@ use thiserror::Error;
 pub enum LumpParseError {
     /// Lump byte count is not divisible by the expected entry size.
     #[error("{lump}: expected size divisible by {entry_size}, got {actual}")]
-    BadLength { lump: &'static str, entry_size: usize, actual: usize },
+    BadLength {
+        lump: &'static str,
+        entry_size: usize,
+        actual: usize,
+    },
 
     /// The reject lump is the wrong size for the number of sectors.
     #[error("REJECT: expected {expected} bytes for {n_sectors} sectors, got {actual}")]
-    BadRejectSize { n_sectors: usize, expected: usize, actual: usize },
+    BadRejectSize {
+        n_sectors: usize,
+        expected: usize,
+        actual: usize,
+    },
 
     /// Blockmap header is truncated.
     #[error("BLOCKMAP: lump too short for header ({0} bytes)")]
@@ -66,10 +74,10 @@ impl Thing {
 
     fn from_bytes(b: &[u8]) -> Self {
         Self {
-            x:     i16::from_le_bytes([b[0], b[1]]),
-            y:     i16::from_le_bytes([b[2], b[3]]),
+            x: i16::from_le_bytes([b[0], b[1]]),
+            y: i16::from_le_bytes([b[2], b[3]]),
             angle: u16::from_le_bytes([b[4], b[5]]),
-            kind:  u16::from_le_bytes([b[6], b[7]]),
+            kind: u16::from_le_bytes([b[6], b[7]]),
             flags: u16::from_le_bytes([b[8], b[9]]),
         }
     }
@@ -108,13 +116,13 @@ impl Linedef {
 
     fn from_bytes(b: &[u8]) -> Self {
         Self {
-            from_vertex:  u16::from_le_bytes([b[0],  b[1]]),
-            to_vertex:    u16::from_le_bytes([b[2],  b[3]]),
-            flags:        u16::from_le_bytes([b[4],  b[5]]),
-            special:      u16::from_le_bytes([b[6],  b[7]]),
-            tag:          u16::from_le_bytes([b[8],  b[9]]),
+            from_vertex: u16::from_le_bytes([b[0], b[1]]),
+            to_vertex: u16::from_le_bytes([b[2], b[3]]),
+            flags: u16::from_le_bytes([b[4], b[5]]),
+            special: u16::from_le_bytes([b[6], b[7]]),
+            tag: u16::from_le_bytes([b[8], b[9]]),
             right_sidedef: u16::from_le_bytes([b[10], b[11]]),
-            left_sidedef:  u16::from_le_bytes([b[12], b[13]]),
+            left_sidedef: u16::from_le_bytes([b[12], b[13]]),
         }
     }
 
@@ -156,12 +164,12 @@ impl Sidedef {
 
     fn from_bytes(b: &[u8]) -> Self {
         Self {
-            x_offset:       i16::from_le_bytes([b[0], b[1]]),
-            y_offset:       i16::from_le_bytes([b[2], b[3]]),
-            upper_texture:  b[4..12].try_into().unwrap(),
-            lower_texture:  b[12..20].try_into().unwrap(),
+            x_offset: i16::from_le_bytes([b[0], b[1]]),
+            y_offset: i16::from_le_bytes([b[2], b[3]]),
+            upper_texture: b[4..12].try_into().unwrap(),
+            lower_texture: b[12..20].try_into().unwrap(),
             middle_texture: b[20..28].try_into().unwrap(),
-            sector:         u16::from_le_bytes([b[28], b[29]]),
+            sector: u16::from_le_bytes([b[28], b[29]]),
         }
     }
 
@@ -224,12 +232,12 @@ impl Seg {
 
     fn from_bytes(b: &[u8]) -> Self {
         Self {
-            from_vertex: u16::from_le_bytes([b[0],  b[1]]),
-            to_vertex:   u16::from_le_bytes([b[2],  b[3]]),
-            angle:       u16::from_le_bytes([b[4],  b[5]]),
-            linedef:     u16::from_le_bytes([b[6],  b[7]]),
-            direction:   u16::from_le_bytes([b[8],  b[9]]),
-            offset:      u16::from_le_bytes([b[10], b[11]]),
+            from_vertex: u16::from_le_bytes([b[0], b[1]]),
+            to_vertex: u16::from_le_bytes([b[2], b[3]]),
+            angle: u16::from_le_bytes([b[4], b[5]]),
+            linedef: u16::from_le_bytes([b[6], b[7]]),
+            direction: u16::from_le_bytes([b[8], b[9]]),
+            offset: u16::from_le_bytes([b[10], b[11]]),
         }
     }
 
@@ -336,14 +344,14 @@ impl Node {
 
     fn from_bytes(b: &[u8]) -> Self {
         Self {
-            x:           i16::from_le_bytes([b[0],  b[1]]),
-            y:           i16::from_le_bytes([b[2],  b[3]]),
-            dx:          i16::from_le_bytes([b[4],  b[5]]),
-            dy:          i16::from_le_bytes([b[6],  b[7]]),
-            right_bbox:  NodeBBox::from_bytes(&b[8..16]),
-            left_bbox:   NodeBBox::from_bytes(&b[16..24]),
+            x: i16::from_le_bytes([b[0], b[1]]),
+            y: i16::from_le_bytes([b[2], b[3]]),
+            dx: i16::from_le_bytes([b[4], b[5]]),
+            dy: i16::from_le_bytes([b[6], b[7]]),
+            right_bbox: NodeBBox::from_bytes(&b[8..16]),
+            left_bbox: NodeBBox::from_bytes(&b[16..24]),
             right_child: u16::from_le_bytes([b[24], b[25]]),
-            left_child:  u16::from_le_bytes([b[26], b[27]]),
+            left_child: u16::from_le_bytes([b[26], b[27]]),
         }
     }
 
@@ -381,13 +389,13 @@ impl Sector {
 
     fn from_bytes(b: &[u8]) -> Self {
         Self {
-            floor_height: i16::from_le_bytes([b[0],  b[1]]),
-            ceil_height:  i16::from_le_bytes([b[2],  b[3]]),
-            floor_flat:   b[4..12].try_into().unwrap(),
-            ceil_flat:    b[12..20].try_into().unwrap(),
-            light_level:  i16::from_le_bytes([b[20], b[21]]),
-            special:      u16::from_le_bytes([b[22], b[23]]),
-            tag:          u16::from_le_bytes([b[24], b[25]]),
+            floor_height: i16::from_le_bytes([b[0], b[1]]),
+            ceil_height: i16::from_le_bytes([b[2], b[3]]),
+            floor_flat: b[4..12].try_into().unwrap(),
+            ceil_flat: b[12..20].try_into().unwrap(),
+            light_level: i16::from_le_bytes([b[20], b[21]]),
+            special: u16::from_le_bytes([b[22], b[23]]),
+            tag: u16::from_le_bytes([b[24], b[25]]),
         }
     }
 
@@ -427,7 +435,10 @@ impl Reject {
                 actual: data.len(),
             });
         }
-        Ok(Self { n_sectors, data: data.to_vec() })
+        Ok(Self {
+            n_sectors,
+            data: data.to_vec(),
+        })
     }
 
     /// Returns `true` if sectors `a` and `b` might be mutually visible
@@ -438,12 +449,14 @@ impl Reject {
         }
         let bit_idx = a * self.n_sectors + b;
         let byte = bit_idx / 8;
-        let bit  = bit_idx % 8;
+        let bit = bit_idx % 8;
         (self.data[byte] >> bit) & 1 == 0
     }
 
     /// Number of sectors this reject was built for.
-    pub fn n_sectors(&self) -> usize { self.n_sectors }
+    pub fn n_sectors(&self) -> usize {
+        self.n_sectors
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -480,8 +493,8 @@ impl Blockmap {
         }
         let x_origin = i16::from_le_bytes([data[0], data[1]]);
         let y_origin = i16::from_le_bytes([data[2], data[3]]);
-        let x_count  = u16::from_le_bytes([data[4], data[5]]);
-        let y_count  = u16::from_le_bytes([data[6], data[7]]);
+        let x_count = u16::from_le_bytes([data[4], data[5]]);
+        let y_count = u16::from_le_bytes([data[6], data[7]]);
 
         let n_blocks = x_count as usize * y_count as usize;
         let offsets_end = Self::HEADER_BYTES + n_blocks * 2;
@@ -492,7 +505,14 @@ impl Blockmap {
             offsets.push(u16::from_le_bytes([chunk[0], chunk[1]]));
         }
 
-        Ok(Self { x_origin, y_origin, x_count, y_count, offsets, raw: data.to_vec() })
+        Ok(Self {
+            x_origin,
+            y_origin,
+            x_count,
+            y_count,
+            offsets,
+            raw: data.to_vec(),
+        })
     }
 
     /// Iterate over the linedef indices in the block at column `col`, row `row`.
@@ -521,11 +541,7 @@ impl Blockmap {
             }
             let val = u16::from_le_bytes([data[pos], data[pos + 1]]);
             pos += 2;
-            if val == 0xFFFF {
-                None
-            } else {
-                Some(val)
-            }
+            if val == 0xFFFF { None } else { Some(val) }
         })
     }
 }
@@ -720,7 +736,10 @@ mod tests {
 
     #[test]
     fn ssector_seg_end() {
-        let ss = Ssector { seg_count: 5, first_seg: 3 };
+        let ss = Ssector {
+            seg_count: 5,
+            first_seg: 3,
+        };
         assert_eq!(ss.seg_end(), 8);
     }
 

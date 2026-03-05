@@ -38,7 +38,9 @@ fn verify_proofs() {
         Err(e) => {
             // Verus not installed: warn but don't fail the build.
             println!("cargo:warning=Verus not found ({e}). Skipping formal verification.");
-            println!("cargo:warning=Install verus at C:\\Users\\markm\\verus\\verus.exe to enable.");
+            println!(
+                "cargo:warning=Install verus at C:\\Users\\markm\\verus\\verus.exe to enable."
+            );
         }
     }
 }

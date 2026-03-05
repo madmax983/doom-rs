@@ -14,7 +14,10 @@ pub struct Vec2Fixed {
 
 impl Vec2Fixed {
     /// Zero vector.
-    pub const ZERO: Self = Self { x: Fixed16_16::ZERO, y: Fixed16_16::ZERO };
+    pub const ZERO: Self = Self {
+        x: Fixed16_16::ZERO,
+        y: Fixed16_16::ZERO,
+    };
 
     /// Construct from raw fixed-point values.
     #[inline]
@@ -57,7 +60,10 @@ impl Add for Vec2Fixed {
     type Output = Self;
     #[inline]
     fn add(self, rhs: Self) -> Self {
-        Self { x: self.x + rhs.x, y: self.y + rhs.y }
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
     }
 }
 
@@ -65,7 +71,10 @@ impl Sub for Vec2Fixed {
     type Output = Self;
     #[inline]
     fn sub(self, rhs: Self) -> Self {
-        Self { x: self.x - rhs.x, y: self.y - rhs.y }
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
     }
 }
 
@@ -73,7 +82,10 @@ impl Neg for Vec2Fixed {
     type Output = Self;
     #[inline]
     fn neg(self) -> Self {
-        Self { x: -self.x, y: -self.y }
+        Self {
+            x: -self.x,
+            y: -self.y,
+        }
     }
 }
 

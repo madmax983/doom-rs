@@ -15,8 +15,8 @@
 
 use doom_map::Level;
 
-use crate::mobj::flags::MF_AMBUSH;
 use crate::mobj::MobjHandle;
+use crate::mobj::flags::MF_AMBUSH;
 use crate::sight::{p_check_sight, sector_from_subsector};
 use crate::state::GameState;
 
@@ -130,12 +130,7 @@ pub fn adjacent_sectors(level: &Level, sector_index: usize) -> Vec<usize> {
 ///
 /// After this call, `gs.sound_targets[sector]` will be `Some(target)` for
 /// every reached sector.
-pub fn p_noise_alert(
-    gs: &mut GameState,
-    level: &Level,
-    target: MobjHandle,
-    emitter: MobjHandle,
-) {
+pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emitter: MobjHandle) {
     // Determine the emitter's sector from its subsector.
     let emitter_sector = {
         let mo = match gs.mobjslab.get(emitter) {
@@ -242,11 +237,7 @@ fn recursive_sound(
 ///
 /// This helper is intended to be called from `A_Look` or similar monster AI
 /// functions.
-pub fn monster_should_wake(
-    gs: &GameState,
-    level: &Level,
-    actor_handle: MobjHandle,
-) -> bool {
+pub fn monster_should_wake(gs: &GameState, level: &Level, actor_handle: MobjHandle) -> bool {
     let mo = match gs.mobjslab.get(actor_handle) {
         Some(mo) => mo,
         None => return false,
@@ -283,9 +274,9 @@ pub fn monster_should_wake(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{flags, Mobj, MobjHandle, MobjKind};
-    use doom_map::lumps::*;
+    use crate::mobj::{Mobj, MobjHandle, MobjKind, flags};
     use doom_map::Level;
+    use doom_map::lumps::*;
     use doom_types::{Bam, Fixed16_16};
 
     // -- Test helpers -------------------------------------------------------
@@ -298,10 +289,7 @@ mod tests {
     /// A one-sided "anchor" linedef for sector 0 is always created so that
     /// subsector 0 -> seg 0 -> linedef 0 -> right sidedef -> sector 0 resolves
     /// correctly via `sector_from_subsector`.
-    fn make_test_level(
-        n_sectors: usize,
-        connections: &[(usize, usize, u16)],
-    ) -> Level {
+    fn make_test_level(n_sectors: usize, connections: &[(usize, usize, u16)]) -> Level {
         let sectors: Vec<Sector> = (0..n_sectors)
             .map(|_| Sector {
                 floor_height: 0,
@@ -369,10 +357,7 @@ mod tests {
         }
 
         // Minimal geometry: 2 vertices, 1 seg, 1 ssector, 0 nodes.
-        let vertexes = vec![
-            Vertex { x: 0, y: 0 },
-            Vertex { x: 64, y: 0 },
-        ];
+        let vertexes = vec![Vertex { x: 0, y: 0 }, Vertex { x: 64, y: 0 }];
 
         // One seg referencing linedef 0 (the anchor).
         let segs = vec![Seg {
@@ -540,10 +525,7 @@ mod tests {
     #[test]
     fn sound_blocked_by_two_consecutive_soundblock_linedefs() {
         // 3 sectors: 0 --[SOUNDBLOCK]--> 1 --[SOUNDBLOCK]--> 2
-        let level = make_test_level(3, &[
-            (0, 1, ML_SOUNDBLOCK),
-            (1, 2, ML_SOUNDBLOCK),
-        ]);
+        let level = make_test_level(3, &[(0, 1, ML_SOUNDBLOCK), (1, 2, ML_SOUNDBLOCK)]);
         let mut gs = make_game_state_with_sound(3);
         let player = gs.player.handle;
 
@@ -566,11 +548,14 @@ mod tests {
     #[test]
     fn sound_blocked_by_three_consecutive_soundblock_linedefs() {
         // 4 sectors: 0 --[SB]--> 1 --[SB]--> 2 --[SB]--> 3
-        let level = make_test_level(4, &[
-            (0, 1, ML_SOUNDBLOCK),
-            (1, 2, ML_SOUNDBLOCK),
-            (2, 3, ML_SOUNDBLOCK),
-        ]);
+        let level = make_test_level(
+            4,
+            &[
+                (0, 1, ML_SOUNDBLOCK),
+                (1, 2, ML_SOUNDBLOCK),
+                (2, 3, ML_SOUNDBLOCK),
+            ],
+        );
         let mut gs = make_game_state_with_sound(4);
         let player = gs.player.handle;
 
@@ -646,12 +631,7 @@ mod tests {
     fn flood_fill_does_not_revisit_sectors() {
         // Create a diamond topology: 0 <-> 1, 0 <-> 2, 1 <-> 3, 2 <-> 3
         // Sound should reach sector 3 exactly once despite two paths.
-        let level = make_test_level(4, &[
-            (0, 1, 0),
-            (0, 2, 0),
-            (1, 3, 0),
-            (2, 3, 0),
-        ]);
+        let level = make_test_level(4, &[(0, 1, 0), (0, 2, 0), (1, 3, 0), (2, 3, 0)]);
         let mut gs = make_game_state_with_sound(4);
         let player = gs.player.handle;
 
@@ -693,10 +673,7 @@ mod tests {
         let level = make_test_level(3, &[(0, 1, 0)]);
 
         let adj_2 = adjacent_sectors(&level, 2);
-        assert!(
-            adj_2.is_empty(),
-            "isolated sector must have no adjacencies"
-        );
+        assert!(adj_2.is_empty(), "isolated sector must have no adjacencies");
     }
 
     #[test]
@@ -743,14 +720,7 @@ mod tests {
         let player = gs.player.handle;
 
         // Spawn an AMBUSH (deaf) monster close enough for LOS (within 4096 range).
-        let monster = spawn_monster(
-            &mut gs,
-            MobjKind::Trooper,
-            100,
-            0,
-            0,
-            flags::MF_AMBUSH,
-        );
+        let monster = spawn_monster(&mut gs, MobjKind::Trooper, 100, 0, 0, flags::MF_AMBUSH);
 
         // Fire noise alert.
         p_noise_alert(&mut gs, &level, player, player);
@@ -809,10 +779,7 @@ mod tests {
             left_sidedef: 1,
         }];
 
-        let vertexes = vec![
-            Vertex { x: 0, y: 0 },
-            Vertex { x: 64, y: 0 },
-        ];
+        let vertexes = vec![Vertex { x: 0, y: 0 }, Vertex { x: 64, y: 0 }];
 
         // Two segs in two subsectors, each in a different sector.
         // Seg 0 → linedef 0, direction 0 → right sidedef → sector 0.
@@ -921,14 +888,7 @@ mod tests {
 
         // Monster in subsector 1 (sector 1), with MF_AMBUSH.
         // Place it far away (> 4096 Manhattan) so p_check_sight fails.
-        let monster = spawn_monster(
-            &mut gs,
-            MobjKind::Trooper,
-            5000,
-            5000,
-            1,
-            flags::MF_AMBUSH,
-        );
+        let monster = spawn_monster(&mut gs, MobjKind::Trooper, 5000, 5000, 1, flags::MF_AMBUSH);
 
         // Fire noise alert — sound propagates to sector 1.
         p_noise_alert(&mut gs, &level, player_handle, player_handle);
@@ -969,12 +929,7 @@ mod tests {
     #[test]
     fn sound_propagates_across_multiple_sectors() {
         // Chain: 0 <-> 1 <-> 2 <-> 3 <-> 4
-        let level = make_test_level(5, &[
-            (0, 1, 0),
-            (1, 2, 0),
-            (2, 3, 0),
-            (3, 4, 0),
-        ]);
+        let level = make_test_level(5, &[(0, 1, 0), (1, 2, 0), (2, 3, 0), (3, 4, 0)]);
         let mut gs = make_game_state_with_sound(5);
         let player = gs.player.handle;
 
@@ -1114,12 +1069,15 @@ mod tests {
     #[test]
     fn sound_with_mixed_soundblock_and_normal_linedefs() {
         // 0 --[normal]--> 1 --[SOUNDBLOCK]--> 2 --[normal]--> 3 --[SOUNDBLOCK]--> 4
-        let level = make_test_level(5, &[
-            (0, 1, 0),
-            (1, 2, ML_SOUNDBLOCK),
-            (2, 3, 0),
-            (3, 4, ML_SOUNDBLOCK),
-        ]);
+        let level = make_test_level(
+            5,
+            &[
+                (0, 1, 0),
+                (1, 2, ML_SOUNDBLOCK),
+                (2, 3, 0),
+                (3, 4, ML_SOUNDBLOCK),
+            ],
+        );
         let mut gs = make_game_state_with_sound(5);
         let player = gs.player.handle;
 

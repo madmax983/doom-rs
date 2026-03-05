@@ -124,19 +124,25 @@ impl Bam {
 impl core::ops::Add for Bam {
     type Output = Self;
     #[inline]
-    fn add(self, rhs: Self) -> Self { self.wrapping_add(rhs) }
+    fn add(self, rhs: Self) -> Self {
+        self.wrapping_add(rhs)
+    }
 }
 
 impl core::ops::Sub for Bam {
     type Output = Self;
     #[inline]
-    fn sub(self, rhs: Self) -> Self { self.wrapping_sub(rhs) }
+    fn sub(self, rhs: Self) -> Self {
+        self.wrapping_sub(rhs)
+    }
 }
 
 impl core::ops::Neg for Bam {
     type Output = Self;
     #[inline]
-    fn neg(self) -> Self { self.negate() }
+    fn neg(self) -> Self {
+        self.negate()
+    }
 }
 
 impl core::fmt::Display for Bam {

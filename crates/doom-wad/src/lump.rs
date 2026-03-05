@@ -154,19 +154,31 @@ mod tests {
 
     #[test]
     fn raw_entry_byte_range() {
-        let entry = RawLumpEntry { filepos: 100, size: 50, name: [0; 8] };
+        let entry = RawLumpEntry {
+            filepos: 100,
+            size: 50,
+            name: [0; 8],
+        };
         assert_eq!(entry.byte_range(), Some((100, 150)));
     }
 
     #[test]
     fn raw_entry_negative_filepos_returns_none() {
-        let entry = RawLumpEntry { filepos: -1, size: 10, name: [0; 8] };
+        let entry = RawLumpEntry {
+            filepos: -1,
+            size: 10,
+            name: [0; 8],
+        };
         assert!(entry.byte_range().is_none());
     }
 
     #[test]
     fn raw_entry_zero_size_valid() {
-        let entry = RawLumpEntry { filepos: 200, size: 0, name: [0; 8] };
+        let entry = RawLumpEntry {
+            filepos: 200,
+            size: 0,
+            name: [0; 8],
+        };
         assert_eq!(entry.byte_range(), Some((200, 200)));
     }
 }

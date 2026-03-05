@@ -9,7 +9,7 @@
 
 use anyhow::Result;
 use doom_game::TicCmd;
-use doom_net::{NetClient, NetConfig, RelayServer, TicPacket, MAX_PLAYERS};
+use doom_net::{MAX_PLAYERS, NetClient, NetConfig, RelayServer, TicPacket};
 use doom_renderer::Framebuffer;
 use doom_tui::{DoomApp, TicInput};
 
@@ -310,14 +310,21 @@ mod tests {
         let server = RelayServer::bind("127.0.0.1:0", config);
         assert!(server.is_ok(), "RelayServer must bind successfully");
         let s = server.unwrap();
-        assert_eq!(s.connected_count(), 0, "fresh server must have 0 connections");
+        assert_eq!(
+            s.connected_count(),
+            0,
+            "fresh server must have 0 connections"
+        );
     }
 
     #[test]
     fn default_port_is_5029() {
         assert_eq!(DEFAULT_PORT, 5029, "default netplay port must be 5029");
         let cfg = NetConfig::default();
-        assert_eq!(cfg.port, DEFAULT_PORT, "NetConfig default port must match DEFAULT_PORT");
+        assert_eq!(
+            cfg.port, DEFAULT_PORT,
+            "NetConfig default port must match DEFAULT_PORT"
+        );
     }
 
     // -- NetGameApp tests --
@@ -338,9 +345,15 @@ mod tests {
         let net_app = NetGameApp::new(game, client);
 
         // Verify the wrapper exposes the inner game.
-        assert!(!net_app.inner().automap.active, "automap must start inactive through wrapper");
+        assert!(
+            !net_app.inner().automap.active,
+            "automap must start inactive through wrapper"
+        );
         assert_eq!(net_app.tic(), 0, "tic counter must start at 0");
-        assert!(!net_app.client().is_connected(), "client starts unhandshaked");
+        assert!(
+            !net_app.client().is_connected(),
+            "client starts unhandshaked"
+        );
     }
 
     #[test]

@@ -88,53 +88,71 @@ impl Fixed16_16 {
 impl Add for Fixed16_16 {
     type Output = Self;
     #[inline]
-    fn add(self, rhs: Self) -> Self { Self(self.0.wrapping_add(rhs.0)) }
+    fn add(self, rhs: Self) -> Self {
+        Self(self.0.wrapping_add(rhs.0))
+    }
 }
 
 impl AddAssign for Fixed16_16 {
     #[inline]
-    fn add_assign(&mut self, rhs: Self) { self.0 = self.0.wrapping_add(rhs.0); }
+    fn add_assign(&mut self, rhs: Self) {
+        self.0 = self.0.wrapping_add(rhs.0);
+    }
 }
 
 impl Sub for Fixed16_16 {
     type Output = Self;
     #[inline]
-    fn sub(self, rhs: Self) -> Self { Self(self.0.wrapping_sub(rhs.0)) }
+    fn sub(self, rhs: Self) -> Self {
+        Self(self.0.wrapping_sub(rhs.0))
+    }
 }
 
 impl SubAssign for Fixed16_16 {
     #[inline]
-    fn sub_assign(&mut self, rhs: Self) { self.0 = self.0.wrapping_sub(rhs.0); }
+    fn sub_assign(&mut self, rhs: Self) {
+        self.0 = self.0.wrapping_sub(rhs.0);
+    }
 }
 
 impl Neg for Fixed16_16 {
     type Output = Self;
     #[inline]
-    fn neg(self) -> Self { Self(self.0.wrapping_neg()) }
+    fn neg(self) -> Self {
+        Self(self.0.wrapping_neg())
+    }
 }
 
 /// `*` calls `fixed_mul` — not the same as integer multiplication.
 impl Mul for Fixed16_16 {
     type Output = Self;
     #[inline]
-    fn mul(self, rhs: Self) -> Self { self.fixed_mul(rhs) }
+    fn mul(self, rhs: Self) -> Self {
+        self.fixed_mul(rhs)
+    }
 }
 
 /// `/` calls `fixed_div`.
 impl Div for Fixed16_16 {
     type Output = Self;
     #[inline]
-    fn div(self, rhs: Self) -> Self { self.fixed_div(rhs) }
+    fn div(self, rhs: Self) -> Self {
+        self.fixed_div(rhs)
+    }
 }
 
 impl From<i32> for Fixed16_16 {
     #[inline]
-    fn from(n: i32) -> Self { Self::from_int(n) }
+    fn from(n: i32) -> Self {
+        Self::from_int(n)
+    }
 }
 
 impl From<Fixed16_16> for i32 {
     #[inline]
-    fn from(f: Fixed16_16) -> i32 { f.to_int() }
+    fn from(f: Fixed16_16) -> i32 {
+        f.to_int()
+    }
 }
 
 impl core::fmt::Display for Fixed16_16 {

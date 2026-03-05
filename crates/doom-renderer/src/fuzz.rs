@@ -20,8 +20,8 @@ use doom_types::limits::{FB_HEIGHT, FB_WIDTH};
 /// Each value is multiplied by `FB_WIDTH` (320) to convert a row offset into
 /// a linear pixel offset in the framebuffer array.
 pub const FUZZ_TABLE: [i32; 50] = [
-    1, -1, 1, -1, 1, 1, -1, 1, 1, -1, 1, 1, 1, -1, 1, 1, 1, -1, -1, -1, -1, 1, -1, -1, 1, 1, 1,
-    1, -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, -1, -1, -1, 1, 1, 1, 1, -1, 1, 1, -1, 1,
+    1, -1, 1, -1, 1, 1, -1, 1, 1, -1, 1, 1, 1, -1, 1, 1, 1, -1, -1, -1, -1, 1, -1, -1, 1, 1, 1, 1,
+    -1, 1, -1, 1, 1, -1, -1, 1, 1, -1, -1, -1, -1, 1, 1, 1, 1, -1, 1, 1, -1, 1,
 ];
 
 /// Colormap row index used by the fuzz effect for darkening.

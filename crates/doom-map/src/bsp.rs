@@ -15,7 +15,7 @@
 //! `bsp_depth(node_id, nodes)` (a `spec fn` that is finite because
 //! `N_NODES < u16::MAX`).
 
-use crate::lumps::{Node, Ssector, NODE_INDEX_MASK, NODE_SUBSECTOR_BIT};
+use crate::lumps::{NODE_INDEX_MASK, NODE_SUBSECTOR_BIT, Node, Ssector};
 use thiserror::Error;
 
 /// Errors from BSP structural validation.
@@ -27,11 +27,19 @@ pub enum BspError {
 
     /// A child pointer has a leaf bit but the index exceeds N_SSECTORS.
     #[error("BSP node {node_idx}: leaf child index {child_idx} >= N_SSECTORS ({n_ssectors})")]
-    LeafChildOutOfBounds { node_idx: usize, child_idx: usize, n_ssectors: usize },
+    LeafChildOutOfBounds {
+        node_idx: usize,
+        child_idx: usize,
+        n_ssectors: usize,
+    },
 
     /// A child pointer has no leaf bit but the index exceeds N_NODES.
     #[error("BSP node {node_idx}: node child index {child_idx} >= N_NODES ({n_nodes})")]
-    NodeChildOutOfBounds { node_idx: usize, child_idx: usize, n_nodes: usize },
+    NodeChildOutOfBounds {
+        node_idx: usize,
+        child_idx: usize,
+        n_nodes: usize,
+    },
 
     /// A node bounding box is degenerate (ymax < ymin or xmax < xmin).
     #[error("BSP node {node_idx}: bounding box is degenerate")]
@@ -42,8 +50,15 @@ pub enum BspError {
     EmptySubsector { ss_idx: usize },
 
     /// A subsector's seg range exceeds N_SEGS.
-    #[error("BSP subsector {ss_idx}: first_seg({first_seg}) + seg_count({seg_count}) > N_SEGS({n_segs})")]
-    SubsectorSegsOutOfBounds { ss_idx: usize, first_seg: usize, seg_count: usize, n_segs: usize },
+    #[error(
+        "BSP subsector {ss_idx}: first_seg({first_seg}) + seg_count({seg_count}) > N_SEGS({n_segs})"
+    )]
+    SubsectorSegsOutOfBounds {
+        ss_idx: usize,
+        first_seg: usize,
+        seg_count: usize,
+        n_segs: usize,
+    },
 }
 
 /// Decoded child pointer from a BSP node.
@@ -114,12 +129,15 @@ impl<'a> BspTree<'a> {
         } else if s == n + 1 {
             return Ok(());
         }
-        Err(BspError::LeafCountMismatch { nodes: n, ssectors: s })
+        Err(BspError::LeafCountMismatch {
+            nodes: n,
+            ssectors: s,
+        })
     }
 
     /// Verifies all child pointers are in-bounds.
     fn validate_child_bounds(&self) -> Result<(), BspError> {
-        let n_nodes    = self.nodes.len();
+        let n_nodes = self.nodes.len();
         let n_ssectors = self.ssectors.len();
 
         for (i, node) in self.nodes.iter().enumerate() {
@@ -128,7 +146,7 @@ impl<'a> BspTree<'a> {
                     BspChild::Subsector(idx) => {
                         if idx as usize >= n_ssectors {
                             return Err(BspError::LeafChildOutOfBounds {
-                                node_idx:  i,
+                                node_idx: i,
                                 child_idx: idx as usize,
                                 n_ssectors,
                             });
@@ -137,7 +155,7 @@ impl<'a> BspTree<'a> {
                     BspChild::Node(idx) => {
                         if idx as usize >= n_nodes {
                             return Err(BspError::NodeChildOutOfBounds {
-                                node_idx:  i,
+                                node_idx: i,
                                 child_idx: idx as usize,
                                 n_nodes,
                             });
@@ -168,7 +186,7 @@ impl<'a> BspTree<'a> {
             let end = ss.seg_end();
             if end > n_segs {
                 return Err(BspError::SubsectorSegsOutOfBounds {
-                    ss_idx:    i,
+                    ss_idx: i,
                     first_seg: ss.first_seg as usize,
                     seg_count: ss.seg_count as usize,
                     n_segs,
@@ -205,7 +223,11 @@ impl<'a> BspTree<'a> {
             let nx = node.x as i32;
             let ny = node.y as i32;
             let cross = dx * (py - ny) - dy * (px - nx);
-            let child_raw = if cross > 0 { node.left_child } else { node.right_child };
+            let child_raw = if cross > 0 {
+                node.left_child
+            } else {
+                node.right_child
+            };
 
             match BspChild::decode(child_raw) {
                 BspChild::Subsector(ss_idx) => {
@@ -234,7 +256,7 @@ impl<'a> BspTree<'a> {
             BspChild::Subsector(_) => 0,
             BspChild::Node(idx) => {
                 let node = &self.nodes[idx as usize];
-                let left_depth  = self.subtree_depth(BspChild::decode(node.left_child));
+                let left_depth = self.subtree_depth(BspChild::decode(node.left_child));
                 let right_depth = self.subtree_depth(BspChild::decode(node.right_child));
                 1 + left_depth.max(right_depth)
             }
@@ -242,10 +264,14 @@ impl<'a> BspTree<'a> {
     }
 
     /// Access the raw node slice.
-    pub fn nodes(&self) -> &[Node] { self.nodes }
+    pub fn nodes(&self) -> &[Node] {
+        self.nodes
+    }
 
     /// Access the raw subsector slice.
-    pub fn ssectors(&self) -> &[Ssector] { self.ssectors }
+    pub fn ssectors(&self) -> &[Ssector] {
+        self.ssectors
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -258,18 +284,36 @@ mod tests {
 
     fn make_node(right: u16, left: u16) -> Node {
         Node {
-            x: 0, y: 0, dx: 1, dy: 0,
-            right_bbox: NodeBBox { ymax: 10, ymin: 0, xmin: 0, xmax: 10 },
-            left_bbox:  NodeBBox { ymax: 10, ymin: 0, xmin: 0, xmax: 10 },
+            x: 0,
+            y: 0,
+            dx: 1,
+            dy: 0,
+            right_bbox: NodeBBox {
+                ymax: 10,
+                ymin: 0,
+                xmin: 0,
+                xmax: 10,
+            },
+            left_bbox: NodeBBox {
+                ymax: 10,
+                ymin: 0,
+                xmin: 0,
+                xmax: 10,
+            },
             right_child: right,
             left_child: left,
         }
     }
 
-    fn leaf(idx: u16) -> u16 { NODE_SUBSECTOR_BIT | idx }
+    fn leaf(idx: u16) -> u16 {
+        NODE_SUBSECTOR_BIT | idx
+    }
 
     fn make_ssector(first: u16, count: u16) -> Ssector {
-        Ssector { first_seg: first, seg_count: count }
+        Ssector {
+            first_seg: first,
+            seg_count: count,
+        }
     }
 
     #[test]
@@ -318,7 +362,10 @@ mod tests {
     fn empty_ssector_detected() {
         let nodes = vec![make_node(leaf(0), leaf(1))];
         let ssectors = vec![
-            Ssector { first_seg: 0, seg_count: 0 }, // empty!
+            Ssector {
+                first_seg: 0,
+                seg_count: 0,
+            }, // empty!
             make_ssector(0, 1),
         ];
         assert!(matches!(
@@ -332,7 +379,10 @@ mod tests {
         // Partition line: x=0, y=0, dx=0, dy=1 (vertical line at x=0).
         // Point (10, 5): cross = 0*(5-0) - 1*(10-0) = -10 < 0 → right child.
         let mut node = make_node(leaf(0), leaf(1));
-        node.x = 0; node.y = 0; node.dx = 0; node.dy = 1;
+        node.x = 0;
+        node.y = 0;
+        node.dx = 0;
+        node.dy = 1;
         let nodes = vec![node];
         let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
         let tree = BspTree::validate(&nodes, &ssectors, 2).unwrap();
@@ -363,11 +413,7 @@ mod tests {
             make_node(0, leaf(2)),       // node 1: right=node(0), left=leaf(2)
         ];
         // With 2 nodes we need 3 ssectors.
-        let ssectors = vec![
-            make_ssector(0, 1),
-            make_ssector(1, 1),
-            make_ssector(2, 1),
-        ];
+        let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1), make_ssector(2, 1)];
         let tree = BspTree::validate(&nodes, &ssectors, 3).expect("valid");
         assert_eq!(tree.max_depth(), 2);
     }

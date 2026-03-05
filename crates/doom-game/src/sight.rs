@@ -300,7 +300,11 @@ pub fn p_check_sight(
             // We need to handle the sign of denom carefully.
             let sight_z = if denom != 0 {
                 // Normalize: ensure denom is positive for comparison
-                let (n, d) = if denom < 0 { (-num, -denom) } else { (num, denom) };
+                let (n, d) = if denom < 0 {
+                    (-num, -denom)
+                } else {
+                    (num, denom)
+                };
                 // Clamp t to [0, 1] -- but we know the ray crosses, so t should be valid.
                 // sight_z = src_z_raw + n * dz / d
                 src_z_raw + (n * dz) / d
@@ -330,11 +334,7 @@ pub fn p_check_sight(
 /// (positive = aiming up, negative = aiming down).
 ///
 /// Returns `0` if the horizontal distance is zero (actors at same position).
-pub fn p_aim_line_slope(
-    gs: &GameState,
-    source: MobjHandle,
-    target: MobjHandle,
-) -> Fixed16_16 {
+pub fn p_aim_line_slope(gs: &GameState, source: MobjHandle, target: MobjHandle) -> Fixed16_16 {
     let (src_x, src_y, src_z, src_h) = match gs.mobjslab.get(source) {
         Some(mo) => (mo.x, mo.y, mo.z, mo.height),
         None => return Fixed16_16::ZERO,
@@ -376,11 +376,7 @@ pub fn p_aim_line_slope(
 ///
 /// Returns `Some(player_handle)` if the player is alive and visible to
 /// the actor, `None` otherwise.
-pub fn p_look_for_players(
-    gs: &GameState,
-    level: &Level,
-    actor: MobjHandle,
-) -> Option<MobjHandle> {
+pub fn p_look_for_players(gs: &GameState, level: &Level, actor: MobjHandle) -> Option<MobjHandle> {
     let player_handle = gs.player.handle;
 
     // Check the actor itself exists.
@@ -489,10 +485,7 @@ mod tests {
             things: vec![],
             linedefs: vec![make_one_sided_linedef(0, 1, 0)],
             sidedefs: vec![make_sidedef(0)],
-            vertexes: vec![
-                Vertex { x: -1000, y: -1000 },
-                Vertex { x: -1000, y: 1000 },
-            ],
+            vertexes: vec![Vertex { x: -1000, y: -1000 }, Vertex { x: -1000, y: 1000 }],
             segs: vec![Seg {
                 from_vertex: 0,
                 to_vertex: 1,
@@ -519,18 +512,12 @@ mod tests {
     ///   Sector 1: right side (x > 64)
     ///   Wall at x=64, from (64, -128) to (64, 128)
     fn make_wall_level() -> Level {
-        let sectors = vec![
-            make_sector(0, 128),
-            make_sector(0, 128),
-        ];
+        let sectors = vec![make_sector(0, 128), make_sector(0, 128)];
         let sidedefs = vec![
             make_sidedef(0), // 0: faces sector 0
             make_sidedef(1), // 1: faces sector 1
         ];
-        let vertexes = vec![
-            Vertex { x: 64, y: -128 },
-            Vertex { x: 64, y: 128 },
-        ];
+        let vertexes = vec![Vertex { x: 64, y: -128 }, Vertex { x: 64, y: 128 }];
         let linedefs = vec![
             make_one_sided_linedef(0, 1, 0), // solid wall at x=64
         ];
@@ -556,8 +543,14 @@ mod tests {
         ];
         // Two subsectors: one for each sector.
         let ssectors = vec![
-            Ssector { seg_count: 1, first_seg: 0 }, // subsector 0 -> sector 0
-            Ssector { seg_count: 1, first_seg: 1 }, // subsector 1 -> sector 1
+            Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            }, // subsector 0 -> sector 0
+            Ssector {
+                seg_count: 1,
+                first_seg: 1,
+            }, // subsector 1 -> sector 1
         ];
 
         // Reject: 2 sectors, all visible.
@@ -595,13 +588,8 @@ mod tests {
             make_sidedef(0), // 0: right (front, sector 0)
             make_sidedef(1), // 1: left (back, sector 1)
         ];
-        let vertexes = vec![
-            Vertex { x: 64, y: -128 },
-            Vertex { x: 64, y: 128 },
-        ];
-        let linedefs = vec![
-            make_two_sided_linedef(0, 1, 0, 1),
-        ];
+        let vertexes = vec![Vertex { x: 64, y: -128 }, Vertex { x: 64, y: 128 }];
+        let linedefs = vec![make_two_sided_linedef(0, 1, 0, 1)];
         let segs = vec![
             Seg {
                 from_vertex: 0,
@@ -621,8 +609,14 @@ mod tests {
             },
         ];
         let ssectors = vec![
-            Ssector { seg_count: 1, first_seg: 0 },
-            Ssector { seg_count: 1, first_seg: 1 },
+            Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            },
+            Ssector {
+                seg_count: 1,
+                first_seg: 1,
+            },
         ];
         let reject = Reject::parse_lump(&[0u8; 1], 2).unwrap();
 
@@ -660,13 +654,7 @@ mod tests {
     }
 
     /// Spawn a monster (trooper) at the given position and subsector.
-    fn spawn_actor(
-        gs: &mut GameState,
-        x: i32,
-        y: i32,
-        subsector: u32,
-        health: i32,
-    ) -> MobjHandle {
+    fn spawn_actor(gs: &mut GameState, x: i32, y: i32, subsector: u32, health: i32) -> MobjHandle {
         let mut mo = Mobj::new(
             MobjKind::Trooper,
             Fixed16_16::from_int(x),
@@ -707,12 +695,32 @@ mod tests {
         let reject = Reject::parse_lump(&[0xFFu8; 1], 2).unwrap();
         let sidedefs = vec![make_sidedef(0), make_sidedef(1)];
         let segs = vec![
-            Seg { from_vertex: 0, to_vertex: 1, angle: 0, linedef: 0, direction: 0, offset: 0 },
-            Seg { from_vertex: 1, to_vertex: 0, angle: 0, linedef: 0, direction: 1, offset: 0 },
+            Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 1,
+                to_vertex: 0,
+                angle: 0,
+                linedef: 0,
+                direction: 1,
+                offset: 0,
+            },
         ];
         let ssectors = vec![
-            Ssector { seg_count: 1, first_seg: 0 },
-            Ssector { seg_count: 1, first_seg: 1 },
+            Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            },
+            Ssector {
+                seg_count: 1,
+                first_seg: 1,
+            },
         ];
         let level = Level {
             name: "TEST".to_string(),
@@ -820,7 +828,12 @@ mod tests {
 
         // Point below the line: front side (0).
         assert_eq!(
-            point_on_side(Fixed16_16::from_int(50), Fixed16_16::from_int(-10), 0, &level),
+            point_on_side(
+                Fixed16_16::from_int(50),
+                Fixed16_16::from_int(-10),
+                0,
+                &level
+            ),
             0,
             "point below horizontal line should be on front side"
         );
@@ -844,7 +857,12 @@ mod tests {
 
         // Point above the line: back side (1).
         assert_eq!(
-            point_on_side(Fixed16_16::from_int(50), Fixed16_16::from_int(10), 0, &level),
+            point_on_side(
+                Fixed16_16::from_int(50),
+                Fixed16_16::from_int(10),
+                0,
+                &level
+            ),
             1,
             "point above horizontal line should be on back side"
         );
@@ -1072,7 +1090,11 @@ mod tests {
         gs.mobjslab.get_mut(monster).unwrap().height = Fixed16_16::from_int(56);
 
         let slope = p_aim_line_slope(&gs, player_h, monster);
-        assert_eq!(slope, Fixed16_16::ZERO, "same height actors -> slope should be 0");
+        assert_eq!(
+            slope,
+            Fixed16_16::ZERO,
+            "same height actors -> slope should be 0"
+        );
     }
 
     #[test]
@@ -1085,7 +1107,11 @@ mod tests {
         gs.mobjslab.get_mut(monster).unwrap().height = Fixed16_16::from_int(56);
 
         let slope = p_aim_line_slope(&gs, player_h, monster);
-        assert!(slope.0 > 0, "target above source -> positive slope, got {}", slope.0);
+        assert!(
+            slope.0 > 0,
+            "target above source -> positive slope, got {}",
+            slope.0
+        );
     }
 
     // =======================================================================
@@ -1118,14 +1144,44 @@ mod tests {
             make_two_sided_linedef(2, 3, 2, 3), // portal at x=128
         ];
         let segs = vec![
-            Seg { from_vertex: 0, to_vertex: 1, angle: 0, linedef: 0, direction: 0, offset: 0 },
-            Seg { from_vertex: 1, to_vertex: 0, angle: 0, linedef: 0, direction: 1, offset: 0 },
-            Seg { from_vertex: 2, to_vertex: 3, angle: 0, linedef: 1, direction: 0, offset: 0 },
+            Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 1,
+                to_vertex: 0,
+                angle: 0,
+                linedef: 0,
+                direction: 1,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 2,
+                to_vertex: 3,
+                angle: 0,
+                linedef: 1,
+                direction: 0,
+                offset: 0,
+            },
         ];
         let ssectors = vec![
-            Ssector { seg_count: 1, first_seg: 0 }, // subsector 0 -> sector 0
-            Ssector { seg_count: 1, first_seg: 1 }, // subsector 1 -> sector 1
-            Ssector { seg_count: 1, first_seg: 2 }, // subsector 2 -> sector 2
+            Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            }, // subsector 0 -> sector 0
+            Ssector {
+                seg_count: 1,
+                first_seg: 1,
+            }, // subsector 1 -> sector 1
+            Ssector {
+                seg_count: 1,
+                first_seg: 2,
+            }, // subsector 2 -> sector 2
         ];
         // 3 sectors -> ceil(9/8) = 2 bytes, all visible.
         let reject = Reject::parse_lump(&[0u8; 2], 3).unwrap();
@@ -1167,12 +1223,32 @@ mod tests {
             sidedefs: vec![make_sidedef(0), make_sidedef(1)],
             vertexes: vec![Vertex { x: 0, y: 0 }, Vertex { x: 100, y: 0 }],
             segs: vec![
-                Seg { from_vertex: 0, to_vertex: 1, angle: 0, linedef: 0, direction: 0, offset: 0 },
-                Seg { from_vertex: 1, to_vertex: 0, angle: 0, linedef: 0, direction: 1, offset: 0 },
+                Seg {
+                    from_vertex: 0,
+                    to_vertex: 1,
+                    angle: 0,
+                    linedef: 0,
+                    direction: 0,
+                    offset: 0,
+                },
+                Seg {
+                    from_vertex: 1,
+                    to_vertex: 0,
+                    angle: 0,
+                    linedef: 0,
+                    direction: 1,
+                    offset: 0,
+                },
             ],
             ssectors: vec![
-                Ssector { seg_count: 1, first_seg: 0 },
-                Ssector { seg_count: 1, first_seg: 1 },
+                Ssector {
+                    seg_count: 1,
+                    first_seg: 0,
+                },
+                Ssector {
+                    seg_count: 1,
+                    first_seg: 1,
+                },
             ],
             nodes: vec![],
             sectors: vec![make_sector(0, 128), make_sector(0, 128)],

@@ -291,8 +291,20 @@ pub fn trace_ray(
     let start_cell_y = ((fy1 - origin_y as f32) / BLOCK_SIZE).floor() as i32;
 
     // DDA setup.
-    let step_x: i32 = if rdx > 0.0 { 1 } else if rdx < 0.0 { -1 } else { 0 };
-    let step_y: i32 = if rdy > 0.0 { 1 } else if rdy < 0.0 { -1 } else { 0 };
+    let step_x: i32 = if rdx > 0.0 {
+        1
+    } else if rdx < 0.0 {
+        -1
+    } else {
+        0
+    };
+    let step_y: i32 = if rdy > 0.0 {
+        1
+    } else if rdy < 0.0 {
+        -1
+    } else {
+        0
+    };
 
     // Distance in t-units to the next cell boundary.
     let t_delta_x = if rdx.abs() > EPSILON {
@@ -414,13 +426,7 @@ pub fn trace_ray(
 
             // Test actors in this cell.
             if check_actors {
-                let actors = actors_in_cell(
-                    cell_x,
-                    cell_y,
-                    origin_x,
-                    origin_y,
-                    actor_positions,
-                );
+                let actors = actors_in_cell(cell_x, cell_y, origin_x, origin_y, actor_positions);
 
                 for actor_idx in actors {
                     // Skip the shooter.
@@ -435,9 +441,15 @@ pub fn trace_ray(
                         continue;
                     }
 
-                    if let Some(t_val) =
-                        ray_actor_intersection(fx1, fy1, rdx, rdy, ax as f32, ay as f32, radius as f32)
-                    {
+                    if let Some(t_val) = ray_actor_intersection(
+                        fx1,
+                        fy1,
+                        rdx,
+                        rdy,
+                        ax as f32,
+                        ay as f32,
+                        radius as f32,
+                    ) {
                         if t_val >= 0.0 && t_val <= 1.0 && t_val < best_frac {
                             let hit_x = (fx1 + rdx * t_val) as i32;
                             let hit_y = (fy1 + rdy * t_val) as i32;
@@ -623,7 +635,12 @@ mod tests {
     }
 
     /// Make a two-sided linedef.
-    fn make_linedef_two_sided(from: u16, to: u16, right_sd: u16, left_sd: u16) -> doom_map::Linedef {
+    fn make_linedef_two_sided(
+        from: u16,
+        to: u16,
+        right_sd: u16,
+        left_sd: u16,
+    ) -> doom_map::Linedef {
         doom_map::Linedef {
             from_vertex: from,
             to_vertex: to,
@@ -640,7 +657,7 @@ mod tests {
     fn make_wall_level() -> Level {
         let verts = vec![
             doom_map::Vertex { x: 0, y: 64 },   // v0
-            doom_map::Vertex { x: 128, y: 64 },  // v1
+            doom_map::Vertex { x: 128, y: 64 }, // v1
         ];
         let sds = vec![make_sidedef(0)]; // sd0 -> sector 0
         let lds = vec![make_linedef_one_sided(0, 1, 0)]; // ld0: v0->v1
@@ -864,7 +881,10 @@ mod tests {
         // Cell (1,0) covers [128, 256) x [0, 128). Actor at (64, 64) radius 16.
         let actors = vec![(64, 64, 16, 56, true)];
         let result = actors_in_cell(1, 0, 0, 0, &actors);
-        assert!(result.is_empty(), "actor at (64,64) should NOT be in cell (1,0)");
+        assert!(
+            result.is_empty(),
+            "actor at (64,64) should NOT be in cell (1,0)"
+        );
     }
 
     #[test]
@@ -881,7 +901,10 @@ mod tests {
         let result0 = actors_in_cell(0, 0, 0, 0, &actors);
         let result1 = actors_in_cell(1, 0, 0, 0, &actors);
         assert!(result0.contains(&0), "actor should be in cell(0,0)");
-        assert!(result1.contains(&0), "actor should also overlap into cell(1,0)");
+        assert!(
+            result1.contains(&0),
+            "actor should also overlap into cell(1,0)"
+        );
     }
 
     #[test]
@@ -902,7 +925,10 @@ mod tests {
         // Origin at (-128, -128). Cell(0,0) covers [-128, 0) x [-128, 0).
         let actors = vec![(-64, -64, 10, 56, true)];
         let result = actors_in_cell(0, 0, -128, -128, &actors);
-        assert!(result.contains(&0), "actor should be in cell with shifted origin");
+        assert!(
+            result.contains(&0),
+            "actor should be in cell with shifted origin"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -917,9 +943,9 @@ mod tests {
             &level,
             64,
             0,
-            0.0,    // cos (east component)
-            1.0,    // sin (north component)
-            200.0,  // max range
+            0.0,   // cos (east component)
+            1.0,   // sin (north component)
+            200.0, // max range
             false,
             None,
             &[],
@@ -930,7 +956,10 @@ mod tests {
             }
             other => panic!("expected Wall hit, got {other:?}"),
         }
-        assert!(result.frac > 0.0 && result.frac < 1.0, "frac should be between 0 and 1");
+        assert!(
+            result.frac > 0.0 && result.frac < 1.0,
+            "frac should be between 0 and 1"
+        );
     }
 
     #[test]
@@ -941,8 +970,8 @@ mod tests {
             &level,
             64,
             0,
-            1.0,   // cos
-            0.0,   // sin
+            1.0, // cos
+            0.0, // sin
             200.0,
             false,
             None,
@@ -959,9 +988,9 @@ mod tests {
         // Two walls: one at y=32 and one at y=96.
         let verts = vec![
             doom_map::Vertex { x: 0, y: 32 },   // v0
-            doom_map::Vertex { x: 128, y: 32 },  // v1
-            doom_map::Vertex { x: 0, y: 96 },    // v2
-            doom_map::Vertex { x: 128, y: 96 },  // v3
+            doom_map::Vertex { x: 128, y: 32 }, // v1
+            doom_map::Vertex { x: 0, y: 96 },   // v2
+            doom_map::Vertex { x: 128, y: 96 }, // v3
         ];
         let sds = vec![make_sidedef(0), make_sidedef(0)];
         let lds = vec![
@@ -997,9 +1026,9 @@ mod tests {
         let lds = vec![make_linedef_one_sided(0, 1, 0)];
         let secs = vec![make_sector(0, 128)];
         let cells = vec![
-            vec![],    // cell (0,0)
-            vec![],    // cell (1,0)
-            vec![],    // cell (0,1)
+            vec![],     // cell (0,0)
+            vec![],     // cell (1,0)
+            vec![],     // cell (0,1)
             vec![0u16], // cell (1,1) has the linedef
         ];
 
@@ -1101,17 +1130,7 @@ mod tests {
         let level = make_wall_level(); // wall at y=64
         // Actor at (64, 32) with radius 10 — between shooter and wall.
         let actors = vec![(64, 32, 10, 56, true)];
-        let result = trace_ray(
-            &level,
-            64,
-            0,
-            0.0,
-            1.0,
-            200.0,
-            true,
-            None,
-            &actors,
-        );
+        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
         match &result.hit {
             TraceHit::Actor { actor_index, .. } => {
                 assert_eq!(*actor_index, 0, "should hit actor 0");
@@ -1125,17 +1144,7 @@ mod tests {
         let level = make_wall_level(); // wall at y=64
         // Actor at (64, 100) with radius 10 — behind the wall.
         let actors = vec![(64, 100, 10, 56, true)];
-        let result = trace_ray(
-            &level,
-            64,
-            0,
-            0.0,
-            1.0,
-            200.0,
-            true,
-            None,
-            &actors,
-        );
+        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
         match &result.hit {
             TraceHit::Wall { linedef_index, .. } => {
                 assert_eq!(*linedef_index, 0, "should hit wall before actor");
@@ -1176,17 +1185,7 @@ mod tests {
         let level = make_wall_level();
         // Actor with shootable=false.
         let actors = vec![(64, 32, 10, 56, false)];
-        let result = trace_ray(
-            &level,
-            64,
-            0,
-            0.0,
-            1.0,
-            200.0,
-            true,
-            None,
-            &actors,
-        );
+        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
         // Should pass through the non-shootable actor and hit the wall.
         assert!(
             matches!(result.hit, TraceHit::Wall { .. }),
@@ -1209,17 +1208,7 @@ mod tests {
         );
 
         let actors = vec![(64, 100, 20, 56, true)];
-        let result = trace_ray(
-            &level,
-            64,
-            0,
-            0.0,
-            1.0,
-            200.0,
-            true,
-            None,
-            &actors,
-        );
+        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
         match &result.hit {
             TraceHit::Actor { actor_index, .. } => {
                 assert_eq!(*actor_index, 0);
@@ -1286,7 +1275,10 @@ mod tests {
         let t = ray_actor_intersection(0.0, 0.0, 1.0, 0.0, 50.0, 0.0, 10.0);
         assert!(t.is_some());
         let t = t.unwrap();
-        assert!((t - 40.0).abs() < 0.1, "should hit at t=~40 (50-10), got {t}");
+        assert!(
+            (t - 40.0).abs() < 0.1,
+            "should hit at t=~40 (50-10), got {t}"
+        );
     }
 
     #[test]

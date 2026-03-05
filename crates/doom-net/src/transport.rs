@@ -9,7 +9,7 @@ use std::io;
 use std::net::{SocketAddr, UdpSocket};
 use std::time::Instant;
 
-use crate::packet::{TicPacket, TIC_PACKET_SIZE};
+use crate::packet::{TIC_PACKET_SIZE, TicPacket};
 
 // ---------------------------------------------------------------------------
 // NetConfig
@@ -488,17 +488,38 @@ mod tests {
     fn handshake_join_packet_has_correct_magic_values() {
         let join = make_join_packet();
         assert_eq!(join.tic, HANDSHAKE_TIC, "join tic must be 0xFFFFFFFF");
-        assert_eq!(join.sender, HANDSHAKE_JOIN_SENDER, "join sender must be 0xFF");
-        assert!(is_join_request(&join), "join packet must be identified as join request");
-        assert!(!is_join_response(&join), "join packet must not be identified as join response");
+        assert_eq!(
+            join.sender, HANDSHAKE_JOIN_SENDER,
+            "join sender must be 0xFF"
+        );
+        assert!(
+            is_join_request(&join),
+            "join packet must be identified as join request"
+        );
+        assert!(
+            !is_join_response(&join),
+            "join packet must not be identified as join response"
+        );
     }
 
     #[test]
     fn handshake_response_contains_assigned_slot() {
         let response = make_join_response(2);
-        assert_eq!(response.tic, HANDSHAKE_TIC, "response tic must be 0xFFFFFFFF");
-        assert_eq!(response.sender, 2, "response sender must be the assigned slot");
-        assert!(is_join_response(&response), "response must be identified as join response");
-        assert!(!is_join_request(&response), "response must not be identified as join request");
+        assert_eq!(
+            response.tic, HANDSHAKE_TIC,
+            "response tic must be 0xFFFFFFFF"
+        );
+        assert_eq!(
+            response.sender, 2,
+            "response sender must be the assigned slot"
+        );
+        assert!(
+            is_join_response(&response),
+            "response must be identified as join response"
+        );
+        assert!(
+            !is_join_request(&response),
+            "response must not be identified as join request"
+        );
     }
 }

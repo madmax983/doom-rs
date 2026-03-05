@@ -446,13 +446,14 @@ impl MidiPlayer {
                     // `next_event_tick` monotonically increasing so no event
                     // fires more than once per loop iteration.
                     let first_delta = score.events.first().map_or(0, |e| u64::from(e.0));
-                    LoopAction::Restart { restart_tick: self.next_event_tick, first_delta }
+                    LoopAction::Restart {
+                        restart_tick: self.next_event_tick,
+                        first_delta,
+                    }
                 } else {
                     // Convert this event's absolute tick to a sample position.
-                    let event_sample = (self.next_event_tick as u128
-                        * sample_rate as u128
-                        / self.ticks_per_sec as u128)
-                        as u64;
+                    let event_sample = (self.next_event_tick as u128 * sample_rate as u128
+                        / self.ticks_per_sec as u128) as u64;
 
                     if event_sample >= sample_count_end {
                         LoopAction::Break
@@ -462,7 +463,10 @@ impl MidiPlayer {
                             .events
                             .get(self.event_cursor + 1)
                             .map(|e| u64::from(e.0));
-                        LoopAction::Process { event_clone, delta_next }
+                        LoopAction::Process {
+                            event_clone,
+                            delta_next,
+                        }
                     }
                 }
             };
@@ -470,7 +474,10 @@ impl MidiPlayer {
             match action {
                 LoopAction::Break => break,
 
-                LoopAction::Restart { restart_tick, first_delta } => {
+                LoopAction::Restart {
+                    restart_tick,
+                    first_delta,
+                } => {
                     self.event_cursor = 0;
                     // next_event_tick for the first event of the new loop.
                     // restart_tick is the current absolute tick (tick of the
@@ -484,7 +491,10 @@ impl MidiPlayer {
                     break;
                 }
 
-                LoopAction::Process { event_clone, delta_next } => {
+                LoopAction::Process {
+                    event_clone,
+                    delta_next,
+                } => {
                     self.process_event(&event_clone);
                     self.event_cursor += 1;
                     if let Some(d) = delta_next {
@@ -506,7 +516,11 @@ impl MidiPlayer {
     /// Process a single [`MusEvent`], writing the appropriate OPL2 registers.
     pub fn process_event(&mut self, event: &MusEvent) {
         match event {
-            MusEvent::PlayNote { channel, note, volume } => {
+            MusEvent::PlayNote {
+                channel,
+                note,
+                volume,
+            } => {
                 // MUS channel 15 is percussion — no melodic OPL channel.
                 if *channel == 15 {
                     return;
@@ -528,8 +542,9 @@ impl MidiPlayer {
                 let vol = volume.unwrap_or(127);
 
                 // Apply base_note_offset from GENMIDI voice to the MIDI note.
-                let actual_note =
-                    (*note as i16).saturating_add(genmidi_note_offset).clamp(0, 127) as u8;
+                let actual_note = (*note as i16)
+                    .saturating_add(genmidi_note_offset)
+                    .clamp(0, 127) as u8;
                 let (block, fnum) = note_to_block_fnum(actual_note);
 
                 // Frequency low byte
@@ -560,7 +575,11 @@ impl MidiPlayer {
                 }
             }
 
-            MusEvent::Controller { channel, controller, value } => {
+            MusEvent::Controller {
+                channel,
+                controller,
+                value,
+            } => {
                 let idx = *channel as usize & 0x0F;
                 match *controller {
                     // MUS controller 2 = program/voice change.
@@ -687,10 +706,16 @@ mod tests {
             note: 60,
             volume: Some(100),
         });
-        assert!(player.opl.channel(0).key_on, "key_on should be set after play");
+        assert!(
+            player.opl.channel(0).key_on,
+            "key_on should be set after play"
+        );
 
         // Release the same note.
-        player.process_event(&MusEvent::ReleaseNote { channel: 0, note: 60 });
+        player.process_event(&MusEvent::ReleaseNote {
+            channel: 0,
+            note: 60,
+        });
         assert!(
             !player.opl.channel(0).key_on,
             "key_on should be cleared after ReleaseNote"
@@ -718,12 +743,22 @@ mod tests {
     fn midi_play_score_returns_event_count() {
         let mut player = MidiPlayer::new();
         let score = make_score(vec![
-            MusEvent::PlayNote { channel: 0, note: 60, volume: Some(100) },
-            MusEvent::ReleaseNote { channel: 0, note: 60 },
+            MusEvent::PlayNote {
+                channel: 0,
+                note: 60,
+                volume: Some(100),
+            },
+            MusEvent::ReleaseNote {
+                channel: 0,
+                note: 60,
+            },
             MusEvent::ScoreEnd,
         ]);
         let count = player.play_score(&score);
-        assert_eq!(count, 3, "play_score must return the number of events in the score");
+        assert_eq!(
+            count, 3,
+            "play_score must return the number of events in the score"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -740,9 +775,18 @@ mod tests {
         let score = make_score(vec![MusEvent::ScoreEnd]);
         player.load_score(score);
 
-        assert_eq!(player.event_cursor, 0, "event_cursor must reset to 0 after load_score");
-        assert_eq!(player.sample_count, 0, "sample_count must reset to 0 after load_score");
-        assert!(player.current_score.is_some(), "current_score must be Some after load_score");
+        assert_eq!(
+            player.event_cursor, 0,
+            "event_cursor must reset to 0 after load_score"
+        );
+        assert_eq!(
+            player.sample_count, 0,
+            "sample_count must reset to 0 after load_score"
+        );
+        assert!(
+            player.current_score.is_some(),
+            "current_score must be Some after load_score"
+        );
     }
 
     #[test]
@@ -754,7 +798,14 @@ mod tests {
         // advance_samples(44100) covers the full second, so PlayNote fires.
         let mut player = MidiPlayer::new();
         let score = make_score_with_deltas(vec![
-            (0, MusEvent::PlayNote { channel: 0, note: 60, volume: Some(127) }),
+            (
+                0,
+                MusEvent::PlayNote {
+                    channel: 0,
+                    note: 60,
+                    volume: Some(127),
+                },
+            ),
             (100, MusEvent::ScoreEnd),
         ]);
         player.load_score(score);
@@ -775,7 +826,14 @@ mod tests {
         // advance_samples(64) should NOT fire it.
         let mut player = MidiPlayer::new();
         let score = make_score_with_deltas(vec![
-            (1000, MusEvent::PlayNote { channel: 0, note: 60, volume: Some(127) }),
+            (
+                1000,
+                MusEvent::PlayNote {
+                    channel: 0,
+                    note: 60,
+                    volume: Some(127),
+                },
+            ),
             (1, MusEvent::ScoreEnd),
         ]);
         player.load_score(score);
@@ -793,7 +851,11 @@ mod tests {
     fn midi_stop_silences() {
         let mut player = MidiPlayer::new();
         let score = make_score(vec![
-            MusEvent::PlayNote { channel: 0, note: 60, volume: Some(127) },
+            MusEvent::PlayNote {
+                channel: 0,
+                note: 60,
+                volume: Some(127),
+            },
             MusEvent::ScoreEnd,
         ]);
         player.load_score(score);
@@ -808,8 +870,14 @@ mod tests {
             player.current_score.is_none(),
             "current_score must be None after stop()"
         );
-        assert_eq!(player.event_cursor, 0, "event_cursor must be 0 after stop()");
-        assert_eq!(player.sample_count, 0, "sample_count must be 0 after stop()");
+        assert_eq!(
+            player.event_cursor, 0,
+            "event_cursor must be 0 after stop()"
+        );
+        assert_eq!(
+            player.sample_count, 0,
+            "sample_count must be 0 after stop()"
+        );
         // OPL chip should be reset (all channels silent).
         for ch in 0..9 {
             assert!(
@@ -847,7 +915,11 @@ mod tests {
     fn genmidi_parse_valid_bank() {
         let buf = make_genmidi_buf();
         let bank = GenmidiBank::parse(&buf).expect("valid GENMIDI must parse");
-        assert_eq!(bank.instruments.len(), 175, "bank must contain exactly 175 instruments");
+        assert_eq!(
+            bank.instruments.len(),
+            175,
+            "bank must contain exactly 175 instruments"
+        );
     }
 
     #[test]
@@ -863,7 +935,10 @@ mod tests {
     fn genmidi_parse_too_short() {
         let buf = vec![0u8; 10];
         let result = GenmidiBank::parse(&buf);
-        assert!(result.is_err(), "buffer shorter than 5608 bytes must produce an error");
+        assert!(
+            result.is_err(),
+            "buffer shorter than 5608 bytes must produce an error"
+        );
     }
 
     #[test]
@@ -875,7 +950,10 @@ mod tests {
         // The returned reference must be the same as instruments[174].
         let last = bank.get(174);
         // Both should have the same flags (all zeros in our test buffer).
-        assert_eq!(instr.flags, last.flags, "out-of-range get must clamp to last instrument");
+        assert_eq!(
+            instr.flags, last.flags,
+            "out-of-range get must clamp to last instrument"
+        );
     }
 
     #[test]
@@ -887,7 +965,7 @@ mod tests {
         //                           feedback, car_tv, car_ad, car_sr, car_ws,
         //                           car_ksl, _unused, base_lo, base_hi]
         let v_offset = 8 + 0 * 32 + 4; // = 12
-        buf[v_offset]     = 0x01; // mod_trem_vibrato
+        buf[v_offset] = 0x01; // mod_trem_vibrato
         buf[v_offset + 1] = 0xF0; // mod_attack_decay
         buf[v_offset + 2] = 0x0F; // mod_sustain_release
         buf[v_offset + 3] = 0x02; // mod_wave_select
@@ -907,17 +985,57 @@ mod tests {
         let mod_reg = opl2_mod_reg(0); // = 0
         let car_reg = opl2_car_reg(0); // = 3
 
-        assert_eq!(opl.read(0x20 + mod_reg), 0x01, "mod_trem_vibrato must be written to 0x20+mod");
-        assert_eq!(opl.read(0x40 + mod_reg), 0x10, "mod_ksl_output must be written to 0x40+mod");
-        assert_eq!(opl.read(0x60 + mod_reg), 0xF0, "mod_attack_decay must be written to 0x60+mod");
-        assert_eq!(opl.read(0x80 + mod_reg), 0x0F, "mod_sustain_release must be written to 0x80+mod");
-        assert_eq!(opl.read(0xE0 + mod_reg), 0x02, "mod_wave_select must be written to 0xE0+mod");
-        assert_eq!(opl.read(0x20 + car_reg), 0x03, "car_trem_vibrato must be written to 0x20+car");
-        assert_eq!(opl.read(0x40 + car_reg), 0x00, "car_ksl_output must be written to 0x40+car");
-        assert_eq!(opl.read(0x60 + car_reg), 0xF1, "car_attack_decay must be written to 0x60+car");
-        assert_eq!(opl.read(0x80 + car_reg), 0x01, "car_sustain_release must be written to 0x80+car");
-        assert_eq!(opl.read(0xE0 + car_reg), 0x01, "car_wave_select must be written to 0xE0+car");
-        assert_eq!(opl.read(0xC0),           0x0E, "feedback must be written to 0xC0+ch");
+        assert_eq!(
+            opl.read(0x20 + mod_reg),
+            0x01,
+            "mod_trem_vibrato must be written to 0x20+mod"
+        );
+        assert_eq!(
+            opl.read(0x40 + mod_reg),
+            0x10,
+            "mod_ksl_output must be written to 0x40+mod"
+        );
+        assert_eq!(
+            opl.read(0x60 + mod_reg),
+            0xF0,
+            "mod_attack_decay must be written to 0x60+mod"
+        );
+        assert_eq!(
+            opl.read(0x80 + mod_reg),
+            0x0F,
+            "mod_sustain_release must be written to 0x80+mod"
+        );
+        assert_eq!(
+            opl.read(0xE0 + mod_reg),
+            0x02,
+            "mod_wave_select must be written to 0xE0+mod"
+        );
+        assert_eq!(
+            opl.read(0x20 + car_reg),
+            0x03,
+            "car_trem_vibrato must be written to 0x20+car"
+        );
+        assert_eq!(
+            opl.read(0x40 + car_reg),
+            0x00,
+            "car_ksl_output must be written to 0x40+car"
+        );
+        assert_eq!(
+            opl.read(0x60 + car_reg),
+            0xF1,
+            "car_attack_decay must be written to 0x60+car"
+        );
+        assert_eq!(
+            opl.read(0x80 + car_reg),
+            0x01,
+            "car_sustain_release must be written to 0x80+car"
+        );
+        assert_eq!(
+            opl.read(0xE0 + car_reg),
+            0x01,
+            "car_wave_select must be written to 0xE0+car"
+        );
+        assert_eq!(opl.read(0xC0), 0x0E, "feedback must be written to 0xC0+ch");
     }
 
     #[test]

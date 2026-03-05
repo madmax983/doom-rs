@@ -20,18 +20,54 @@ pub struct CheatDef {
 
 /// All standard Doom cheat codes.
 pub const CHEATS: &[CheatDef] = &[
-    CheatDef { name: "IDDQD",      sequence: "iddqd"      },
-    CheatDef { name: "IDKFA",      sequence: "idkfa"      },
-    CheatDef { name: "IDFA",       sequence: "idfa"       },
-    CheatDef { name: "IDCLIP",     sequence: "idclip"     },
-    CheatDef { name: "IDDT",       sequence: "iddt"       },
-    CheatDef { name: "IDSPISPOPD", sequence: "idspispopd" },
-    CheatDef { name: "IDBEHOLDS",  sequence: "idbeholds"  },
-    CheatDef { name: "IDBEHOLDI",  sequence: "idbeholdi"  },
-    CheatDef { name: "IDBEHOLDR",  sequence: "idbeholdr"  },
-    CheatDef { name: "IDBEHOLDA",  sequence: "idbeholda"  },
-    CheatDef { name: "IDBEHOLDV",  sequence: "idbeholdv"  },
-    CheatDef { name: "IDBEHOLDL",  sequence: "idbeholdl"  },
+    CheatDef {
+        name: "IDDQD",
+        sequence: "iddqd",
+    },
+    CheatDef {
+        name: "IDKFA",
+        sequence: "idkfa",
+    },
+    CheatDef {
+        name: "IDFA",
+        sequence: "idfa",
+    },
+    CheatDef {
+        name: "IDCLIP",
+        sequence: "idclip",
+    },
+    CheatDef {
+        name: "IDDT",
+        sequence: "iddt",
+    },
+    CheatDef {
+        name: "IDSPISPOPD",
+        sequence: "idspispopd",
+    },
+    CheatDef {
+        name: "IDBEHOLDS",
+        sequence: "idbeholds",
+    },
+    CheatDef {
+        name: "IDBEHOLDI",
+        sequence: "idbeholdi",
+    },
+    CheatDef {
+        name: "IDBEHOLDR",
+        sequence: "idbeholdr",
+    },
+    CheatDef {
+        name: "IDBEHOLDA",
+        sequence: "idbeholda",
+    },
+    CheatDef {
+        name: "IDBEHOLDV",
+        sequence: "idbeholdv",
+    },
+    CheatDef {
+        name: "IDBEHOLDL",
+        sequence: "idbeholdl",
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -52,11 +88,7 @@ pub struct CheatDetector {
 impl CheatDetector {
     /// Create a new detector sized for the longest registered cheat sequence.
     pub fn new() -> Self {
-        let max_len = CHEATS
-            .iter()
-            .map(|c| c.sequence.len())
-            .max()
-            .unwrap_or(16);
+        let max_len = CHEATS.iter().map(|c| c.sequence.len()).max().unwrap_or(16);
         Self {
             buffer: String::with_capacity(max_len + 1),
             max_len,

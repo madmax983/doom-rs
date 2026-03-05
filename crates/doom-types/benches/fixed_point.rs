@@ -25,11 +25,17 @@ fn bench_fixed_mul_chain(c: &mut Criterion) {
     let vals: Vec<Fixed16_16> = (1..=64).map(|i| Fixed16_16::from_int(i)).collect();
     c.bench_function("Fixed16_16::fixed_mul x64 chain", |bench| {
         bench.iter(|| {
-            vals.iter()
-                .fold(Fixed16_16::from_int(1), |acc, &v| acc.fixed_mul(black_box(v)))
+            vals.iter().fold(Fixed16_16::from_int(1), |acc, &v| {
+                acc.fixed_mul(black_box(v))
+            })
         });
     });
 }
 
-criterion_group!(benches, bench_fixed_mul, bench_fixed_div, bench_fixed_mul_chain);
+criterion_group!(
+    benches,
+    bench_fixed_mul,
+    bench_fixed_div,
+    bench_fixed_mul_chain
+);
 criterion_main!(benches);

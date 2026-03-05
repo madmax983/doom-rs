@@ -119,8 +119,7 @@ fn query_refresh_rate() -> u32 {
             let mut devmode: DEVMODEW = mem::zeroed();
             devmode.dmSize = mem::size_of::<DEVMODEW>() as u16;
 
-            if EnumDisplaySettingsW(std::ptr::null(), ENUM_CURRENT_SETTINGS, &raw mut devmode)
-                != 0
+            if EnumDisplaySettingsW(std::ptr::null(), ENUM_CURRENT_SETTINGS, &raw mut devmode) != 0
                 && devmode.dmDisplayFrequency > 0
             {
                 devmode.dmDisplayFrequency
@@ -177,11 +176,7 @@ impl DoomEventLoop {
     /// Run the game loop until the user quits (Q or Escape).
     ///
     /// `lut` is used to resolve palette indices to RGB at blit time.
-    pub fn run<A: DoomApp>(
-        &mut self,
-        app: &mut A,
-        lut: &PaletteLut,
-    ) -> Result<(), EventLoopError> {
+    pub fn run<A: DoomApp>(&mut self, app: &mut A, lut: &PaletteLut) -> Result<(), EventLoopError> {
         let mut fb = Framebuffer::new();
         let mut last_frame = Instant::now();
 
@@ -293,13 +288,12 @@ impl DoomEventLoop {
                     .constraints([Constraint::Min(0), Constraint::Length(1)])
                     .split(f.area());
 
-                let widget = DoomFramebufferWidget::new(fb, lut, active_palette)
-                    .with_scaling(scaling_mode);
+                let widget =
+                    DoomFramebufferWidget::new(fb, lut, active_palette).with_scaling(scaling_mode);
                 f.render_widget(widget, chunks[0]);
 
-                let status = format!(
-                    " DOOM | FPS: {fps:.1} | Frame: {frame_count} | [Q/Esc] Quit "
-                );
+                let status =
+                    format!(" DOOM | FPS: {fps:.1} | Frame: {frame_count} | [Q/Esc] Quit ");
                 let status_bar = Paragraph::new(status)
                     .style(Style::default().fg(Color::Black).bg(Color::Yellow));
                 f.render_widget(status_bar, chunks[1]);

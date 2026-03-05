@@ -36,8 +36,18 @@ impl BBox {
     ///
     /// Caller must ensure `ymax >= ymin` and `xmax >= xmin`.
     #[inline]
-    pub const fn new(ymax: Fixed16_16, ymin: Fixed16_16, xmin: Fixed16_16, xmax: Fixed16_16) -> Self {
-        Self { ymax, ymin, xmin, xmax }
+    pub const fn new(
+        ymax: Fixed16_16,
+        ymin: Fixed16_16,
+        xmin: Fixed16_16,
+        xmax: Fixed16_16,
+    ) -> Self {
+        Self {
+            ymax,
+            ymin,
+            xmin,
+            xmax,
+        }
     }
 
     /// Returns `true` if the invariant holds (non-degenerate box).
@@ -49,10 +59,7 @@ impl BBox {
     /// Returns `true` if `point` is inside or on the boundary of the box.
     #[inline]
     pub fn contains(self, point: Vec2Fixed) -> bool {
-        point.x >= self.xmin
-            && point.x <= self.xmax
-            && point.y >= self.ymin
-            && point.y <= self.ymax
+        point.x >= self.xmin && point.x <= self.xmax && point.y >= self.ymin && point.y <= self.ymax
     }
 
     /// Returns `true` if this box overlaps `other` (touching counts as overlap).
@@ -80,10 +87,26 @@ impl BBox {
     #[inline]
     pub fn union(self, other: Self) -> Self {
         Self {
-            ymax: if self.ymax > other.ymax { self.ymax } else { other.ymax },
-            ymin: if self.ymin < other.ymin { self.ymin } else { other.ymin },
-            xmin: if self.xmin < other.xmin { self.xmin } else { other.xmin },
-            xmax: if self.xmax > other.xmax { self.xmax } else { other.xmax },
+            ymax: if self.ymax > other.ymax {
+                self.ymax
+            } else {
+                other.ymax
+            },
+            ymin: if self.ymin < other.ymin {
+                self.ymin
+            } else {
+                other.ymin
+            },
+            xmin: if self.xmin < other.xmin {
+                self.xmin
+            } else {
+                other.xmin
+            },
+            xmax: if self.xmax > other.xmax {
+                self.xmax
+            } else {
+                other.xmax
+            },
         }
     }
 }
@@ -92,7 +115,9 @@ impl BBox {
 mod tests {
     use super::*;
 
-    fn int(n: i32) -> Fixed16_16 { Fixed16_16::from_int(n) }
+    fn int(n: i32) -> Fixed16_16 {
+        Fixed16_16::from_int(n)
+    }
 
     #[test]
     fn from_corners_normalizes() {

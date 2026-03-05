@@ -18,7 +18,9 @@ impl Brightness {
     }
 
     #[inline]
-    pub const fn raw(self) -> u8 { self.0 }
+    pub const fn raw(self) -> u8 {
+        self.0
+    }
 
     /// Minimum brightness (pitch black).
     pub const MIN: Self = Self(0);
@@ -38,7 +40,9 @@ impl SectorSpecial {
     }
 
     #[inline]
-    pub const fn raw(self) -> u8 { self.0 }
+    pub const fn raw(self) -> u8 {
+        self.0
+    }
 
     /// Normal sector (no special).
     pub const NORMAL: Self = Self(0);
@@ -55,13 +59,15 @@ impl SkillLevel {
     }
 
     #[inline]
-    pub const fn raw(self) -> u8 { self.0 }
+    pub const fn raw(self) -> u8 {
+        self.0
+    }
 
     pub const ITYTD: Self = Self(0);
-    pub const HNTR:  Self = Self(1);
-    pub const HMP:   Self = Self(2);
-    pub const UV:    Self = Self(3);
-    pub const NM:    Self = Self(4);
+    pub const HNTR: Self = Self(1);
+    pub const HMP: Self = Self(2);
+    pub const UV: Self = Self(3);
+    pub const NM: Self = Self(4);
 }
 
 /// Player number 0..=3.
@@ -75,7 +81,9 @@ impl PlayerNum {
     }
 
     #[inline]
-    pub const fn raw(self) -> u8 { self.0 }
+    pub const fn raw(self) -> u8 {
+        self.0
+    }
 }
 
 /// Map vertex coordinate — spec range [-32768, 32767] = `i16`.
@@ -84,10 +92,14 @@ pub struct Coord(pub i16);
 
 impl Coord {
     #[inline]
-    pub const fn new(v: i16) -> Self { Self(v) }
+    pub const fn new(v: i16) -> Self {
+        Self(v)
+    }
 
     #[inline]
-    pub const fn raw(self) -> i16 { self.0 }
+    pub const fn raw(self) -> i16 {
+        self.0
+    }
 }
 
 #[cfg(test)]

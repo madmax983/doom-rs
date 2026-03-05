@@ -147,17 +147,15 @@ pub fn p_line_attack(
 
         let actor_positions: Vec<(i32, i32, i32, i32, bool)> = handles
             .iter()
-            .map(|h| {
-                match gs.mobjslab.get(*h) {
-                    Some(mo) => (
-                        mo.x.to_int(),
-                        mo.y.to_int(),
-                        mo.radius.to_int(),
-                        mo.height.to_int(),
-                        mo.health > 0 && (mo.flags & flags::MF_SHOOTABLE != 0),
-                    ),
-                    None => (0, 0, 0, 0, false),
-                }
+            .map(|h| match gs.mobjslab.get(*h) {
+                Some(mo) => (
+                    mo.x.to_int(),
+                    mo.y.to_int(),
+                    mo.radius.to_int(),
+                    mo.height.to_int(),
+                    mo.health > 0 && (mo.flags & flags::MF_SHOOTABLE != 0),
+                ),
+                None => (0, 0, 0, 0, false),
             })
             .collect();
 
@@ -742,12 +740,9 @@ mod tests {
     /// Build a minimal level for combat tests: a 2x2 blockmap grid with
     /// a one-sided wall at y=64 spanning x=[0, 128].
     fn make_combat_test_level() -> doom_map::Level {
-        use doom_map::{Blockmap, Linedef, Reject, Sector, Sidedef, Vertex, SIDEDEF_NONE};
+        use doom_map::{Blockmap, Linedef, Reject, SIDEDEF_NONE, Sector, Sidedef, Vertex};
 
-        let verts = vec![
-            Vertex { x: 0, y: 64 },
-            Vertex { x: 128, y: 64 },
-        ];
+        let verts = vec![Vertex { x: 0, y: 64 }, Vertex { x: 128, y: 64 }];
         let sds = vec![Sidedef {
             x_offset: 0,
             y_offset: 0,
@@ -783,7 +778,7 @@ mod tests {
         bm_raw.extend_from_slice(&2u16.to_le_bytes()); // y_count
         // 4 offsets (header=4 words, offsets=4 words, data starts at word 8)
         let data_start = 4u16 + 4; // word offset of first block data
-        bm_raw.extend_from_slice(&data_start.to_le_bytes());       // cell(0,0)
+        bm_raw.extend_from_slice(&data_start.to_le_bytes()); // cell(0,0)
         bm_raw.extend_from_slice(&(data_start + 3).to_le_bytes()); // cell(1,0) empty
         bm_raw.extend_from_slice(&(data_start + 3).to_le_bytes()); // cell(0,1) empty
         bm_raw.extend_from_slice(&(data_start + 3).to_le_bytes()); // cell(1,1) empty
@@ -889,7 +884,8 @@ mod tests {
         );
         assert!(result.is_none(), "wall should block hitscan");
         assert_eq!(
-            gs.mobjslab.get(trooper).unwrap().health, 20,
+            gs.mobjslab.get(trooper).unwrap().health,
+            20,
             "trooper behind wall must be unharmed"
         );
     }
@@ -1004,8 +1000,8 @@ mod tests {
     fn radius_attack_distance_scaled_damage() {
         // Two actors at different distances — closer one should take more damage.
         let mut gs = make_game_state();
-        let close_trooper = spawn_trooper(&mut gs, 20, 0);  // dist=20
-        let far_trooper = spawn_trooper(&mut gs, 80, 0);    // dist=80
+        let close_trooper = spawn_trooper(&mut gs, 20, 0); // dist=20
+        let far_trooper = spawn_trooper(&mut gs, 80, 0); // dist=80
 
         // Give both actors enough health to survive the blast so we can
         // compare remaining health (troopers default to 20 which is too low).
@@ -1042,7 +1038,13 @@ mod tests {
         // Trooper at (64, 100) — behind the wall at y=64, within blast radius.
         let trooper = spawn_trooper(&mut gs, 64, 100);
 
-        p_radius_attack(&mut gs, player_h, 200, Fixed16_16::from_int(200), Some(&level));
+        p_radius_attack(
+            &mut gs,
+            player_h,
+            200,
+            Fixed16_16::from_int(200),
+            Some(&level),
+        );
 
         let health = gs.mobjslab.get(trooper).unwrap().health;
         assert_eq!(
@@ -1070,7 +1072,13 @@ mod tests {
         // Trooper at (64, 32) — in front of the wall, clear LOS.
         let trooper = spawn_trooper(&mut gs, 64, 32);
 
-        p_radius_attack(&mut gs, player_h, 100, Fixed16_16::from_int(200), Some(&level));
+        p_radius_attack(
+            &mut gs,
+            player_h,
+            100,
+            Fixed16_16::from_int(200),
+            Some(&level),
+        );
 
         let health = gs.mobjslab.get(trooper).unwrap().health;
         assert!(

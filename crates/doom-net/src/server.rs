@@ -194,9 +194,9 @@ impl RelayServer {
     pub fn check_timeouts(&mut self) {
         let timeout = self.config.timeout_ms;
         for slot in &mut self.slots {
-            let timed_out = slot
-                .as_ref()
-                .is_some_and(|s| s.connected && s.last_heard.elapsed().as_millis() as u64 >= timeout);
+            let timed_out = slot.as_ref().is_some_and(|s| {
+                s.connected && s.last_heard.elapsed().as_millis() as u64 >= timeout
+            });
             if timed_out {
                 *slot = None;
             }
@@ -252,7 +252,10 @@ mod tests {
     #[test]
     fn relay_server_new_binds_successfully() {
         let server = RelayServer::bind("127.0.0.1:0", test_config());
-        assert!(server.is_ok(), "RelayServer::bind must succeed on 127.0.0.1:0");
+        assert!(
+            server.is_ok(),
+            "RelayServer::bind must succeed on 127.0.0.1:0"
+        );
         let s = server.unwrap();
         assert_eq!(s.connected_count(), 0);
     }
@@ -304,7 +307,11 @@ mod tests {
         assert_eq!(server.connected_count(), 1);
 
         server.disconnect_player(slot);
-        assert_eq!(server.connected_count(), 0, "disconnect must clear the slot");
+        assert_eq!(
+            server.connected_count(),
+            0,
+            "disconnect must clear the slot"
+        );
 
         // Slot should be reusable.
         let new_addr: SocketAddr = "127.0.0.1:10002".parse().unwrap();

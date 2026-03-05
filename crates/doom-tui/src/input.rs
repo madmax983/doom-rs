@@ -25,9 +25,9 @@ pub const TURN_SPEED: i16 = 640; // roughly 1/50 of a full circle in BAM >> 16
 
 /// Button flags.
 pub mod buttons {
-    pub const BT_ATTACK:    u8 = 0x01;
-    pub const BT_USE:       u8 = 0x02;
-    pub const BT_CHANGE:    u8 = 0x04;
+    pub const BT_ATTACK: u8 = 0x01;
+    pub const BT_USE: u8 = 0x02;
+    pub const BT_CHANGE: u8 = 0x04;
     pub const BT_WEAPONMASK: u8 = 0x38; // bits 3-5 = weapon number
 }
 
@@ -165,7 +165,8 @@ impl InputState {
 
         // Attack
         if self.is_held(KeyCode::Char('\n'))    // Ctrl is tricky in crossterm
-            || self.is_held(KeyCode::Char('f')) {
+            || self.is_held(KeyCode::Char('f'))
+        {
             t.buttons |= buttons::BT_ATTACK;
         }
 
@@ -278,8 +279,14 @@ mod tests {
         let mut s = InputState::new();
         s.push_tab();
         // First to_tic_input() must deliver tab_pressed = true.
-        assert!(s.to_tic_input().tab_pressed, "tab_pressed must be true after push_tab");
+        assert!(
+            s.to_tic_input().tab_pressed,
+            "tab_pressed must be true after push_tab"
+        );
         // Second call must return false — it is consumed (one-shot).
-        assert!(!s.to_tic_input().tab_pressed, "tab_pressed must be false after being consumed");
+        assert!(
+            !s.to_tic_input().tab_pressed,
+            "tab_pressed must be false after being consumed"
+        );
     }
 }

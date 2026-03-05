@@ -265,7 +265,10 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
         }
 
         CheatCode::Invulnerability => {
-            toggle_power(&mut gs.player.powers[powers::PW_INVULNERABILITY], POWER_DURATION_60S);
+            toggle_power(
+                &mut gs.player.powers[powers::PW_INVULNERABILITY],
+                POWER_DURATION_60S,
+            );
             true
         }
 
@@ -276,12 +279,18 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
         }
 
         CheatCode::Invisibility => {
-            toggle_power(&mut gs.player.powers[powers::PW_INVISIBILITY], POWER_DURATION_60S);
+            toggle_power(
+                &mut gs.player.powers[powers::PW_INVISIBILITY],
+                POWER_DURATION_60S,
+            );
             true
         }
 
         CheatCode::RadSuit => {
-            toggle_power(&mut gs.player.powers[powers::PW_IRONFEET], POWER_DURATION_60S);
+            toggle_power(
+                &mut gs.player.powers[powers::PW_IRONFEET],
+                POWER_DURATION_60S,
+            );
             true
         }
 
@@ -292,7 +301,10 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
         }
 
         CheatCode::LightAmp => {
-            toggle_power(&mut gs.player.powers[powers::PW_INFRARED], POWER_DURATION_120S);
+            toggle_power(
+                &mut gs.player.powers[powers::PW_INFRARED],
+                POWER_DURATION_120S,
+            );
             true
         }
 

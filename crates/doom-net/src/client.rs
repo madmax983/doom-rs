@@ -50,11 +50,7 @@ impl NetClient {
 
     /// Create a `NetClient` from an already-bound transport and a known
     /// server address + slot (used after handshake completion).
-    pub fn from_parts(
-        transport: NetTransport,
-        server_addr: SocketAddr,
-        player_slot: u8,
-    ) -> Self {
+    pub fn from_parts(transport: NetTransport, server_addr: SocketAddr, player_slot: u8) -> Self {
         Self {
             transport,
             player_slot,
@@ -155,7 +151,10 @@ mod tests {
         let client = NetClient::connect(&server_addr.to_string(), 0);
         assert!(client.is_ok(), "NetClient::connect must succeed");
         let c = client.unwrap();
-        assert!(!c.is_connected(), "fresh client must not be connected until handshake");
+        assert!(
+            !c.is_connected(),
+            "fresh client must not be connected until handshake"
+        );
         assert_eq!(c.player_slot(), 0, "default slot must be 0");
     }
 
@@ -169,7 +168,10 @@ mod tests {
         assert!(client.is_connected());
 
         client.disconnect();
-        assert!(!client.is_connected(), "disconnect must mark client as not connected");
+        assert!(
+            !client.is_connected(),
+            "disconnect must mark client as not connected"
+        );
     }
 
     #[test]
@@ -239,7 +241,10 @@ mod tests {
         let response = client_transport.recv_packet().unwrap();
         assert!(response.is_some(), "client must receive join response");
         let (resp_pkt, _) = response.unwrap();
-        assert_eq!(resp_pkt.tic, 0xFFFF_FFFF, "response tic must be handshake magic");
+        assert_eq!(
+            resp_pkt.tic, 0xFFFF_FFFF,
+            "response tic must be handshake magic"
+        );
         assert_eq!(resp_pkt.sender, 0, "assigned slot must be 0 (first slot)");
 
         // Verify the response is recognized as a join response.

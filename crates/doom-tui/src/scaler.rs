@@ -53,11 +53,11 @@ pub fn cell_to_fb_y_bot(cy: usize, term_h: usize, fb_h: usize) -> usize {
 /// All array accesses are clamped to `[0, 319] × [0, 199]` before indexing,
 /// so this function never panics regardless of input values.
 pub fn sample_bilinear(
-    fb_data: &[u8],      // 320*200 palette indices
+    fb_data: &[u8], // 320*200 palette indices
     palette: &PaletteLut,
-    palette_idx: usize,  // active palette (0 = normal)
-    fx: u32,             // fixed-point x: integer part = fx >> 16, frac = fx & 0xFFFF
-    fy: u32,             // fixed-point y
+    palette_idx: usize, // active palette (0 = normal)
+    fx: u32,            // fixed-point x: integer part = fx >> 16, frac = fx & 0xFFFF
+    fy: u32,            // fixed-point y
 ) -> (u8, u8, u8) {
     const W: u32 = 320;
     const H: u32 = 200;
@@ -72,7 +72,7 @@ pub fn sample_bilinear(
     // Weight 0 means "all from the left/top sample"; 255 means "almost all from
     // the right/bottom sample".  The denominator in bilerp is 256 so that
     // integer coordinates (wx=0) produce the exact corner value.
-    let wx = ((fx & 0xFFFF) >> 8) as u32;  // 0..=255
+    let wx = ((fx & 0xFFFF) >> 8) as u32; // 0..=255
     let wy = ((fy & 0xFFFF) >> 8) as u32;
 
     // Sample 4 corners.
@@ -92,13 +92,7 @@ pub fn sample_bilinear(
 ///
 /// Assumes `x < 320` and `y < 200` (caller must clamp).
 #[inline]
-fn lookup(
-    fb: &[u8],
-    palette: &PaletteLut,
-    pal: usize,
-    x: usize,
-    y: usize,
-) -> (u8, u8, u8) {
+fn lookup(fb: &[u8], palette: &PaletteLut, pal: usize, x: usize, y: usize) -> (u8, u8, u8) {
     // Safety: caller clamps x/y; fb_data is 320*200 bytes.
     // We defensively use saturating indexing to avoid any panic if the slice
     // is under-sized (widget.rs already guards for this, but belt-and-suspenders).
@@ -120,7 +114,7 @@ pub fn bilerp(c00: u8, c10: u8, c01: u8, c11: u8, wx: u32, wy: u32) -> u8 {
     // Use 256 as denominator: (a*(256-w) + b*w) >> 8.
     // At wx=0: top = c00*(256>>8) = c00 exactly.
     // At wx=255: top ≈ c10 (within 1 LSB due to 255/256 instead of 1.0).
-    let top    = (c00 as u32 * (256 - wx) + c10 as u32 * wx) >> 8;
+    let top = (c00 as u32 * (256 - wx) + c10 as u32 * wx) >> 8;
     let bottom = (c01 as u32 * (256 - wx) + c11 as u32 * wx) >> 8;
     ((top * (256 - wy) + bottom * wy) >> 8) as u8
 }
@@ -199,7 +193,8 @@ mod tests {
         assert_eq!(b, expected.b, "b at integer coord");
 
         // At a fractional position with uniform field, bilerp(42,42,42,42,wx,wy)==42.
-        let (r2, g2, b2) = sample_bilinear(&fb, &lut, 0, (160 << 16) | 0x8000, (100 << 16) | 0x8000);
+        let (r2, g2, b2) =
+            sample_bilinear(&fb, &lut, 0, (160 << 16) | 0x8000, (100 << 16) | 0x8000);
         assert_eq!(r2, expected.r, "r at fractional coord");
         assert_eq!(g2, expected.g, "g at fractional coord");
         assert_eq!(b2, expected.b, "b at fractional coord");

@@ -12,9 +12,9 @@ pub mod limits;
 pub mod primitives;
 pub mod vec2;
 
-pub use angle::{Bam, ANG45, ANG90, ANG180, ANG270};
+pub use angle::{ANG45, ANG90, ANG180, ANG270, Bam};
 pub use bbox::BBox;
-pub use fixed::{Fixed16_16, FIXED_ONE, FRAC_BITS};
+pub use fixed::{FIXED_ONE, FRAC_BITS, Fixed16_16};
 pub use vec2::Vec2Fixed;
 
 // Verus spine proofs (only processed by verus, not rustc).

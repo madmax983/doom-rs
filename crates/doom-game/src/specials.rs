@@ -916,7 +916,15 @@ pub fn ev_floor_lower_to_lowest(gs: &mut GameState, level: &Level, tag: u16, spe
         .map(|(i, _)| (i, lowest_adjacent_floor(level, i)))
         .collect();
     for (idx, target) in per_sector {
-        activate_floor_lower_single_typed(gs, level, idx, tag, target, speed, FloorType::LowerToLowest);
+        activate_floor_lower_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            FloorType::LowerToLowest,
+        );
     }
 }
 
@@ -930,7 +938,15 @@ pub fn ev_floor_lower_to_highest(gs: &mut GameState, level: &Level, tag: u16, sp
         .map(|(i, _)| (i, highest_adjacent_floor(level, i)))
         .collect();
     for (idx, target) in per_sector {
-        activate_floor_lower_single_typed(gs, level, idx, tag, target, speed, FloorType::LowerToHighest);
+        activate_floor_lower_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            FloorType::LowerToHighest,
+        );
     }
 }
 
@@ -981,7 +997,15 @@ pub fn ev_floor_lower_to_nearest(gs: &mut GameState, level: &Level, tag: u16, sp
         })
         .collect();
     for (idx, target) in per_sector {
-        activate_floor_lower_single_typed(gs, level, idx, tag, target, speed, FloorType::LowerToNearest);
+        activate_floor_lower_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            FloorType::LowerToNearest,
+        );
     }
 }
 
@@ -1407,12 +1431,7 @@ const PLATFORM_WAIT: i32 = 105;
 /// current floor height.
 ///
 /// Returns the number of platforms created.
-pub fn ev_perpetual_platform(
-    gs: &mut GameState,
-    level: &Level,
-    tag: u16,
-    speed: i16,
-) -> usize {
+pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed: i16) -> usize {
     let sector_indices: Vec<usize> = level
         .sectors
         .iter()
@@ -1424,11 +1443,7 @@ pub fn ev_perpetual_platform(
     let mut count = 0;
     for idx in sector_indices {
         // Avoid duplicate platforms on the same sector.
-        if gs
-            .active_platforms
-            .iter()
-            .any(|p| p.sector_index == idx)
-        {
+        if gs.active_platforms.iter().any(|p| p.sector_index == idx) {
             continue;
         }
         let sector = &level.sectors[idx];
@@ -1720,21 +1735,48 @@ const LIFT_WAIT: i32 = 105;
 /// Perpetual crusher: lowers to floor+8, reverses, raises to top, reverses, repeat.
 /// Deals 10 damage per tic when crushing.
 pub fn ev_ceiling_crush_and_raise(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    activate_crusher(gs, level, tag, speed, 10, false, false, CeilingType::CrushAndRaise);
+    activate_crusher(
+        gs,
+        level,
+        tag,
+        speed,
+        10,
+        false,
+        false,
+        CeilingType::CrushAndRaise,
+    );
 }
 
 /// Activate a LowerAndCrush ceiling on all sectors matching `tag`.
 ///
 /// One-shot: lowers to floor+8 then stops. No crush damage.
 pub fn ev_ceiling_lower_and_crush(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    activate_crusher(gs, level, tag, speed, 0, false, true, CeilingType::LowerAndCrush);
+    activate_crusher(
+        gs,
+        level,
+        tag,
+        speed,
+        0,
+        false,
+        true,
+        CeilingType::LowerAndCrush,
+    );
 }
 
 /// Activate a LowerToFloor ceiling on all sectors matching `tag`.
 ///
 /// One-shot: lowers to floor height then stops. No crush damage.
 pub fn ev_ceiling_lower_to_floor(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    activate_crusher(gs, level, tag, speed, 0, false, true, CeilingType::LowerToFloor);
+    activate_crusher(
+        gs,
+        level,
+        tag,
+        speed,
+        0,
+        false,
+        true,
+        CeilingType::LowerToFloor,
+    );
 }
 
 /// Stop all crushers with matching `tag` by removing them.
@@ -1748,7 +1790,16 @@ pub fn ev_ceiling_crush_stop(gs: &mut GameState, tag: u16) {
 ///
 /// Like CrushAndRaise but typically with higher speed. Deals 10 damage per tic.
 pub fn ev_ceiling_crush_raise_fast(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    activate_crusher(gs, level, tag, speed, 10, false, false, CeilingType::FastCrushAndRaise);
+    activate_crusher(
+        gs,
+        level,
+        tag,
+        speed,
+        10,
+        false,
+        false,
+        CeilingType::FastCrushAndRaise,
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -2072,12 +2123,7 @@ fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
 /// Enqueue a blazing (fast) door mover that opens and optionally auto-closes.
 ///
 /// Same as `open_door` but with `BLAZING_DOOR_SPEED` (8 units/tic).
-fn open_blazing_door(
-    gs: &mut GameState,
-    level: &Level,
-    sector_idx: usize,
-    auto_close: bool,
-) {
+fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: bool) {
     let sector = match level.sectors.get(sector_idx) {
         Some(s) => s,
         None => return,
@@ -2364,7 +2410,16 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 49: S1 Ceiling lower to 8 above floor + crush damage.
         49 => {
             let tag = level.linedefs[linedef_idx].tag;
-            activate_crusher(gs, level, tag, 2, 10, false, true, CeilingType::LowerAndCrush);
+            activate_crusher(
+                gs,
+                level,
+                tag,
+                2,
+                10,
+                false,
+                true,
+                CeilingType::LowerAndCrush,
+            );
         }
 
         // Type 57: W1 Stop ceiling crusher (remove all crushers matching tag).
@@ -2501,7 +2556,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .collect();
             for (idx, target) in per_sector {
                 activate_floor_raise_single_typed(
-                    gs, level, idx, tag, target, 1, true,
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    true,
                     FloorType::RaiseCrush,
                 );
             }
@@ -2537,7 +2598,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .collect();
             for (idx, target) in per_sector {
                 activate_floor_raise_single_typed(
-                    gs, level, idx, tag, target, 1, true,
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    true,
                     FloorType::RaiseCrush,
                 );
             }
@@ -2585,7 +2652,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .collect();
             for (idx, target) in per_sector {
                 activate_floor_raise_single_typed(
-                    gs, level, idx, tag, target, 1, true,
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    true,
                     FloorType::RaiseCrush,
                 );
             }
@@ -2631,7 +2704,12 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .collect();
             for (idx, target) in per_sector {
                 activate_floor_lower_single_typed(
-                    gs, level, idx, tag, target, 4,
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
                     FloorType::LowerToHighest,
                 );
             }
@@ -2673,7 +2751,12 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .collect();
             for (idx, target) in per_sector {
                 activate_floor_lower_single_typed(
-                    gs, level, idx, tag, target, 1,
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
                     FloorType::LowerToHighest,
                 );
             }
@@ -2691,7 +2774,12 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .collect();
             for (idx, target) in per_sector {
                 activate_floor_lower_single_typed(
-                    gs, level, idx, tag, target, 4,
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
                     FloorType::LowerToHighest,
                 );
             }
@@ -2709,7 +2797,12 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .collect();
             for (idx, target) in per_sector {
                 activate_floor_lower_single_typed(
-                    gs, level, idx, tag, target, 4,
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
                     FloorType::LowerToHighest,
                 );
             }
@@ -2745,7 +2838,12 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .collect();
             for (idx, target) in per_sector {
                 activate_floor_lower_single_typed(
-                    gs, level, idx, tag, target, 4,
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
                     FloorType::LowerToHighest,
                 );
             }
@@ -5229,14 +5327,9 @@ mod tests {
     /// Layout: N sectors chained linearly.
     /// Sector i is connected to sector i+1 by a two-sided linedef.
     /// All sectors share the same floor flat (`FLAT1`) by default.
-    fn make_stair_level(
-        sector_count: usize,
-        base_floor: i16,
-        tag: u16,
-    ) -> doom_map::Level {
+    fn make_stair_level(sector_count: usize, base_floor: i16, tag: u16) -> doom_map::Level {
         let reject_bytes = vec![0u8; (sector_count * sector_count + 7) / 8];
-        let reject =
-            doom_map::Reject::parse_lump(&reject_bytes, sector_count).unwrap();
+        let reject = doom_map::Reject::parse_lump(&reject_bytes, sector_count).unwrap();
 
         let mut sectors = Vec::new();
         for i in 0..sector_count {
@@ -5439,11 +5532,7 @@ mod tests {
     /// Build a platform level: 2 sectors connected by a two-sided linedef.
     /// Sector 0 = adjacent sector (provides lowest floor).
     /// Sector 1 = platform sector (tagged).
-    fn make_platform_level(
-        adj_floor: i16,
-        plat_floor: i16,
-        tag: u16,
-    ) -> doom_map::Level {
+    fn make_platform_level(adj_floor: i16, plat_floor: i16, tag: u16) -> doom_map::Level {
         let reject_bytes = vec![0u8; 1]; // 2 sectors
         let reject = doom_map::Reject::parse_lump(&reject_bytes, 2).unwrap();
 
@@ -5616,10 +5705,7 @@ mod tests {
 
         // Should create only 2 movers (sectors 0 and 1). Sector 2 has different
         // flat so the chain breaks.
-        assert_eq!(
-            count, 2,
-            "stair chain must stop when floor flat differs"
-        );
+        assert_eq!(count, 2, "stair chain must stop when floor flat differs");
     }
 
     // -----------------------------------------------------------------------
@@ -5714,10 +5800,7 @@ mod tests {
             floor_type: FloorType::RaiseCrush,
         });
 
-        assert!(
-            gs.active_floors[0].crush,
-            "crush flag must be set"
-        );
+        assert!(gs.active_floors[0].crush, "crush flag must be set");
 
         // Verify it's a FloorMover that can deal crush damage.
         let _crush_dmg: i32 = if gs.active_floors[0].crush { 10 } else { 0 };
@@ -6136,8 +6219,7 @@ mod tests {
         // Verify monotonically increasing target heights.
         for i in 1..gs.active_floors.len() {
             assert!(
-                gs.active_floors[i].target_height
-                    > gs.active_floors[i - 1].target_height,
+                gs.active_floors[i].target_height > gs.active_floors[i - 1].target_height,
                 "stair target heights must be monotonically increasing"
             );
         }
@@ -6282,7 +6364,10 @@ mod tests {
         let mut level = make_tagged_sector_level(0, 128, 1, 25);
 
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::CrushAndRaise);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::CrushAndRaise
+        );
 
         // Tick down to bottom: 128 - 8 = 120 units / speed 1 = 120 tics.
         for _ in 0..120 {
@@ -6335,7 +6420,10 @@ mod tests {
         let mut level = make_tagged_sector_level(0, 128, 1, 6);
 
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::FastCrushAndRaise);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::FastCrushAndRaise
+        );
         assert_eq!(gs.active_ceilings[0].speed, 2, "fast crusher uses speed 2");
 
         // Tick once.
@@ -6365,7 +6453,10 @@ mod tests {
         let mut level = make_tagged_sector_level(0, 128, 1, 44);
 
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::LowerAndCrush);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::LowerAndCrush
+        );
 
         // Tick to bottom: 128 - 8 = 120 / speed 2 = 60 tics.
         for _ in 0..60 {
@@ -6386,7 +6477,10 @@ mod tests {
 
         ev_ceiling_lower_to_floor(&mut gs, &level, 1, 2);
         assert_eq!(gs.active_ceilings.len(), 1);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::LowerToFloor);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::LowerToFloor
+        );
         assert_eq!(
             gs.active_ceilings[0].bottom_height, 0,
             "LowerToFloor bottom must be floor height (0), not floor+8"
@@ -6397,7 +6491,10 @@ mod tests {
         for _ in 0..64 {
             tick_ceilings(&mut gs, &mut level_mut);
         }
-        assert_eq!(level_mut.sectors[1].ceil_height, 0, "ceiling must reach floor");
+        assert_eq!(
+            level_mut.sectors[1].ceil_height, 0,
+            "ceiling must reach floor"
+        );
         assert!(
             gs.active_ceilings.is_empty(),
             "LowerToFloor must remove itself at bottom"
@@ -6487,7 +6584,10 @@ mod tests {
         let mut level2 = make_tagged_sector_level(0, 16, 1, 25);
         // Place player at z=0 in sector 1.
         activate_linedef(&mut gs, &mut level2, 0);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::CrushAndRaise);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::CrushAndRaise
+        );
         assert_eq!(gs.active_ceilings[0].speed, 1);
 
         // Tick down to floor+8 = 8. ceil=16, speed=1 → 8 tics.
@@ -6504,7 +6604,14 @@ mod tests {
         // Create a CrushAndRaise crusher with speed 4.
         let level3 = make_tagged_sector_level(0, 20, 2, 0);
         activate_crusher(
-            &mut gs, &level3, 2, 4, 10, false, false, CeilingType::CrushAndRaise,
+            &mut gs,
+            &level3,
+            2,
+            4,
+            10,
+            false,
+            false,
+            CeilingType::CrushAndRaise,
         );
         assert_eq!(gs.active_ceilings[0].speed, 4);
         assert_eq!(gs.active_ceilings[0].normal_speed, 4);
@@ -6547,7 +6654,10 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_ceilings.len(), 1);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::FastCrushAndRaise);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::FastCrushAndRaise
+        );
         assert_eq!(gs.active_ceilings[0].speed, 2);
         assert!(!gs.active_ceilings[0].remove_when_done);
     }
@@ -6559,7 +6669,10 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_ceilings.len(), 1);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::CrushAndRaise);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::CrushAndRaise
+        );
         assert_eq!(gs.active_ceilings[0].speed, 1);
     }
 
@@ -6570,8 +6683,14 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_ceilings.len(), 1);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::LowerAndCrush);
-        assert_eq!(gs.active_ceilings[0].crush_damage, 0, "type 44 has no crush damage");
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::LowerAndCrush
+        );
+        assert_eq!(
+            gs.active_ceilings[0].crush_damage, 0,
+            "type 44 has no crush damage"
+        );
     }
 
     #[test]
@@ -6581,7 +6700,10 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_ceilings.len(), 1);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::LowerAndCrush);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::LowerAndCrush
+        );
         assert_eq!(
             gs.active_ceilings[0].crush_damage, 10,
             "type 49 has crush damage 10"
@@ -6627,7 +6749,10 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_ceilings.len(), 1);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::LowerAndCrush);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::LowerAndCrush
+        );
     }
 
     #[test]
@@ -6637,7 +6762,10 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_ceilings.len(), 1);
-        assert_eq!(gs.active_ceilings[0].ceiling_type, CeilingType::CrushAndRaise);
+        assert_eq!(
+            gs.active_ceilings[0].ceiling_type,
+            CeilingType::CrushAndRaise
+        );
         assert_eq!(gs.active_ceilings[0].speed, 1, "type 73 is slow (speed 1)");
     }
 
@@ -6794,7 +6922,10 @@ mod tests {
 
         let gs2 = gs.clone();
         assert_eq!(gs2.active_ceilings.len(), 1);
-        assert_eq!(gs2.active_ceilings[0].ceiling_type, CeilingType::SilentCrush);
+        assert_eq!(
+            gs2.active_ceilings[0].ceiling_type,
+            CeilingType::SilentCrush
+        );
         assert_eq!(gs2.active_ceilings[0].normal_speed, 2);
         assert!(gs2.active_ceilings[0].silent);
     }
@@ -6851,7 +6982,14 @@ mod tests {
 
         // Create a SilentCrush crusher with speed 4.
         activate_crusher(
-            &mut gs, &level, 2, 4, 10, true, false, CeilingType::SilentCrush,
+            &mut gs,
+            &level,
+            2,
+            4,
+            10,
+            true,
+            false,
+            CeilingType::SilentCrush,
         );
         assert_eq!(gs.active_ceilings[0].speed, 4);
 
@@ -6889,7 +7027,14 @@ mod tests {
 
         // Create a FastCrushAndRaise crusher with speed 4.
         activate_crusher(
-            &mut gs, &level, 2, 4, 10, false, false, CeilingType::FastCrushAndRaise,
+            &mut gs,
+            &level,
+            2,
+            4,
+            10,
+            false,
+            false,
+            CeilingType::FastCrushAndRaise,
         );
         assert_eq!(gs.active_ceilings[0].speed, 4);
 
@@ -6936,11 +7081,7 @@ mod tests {
     //   LD0: sector 0 ↔ sector 1 (right=SD0→sec0, left=SD1→sec1) special=ld_special, tag=tag
     //   LD1: sector 1 ↔ sector 2 (right=SD2→sec1, left=SD3→sec2)
     // -----------------------------------------------------------------------
-    fn make_lift_test_level(
-        adj_floor: i16,
-        ld_special: u16,
-        tag: u16,
-    ) -> doom_map::Level {
+    fn make_lift_test_level(adj_floor: i16, ld_special: u16, tag: u16) -> doom_map::Level {
         let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
 
         let sectors = vec![
@@ -7083,7 +7224,10 @@ mod tests {
         // Sector 1 (floor=64, tag=5) is adjacent to sector 0 (floor=0) and sector 2 (floor=16).
         let level = make_lift_test_level(16, 0, 5);
         let low = lowest_adjacent_floor(&level, 1);
-        assert_eq!(low, 0, "lowest adjacent floor to sector 1 should be 0 (sector 0)");
+        assert_eq!(
+            low, 0,
+            "lowest adjacent floor to sector 1 should be 0 (sector 0)"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -7120,7 +7264,10 @@ mod tests {
         for _ in 0..16 {
             tick_lifts(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].floor_height, 0, "floor must reach low_height");
+        assert_eq!(
+            level.sectors[1].floor_height, 0,
+            "floor must reach low_height"
+        );
         assert_eq!(gs.lifts[0].status, LiftStatus::Waiting);
         assert_eq!(gs.lifts[0].wait_remaining, 105);
     }
@@ -7171,7 +7318,10 @@ mod tests {
         for _ in 0..16 {
             tick_lifts(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].floor_height, 64, "floor must return to high_height");
+        assert_eq!(
+            level.sectors[1].floor_height, 64,
+            "floor must return to high_height"
+        );
         // LiftStatus::Done triggers removal on next tick.
         tick_lifts(&mut gs, &mut level);
         assert!(gs.lifts.is_empty(), "lift must be removed when Done");
@@ -7192,7 +7342,10 @@ mod tests {
             tick_lifts(&mut gs, &mut level);
         }
 
-        assert_eq!(level.sectors[1].floor_height, 64, "floor must be back at original");
+        assert_eq!(
+            level.sectors[1].floor_height, 64,
+            "floor must be back at original"
+        );
         assert!(gs.lifts.is_empty(), "lift must be removed after full cycle");
     }
 
@@ -7301,12 +7454,11 @@ mod tests {
         let mut level = make_lift_test_level(16, 120, 5);
 
         activate_linedef(&mut gs, &mut level, 0);
+        assert_eq!(gs.lifts.len(), 1, "line type 120 should create a LiftMover");
         assert_eq!(
-            gs.lifts.len(),
-            1,
-            "line type 120 should create a LiftMover"
+            gs.lifts[0].speed, 8,
+            "line type 120 should be blazing speed 8"
         );
-        assert_eq!(gs.lifts[0].speed, 8, "line type 120 should be blazing speed 8");
     }
 
     // -----------------------------------------------------------------------
@@ -8241,8 +8393,14 @@ mod tests {
         let sw = &gs.scrolling_walls[0];
         let expected_x = (i32::MAX - 100).wrapping_add(i16::MAX as i32);
         let expected_y = (i32::MIN + 100).wrapping_add(i16::MIN as i32);
-        assert_eq!(sw.accumulated_x, expected_x, "wrapping_add must handle overflow");
-        assert_eq!(sw.accumulated_y, expected_y, "wrapping_add must handle underflow");
+        assert_eq!(
+            sw.accumulated_x, expected_x,
+            "wrapping_add must handle overflow"
+        );
+        assert_eq!(
+            sw.accumulated_y, expected_y,
+            "wrapping_add must handle underflow"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -8440,10 +8598,7 @@ mod tests {
     fn shortest_lower_texture_no_textures_returns_zero() {
         let level = make_damage_level(0, 0);
         let result = shortest_lower_texture(&level, 0);
-        assert_eq!(
-            result, 0,
-            "no lower textures => returns 0"
-        );
+        assert_eq!(result, 0, "no lower textures => returns 0");
     }
 
     // --- Floor activation functions ---
@@ -8452,12 +8607,7 @@ mod tests {
     fn ev_floor_lower_to_lowest_creates_correct_mover() {
         let mut gs = GameState::new("TEST");
         // Sector 0: floor=0, Sector 1: floor=64 tag=1, Sector 2: floor=32.
-        let level = make_multi_sector_level(
-            [0, 64, 32],
-            [128, 128, 128],
-            [0, 1, 0],
-            0, 0,
-        );
+        let level = make_multi_sector_level([0, 64, 32], [128, 128, 128], [0, 1, 0], 0, 0);
         ev_floor_lower_to_lowest(&mut gs, &level, 1, 2);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(gs.active_floors[0].target_height, 0, "lowest adjacent = 0");
@@ -8470,15 +8620,13 @@ mod tests {
     fn ev_floor_lower_to_highest_creates_correct_mover() {
         let mut gs = GameState::new("TEST");
         // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=48.
-        let level = make_multi_sector_level(
-            [10, 64, 48],
-            [128, 128, 128],
-            [0, 1, 0],
-            0, 0,
-        );
+        let level = make_multi_sector_level([10, 64, 48], [128, 128, 128], [0, 1, 0], 0, 0);
         ev_floor_lower_to_highest(&mut gs, &level, 1, 1);
         assert_eq!(gs.active_floors.len(), 1);
-        assert_eq!(gs.active_floors[0].target_height, 48, "highest adjacent = 48");
+        assert_eq!(
+            gs.active_floors[0].target_height, 48,
+            "highest adjacent = 48"
+        );
         assert_eq!(gs.active_floors[0].floor_type, FloorType::LowerToHighest);
     }
 
@@ -8486,15 +8634,13 @@ mod tests {
     fn ev_floor_raise_to_lowest_ceiling_works() {
         let mut gs = GameState::new("TEST");
         // Sector 0: ceil=128, Sector 1: floor=0 ceil=200 tag=1, Sector 2: ceil=96.
-        let level = make_multi_sector_level(
-            [0, 0, 0],
-            [128, 200, 96],
-            [0, 1, 0],
-            0, 0,
-        );
+        let level = make_multi_sector_level([0, 0, 0], [128, 200, 96], [0, 1, 0], 0, 0);
         ev_floor_raise_to_lowest_ceiling(&mut gs, &level, 1, 1, false);
         assert_eq!(gs.active_floors.len(), 1);
-        assert_eq!(gs.active_floors[0].target_height, 96, "lowest adj ceil = 96");
+        assert_eq!(
+            gs.active_floors[0].target_height, 96,
+            "lowest adj ceil = 96"
+        );
         assert_eq!(gs.active_floors[0].direction, MoveDirection::Up);
         assert!(!gs.active_floors[0].crush, "crush should be false");
     }
@@ -8504,12 +8650,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 1: floor=0, adjacent to sector 0 (floor=32) and sector 2 (floor=64).
         // next_highest_floor above 0 = 32.
-        let level = make_multi_sector_level(
-            [32, 0, 64],
-            [128, 128, 128],
-            [0, 1, 0],
-            0, 0,
-        );
+        let level = make_multi_sector_level([32, 0, 64], [128, 128, 128], [0, 1, 0], 0, 0);
         ev_floor_raise_to_nearest(&mut gs, &level, 1, 1);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(gs.active_floors[0].target_height, 32, "next highest = 32");
@@ -8597,12 +8738,7 @@ mod tests {
     fn ev_floor_raise_24_raises_by_exactly_24() {
         let mut gs = GameState::new("TEST");
         // Sector 1: floor=10, tag=1.
-        let level = make_multi_sector_level(
-            [0, 10, 0],
-            [128, 128, 128],
-            [0, 1, 0],
-            0, 0,
-        );
+        let level = make_multi_sector_level([0, 10, 0], [128, 128, 128], [0, 1, 0], 0, 0);
         ev_floor_raise_24(&mut gs, &level, 1, 1);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(gs.active_floors[0].target_height, 34, "10 + 24 = 34");
@@ -8613,12 +8749,7 @@ mod tests {
     fn ev_floor_raise_32_raises_by_exactly_32() {
         let mut gs = GameState::new("TEST");
         // Sector 1: floor=20, tag=1.
-        let level = make_multi_sector_level(
-            [0, 20, 0],
-            [128, 128, 128],
-            [0, 1, 0],
-            0, 0,
-        );
+        let level = make_multi_sector_level([0, 20, 0], [128, 128, 128], [0, 1, 0], 0, 0);
         ev_floor_raise_32(&mut gs, &level, 1, 1);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(gs.active_floors[0].target_height, 52, "20 + 32 = 52");
@@ -8629,15 +8760,13 @@ mod tests {
     fn ev_floor_raise_to_ceiling_raises_to_own_ceiling() {
         let mut gs = GameState::new("TEST");
         // Sector 1: floor=0, ceil=200, tag=1.
-        let level = make_multi_sector_level(
-            [0, 0, 0],
-            [128, 200, 128],
-            [0, 1, 0],
-            0, 0,
-        );
+        let level = make_multi_sector_level([0, 0, 0], [128, 200, 128], [0, 1, 0], 0, 0);
         ev_floor_raise_to_ceiling(&mut gs, &level, 1, 1, false);
         assert_eq!(gs.active_floors.len(), 1);
-        assert_eq!(gs.active_floors[0].target_height, 200, "target = own ceiling = 200");
+        assert_eq!(
+            gs.active_floors[0].target_height, 200,
+            "target = own ceiling = 200"
+        );
         assert_eq!(gs.active_floors[0].floor_type, FloorType::RaiseToCeiling);
     }
 
@@ -8647,12 +8776,7 @@ mod tests {
     fn line_type_19_dispatches_lower_to_highest() {
         let mut gs = GameState::new("TEST");
         // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=48.
-        let mut level = make_multi_sector_level(
-            [10, 64, 48],
-            [128, 128, 128],
-            [0, 1, 0],
-            19, 1,
-        );
+        let mut level = make_multi_sector_level([10, 64, 48], [128, 128, 128], [0, 1, 0], 19, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
@@ -8664,12 +8788,7 @@ mod tests {
     #[test]
     fn line_type_23_dispatches_lower_to_lowest() {
         let mut gs = GameState::new("TEST");
-        let mut level = make_multi_sector_level(
-            [0, 64, 32],
-            [128, 128, 128],
-            [0, 1, 0],
-            23, 1,
-        );
+        let mut level = make_multi_sector_level([0, 64, 32], [128, 128, 128], [0, 1, 0], 23, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
@@ -8683,22 +8802,14 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=30.
         // highest_adjacent = 30, target = 30 + 8 = 38.
-        let mut level = make_multi_sector_level(
-            [10, 64, 30],
-            [128, 128, 128],
-            [0, 1, 0],
-            36, 1,
-        );
+        let mut level = make_multi_sector_level([10, 64, 30], [128, 128, 128], [0, 1, 0], 36, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
             gs.active_floors[0].target_height, 38,
             "type 36: target = highest_adj(30) + 8 = 38"
         );
-        assert_eq!(
-            gs.active_floors[0].speed, 4,
-            "type 36: turbo speed = 4"
-        );
+        assert_eq!(gs.active_floors[0].speed, 4, "type 36: turbo speed = 4");
     }
 
     #[test]
@@ -8706,12 +8817,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 0: ceil=128, Sector 1: floor=0 ceil=200 tag=1, Sector 2: ceil=100.
         // lowest_adj_ceil = 100, target = 100 - 8 = 92.
-        let mut level = make_multi_sector_level(
-            [0, 0, 0],
-            [128, 200, 100],
-            [0, 1, 0],
-            56, 1,
-        );
+        let mut level = make_multi_sector_level([0, 0, 0], [128, 200, 100], [0, 1, 0], 56, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
@@ -8725,12 +8831,7 @@ mod tests {
     fn line_type_64_dispatches_raise_to_lowest_ceiling() {
         let mut gs = GameState::new("TEST");
         // Sector 0: ceil=128, Sector 1: floor=0 ceil=200 tag=1, Sector 2: ceil=96.
-        let mut level = make_multi_sector_level(
-            [0, 0, 0],
-            [128, 200, 96],
-            [0, 1, 0],
-            64, 1,
-        );
+        let mut level = make_multi_sector_level([0, 0, 0], [128, 200, 96], [0, 1, 0], 64, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
@@ -8742,12 +8843,7 @@ mod tests {
     #[test]
     fn line_type_91_dispatches_raise_to_lowest_ceiling() {
         let mut gs = GameState::new("TEST");
-        let mut level = make_multi_sector_level(
-            [0, 0, 0],
-            [128, 200, 80],
-            [0, 1, 0],
-            91, 1,
-        );
+        let mut level = make_multi_sector_level([0, 0, 0], [128, 200, 80], [0, 1, 0], 91, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
@@ -8761,12 +8857,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 0: floor=0, Sector 1: floor=64 tag=1, Sector 2: floor=32 tag=2.
         // Both sectors 1 and 2 have different tags.
-        let level = make_multi_sector_level(
-            [0, 64, 32],
-            [128, 128, 128],
-            [0, 1, 2],
-            0, 0,
-        );
+        let level = make_multi_sector_level([0, 64, 32], [128, 128, 128], [0, 1, 2], 0, 0);
 
         // Create a floor mover for tag 1 (sector 1).
         ev_floor_lower_to_lowest(&mut gs, &level, 1, 1);
@@ -8816,12 +8907,7 @@ mod tests {
     #[test]
     fn line_type_38_dispatches_lower_to_lowest() {
         let mut gs = GameState::new("TEST");
-        let mut level = make_multi_sector_level(
-            [10, 64, 32],
-            [128, 128, 128],
-            [0, 1, 0],
-            38, 1,
-        );
+        let mut level = make_multi_sector_level([10, 64, 32], [128, 128, 128], [0, 1, 0], 38, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
@@ -8833,12 +8919,7 @@ mod tests {
     #[test]
     fn line_type_45_dispatches_lower_to_highest() {
         let mut gs = GameState::new("TEST");
-        let mut level = make_multi_sector_level(
-            [10, 64, 48],
-            [128, 128, 128],
-            [0, 1, 0],
-            45, 1,
-        );
+        let mut level = make_multi_sector_level([10, 64, 48], [128, 128, 128], [0, 1, 0], 45, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
@@ -8850,12 +8931,7 @@ mod tests {
     #[test]
     fn line_type_82_dispatches_lower_to_lowest() {
         let mut gs = GameState::new("TEST");
-        let mut level = make_multi_sector_level(
-            [5, 64, 32],
-            [128, 128, 128],
-            [0, 1, 0],
-            82, 1,
-        );
+        let mut level = make_multi_sector_level([5, 64, 32], [128, 128, 128], [0, 1, 0], 82, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
@@ -8867,12 +8943,7 @@ mod tests {
     #[test]
     fn line_type_58_dispatches_raise_24() {
         let mut gs = GameState::new("TEST");
-        let mut level = make_multi_sector_level(
-            [0, 10, 0],
-            [128, 128, 128],
-            [0, 1, 0],
-            58, 1,
-        );
+        let mut level = make_multi_sector_level([0, 10, 0], [128, 128, 128], [0, 1, 0], 58, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
@@ -8884,12 +8955,7 @@ mod tests {
     #[test]
     fn line_type_102_dispatches_lower_to_highest() {
         let mut gs = GameState::new("TEST");
-        let mut level = make_multi_sector_level(
-            [10, 64, 40],
-            [128, 128, 128],
-            [0, 1, 0],
-            102, 1,
-        );
+        let mut level = make_multi_sector_level([10, 64, 40], [128, 128, 128], [0, 1, 0], 102, 1);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(
@@ -8903,12 +8969,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 1: floor=64, adjacent to sector 0 (floor=10) and sector 2 (floor=32).
         // Next lowest (highest below 64) = 32.
-        let level = make_multi_sector_level(
-            [10, 64, 32],
-            [128, 128, 128],
-            [0, 1, 0],
-            0, 0,
-        );
+        let level = make_multi_sector_level([10, 64, 32], [128, 128, 128], [0, 1, 0], 0, 0);
         ev_floor_lower_to_nearest(&mut gs, &level, 1, 1);
         assert_eq!(gs.active_floors.len(), 1);
         assert_eq!(

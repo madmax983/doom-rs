@@ -48,7 +48,9 @@ pub enum WadError {
     NegativeLumpCount(i32),
 
     /// The directory offset points outside the file.
-    #[error("WAD directory offset {offset} + directory size {dir_size} exceeds file length {file_len}")]
+    #[error(
+        "WAD directory offset {offset} + directory size {dir_size} exceeds file length {file_len}"
+    )]
     DirectoryOutOfBounds {
         offset: usize,
         dir_size: usize,
@@ -128,13 +130,15 @@ impl WadFile {
         for chunk in dir_bytes.chunks_exact(16) {
             let raw = RawLumpEntry {
                 filepos: i32::from_le_bytes(chunk[0..4].try_into().unwrap()),
-                size:    i32::from_le_bytes(chunk[4..8].try_into().unwrap()),
-                name:    chunk[8..16].try_into().unwrap(),
+                size: i32::from_le_bytes(chunk[4..8].try_into().unwrap()),
+                name: chunk[8..16].try_into().unwrap(),
             };
             let name = LumpName::from_raw(raw.name);
-            let (offset, end) = raw.byte_range().ok_or_else(|| WadError::LumpNegativeField {
-                name: name.as_str().to_owned(),
-            })?;
+            let (offset, end) = raw
+                .byte_range()
+                .ok_or_else(|| WadError::LumpNegativeField {
+                    name: name.as_str().to_owned(),
+                })?;
 
             if end > data.len() {
                 return Err(WadError::LumpOutOfBounds {
@@ -145,20 +149,30 @@ impl WadFile {
                 });
             }
 
-            dir.push(LumpDef { name, offset, size: raw.size as usize });
+            dir.push(LumpDef {
+                name,
+                offset,
+                size: raw.size as usize,
+            });
         }
 
         Ok(Self { kind, data, dir })
     }
 
     /// WAD kind (IWAD or PWAD).
-    pub fn kind(&self) -> WadKind { self.kind }
+    pub fn kind(&self) -> WadKind {
+        self.kind
+    }
 
     /// Number of lumps in the directory.
-    pub fn lump_count(&self) -> usize { self.dir.len() }
+    pub fn lump_count(&self) -> usize {
+        self.dir.len()
+    }
 
     /// Iterate over all lump descriptors.
-    pub fn lumps(&self) -> &[LumpDef] { &self.dir }
+    pub fn lumps(&self) -> &[LumpDef] {
+        &self.dir
+    }
 
     /// Find the last lump with the given name (PWAD override semantics).
     ///
@@ -188,12 +202,23 @@ impl WadFile {
     ///
     /// Returns an iterator over lumps that appear strictly between the
     /// last occurrence of `start_marker` and the next `end_marker`.
-    pub fn lumps_between<'a>(&'a self, start: &str, end: &str) -> impl Iterator<Item = &'a LumpDef> {
+    pub fn lumps_between<'a>(
+        &'a self,
+        start: &str,
+        end: &str,
+    ) -> impl Iterator<Item = &'a LumpDef> {
         let start_key = LumpName::from_str(start);
-        let end_key   = LumpName::from_str(end);
+        let end_key = LumpName::from_str(end);
 
-        let start_idx = self.dir.iter().rposition(|l| l.name == start_key).map(|i| i + 1).unwrap_or(0);
-        let end_idx   = self.dir[start_idx..].iter().position(|l| l.name == end_key)
+        let start_idx = self
+            .dir
+            .iter()
+            .rposition(|l| l.name == start_key)
+            .map(|i| i + 1)
+            .unwrap_or(0);
+        let end_idx = self.dir[start_idx..]
+            .iter()
+            .position(|l| l.name == end_key)
             .map(|i| start_idx + i)
             .unwrap_or(self.dir.len());
 
@@ -211,8 +236,8 @@ impl WadFile {
 
 /// Required lumps that must follow a map marker (in order).
 pub const REQUIRED_MAP_LUMPS: &[&str] = &[
-    "THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES",
-    "SEGS", "SSECTORS", "NODES", "SECTORS", "REJECT", "BLOCKMAP",
+    "THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SEGS", "SSECTORS", "NODES", "SECTORS", "REJECT",
+    "BLOCKMAP",
 ];
 
 /// Validated map lump group: marker + the 10 required sub-lumps.
@@ -276,13 +301,19 @@ impl WadDir {
     }
 
     /// All lumps.
-    pub fn lumps(&self) -> &[LumpDef] { &self.lumps }
+    pub fn lumps(&self) -> &[LumpDef] {
+        &self.lumps
+    }
 
     /// Total lump count.
-    pub fn len(&self) -> usize { self.lumps.len() }
+    pub fn len(&self) -> usize {
+        self.lumps.len()
+    }
 
     /// Returns `true` if no lumps are present.
-    pub fn is_empty(&self) -> bool { self.lumps.is_empty() }
+    pub fn is_empty(&self) -> bool {
+        self.lumps.is_empty()
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -539,12 +570,18 @@ mod tests {
     fn parse_rejects_bad_magic() {
         let mut bad = vec![0u8; 16];
         bad[0..4].copy_from_slice(b"XWAD");
-        assert!(matches!(WadFile::parse(bad), Err(WadError::InvalidMagic(_))));
+        assert!(matches!(
+            WadFile::parse(bad),
+            Err(WadError::InvalidMagic(_))
+        ));
     }
 
     #[test]
     fn parse_rejects_too_short() {
-        assert!(matches!(WadFile::parse(vec![0u8; 4]), Err(WadError::TooShort(4))));
+        assert!(matches!(
+            WadFile::parse(vec![0u8; 4]),
+            Err(WadError::TooShort(4))
+        ));
     }
 
     #[test]
@@ -569,11 +606,7 @@ mod tests {
 
     #[test]
     fn multiple_lumps_same_name_last_wins() {
-        let wad_bytes = make_iwad(&[
-            ("DEMO", b"first"),
-            ("OTHER", b"other"),
-            ("DEMO", b"second"),
-        ]);
+        let wad_bytes = make_iwad(&[("DEMO", b"first"), ("OTHER", b"other"), ("DEMO", b"second")]);
         let wad = WadFile::parse(wad_bytes).unwrap();
         // find_lump returns last occurrence
         assert_eq!(wad.find_lump_data("DEMO").unwrap(), b"second");

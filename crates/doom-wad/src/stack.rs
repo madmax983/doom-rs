@@ -12,8 +12,8 @@
 //! This invariant is trivially true by construction (we append valid descriptors),
 //! which is why the Verus proof is short: it's a simple inductive argument.
 
-use crate::wad::{WadError, WadFile, WadKind};
 use crate::lump::LumpDef;
+use crate::wad::{WadError, WadFile, WadKind};
 
 /// Ordered stack of WAD files.
 ///
@@ -59,11 +59,16 @@ impl WadStack {
 
     /// Returns `true` if the IWAD has been loaded.
     pub fn has_iwad(&self) -> bool {
-        self.wads.first().map(|w| w.kind() == WadKind::Iwad).unwrap_or(false)
+        self.wads
+            .first()
+            .map(|w| w.kind() == WadKind::Iwad)
+            .unwrap_or(false)
     }
 
     /// Total number of loaded WAD files.
-    pub fn wad_count(&self) -> usize { self.wads.len() }
+    pub fn wad_count(&self) -> usize {
+        self.wads.len()
+    }
 
     /// Total lump count across all WADs (may have duplicates — use `find` for resolution).
     pub fn total_lump_count(&self) -> usize {
@@ -94,7 +99,9 @@ impl WadStack {
     /// Useful for building a flat index or for tools that need the full picture
     /// rather than override-resolved access.
     pub fn all_lumps(&self) -> impl Iterator<Item = (&WadFile, &LumpDef)> {
-        self.wads.iter().flat_map(|w| w.lumps().iter().map(move |l| (w, l)))
+        self.wads
+            .iter()
+            .flat_map(|w| w.lumps().iter().map(move |l| (w, l)))
     }
 
     /// Find a map's lump group, searching PWADs first (override semantics).
@@ -133,7 +140,9 @@ impl WadStack {
 }
 
 impl Default for WadStack {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[cfg(test)]
@@ -170,7 +179,10 @@ mod tests {
 
     #[test]
     fn pwad_overrides_iwad_lump() {
-        let iwad_bytes = make_wad(b"IWAD", &[("DEMO", b"iwad_data"), ("UNIQUE", b"only_in_iwad")]);
+        let iwad_bytes = make_wad(
+            b"IWAD",
+            &[("DEMO", b"iwad_data"), ("UNIQUE", b"only_in_iwad")],
+        );
         let pwad_bytes = make_wad(b"PWAD", &[("DEMO", b"pwad_data")]);
 
         let mut stack = WadStack::new();
