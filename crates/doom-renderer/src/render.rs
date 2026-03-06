@@ -351,10 +351,9 @@ pub fn render_level(
             (sx2, vx2, sx1, vx1)
         };
 
-        // Conservative rasterization to avoid 1px cracks between adjacent segs
-        // caused by integer projection/truncation differences.
-        let col_start = sx_left.saturating_sub(1).max(0).min((SCREEN_W - 1) as i64) as usize;
-        let col_end = sx_right.saturating_add(1).max(0).min((SCREEN_W - 1) as i64) as usize;
+        // Rasterized column span (inclusive).
+        let col_start = sx_left.max(0).min((SCREEN_W - 1) as i64) as usize;
+        let col_end = sx_right.max(0).min((SCREEN_W - 1) as i64) as usize;
 
         if col_start > col_end {
             continue;
