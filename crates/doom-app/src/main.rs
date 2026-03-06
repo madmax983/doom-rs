@@ -23,9 +23,9 @@ use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
-    AnimState, AutomapState, ColormapCache, FlatCache, Framebuffer, PaletteFlash, PaletteLut,
-    SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_status_bar, draw_weapon_sprite,
-    render_level, render_things,
+    AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer, PaletteFlash,
+    PaletteLut, SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_menu, draw_status_bar,
+    draw_weapon_sprite, render_level, render_things,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -134,6 +134,10 @@ pub(crate) struct DoomGame {
     switch_list: SwitchList,
     /// Player health from the previous tic — used to detect damage for pain flash.
     prev_health: i32,
+    /// In-game menu (Esc toggles it).
+    menu: doom_game::menu::GameMenu,
+    /// Bitmap font for menu/console text rendering.
+    bitmap_font: BitmapFont,
 }
 
 impl DoomGame {
@@ -176,18 +180,35 @@ impl DoomGame {
             palette_flash: PaletteFlash::new(),
             switch_list: SwitchList::new(),
             prev_health: initial_health,
+            menu: doom_game::menu::GameMenu::new(false), // false = Doom 1 mode
+            bitmap_font: BitmapFont::new(),
         }
     }
 }
 
 impl DoomApp for DoomGame {
     fn tick(&mut self, input: TicInput) {
+        // Tick menu skull animation each tic regardless of menu state.
+        self.menu.tick();
+
         // Handle console / cheat input before forwarding movement to the
         // game simulation.
         if let Some(ch) = input.console_char {
             if ch == '`' || ch == '~' {
                 // Toggle the console overlay on backtick/tilde.
                 self.console.toggle();
+            } else if ch == '\x1b' {
+                // Escape: toggle the in-game menu (when console is not open).
+                // Note: the event loop currently maps Escape to quit, so this
+                // branch fires only if the event loop is updated to forward
+                // Escape as a console_char instead.
+                if !self.console.visible {
+                    if self.menu.is_active() {
+                        self.menu.close();
+                    } else {
+                        self.menu.open();
+                    }
+                }
             } else if self.console.visible {
                 // Console is open: feed characters to the input line.
                 if ch == '\n' {
@@ -414,10 +435,103 @@ impl DoomApp for DoomGame {
         if let Some((ref msg, _)) = self.cheat_message {
             draw_cheat_message_overlay(fb, msg);
         }
+
+        // Draw menu overlay on top of the game view (no-op when menu is not active).
+        draw_menu(fb, &self.menu, &self.bitmap_font);
+
+        // Draw console overlay on top of everything (highest priority).
+        if self.console.visible {
+            draw_console_overlay(fb, &self.console);
+        }
     }
 
     fn active_palette(&self) -> usize {
         self.palette_flash.active_palette()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Console overlay
+// ---------------------------------------------------------------------------
+
+/// Draw the console overlay onto the top ~80 rows of the framebuffer.
+///
+/// The console is drawn on top of everything else (highest priority).
+/// Layout:
+///   - Rows 0..80: darkened background panel
+///   - Row 2:      "--- CONSOLE ---" header (yellow)
+///   - Rows 10+:   recent messages (newest first, white)
+///   - Row 70:     "> input_" prompt line (green)
+fn draw_console_overlay(fb: &mut Framebuffer, console: &console::Console) {
+    const FB_W: usize = 320;
+    const PANEL_H: usize = 80; // console panel height in pixels
+    const CHAR_H: usize = 7; // 6px glyph + 1px gap
+    const COLOR_HEADER: u8 = 231; // yellow — "--- CONSOLE ---"
+    const COLOR_MSG: u8 = 200; // light — message lines
+    const COLOR_PROMPT: u8 = 112; // green-ish — "> input_"
+    const COLOR_BG: u8 = 4; // dark blue-gray panel
+
+    // Darken the top PANEL_H rows to form the console background.
+    for y in 0..PANEL_H {
+        let row_start = y * FB_W;
+        let row_end = row_start + FB_W;
+        if row_end <= fb.data.len() {
+            for px in &mut fb.data[row_start..row_end] {
+                *px = px.wrapping_shr(1).saturating_add(COLOR_BG / 4);
+            }
+        }
+    }
+
+    // Draw "--- CONSOLE ---" header at the top.
+    draw_mini_string(fb, 2, "--- CONSOLE ---", COLOR_HEADER);
+
+    // Draw recent messages (up to 8), newest first.
+    let msgs: Vec<&str> = console
+        .messages
+        .iter()
+        .rev()
+        .take(8)
+        .map(|s| s.as_str())
+        .collect();
+    for (i, msg) in msgs.iter().enumerate() {
+        let y = 10 + i * CHAR_H;
+        if y + CHAR_H > PANEL_H {
+            break;
+        }
+        draw_mini_string(fb, y, msg, COLOR_MSG);
+    }
+
+    // Draw "> input_" prompt at the bottom of the panel.
+    let prompt = format!("> {}_", console.input);
+    let prompt_y = PANEL_H.saturating_sub(CHAR_H + 2);
+    draw_mini_string(fb, prompt_y, &prompt, COLOR_PROMPT);
+}
+
+/// Draw a string using the mini 4x6 glyph font at `(2, y)`.
+///
+/// Characters that overflow the 320-pixel width are clipped.
+fn draw_mini_string(fb: &mut Framebuffer, y: usize, text: &str, color: u8) {
+    const FB_W: usize = 320;
+    const CHAR_W: usize = 5;
+    const GLYPH_ROWS: usize = 6;
+
+    for (ci, ch) in text.chars().enumerate() {
+        let glyph = mini_glyph(ch);
+        let cx = 2 + ci * CHAR_W;
+        for (row, &bits) in glyph.iter().enumerate().take(GLYPH_ROWS) {
+            let sy = y + row;
+            if sy >= 200 {
+                break;
+            }
+            for col in 0..4 {
+                if bits & (1 << (3 - col)) != 0 {
+                    let sx = cx + col;
+                    if sx < FB_W {
+                        fb.set_pixel(sx, sy, color);
+                    }
+                }
+            }
+        }
     }
 }
 

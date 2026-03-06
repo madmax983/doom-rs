@@ -969,9 +969,42 @@ pub fn draw_status_bar_data(fb: &mut Framebuffer, data: &StatusBarData) {
 /// - `player`   -- current player state (health, ammo, armor, weapons, keys).
 /// - `god_mode` -- when `true`, override health color to bright yellow and use god face.
 pub fn draw_status_bar(fb: &mut Framebuffer, player: &PlayerState, god_mode: bool) {
-    let _ = god_mode; // TODO: god mode color override in future
     let data = StatusBarData::from_player(player);
     draw_status_bar_data(fb, &data);
+    if god_mode {
+        apply_god_mode_overlay(fb, data.health);
+    }
+}
+
+/// Apply the god mode visual overlay on top of an already-drawn status bar.
+///
+/// Overdraws three regions with bright yellow (`COLOR_YELLOW`) to signal invincibility:
+/// 1. The health number (same position as the normal red health display).
+/// 2. The health percent sign.
+/// 3. The face border rectangle, giving the mugshot a gold halo.
+fn apply_god_mode_overlay(fb: &mut Framebuffer, health: i32) {
+    let bar_y = STATUS_BAR_Y as i32;
+
+    // 1. Redraw health number in yellow.
+    draw_number(fb, 52, bar_y + 12, health, 3, COLOR_YELLOW);
+
+    // 2. Redraw health percent sign in yellow.
+    draw_char(fb, 52 + 3 * 8, bar_y + 14, b'%', COLOR_YELLOW);
+
+    // 3. Redraw the face border rectangle in yellow.
+    //    draw_face uses x=144, y=bar_y+2, w=38, h=28 (matching draw_status_bar_data).
+    let face_x = 144i32;
+    let face_y = bar_y + 2;
+    let face_w = 38i32;
+    let face_h = 28i32;
+    for dx in 0..face_w {
+        put_pixel(fb, face_x + dx, face_y, COLOR_YELLOW);
+        put_pixel(fb, face_x + dx, face_y + face_h - 1, COLOR_YELLOW);
+    }
+    for dy in 1..face_h - 1 {
+        put_pixel(fb, face_x, face_y + dy, COLOR_YELLOW);
+        put_pixel(fb, face_x + face_w - 1, face_y + dy, COLOR_YELLOW);
+    }
 }
 
 // ===========================================================================
@@ -1345,5 +1378,114 @@ mod tests {
         draw_number(&mut fb, 0, 0, 999_999, 3, 1);
         // With width=3 it still renders (just the lower 3 digits won't fit the
         // full number, but it should not panic).
+    }
+
+    // --- Test 15: god_mode=true causes yellow pixels in health number region ---
+    #[test]
+    fn god_mode_true_health_is_yellow() {
+        let mut fb_god = Framebuffer::new();
+        let mut fb_normal = Framebuffer::new();
+
+        let mut data = StatusBarData::default();
+        data.health = 100;
+
+        // Draw normal bar, then apply the overlay manually for god mode.
+        draw_status_bar_data(&mut fb_normal, &data);
+        draw_status_bar_data(&mut fb_god, &data);
+        apply_god_mode_overlay(&mut fb_god, data.health);
+
+        // In the god framebuffer there must be at least one COLOR_YELLOW pixel
+        // in the health number region (x=52..76, y=bar_y+12..bar_y+21).
+        let bar_y = STATUS_BAR_Y;
+        let mut found_yellow_god = false;
+        let mut found_red_god = false;
+        for dy in 0..DIGIT_H as usize {
+            for dx in 0..(3 * 8usize) {
+                let px = fb_god.get_pixel(52 + dx, bar_y + 12 + dy);
+                if px == Some(COLOR_YELLOW) {
+                    found_yellow_god = true;
+                }
+                if px == Some(COLOR_RED) {
+                    found_red_god = true;
+                }
+            }
+        }
+        assert!(
+            found_yellow_god,
+            "god mode health region must contain at least one COLOR_YELLOW pixel"
+        );
+        // The overlay overwrites the red health pixels; there should be no red
+        // pixels remaining in the health number area when health=100.
+        assert!(
+            !found_red_god,
+            "god mode health region must not contain COLOR_RED pixels after overlay"
+        );
+
+        // Normal bar should have red there, not yellow.
+        let mut found_red_normal = false;
+        for dy in 0..DIGIT_H as usize {
+            for dx in 0..(3 * 8usize) {
+                if fb_normal.get_pixel(52 + dx, bar_y + 12 + dy) == Some(COLOR_RED) {
+                    found_red_normal = true;
+                }
+            }
+        }
+        assert!(
+            found_red_normal,
+            "normal bar health region must contain COLOR_RED pixels"
+        );
+    }
+
+    // --- Test 16: god_mode=false leaves health as normal red ---
+    #[test]
+    fn god_mode_false_health_stays_red() {
+        let mut fb = Framebuffer::new();
+        let player = default_player();
+        // draw_status_bar with god_mode=false.
+        draw_status_bar(&mut fb, &player, false);
+
+        // Health region should not contain COLOR_YELLOW in the number area
+        // (player default health is 0, so the "0" digit renders; check both color
+        // presence: yellow must be absent, background/red must appear as drawn).
+        let bar_y = STATUS_BAR_Y;
+        let mut found_yellow = false;
+        for dy in 0..DIGIT_H as usize {
+            for dx in 0..(3 * 8usize) {
+                if fb.get_pixel(52 + dx, bar_y + 12 + dy) == Some(COLOR_YELLOW) {
+                    found_yellow = true;
+                }
+            }
+        }
+        assert!(
+            !found_yellow,
+            "non-god mode must not show COLOR_YELLOW in the health number area"
+        );
+    }
+
+    // --- Test 17: god_mode=true causes yellow face border ---
+    #[test]
+    fn god_mode_true_face_border_is_yellow() {
+        let mut fb = Framebuffer::new();
+        let mut data = StatusBarData::default();
+        data.health = 100;
+        draw_status_bar_data(&mut fb, &data);
+        apply_god_mode_overlay(&mut fb, data.health);
+
+        // The top border of the face rectangle (y=bar_y+2, x=144..181) must be yellow.
+        let bar_y = STATUS_BAR_Y as i32;
+        let face_x = 144i32;
+        let face_y = bar_y + 2;
+        let face_w = 38i32;
+
+        let mut found_yellow = false;
+        for dx in 0..face_w {
+            if fb.get_pixel((face_x + dx) as usize, face_y as usize) == Some(COLOR_YELLOW) {
+                found_yellow = true;
+            }
+        }
+        assert!(
+            found_yellow,
+            "god mode face top border must contain COLOR_YELLOW pixels"
+        );
     }
 }

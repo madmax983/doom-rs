@@ -60,7 +60,6 @@ const FOCAL_LEN: i32 = 160; // = HALF_W, 90° horizontal FOV
 /// Assumed player eye height above the floor (map units, fixed-point integer).
 const PLAYER_HEIGHT: i32 = 41;
 
-
 #[inline]
 fn is_no_texture(name: &[u8; 8]) -> bool {
     name[0] == b'-' || name.iter().all(|&b| b == 0 || b == b' ')
@@ -919,13 +918,7 @@ pub fn render_level(
                         player_ceil_flat,
                         player_light,
                     );
-                    visplanes.r_check_plane(
-                        idx,
-                        x,
-                        x,
-                        open_top[x] as i16,
-                        ceil_bot as i16,
-                    );
+                    visplanes.r_check_plane(idx, x, x, open_top[x] as i16, ceil_bot as i16);
                 }
             }
             // Floor: rows HALF_H..open_bot[x] (below horizon)
@@ -938,13 +931,7 @@ pub fn render_level(
                         player_floor_flat,
                         player_light,
                     );
-                    visplanes.r_check_plane(
-                        idx,
-                        x,
-                        x,
-                        floor_top as i16,
-                        open_bot[x] as i16,
-                    );
+                    visplanes.r_check_plane(idx, x, x, floor_top as i16, open_bot[x] as i16);
                 }
             }
         }
@@ -1592,7 +1579,10 @@ mod tests {
         );
         let px = fb.get_pixel(cx, HALF_H as usize).unwrap_or(0);
         let is_wall = (32..64).contains(&px);
-        assert!(is_wall, "fallback one-sided wall column should be wall-colored");
+        assert!(
+            is_wall,
+            "fallback one-sided wall column should be wall-colored"
+        );
     }
 
     #[test]
