@@ -289,14 +289,42 @@ pub fn render_level(
             Some(ld) => ld,
             None => continue,
         };
-        let sidedef_idx = if seg.direction == 0 {
-            linedef.right_sidedef as usize
+        let sidedef = if linedef.is_two_sided() {
+            // For true portals, seg direction selects front/back sidedef.
+            let idx = if seg.direction == 0 {
+                linedef.right_sidedef
+            } else {
+                linedef.left_sidedef
+            };
+            if idx == 0xFFFF {
+                continue;
+            }
+            match level.sidedefs.get(idx as usize) {
+                Some(sd) => sd,
+                None => continue,
+            }
         } else {
-            linedef.left_sidedef as usize
-        };
-        let sidedef = match level.sidedefs.get(sidedef_idx) {
-            Some(sd) => sd,
-            None => continue,
+            // For one-sided lines, honor seg direction first. If that side is
+            // missing, fall back to the opposite sidedef.
+            let preferred = if seg.direction == 0 {
+                linedef.right_sidedef
+            } else {
+                linedef.left_sidedef
+            };
+            let idx = if preferred != 0xFFFF {
+                preferred
+            } else if seg.direction == 0 {
+                linedef.left_sidedef
+            } else {
+                linedef.right_sidedef
+            };
+            if idx == 0xFFFF {
+                continue;
+            }
+            match level.sidedefs.get(idx as usize) {
+                Some(sd) => sd,
+                None => continue,
+            }
         };
         let sector = match level.sectors.get(sidedef.sector as usize) {
             Some(s) => s,
@@ -1433,6 +1461,7 @@ mod tests {
     #[test]
     fn one_sided_dash_middle_texture_is_not_drawn() {
         use doom_types::ANG90;
+        init_trig();
 
         let mut level = make_minimal_level();
         level.sidedefs[0].middle_texture = *b"-\0\0\0\0\0\0\0";
@@ -1458,8 +1487,35 @@ mod tests {
     }
 
     #[test]
+    fn one_sided_missing_preferred_side_falls_back_to_existing_side() {
+        use doom_types::ANG90;
+
+        let mut level = make_minimal_level();
+        // One-sided linedef: only right sidedef exists.
+        level.linedefs[0].right_sidedef = 0;
+        level.linedefs[0].left_sidedef = 0xFFFF;
+        // Force seg direction to point at the missing side first.
+        level.segs[0].direction = 1;
+        // Ensure the existing side has a drawable middle texture.
+        level.sidedefs[0].middle_texture = *b"WALL3\0\0\0";
+
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+        let zbuf = render_level(
+            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
+        );
+
+        let cx = HALF_W as usize;
+        assert!(
+            zbuf[cx].is_finite(),
+            "renderer should fall back to the existing side when preferred side is missing"
+        );
+    }
+
+    #[test]
     fn invalid_two_sided_flag_without_back_sector_renders_as_solid() {
         use doom_types::ANG90;
+        init_trig();
 
         let mut level = make_minimal_level();
         // Malformed-but-seen-in-the-wild style input: two-sided flag set but no left side.
