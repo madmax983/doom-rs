@@ -564,7 +564,39 @@ fn thing_sprite(kind: u16) -> Option<[u8; 8]> {
 /// `vx <= 0.5` is behind or too close and is skipped.  Screen X of the
 /// sprite centre is `HALF_W + FOCAL_LEN * vy / vx`; sprite screen height is
 /// `frame.height * FOCAL_LEN / vx`.
+/// Like [`render_things`] but accepts an explicit slice of things rather than
+/// pulling them from `level.things`.  Use this when rendering live game-state
+/// objects (mobjslab) whose positions have moved since the WAD was loaded.
+pub fn render_things_ex(
+    things: &[doom_map::Thing],
+    level: &doom_map::Level,
+    player_x: doom_types::Fixed16_16,
+    player_y: doom_types::Fixed16_16,
+    player_angle: doom_types::Bam,
+    fb: &mut Framebuffer,
+    cache: &SpriteCache,
+    z_buffer: Option<&[f32; SCREEN_W]>,
+    colormap: Option<&ColormapCache>,
+) {
+    render_things_impl(things, level, player_x, player_y, player_angle, fb, cache, z_buffer, colormap);
+}
+
+/// Render all Things from `level.things` as billboard sprites.
 pub fn render_things(
+    level: &doom_map::Level,
+    player_x: doom_types::Fixed16_16,
+    player_y: doom_types::Fixed16_16,
+    player_angle: doom_types::Bam,
+    fb: &mut Framebuffer,
+    cache: &SpriteCache,
+    z_buffer: Option<&[f32; SCREEN_W]>,
+    colormap: Option<&ColormapCache>,
+) {
+    render_things_impl(&level.things, level, player_x, player_y, player_angle, fb, cache, z_buffer, colormap);
+}
+
+fn render_things_impl(
+    things: &[doom_map::Thing],
     level: &doom_map::Level,
     player_x: doom_types::Fixed16_16,
     player_y: doom_types::Fixed16_16,
@@ -591,8 +623,7 @@ pub fn render_things(
     let mut fuzz_pos: usize = 0;
 
     // ---------- Collect visible things with their view-space depths ----------
-    let mut visible: Vec<(f32, &doom_map::Thing)> = level
-        .things
+    let mut visible: Vec<(f32, &doom_map::Thing)> = things
         .iter()
         .filter_map(|thing| {
             let dx = thing.x as f32 - px;

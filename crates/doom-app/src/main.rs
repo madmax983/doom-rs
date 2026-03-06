@@ -17,15 +17,15 @@ use doom_game::dehacked::DehPatch;
 use doom_game::player::WeaponType;
 use doom_game::{
     GameState, Skill, TicCmd, check_cross_lines, init_conveyors, init_scrolling_walls,
-    init_sector_lights, spawn_level_things,
+    init_sector_lights, kind_to_doomed_type, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
-use doom_map::Level;
+use doom_map::{Level, Thing};
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
     AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer, PaletteFlash,
     PaletteLut, SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_menu, draw_status_bar,
-    draw_weapon_sprite, render_level, render_things,
+    draw_weapon_sprite, render_level, render_things_ex,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -404,11 +404,32 @@ impl DoomApp for DoomGame {
                 false,
             );
 
-            // Project level Things as billboard sprites (painter's algorithm,
-            // back-to-front). Must run after render_level so walls are already
-            // drawn into the framebuffer. Z-buffer clips sprites behind walls.
+            // Project live mobj positions as billboard sprites (painter's
+            // algorithm, back-to-front). Using mobjslab rather than
+            // level.things so monsters actually move.
             if let Some(ref cache) = self.sprite_cache {
-                render_things(
+                let player_handle = self.gs.player.handle;
+                let live_things: Vec<Thing> = self
+                    .gs
+                    .mobjslab
+                    .iter_handles()
+                    .filter(|&h| h != player_handle)
+                    .filter_map(|h| self.gs.mobjslab.get(h))
+                    .filter_map(|mo| {
+                        let doomed = kind_to_doomed_type(mo.kind)?;
+                        // Convert BAM angle → degrees (0-359)
+                        let deg = (mo.angle.0 as u64 * 360 / 0x1_0000_0000u64) as u16;
+                        Some(Thing {
+                            x: mo.x.to_int() as i16,
+                            y: mo.y.to_int() as i16,
+                            angle: deg,
+                            kind: doomed,
+                            flags: 0,
+                        })
+                    })
+                    .collect();
+                render_things_ex(
+                    &live_things,
                     &self.level,
                     Fixed16_16::from_int(px),
                     Fixed16_16::from_int(py),

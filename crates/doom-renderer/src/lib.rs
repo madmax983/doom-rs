@@ -68,8 +68,8 @@ pub use sky::{
 pub use span::{DrawSpanParams, FLAT_DIM, FLAT_MASK, draw_span, draw_span_solid};
 pub use sprite::{
     SpriteCache, SpriteFrame, compute_sprite_rotation, draw_sprite, draw_sprite_ex,
-    draw_weapon_sprite, render_flag_for_thing, render_things, sector_for_point, sprite_lump_name,
-    thing_has_rotations, thing_sprite_prefix,
+    draw_weapon_sprite, render_flag_for_thing, render_things, render_things_ex,
+    sector_for_point, sprite_lump_name, thing_has_rotations, thing_sprite_prefix,
 };
 pub use sprite_lookup::{
     ActorRenderInfo, ResolvedSprite, compute_rotation, render_flag_from_state, resolve_sprite,

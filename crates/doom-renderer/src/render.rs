@@ -34,7 +34,7 @@ use doom_map::bsp::BspTree;
 use doom_types::Bam;
 
 use crate::anim::AnimState;
-use crate::clip::clip_seg_to_near_plane;
+use crate::clip::clip_seg_to_view_frustum;
 use crate::colormap::ColormapCache;
 use crate::column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column};
 use crate::flat_cache::FlatCache;
@@ -377,8 +377,10 @@ pub fn render_level(
         // Only treat as portal when a valid back sector exists.
         let is_two_sided = back_sector.is_some();
 
-        // Near-clip.
-        let clipped = match clip_seg_to_near_plane(vx1, vy1, vx2, vy2) {
+        // Clip to full view frustum (near + left/right FOV planes).
+        // This bounds span_w to ≤ SCREEN_W, preventing texture warp when
+        // a wall vertex passes close to or behind the near plane.
+        let clipped = match clip_seg_to_view_frustum(vx1, vy1, vx2, vy2) {
             Some(c) => c,
             None => continue,
         };
@@ -475,9 +477,18 @@ pub fn render_level(
                 if portal_top <= portal_bot {
                     wall_clip_top[x] = wall_clip_top[x].max(portal_top);
                     wall_clip_bot[x] = wall_clip_bot[x].min(portal_bot);
+                    // If accumulation of portals has fully closed this column,
+                    // write depth so sprites behind it cannot bleed through.
+                    if wall_clip_top[x] > wall_clip_bot[x] && depth_f32 < z_buf[x] {
+                        z_buf[x] = depth_f32;
+                    }
                 } else {
                     wall_clip_top[x] = 1;
                     wall_clip_bot[x] = 0;
+                    // Fully-closed portal: acts as solid for sprite occlusion.
+                    if depth_f32 < z_buf[x] {
+                        z_buf[x] = depth_f32;
+                    }
                 }
 
                 // Clamp so upper ≤ lower (degenerate case: equal heights, sealed door).
@@ -748,6 +759,10 @@ pub fn render_level(
                     continue;
                 }
 
+                // Write depth immediately: solid walls always occlude sprites
+                // even when their visible column is clipped away by a portal.
+                z_buf[x] = depth_f32;
+
                 // Project front sector ceiling/floor against camera height.
                 let mut w_top = HALF_H - ((ceil_h - view_z) * FOCAL_LEN / depth_i32.max(1));
                 let mut w_bot = HALF_H - ((floor_h - view_z) * FOCAL_LEN / depth_i32.max(1));
@@ -765,8 +780,6 @@ pub fn render_level(
                 if draw_top > draw_bot {
                     continue;
                 }
-
-                z_buf[x] = depth_f32;
 
                 // Inline visplane emission for one-sided walls.
                 {
@@ -1016,6 +1029,7 @@ pub fn render_level(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::clip::clip_seg_to_near_plane;
 
     /// Build a minimal Level with one sector and one seg for testing.
     fn make_minimal_level() -> Level {

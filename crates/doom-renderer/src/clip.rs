@@ -47,6 +47,65 @@ pub fn clip_seg_to_near_plane(
     }
 }
 
+/// Clip a view-space seg against one half-plane defined by signed distances
+/// `d1` / `d2` from the plane at each endpoint (inside when `d >= 0`).
+///
+/// Returns the (possibly shortened) segment, or `None` if fully outside.
+#[inline]
+fn clip_one_plane(
+    vx1: i64, vy1: i64, vx2: i64, vy2: i64,
+    d1: i64, d2: i64,
+) -> Option<(i64, i64, i64, i64)> {
+    if d1 >= 0 && d2 >= 0 {
+        return Some((vx1, vy1, vx2, vy2));
+    }
+    if d1 < 0 && d2 < 0 {
+        return None;
+    }
+    // One endpoint is outside; compute the intersection point.
+    if d1 < 0 {
+        // p1 is outside — clip p1 toward p2.
+        let t_num = -d1;
+        let t_den = d2 - d1; // positive
+        let nx = vx1 + t_num * (vx2 - vx1) / t_den;
+        let ny = vy1 + t_num * (vy2 - vy1) / t_den;
+        Some((nx, ny, vx2, vy2))
+    } else {
+        // p2 is outside — clip p2 toward p1.
+        let t_num = d1;
+        let t_den = d1 - d2; // positive
+        let nx = vx1 + t_num * (vx2 - vx1) / t_den;
+        let ny = vy1 + t_num * (vy2 - vy1) / t_den;
+        Some((vx1, vy1, nx, ny))
+    }
+}
+
+/// Clip a view-space seg to the full view frustum for a 90° FOV.
+///
+/// Applies three half-plane clips in sequence:
+/// - **Near plane** `vx ≥ 1`: eliminates geometry behind the player.
+/// - **Left frustum** `vx + vy ≥ 0`: corresponds to screen column 0.
+/// - **Right frustum** `vx − vy ≥ 0`: corresponds to screen column 320.
+///
+/// After clipping, both endpoints project to screen columns within `[0, 320]`,
+/// which prevents huge `span_w` values and the wall-texture warp that results
+/// from them.  Returns `None` if the seg is entirely outside the frustum.
+#[must_use]
+pub fn clip_seg_to_view_frustum(
+    vx1: i64, vy1: i64, vx2: i64, vy2: i64,
+) -> Option<(i64, i64, i64, i64)> {
+    // 1. Near plane: d = vx - 1
+    let (vx1, vy1, vx2, vy2) =
+        clip_one_plane(vx1, vy1, vx2, vy2, vx1 - 1, vx2 - 1)?;
+    // 2. Left frustum: d = vx + vy  (inside when vy >= -vx)
+    let (vx1, vy1, vx2, vy2) =
+        clip_one_plane(vx1, vy1, vx2, vy2, vx1 + vy1, vx2 + vy2)?;
+    // 3. Right frustum: d = vx - vy  (inside when vy <= vx)
+    let (vx1, vy1, vx2, vy2) =
+        clip_one_plane(vx1, vy1, vx2, vy2, vx1 - vy1, vx2 - vy2)?;
+    Some((vx1, vy1, vx2, vy2))
+}
+
 /// Tracks which screen columns are already fully blocked by nearer one-sided walls.
 ///
 /// This is a compact `solidsegs`-style approximation for a fixed 320-column

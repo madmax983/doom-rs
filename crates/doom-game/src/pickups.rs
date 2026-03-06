@@ -123,6 +123,85 @@ pub fn doomed_type_to_kind(doomed_type: u16) -> Option<MobjKind> {
     }
 }
 
+/// Reverse of [`doomed_type_to_kind`]: map a `MobjKind` back to its DoomEd
+/// type number so live mobjs can be passed to the sprite renderer.
+///
+/// Returns `None` for internal kinds that have no WAD thing type (projectiles,
+/// visual effects, etc.).
+pub fn kind_to_doomed_type(kind: MobjKind) -> Option<u16> {
+    Some(match kind {
+        MobjKind::Player => 1,
+        // Monsters
+        MobjKind::Trooper => 3004,
+        MobjKind::Sergeant => 9,
+        MobjKind::Imp => 3001,
+        MobjKind::Demon => 3002,
+        MobjKind::Spectre => 58,
+        MobjKind::LostSoul => 3006,
+        MobjKind::Cacodemon => 3005,
+        MobjKind::BaronOfHell => 3003,
+        MobjKind::HellKnight => 69,
+        MobjKind::Arachnotron => 68,
+        MobjKind::PainElemental => 71,
+        MobjKind::Revenant => 66,
+        MobjKind::Mancubus => 67,
+        MobjKind::ArchVile => 64,
+        MobjKind::SpiderMastermind => 7,
+        MobjKind::Cyberdemon => 16,
+        MobjKind::WolfSS => 84,
+        // Weapons
+        MobjKind::Shotgun => 2001,
+        MobjKind::SuperShotgun => 82,
+        MobjKind::Chaingun => 2002,
+        MobjKind::RocketLauncher => 2003,
+        MobjKind::PlasmaRifle => 2004,
+        MobjKind::BfgPickup => 2006,
+        MobjKind::Chainsaw => 2005,
+        // Ammo
+        MobjKind::Clip => 2007,
+        MobjKind::ClipBox => 2048,
+        MobjKind::Shell => 2008,
+        MobjKind::ShellBox => 2049,
+        MobjKind::RocketAmmo => 2010,
+        MobjKind::RocketBox => 2046,
+        MobjKind::Cell => 2047,
+        MobjKind::CellPack => 17,
+        // Health & armor
+        MobjKind::HealthBonus => 2014,
+        MobjKind::ArmorBonus => 2015,
+        MobjKind::GreenArmor => 2018,
+        MobjKind::BlueArmor => 2019,
+        MobjKind::Stimpack => 2011,
+        MobjKind::Medikit => 2012,
+        MobjKind::Megasphere => 83,
+        MobjKind::Soulsphere => 2013,
+        // Keys
+        MobjKind::BlueCard => 5,
+        MobjKind::RedCard => 13,
+        MobjKind::YellowCard => 6,
+        MobjKind::BlueSkull => 40,
+        MobjKind::RedSkull => 38,
+        MobjKind::YellowSkull => 39,
+        // Power-ups
+        MobjKind::Berserk => 2023,
+        MobjKind::BlurSphere => 2024,
+        MobjKind::RadSuit => 2025,
+        MobjKind::Allmap => 2026,
+        MobjKind::Infrared => 2045,
+        MobjKind::InvulnerabilitySphere => 2022,
+        MobjKind::Backpack => 8,
+        // Decorations
+        MobjKind::Barrel => 2035,
+        MobjKind::TechLamp => 85,
+        MobjKind::TechLamp2 => 86,
+        // Boss specials
+        MobjKind::BossBrain => 88,
+        MobjKind::CommanderKeen => 72,
+        // Projectiles and visual effects have no DoomEd number.
+        _ => return None,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
