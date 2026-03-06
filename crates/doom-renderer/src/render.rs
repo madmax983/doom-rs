@@ -385,9 +385,10 @@ pub fn render_level(
         let (vx1, vy1, vx2, vy2) = clipped;
 
         // Project to screen columns.
-        // sx = HALF_W - FOCAL_LEN * vy / vx
-        let sx1 = HALF_W as i64 - (FOCAL_LEN as i64 * vy1) / vx1.max(1);
-        let sx2 = HALF_W as i64 - (FOCAL_LEN as i64 * vy2) / vx2.max(1);
+        // vy is the right-lateral component (positive = to the player's right),
+        // so sx = HALF_W + FOCAL_LEN * vy / vx maps right-side geometry to right columns.
+        let sx1 = HALF_W as i64 + (FOCAL_LEN as i64 * vy1) / vx1.max(1);
+        let sx2 = HALF_W as i64 + (FOCAL_LEN as i64 * vy2) / vx2.max(1);
 
         let (sx_left, vx_left, sx_right, vx_right) = if sx1 <= sx2 {
             (sx1, vx1, sx2, vx2)
@@ -1726,6 +1727,10 @@ mod tests {
     /// Regression: passing `flat_cache = None` must not panic (backward compat).
     #[test]
     fn test_render_level_with_flat_cache_none_smoke() {
+        // Initialise trig tables so Bam::ZERO.cos()/sin() return correct values
+        // regardless of test execution order (the guard makes this idempotent).
+        unsafe { doom_types::Bam::init_trig_tables() };
+
         let level = make_minimal_level();
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
@@ -1744,10 +1749,12 @@ mod tests {
             false,
         );
 
-        // Background colour index 25 was written to the top half.
-        assert_eq!(fb.get_pixel(0, 0), Some(25));
-        // Background colour index 119 was written to the bottom half.
-        assert_eq!(fb.get_pixel(0, SCREEN_H - 1), Some(119));
+        // The minimal wall (north of the east-facing player) projects to the left
+        // portion of the screen (~columns 0-80).  Column 319 is always background.
+        // Background fill: 25 = ceiling (top half, rows 0..100).
+        assert_eq!(fb.get_pixel(319, 0), Some(25));
+        // Background fill: 119 = floor (bottom half, rows 100..200).
+        assert_eq!(fb.get_pixel(319, SCREEN_H - 1), Some(119));
     }
 
     /// Regression: passing `tex_cache = None` must not panic (backward compat).
