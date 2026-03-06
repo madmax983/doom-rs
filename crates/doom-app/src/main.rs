@@ -14,7 +14,11 @@ use clap::Parser;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
-use doom_game::{GameState, Mobj, MobjKind, TicCmd, flags, init_conveyors, init_scrolling_walls};
+use doom_game::player::WeaponType;
+use doom_game::{
+    GameState, Skill, TicCmd, check_cross_lines, init_conveyors, init_scrolling_walls,
+    init_sector_lights, spawn_level_things,
+};
 use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
@@ -78,6 +82,15 @@ struct Args {
     /// Total number of players in a netplay session (2-4).  Defaults to 2.
     #[arg(long, default_value = "2")]
     num_players: u8,
+
+    /// Headless capture: render N frames and save a BMP screenshot, then exit.
+    /// Example: --capture screenshot.bmp
+    #[arg(long)]
+    capture: Option<std::path::PathBuf>,
+
+    /// Number of frames to tick before capturing (default: 1).
+    #[arg(long, default_value = "1")]
+    capture_frames: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -136,6 +149,9 @@ impl DoomGame {
         // Initialize scrolling wall and conveyor belt specials from level linedefs.
         init_scrolling_walls(&mut gs, &level);
         init_conveyors(&mut gs, &level);
+
+        // Initialize dynamic sector lighting (blinking, strobe, fireflicker).
+        init_sector_lights(&mut gs, &level);
 
         // Capture initial player health for pain-flash delta detection.
         let initial_health = gs.player.health();
@@ -265,7 +281,31 @@ impl DoomApp for DoomGame {
         let attack_pressed_now = cmd.buttons & doom_tui::buttons::BT_ATTACK != 0;
         let attack_just_fired = attack_pressed_now && !self.prev_attack_down;
 
+        // Capture player position before the tick for walk-trigger detection.
+        let (old_px, old_py) = match self.gs.mobjslab.get(self.gs.player.handle) {
+            Some(mo) => (mo.x.to_int(), mo.y.to_int()),
+            None => (0, 0),
+        };
+
         self.gs.tick(cmd, Some(&mut self.level));
+
+        // Check if the player crossed any walk-triggered linedefs.
+        let player_handle = self.gs.player.handle;
+        if let Some(mo) = self.gs.mobjslab.get(player_handle) {
+            let new_px = mo.x.to_int();
+            let new_py = mo.y.to_int();
+            if new_px != old_px || new_py != old_py {
+                check_cross_lines(
+                    &mut self.gs,
+                    &mut self.level,
+                    player_handle,
+                    old_px,
+                    old_py,
+                    new_px,
+                    new_py,
+                );
+            }
+        }
 
         // Advance animated texture state (flat and wall animations).
         self.anim_state.tick();
@@ -359,9 +399,10 @@ impl DoomApp for DoomGame {
                 );
             }
 
-            // Draw weapon sprite overlay (pistol idle frame A).
+            // Draw weapon sprite overlay using the player's current weapon.
             if let Some(ref cache) = self.sprite_cache {
-                draw_weapon_sprite(fb, b"PISGA0\0\0", cache, &IDENTITY_COLORMAP);
+                let sprite_name = weapon_idle_sprite(self.gs.player.weapon);
+                draw_weapon_sprite(fb, &sprite_name, cache, &IDENTITY_COLORMAP);
             }
 
             // Draw HUD status bar over the bottom 32 rows.
@@ -488,6 +529,25 @@ fn mini_glyph(ch: char) -> [u8; 6] {
 }
 
 // ---------------------------------------------------------------------------
+// Weapon sprite mapping
+// ---------------------------------------------------------------------------
+
+/// Map the player's current weapon to its idle sprite lump name (8 bytes).
+fn weapon_idle_sprite(weapon: WeaponType) -> [u8; 8] {
+    match weapon {
+        WeaponType::Fist => *b"PUNGA0\0\0",
+        WeaponType::Pistol => *b"PISGA0\0\0",
+        WeaponType::Shotgun => *b"SHTGA0\0\0",
+        WeaponType::Chaingun => *b"CHGGA0\0\0",
+        WeaponType::RocketLauncher => *b"MISGA0\0\0",
+        WeaponType::PlasmaRifle => *b"PLSGA0\0\0",
+        WeaponType::Bfg => *b"BFGGA0\0\0",
+        WeaponType::Chainsaw => *b"SAWGA0\0\0",
+        WeaponType::SuperShotgun => *b"SHT2A0\0\0",
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Input conversion
 // ---------------------------------------------------------------------------
 
@@ -504,39 +564,8 @@ pub(crate) fn ticinput_to_ticcmd(input: TicInput) -> TicCmd {
     cmd
 }
 
-// ---------------------------------------------------------------------------
-// Player spawning
-// ---------------------------------------------------------------------------
-
-/// Find player 1 start thing (kind == 1) and spawn a Mobj at that position.
-fn spawn_player(gs: &mut GameState, level: &Level) {
-    // Thing::kind is the DoomEd type number; 1 = player 1 start.
-    let start = level.things.iter().find(|t| t.kind == 1);
-
-    let (x, y, angle_deg) = match start {
-        Some(t) => (t.x as i32, t.y as i32, t.angle as u32),
-        None => (0, 0, 0u32),
-    };
-
-    // Convert degrees (0–359) to 32-bit BAM.
-    // BAM full circle = 2^32. One degree = 2^32 / 360 ≈ 11930465.
-    let bam_per_degree = (0x1_0000_0000u64 / 360) as u32;
-    let angle = Bam(angle_deg.wrapping_mul(bam_per_degree));
-
-    let mut mo = Mobj::new(
-        MobjKind::Player,
-        Fixed16_16::from_int(x),
-        Fixed16_16::from_int(y),
-        angle,
-    );
-    mo.health = 100;
-    mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
-    mo.radius = Fixed16_16::from_int(16);
-    mo.height = Fixed16_16::from_int(56);
-
-    let handle = gs.mobjslab.alloc(mo);
-    gs.player = doom_game::PlayerState::pistol_start(handle);
-}
+// `spawn_player` removed — replaced by `spawn_level_things` which spawns
+// ALL map things (player, monsters, items, decorations, keys).
 
 // ---------------------------------------------------------------------------
 // main
@@ -569,9 +598,16 @@ fn main() -> Result<()> {
     let level = Level::from_wad(&wad, &args.warp)
         .with_context(|| format!("Failed to load map {}", args.warp))?;
 
-    // Create game state and spawn the player at the map's player-1-start.
+    // Create game state and spawn ALL level things (player, monsters, items, keys).
     let mut gs = GameState::new(&args.warp);
-    spawn_player(&mut gs, &level);
+    let skill = match args.skill {
+        1 => Skill::Baby,
+        2 => Skill::Easy,
+        4 => Skill::Hard,
+        5 => Skill::Nightmare,
+        _ => Skill::Medium, // default: 3 = Hurt Me Plenty
+    };
+    spawn_level_things(&mut gs, &level, skill, false);
 
     // Apply DeHackEd patch if one was specified.
     if let Some(ref deh_path) = args.deh {
@@ -651,6 +687,28 @@ fn main() -> Result<()> {
         colormap_cache,
     );
 
+    // Headless capture mode: tick N frames, render, save BMP, exit.
+    if let Some(ref capture_path) = args.capture {
+        let mut app = app;
+        let mut fb = Framebuffer::new();
+
+        // Tick the game for the requested number of frames.
+        for _ in 0..args.capture_frames {
+            app.tick(TicInput::default());
+        }
+        app.render(&mut fb);
+
+        // Write the framebuffer as a 24-bit BMP file.
+        write_bmp(capture_path, &fb, &blit_palette, app.active_palette())
+            .with_context(|| format!("Failed to write capture: {}", capture_path.display()))?;
+        eprintln!(
+            "Captured frame {} to {}",
+            args.capture_frames,
+            capture_path.display()
+        );
+        return Ok(());
+    }
+
     // Client (netplay) mode: wrap DoomGame in a NetGameApp for network-aware input.
     if let Some(ref addr_str) = args.connect {
         let client = doom_net::NetClient::connect(addr_str, 0)
@@ -694,6 +752,65 @@ fn main() -> Result<()> {
         event_loop
             .run(&mut app, &blit_palette)
             .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// BMP frame capture (zero extra dependencies)
+// ---------------------------------------------------------------------------
+
+/// Write a 320x200 palette-indexed framebuffer as a 24-bit BMP file.
+fn write_bmp(
+    path: &std::path::Path,
+    fb: &Framebuffer,
+    palette: &PaletteLut,
+    active_palette: usize,
+) -> std::io::Result<()> {
+    use std::io::Write;
+
+    const W: usize = 320;
+    const H: usize = 200;
+    // Each row: W * 3 bytes BGR. Row stride must be 4-byte aligned.
+    let row_bytes = W * 3;
+    let row_stride = (row_bytes + 3) & !3;
+    let pixel_data_size = row_stride * H;
+    let file_size = 14 + 40 + pixel_data_size;
+
+    let mut out = std::fs::File::create(path)?;
+
+    // -- BMP file header (14 bytes) --
+    out.write_all(b"BM")?;
+    out.write_all(&(file_size as u32).to_le_bytes())?;
+    out.write_all(&0u32.to_le_bytes())?; // reserved
+    out.write_all(&54u32.to_le_bytes())?; // pixel data offset
+
+    // -- DIB header (BITMAPINFOHEADER, 40 bytes) --
+    out.write_all(&40u32.to_le_bytes())?;
+    out.write_all(&(W as i32).to_le_bytes())?;
+    out.write_all(&(H as i32).to_le_bytes())?; // positive = bottom-up
+    out.write_all(&1u16.to_le_bytes())?; // planes
+    out.write_all(&24u16.to_le_bytes())?; // bits per pixel
+    out.write_all(&0u32.to_le_bytes())?; // compression (none)
+    out.write_all(&(pixel_data_size as u32).to_le_bytes())?;
+    out.write_all(&0u32.to_le_bytes())?; // x ppm
+    out.write_all(&0u32.to_le_bytes())?; // y ppm
+    out.write_all(&0u32.to_le_bytes())?; // colors used
+    out.write_all(&0u32.to_le_bytes())?; // important colors
+
+    // -- Pixel data (bottom-up rows, BGR) --
+    let pad = [0u8; 3];
+    let pad_len = row_stride - row_bytes;
+    for y in (0..H).rev() {
+        for x in 0..W {
+            let idx = fb.data[y * W + x];
+            let rgb = palette.get(active_palette, idx);
+            out.write_all(&[rgb.b, rgb.g, rgb.r])?;
+        }
+        if pad_len > 0 {
+            out.write_all(&pad[..pad_len])?;
+        }
     }
 
     Ok(())

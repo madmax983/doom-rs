@@ -83,8 +83,12 @@ impl TextureCache {
             return None;
         }
 
-        // Trim null bytes and uppercase for the hashmap lookup.
-        let len = name.iter().position(|&b| b == 0).unwrap_or(8);
+        // Trim trailing NUL/space padding and uppercase for hashmap lookup.
+        // Some maps may space-pad names in sidedefs.
+        let len = name
+            .iter()
+            .rposition(|&b| b != 0 && b != b' ')
+            .map_or(0, |i| i + 1);
         let key = String::from_utf8_lossy(&name[..len]).to_uppercase();
         self.textures.get(&key)
     }
@@ -165,35 +169,35 @@ fn parse_texture_lump(
             data[off_idx + 3],
         ]) as usize;
 
-        if tex_offset + 20 > data.len() {
+        if tex_offset + 22 > data.len() {
             continue;
         }
 
         // Parse texture header at tex_offset.
         // Layout (offsets relative to tex_offset):
         //   +0   u8[8]  name
-        //   +8   u16    masked  (skip)
-        //   +10  u16    width
-        //   +12  u16    height
-        //   +14  u32    columndir (unused in Doom, skip)
-        //   +18  u16    patch_count
-        //   +20  patch_count × MapPatch (10 bytes each)
+        //   +8   u32    masked  (skip)
+        //   +12  u16    width
+        //   +14  u16    height
+        //   +16  u32    columndir (unused in Doom, skip)
+        //   +20  u16    patch_count
+        //   +22  patch_count × MapPatch (10 bytes each)
         let name_bytes = &data[tex_offset..tex_offset + 8];
         let name_len = name_bytes.iter().position(|&b| b == 0).unwrap_or(8);
         let name = String::from_utf8_lossy(&name_bytes[..name_len]).to_uppercase();
 
-        let width = u16::from_le_bytes([data[tex_offset + 10], data[tex_offset + 11]]) as u32;
-        let height = u16::from_le_bytes([data[tex_offset + 12], data[tex_offset + 13]]) as u32;
-        // columndir at [tex_offset+14..tex_offset+18] — skipped
+        let width = u16::from_le_bytes([data[tex_offset + 12], data[tex_offset + 13]]) as u32;
+        let height = u16::from_le_bytes([data[tex_offset + 14], data[tex_offset + 15]]) as u32;
+        // columndir at [tex_offset+16..tex_offset+20] — skipped
         let patch_count =
-            u16::from_le_bytes([data[tex_offset + 18], data[tex_offset + 19]]) as usize;
+            u16::from_le_bytes([data[tex_offset + 20], data[tex_offset + 21]]) as usize;
 
         if width == 0 || height == 0 {
             continue;
         }
 
-        // Parse MapPatch entries (10 bytes each), starting at tex_offset + 20.
-        let patches_start = tex_offset + 20;
+        // Parse MapPatch entries (10 bytes each), starting at tex_offset + 22.
+        let patches_start = tex_offset + 22;
         let mut patches = Vec::with_capacity(patch_count);
         for p in 0..patch_count {
             let poff = patches_start + p * 10;
@@ -444,8 +448,8 @@ mod tests {
             name_buf[i] = b.to_ascii_uppercase();
         }
         out.extend_from_slice(&name_buf);
-        // masked (u16)
-        out.extend_from_slice(&0u16.to_le_bytes());
+        // masked (u32)
+        out.extend_from_slice(&0u32.to_le_bytes());
         // width, height (u16 each)
         out.extend_from_slice(&width.to_le_bytes());
         out.extend_from_slice(&height.to_le_bytes());

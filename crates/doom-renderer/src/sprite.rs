@@ -672,7 +672,8 @@ pub fn render_things(
 
         let dx = thing.x as f32 - px;
         let dy = thing.y as f32 - py;
-        let vy = -dx * sin_a + dy * cos_a; // lateral displacement
+        // Match render.rs view transform so sprite columns align with wall columns.
+        let vy = dx * sin_a - dy * cos_a; // lateral displacement
 
         // --- Screen-space projection ---
         // Horizontal centre of the sprite on screen.
@@ -1499,7 +1500,7 @@ mod tests {
         let dx = thing_x - px;
         let dy = thing_y - py;
         let vx = dx * cos_a + dy * sin_a;
-        let vy = -dx * sin_a + dy * cos_a;
+        let vy = dx * sin_a - dy * cos_a;
 
         // vx must be positive (thing is in front).
         assert!(vx > 0.5, "thing should be in front: vx={vx}");
@@ -1511,6 +1512,57 @@ mod tests {
         assert!(
             deviation < 1.0,
             "forward thing should project to screen centre ≈160, got {sx_center}"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // render_things test 6: lateral projection uses same sign as wall pass
+    // ------------------------------------------------------------------
+    #[test]
+    fn test_proj_lateral_matches_wall_space_for_zbuf_clipping() {
+        // Place a sprite slightly off-center.
+        let thing = make_thing(100, 50, 2035);
+        let level = make_test_level(vec![thing]);
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 77));
+
+        // Expected sprite center from the wall transform convention in render.rs:
+        //   vx = dx*cos + dy*sin
+        //   vy = dx*sin - dy*cos
+        //   sx = HALF_W - FOCAL_LEN * vy / vx
+        let dx = 100.0f32;
+        let dy = 50.0f32;
+        let vx = dx; // facing east => cos=1, sin=0
+        let vy = -dy;
+        let sx_center = HALF_W as f32 - FOCAL_LEN * vy / vx;
+
+        // Block a band around the expected sprite columns.
+        let mut zbuf = [f32::MAX; SCREEN_W];
+        let band_center = sx_center.round() as i32;
+        for x in (band_center - 20)..=(band_center + 20) {
+            if (0..SCREEN_W as i32).contains(&x) {
+                zbuf[x as usize] = 10.0;
+            }
+        }
+
+        let mut fb = Framebuffer::new();
+        render_things(
+            &level,
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Fixed16_16::from_int(0),
+            doom_types::Bam(0),
+            &mut fb,
+            &cache,
+            Some(&zbuf),
+            None,
+        );
+
+        // Sprite depth is ~100, so it should be fully clipped by zbuf=10 if
+        // its projected columns match wall-space projection.
+        assert!(
+            fb.data.iter().all(|&px| px != 77),
+            "sprite should be clipped when z-buffer blocks its wall-space columns"
         );
     }
 

@@ -60,8 +60,11 @@ impl FlatCache {
     /// format). Lookup is case-insensitive. Returns the default (zeroed) flat
     /// if the name is not in the cache.
     pub fn get(&self, name: &[u8; 8]) -> &[u8; FLAT_SIZE] {
-        // Trim null bytes and uppercase for lookup.
-        let len = name.iter().position(|&b| b == 0).unwrap_or(8);
+        // Trim trailing NUL/space padding and uppercase for lookup.
+        let len = name
+            .iter()
+            .rposition(|&b| b != 0 && b != b' ')
+            .map_or(0, |i| i + 1);
         let key = String::from_utf8_lossy(&name[..len]).to_uppercase();
         self.flats
             .get(&key)
@@ -166,6 +169,19 @@ mod tests {
             a as *const _, b as *const _,
             "same name should return same pointer"
         );
+    }
+
+    #[test]
+    fn test_flat_cache_space_padded_lookup() {
+        let flat_data = vec![99u8; FLAT_SIZE];
+        let lumps: Vec<(&str, &[u8])> =
+            vec![("F_START", b""), ("LAVA", &flat_data), ("F_END", b"")];
+        let wad_bytes = make_iwad(&lumps);
+        let wad = WadFile::parse(wad_bytes).expect("parse WAD");
+        let cache = FlatCache::load(&wad);
+
+        let texels = cache.get(b"LAVA    ");
+        assert_eq!(texels[0], 99, "space-padded name should resolve");
     }
 
     /// Loading a WAD without `F_START`/`F_END` produces an empty cache,

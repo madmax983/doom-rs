@@ -4,7 +4,12 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(mkdir:*)",
       "Bash(cargo build:*)",
-      "Bash(cargo test:*)"
+      "Bash(cargo test:*)",
+      "Bash(cp:*)",
+      "Bash(cargo fmt:*)",
+      "Bash(cargo clippy:*)",
+      "Bash(cargo run:*)",
+      "Bash(powershell:*)"
     ]
   }
 }
