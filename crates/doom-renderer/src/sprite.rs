@@ -907,8 +907,30 @@ pub fn draw_weapon_sprite(
     colormap: &[u8; 256],
 ) {
     if let Some(frame) = cache.get(lump_name) {
-        draw_sprite(fb, frame, 160, 167, colormap);
+        draw_weapon_frame(fb, frame, 160, 167, colormap);
     }
+}
+
+fn weapon_draw_anchor_x(base_x: i32, frame: &SpriteFrame) -> i32 {
+    // Keep the overlay centered by visible width, even when source data uses
+    // non-standard patch offsets.
+    base_x + frame.left_offset as i32 - (frame.width as i32 / 2)
+}
+
+/// Draw a pre-parsed weapon frame at a desired visual center.
+///
+/// World sprites should still use [`draw_sprite`]; this helper is specific to
+/// weapon overlays where center stability is more important than raw patch
+/// offset semantics.
+pub fn draw_weapon_frame(
+    fb: &mut Framebuffer,
+    frame: &SpriteFrame,
+    base_x: i32,
+    base_y: i32,
+    colormap: &[u8; 256],
+) {
+    let draw_center_x = weapon_draw_anchor_x(base_x, frame);
+    draw_sprite(fb, frame, draw_center_x, base_y, colormap);
 }
 
 // ---------------------------------------------------------------------------
@@ -1095,6 +1117,55 @@ mod tests {
         draw_weapon_sprite(&mut fb, b"PISGA0\0\0", &cache, &IDENTITY_COLORMAP);
         // Framebuffer stays zeroed — no pixels written, no panic.
         assert!(fb.data.iter().all(|&b| b == 0), "fb should remain zeroed");
+    }
+    #[test]
+    fn test_draw_weapon_sprite_centers_when_left_offset_is_zero() {
+        let mut cache = SpriteCache::empty();
+        let frame = SpriteFrame {
+            width: 4,
+            height: 1,
+            left_offset: 0,
+            top_offset: 0,
+            pixels: vec![Some(77); 4],
+        };
+        cache.insert("PISGA0".to_string(), frame);
+
+        let mut fb = Framebuffer::new();
+        draw_weapon_sprite(&mut fb, b"PISGA0\0\0", &cache, &IDENTITY_COLORMAP);
+
+        // Width 4 centered at x=160 occupies [158, 161].
+        for x in 158..=161 {
+            assert_eq!(
+                fb.get_pixel(x, 167),
+                Some(77),
+                "x={x} should be weapon pixel"
+            );
+        }
+    }
+
+    #[test]
+    fn test_draw_weapon_sprite_centers_with_pathological_left_offset() {
+        let mut cache = SpriteCache::empty();
+        let frame = SpriteFrame {
+            width: 4,
+            height: 1,
+            left_offset: -120,
+            top_offset: 0,
+            pixels: vec![Some(88); 4],
+        };
+        cache.insert("PISGA0".to_string(), frame);
+
+        let mut fb = Framebuffer::new();
+        draw_weapon_sprite(&mut fb, b"PISGA0\0\0", &cache, &IDENTITY_COLORMAP);
+
+        // Must still render centered despite unusual source offset.
+        for x in 158..=161 {
+            assert_eq!(
+                fb.get_pixel(x, 167),
+                Some(88),
+                "x={x} should be centered weapon pixel"
+            );
+        }
     }
 
     // ------------------------------------------------------------------

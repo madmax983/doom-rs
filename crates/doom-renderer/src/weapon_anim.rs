@@ -19,7 +19,7 @@ use crate::colormap::ColormapCache;
 use crate::column::IDENTITY_COLORMAP;
 use crate::framebuffer::Framebuffer;
 use crate::lighting::LightParams;
-use crate::sprite::{SpriteCache, draw_sprite};
+use crate::sprite::{SpriteCache, draw_weapon_frame};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -318,13 +318,13 @@ pub fn draw_weapon_animated(
 
     // Draw main weapon sprite.
     if let Some(frame) = cache.get(&anim.current.sprite_name) {
-        draw_sprite(fb, frame, sx, sy, main_colormap);
+        draw_weapon_frame(fb, frame, sx, sy, main_colormap);
     }
 
     // Draw muzzle flash overlay at full brightness.
     if anim.current.flash_active {
         if let Some(flash_frame) = cache.get(&anim.current.flash_sprite) {
-            draw_sprite(fb, flash_frame, sx, sy, &IDENTITY_COLORMAP);
+            draw_weapon_frame(fb, flash_frame, sx, sy, &IDENTITY_COLORMAP);
         }
     }
 }
@@ -386,13 +386,13 @@ pub fn draw_weapon_shaded(
 
     // Draw main weapon sprite.
     if let Some(frame) = cache.get(&anim.current.sprite_name) {
-        draw_sprite(fb, frame, sx, sy, main_colormap);
+        draw_weapon_frame(fb, frame, sx, sy, main_colormap);
     }
 
     // Draw muzzle flash overlay at full brightness.
     if anim.current.flash_active {
         if let Some(flash_frame) = cache.get(&anim.current.flash_sprite) {
-            draw_sprite(fb, flash_frame, sx, sy, &IDENTITY_COLORMAP);
+            draw_weapon_frame(fb, flash_frame, sx, sy, &IDENTITY_COLORMAP);
         }
     }
 }
