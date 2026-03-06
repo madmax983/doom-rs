@@ -30,15 +30,18 @@
 //! so floor/ceiling spans fill through the gap.
 
 use doom_map::Level;
+use doom_map::bsp::BspTree;
 use doom_types::Bam;
 
 use crate::anim::AnimState;
+use crate::clip::{PlaneClipKind, clip_plane_span_runs, clip_seg_to_near_plane};
 use crate::colormap::ColormapCache;
 use crate::column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column};
 use crate::flat_cache::FlatCache;
 use crate::framebuffer::Framebuffer;
 use crate::lighting::LightParams;
 use crate::palette::PaletteLut;
+use crate::seg::collect_front_to_back_seg_indices;
 use crate::sky::{draw_sky_columns, draw_sky_fallback, is_sky_flat};
 use crate::span::{DrawSpanParams, draw_span};
 use crate::texture::TextureCache;
@@ -59,6 +62,68 @@ const PLAYER_HEIGHT: i32 = 41;
 
 /// Sentinel name used to mark columns that were never written by any seg.
 const NO_FLAT: [u8; 8] = *b"-\0\0\0\0\0\0\0";
+
+#[inline]
+fn is_no_texture(name: &[u8; 8]) -> bool {
+    name[0] == b'-' || name.iter().all(|&b| b == 0 || b == b' ')
+}
+
+fn player_sector_index(level: &Level, player_x: i32, player_y: i32) -> Option<usize> {
+    if level.sectors.is_empty() {
+        return None;
+    }
+
+    let from_seg = |seg_idx: usize| -> Option<usize> {
+        let seg = level.segs.get(seg_idx)?;
+        let linedef = level.linedefs.get(seg.linedef as usize)?;
+        let sidedef_idx = if seg.direction == 0 {
+            linedef.right_sidedef
+        } else {
+            linedef.left_sidedef
+        };
+        if sidedef_idx == 0xFFFF {
+            return None;
+        }
+        let sidedef = level.sidedefs.get(sidedef_idx as usize)?;
+        Some(sidedef.sector as usize)
+    };
+
+    if let Ok(bsp) = BspTree::validate(&level.nodes, &level.ssectors, level.segs.len())
+        && let Some(ss) = bsp.point_in_subsector(player_x, player_y)
+        && let Some(idx) = from_seg(ss.first_seg as usize)
+    {
+        return Some(idx.min(level.sectors.len() - 1));
+    }
+
+    from_seg(0).or(Some(0))
+}
+
+#[inline]
+fn draw_masked_column(
+    fb: &mut Framebuffer,
+    x: usize,
+    y_top: usize,
+    y_bot: usize,
+    mut frac: u32,
+    fracstep: u32,
+    source: &[u8],
+    colormap: &[u8; 256],
+) {
+    if x >= SCREEN_W || y_top > y_bot || source.is_empty() {
+        return;
+    }
+    let y_end = (y_bot + 1).min(SCREEN_H);
+    let height_mask = (source.len() as u32).wrapping_sub(1);
+    for y in y_top..y_end {
+        let tex_row = ((frac >> 16) & height_mask) as usize;
+        let raw = source[tex_row];
+        // Masked textures use palette index 0 as transparent.
+        if raw != 0 {
+            fb.data[y * SCREEN_W + x] = colormap[raw as usize];
+        }
+        frac = frac.wrapping_add(fracstep);
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -146,6 +211,19 @@ pub fn render_level(
     // distance-attenuated colormaps per span.
     let mut col_light = [255u8; SCREEN_W];
 
+    if let Some(sec_idx) = player_sector_index(level, player_x, player_y)
+        && let Some(sec) = level.sectors.get(sec_idx)
+    {
+        let sec_light = (sec.light_level as u32).min(255) as u8;
+        for x in 0..SCREEN_W {
+            ceil_flat[x] = sec.ceil_flat;
+            floor_flat[x] = sec.floor_flat;
+            ceil_height[x] = sec.ceil_height as i32;
+            floor_height[x] = sec.floor_height as i32;
+            col_light[x] = sec_light;
+        }
+    }
+
     // Z-buffer (per-column minimum depth, in view-space units, f32).
     // Initialised to f32::MAX so every wall is nearer than "infinity".
     // Only one-sided segs write to this buffer; two-sided segs (portals)
@@ -167,10 +245,16 @@ pub fn render_level(
     let cos_i = cos_a.0 as i64;
     let sin_i = sin_a.0 as i64;
 
+    // BSP gives a coarse front-to-back order by subsector.
+    let seg_order = collect_front_to_back_seg_indices(level, player_x, player_y);
+
     // ------------------------------------------------------------------
-    // Step 4: Iterate all segs — draw walls, record flat names
+    // Step 4: Iterate segs (BSP front-to-back order) — draw walls, record flats
     // ------------------------------------------------------------------
-    for seg in &level.segs {
+    for seg_idx in seg_order {
+        let Some(seg) = level.segs.get(seg_idx) else {
+            continue;
+        };
         // Get vertex world positions.
         let v1 = match level.vertexes.get(seg.from_vertex as usize) {
             Some(v) => v,
@@ -229,8 +313,7 @@ pub fn render_level(
         let light_params = LightParams::new(sector_light, is_fullbright);
 
         // Resolve the back sector for two-sided linedefs.
-        let is_two_sided = linedef.is_two_sided();
-        let back_sector = if is_two_sided {
+        let back_sector = if linedef.is_two_sided() {
             let back_sidedef_idx = if seg.direction == 0 {
                 linedef.left_sidedef
             } else {
@@ -247,6 +330,8 @@ pub fn render_level(
         } else {
             None
         };
+        // Only treat as portal when a valid back sector exists.
+        let is_two_sided = back_sector.is_some();
 
         // Near-clip.
         let clipped = match clip_seg_to_near_plane(vx1, vy1, vx2, vy2) {
@@ -266,8 +351,10 @@ pub fn render_level(
             (sx2, vx2, sx1, vx1)
         };
 
-        let col_start = sx_left.max(0).min((SCREEN_W - 1) as i64) as usize;
-        let col_end = sx_right.max(0).min((SCREEN_W - 1) as i64) as usize;
+        // Conservative rasterization to avoid 1px cracks between adjacent segs
+        // caused by integer projection/truncation differences.
+        let col_start = sx_left.saturating_sub(1).max(0).min((SCREEN_W - 1) as i64) as usize;
+        let col_end = sx_right.saturating_add(1).max(0).min((SCREEN_W - 1) as i64) as usize;
 
         if col_start > col_end {
             continue;
@@ -334,22 +421,56 @@ pub fn render_level(
                 // Clamp so upper ≤ lower (degenerate case: equal heights, sealed door).
                 let upper_bot = screen_back_ceil.min(w_bot);
                 let lower_top = screen_back_floor.max(w_top);
+                let has_upper = upper_bot > w_top;
+                let has_lower = lower_top < w_bot;
 
-                // The portal opening is screen_back_ceil .. screen_back_floor.
-                // Update wall_top/wall_bot to reflect the opening so that ceiling
-                // and floor spans fill through it.
-                wall_top[x] = screen_back_ceil;
-                wall_bot[x] = screen_back_floor;
-                ceilingclip[x] = (screen_back_ceil - 1).clamp(-1, SCREEN_H as i32 - 1);
-                floorclip[x] = (screen_back_floor + 1).clamp(0, SCREEN_H as i32);
+                // Update visplane clip bounds.
+                //
+                // When an opaque upper/lower band exists, that band occupies the
+                // rows between front and back planes and must not be repainted by
+                // ceiling/floor spans.
+                let ceil_clip_row = if has_upper {
+                    w_top - 1
+                } else {
+                    screen_back_ceil - 1
+                };
+                let floor_clip_row = if has_lower {
+                    w_bot + 1
+                } else {
+                    screen_back_floor + 1
+                };
+                ceilingclip[x] = ceil_clip_row.clamp(-1, SCREEN_H as i32 - 1);
+                floorclip[x] = floor_clip_row.clamp(0, SCREEN_H as i32);
+                wall_top[x] = (ceilingclip[x] + 1).clamp(0, SCREEN_H as i32);
+                wall_bot[x] = (floorclip[x] - 1).clamp(-1, SCREEN_H as i32 - 1);
 
-                // Record back sector flats (what the player sees through the portal).
+                // Choose which sector contributes visible flats in this column.
+                // If an upper/lower wall band exists, the corresponding front
+                // plane remains visible around the band.
                 if let Some(bs) = back_sector {
-                    ceil_flat[x] = bs.ceil_flat;
-                    floor_flat[x] = bs.floor_flat;
-                    ceil_height[x] = bs.ceil_height as i32;
-                    floor_height[x] = bs.floor_height as i32;
-                    col_light[x] = (bs.light_level as u32).min(255) as u8;
+                    let back_light = (bs.light_level as u32).min(255) as u8;
+
+                    if has_upper {
+                        ceil_flat[x] = sector.ceil_flat;
+                        ceil_height[x] = ceil_h;
+                    } else {
+                        ceil_flat[x] = bs.ceil_flat;
+                        ceil_height[x] = bs.ceil_height as i32;
+                    }
+
+                    if has_lower {
+                        floor_flat[x] = sector.floor_flat;
+                        floor_height[x] = floor_h;
+                    } else {
+                        floor_flat[x] = bs.floor_flat;
+                        floor_height[x] = bs.floor_height as i32;
+                    }
+
+                    col_light[x] = if has_upper || has_lower {
+                        sector_light
+                    } else {
+                        back_light
+                    };
                 } else {
                     ceil_flat[x] = sector.ceil_flat;
                     floor_flat[x] = sector.floor_flat;
@@ -379,10 +500,9 @@ pub fn render_level(
                 }
 
                 // ---- Upper band (front_ceil > back_ceil) -------------------------
-                let has_upper = upper_bot > w_top;
                 // Skip upper texture if both front and back are sky (sky-to-sky portal).
                 let skip_upper_for_sky = front_is_sky && back_is_sky;
-                if has_upper && !skip_upper_for_sky {
+                if has_upper && !skip_upper_for_sky && !is_no_texture(&sidedef.upper_texture) {
                     let upper_h_px = (upper_bot - w_top).max(1);
 
                     // Per-column colormap: front sector light + distance attenuation.
@@ -446,8 +566,7 @@ pub fn render_level(
                 }
 
                 // ---- Lower band (back_floor > front_floor) -----------------------
-                let has_lower = lower_top < w_bot;
-                if has_lower {
+                if has_lower && !is_no_texture(&sidedef.lower_texture) {
                     let lower_h_px = (w_bot - lower_top).max(1);
 
                     // Per-column colormap: front sector light + distance attenuation.
@@ -497,10 +616,53 @@ pub fn render_level(
                         fb.draw_column(x, lower_top as usize, w_bot as usize, shaded);
                     }
                 }
+
+                // ---- Masked middle texture (grates/fences on two-sided lines) ----
+                let mid_name = anim.map_or(sidedef.middle_texture, |a| {
+                    a.resolve_wall(&sidedef.middle_texture)
+                });
+                if !is_no_texture(&mid_name) {
+                    let col_dist = depth_i32 as f32;
+                    let wall_cm: &[u8; 256] = colormap
+                        .map(|c| light_params.get_wall_colormap(col_dist, x, c))
+                        .unwrap_or(&IDENTITY_COLORMAP);
+                    if let Some(cache) = tex_cache
+                        && let Some(tex) = cache.get(&mid_name)
+                    {
+                        let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
+                        let tex_h = tex.height as u32;
+                        let fracstep = (tex_h << 16) / (wall_h_px as u32).max(1);
+                        let texturemid = ((tex_h / 2) as i32 + sidedef.y_offset as i32) as i64;
+                        let frac_start = ((texturemid << 16) as i64
+                            - (HALF_H as i64 - w_top as i64) * fracstep as i64)
+                            as u32;
+                        let col_off = u_tex * tex_h as usize;
+                        let col_data = &tex.data[col_off..col_off + tex_h as usize];
+                        draw_masked_column(
+                            fb,
+                            x,
+                            w_top as usize,
+                            w_bot as usize,
+                            frac_start,
+                            fracstep,
+                            col_data,
+                            wall_cm,
+                        );
+                    }
+                }
             } else {
                 // -----------------------------------------------------------------
                 // ONE-SIDED SEG: solid wall
                 // -----------------------------------------------------------------
+
+                let mid_name = anim.map_or(sidedef.middle_texture, |a| {
+                    a.resolve_wall(&sidedef.middle_texture)
+                });
+                // Defensive WAD-compat: if a one-sided seg resolves to no middle
+                // texture marker, skip it instead of drawing fallback bars.
+                if is_no_texture(&mid_name) {
+                    continue;
+                }
 
                 // Z-buffer occlusion.
                 if depth_f32 >= z_buf[x] {
@@ -541,10 +703,8 @@ pub fn render_level(
                     .unwrap_or(&IDENTITY_COLORMAP);
 
                 // Draw the wall column — textured if a TextureCache is available.
+                let mut drew_textured = false;
                 if let Some(cache) = tex_cache {
-                    let mid_name = anim.map_or(sidedef.middle_texture, |a| {
-                        a.resolve_wall(&sidedef.middle_texture)
-                    });
                     if let Some(tex) = cache.get(&mid_name) {
                         // Perspective-correct horizontal texture coordinate (U).
                         let t_screen = (t as f32) / (span_w as f32).max(1.0);
@@ -580,14 +740,16 @@ pub fn render_level(
                                 colormap: wall_cm,
                             },
                         );
-                        continue; // skip flat-color fallback
+                        drew_textured = true;
                     }
                 }
 
-                // Fallback: flat-shaded solid color (no texture or texture not found).
-                let base_color = 32u8;
-                let shaded = wall_cm[base_color as usize];
-                fb.draw_column(x, w_top as usize, w_bot as usize, shaded);
+                if !drew_textured {
+                    // Fallback: flat-shaded solid color (no texture or texture not found).
+                    let base_color = 32u8;
+                    let shaded = wall_cm[base_color as usize];
+                    fb.draw_column(x, w_top as usize, w_bot as usize, shaded);
+                }
             }
         }
     }
@@ -692,43 +854,19 @@ pub fn render_level(
                 .map(|c| flat_lp.get_flat_colormap(dist as f32, c))
                 .unwrap_or(&IDENTITY_COLORMAP);
 
-            // Clip each emitted visplane run against wall-pass ceiling/floor clips
-            // so flats never overdraw opaque wall pixels.
-            let mut run_start: Option<usize> = None;
-            for x in span.x1..=span.x2 {
-                let visible = match plane.kind {
-                    PlaneKind::Ceiling => y <= ceilingclip[x],
-                    PlaneKind::Floor => y >= floorclip[x],
-                };
-
-                match (run_start, visible) {
-                    (None, true) => run_start = Some(x),
-                    (Some(start), false) => {
-                        let end = x - 1;
-                        let local_steps = (start - span.x1) as u32;
-                        let params = DrawSpanParams {
-                            y: span.y,
-                            x1: start,
-                            x2: end,
-                            ds_xfrac: base_xfrac.wrapping_add(xstep_u.wrapping_mul(local_steps)),
-                            ds_yfrac: base_yfrac.wrapping_add(ystep_u.wrapping_mul(local_steps)),
-                            ds_xstep: xstep_u,
-                            ds_ystep: ystep_u,
-                            source,
-                            colormap: span_cm,
-                        };
-                        draw_span(fb, &params);
-                        run_start = None;
-                    }
-                    _ => {}
-                }
-            }
-            if let Some(start) = run_start {
+            // Clip emitted visplane runs against wall-pass ceiling/floor bounds.
+            let clip_kind = match plane.kind {
+                PlaneKind::Ceiling => PlaneClipKind::Ceiling,
+                PlaneKind::Floor => PlaneClipKind::Floor,
+            };
+            for (start, end) in
+                clip_plane_span_runs(y, span.x1, span.x2, clip_kind, &ceilingclip, &floorclip)
+            {
                 let local_steps = (start - span.x1) as u32;
                 let params = DrawSpanParams {
                     y: span.y,
                     x1: start,
-                    x2: span.x2,
+                    x2: end,
                     ds_xfrac: base_xfrac.wrapping_add(xstep_u.wrapping_mul(local_steps)),
                     ds_yfrac: base_yfrac.wrapping_add(ystep_u.wrapping_mul(local_steps)),
                     ds_xstep: xstep_u,
@@ -742,44 +880,6 @@ pub fn render_level(
     }
 
     z_buf
-}
-
-// ---------------------------------------------------------------------------
-// Near-plane clipping
-// ---------------------------------------------------------------------------
-
-/// Clip a view-space seg to the near plane (vx = 1).
-///
-/// Returns `None` if both endpoints are behind the near plane after clipping.
-/// Returns `Some((vx1, vy1, vx2, vy2))` with the clipped coordinates.
-fn clip_seg_to_near_plane(vx1: i64, vy1: i64, vx2: i64, vy2: i64) -> Option<(i64, i64, i64, i64)> {
-    const NEAR: i64 = 1;
-
-    if vx1 <= 0 && vx2 <= 0 {
-        return None;
-    }
-    if vx1 > 0 && vx2 > 0 {
-        return Some((vx1, vy1, vx2, vy2));
-    }
-
-    let t_num = NEAR - vx1;
-    let t_den = vx2 - vx1;
-    if t_den == 0 {
-        return None;
-    }
-
-    if vx1 <= 0 {
-        let ny = vy1 + t_num * (vy2 - vy1) / t_den;
-        Some((NEAR, ny, vx2, vy2))
-    } else {
-        let t_num2 = NEAR - vx2;
-        let t_den2 = vx1 - vx2;
-        if t_den2 == 0 {
-            return None;
-        }
-        let ny = vy2 + t_num2 * (vy1 - vy2) / t_den2;
-        Some((vx1, vy1, NEAR, ny))
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1121,6 +1221,157 @@ mod tests {
         }
     }
 
+    /// Build a level with:
+    /// - Near two-sided portal at y=128 with a narrow opening.
+    /// - Far one-sided wall at y=256 behind that portal.
+    ///
+    /// The near portal deliberately uses no upper/lower textures so pixels
+    /// outside the opening should remain background. If far walls are not
+    /// clipped to the current portal window, they leak into those rows.
+    fn make_portal_window_with_far_solid_level() -> Level {
+        use doom_map::lumps::{
+            Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
+        };
+
+        let vertexes = vec![
+            Vertex { x: -64, y: 128 },
+            Vertex { x: 64, y: 128 },
+            Vertex { x: -64, y: 256 },
+            Vertex { x: 64, y: 256 },
+        ];
+
+        let sectors = vec![
+            // Front sector (player side).
+            Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            // Back sector visible through portal opening.
+            Sector {
+                floor_height: 56,
+                ceil_height: 72,
+                floor_flat: *b"FLAT3\0\0\0",
+                ceil_flat: *b"FLAT4\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+
+        let sidedefs = vec![
+            // sd0: front side of near two-sided portal, no opaque upper/lower bands.
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"-\0\0\0\0\0\0\0",
+                lower_texture: *b"-\0\0\0\0\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            // sd1: back side of near portal.
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"-\0\0\0\0\0\0\0",
+                lower_texture: *b"-\0\0\0\0\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+            // sd2: far one-sided solid wall.
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"WALL1\0\0\0",
+                lower_texture: *b"WALL1\0\0\0",
+                middle_texture: *b"WALL1\0\0\0",
+                sector: 1,
+            },
+        ];
+
+        // ld0: near two-sided portal.
+        // ld1: far one-sided wall behind the portal.
+        let linedefs = vec![
+            Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004, // two-sided
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+            Linedef {
+                from_vertex: 2,
+                to_vertex: 3,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 2,
+                left_sidedef: 0xFFFF,
+            },
+        ];
+
+        // Near portal first, far wall second.
+        let segs = vec![
+            Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 2,
+                to_vertex: 3,
+                angle: 0,
+                linedef: 1,
+                direction: 0,
+                offset: 0,
+            },
+        ];
+
+        let ssectors = vec![Ssector {
+            seg_count: segs.len() as u16,
+            first_seg: 0,
+        }];
+        let things = vec![Thing {
+            x: 0,
+            y: 0,
+            angle: 0,
+            kind: 1,
+            flags: 7,
+        }];
+
+        let reject = Reject::parse_lump(&[0u8; 1], 2).expect("reject parse");
+        let mut bm_data = vec![0u8; 8 + 2 + 4];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("blockmap parse");
+
+        Level {
+            name: "PORTWIN".to_owned(),
+            things,
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap,
+        }
+    }
+
     #[test]
     fn render_empty_level_does_not_panic() {
         let level = make_minimal_level();
@@ -1158,6 +1409,74 @@ mod tests {
 
         render_level(
             &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
+        );
+    }
+
+    #[test]
+    fn masked_column_skips_transparent_texels() {
+        let mut fb = Framebuffer::new();
+        draw_masked_column(
+            &mut fb,
+            10,
+            0,
+            3,
+            0,
+            1 << 16,
+            &[0, 7, 0, 9],
+            &IDENTITY_COLORMAP,
+        );
+        assert_eq!(fb.get_pixel(10, 0), Some(0), "row 0 is transparent");
+        assert_eq!(fb.get_pixel(10, 1), Some(7), "row 1 must draw");
+        assert_eq!(fb.get_pixel(10, 2), Some(0), "row 2 is transparent");
+        assert_eq!(fb.get_pixel(10, 3), Some(9), "row 3 must draw");
+    }
+
+    #[test]
+    fn one_sided_dash_middle_texture_is_not_drawn() {
+        use doom_types::ANG90;
+
+        let mut level = make_minimal_level();
+        level.sidedefs[0].middle_texture = *b"-\0\0\0\0\0\0\0";
+
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        let zbuf = render_level(
+            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
+        );
+
+        let cx = HALF_W as usize;
+        assert_eq!(
+            zbuf[cx],
+            f32::MAX,
+            "no-texture one-sided wall must not claim z-buffer coverage"
+        );
+        assert_eq!(
+            fb.get_pixel(cx, (HALF_H / 2) as usize),
+            Some(25),
+            "top-half background should remain when middle texture is '-'"
+        );
+    }
+
+    #[test]
+    fn invalid_two_sided_flag_without_back_sector_renders_as_solid() {
+        use doom_types::ANG90;
+
+        let mut level = make_minimal_level();
+        // Malformed-but-seen-in-the-wild style input: two-sided flag set but no left side.
+        level.linedefs[0].flags = 0x0004;
+        level.linedefs[0].left_sidedef = 0xFFFF;
+
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+        let zbuf = render_level(
+            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
+        );
+
+        let cx = HALF_W as usize;
+        assert!(
+            zbuf[cx] < f32::MAX,
+            "line with no valid back sector must still render as solid wall"
         );
     }
 
@@ -1562,6 +1881,45 @@ mod tests {
         assert!(
             is_wall(px_lower),
             "lower sample must remain wall-colored (near wall occludes far portal flats), got {px_lower}"
+        );
+    }
+
+    /// Regression: a far one-sided wall behind a near portal must be clipped
+    /// to the portal opening and must not leak into rows outside the window.
+    #[test]
+    fn test_far_solid_wall_is_clipped_to_near_portal_window() {
+        use doom_types::ANG90;
+        init_trig();
+
+        let level = make_portal_window_with_far_solid_level();
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        render_level(
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
+        );
+
+        let x = HALF_W as usize;
+        let y_above = 80usize; // outside the narrow opening
+        let y_inside = 100usize; // inside the opening
+        let y_below = 120usize; // outside the narrow opening
+
+        let p_above = fb.get_pixel(x, y_above).unwrap_or(0);
+        let p_inside = fb.get_pixel(x, y_inside).unwrap_or(0);
+        let p_below = fb.get_pixel(x, y_below).unwrap_or(0);
+        let is_wall = |px: u8| (32..64).contains(&px);
+
+        assert!(
+            !is_wall(p_above),
+            "far wall leaked above portal window: pixel={p_above} at y={y_above}"
+        );
+        assert!(
+            is_wall(p_inside),
+            "far wall should be visible through portal opening: pixel={p_inside} at y={y_inside}"
+        );
+        assert!(
+            !is_wall(p_below),
+            "far wall leaked below portal window: pixel={p_below} at y={y_below}"
         );
     }
 
