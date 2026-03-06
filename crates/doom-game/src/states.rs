@@ -17,16 +17,23 @@ const SPOS_ATTACK: u8 = 4;
 const TROO_ATTACK: u8 = 5;
 const SARG_ATTACK: u8 = 6;
 const FALL: u8 = 7;
-const HEAD_ATTACK: u8 = 8;
 const BRUIS_ATTACK: u8 = 9;
 const CPOS_ATTACK: u8 = 11;
-const CYBER_ATTACK: u8 = 12;
 const SKEL_MISSILE: u8 = 13;
 const FAT_ATTACK1: u8 = 14;
 const SKULL_ATTACK: u8 = 17;
 const BSPI_ATTACK: u8 = 18;
-const SPID_ATTACK: u8 = 19;
 const PAIN_ATTACK: u8 = 20;
+const VILE_CHASE: u8 = 22;
+const VILE_START: u8 = 23;
+const VILE_TARGET: u8 = 24;
+const VILE_ATTACK: u8 = 25;
+const FIRE: u8 = 26;
+const BRAIN_AWAKE: u8 = 27;
+const BRAIN_SPIT: u8 = 28;
+const BRAIN_DIE: u8 = 30;
+const BRAIN_SCREAM: u8 = 31;
+const BRAIN_EXPLODE: u8 = 32;
 
 /// Fullbright bit for frame field.
 const FB: u8 = 0x80;
@@ -116,9 +123,10 @@ pub mod sprite_names {
     pub const SPR_SMRT: u16 = 76;
     pub const SPR_CEYE: u16 = 77;
     pub const SPR_FSKU: u16 = 78;
+    pub const SPR_FIRE: u16 = 79;
     pub const SPR_NONE: u16 = 0xFFFF;
 
-    pub const SPRITE_COUNT: usize = 79;
+    pub const SPRITE_COUNT: usize = 80;
 
     /// Sprite name strings for WAD lookup.
     pub const SPRITE_NAMES: [&str; SPRITE_COUNT] = [
@@ -129,7 +137,7 @@ pub mod sprite_names {
         "IFOG", "CLIP", "SHEL", "CELL", "AMMO", "SBOX", "BPAK", "MEDI", "STIM", "BON1", "BON2",
         "SOUL", "PINV", "PINS", "SUIT", "PMAP", "PVIS", "MEGA", "ARM1", "ARM2", "BKEY", "RKEY",
         "YKEY", "BSKU", "RSKU", "YSKU", "COLU", "TBLU", "TGRN", "TRED", "SMBT", "SMGT", "SMRT",
-        "CEYE", "FSKU",
+        "CEYE", "FSKU", "FIRE",
     ];
 }
 
@@ -513,8 +521,26 @@ pub mod ids {
     pub const S_SAW2: u16 = 303;
     pub const S_SAW3: u16 = 304;
 
+    // -----------------------------------------------------------------------
+    // Fire column states (305..308) — Arch-Vile's fire effect
+    // -----------------------------------------------------------------------
+    pub const S_FIRE1: u16 = 305;
+    pub const S_FIRE2: u16 = 306;
+    pub const S_FIRE3: u16 = 307;
+    pub const S_FIRE4: u16 = 308;
+
+    // -----------------------------------------------------------------------
+    // Boss Brain states (309..314)
+    // -----------------------------------------------------------------------
+    pub const S_BRAIN_STND: u16 = 309;
+    pub const S_BRAIN_SEE: u16 = 310;
+    pub const S_BRAIN_SPIT: u16 = 311;
+    pub const S_BRAIN_DIE1: u16 = 312;
+    pub const S_BRAIN_DIE2: u16 = 313;
+    pub const S_BRAIN_DIE3: u16 = 314;
+
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 305;
+    pub const STATES_COUNT: usize = 315;
 }
 
 // ---------------------------------------------------------------------------
@@ -799,13 +825,13 @@ pub static STATES: &[MobjStateEntry] = &[
     // --- Arch-Vile (196..210) ---
     st!(SPR_VILE, 0, 10, LOOK, ids::S_VILE_STND2), // 196
     st!(SPR_VILE, 1, 10, LOOK, ids::S_VILE_STND),  // 197
-    st!(SPR_VILE, 0, 2, CHASE, ids::S_VILE_RUN2),  // 198
-    st!(SPR_VILE, 1, 2, CHASE, ids::S_VILE_RUN3),  // 199
-    st!(SPR_VILE, 2, 2, CHASE, ids::S_VILE_RUN4),  // 200
-    st!(SPR_VILE, 3, 2, CHASE, ids::S_VILE_RUN1),  // 201
-    st!(SPR_VILE, 4, 10, NONE, ids::S_VILE_ATK2),  // 202
-    st!(SPR_VILE, 5, 10, NONE, ids::S_VILE_ATK3),  // 203
-    st!(SPR_VILE, 6, 10, NONE, ids::S_VILE_RUN1),  // 204
+    st!(SPR_VILE, 0, 2, VILE_CHASE, ids::S_VILE_RUN2), // 198
+    st!(SPR_VILE, 1, 2, VILE_CHASE, ids::S_VILE_RUN3), // 199
+    st!(SPR_VILE, 2, 2, VILE_CHASE, ids::S_VILE_RUN4), // 200
+    st!(SPR_VILE, 3, 2, VILE_CHASE, ids::S_VILE_RUN1), // 201
+    st!(SPR_VILE, 4, 10, VILE_START, ids::S_VILE_ATK2), // 202: ATK1 → VILE_START
+    st!(SPR_VILE, 5, 10, VILE_TARGET, ids::S_VILE_ATK3), // 203: ATK2 → VILE_TARGET
+    st!(SPR_VILE, 6, 10, VILE_ATTACK, ids::S_VILE_RUN1), // 204: ATK3 → VILE_ATTACK
     st!(SPR_VILE, 7, 5, NONE, ids::S_VILE_RUN1),   // 205: pain
     st!(SPR_VILE, 8, 7, NONE, ids::S_VILE_DIE2),   // 206: die1
     st!(SPR_VILE, 9, 7, FALL, ids::S_VILE_DIE3),   // 207
@@ -921,6 +947,22 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SAWG, 0, 4, NONE, ids::S_SAW2),       // 302: fire1
     st!(SPR_SAWG, 1, 4, NONE, ids::S_SAW3),       // 303: fire2
     st!(SPR_SAWG, 1, 0, NONE, ids::S_SAW_READY1), // 304: fire3
+    // ===================================================================
+    // Fire column states (305..308) — Arch-Vile fire effect
+    // ===================================================================
+    st!(SPR_FIRE, 0 | FB, 2, FIRE, ids::S_FIRE2), // 305: FIRE1
+    st!(SPR_FIRE, 1 | FB, 2, FIRE, ids::S_FIRE3), // 306: FIRE2
+    st!(SPR_FIRE, 2 | FB, 2, FIRE, ids::S_FIRE4), // 307: FIRE3
+    st!(SPR_FIRE, 3 | FB, 2, FIRE, ids::S_FIRE1), // 308: FIRE4 → loops
+    // ===================================================================
+    // Boss Brain states (309..314)
+    // ===================================================================
+    st!(SPR_BBRN, 0, -1, NONE, ids::S_NULL), // 309: BRAIN_STND (idle)
+    st!(SPR_BBRN, 0, 150, BRAIN_AWAKE, ids::S_BRAIN_SPIT), // 310: BRAIN_SEE
+    st!(SPR_BBRN, 1, 10, BRAIN_SPIT, ids::S_BRAIN_SEE), // 311: BRAIN_SPIT
+    st!(SPR_BBRN, 2, 8, BRAIN_SCREAM, ids::S_BRAIN_DIE2), // 312: BRAIN_DIE1
+    st!(SPR_BBRN, 3, 8, BRAIN_EXPLODE, ids::S_BRAIN_DIE3), // 313: BRAIN_DIE2
+    st!(SPR_BBRN, 4, -1, BRAIN_DIE, ids::S_NULL), // 314: BRAIN_DIE3
 ];
 
 // ---------------------------------------------------------------------------

@@ -47,6 +47,9 @@ pub struct MobjInfo {
     /// State entered for ranged / missile attacks. `S_NULL` = no ranged
     /// attack.
     pub missile_state: StateNum,
+    /// State to resurrect into when an Arch-Vile raises a corpse.
+    /// `S_NULL` = cannot be raised.
+    pub raise_state: StateNum,
 }
 
 // ---------------------------------------------------------------------------
@@ -89,16 +92,17 @@ const ITEM: MobjInfo = MobjInfo {
     death_state: sn(ids::S_NULL),
     melee_state: sn(ids::S_NULL),
     missile_state: sn(ids::S_NULL),
+    raise_state: sn(ids::S_NULL),
 };
 
 // ---------------------------------------------------------------------------
-// Global MOBJINFO table  (indexed by MobjKind as usize, 0..=73)
+// Global MOBJINFO table  (indexed by MobjKind as usize, 0..=75)
 // ---------------------------------------------------------------------------
 
 /// Actor property table.  Index with `MobjKind as usize`.
 ///
 /// Based on Doom's `mobjinfo[]` in `info.c`.
-pub static MOBJINFO: [MobjInfo; 74] = [
+pub static MOBJINFO: [MobjInfo; 76] = [
     // -----------------------------------------------------------------------
     // 0: Player
     // -----------------------------------------------------------------------
@@ -116,6 +120,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_NULL),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_NULL),
+        raise_state: sn(ids::S_NULL),
     },
     // -----------------------------------------------------------------------
     // 1: Trooper (Zombie Man) — MT_POSSESSED
@@ -134,6 +139,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_POSS_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_POSS_ATK1),
+        raise_state: sn(ids::S_POSS_STND),
     },
     // -----------------------------------------------------------------------
     // 2: Sergeant (Shotgun Guy) — MT_SHOTGUY
@@ -152,6 +158,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_SPOS_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_SPOS_ATK1),
+        raise_state: sn(ids::S_SPOS_STND),
     },
     // -----------------------------------------------------------------------
     // 3: Imp — MT_TROOP
@@ -170,6 +177,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_TROO_DIE1),
         melee_state: sn(ids::S_TROO_ATK1),
         missile_state: sn(ids::S_TROO_ATK1),
+        raise_state: sn(ids::S_TROO_STND),
     },
     // -----------------------------------------------------------------------
     // 4: Demon (Pink Demon) — MT_SERGEANT
@@ -188,6 +196,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_SARG_DIE1),
         melee_state: sn(ids::S_SARG_ATK1),
         missile_state: sn(ids::S_NULL),
+        raise_state: sn(ids::S_SARG_STND),
     },
     // -----------------------------------------------------------------------
     // 5: Spectre — same as Demon + MF_SHADOW
@@ -206,6 +215,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_SARG_DIE1),
         melee_state: sn(ids::S_SARG_ATK1),
         missile_state: sn(ids::S_NULL),
+        raise_state: sn(ids::S_SARG_STND),
     },
     // -----------------------------------------------------------------------
     // 6: Lost Soul — MT_SKULL
@@ -224,6 +234,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_SKULL_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_SKULL_ATK1),
+        raise_state: sn(ids::S_NULL),
     },
     // -----------------------------------------------------------------------
     // 7: Cacodemon — MT_HEAD
@@ -242,6 +253,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_HEAD_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_NULL),
+        raise_state: sn(ids::S_HEAD_STND),
     },
     // -----------------------------------------------------------------------
     // 8: Baron of Hell — MT_BRUISER
@@ -260,6 +272,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_BOSS_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_NULL),
+        raise_state: sn(ids::S_BOSS_STND),
     },
     // -----------------------------------------------------------------------
     // 9: Hell Knight — own BOS2 states
@@ -278,6 +291,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_BOS2_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_BOS2_ATK1),
+        raise_state: sn(ids::S_BOS2_STND),
     },
     // -----------------------------------------------------------------------
     // 10: Arachnotron — MT_BABY
@@ -296,6 +310,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_BSPI_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_BSPI_ATK1),
+        raise_state: sn(ids::S_NULL),
     },
     // 11: Pain Elemental
     MobjInfo {
@@ -312,6 +327,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_PAIN_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_PAIN_ATK1),
+        raise_state: sn(ids::S_NULL),
     },
     // 12: Revenant
     MobjInfo {
@@ -328,6 +344,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_SKEL_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_SKEL_ATK1),
+        raise_state: sn(ids::S_NULL),
     },
     // 13: Mancubus
     MobjInfo {
@@ -344,6 +361,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_FATT_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_FATT_ATK1),
+        raise_state: sn(ids::S_FATT_STND),
     },
     // 14: ArchVile
     MobjInfo {
@@ -360,6 +378,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_VILE_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_VILE_ATK1),
+        raise_state: sn(ids::S_NULL),
     },
     // 15: Spider Mastermind — MT_SPIDER
     MobjInfo {
@@ -376,6 +395,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_SPID_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_NULL),
+        raise_state: sn(ids::S_NULL),
     },
     // 16: Cyberdemon — MT_CYBORG
     MobjInfo {
@@ -392,6 +412,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_CYBER_DIE1),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_NULL),
+        raise_state: sn(ids::S_NULL),
     },
     // 17: Wolf SS — reuses Trooper states
     MobjInfo {
@@ -408,6 +429,7 @@ pub static MOBJINFO: [MobjInfo; 74] = [
         death_state: sn(ids::S_NULL),
         melee_state: sn(ids::S_NULL),
         missile_state: sn(ids::S_NULL),
+        raise_state: sn(ids::S_NULL),
     },
     // -----------------------------------------------------------------------
     // 18..=26: Projectiles and visual effects
@@ -577,6 +599,9 @@ pub static MOBJINFO: [MobjInfo; 74] = [
     MobjInfo {
         spawn_health: 250,
         flags: flags::MF_SOLID | flags::MF_SHOOTABLE,
+        spawn_state: sn(ids::S_BRAIN_STND),
+        see_state: sn(ids::S_BRAIN_SEE),
+        death_state: sn(ids::S_BRAIN_DIE1),
         ..ITEM
     }, // 65: BossBrain
     MobjInfo {
@@ -642,6 +667,20 @@ pub static MOBJINFO: [MobjInfo; 74] = [
     },
     // 73: Backpack
     ITEM,
+    // -----------------------------------------------------------------------
+    // 74..=75: Arch-Vile fire and Boss Brain cube
+    // -----------------------------------------------------------------------
+    // 74: VileFire — visual effect that tracks the Arch-Vile's target
+    MobjInfo {
+        flags: flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY,
+        ..ITEM
+    },
+    // 75: BossCube — cube projectile spawned by the Boss Brain
+    MobjInfo {
+        speed: fixed(15),
+        flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        ..ITEM
+    },
 ];
 
 // ---------------------------------------------------------------------------
@@ -655,9 +694,9 @@ mod tests {
 
     #[test]
     fn table_covers_all_kinds() {
-        // MobjKind::Backpack = 73 → table must have 74 entries.
-        assert_eq!(MOBJINFO.len(), 74);
-        assert_eq!(MobjKind::Backpack as usize, 73);
+        // MobjKind::BossCube = 75 → table must have 76 entries.
+        assert_eq!(MOBJINFO.len(), 76);
+        assert_eq!(MobjKind::BossCube as usize, 75);
     }
 
     #[test]

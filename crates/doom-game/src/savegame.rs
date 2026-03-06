@@ -465,11 +465,16 @@ fn read_mobj(r: &mut ReadCursor<'_>) -> Result<Mobj, SaveError> {
         state,
         tics,
         target,
+        tracer: MobjHandle::NULL,
         movedir,
         movecount,
         reactiontime,
         threshold,
         subsector,
+        spawn_x: Fixed16_16::ZERO,
+        spawn_y: Fixed16_16::ZERO,
+        spawn_angle: Bam::ZERO,
+        spawn_type: 0,
     })
 }
 

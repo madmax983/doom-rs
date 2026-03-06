@@ -5943,7 +5943,7 @@ mod tests {
         let reject_bytes = vec![0u8; 1]; // 2 sectors
         let reject = doom_map::Reject::parse_lump(&reject_bytes, 2).unwrap();
 
-        let mut sectors = vec![
+        let sectors = vec![
             doom_map::Sector {
                 floor_height: 0,
                 ceil_height: 128,

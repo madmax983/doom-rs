@@ -122,7 +122,7 @@ pub fn par_time(level_name: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjHandle, MobjKind};
+    use crate::mobj::{Mobj, MobjKind};
     use crate::player::PlayerState;
     use crate::state::GameState;
     use doom_types::{Bam, Fixed16_16};

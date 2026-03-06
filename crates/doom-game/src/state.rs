@@ -4,8 +4,11 @@
 //! It must never contain `Arc`, `Rc`, raw pointers, `HashMap`, or any
 //! non-deterministic source (no `Instant::now()`, no OS calls).
 
+use doom_types::Fixed16_16;
+
 use crate::mobj::{MobjHandle, MobjSlab};
 use crate::player::PlayerState;
+use crate::spawn::Skill;
 
 // ---------------------------------------------------------------------------
 // Exit request
@@ -518,6 +521,19 @@ pub struct GameState {
     /// Sized to `level.linedefs.len()` by `automap::init_seen_lines` or
     /// lazily resized by `mark_lines_seen`.
     pub seen_lines: Vec<bool>,
+
+    // --- Difficulty ---
+    /// Current skill level (affects Nightmare respawning).
+    pub skill: Skill,
+
+    // --- Boss Brain (Icon of Sin) ---
+    /// Set `true` once the Boss Brain's see state fires; cubes only
+    /// start spawning after this flag is set.
+    pub brain_awake: bool,
+    /// Spawn spot positions collected from DoomEd thing type 87.
+    pub brain_targets: Vec<(Fixed16_16, Fixed16_16)>,
+    /// Round-robin index into `brain_targets` for the next cube.
+    pub brain_target_index: usize,
 }
 
 impl GameState {
@@ -555,6 +571,10 @@ impl GameState {
             sound_traversed: Vec::new(),
             sound_gen: 0,
             seen_lines: Vec::new(),
+            skill: Skill::Medium,
+            brain_awake: false,
+            brain_targets: Vec::new(),
+            brain_target_index: 0,
         }
     }
 

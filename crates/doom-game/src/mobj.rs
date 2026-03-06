@@ -143,6 +143,11 @@ pub enum MobjKind {
     // Pickups — missing items (Batch: item pickups)
     InvulnerabilitySphere = 72, // DoomEd 2022 — invulnerability power-up
     Backpack = 73,              // DoomEd 8 — doubles max ammo + gives ammo
+
+    // Arch-Vile fire column (visual effect that tracks the target)
+    VileFire = 74,
+    // Boss Brain cube projectile (flies to spawn spots, morphs into monster)
+    BossCube = 75,
 }
 
 // ---------------------------------------------------------------------------
@@ -295,6 +300,8 @@ pub struct Mobj {
     // --- AI ---
     /// Primary target (for monsters: who they're chasing/attacking).
     pub target: MobjHandle,
+    /// Secondary target (Arch-Vile fire tracking, Revenant homing).
+    pub tracer: MobjHandle,
     /// 8-way move direction (0 = east, 1 = northeast, ..., 7 = southeast).
     pub movedir: u8,
     /// Tics left before AI reconsiders its move direction.
@@ -307,6 +314,16 @@ pub struct Mobj {
     // --- World linkage ---
     /// Index of the subsector this actor occupies.
     pub subsector: u32,
+
+    // --- Nightmare respawn ---
+    /// Original spawn X (map units, fixed-point).
+    pub spawn_x: Fixed16_16,
+    /// Original spawn Y.
+    pub spawn_y: Fixed16_16,
+    /// Original facing angle at spawn.
+    pub spawn_angle: Bam,
+    /// DoomEd thing type for respawning.  0 = cannot respawn.
+    pub spawn_type: u16,
 }
 
 impl Mobj {
@@ -328,11 +345,16 @@ impl Mobj {
             state: StateNum::NULL,
             tics: -1,
             target: MobjHandle::NULL,
+            tracer: MobjHandle::NULL,
             movedir: 0,
             movecount: 0,
             reactiontime: 0,
             threshold: 0,
             subsector: 0,
+            spawn_x: Fixed16_16::ZERO,
+            spawn_y: Fixed16_16::ZERO,
+            spawn_angle: Bam::ZERO,
+            spawn_type: 0,
         }
     }
 

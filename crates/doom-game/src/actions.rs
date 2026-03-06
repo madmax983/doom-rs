@@ -82,6 +82,32 @@ pub const ACTION_SPID_ATTACK: u8 = 19;
 /// `A_PainAttack`: Pain Elemental spawns Lost Soul.
 pub const ACTION_PAIN_ATTACK: u8 = 20;
 
+// --- Arch-Vile special actions ---
+/// `A_VileChase`: Chase with resurrection scan.
+pub const ACTION_VILE_CHASE: u8 = 22;
+/// `A_VileStart`: Begin attack — set tracer to target.
+pub const ACTION_VILE_START: u8 = 23;
+/// `A_VileTarget`: Spawn fire column at target's position.
+pub const ACTION_VILE_TARGET: u8 = 24;
+/// `A_VileAttack`: Deal 20 direct + 70 blast damage and upward thrust.
+pub const ACTION_VILE_ATTACK: u8 = 25;
+/// `A_Fire`: Fire column tracks the target's position each tic.
+pub const ACTION_FIRE: u8 = 26;
+
+// --- Boss Brain (Icon of Sin) actions ---
+/// `A_BrainAwake`: Set brain_awake flag and play alert sound.
+pub const ACTION_BRAIN_AWAKE: u8 = 27;
+/// `A_BrainSpit`: Spawn a BossCube aimed at the next spawn spot.
+pub const ACTION_BRAIN_SPIT: u8 = 28;
+/// `A_SpawnFly`: Cube arrives — spawn a random monster at destination.
+pub const ACTION_SPAWN_FLY: u8 = 29;
+/// `A_BrainDie`: Trigger level exit.
+pub const ACTION_BRAIN_DIE: u8 = 30;
+/// `A_BrainScream`: Spawn 20 explosions across the brain sprite.
+pub const ACTION_BRAIN_SCREAM: u8 = 31;
+/// `A_BrainExplode`: Spawn a single explosion at a random position.
+pub const ACTION_BRAIN_EXPLODE: u8 = 32;
+
 // ---------------------------------------------------------------------------
 // Public dispatcher
 // ---------------------------------------------------------------------------
@@ -113,6 +139,17 @@ pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level
         ACTION_BSPI_ATTACK => a_bspi_attack(gs, handle),
         ACTION_SPID_ATTACK => a_spid_attack(gs, handle, level),
         ACTION_PAIN_ATTACK => a_pain_attack(gs, handle),
+        ACTION_VILE_CHASE => a_vile_chase(gs, handle, level),
+        ACTION_VILE_START => a_vile_start(gs, handle),
+        ACTION_VILE_TARGET => a_vile_target(gs, handle),
+        ACTION_VILE_ATTACK => a_vile_attack(gs, handle),
+        ACTION_FIRE => a_fire(gs, handle),
+        ACTION_BRAIN_AWAKE => a_brain_awake(gs),
+        ACTION_BRAIN_SPIT => a_brain_spit(gs, handle),
+        ACTION_SPAWN_FLY => a_spawn_fly(gs, handle),
+        ACTION_BRAIN_DIE => a_brain_die(gs),
+        ACTION_BRAIN_SCREAM => a_brain_scream(gs, handle),
+        ACTION_BRAIN_EXPLODE => a_brain_explode(gs, handle),
         _ => {}
     }
 }
@@ -1486,6 +1523,377 @@ fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
     gs.mobjslab.alloc(skull);
 }
 
+// ===========================================================================
+// Arch-Vile actions
+// ===========================================================================
+
+/// Port of `A_VileChase` from Doom's `p_enemy.c`.
+///
+/// Performs a standard chase, but on each call also scans the slab for nearby
+/// corpses that can be resurrected (have a non-`S_NULL` `raise_state` and
+/// the `MF_CORPSE` flag). If a suitable corpse is found within 128 map units
+/// (Manhattan distance), the vile sets its target to the corpse, enters
+/// `S_VILE_ATK1`, and the corpse is restored to life.
+fn a_vile_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let (vx, vy) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x.to_int(), mo.y.to_int()),
+        None => return,
+    };
+
+    // Scan for raisable corpses.
+    let mut corpse_handle: Option<MobjHandle> = None;
+    for h in gs.mobjslab.iter_handles().collect::<Vec<_>>() {
+        let raisable = {
+            let Some(mo) = gs.mobjslab.get(h) else {
+                continue;
+            };
+            if mo.flags & flags::MF_CORPSE == 0 {
+                continue;
+            }
+            // Check Manhattan distance <= 128.
+            let dx = (mo.x.to_int() - vx).abs();
+            let dy = (mo.y.to_int() - vy).abs();
+            if dx > 128 || dy > 128 {
+                continue;
+            }
+            // Check that the monster type has a raise_state.
+            let info = &mobjinfo::MOBJINFO[mo.kind as usize];
+            info.raise_state.0 != states::ids::S_NULL
+        };
+        if raisable {
+            corpse_handle = Some(h);
+            break;
+        }
+    }
+
+    if let Some(ch) = corpse_handle {
+        // Resurrect the corpse: restore health, clear corpse flag, set raise_state.
+        let kind_idx = gs.mobjslab.get(ch).map(|m| m.kind as usize).unwrap_or(0);
+        let info = &mobjinfo::MOBJINFO[kind_idx];
+        let raise_sn = info.raise_state;
+        let full_hp = info.spawn_health;
+        let orig_flags = info.flags;
+
+        if let Some(corpse) = gs.mobjslab.get_mut(ch) {
+            corpse.health = full_hp;
+            corpse.flags = orig_flags;
+            corpse.state = raise_sn;
+            if let Some(e) = states::STATES.get(raise_sn.0 as usize) {
+                corpse.tics = e.tics;
+            }
+        }
+
+        // Set the vile's target to the corpse handle and enter attack state.
+        if let Some(vile) = gs.mobjslab.get_mut(handle) {
+            vile.target = ch;
+        }
+        // Transition to vile attack sequence (S_VILE_ATK1).
+        let atk_sn = crate::mobj::StateNum(states::ids::S_VILE_ATK1);
+        if let Some(vile) = gs.mobjslab.get_mut(handle) {
+            vile.state = atk_sn;
+            if let Some(e) = states::STATES.get(atk_sn.0 as usize) {
+                vile.tics = e.tics;
+            }
+        }
+        a_face_target(gs, handle);
+        return;
+    }
+
+    // No corpse found — normal chase.
+    a_chase(gs, handle, level);
+}
+
+/// Port of `A_VileStart` from Doom's `p_enemy.c`.
+///
+/// First attack frame: sets the Arch-Vile's tracer to its current target
+/// so `A_Fire` knows whom to track.
+fn a_vile_start(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    a_face_target(gs, handle);
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.tracer = target;
+    }
+}
+
+/// Port of `A_VileTarget` from Doom's `p_enemy.c`.
+///
+/// Spawns a VileFire actor at the target's position, sets the fire's
+/// `target` to the Vile (owner) and `tracer` to the target (tracking).
+fn a_vile_target(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+    a_face_target(gs, handle);
+
+    let (tx, ty, tz) = match gs.mobjslab.get(target) {
+        Some(t) => (t.x, t.y, t.z),
+        None => return,
+    };
+
+    let mut fire = crate::mobj::Mobj::new(MobjKind::VileFire, tx, ty, Bam(0));
+    fire.z = tz;
+    fire.health = 1;
+    fire.flags = flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY;
+    fire.target = handle; // owner = the vile
+    fire.tracer = target; // tracking = the victim
+    let fire_h = gs.mobjslab.alloc(fire);
+
+    // Store fire handle in the vile's tracer for reference.
+    if let Some(vile) = gs.mobjslab.get_mut(handle) {
+        vile.tracer = fire_h;
+    }
+}
+
+/// Port of `A_VileAttack` from Doom's `p_enemy.c`.
+///
+/// Deals 20 direct damage + 70 blast damage to the target and applies
+/// an upward thrust of 15 map units (momz).
+fn a_vile_attack(gs: &mut GameState, handle: MobjHandle) {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return;
+    }
+    a_face_target(gs, handle);
+
+    // Direct damage: 20 hit points.
+    if let Some(t) = gs.mobjslab.get_mut(target) {
+        t.health -= 20;
+    }
+
+    // Blast damage: 70 hit points.
+    if let Some(t) = gs.mobjslab.get_mut(target) {
+        t.health -= 70;
+    }
+
+    // Upward thrust: momz += 15 * FRACUNIT (1000/256 ~ 62915, but we use
+    // simpler from_int for clarity — this is Doom's `1000<<8/256`).
+    if let Some(t) = gs.mobjslab.get_mut(target) {
+        t.momz = t.momz + Fixed16_16::from_int(15);
+    }
+}
+
+/// Port of `A_Fire` from Doom's `p_enemy.c`.
+///
+/// Each tic the fire column tracks its tracer's position, staying at the
+/// target's feet. If the tracer handle is stale, the fire does nothing.
+fn a_fire(gs: &mut GameState, handle: MobjHandle) {
+    let tracer = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.tracer,
+        None => return,
+    };
+    let (tx, ty) = match gs.mobjslab.get(tracer) {
+        Some(t) => (t.x, t.y),
+        None => return,
+    };
+    if let Some(fire) = gs.mobjslab.get_mut(handle) {
+        fire.x = tx;
+        fire.y = ty;
+    }
+}
+
+// ===========================================================================
+// Boss Brain (Icon of Sin) actions
+// ===========================================================================
+
+/// Monster types that the Boss Brain cube can spawn.
+///
+/// This matches the original Doom `BossTargetType` table from `p_enemy.c`.
+const BOSS_SPAWN_TYPES: [MobjKind; 11] = [
+    MobjKind::Trooper,
+    MobjKind::Sergeant,
+    MobjKind::Imp,
+    MobjKind::Demon,
+    MobjKind::Spectre,
+    MobjKind::PainElemental,
+    MobjKind::Arachnotron,
+    MobjKind::Revenant,
+    MobjKind::Mancubus,
+    MobjKind::HellKnight,
+    MobjKind::BaronOfHell,
+];
+
+/// Port of `A_BrainAwake` from Doom's `p_enemy.c`.
+///
+/// Sets the `brain_awake` flag on GameState so cubes start spawning.
+fn a_brain_awake(gs: &mut GameState) {
+    gs.brain_awake = true;
+}
+
+/// Port of `A_BrainSpit` from Doom's `p_enemy.c`.
+///
+/// Spawns a `BossCube` projectile aimed at the next spawn spot in the
+/// round-robin target list. The cube stores the destination coordinates
+/// in its (`spawn_x`, `spawn_y`) fields — we repurpose `momx`/`momy` for
+/// flight velocity and store the destination in the cube's `x`/`y` at
+/// spawn time, then compute velocity toward the target.
+fn a_brain_spit(gs: &mut GameState, handle: MobjHandle) {
+    if !gs.brain_awake || gs.brain_targets.is_empty() {
+        return;
+    }
+
+    // Round-robin target selection.
+    let idx = gs.brain_target_index % gs.brain_targets.len();
+    gs.brain_target_index = idx + 1;
+    let (dest_x, dest_y) = gs.brain_targets[idx];
+
+    // Spawn the cube at the brain's position.
+    let (bx, by, bz) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x, mo.y, mo.z),
+        None => return,
+    };
+
+    let mut cube = crate::mobj::Mobj::new(MobjKind::BossCube, bx, by, Bam(0));
+    cube.z = bz;
+    cube.health = 1;
+    cube.flags = flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY;
+    cube.radius = Fixed16_16::from_int(6);
+    cube.height = Fixed16_16::from_int(8);
+    cube.reactiontime = 0; // will be set once arrived
+    cube.target = handle; // owner = brain
+
+    // Compute velocity toward destination. Speed = 15 map units/tic.
+    let dx_f = (dest_x - bx).to_int() as f32;
+    let dy_f = (dest_y - by).to_int() as f32;
+    let dist = (dx_f * dx_f + dy_f * dy_f).sqrt().max(1.0);
+    let speed = 15.0_f32;
+    cube.momx = Fixed16_16::from_int((dx_f / dist * speed) as i32);
+    cube.momy = Fixed16_16::from_int((dy_f / dist * speed) as i32);
+
+    // Store destination in `tracer` fields — we'll use reactiontime as a
+    // countdown. For simplicity, encode the target index in reactiontime
+    // so a_spawn_fly can look it up.
+    cube.reactiontime = idx as i32;
+
+    gs.mobjslab.alloc(cube);
+}
+
+/// Port of `A_SpawnFly` from Doom's `p_enemy.c`.
+///
+/// Called when the cube arrives at a spawn spot. Picks a random monster
+/// type from `BOSS_SPAWN_TYPES`, spawns it at the destination, then
+/// removes the cube and spawns a `SpawnFire` fog effect.
+fn a_spawn_fly(gs: &mut GameState, handle: MobjHandle) {
+    // Determine spawn position from the brain_targets list.
+    let target_idx = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.reactiontime as usize,
+        None => return,
+    };
+
+    let (dest_x, dest_y) = if target_idx < gs.brain_targets.len() {
+        gs.brain_targets[target_idx]
+    } else {
+        // Fallback: use the cube's current position.
+        match gs.mobjslab.get(handle) {
+            Some(mo) => (mo.x, mo.y),
+            None => return,
+        }
+    };
+
+    // Random monster type selection.
+    let r = gs.p_random() as usize;
+    let kind = BOSS_SPAWN_TYPES[r % BOSS_SPAWN_TYPES.len()];
+    let kind_idx = kind as usize;
+    let info = &mobjinfo::MOBJINFO[kind_idx];
+
+    // Spawn the monster.
+    let mut monster = crate::mobj::Mobj::new(kind, dest_x, dest_y, Bam(0));
+    monster.health = info.spawn_health;
+    monster.flags = info.flags;
+    monster.radius = info.radius;
+    monster.height = info.height;
+    monster.state = info.spawn_state;
+    monster.reactiontime = 18; // standard reaction time for spawned monsters
+    if let Some(e) = states::STATES.get(info.spawn_state.0 as usize) {
+        monster.tics = e.tics;
+    }
+    gs.mobjslab.alloc(monster);
+
+    // Spawn SpawnFire fog at destination.
+    let mut fog = crate::mobj::Mobj::new(MobjKind::SpawnFire, dest_x, dest_y, Bam(0));
+    fog.flags = flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY;
+    fog.health = 1;
+    gs.mobjslab.alloc(fog);
+
+    // Remove the cube.
+    gs.mobjslab.free(handle);
+}
+
+/// Port of `A_BrainDie` from Doom's `p_enemy.c`.
+///
+/// Triggers a normal level exit.
+fn a_brain_die(gs: &mut GameState) {
+    gs.exit_request = Some(crate::state::ExitRequest::Normal);
+}
+
+/// Port of `A_BrainScream` from Doom's `p_enemy.c`.
+///
+/// Spawns 20 explosion effects spread across the brain's width.
+fn a_brain_scream(gs: &mut GameState, handle: MobjHandle) {
+    let (bx, by, bz) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x.to_int(), mo.y.to_int(), mo.z.to_int()),
+        None => return,
+    };
+
+    // Spawn 20 explosions spread across a 320-unit horizontal range.
+    for i in 0..20 {
+        let ex = bx - 196 + i * 16;
+        let ey = by - 320;
+        // Random Z offset in [0, 319].
+        let r = gs.p_random() as i32;
+        let ez = bz + 128 + (r * 2);
+        let mut exp = crate::mobj::Mobj::new(
+            MobjKind::BulletPuff, // reuse BulletPuff as explosion visual
+            Fixed16_16::from_int(ex),
+            Fixed16_16::from_int(ey),
+            Bam(0),
+        );
+        exp.z = Fixed16_16::from_int(ez);
+        exp.flags = flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY;
+        exp.health = 1;
+        // Random tics to stagger the animations.
+        exp.tics = gs.p_random() as i16 & 7;
+        gs.mobjslab.alloc(exp);
+    }
+}
+
+/// Port of `A_BrainExplode` from Doom's `p_enemy.c`.
+///
+/// Spawns a single explosion at a random position near the brain.
+fn a_brain_explode(gs: &mut GameState, handle: MobjHandle) {
+    let (bx, by, bz) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x.to_int(), mo.y.to_int(), mo.z.to_int()),
+        None => return,
+    };
+
+    let r = gs.p_random() as i32;
+    let ex = bx + (r - 128) * 2;
+    let rz = gs.p_random() as i32;
+    let ez = bz + 128 + rz * 2;
+
+    let mut exp = crate::mobj::Mobj::new(
+        MobjKind::BulletPuff,
+        Fixed16_16::from_int(ex),
+        Fixed16_16::from_int(by),
+        Bam(0),
+    );
+    exp.z = Fixed16_16::from_int(ez);
+    exp.flags = flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY;
+    exp.health = 1;
+    exp.momz = Fixed16_16::from_int(gs.p_random() as i32 / 64);
+    exp.tics = gs.p_random() as i16 & 7;
+    gs.mobjslab.alloc(exp);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -1534,6 +1942,7 @@ mod tests {
     }
 
     /// Spawn a trooper with extra flags.
+    #[allow(dead_code)]
     fn spawn_trooper_with_flags(
         gs: &mut GameState,
         x: i32,
@@ -3160,6 +3569,17 @@ mod tests {
             ACTION_BSPI_ATTACK,
             ACTION_SPID_ATTACK,
             ACTION_PAIN_ATTACK,
+            ACTION_VILE_CHASE,
+            ACTION_VILE_START,
+            ACTION_VILE_TARGET,
+            ACTION_VILE_ATTACK,
+            ACTION_FIRE,
+            ACTION_BRAIN_AWAKE,
+            ACTION_BRAIN_SPIT,
+            ACTION_SPAWN_FLY,
+            ACTION_BRAIN_DIE,
+            ACTION_BRAIN_SCREAM,
+            ACTION_BRAIN_EXPLODE,
         ];
         for i in 0..constants.len() {
             for j in (i + 1)..constants.len() {
@@ -3169,5 +3589,539 @@ mod tests {
                 );
             }
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Arch-Vile action tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn dispatch_vile_chase_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+        dispatch_action(&mut gs, h, ACTION_VILE_CHASE, None);
+    }
+
+    #[test]
+    fn dispatch_vile_start_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+        dispatch_action(&mut gs, h, ACTION_VILE_START, None);
+    }
+
+    #[test]
+    fn dispatch_vile_target_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+        dispatch_action(&mut gs, h, ACTION_VILE_TARGET, None);
+    }
+
+    #[test]
+    fn dispatch_vile_attack_does_not_panic() {
+        let mut gs = make_game_state();
+        let h = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+        dispatch_action(&mut gs, h, ACTION_VILE_ATTACK, None);
+    }
+
+    #[test]
+    fn dispatch_fire_does_not_panic() {
+        let mut gs = make_game_state();
+        // Spawn a fire actor with a tracer.
+        let mut fire = Mobj::new(
+            MobjKind::VileFire,
+            Fixed16_16::from_int(100),
+            Fixed16_16::from_int(100),
+            Bam::ZERO,
+        );
+        fire.health = 1;
+        fire.tracer = gs.player.handle;
+        let h = gs.mobjslab.alloc(fire);
+        dispatch_action(&mut gs, h, ACTION_FIRE, None);
+    }
+
+    #[test]
+    fn vile_start_sets_tracer() {
+        let mut gs = make_game_state();
+        let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+
+        a_vile_start(&mut gs, vile);
+
+        let mo = gs.mobjslab.get(vile).unwrap();
+        assert_eq!(
+            mo.tracer, gs.player.handle,
+            "vile_start must set tracer to the target"
+        );
+    }
+
+    #[test]
+    fn vile_target_spawns_fire() {
+        let mut gs = make_game_state();
+        let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+
+        let count_before = gs.mobjslab.len();
+        a_vile_target(&mut gs, vile);
+        let count_after = gs.mobjslab.len();
+
+        assert!(
+            count_after > count_before,
+            "vile_target must spawn a VileFire actor"
+        );
+
+        let fire = gs.mobjslab.iter_handles().find(|h| {
+            gs.mobjslab
+                .get(*h)
+                .map(|m| m.kind == MobjKind::VileFire)
+                .unwrap_or(false)
+        });
+        assert!(fire.is_some(), "must spawn a VileFire MobjKind");
+    }
+
+    #[test]
+    fn vile_attack_damages_target() {
+        let mut gs = make_game_state();
+        let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+        let hp_before = gs.mobjslab.get(gs.player.handle).unwrap().health;
+
+        a_vile_attack(&mut gs, vile);
+
+        let hp_after = gs.mobjslab.get(gs.player.handle).unwrap().health;
+        assert_eq!(
+            hp_before - hp_after,
+            90,
+            "vile_attack must deal 20+70=90 total damage"
+        );
+    }
+
+    #[test]
+    fn vile_attack_applies_upward_thrust() {
+        let mut gs = make_game_state();
+        let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+
+        a_vile_attack(&mut gs, vile);
+
+        let momz = gs.mobjslab.get(gs.player.handle).unwrap().momz;
+        assert_eq!(
+            momz,
+            Fixed16_16::from_int(15),
+            "vile_attack must apply momz of 15"
+        );
+    }
+
+    #[test]
+    fn fire_tracks_tracer_position() {
+        let mut gs = make_game_state();
+        // Move the player to a known position.
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().x = Fixed16_16::from_int(500);
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().y = Fixed16_16::from_int(300);
+
+        let mut fire = Mobj::new(
+            MobjKind::VileFire,
+            Fixed16_16::from_int(100),
+            Fixed16_16::from_int(100),
+            Bam::ZERO,
+        );
+        fire.health = 1;
+        fire.tracer = gs.player.handle;
+        let fh = gs.mobjslab.alloc(fire);
+
+        a_fire(&mut gs, fh);
+
+        let fire_mo = gs.mobjslab.get(fh).unwrap();
+        assert_eq!(fire_mo.x, Fixed16_16::from_int(500));
+        assert_eq!(fire_mo.y, Fixed16_16::from_int(300));
+    }
+
+    #[test]
+    fn vile_chase_resurrects_nearby_corpse() {
+        let mut gs = make_game_state();
+        let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+
+        // Create a trooper corpse within 128 units of the vile.
+        let mut corpse = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(210),
+            Fixed16_16::from_int(10),
+            Bam::ZERO,
+        );
+        corpse.health = 0;
+        corpse.flags = flags::MF_CORPSE;
+        let corpse_h = gs.mobjslab.alloc(corpse);
+
+        a_vile_chase(&mut gs, vile, None);
+
+        // The corpse should be resurrected.
+        let raised = gs.mobjslab.get(corpse_h).unwrap();
+        assert!(
+            raised.health > 0,
+            "resurrected corpse must have health > 0, got {}",
+            raised.health
+        );
+        assert_eq!(
+            raised.flags & flags::MF_CORPSE,
+            0,
+            "resurrected corpse must not have MF_CORPSE flag"
+        );
+    }
+
+    #[test]
+    fn vile_chase_ignores_distant_corpse() {
+        let mut gs = make_game_state();
+        let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+
+        // Create a trooper corpse far from the vile (> 128 units).
+        let mut corpse = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(500),
+            Fixed16_16::from_int(500),
+            Bam::ZERO,
+        );
+        corpse.health = 0;
+        corpse.flags = flags::MF_CORPSE;
+        let corpse_h = gs.mobjslab.alloc(corpse);
+
+        a_vile_chase(&mut gs, vile, None);
+
+        // The corpse should remain dead (too far away).
+        let still_dead = gs.mobjslab.get(corpse_h).unwrap();
+        assert_eq!(
+            still_dead.health, 0,
+            "distant corpse must not be resurrected"
+        );
+    }
+
+    #[test]
+    fn vile_chase_ignores_non_raisable_corpse() {
+        let mut gs = make_game_state();
+        let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+
+        // Create a Lost Soul corpse nearby (Lost Soul has raise_state = S_NULL).
+        let mut corpse = Mobj::new(
+            MobjKind::LostSoul,
+            Fixed16_16::from_int(210),
+            Fixed16_16::from_int(10),
+            Bam::ZERO,
+        );
+        corpse.health = 0;
+        corpse.flags = flags::MF_CORPSE;
+        let corpse_h = gs.mobjslab.alloc(corpse);
+
+        a_vile_chase(&mut gs, vile, None);
+
+        // Lost Soul should remain dead (not raisable).
+        let still_dead = gs.mobjslab.get(corpse_h).unwrap();
+        assert_eq!(still_dead.health, 0, "non-raisable corpse must stay dead");
+    }
+
+    // -----------------------------------------------------------------------
+    // Boss Brain action tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn brain_awake_sets_flag() {
+        let mut gs = make_game_state();
+        assert!(!gs.brain_awake);
+        a_brain_awake(&mut gs);
+        assert!(gs.brain_awake, "brain_awake must set the flag");
+    }
+
+    #[test]
+    fn brain_spit_does_nothing_when_not_awake() {
+        let mut gs = make_game_state();
+        gs.brain_targets
+            .push((Fixed16_16::from_int(500), Fixed16_16::from_int(500)));
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+
+        let count_before = gs.mobjslab.len();
+        a_brain_spit(&mut gs, brain);
+        assert_eq!(
+            gs.mobjslab.len(),
+            count_before,
+            "brain_spit must do nothing when brain_awake is false"
+        );
+    }
+
+    #[test]
+    fn brain_spit_does_nothing_without_targets() {
+        let mut gs = make_game_state();
+        gs.brain_awake = true;
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+
+        let count_before = gs.mobjslab.len();
+        a_brain_spit(&mut gs, brain);
+        assert_eq!(
+            gs.mobjslab.len(),
+            count_before,
+            "brain_spit must do nothing without brain_targets"
+        );
+    }
+
+    #[test]
+    fn brain_spit_spawns_cube() {
+        let mut gs = make_game_state();
+        gs.brain_awake = true;
+        gs.brain_targets
+            .push((Fixed16_16::from_int(500), Fixed16_16::from_int(500)));
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+
+        let count_before = gs.mobjslab.len();
+        a_brain_spit(&mut gs, brain);
+        let count_after = gs.mobjslab.len();
+
+        assert!(
+            count_after > count_before,
+            "brain_spit must spawn a BossCube"
+        );
+
+        let cube = gs.mobjslab.iter_handles().find(|h| {
+            gs.mobjslab
+                .get(*h)
+                .map(|m| m.kind == MobjKind::BossCube)
+                .unwrap_or(false)
+        });
+        assert!(cube.is_some(), "must spawn a BossCube MobjKind");
+    }
+
+    #[test]
+    fn brain_spit_round_robins_targets() {
+        let mut gs = make_game_state();
+        gs.brain_awake = true;
+        gs.brain_targets
+            .push((Fixed16_16::from_int(100), Fixed16_16::from_int(100)));
+        gs.brain_targets
+            .push((Fixed16_16::from_int(500), Fixed16_16::from_int(500)));
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+
+        assert_eq!(gs.brain_target_index, 0);
+        a_brain_spit(&mut gs, brain);
+        assert_eq!(
+            gs.brain_target_index, 1,
+            "first spit uses index 0, advances to 1"
+        );
+        a_brain_spit(&mut gs, brain);
+        assert_eq!(
+            gs.brain_target_index, 2,
+            "second spit uses index 1, advances to 2"
+        );
+        // Third spit should wrap around (2 % 2 == 0).
+        a_brain_spit(&mut gs, brain);
+        assert_eq!(
+            gs.brain_target_index, 1,
+            "third spit wraps to index 0, advances to 1"
+        );
+    }
+
+    #[test]
+    fn spawn_fly_spawns_monster_and_fog() {
+        let mut gs = make_game_state();
+        gs.brain_awake = true;
+        gs.brain_targets
+            .push((Fixed16_16::from_int(500), Fixed16_16::from_int(500)));
+
+        // Create a cube with reactiontime pointing to target index 0.
+        let mut cube = Mobj::new(
+            MobjKind::BossCube,
+            Fixed16_16::from_int(500),
+            Fixed16_16::from_int(500),
+            Bam::ZERO,
+        );
+        cube.health = 1;
+        cube.flags = flags::MF_NOBLOCKMAP | flags::MF_MISSILE;
+        cube.reactiontime = 0; // target index
+        let cube_h = gs.mobjslab.alloc(cube);
+
+        let count_before = gs.mobjslab.len();
+        a_spawn_fly(&mut gs, cube_h);
+        let count_after = gs.mobjslab.len();
+
+        // Should spawn monster + fog - cube (removed) = net +1.
+        // But the cube is freed, so we spawned 2 new (monster + fog) - 1 freed = net +1.
+        assert!(
+            count_after >= count_before,
+            "spawn_fly must spawn monster + fog, got {count_before} -> {count_after}"
+        );
+
+        // Cube should be freed.
+        assert!(
+            gs.mobjslab.get(cube_h).is_none(),
+            "cube must be removed after spawning"
+        );
+
+        // SpawnFire fog should exist.
+        let fog = gs.mobjslab.iter_handles().find(|h| {
+            gs.mobjslab
+                .get(*h)
+                .map(|m| m.kind == MobjKind::SpawnFire)
+                .unwrap_or(false)
+        });
+        assert!(fog.is_some(), "must spawn a SpawnFire fog effect");
+    }
+
+    #[test]
+    fn spawn_fly_monster_has_reaction_time() {
+        let mut gs = make_game_state();
+        gs.brain_awake = true;
+        gs.brain_targets
+            .push((Fixed16_16::from_int(500), Fixed16_16::from_int(500)));
+
+        let mut cube = Mobj::new(
+            MobjKind::BossCube,
+            Fixed16_16::from_int(500),
+            Fixed16_16::from_int(500),
+            Bam::ZERO,
+        );
+        cube.health = 1;
+        cube.flags = flags::MF_NOBLOCKMAP | flags::MF_MISSILE;
+        cube.reactiontime = 0;
+        let cube_h = gs.mobjslab.alloc(cube);
+
+        a_spawn_fly(&mut gs, cube_h);
+
+        // Find the spawned monster (not SpawnFire, not player, not cube).
+        let monster = gs.mobjslab.iter_handles().find(|h| {
+            gs.mobjslab
+                .get(*h)
+                .map(|m| {
+                    m.kind != MobjKind::Player
+                        && m.kind != MobjKind::SpawnFire
+                        && m.kind != MobjKind::BossCube
+                        && BOSS_SPAWN_TYPES.contains(&m.kind)
+                })
+                .unwrap_or(false)
+        });
+        assert!(
+            monster.is_some(),
+            "must spawn a monster from BOSS_SPAWN_TYPES"
+        );
+
+        let spawned = gs.mobjslab.get(monster.unwrap()).unwrap();
+        assert_eq!(
+            spawned.reactiontime, 18,
+            "spawned monster must have reactiontime=18"
+        );
+    }
+
+    #[test]
+    fn brain_die_triggers_exit() {
+        let mut gs = make_game_state();
+        assert!(gs.exit_request.is_none());
+        a_brain_die(&mut gs);
+        assert_eq!(
+            gs.exit_request,
+            Some(crate::state::ExitRequest::Normal),
+            "brain_die must trigger a normal exit"
+        );
+    }
+
+    #[test]
+    fn brain_scream_spawns_explosions() {
+        let mut gs = make_game_state();
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+
+        let count_before = gs.mobjslab.len();
+        a_brain_scream(&mut gs, brain);
+        let count_after = gs.mobjslab.len();
+
+        assert_eq!(
+            count_after - count_before,
+            20,
+            "brain_scream must spawn exactly 20 explosions"
+        );
+    }
+
+    #[test]
+    fn brain_explode_spawns_one_explosion() {
+        let mut gs = make_game_state();
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+
+        let count_before = gs.mobjslab.len();
+        a_brain_explode(&mut gs, brain);
+        let count_after = gs.mobjslab.len();
+
+        assert_eq!(
+            count_after - count_before,
+            1,
+            "brain_explode must spawn exactly 1 explosion"
+        );
+    }
+
+    #[test]
+    fn dispatch_brain_awake_does_not_panic() {
+        let mut gs = make_game_state();
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+        dispatch_action(&mut gs, brain, ACTION_BRAIN_AWAKE, None);
+        assert!(gs.brain_awake);
+    }
+
+    #[test]
+    fn dispatch_brain_spit_does_not_panic() {
+        let mut gs = make_game_state();
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+        dispatch_action(&mut gs, brain, ACTION_BRAIN_SPIT, None);
+    }
+
+    #[test]
+    fn dispatch_brain_die_does_not_panic() {
+        let mut gs = make_game_state();
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+        dispatch_action(&mut gs, brain, ACTION_BRAIN_DIE, None);
+    }
+
+    #[test]
+    fn dispatch_brain_scream_does_not_panic() {
+        let mut gs = make_game_state();
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+        dispatch_action(&mut gs, brain, ACTION_BRAIN_SCREAM, None);
+    }
+
+    #[test]
+    fn dispatch_brain_explode_does_not_panic() {
+        let mut gs = make_game_state();
+        let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
+        dispatch_action(&mut gs, brain, ACTION_BRAIN_EXPLODE, None);
+    }
+
+    // --- New action no-target / stale-handle edge cases ---
+
+    #[test]
+    fn vile_actions_noop_without_target() {
+        let mut gs = make_game_state();
+        let mut mo = Mobj::new(
+            MobjKind::ArchVile,
+            Fixed16_16::from_int(100),
+            Fixed16_16::from_int(0),
+            Bam::ZERO,
+        );
+        mo.health = 700;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
+        let h = gs.mobjslab.alloc(mo);
+
+        // None of these should panic.
+        dispatch_action(&mut gs, h, ACTION_VILE_START, None);
+        dispatch_action(&mut gs, h, ACTION_VILE_TARGET, None);
+        dispatch_action(&mut gs, h, ACTION_VILE_ATTACK, None);
+    }
+
+    #[test]
+    fn vile_actions_noop_with_dead_target() {
+        let mut gs = make_game_state();
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().health = 0;
+        let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
+
+        let count_before = gs.mobjslab.len();
+        dispatch_action(&mut gs, vile, ACTION_VILE_TARGET, None);
+        assert_eq!(
+            gs.mobjslab.len(),
+            count_before,
+            "must not spawn fire when target is dead"
+        );
+    }
+
+    #[test]
+    fn boss_spawn_types_has_11_entries() {
+        assert_eq!(
+            BOSS_SPAWN_TYPES.len(),
+            11,
+            "BOSS_SPAWN_TYPES must have 11 monster types"
+        );
     }
 }

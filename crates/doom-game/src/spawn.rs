@@ -168,6 +168,12 @@ pub fn spawn_level_things(
             mo.flags |= flags::MF_AMBUSH;
         }
 
+        // Save original spawn point for Nightmare respawning.
+        mo.spawn_x = x;
+        mo.spawn_y = y;
+        mo.spawn_angle = angle;
+        mo.spawn_type = thing.kind;
+
         let handle = gs.mobjslab.alloc(mo);
 
         // --- Track totals for intermission screen ---
@@ -196,6 +202,104 @@ impl GameState {
     pub fn spawn_things(&mut self, level: &Level, skill: Skill) -> Option<MobjHandle> {
         spawn_level_things(self, level, skill, false)
     }
+}
+
+// ---------------------------------------------------------------------------
+// Nightmare respawn
+// ---------------------------------------------------------------------------
+
+/// Simulation tics per second (Doom runs at 35 Hz).
+pub const TICRATE: u32 = 35;
+
+/// Number of tics a dead monster waits before respawning on Nightmare.
+///
+/// 12 seconds * 35 tics/sec = 420 tics.
+pub const NIGHTMARE_RESPAWN_TICS: i32 = 12 * TICRATE as i32;
+
+/// Attempt to respawn a dead monster at its original spawn point.
+///
+/// On Nightmare difficulty, dead monsters (those with `MF_COUNTKILL` that
+/// are in their death state) use `movecount` as a respawn timer.  Each tic,
+/// `movecount` is incremented.  Once it reaches `NIGHTMARE_RESPAWN_TICS`
+/// (420), the corpse is removed and a fresh monster is spawned at its
+/// original map position with teleport fog effects.
+///
+/// Returns `true` if the monster respawned (corpse should be removed by
+/// the caller), `false` if the timer is still counting or the mobj is
+/// ineligible.
+pub fn p_nightmare_respawn(gs: &mut GameState, handle: MobjHandle) -> bool {
+    // Read all the data we need from the corpse before mutating.
+    let (spawn_x, spawn_y, spawn_angle, spawn_type, corpse_x, corpse_y, movecount) = {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return false;
+        };
+
+        // Must be a dead monster with a valid spawn type.
+        if mo.spawn_type == 0 {
+            return false;
+        }
+
+        (
+            mo.spawn_x,
+            mo.spawn_y,
+            mo.spawn_angle,
+            mo.spawn_type,
+            mo.x,
+            mo.y,
+            mo.movecount,
+        )
+    };
+
+    // Increment the respawn counter.
+    if movecount < NIGHTMARE_RESPAWN_TICS {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.movecount += 1;
+        }
+        return false;
+    }
+
+    // --- Timer expired: respawn the monster ---
+
+    // Spawn teleport fog at the corpse location.
+    let mut fog_corpse = Mobj::new(MobjKind::SpawnFire, corpse_x, corpse_y, Bam::ZERO);
+    fog_corpse.state = crate::mobj::StateNum(crate::states::ids::S_TFOG1);
+    if let Some(entry) = STATES.get(crate::states::ids::S_TFOG1 as usize) {
+        fog_corpse.tics = entry.tics;
+    }
+    fog_corpse.flags = flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY;
+    gs.mobjslab.alloc(fog_corpse);
+
+    // Spawn teleport fog at the original spawn point.
+    let mut fog_spawn = Mobj::new(MobjKind::SpawnFire, spawn_x, spawn_y, Bam::ZERO);
+    fog_spawn.state = crate::mobj::StateNum(crate::states::ids::S_TFOG1);
+    if let Some(entry) = STATES.get(crate::states::ids::S_TFOG1 as usize) {
+        fog_spawn.tics = entry.tics;
+    }
+    fog_spawn.flags = flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY;
+    gs.mobjslab.alloc(fog_spawn);
+
+    // Resolve the MobjKind from the DoomEd type.
+    let kind = match doomed_type_to_kind(spawn_type) {
+        Some(k) => k,
+        None => return false,
+    };
+
+    // Spawn a fresh monster at the original position.
+    let mut fresh = Mobj::new(kind, spawn_x, spawn_y, spawn_angle);
+    apply_mobjinfo_defaults(&mut fresh);
+
+    // Carry over the spawn-point data so it can respawn again.
+    fresh.spawn_x = spawn_x;
+    fresh.spawn_y = spawn_y;
+    fresh.spawn_angle = spawn_angle;
+    fresh.spawn_type = spawn_type;
+
+    gs.mobjslab.alloc(fresh);
+
+    // Remove the corpse.
+    gs.mobjslab.free(handle);
+
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -935,5 +1039,277 @@ mod tests {
         let bam270 = degrees_to_bam(270);
         let diff270 = bam270.0.wrapping_sub(0xC000_0000);
         assert!(diff270 < 0x0100_0000 || diff270 > 0xFF00_0000);
+    }
+
+    // ===================================================================
+    // Nightmare respawn
+    // ===================================================================
+
+    /// Create a dead Trooper corpse with spawn-point data set.
+    fn make_dead_trooper_corpse(gs: &mut GameState) -> crate::mobj::MobjHandle {
+        let spawn_x = Fixed16_16::from_int(200);
+        let spawn_y = Fixed16_16::from_int(300);
+        let spawn_angle = degrees_to_bam(90);
+
+        let mut mo = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(500),
+            Fixed16_16::from_int(600),
+            Bam::ZERO,
+        );
+        crate::spawn::apply_mobjinfo_defaults(&mut mo);
+
+        // Simulate death: zero health, set MF_COUNTKILL (already set by mobjinfo).
+        mo.health = 0;
+        mo.movecount = 0;
+
+        // Set spawn point data.
+        mo.spawn_x = spawn_x;
+        mo.spawn_y = spawn_y;
+        mo.spawn_angle = spawn_angle;
+        mo.spawn_type = 3004; // DoomEd type for Trooper
+
+        gs.mobjslab.alloc(mo)
+    }
+
+    #[test]
+    fn nightmare_respawn_constants() {
+        assert_eq!(TICRATE, 35);
+        assert_eq!(NIGHTMARE_RESPAWN_TICS, 420);
+    }
+
+    #[test]
+    fn nightmare_respawn_timer_increments() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_dead_trooper_corpse(&mut gs);
+
+        // First call: movecount goes from 0 to 1, returns false.
+        assert!(!p_nightmare_respawn(&mut gs, handle));
+        assert_eq!(gs.mobjslab.get(handle).unwrap().movecount, 1);
+
+        // Second call: movecount goes to 2.
+        assert!(!p_nightmare_respawn(&mut gs, handle));
+        assert_eq!(gs.mobjslab.get(handle).unwrap().movecount, 2);
+    }
+
+    #[test]
+    fn nightmare_respawn_triggers_at_420_tics() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_dead_trooper_corpse(&mut gs);
+
+        // Set movecount just below threshold.
+        gs.mobjslab.get_mut(handle).unwrap().movecount = NIGHTMARE_RESPAWN_TICS - 1;
+
+        // One more increment, still not at threshold.
+        assert!(!p_nightmare_respawn(&mut gs, handle));
+        assert_eq!(
+            gs.mobjslab.get(handle).unwrap().movecount,
+            NIGHTMARE_RESPAWN_TICS
+        );
+
+        // Now at threshold — respawn should happen.
+        assert!(p_nightmare_respawn(&mut gs, handle));
+
+        // Original corpse handle should be freed.
+        assert!(gs.mobjslab.get(handle).is_none());
+    }
+
+    #[test]
+    fn nightmare_respawn_creates_fresh_monster_at_spawn_point() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_dead_trooper_corpse(&mut gs);
+
+        // Set movecount to threshold so respawn fires immediately.
+        gs.mobjslab.get_mut(handle).unwrap().movecount = NIGHTMARE_RESPAWN_TICS;
+
+        let initial_count = gs.mobjslab.len();
+        assert!(p_nightmare_respawn(&mut gs, handle));
+
+        // Corpse removed, but fresh monster + 2 fog effects added.
+        // Net: -1 corpse + 1 monster + 2 fog = +2
+        assert_eq!(gs.mobjslab.len(), initial_count + 2);
+
+        // Find the freshly-spawned Trooper (not SpawnFire).
+        let fresh_handle = gs
+            .mobjslab
+            .iter_handles()
+            .find(|&h| {
+                gs.mobjslab
+                    .get(h)
+                    .map(|m| m.kind == MobjKind::Trooper)
+                    .unwrap_or(false)
+            })
+            .expect("Fresh trooper should exist after respawn");
+
+        let fresh = gs.mobjslab.get(fresh_handle).unwrap();
+
+        // Verify spawn point position.
+        assert_eq!(fresh.x, Fixed16_16::from_int(200));
+        assert_eq!(fresh.y, Fixed16_16::from_int(300));
+
+        // Verify full health restored.
+        assert_eq!(fresh.health, 20); // Trooper spawn_health = 20
+
+        // Verify spawn data carried over for re-respawning.
+        assert_eq!(fresh.spawn_x, Fixed16_16::from_int(200));
+        assert_eq!(fresh.spawn_y, Fixed16_16::from_int(300));
+        assert_eq!(fresh.spawn_type, 3004);
+    }
+
+    #[test]
+    fn nightmare_respawn_spawns_teleport_fog() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_dead_trooper_corpse(&mut gs);
+        gs.mobjslab.get_mut(handle).unwrap().movecount = NIGHTMARE_RESPAWN_TICS;
+
+        assert!(p_nightmare_respawn(&mut gs, handle));
+
+        // Should have exactly 2 SpawnFire fog effects.
+        let fog_count = gs
+            .mobjslab
+            .iter_handles()
+            .filter(|&h| {
+                gs.mobjslab
+                    .get(h)
+                    .map(|m| m.kind == MobjKind::SpawnFire)
+                    .unwrap_or(false)
+            })
+            .count();
+        assert_eq!(fog_count, 2, "Should spawn fog at corpse and spawn point");
+    }
+
+    #[test]
+    fn nightmare_respawn_no_action_without_spawn_type() {
+        let mut gs = GameState::new("TEST");
+        let mut mo = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 0;
+        mo.flags = flags::MF_COUNTKILL;
+        mo.spawn_type = 0; // No spawn type — cannot respawn.
+        let handle = gs.mobjslab.alloc(mo);
+
+        // Should return false because spawn_type == 0.
+        assert!(!p_nightmare_respawn(&mut gs, handle));
+    }
+
+    #[test]
+    fn nightmare_respawn_does_not_happen_below_threshold() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_dead_trooper_corpse(&mut gs);
+
+        // Run 419 tics — should not respawn.
+        for _ in 0..419 {
+            assert!(!p_nightmare_respawn(&mut gs, handle));
+        }
+
+        // Monster should still be alive in the slab (corpse).
+        assert!(gs.mobjslab.get(handle).is_some());
+        assert_eq!(gs.mobjslab.get(handle).unwrap().movecount, 419);
+
+        // 420th call pushes to threshold.
+        assert!(!p_nightmare_respawn(&mut gs, handle));
+        assert_eq!(
+            gs.mobjslab.get(handle).unwrap().movecount,
+            NIGHTMARE_RESPAWN_TICS
+        );
+
+        // 421st call (at threshold) triggers respawn.
+        assert!(p_nightmare_respawn(&mut gs, handle));
+        assert!(gs.mobjslab.get(handle).is_none());
+    }
+
+    #[test]
+    fn tick_all_mobjs_nightmare_triggers_respawn() {
+        let mut gs = GameState::new("TEST");
+        gs.skill = Skill::Nightmare;
+
+        // Spawn a player so tick_all_mobjs can skip it.
+        let player_mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let player_handle = gs.mobjslab.alloc(player_mo);
+        gs.player = crate::player::PlayerState::pistol_start(player_handle);
+
+        // Spawn a dead trooper with spawn data.
+        let handle = make_dead_trooper_corpse(&mut gs);
+        gs.mobjslab.get_mut(handle).unwrap().movecount = NIGHTMARE_RESPAWN_TICS;
+
+        // Run tick_all_mobjs — should trigger respawn on Nightmare.
+        crate::tic::tick_all_mobjs(&mut gs, None);
+
+        // Corpse should be gone.
+        assert!(gs.mobjslab.get(handle).is_none());
+
+        // Fresh trooper should exist.
+        let has_trooper = gs.mobjslab.iter_handles().any(|h| {
+            gs.mobjslab
+                .get(h)
+                .map(|m| m.kind == MobjKind::Trooper && m.health > 0)
+                .unwrap_or(false)
+        });
+        assert!(
+            has_trooper,
+            "Fresh trooper should exist after Nightmare respawn"
+        );
+    }
+
+    #[test]
+    fn tick_all_mobjs_no_respawn_on_lower_skill() {
+        let mut gs = GameState::new("TEST");
+        gs.skill = Skill::Hard; // Not Nightmare
+
+        let player_mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let player_handle = gs.mobjslab.alloc(player_mo);
+        gs.player = crate::player::PlayerState::pistol_start(player_handle);
+
+        let handle = make_dead_trooper_corpse(&mut gs);
+        gs.mobjslab.get_mut(handle).unwrap().movecount = NIGHTMARE_RESPAWN_TICS;
+
+        // Run tick_all_mobjs on Hard — should NOT trigger respawn.
+        crate::tic::tick_all_mobjs(&mut gs, None);
+
+        // Corpse should still be there (not respawned).
+        assert!(gs.mobjslab.get(handle).is_some());
+    }
+
+    #[test]
+    fn spawn_level_things_saves_spawn_point() {
+        let level = make_test_level_with_things(vec![Thing {
+            x: 150,
+            y: 250,
+            angle: 45,
+            kind: 3004, // Trooper
+            flags: 7,
+        }]);
+        let mut gs = GameState::new("TEST");
+        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+
+        let handle = gs
+            .mobjslab
+            .iter_handles()
+            .find(|&h| {
+                gs.mobjslab
+                    .get(h)
+                    .map(|m| m.kind == MobjKind::Trooper)
+                    .unwrap_or(false)
+            })
+            .unwrap();
+        let mo = gs.mobjslab.get(handle).unwrap();
+
+        assert_eq!(mo.spawn_x, Fixed16_16::from_int(150));
+        assert_eq!(mo.spawn_y, Fixed16_16::from_int(250));
+        assert_eq!(mo.spawn_type, 3004);
     }
 }

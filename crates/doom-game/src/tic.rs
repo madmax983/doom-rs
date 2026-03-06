@@ -226,6 +226,7 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
     // Collect handles first to avoid borrow conflicts during iteration.
     let handles: Vec<MobjHandle> = gs.mobjslab.iter_handles().collect();
     let player_handle = gs.player.handle;
+    let is_nightmare = gs.skill == crate::spawn::Skill::Nightmare;
 
     for handle in handles {
         // Skip the player mobj — it's handled by tick_player.
@@ -236,6 +237,28 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
         // Skip freed mobjs (may have been removed by an earlier iteration).
         if gs.mobjslab.get(handle).is_none() {
             continue;
+        }
+
+        // --- Nightmare respawn check ---
+        // On Nightmare, dead monsters (MF_COUNTKILL corpses) use movecount
+        // as a respawn timer.  After 420 tics (12 seconds) the corpse is
+        // replaced by a fresh monster at the original spawn point.
+        if is_nightmare {
+            let is_dead_monster = gs
+                .mobjslab
+                .get(handle)
+                .map(|mo| {
+                    mo.health <= 0 && mo.flags & flags::MF_COUNTKILL != 0 && mo.spawn_type != 0
+                })
+                .unwrap_or(false);
+
+            if is_dead_monster {
+                // p_nightmare_respawn handles timer increment and respawn.
+                // If it returns true, the corpse has been freed — skip to next.
+                if crate::spawn::p_nightmare_respawn(gs, handle) {
+                    continue;
+                }
+            }
         }
 
         let result = tick_mobj(gs, handle, level);
