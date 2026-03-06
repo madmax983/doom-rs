@@ -562,7 +562,7 @@ fn thing_sprite(kind: u16) -> Option<[u8; 8]> {
 /// View space is computed with a standard rotation: `vx` is depth (forward
 /// from the player eye), `vy` is lateral displacement.  A sprite with
 /// `vx <= 0.5` is behind or too close and is skipped.  Screen X of the
-/// sprite centre is `HALF_W - FOCAL_LEN * vy / vx`; sprite screen height is
+/// sprite centre is `HALF_W + FOCAL_LEN * vy / vx`; sprite screen height is
 /// `frame.height * FOCAL_LEN / vx`.
 pub fn render_things(
     level: &doom_map::Level,
@@ -677,7 +677,7 @@ pub fn render_things(
 
         // --- Screen-space projection ---
         // Horizontal centre of the sprite on screen.
-        let sx_center = HALF_W as f32 - FOCAL_LEN * vy / vx;
+        let sx_center = HALF_W as f32 + FOCAL_LEN * vy / vx;
 
         // Scale factor: how many screen pixels per map unit at this depth.
         let sprite_scale = FOCAL_LEN / vx;
@@ -1505,7 +1505,7 @@ mod tests {
         // vx must be positive (thing is in front).
         assert!(vx > 0.5, "thing should be in front: vx={vx}");
 
-        let sx_center = 160.0_f32 - 160.0 * vy / vx;
+        let sx_center = 160.0_f32 + 160.0 * vy / vx;
 
         // For a thing directly ahead, vy ≈ 0 so sx_center ≈ 160.
         let deviation = (sx_center - 160.0).abs();
@@ -1530,12 +1530,12 @@ mod tests {
         // Expected sprite center from the wall transform convention in render.rs:
         //   vx = dx*cos + dy*sin
         //   vy = dx*sin - dy*cos
-        //   sx = HALF_W - FOCAL_LEN * vy / vx
+        //   sx = HALF_W + FOCAL_LEN * vy / vx
         let dx = 100.0f32;
         let dy = 50.0f32;
         let vx = dx; // facing east => cos=1, sin=0
         let vy = -dy;
-        let sx_center = HALF_W as f32 - FOCAL_LEN * vy / vx;
+        let sx_center = HALF_W as f32 + FOCAL_LEN * vy / vx;
 
         // Block a band around the expected sprite columns.
         let mut zbuf = [f32::MAX; SCREEN_W];
