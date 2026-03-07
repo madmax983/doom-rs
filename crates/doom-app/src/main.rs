@@ -16,8 +16,8 @@ use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
 use doom_game::player::WeaponType;
 use doom_game::{
-    GameState, Skill, TicCmd, check_cross_lines, init_conveyors, init_scrolling_walls,
-    init_sector_lights, kind_to_doomed_type, spawn_level_things,
+    GameState, Skill, TicCmd, TitleScreen, check_cross_lines, init_conveyors,
+    init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
 use doom_map::{Level, Thing};
@@ -25,7 +25,7 @@ use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
     AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer, PaletteFlash,
     PaletteLut, SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_menu, draw_status_bar,
-    draw_weapon_sprite, render_level, render_things_ex,
+    draw_title_screen, draw_weapon_sprite, render_level, render_things_ex,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -44,9 +44,9 @@ struct Args {
     #[arg(long)]
     wad: std::path::PathBuf,
 
-    /// Map to load (e.g. E1M1, MAP01). Defaults to E1M1.
-    #[arg(long, default_value = "E1M1")]
-    warp: String,
+    /// Map to load (e.g. E1M1, MAP01). Omit to start at the title screen.
+    #[arg(long)]
+    warp: Option<String>,
 
     /// Skill level 1-5 (1=ITYTD, 2=HNTR, 3=HMP, 4=UV, 5=NM). Defaults to 3.
     #[arg(long, default_value = "3")]
@@ -138,6 +138,8 @@ pub(crate) struct DoomGame {
     menu: doom_game::menu::GameMenu,
     /// Bitmap font for menu/console text rendering.
     bitmap_font: BitmapFont,
+    /// Title screen state. `Some` = still on title screen, `None` = in gameplay.
+    title_screen: Option<TitleScreen>,
 }
 
 impl DoomGame {
@@ -149,6 +151,7 @@ impl DoomGame {
         tex_cache: Option<TextureCache>,
         sprite_cache: Option<SpriteCache>,
         colormap_cache: Option<ColormapCache>,
+        show_title: bool,
     ) -> Self {
         // Initialize scrolling wall and conveyor belt specials from level linedefs.
         init_scrolling_walls(&mut gs, &level);
@@ -159,6 +162,14 @@ impl DoomGame {
 
         // Capture initial player health for pain-flash delta detection.
         let initial_health = gs.player.health();
+
+        let mut menu = doom_game::menu::GameMenu::new(false); // false = Doom 1 mode
+        let title_screen = if show_title {
+            menu.open();
+            Some(TitleScreen::new())
+        } else {
+            None
+        };
 
         Self {
             gs,
@@ -180,14 +191,68 @@ impl DoomGame {
             palette_flash: PaletteFlash::new(),
             switch_list: SwitchList::new(),
             prev_health: initial_health,
-            menu: doom_game::menu::GameMenu::new(false), // false = Doom 1 mode
+            menu,
             bitmap_font: BitmapFont::new(),
+            title_screen,
         }
     }
 }
 
 impl DoomApp for DoomGame {
     fn tick(&mut self, input: TicInput) {
+        // --- Title screen mode ---
+        // While the title screen is showing, route input to the menu and skip
+        // all game simulation.  StartGame dismisses the title screen.
+        if let Some(ref mut ts) = self.title_screen {
+            ts.tick();
+            self.menu.tick();
+
+            // Up/down navigation via movement keys (W/↑ = up, S/↓ = down).
+            if input.forward_move > 0 {
+                self.menu.move_up();
+            } else if input.forward_move < 0 {
+                self.menu.move_down();
+            }
+
+            // Enter (console_char '\n') = select; Backspace = back.
+            if let Some(ch) = input.console_char {
+                if ch == '\n' {
+                    if let Some(result) = self.menu.select() {
+                        match result {
+                            doom_game::menu::MenuResult::StartGame { episode: _, skill } => {
+                                // Map skill index to Skill enum (0=Baby..4=Nightmare).
+                                let sk = match skill {
+                                    0 => Skill::Baby,
+                                    1 => Skill::Easy,
+                                    3 => Skill::Hard,
+                                    4 => Skill::Nightmare,
+                                    _ => Skill::Medium,
+                                };
+                                // Re-spawn the level with the chosen skill.
+                                self.gs = GameState::new(&self.gs.level_name.clone());
+                                spawn_level_things(&mut self.gs, &self.level, sk, false);
+                                init_scrolling_walls(&mut self.gs, &self.level);
+                                init_conveyors(&mut self.gs, &self.level);
+                                init_sector_lights(&mut self.gs, &self.level);
+                                self.menu.close();
+                                self.title_screen = None;
+                            }
+                            doom_game::menu::MenuResult::Quit => {
+                                // Can't stop the event loop from here; just close the menu.
+                                self.menu.close();
+                                self.title_screen = None;
+                            }
+                            _ => {}
+                        }
+                    }
+                } else if ch == '\x08' {
+                    // Backspace = back in menu.
+                    self.menu.back();
+                }
+            }
+            return;
+        }
+
         // Tick menu skull animation each tic regardless of menu state.
         self.menu.tick();
 
@@ -367,6 +432,13 @@ impl DoomApp for DoomGame {
     }
 
     fn render(&mut self, fb: &mut Framebuffer) {
+        // Title screen mode: draw the title/credits screen + menu overlay.
+        if let Some(ref ts) = self.title_screen {
+            draw_title_screen(fb, ts, &self.bitmap_font);
+            draw_menu(fb, &self.menu, &self.bitmap_font);
+            return;
+        }
+
         let handle = self.gs.player.handle;
         let (px, py, angle) = match self.gs.mobjslab.get(handle) {
             Some(mo) => (mo.x.to_int(), mo.y.to_int(), mo.angle),
@@ -729,12 +801,16 @@ fn main() -> Result<()> {
         None => PaletteLut::grayscale(),
     };
 
+    // Determine which map to load — default to E1M1 when no --warp is given.
+    let warp_str = args.warp.as_deref().unwrap_or("E1M1");
+    let show_title = args.warp.is_none();
+
     // Parse the requested level.
-    let level = Level::from_wad(&wad, &args.warp)
-        .with_context(|| format!("Failed to load map {}", args.warp))?;
+    let level = Level::from_wad(&wad, warp_str)
+        .with_context(|| format!("Failed to load map {warp_str}"))?;
 
     // Create game state and spawn ALL level things (player, monsters, items, keys).
-    let mut gs = GameState::new(&args.warp);
+    let mut gs = GameState::new(warp_str);
     let skill = match args.skill {
         1 => Skill::Baby,
         2 => Skill::Easy,
@@ -784,11 +860,13 @@ fn main() -> Result<()> {
     // Try to open the audio subsystem.  Returns None in headless/CI environments.
     let audio = AudioSystem::try_open(&wad);
 
-    // Start map music if audio is available.
-    if let Some(ref audio) = audio {
-        if let Some(music_lump) = music_lump_for_map(&args.warp) {
-            if let Some(mus_data) = wad.find_lump_data(&music_lump) {
-                audio.start_music(mus_data.to_vec());
+    // Start map music if audio is available (skip during title screen).
+    if !show_title {
+        if let Some(ref audio) = audio {
+            if let Some(music_lump) = music_lump_for_map(warp_str) {
+                if let Some(mus_data) = wad.find_lump_data(&music_lump) {
+                    audio.start_music(mus_data.to_vec());
+                }
             }
         }
     }
@@ -820,6 +898,7 @@ fn main() -> Result<()> {
         tex_cache,
         sprite_cache,
         colormap_cache,
+        show_title,
     );
 
     // Headless capture mode: tick N frames, render, save BMP, exit.
@@ -877,7 +956,7 @@ fn main() -> Result<()> {
             .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
     } else if let Some(record_path) = args.record {
         // Parse episode/map from the --warp argument.
-        let (episode, map) = parse_warp_episode_map(&args.warp);
+        let (episode, map) = parse_warp_episode_map(warp_str);
         // Clamp skill to 0-4 (LMP uses 0-based skill internally).
         let skill = args.skill.saturating_sub(1).min(4);
         let header = LmpHeader::new_singleplayer(skill, episode, map);
@@ -1061,6 +1140,7 @@ mod tests {
             None,
             None,
             None,
+            false,
         )
     }
 
