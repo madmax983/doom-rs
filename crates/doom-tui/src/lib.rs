@@ -12,6 +12,7 @@
 pub mod event_loop;
 pub mod input;
 pub mod scaler;
+pub mod sixel;
 pub mod widget;
 
 pub use event_loop::{DoomApp, DoomEventLoop, EventLoopError, TIC_DURATION, TIC_RATE_HZ};

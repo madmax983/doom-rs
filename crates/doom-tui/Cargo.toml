@@ -8,6 +8,8 @@ doom-renderer = { workspace = true }
 ratatui       = { workspace = true }
 crossterm     = { workspace = true }
 thiserror     = { workspace = true }
+ratatui-image = { version = "10.0.6", default-features = false, features = ["crossterm", "image-defaults"] }
+image           = { version = "0.25", default-features = false }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Graphics_Gdi"] }

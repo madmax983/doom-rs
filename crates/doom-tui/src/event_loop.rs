@@ -22,6 +22,7 @@
 
 use crate::input::{InputState, TicInput};
 use crate::scaler::ScalingMode;
+use crate::sixel::DoomSixelWidget;
 use crate::widget::DoomFramebufferWidget;
 use crossterm::{
     event::{self, KeyCode, KeyEventKind, KeyModifiers},
@@ -29,6 +30,7 @@ use crossterm::{
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use doom_renderer::{Framebuffer, PaletteLut};
+use image::{DynamicImage, RgbImage};
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -36,6 +38,7 @@ use ratatui::{
     style::{Color, Style},
     widgets::Paragraph,
 };
+use ratatui_image::{Resize, StatefulImage, picker::Picker, picker::ProtocolType};
 use std::io::{Stdout, stdout};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -95,8 +98,18 @@ pub struct DoomEventLoop {
     last_fps_update: Instant,
     frame_count: u64,
 
-    /// Scaling algorithm used when blitting the framebuffer to the terminal.
+    /// Scaling algorithm used when blitting the framebuffer to the terminal (halfblocks path).
     scaling_mode: ScalingMode,
+
+    /// Graphics protocol picker — detects Kitty/Sixel/iTerm2 or falls back to halfblocks.
+    picker: Picker,
+
+    /// When true, use the detected graphics protocol (Kitty/Sixel/iTerm2) instead of halfblocks.
+    ///
+    /// Defaults to `false` because Sixel/iTerm2 encoding is too slow for 35+ Hz game rendering
+    /// on most terminals.  Enable with [`DoomEventLoop::set_graphics_protocol`] or let the user
+    /// toggle in-game.
+    use_graphics_protocol: bool,
 }
 
 /// Query the primary monitor's refresh rate via platform APIs.
@@ -143,6 +156,11 @@ impl DoomEventLoop {
         execute!(out, EnterAlternateScreen)
             .map_err(|e| EventLoopError::TerminalSetup(e.to_string()))?;
 
+        // Query the terminal for graphics protocol support AFTER entering alternate screen
+        // but BEFORE consuming any terminal events.  Falls back to halfblocks if the query
+        // fails or the terminal doesn't support any graphics protocol.
+        let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
+
         let backend = CrosstermBackend::new(out);
         let mut terminal =
             Terminal::new(backend).map_err(|e| EventLoopError::TerminalSetup(e.to_string()))?;
@@ -163,7 +181,31 @@ impl DoomEventLoop {
             last_fps_update: Instant::now(),
             frame_count: 0,
             scaling_mode: ScalingMode::Nearest,
+            picker,
+            use_graphics_protocol: false,
         })
+    }
+
+    /// Return which graphics protocol was detected at startup.
+    pub fn protocol_type(&self) -> ProtocolType {
+        self.picker.protocol_type()
+    }
+
+    /// Enable or disable the graphics protocol (Kitty/Sixel/iTerm2) renderer.
+    ///
+    /// Has no effect if the terminal only supports halfblocks.
+    pub fn set_graphics_protocol(&mut self, enable: bool) {
+        self.use_graphics_protocol = enable;
+    }
+
+    /// Toggle between halfblocks and the detected graphics protocol.
+    ///
+    /// Returns whether graphics protocol is now active.
+    pub fn toggle_graphics_protocol(&mut self) -> bool {
+        if self.picker.protocol_type() != ProtocolType::Halfblocks {
+            self.use_graphics_protocol = !self.use_graphics_protocol;
+        }
+        self.use_graphics_protocol
     }
 
     /// Set the scaling algorithm used when blitting the framebuffer to the terminal.
@@ -259,7 +301,11 @@ impl DoomEventLoop {
         }
     }
 
-    /// Blit the framebuffer to the terminal via `DoomFramebufferWidget`.
+    /// Blit the framebuffer to the terminal.
+    ///
+    /// If the terminal supports a graphics protocol (Kitty/Sixel/iTerm2) the framebuffer is
+    /// converted to an RGB image and rendered via ratatui-image at true pixel resolution.
+    /// Otherwise the existing half-block `▀` widget is used as a fallback.
     fn blit(
         &mut self,
         fb: &Framebuffer,
@@ -280,6 +326,27 @@ impl DoomEventLoop {
         let fps = self.fps;
         let frame_count = self.frame_count;
         let scaling_mode = self.scaling_mode;
+        let protocol_type = self.picker.protocol_type();
+        let font_size = self.picker.font_size();
+        let use_gfx = self.use_graphics_protocol && protocol_type != ProtocolType::Halfblocks;
+
+        // For Kitty/iTerm2: build a StatefulProtocol before the draw closure
+        // (borrow checker: can't hold &self.picker and &mut self.terminal simultaneously).
+        let mut img_proto = match (use_gfx, protocol_type) {
+            (true, ProtocolType::Kitty) | (true, ProtocolType::Iterm2) => {
+                let rgb_data: Vec<u8> = fb
+                    .as_slice()
+                    .iter()
+                    .flat_map(|&idx| {
+                        let rgb = lut.get(active_palette, idx);
+                        [rgb.r, rgb.g, rgb.b]
+                    })
+                    .collect();
+                RgbImage::from_raw(Framebuffer::width() as u32, Framebuffer::height() as u32, rgb_data)
+                    .map(|img| self.picker.new_resize_protocol(DynamicImage::ImageRgb8(img)))
+            }
+            _ => None,
+        };
 
         self.terminal
             .draw(|f| {
@@ -288,12 +355,30 @@ impl DoomEventLoop {
                     .constraints([Constraint::Min(0), Constraint::Length(1)])
                     .split(f.area());
 
-                let widget =
-                    DoomFramebufferWidget::new(fb, lut, active_palette).with_scaling(scaling_mode);
-                f.render_widget(widget, chunks[0]);
+                if use_gfx && protocol_type == ProtocolType::Sixel {
+                    // Fast palette-aware sixel: no color quantization, scales to fill terminal.
+                    let widget = DoomSixelWidget::new(fb, lut, active_palette, font_size);
+                    f.render_widget(widget, chunks[0]);
+                } else if let Some(ref mut proto) = img_proto {
+                    // Kitty / iTerm2: use ratatui-image StatefulProtocol.
+                    let widget = StatefulImage::default().resize(Resize::Scale(None));
+                    f.render_stateful_widget(widget, chunks[0], proto);
+                } else {
+                    // Halfblocks (default): palette-aware, zero RGB conversion.
+                    let widget = DoomFramebufferWidget::new(fb, lut, active_palette)
+                        .with_scaling(scaling_mode);
+                    f.render_widget(widget, chunks[0]);
+                }
 
-                let status =
-                    format!(" DOOM | FPS: {fps:.1} | Frame: {frame_count} | [Q/Esc] Quit ");
+                let proto_name = match (use_gfx, protocol_type) {
+                    (true, ProtocolType::Sixel) => "sixel*",
+                    (true, ProtocolType::Kitty) => "kitty",
+                    (true, ProtocolType::Iterm2) => "iterm2",
+                    _ => "halfblocks",
+                };
+                let status = format!(
+                    " DOOM | FPS: {fps:.1} | Frame: {frame_count} | {proto_name} | [Q/Esc] Quit "
+                );
                 let status_bar = Paragraph::new(status)
                     .style(Style::default().fg(Color::Black).bg(Color::Yellow));
                 f.render_widget(status_bar, chunks[1]);

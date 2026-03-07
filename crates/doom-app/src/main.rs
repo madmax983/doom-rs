@@ -862,6 +862,10 @@ fn main() -> Result<()> {
     let mut event_loop =
         DoomEventLoop::new().map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
 
+    // Enable graphics protocol (Sixel/Kitty/iTerm2) if the terminal supports it.
+    // Our custom palette-aware Sixel encoder makes this fast even at 35 Hz.
+    event_loop.set_graphics_protocol(true);
+
     if let Some(demo_path) = args.playdemo {
         // Load and parse the demo file.
         let demo_bytes = std::fs::read(&demo_path)
