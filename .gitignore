@@ -4,3 +4,6 @@
 *.WAD
 *.lmp
 *.deh
+*.bmp
+*.png
+.claude/worktrees/
