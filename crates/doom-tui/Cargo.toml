@@ -11,5 +11,12 @@ thiserror     = { workspace = true }
 ratatui-image = { version = "10.0.6", default-features = false, features = ["crossterm", "image-defaults"] }
 image           = { version = "0.25", default-features = false }
 
+[dev-dependencies]
+criterion = { workspace = true }
+
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Graphics_Gdi"] }
+
+[[bench]]
+name    = "sixel_bench"
+harness = false

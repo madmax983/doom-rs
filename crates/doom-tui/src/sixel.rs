@@ -99,7 +99,7 @@ impl Widget for DoomSixelWidget<'_> {
     }
 }
 
-fn encode_doom_sixel(
+pub fn encode_doom_sixel(
     data: &[u8],
     lut: &PaletteLut,
     pal: usize,
