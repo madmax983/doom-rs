@@ -51,6 +51,10 @@ pub struct DoorMover {
     pub wait_tics: i32,
     /// Countdown until the door starts closing again (−1 = permanent open/close).
     pub countdown: i32,
+    /// For close-wait-open doors: ceiling height to reopen to (0 = not applicable).
+    pub reopen_height: i16,
+    /// For close-wait-open doors: tics remaining before reopening (−1 = not applicable).
+    pub reopen_countdown: i32,
 }
 
 // ---------------------------------------------------------------------------
@@ -77,6 +81,8 @@ pub enum CeilingType {
     FastCrushAndRaise,
     /// Crush without sound flag.
     SilentCrush,
+    /// Raise ceiling to highest adjacent ceiling and stop.
+    RaiseToHighest,
 }
 
 /// A ceiling crusher that oscillates between top and bottom heights,

@@ -220,6 +220,23 @@ pub fn player_sector_index(gs: &GameState, level: &Level) -> Option<usize> {
 }
 
 // ---------------------------------------------------------------------------
+// Secret sector tracking
+// ---------------------------------------------------------------------------
+
+/// Detect when the player enters a sector with special 9 (secret sector) and
+/// increment `secret_count`.  Clears the sector special to prevent double-counting.
+///
+/// Call once per tic after player movement is resolved.
+pub fn tick_sector_secrets(gs: &mut GameState, level: &mut Level) {
+    if let Some(sector_idx) = player_sector_index(gs, level) {
+        if level.sectors[sector_idx].special == 9 {
+            gs.secret_count += 1;
+            level.sectors[sector_idx].special = 0;
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Teleporters
 // ---------------------------------------------------------------------------
 
@@ -421,13 +438,30 @@ pub fn tick_sector_lights(gs: &mut GameState, level: &mut Level) {
 ///
 /// Call this once per tic from `tick()`.
 pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
+    const CLOSE_WAIT_OPEN_DELAY: i32 = 1050; // 30 s at 35 Hz
+
     let mut i = 0;
     while i < gs.active_doors.len() {
-        // Borrow just the fields we need, then operate.
+        // ── Close-wait-open: waiting at closed position before reopening ──
+        if gs.active_doors[i].reopen_countdown > 0 {
+            gs.active_doors[i].reopen_countdown -= 1;
+            i += 1;
+            continue;
+        }
+        if gs.active_doors[i].reopen_countdown == 0 {
+            // Delay expired — start reopening.
+            let rh = gs.active_doors[i].reopen_height;
+            gs.active_doors[i].target_height = rh;
+            gs.active_doors[i].speed = DOOR_SPEED; // positive = opening
+            gs.active_doors[i].reopen_height = 0;
+            gs.active_doors[i].reopen_countdown = -1;
+            // Fall through to movement logic.
+        }
+
+        // ── Standard open-wait-close countdown ──
         let countdown = gs.active_doors[i].countdown;
         let speed_abs = gs.active_doors[i].speed.abs();
 
-        // Waiting at open position?
         if countdown > 0 {
             gs.active_doors[i].countdown -= 1;
             i += 1;
@@ -439,11 +473,12 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
             gs.active_doors[i].countdown = -1;
         }
 
-        // Move toward target.
+        // ── Move toward target ──
         let sector_idx = gs.active_doors[i].sector;
         let speed = gs.active_doors[i].speed;
         let target = gs.active_doors[i].target_height;
         let is_ceiling = gs.active_doors[i].is_ceiling;
+        let reopen_height = gs.active_doors[i].reopen_height;
 
         if sector_idx < level.sectors.len() {
             let sector = &mut level.sectors[sector_idx];
@@ -462,13 +497,18 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
 
             if reached {
                 *height = target;
-                // Update current_height mirror.
                 gs.active_doors[i].current_height = target;
+
+                // Close-wait-open: start the reopen delay instead of removing.
+                if speed < 0 && reopen_height != 0 {
+                    gs.active_doors[i].reopen_countdown = CLOSE_WAIT_OPEN_DELAY;
+                    i += 1;
+                    continue;
+                }
+
                 gs.active_doors.remove(i);
-                // Do NOT increment i — item was removed.
                 continue;
             }
-            // Mirror current height.
             let new_h = if is_ceiling {
                 level.sectors[sector_idx].ceil_height
             } else {
@@ -1802,6 +1842,39 @@ pub fn ev_ceiling_crush_raise_fast(gs: &mut GameState, level: &Level, tag: u16, 
     );
 }
 
+/// Raise ceiling on all sectors matching `tag` to the highest adjacent ceiling.
+///
+/// Creates a one-shot `CeilingMover` with `CeilingType::RaiseToHighest`.
+/// Linedef type 40 (W1 Raise ceiling to highest adjacent ceiling).
+pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) {
+    for sector_idx in 0..level.sectors.len() {
+        let sector = &level.sectors[sector_idx];
+        if sector.tag != tag {
+            continue;
+        }
+        let top = highest_adjacent_ceiling(level, sector_idx);
+        if sector.ceil_height >= top {
+            continue;
+        }
+        if gs.active_ceilings.iter().any(|c| c.sector_index == sector_idx) {
+            continue;
+        }
+        gs.active_ceilings.push(CeilingMover {
+            sector_index: sector_idx,
+            top_height: top,
+            bottom_height: sector.ceil_height,
+            speed: 2,
+            normal_speed: 2,
+            crush_damage: 0,
+            direction: MoveDirection::Up,
+            silent: false,
+            remove_when_done: true,
+            tag,
+            ceiling_type: CeilingType::RaiseToHighest,
+        });
+    }
+}
+
 // ---------------------------------------------------------------------------
 
 /// Activate a crusher on all sectors matching `tag`.
@@ -2092,6 +2165,8 @@ fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: b
         is_ceiling: true,
         wait_tics: if auto_close { DOOR_WAIT } else { -1 },
         countdown: if auto_close { DOOR_WAIT } else { -1 },
+        reopen_height: 0,
+        reopen_countdown: -1,
     });
 }
 
@@ -2117,6 +2192,34 @@ fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         is_ceiling: true,
         wait_tics: -1,
         countdown: -1,
+        reopen_height: 0,
+        reopen_countdown: -1,
+    });
+}
+
+/// Enqueue a door that closes, waits 30 s (1050 tics), then reopens.
+///
+/// Used by linedef types 16 (W1) and 76 (WR).
+fn close_wait_open_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
+    let sector = match level.sectors.get(sector_idx) {
+        Some(s) => s,
+        None => return,
+    };
+    if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
+        return;
+    }
+    // Reopen to highest adjacent ceiling (mirrors Doom's EV_DoDoor logic).
+    let reopen_h = highest_adjacent_ceiling(level, sector_idx);
+    gs.active_doors.push(DoorMover {
+        sector: sector_idx,
+        target_height: sector.floor_height + 4,
+        current_height: sector.ceil_height,
+        speed: -DOOR_SPEED,
+        is_ceiling: true,
+        wait_tics: -1,
+        countdown: -1,
+        reopen_height: reopen_h,
+        reopen_countdown: -1,
     });
 }
 
@@ -2143,6 +2246,8 @@ fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_
         is_ceiling: true,
         wait_tics: if auto_close { DOOR_WAIT } else { -1 },
         countdown: if auto_close { DOOR_WAIT } else { -1 },
+        reopen_height: 0,
+        reopen_countdown: -1,
     });
 }
 
@@ -2167,6 +2272,8 @@ fn close_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         is_ceiling: true,
         wait_tics: -1,
         countdown: -1,
+        reopen_height: 0,
+        reopen_countdown: -1,
     });
 }
 
@@ -2204,23 +2311,35 @@ pub fn p_use_lines(gs: &mut GameState, level: &mut Level, handle: MobjHandle) {
 
     // Find and activate the first linedef whose special segment the ray crosses.
     for ld_idx in 0..level.linedefs.len() {
-        let ld = &level.linedefs[ld_idx];
-        if ld.special == 0 {
+        // Collect data while the borrow is immutable; drop before mutable dispatch.
+        let (lx1, ly1, lx2, ly2, special) = {
+            let ld = &level.linedefs[ld_idx];
+            if ld.special == 0 {
+                continue;
+            }
+            let v1 = &level.vertexes[ld.from_vertex as usize];
+            let v2 = &level.vertexes[ld.to_vertex as usize];
+            (v1.x as i32, v1.y as i32, v2.x as i32, v2.y as i32, ld.special)
+        };
+
+        if !segment_crosses_line(ax, ay, ahead_x, ahead_y, lx1, ly1, lx2, ly2) {
             continue;
         }
 
-        let v1 = &level.vertexes[ld.from_vertex as usize];
-        let v2 = &level.vertexes[ld.to_vertex as usize];
-
-        let lx1 = v1.x as i32;
-        let ly1 = v1.y as i32;
-        let lx2 = v2.x as i32;
-        let ly2 = v2.y as i32;
-
-        if segment_crosses_line(ax, ay, ahead_x, ahead_y, lx1, ly1, lx2, ly2) {
-            activate_linedef(gs, level, ld_idx);
-            return;
+        // USE key only activates switch-type (S1/SR) triggers.
+        use crate::linedef_dispatch::{TriggerType, classify_trigger, dispatch_linedef};
+        if let Some(trigger) = classify_trigger(special) {
+            if matches!(
+                trigger,
+                TriggerType::SwitchOnce | TriggerType::SwitchRepeat
+            ) {
+                let activated = dispatch_linedef(gs, level, ld_idx, special, trigger, handle, 0);
+                if activated {
+                    crate::switch::toggle_switch_texture(level, ld_idx);
+                }
+            }
         }
+        return;
     }
 }
 
@@ -3596,7 +3715,7 @@ mod tests {
     #[test]
     fn p_use_lines_activates_nearest_linedef() {
         let mut gs = GameState::new("TEST");
-        // Closed door: ceil == floor (0).
+        // Closed door: ceil == floor (0). make_door_level uses special 1 (SR door).
         let mut level = make_door_level(0);
 
         // Place actor at (-32, 0) facing East (Bam::ZERO → trig fallback, ray = east).
@@ -3609,15 +3728,19 @@ mod tests {
         mo.health = 100;
         let handle = gs.mobjslab.alloc(mo);
 
-        // Before: door is closed (ceil == floor == 0).
-        assert_eq!(level.sectors[1].ceil_height, 0);
+        // Before: no active door movers.
+        assert_eq!(gs.active_doors.len(), 0);
 
         p_use_lines(&mut gs, &mut level, handle);
 
-        // After: door opened (ceil = floor + 128 = 128).
+        // After: a door mover was queued (animated open, target = floor+128 = 128).
         assert_eq!(
-            level.sectors[1].ceil_height, 128,
-            "p_use_lines must open the door sector"
+            gs.active_doors.len(), 1,
+            "p_use_lines must enqueue a door mover"
+        );
+        assert_eq!(
+            gs.active_doors[0].target_height, 128,
+            "door target must be 128 above floor"
         );
     }
 

@@ -356,9 +356,27 @@ fn dispatch_effect(
             true
         }
         DoorCloseWaitOpen => {
-            // Close, then wait 30s (1050 tics), then open.
-            // Simplified: just close the door for now.
-            close_door_by_tag_or_back(gs, level, linedef_index, tag, false);
+            // Close, wait 30 s (1050 tics), then reopen to highest adjacent ceiling.
+            if tag == 0 {
+                let ld = match level.linedefs.get(linedef_index) {
+                    Some(ld) => ld,
+                    None => return false,
+                };
+                let left = ld.left_sidedef;
+                if left == doom_map::SIDEDEF_NONE {
+                    return false;
+                }
+                let sector_idx = match level.sidedefs.get(left as usize) {
+                    Some(sd) => sd.sector as usize,
+                    None => return false,
+                };
+                close_wait_open_helper(gs, level, sector_idx);
+            } else {
+                let indices = sectors_by_tag(level, tag);
+                for idx in indices {
+                    close_wait_open_helper(gs, level, idx);
+                }
+            }
             true
         }
         DoorBlazeOpenWaitClose => {
@@ -485,9 +503,7 @@ fn dispatch_effect(
             true
         }
         CeilingRaiseToHighest => {
-            // Raise ceiling to highest adjacent ceiling.
-            // Simplified: just stop any crushers and the ceiling stays.
-            crate::specials::ev_ceiling_crush_stop(gs, tag);
+            crate::specials::ev_ceiling_raise_to_highest(gs, level, tag);
             true
         }
         CeilingCrushAndRaise => {
@@ -595,7 +611,15 @@ fn dispatch_effect(
             true
         }
         TeleportMonstersOnly => {
-            // Only monsters teleport — player activation is a no-op.
+            // Teleport only non-player mobjs (MF_COUNTKILL set).
+            let is_monster = gs
+                .mobjslab
+                .get(activator)
+                .map(|m| m.flags & crate::mobj::flags::MF_COUNTKILL != 0)
+                .unwrap_or(false);
+            if is_monster {
+                crate::specials::ev_teleport(gs, level, tag, activator);
+            }
             true
         }
     }
@@ -714,6 +738,8 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, auto_c
         is_ceiling: true,
         wait_tics: if auto_close { DOOR_WAIT } else { -1 },
         countdown: if auto_close { DOOR_WAIT } else { -1 },
+        reopen_height: 0,
+        reopen_countdown: -1,
     });
 }
 
@@ -734,6 +760,31 @@ fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
         is_ceiling: true,
         wait_tics: -1,
         countdown: -1,
+        reopen_height: 0,
+        reopen_countdown: -1,
+    });
+}
+
+/// Close a door then reopen it after 30 s (types 16 / 76).
+fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
+    let sector = match level.sectors.get(sector_idx) {
+        Some(s) => s,
+        None => return,
+    };
+    if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
+        return;
+    }
+    let reopen_h = crate::specials::highest_adjacent_ceiling(level, sector_idx);
+    gs.active_doors.push(crate::state::DoorMover {
+        sector: sector_idx,
+        target_height: sector.floor_height + 4,
+        current_height: sector.ceil_height,
+        speed: -DOOR_SPEED,
+        is_ceiling: true,
+        wait_tics: -1,
+        countdown: -1,
+        reopen_height: reopen_h,
+        reopen_countdown: -1,
     });
 }
 
@@ -759,6 +810,8 @@ fn open_blazing_door_helper(
         is_ceiling: true,
         wait_tics: if auto_close { DOOR_WAIT } else { -1 },
         countdown: if auto_close { DOOR_WAIT } else { -1 },
+        reopen_height: 0,
+        reopen_countdown: -1,
     });
 }
 
@@ -779,6 +832,8 @@ fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usiz
         is_ceiling: true,
         wait_tics: -1,
         countdown: -1,
+        reopen_height: 0,
+        reopen_countdown: -1,
     });
 }
 

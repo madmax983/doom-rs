@@ -621,6 +621,8 @@ fn write_door_mover(w: &mut WriteCursor, d: &DoorMover) {
     w.write_bool(d.is_ceiling);
     w.write_i32(d.wait_tics);
     w.write_i32(d.countdown);
+    w.write_i16(d.reopen_height);
+    w.write_i32(d.reopen_countdown);
 }
 
 fn read_door_mover(r: &mut ReadCursor<'_>) -> Result<DoorMover, SaveError> {
@@ -632,6 +634,8 @@ fn read_door_mover(r: &mut ReadCursor<'_>) -> Result<DoorMover, SaveError> {
         is_ceiling: r.read_bool()?,
         wait_tics: r.read_i32()?,
         countdown: r.read_i32()?,
+        reopen_height: r.read_i16()?,
+        reopen_countdown: r.read_i32()?,
     })
 }
 
@@ -662,6 +666,7 @@ fn write_ceiling_type(w: &mut WriteCursor, ct: CeilingType) {
         CeilingType::LowerAndCrush => 2u8,
         CeilingType::FastCrushAndRaise => 3u8,
         CeilingType::SilentCrush => 4u8,
+        CeilingType::RaiseToHighest => 5u8,
     };
     w.write_u8(byte);
 }
@@ -673,6 +678,7 @@ fn read_ceiling_type(r: &mut ReadCursor<'_>) -> Result<CeilingType, SaveError> {
         2 => Ok(CeilingType::LowerAndCrush),
         3 => Ok(CeilingType::FastCrushAndRaise),
         4 => Ok(CeilingType::SilentCrush),
+        5 => Ok(CeilingType::RaiseToHighest),
         _ => Err(SaveError::Truncated),
     }
 }
@@ -1438,6 +1444,8 @@ mod tests {
             is_ceiling: true,
             wait_tics: 120,
             countdown: 60,
+            reopen_height: 0,
+            reopen_countdown: -1,
         });
         gs.active_doors.push(DoorMover {
             sector: 10,
@@ -1447,6 +1455,8 @@ mod tests {
             is_ceiling: true,
             wait_tics: 0,
             countdown: -1,
+            reopen_height: 0,
+            reopen_countdown: -1,
         });
         let data = save_game(&gs, &test_level_name(), 2, "doors test");
         let loaded = load_game(&data).expect("load must succeed");
