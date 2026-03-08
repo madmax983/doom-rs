@@ -274,6 +274,14 @@ impl PlayerState {
         }
     }
 
+    /// Deduct `amount` from armor; clears `armor_type` when armor reaches 0.
+    pub fn deduct_armor(&mut self, amount: i32) {
+        self.armor = (self.armor - amount).max(0);
+        if self.armor == 0 {
+            self.armor_type = 0;
+        }
+    }
+
     // -----------------------------------------------------------------------
     // Keys
     // -----------------------------------------------------------------------

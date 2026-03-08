@@ -48,6 +48,10 @@ pub enum LumpParseError {
 // THINGS
 // ---------------------------------------------------------------------------
 
+/// Linedef flags — impassable to all actors (and projectiles).
+pub const FLAG_BLOCKING: u16 = 0x0001;
+/// Linedef flags — impassable to monsters only.
+pub const FLAG_BLOCKMONSTERS: u16 = 0x0002;
 /// Linedef flags bit for two-sided lines.
 pub const FLAG_TWO_SIDED: u16 = 0x0004;
 

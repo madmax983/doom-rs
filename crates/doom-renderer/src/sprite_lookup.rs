@@ -58,6 +58,11 @@ pub struct ActorRenderInfo {
     pub height: i32,
     /// Render flag derived from the actor's state and flags.
     pub render_flag: RenderFlag,
+    /// Fallback 4-byte sprite prefix used when `sprite == SPR_NONE`.
+    ///
+    /// Pickup items whose `spawn_state` is `S_NULL` have no state-driven sprite;
+    /// this field carries the DoomEd-type-derived prefix so they still render.
+    pub fallback_prefix: Option<[u8; 4]>,
 }
 
 // ---------------------------------------------------------------------------
@@ -537,6 +542,7 @@ mod tests {
             frame: 0x80, // frame A + fullbright
             height: 56 * 65536,
             render_flag: RenderFlag::FullBright,
+            fallback_prefix: None,
         };
         assert_eq!(info.x, 100 * 65536);
         assert_eq!(info.y, 200 * 65536);
@@ -557,6 +563,7 @@ mod tests {
             frame: 0x80 | 2, // frame C + fullbright
             height: 0,
             render_flag: RenderFlag::FullBright,
+            fallback_prefix: None,
         };
         let is_fullbright = (info.frame & MobjStateEntry::FF_FULLBRIGHT) != 0;
         assert!(
@@ -577,6 +584,7 @@ mod tests {
             frame: 3, // frame D, no fullbright
             height: 0,
             render_flag: RenderFlag::Normal,
+            fallback_prefix: None,
         };
         let is_fullbright = (info.frame & MobjStateEntry::FF_FULLBRIGHT) != 0;
         assert!(!is_fullbright);

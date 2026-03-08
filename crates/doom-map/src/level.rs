@@ -201,6 +201,43 @@ impl Level {
             .expect("BSP invariant violated post-load — this is a bug")
     }
 
+    /// Find the sector index containing world point `(x, y)` via BSP traversal.
+    ///
+    /// Returns `None` if the level has no BSP nodes, or if any index is
+    /// out of bounds.
+    #[must_use]
+    pub fn sector_index_at(&self, x: i32, y: i32) -> Option<usize> {
+        let bsp = BspTree::validate(
+            &self.nodes,
+            &self.ssectors,
+            self.segs.len(),
+        )
+        .ok()?;
+        let ssector = bsp.point_in_subsector(x, y)?;
+        let seg = self.segs.get(ssector.first_seg as usize)?;
+        let linedef = self.linedefs.get(seg.linedef as usize)?;
+        let sidedef_idx = if seg.direction == 0 {
+            linedef.right_sidedef
+        } else {
+            linedef.left_sidedef
+        };
+        if sidedef_idx == 0xFFFF {
+            return None;
+        }
+        let sidedef = self.sidedefs.get(sidedef_idx as usize)?;
+        Some(sidedef.sector as usize)
+    }
+
+    /// Return the floor height (in map units) at world point `(x, y)`.
+    ///
+    /// Uses BSP traversal to find the subsector.  Returns `None` if the
+    /// level geometry is incomplete.
+    #[must_use]
+    pub fn floor_at(&self, x: i32, y: i32) -> Option<i16> {
+        let si = self.sector_index_at(x, y)?;
+        self.sectors.get(si).map(|s| s.floor_height)
+    }
+
     /// Print a one-line geometry summary (used by the Phase 3 CLI gate).
     pub fn print_stats(&self) {
         let bsp = self.bsp();

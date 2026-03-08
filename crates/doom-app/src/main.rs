@@ -20,12 +20,13 @@ use doom_game::{
     init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
-use doom_map::{Level, Thing};
+use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
     AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer, PaletteFlash,
     PaletteLut, SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_menu, draw_status_bar,
-    draw_title_screen, draw_weapon_sprite, render_level, render_things_ex,
+    ActorRenderInfo, draw_title_screen, draw_weapon_sprite, render_actors_ex, render_level,
+    render_flag_from_state, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -91,6 +92,12 @@ struct Args {
     /// Number of frames to tick before capturing (default: 1).
     #[arg(long, default_value = "1")]
     capture_frames: u32,
+
+    /// Write a plain-text debug event log to this file while playing.
+    /// Each line is prefixed with the game tic number.
+    /// Example: --debug-log gameplay.log
+    #[arg(long)]
+    debug_log: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -140,6 +147,10 @@ pub(crate) struct DoomGame {
     bitmap_font: BitmapFont,
     /// Title screen state. `Some` = still on title screen, `None` = in gameplay.
     title_screen: Option<TitleScreen>,
+    /// Optional plain-text debug event log (opened with --debug-log).
+    debug_log: Option<std::fs::File>,
+    /// SFX ID for the player pain sound (DSPLPAIN), resolved at startup.
+    pain_sfx_id: Option<u16>,
 }
 
 impl DoomGame {
@@ -152,6 +163,8 @@ impl DoomGame {
         sprite_cache: Option<SpriteCache>,
         colormap_cache: Option<ColormapCache>,
         show_title: bool,
+        debug_log: Option<std::fs::File>,
+        pain_sfx_id: Option<u16>,
     ) -> Self {
         // Initialize scrolling wall and conveyor belt specials from level linedefs.
         init_scrolling_walls(&mut gs, &level);
@@ -194,7 +207,36 @@ impl DoomGame {
             menu,
             bitmap_font: BitmapFont::new(),
             title_screen,
+            debug_log,
+            pain_sfx_id,
         }
+    }
+}
+
+impl DoomGame {
+    /// Write a plain-text event line to the debug log (if active).
+    ///
+    /// Format: `tic=<N> <msg>\n`  — no ANSI codes, no box drawing.
+    fn dlog(&mut self, msg: &str) {
+        if let Some(ref mut f) = self.debug_log {
+            use std::io::Write;
+            let _ = writeln!(f, "tic={} {}", self.gs.tic_num, msg);
+        }
+    }
+
+    /// Snapshot player state to the log (position, health, armor, ammo).
+    fn dlog_player_snapshot(&mut self) {
+        if self.debug_log.is_none() { return; }
+        let (px, py, pa) = self.gs.mobjslab.get(self.gs.player.handle)
+            .map(|mo| (mo.x.to_int(), mo.y.to_int(), mo.angle.0))
+            .unwrap_or((0, 0, 0));
+        let hp  = self.gs.player.health();
+        let arm = self.gs.player.armor();
+        let msg = format!(
+            "player pos=({},{}) angle={:#010x} health={} armor={}",
+            px, py, pa, hp, arm
+        );
+        self.dlog(&msg);
     }
 }
 
@@ -417,7 +459,23 @@ impl DoomApp for DoomGame {
             None => (0, 0),
         };
 
+        // Snapshot kill/item counts before the tick to detect changes.
+        let pre_kills = self.gs.player.kill_count;
+        let pre_items = self.gs.player.item_count;
+
         self.gs.tick(cmd, Some(&mut self.level));
+
+        // Log kill and item events.
+        if self.debug_log.is_some() {
+            if self.gs.player.kill_count > pre_kills {
+                let msg = format!("kill count={}", self.gs.player.kill_count);
+                self.dlog(&msg);
+            }
+            if self.gs.player.item_count > pre_items {
+                let msg = format!("pickup items={}", self.gs.player.item_count);
+                self.dlog(&msg);
+            }
+        }
 
         // Check if the player crossed any walk-triggered linedefs.
         let player_handle = self.gs.player.handle;
@@ -443,7 +501,7 @@ impl DoomApp for DoomGame {
         // Advance palette flash timer (pain/pickup/rad-suit tints).
         self.palette_flash.tick();
 
-        // Detect player damage and trigger a pain flash.
+        // Detect player damage and trigger a pain flash + hurt sound.
         {
             let cur_health = self.gs.player.health();
             if cur_health < self.prev_health {
@@ -452,6 +510,20 @@ impl DoomApp for DoomGame {
                 // Simple formula: one palette step per 8 HP lost, clamped.
                 let palette = ((damage / 8) as usize).clamp(1, 8);
                 self.palette_flash.trigger(palette, 12);
+                // Play DSPLPAIN on any damage taken.
+                if let (Some(audio), Some(sfx_id)) = (&self.audio, self.pain_sfx_id) {
+                    audio.play_sfx(sfx_id);
+                }
+                if self.debug_log.is_some() {
+                    let msg = format!("damage -{} health={}", damage, cur_health);
+                    self.dlog(&msg);
+                }
+            }
+            if self.debug_log.is_some() {
+                // Log player snapshot every 35 tics (once per second of gametime).
+                if self.gs.tic_num % 35 == 0 {
+                    self.dlog_player_snapshot();
+                }
             }
             self.prev_health = cur_health;
         }
@@ -520,32 +592,46 @@ impl DoomApp for DoomGame {
                 false,
             );
 
-            // Project live mobj positions as billboard sprites (painter's
-            // algorithm, back-to-front). Using mobjslab rather than
-            // level.things so monsters actually move.
+            // Project live mobj positions as state-driven billboard sprites.
+            // Uses ActorRenderInfo so animations play correctly.
             if let Some(ref cache) = self.sprite_cache {
                 let player_handle = self.gs.player.handle;
-                let live_things: Vec<Thing> = self
+                let actors: Vec<ActorRenderInfo> = self
                     .gs
                     .mobjslab
                     .iter_handles()
                     .filter(|&h| h != player_handle)
                     .filter_map(|h| self.gs.mobjslab.get(h))
                     .filter_map(|mo| {
-                        let doomed = kind_to_doomed_type(mo.kind)?;
-                        // Convert BAM angle → degrees (0-359)
-                        let deg = (mo.angle.0 as u64 * 360 / 0x1_0000_0000u64) as u16;
-                        Some(Thing {
-                            x: mo.x.to_int() as i16,
-                            y: mo.y.to_int() as i16,
-                            angle: deg,
-                            kind: doomed,
-                            flags: 0,
+                        let state_entry = doom_game::STATES.get(mo.state.0 as usize);
+                        let (sprite, frame) = state_entry
+                            .map(|s| (s.sprite, s.frame))
+                            .unwrap_or((doom_game::states::sprite_names::SPR_NONE, 0));
+                        // For items whose spawn_state is S_NULL (sprite = SPR_NONE),
+                        // fall back to the DoomEd-type-derived prefix so they still render.
+                        let fallback_prefix = if sprite == doom_game::states::sprite_names::SPR_NONE {
+                            kind_to_doomed_type(mo.kind).and_then(thing_sprite_prefix)
+                        } else {
+                            None
+                        };
+                        // Skip completely if no sprite and no fallback.
+                        if sprite == doom_game::states::sprite_names::SPR_NONE && fallback_prefix.is_none() {
+                            return None;
+                        }
+                        Some(ActorRenderInfo {
+                            x: mo.x.0,
+                            y: mo.y.0,
+                            angle: mo.angle.0,
+                            sprite,
+                            frame,
+                            height: mo.height.0,
+                            render_flag: render_flag_from_state(frame, mo.flags),
+                            fallback_prefix,
                         })
                     })
                     .collect();
-                render_things_ex(
-                    &live_things,
+                render_actors_ex(
+                    &actors,
                     &self.level,
                     Fixed16_16::from_int(px),
                     Fixed16_16::from_int(py),
@@ -934,6 +1020,19 @@ fn main() -> Result<()> {
     }
 
     // Build the app.
+    let debug_log = args.debug_log.as_ref().and_then(|p| {
+        match std::fs::File::create(p) {
+            Ok(f) => Some(f),
+            Err(e) => {
+                eprintln!("Warning: could not open debug log '{}': {e}", p.display());
+                None
+            }
+        }
+    });
+
+    // Resolve player pain SFX (DSPLPAIN) once at startup so we can fire it cheaply.
+    let pain_sfx_id = audio_system::find_sfx_id_by_name(&wad, "DSPLPAIN");
+
     let app = DoomGame::new(
         gs,
         level,
@@ -943,6 +1042,8 @@ fn main() -> Result<()> {
         sprite_cache,
         colormap_cache,
         show_title,
+        debug_log,
+        pain_sfx_id,
     );
 
     // Headless capture mode: tick N frames, render, save BMP, exit.
@@ -1185,6 +1286,8 @@ mod tests {
             None,
             None,
             false,
+            None,
+            None,
         )
     }
 

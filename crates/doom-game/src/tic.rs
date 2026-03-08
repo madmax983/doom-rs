@@ -345,10 +345,18 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
     }
 
     // BT_ATTACK: fire current weapon.
-    if cmd.buttons & bt::BT_ATTACK != 0 {
+    // Auto-fire weapons (chaingun, plasma) fire every tic the button is held.
+    // All others are edge-triggered: fire only on the leading edge of the press.
+    let attack_held = cmd.buttons & bt::BT_ATTACK != 0;
+    let is_auto_weapon = matches!(
+        gs.player.weapon,
+        WeaponType::Chaingun | WeaponType::PlasmaRifle | WeaponType::Chainsaw
+    );
+    if attack_held && (!gs.player.attack_down || is_auto_weapon) {
         let handle = gs.player.handle;
         crate::weapons::fire_weapon(gs, level.as_deref(), handle);
     }
+    gs.player.attack_down = attack_held;
 
     // BT_USE: activate linedef ahead of player.
     if cmd.buttons & bt::BT_USE != 0 {
@@ -560,6 +568,19 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     mo.momy = mo.momy.fixed_mul(FRICTION);
     mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
     mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
+
+    // 6. Update floor height (mo.z) to track the sector the player is now in.
+    // This is critical for stair climbing: the step-height check in p_try_move
+    // compares `open_floor - mo_z` against MAX_STEP_HEIGHT (24 units).
+    // Without this update, mo.z stays at the spawn-point floor and multi-step
+    // stairs become impassable after the first step.
+    if let Some(lv) = level {
+        let fx = mo.x.to_int();
+        let fy = mo.y.to_int();
+        if let Some(floor_h) = lv.floor_at(fx, fy) {
+            mo.z = Fixed16_16::from_int(floor_h as i32);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

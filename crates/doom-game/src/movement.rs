@@ -212,6 +212,34 @@ fn try_move_with_blocker(
                     );
                 }
 
+                // --- Two-sided: ML_BLOCKING always blocks, ML_BLOCKMONSTERS blocks monsters ---
+                if ld.flags & doom_map::lumps::FLAG_BLOCKING != 0 {
+                    return (
+                        false,
+                        Some(BlockingLine {
+                            x1: lx1,
+                            y1: ly1,
+                            x2: lx2,
+                            y2: ly2,
+                        }),
+                    );
+                }
+                let is_monster = slab
+                    .get(handle)
+                    .map(|mo| mo.flags & flags::MF_COUNTKILL != 0)
+                    .unwrap_or(false);
+                if ld.flags & doom_map::lumps::FLAG_BLOCKMONSTERS != 0 && is_monster {
+                    return (
+                        false,
+                        Some(BlockingLine {
+                            x1: lx1,
+                            y1: ly1,
+                            x2: lx2,
+                            y2: ly2,
+                        }),
+                    );
+                }
+
                 // --- Two-sided: check opening ---
                 let Some(right_sd) = level.sidedefs.get(ld.right_sidedef as usize) else {
                     return (

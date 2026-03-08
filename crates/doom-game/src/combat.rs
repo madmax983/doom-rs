@@ -51,12 +51,35 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         }
     }
 
+    // If this is the player, absorb damage through armor and update PlayerState.
+    let effective_damage = if target == gs.player.handle {
+        if gs.player.god_mode {
+            return;
+        }
+        // Doom armor absorption formula:
+        // Green armor (type 1): absorbs 1/3 of damage.
+        // Blue armor (type 2): absorbs 1/2 of damage.
+        let mut dmg = damage;
+        let armor_type = gs.player.armor_type;
+        if armor_type > 0 && gs.player.armor() > 0 {
+            let saved = if armor_type == 1 { dmg / 3 } else { dmg / 2 };
+            let saved = saved.min(gs.player.armor());
+            gs.player.deduct_armor(saved);
+            dmg -= saved;
+        }
+        gs.player.apply_damage(dmg);
+        gs.player.damage_count = (gs.player.damage_count + dmg.max(0) as u32).min(100);
+        dmg
+    } else {
+        damage
+    };
+
     // Apply damage + inflictor.
     let new_health = {
         let Some(mo) = gs.mobjslab.get_mut(target) else {
             return;
         };
-        mo.health = (mo.health - damage).max(0);
+        mo.health = (mo.health - effective_damage).max(0);
         if inflictor != MobjHandle::NULL {
             mo.target = inflictor;
         }

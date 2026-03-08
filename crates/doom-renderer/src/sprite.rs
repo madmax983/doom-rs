@@ -564,6 +564,209 @@ fn thing_sprite(kind: u16) -> Option<[u8; 8]> {
 /// `vx <= 0.5` is behind or too close and is skipped.  Screen X of the
 /// sprite centre is `HALF_W + FOCAL_LEN * vy / vx`; sprite screen height is
 /// `frame.height * FOCAL_LEN / vx`.
+/// Render live actors using state-driven sprites (`ActorRenderInfo`).
+///
+/// Unlike [`render_things_ex`] which guesses the sprite from the DoomEd thing
+/// type and always draws frame A, this function uses the sprite/frame stored
+/// in the actor's current state — giving correct animations.
+pub fn render_actors_ex(
+    actors: &[crate::sprite_lookup::ActorRenderInfo],
+    level: &doom_map::Level,
+    player_x: doom_types::Fixed16_16,
+    player_y: doom_types::Fixed16_16,
+    player_angle: doom_types::Bam,
+    fb: &mut Framebuffer,
+    cache: &SpriteCache,
+    z_buffer: Option<&[f32; SCREEN_W]>,
+    colormap: Option<&ColormapCache>,
+) {
+    use doom_game::states::sprite_names;
+
+    let angle_rad =
+        (player_angle.0 as f32) * (std::f32::consts::PI * 2.0 / (u32::MAX as f32 + 1.0));
+    let cos_a = angle_rad.cos();
+    let sin_a = angle_rad.sin();
+    let px = player_x.raw() as f32 / 65536.0;
+    let py = player_y.raw() as f32 / 65536.0;
+
+    // Player's eye height in world space.  BSP-walk to find the sector the
+    // player is standing in, then add PLAYER_HEIGHT above that floor.
+    let player_floor = sector_for_point(level, px as i32, py as i32)
+        .and_then(|si| level.sectors.get(si))
+        .map_or(0.0, |s| s.floor_height as f32);
+    let view_z = player_floor + PLAYER_HEIGHT;
+
+    // Collect and depth-sort actors back-to-front.
+    let mut visible: Vec<(f32, &crate::sprite_lookup::ActorRenderInfo)> = actors
+        .iter()
+        .filter_map(|a| {
+            let ax = a.x as f32 / 65536.0;
+            let ay = a.y as f32 / 65536.0;
+            let dx = ax - px;
+            let dy = ay - py;
+            let vx = dx * cos_a + dy * sin_a;
+            if vx > 0.5 { Some((vx, a)) } else { None }
+        })
+        .collect();
+    visible.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+
+    let mut fuzz_pos: usize = 0;
+
+    for (vx, actor) in visible {
+        let sprite_idx = actor.sprite as usize;
+        let is_null_sprite = actor.sprite == sprite_names::SPR_NONE
+            || sprite_idx >= sprite_names::SPRITE_COUNT;
+
+        // Build a 4-byte sprite prefix.
+        // State-driven path: use the sprite index from STATES.
+        // Fallback path: use the pre-computed prefix for items with S_NULL spawn state.
+        let (prefix, frame_idx) = if !is_null_sprite {
+            let sprite_name_str = sprite_names::SPRITE_NAMES[sprite_idx];
+            let mut p = [0u8; 4];
+            for (i, b) in sprite_name_str.bytes().take(4).enumerate() {
+                p[i] = b.to_ascii_uppercase();
+            }
+            (p, actor.frame & 0x7F)
+        } else if let Some(fb) = actor.fallback_prefix {
+            (fb, 0u8)
+        } else {
+            continue;
+        };
+
+        // Compute rotation based on actor facing vs viewer direction.
+        let thing_angle = doom_types::Bam(actor.angle);
+        let thing_x = doom_types::Fixed16_16(actor.x);
+        let thing_y = doom_types::Fixed16_16(actor.y);
+
+        let has_rotations = {
+            // Check if rotation 1 lump exists (non-directional sprites only have rotation 0).
+            let test = sprite_lump_name(&prefix, frame_idx, 1);
+            cache.get(&test).is_some()
+        };
+
+        let (frame, flip_x) = if has_rotations {
+            let rotation = compute_sprite_rotation(thing_angle, thing_x, thing_y, player_x, player_y);
+            let lump_name = sprite_lump_name(&prefix, frame_idx, rotation);
+            if let Some(f) = cache.get(&lump_name) {
+                (f, false)
+            } else if let Some(mirror_rot) = mirror_rotation(rotation) {
+                let mirror_name = sprite_lump_name(&prefix, frame_idx, mirror_rot);
+                if let Some(f) = cache.get(&mirror_name) {
+                    (f, true)
+                } else {
+                    let fallback = sprite_lump_name(&prefix, frame_idx, 0);
+                    match cache.get(&fallback) {
+                        Some(f) => (f, false),
+                        None => continue,
+                    }
+                }
+            } else {
+                let fallback = sprite_lump_name(&prefix, frame_idx, 0);
+                match cache.get(&fallback) {
+                    Some(f) => (f, false),
+                    None => continue,
+                }
+            }
+        } else {
+            let lump_name = sprite_lump_name(&prefix, frame_idx, 0);
+            match cache.get(&lump_name) {
+                Some(f) => (f, false),
+                None => continue,
+            }
+        };
+
+        let render_flag = actor.render_flag;
+
+        let ax = actor.x as f32 / 65536.0;
+        let ay = actor.y as f32 / 65536.0;
+        let dx = ax - px;
+        let dy = ay - py;
+        let vy = dx * sin_a - dy * cos_a;
+        let sx_center = HALF_W as f32 + FOCAL_LEN * vy / vx;
+        let sprite_scale = FOCAL_LEN / vx;
+        let screen_h = ((frame.height as f32) * sprite_scale).round() as i32;
+        let screen_w = ((frame.width as f32) * sprite_scale).round() as i32;
+
+        if screen_h <= 0 || screen_w <= 0 {
+            continue;
+        }
+
+        // Sprite bottom screen position accounts for height difference between
+        // the player's eye (view_z) and the actor's floor sector.
+        // This makes sprites render at the correct height above/below stairs.
+        let actor_floor = sector_for_point(level, ax as i32, ay as i32)
+            .and_then(|si| level.sectors.get(si))
+            .map_or(0.0, |s| s.floor_height as f32);
+        let height_diff = view_z - actor_floor;
+        let screen_y_bot = HALF_H + (height_diff * sprite_scale).round() as i32;
+        let screen_y_top = screen_y_bot - screen_h;
+        let screen_x_left = sx_center as i32 - (frame.left_offset as i32 * screen_w / frame.width as i32);
+        let screen_x_right = screen_x_left + screen_w;
+
+        if screen_x_right <= 0 || screen_x_left >= SCREEN_W as i32 {
+            continue;
+        }
+
+        let col_h = screen_y_bot - screen_y_top;
+
+        let light_params = if render_flag == RenderFlag::FullBright {
+            LightParams::new(255, true)
+        } else if colormap.is_some() {
+            let sector_light = sector_for_point(level, ax as i32, ay as i32)
+                .and_then(|si| level.sectors.get(si))
+                .map_or(255, |s| s.light_level.clamp(0, 255) as u8);
+            LightParams::new(sector_light, false)
+        } else {
+            LightParams::new(255, true)
+        };
+
+        let sprite_colormap: Option<&[u8; 256]> =
+            colormap.map(|cm| light_params.get_colormap(vx, cm));
+        let sy_top_clamped = screen_y_top.max(0);
+        let sy_bot_clamped = screen_y_bot.min(SCREEN_H as i32 - 1);
+        let sx_start = screen_x_left.max(0);
+        let sx_end = (screen_x_right - 1).min(SCREEN_W as i32 - 1);
+
+        for sx in sx_start..=sx_end {
+            let screen_col = sx - screen_x_left;
+            let sprite_col = if flip_x {
+                frame.width as i32 - 1 - screen_col * frame.width as i32 / screen_w.max(1)
+            } else {
+                screen_col * frame.width as i32 / screen_w.max(1)
+            };
+            let sprite_col = sprite_col.clamp(0, frame.width as i32 - 1) as usize;
+
+            if let Some(zbuf) = z_buffer {
+                if vx >= zbuf[sx as usize] {
+                    continue;
+                }
+            }
+
+            if render_flag == RenderFlag::Fuzz {
+                let sy_top_u = sy_top_clamped.max(0) as usize;
+                let sy_bot_u = sy_bot_clamped.min(SCREEN_H as i32 - 1) as usize;
+                if sy_top_u <= sy_bot_u {
+                    draw_fuzz_column(fb, sx as usize, sy_top_u, sy_bot_u, &mut fuzz_pos, colormap);
+                }
+                continue;
+            }
+
+            for sy in sy_top_clamped..=sy_bot_clamped {
+                let sprite_row = (sy - screen_y_top) * frame.height as i32 / col_h.max(1);
+                let sprite_row = sprite_row.clamp(0, frame.height as i32 - 1) as usize;
+                let pixel_idx = sprite_col * frame.height as usize + sprite_row;
+                if let Some(Some(raw_idx)) = frame.pixels.get(pixel_idx) {
+                    let final_color = match sprite_colormap {
+                        Some(cm) => cm[*raw_idx as usize],
+                        None => *raw_idx,
+                    };
+                    fb.data[sy as usize * SCREEN_W + sx as usize] = final_color;
+                }
+            }
+        }
+    }
+}
+
 /// Like [`render_things`] but accepts an explicit slice of things rather than
 /// pulling them from `level.things`.  Use this when rendering live game-state
 /// objects (mobjslab) whose positions have moved since the WAD was loaded.
@@ -762,39 +965,43 @@ fn render_things_impl(
         // light_params was set but never read in the fuzz path.
         let _ = &light_params;
 
-        // --- Draw each scaled sprite column ---
-        for col in 0..frame.width as i32 {
-            // When flip_x is true, draw columns in reverse for horizontal mirroring.
-            let draw_col = if flip_x {
-                frame.width as i32 - 1 - col
-            } else {
-                col
-            };
-            let sx = screen_x_left + draw_col * screen_w / frame.width as i32;
-            if sx < 0 || sx >= SCREEN_W as i32 {
-                continue;
-            }
+        // --- Draw each screen column covered by the sprite ---
+        // Iterating screen columns (not sprite columns) prevents gaps when
+        // the sprite is close and screen_w >> frame.width.
+        let sprite_colormap: Option<&[u8; 256]> =
+            colormap.map(|cm| light_params.get_colormap(vx, cm));
+        let sy_top_clamped = screen_y_top.max(0);
+        let sy_bot_clamped = screen_y_bot.min(SCREEN_H as i32 - 1);
 
-            // Per-column z-buffer clipping: if a wall in this column is
-            // nearer than (or at the same depth as) the sprite, skip the
-            // entire column — the wall fully occludes it.
+        let sx_start = screen_x_left.max(0);
+        let sx_end = (screen_x_right - 1).min(SCREEN_W as i32 - 1);
+        for sx in sx_start..=sx_end {
+            // Map screen column back to sprite column (handles flip_x).
+            let screen_col = sx - screen_x_left;
+            let sprite_col = if flip_x {
+                frame.width as i32 - 1 - screen_col * frame.width as i32 / screen_w.max(1)
+            } else {
+                screen_col * frame.width as i32 / screen_w.max(1)
+            };
+            let sprite_col = sprite_col.clamp(0, frame.width as i32 - 1) as usize;
+
+            // Per-column z-buffer clipping.
             if let Some(zbuf) = z_buffer {
                 if vx >= zbuf[sx as usize] {
                     continue;
                 }
             }
 
-            // Handle fuzz effect (Spectre) — draw_fuzz_column reads existing
-            // fb pixels and darkens them; the sprite's texture is not drawn.
+            // Fuzz effect (Spectre).
             if render_flag == RenderFlag::Fuzz {
-                let sy_top_clamped = screen_y_top.max(0) as usize;
-                let sy_bot_clamped = screen_y_bot.min(SCREEN_H as i32 - 1) as usize;
-                if sy_top_clamped <= sy_bot_clamped {
+                let sy_top_u = sy_top_clamped.max(0) as usize;
+                let sy_bot_u = sy_bot_clamped.min(SCREEN_H as i32 - 1) as usize;
+                if sy_top_u <= sy_bot_u {
                     draw_fuzz_column(
                         fb,
                         sx as usize,
-                        sy_top_clamped,
-                        sy_bot_clamped,
+                        sy_top_u,
+                        sy_bot_u,
                         &mut fuzz_pos,
                         colormap,
                     );
@@ -802,22 +1009,12 @@ fn render_things_impl(
                 continue;
             }
 
-            // Compute the colormap row for this sprite column based on
-            // distance and sector light.
-            let sprite_colormap: Option<&[u8; 256]> =
-                colormap.map(|cm| light_params.get_colormap(vx, cm));
-
-            let sy_top_clamped = screen_y_top.max(0);
-            let sy_bot_clamped = screen_y_bot.min(SCREEN_H as i32 - 1);
-
             for sy in sy_top_clamped..=sy_bot_clamped {
-                // Map screen row back to sprite row.
                 let sprite_row = (sy - screen_y_top) * frame.height as i32 / col_h.max(1);
                 let sprite_row = sprite_row.clamp(0, frame.height as i32 - 1) as usize;
 
-                let pixel_idx = col as usize * frame.height as usize + sprite_row;
+                let pixel_idx = sprite_col * frame.height as usize + sprite_row;
                 if let Some(Some(raw_idx)) = frame.pixels.get(pixel_idx) {
-                    // Apply colormap shading if available.
                     let final_color = match sprite_colormap {
                         Some(cm) => cm[*raw_idx as usize],
                         None => *raw_idx,

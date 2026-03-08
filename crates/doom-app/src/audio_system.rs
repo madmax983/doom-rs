@@ -278,6 +278,41 @@ pub fn weapon_fire_sfx(weapon: doom_game::WeaponType) -> u16 {
     }
 }
 
+/// Resolve the SFX ID for a named DS* lump by scanning the WAD in the same
+/// order used by [`populate_sfx_cache`].
+///
+/// Returns `None` if the lump is not present in the WAD.
+pub fn find_sfx_id_by_name(wad: &WadFile, lump_name: &str) -> Option<u16> {
+    let has_ds_markers =
+        wad.find_lump("DS_START").is_some() && wad.find_lump("DS_END").is_some();
+
+    // Build the ordered candidate list exactly as populate_sfx_cache does.
+    let mut idx = 0u16;
+    if has_ds_markers {
+        for l in wad
+            .lumps_between("DS_START", "DS_END")
+            .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
+        {
+            idx += 1;
+            if l.name.as_str().eq_ignore_ascii_case(lump_name) {
+                return Some(idx);
+            }
+        }
+    } else {
+        for l in wad
+            .lumps()
+            .iter()
+            .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
+        {
+            idx += 1;
+            if l.name.as_str().eq_ignore_ascii_case(lump_name) {
+                return Some(idx);
+            }
+        }
+    }
+    None
+}
+
 // ---------------------------------------------------------------------------
 // Music lump name helpers
 // ---------------------------------------------------------------------------
