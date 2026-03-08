@@ -1619,6 +1619,31 @@ mod tests {
         assert_eq!(s.action, LOOK);
     }
 
+    /// Regression: verify 5-frame death chains for every original monster.
+    /// Each must have DIE1→DIE2→DIE3→DIE4→DIE5→S_NULL with DIE5.tics == -1.
+    #[test]
+    fn all_original_monsters_have_five_frame_death_chains() {
+        let cases: &[(&str, u16, u16, u16, u16, u16)] = &[
+            ("Trooper",    ids::S_POSS_DIE1, ids::S_POSS_DIE2, ids::S_POSS_DIE3, ids::S_POSS_DIE4, ids::S_POSS_DIE5),
+            ("Sergeant",   ids::S_SPOS_DIE1, ids::S_SPOS_DIE2, ids::S_SPOS_DIE3, ids::S_SPOS_DIE4, ids::S_SPOS_DIE5),
+            ("Imp",        ids::S_TROO_DIE1, ids::S_TROO_DIE2, ids::S_TROO_DIE3, ids::S_TROO_DIE4, ids::S_TROO_DIE5),
+            ("Demon",      ids::S_SARG_DIE1, ids::S_SARG_DIE2, ids::S_SARG_DIE3, ids::S_SARG_DIE4, ids::S_SARG_DIE5),
+            ("Cacodemon",  ids::S_HEAD_DIE1, ids::S_HEAD_DIE2, ids::S_HEAD_DIE3, ids::S_HEAD_DIE4, ids::S_HEAD_DIE5),
+            ("Baron",      ids::S_BOSS_DIE1, ids::S_BOSS_DIE2, ids::S_BOSS_DIE3, ids::S_BOSS_DIE4, ids::S_BOSS_DIE5),
+            ("Cyberdemon", ids::S_CYBER_DIE1, ids::S_CYBER_DIE2, ids::S_CYBER_DIE3, ids::S_CYBER_DIE4, ids::S_CYBER_DIE5),
+            ("Spider",     ids::S_SPID_DIE1, ids::S_SPID_DIE2, ids::S_SPID_DIE3, ids::S_SPID_DIE4, ids::S_SPID_DIE5),
+            ("HellKnight", ids::S_BOS2_DIE1, ids::S_BOS2_DIE2, ids::S_BOS2_DIE3, ids::S_BOS2_DIE4, ids::S_BOS2_DIE5),
+        ];
+        for &(name, d1, d2, d3, d4, d5) in cases {
+            assert_eq!(STATES[d1 as usize].next_state, StateNum(d2), "{name} DIE1→DIE2");
+            assert_eq!(STATES[d2 as usize].next_state, StateNum(d3), "{name} DIE2→DIE3");
+            assert_eq!(STATES[d3 as usize].next_state, StateNum(d4), "{name} DIE3→DIE4");
+            assert_eq!(STATES[d4 as usize].next_state, StateNum(d5), "{name} DIE4→DIE5");
+            assert_eq!(STATES[d5 as usize].tics, -1, "{name} DIE5 must hold forever");
+            assert_eq!(STATES[d5 as usize].next_state, StateNum(ids::S_NULL), "{name} DIE5→S_NULL");
+        }
+    }
+
     #[test]
     fn hell_knight_death_terminates() {
         // DIE2 now chains to DIE3; the terminal state is DIE5.

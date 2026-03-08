@@ -2605,6 +2605,59 @@ mod tests {
     }
 
     #[test]
+    fn a_scream_sets_mf_screamed_flag() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+
+        // MF_SCREAMED must NOT be set before the action fires.
+        assert_eq!(
+            gs.mobjslab.get(trooper).unwrap().flags & flags::MF_SCREAMED,
+            0,
+            "MF_SCREAMED must not be set before A_Scream"
+        );
+
+        dispatch_action(&mut gs, trooper, ACTION_SCREAM, None);
+
+        assert_ne!(
+            gs.mobjslab.get(trooper).unwrap().flags & flags::MF_SCREAMED,
+            0,
+            "A_Scream must set MF_SCREAMED"
+        );
+    }
+
+    /// Verify that each original monster's first death frame carries ACTION_SCREAM
+    /// and second death frame carries ACTION_FALL — matching the vanilla state table.
+    #[test]
+    fn die1_and_die2_actions_correct_for_all_original_monsters() {
+        use crate::states::ids;
+        use crate::states::STATES;
+
+        let cases: &[(u16, u16, &str)] = &[
+            (ids::S_POSS_DIE1, ids::S_POSS_DIE2, "Trooper"),
+            (ids::S_SPOS_DIE1, ids::S_SPOS_DIE2, "Sergeant"),
+            (ids::S_TROO_DIE1, ids::S_TROO_DIE2, "Imp"),
+            (ids::S_SARG_DIE1, ids::S_SARG_DIE2, "Demon"),
+            (ids::S_HEAD_DIE1, ids::S_HEAD_DIE2, "Cacodemon"),
+            (ids::S_BOSS_DIE1, ids::S_BOSS_DIE2, "Baron"),
+            (ids::S_CYBER_DIE1, ids::S_CYBER_DIE2, "Cyberdemon"),
+            (ids::S_SPID_DIE1, ids::S_SPID_DIE2, "Spider"),
+            (ids::S_BOS2_DIE1, ids::S_BOS2_DIE2, "HellKnight"),
+        ];
+        for &(die1, die2, name) in cases {
+            assert_eq!(
+                STATES[die1 as usize].action,
+                ACTION_SCREAM,
+                "{name} DIE1 must have ACTION_SCREAM"
+            );
+            assert_eq!(
+                STATES[die2 as usize].action,
+                ACTION_FALL,
+                "{name} DIE2 must have ACTION_FALL"
+            );
+        }
+    }
+
+    #[test]
     fn a_fall_clears_solid_flag() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);

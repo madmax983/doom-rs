@@ -519,6 +519,29 @@ mod tests {
         );
     }
 
+    /// Regression: damage_mobj kills via p_set_mobj_state, which fires the entry
+    /// action (A_Scream).  If we ever revert to direct state assignment A_Scream
+    /// will silently stop firing and MF_SCREAMED will not be set.
+    #[test]
+    fn lethal_damage_fires_a_scream_via_p_set_mobj_state() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+
+        assert_eq!(
+            gs.mobjslab.get(trooper).unwrap().flags & crate::mobj::flags::MF_SCREAMED,
+            0,
+            "MF_SCREAMED must be clear before kill"
+        );
+
+        damage_mobj(&mut gs, trooper, MobjHandle::NULL, 20);
+
+        assert_ne!(
+            gs.mobjslab.get(trooper).unwrap().flags & crate::mobj::flags::MF_SCREAMED,
+            0,
+            "lethal damage must set MF_SCREAMED (A_Scream fired by p_set_mobj_state)"
+        );
+    }
+
     #[test]
     fn stale_handle_is_noop() {
         let mut gs = make_game_state();
