@@ -91,15 +91,17 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         // Death transition — use p_set_mobj_state so the entry action
         // (A_Scream on the first death frame) fires correctly.
         // -------------------------------------------------------------------
-        let death_sn: StateNum = {
+        let (death_sn, kind): (StateNum, _) = {
             let Some(mo) = gs.mobjslab.get(target) else {
                 return;
             };
-            crate::mobjinfo::MOBJINFO[mo.kind as usize].death_state
+            (crate::mobjinfo::MOBJINFO[mo.kind as usize].death_state, mo.kind)
         };
         if death_sn != StateNum::NULL {
             crate::tic::p_set_mobj_state(gs, target, death_sn, None);
         }
+        gs.sound_queue
+            .push(crate::state::SoundRequest::MonsterDie(kind));
     } else {
         // -------------------------------------------------------------------
         // Pain transition — probabilistic via p_random()

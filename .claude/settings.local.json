@@ -11,7 +11,8 @@
       "Bash(cargo run:*)",
       "Bash(powershell:*)",
       "Bash(cargo check:*)",
-      "Skill(commit-commands:commit)"
+      "Skill(commit-commands:commit)",
+      "Bash(grep:*)"
     ]
   }
 }

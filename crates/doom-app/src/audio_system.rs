@@ -278,6 +278,111 @@ pub fn weapon_fire_sfx(weapon: doom_game::WeaponType) -> u16 {
     }
 }
 
+/// Build a name → SFX ID lookup map over all DS* lumps in `wad`.
+///
+/// The IDs are assigned in the same sequential order as [`populate_sfx_cache`],
+/// so `sfx_lookup["DSPISTOL"]` returns the same ID that the mixer uses.
+/// This lets the app resolve monster sound IDs by name in O(1) at play time.
+pub fn build_sfx_lookup(wad: &WadFile) -> std::collections::HashMap<String, u16> {
+    let mut map = std::collections::HashMap::new();
+    let has_ds_markers =
+        wad.find_lump("DS_START").is_some() && wad.find_lump("DS_END").is_some();
+
+    let mut idx = 0u16;
+    if has_ds_markers {
+        for l in wad
+            .lumps_between("DS_START", "DS_END")
+            .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
+        {
+            idx += 1;
+            map.insert(l.name.as_str().to_ascii_uppercase(), idx);
+        }
+    } else {
+        for l in wad
+            .lumps()
+            .iter()
+            .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
+        {
+            idx += 1;
+            map.insert(l.name.as_str().to_ascii_uppercase(), idx);
+        }
+    }
+    map
+}
+
+/// Return the Doom DS* lump name for a monster's wake (see) sound.
+///
+/// Returns `""` for kinds that have no wake sound (projectiles, pickups, etc.).
+pub fn monster_wake_lump(kind: doom_game::MobjKind) -> &'static str {
+    use doom_game::MobjKind;
+    match kind {
+        MobjKind::Trooper => "DSPOSSIT",
+        MobjKind::Sergeant => "DSSGTSIT",
+        MobjKind::Imp => "DSBGSIT1",
+        MobjKind::Demon | MobjKind::Spectre => "DSSGTSIT",
+        MobjKind::LostSoul => "DSSKLATK",
+        MobjKind::Cacodemon => "DSCACSIT",
+        MobjKind::BaronOfHell => "DSBRSSIT",
+        MobjKind::HellKnight => "DSKNTSIT",
+        MobjKind::Arachnotron => "DSBSPIT",
+        MobjKind::PainElemental => "DSPESIT",
+        MobjKind::Revenant => "DSSKESIT",
+        MobjKind::Mancubus => "DSMNTSIT",
+        MobjKind::ArchVile => "DSVILSIT",
+        MobjKind::SpiderMastermind => "DSSPIDSIT",
+        MobjKind::Cyberdemon => "DSCYBSIT",
+        MobjKind::WolfSS => "DSSPOSSIT",
+        _ => "",
+    }
+}
+
+/// Return the Doom DS* lump name for a monster's attack sound.
+///
+/// Returns `""` for kinds that have no dedicated attack sound.
+pub fn monster_attack_lump(kind: doom_game::MobjKind) -> &'static str {
+    use doom_game::MobjKind;
+    match kind {
+        MobjKind::Trooper | MobjKind::WolfSS => "DSPISTOL",
+        MobjKind::Sergeant => "DSSHOTGN",
+        MobjKind::Imp => "DSBGSIT1",
+        MobjKind::Demon | MobjKind::Spectre => "DSSGTATK",
+        MobjKind::Cacodemon => "DSCLAW1",
+        MobjKind::BaronOfHell | MobjKind::HellKnight => "DSBAREXP",
+        MobjKind::Revenant => "DSSKEATK",
+        MobjKind::Mancubus => "DSFIRSHT",
+        MobjKind::ArchVile => "DSVILATK",
+        MobjKind::Arachnotron => "DSBSPIT",
+        MobjKind::Cyberdemon => "DSRLAUNC",
+        MobjKind::SpiderMastermind => "DSSHOTGN",
+        _ => "",
+    }
+}
+
+/// Return the Doom DS* lump name for a monster's death sound.
+///
+/// Returns `""` for kinds that have no death sound.
+pub fn monster_death_lump(kind: doom_game::MobjKind) -> &'static str {
+    use doom_game::MobjKind;
+    match kind {
+        MobjKind::Trooper | MobjKind::WolfSS => "DSPODTH1",
+        MobjKind::Sergeant => "DSSGTDTH",
+        MobjKind::Imp => "DSBGDTH1",
+        MobjKind::Demon | MobjKind::Spectre => "DSSGTDTH",
+        MobjKind::LostSoul => "DSFIRXPL",
+        MobjKind::Cacodemon => "DSCACDTH",
+        MobjKind::BaronOfHell => "DSBRDTH1",
+        MobjKind::HellKnight => "DSKNTDTH",
+        MobjKind::Arachnotron => "DSBSDTH",
+        MobjKind::PainElemental => "DSPEDTH",
+        MobjKind::Revenant => "DSSKEPCH1",
+        MobjKind::Mancubus => "DSMNTDTH",
+        MobjKind::ArchVile => "DSVILDTH",
+        MobjKind::SpiderMastermind => "DSSPIDTH",
+        MobjKind::Cyberdemon => "DSCYBDTH",
+        _ => "",
+    }
+}
+
 /// Resolve the SFX ID for a named DS* lump by scanning the WAD in the same
 /// order used by [`populate_sfx_cache`].
 ///

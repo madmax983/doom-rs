@@ -206,6 +206,7 @@ mod tests {
             false,
             None,
             None,
+            std::collections::HashMap::new(),
         )
     }
 

@@ -420,9 +420,9 @@ impl GameState {
     pub fn tick(&mut self, cmd: TicCmd, mut level: Option<&mut Level>) {
         self.tic_num = self.tic_num.wrapping_add(1);
 
-        // Clear any exit request from the previous tic so callers see it
-        // exactly once.
+        // Clear transient per-tic state.
         self.exit_request = None;
+        self.sound_queue.clear();
 
         // Player input processing.
         tick_player(self, cmd, level.as_deref_mut());

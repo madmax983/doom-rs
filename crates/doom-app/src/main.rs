@@ -32,7 +32,10 @@ use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
 
-use audio_system::{AudioSystem, music_lump_for_map, weapon_fire_sfx};
+use audio_system::{
+    AudioSystem, build_sfx_lookup, monster_attack_lump, monster_death_lump, monster_wake_lump,
+    music_lump_for_map, weapon_fire_sfx,
+};
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -151,6 +154,9 @@ pub(crate) struct DoomGame {
     debug_log: Option<std::fs::File>,
     /// SFX ID for the player pain sound (DSPLPAIN), resolved at startup.
     pain_sfx_id: Option<u16>,
+    /// Name → SFX ID lookup built from the WAD at startup (same ordering as
+    /// `SfxCache`).  Used to play monster wake/attack/death sounds by lump name.
+    sfx_lookup: std::collections::HashMap<String, u16>,
 }
 
 impl DoomGame {
@@ -165,6 +171,7 @@ impl DoomGame {
         show_title: bool,
         debug_log: Option<std::fs::File>,
         pain_sfx_id: Option<u16>,
+        sfx_lookup: std::collections::HashMap<String, u16>,
     ) -> Self {
         // Initialize scrolling wall and conveyor belt specials from level linedefs.
         init_scrolling_walls(&mut gs, &level);
@@ -209,6 +216,7 @@ impl DoomGame {
             title_screen,
             debug_log,
             pain_sfx_id,
+            sfx_lookup,
         }
     }
 }
@@ -538,6 +546,26 @@ impl DoomApp for DoomGame {
         let pre_items = self.gs.player.item_count;
 
         self.gs.tick(cmd, Some(&mut self.level));
+
+        // Drain the game's sound event queue and play each sound via audio.
+        if let Some(ref audio) = self.audio {
+            // Collect so we can read sfx_lookup without aliasing self.
+            let events: Vec<_> = self.gs.sound_queue.drain(..).collect();
+            for ev in events {
+                use doom_game::SoundRequest;
+                let lump = match ev {
+                    SoundRequest::MonsterWake(kind) => monster_wake_lump(kind),
+                    SoundRequest::MonsterAttack(kind) => monster_attack_lump(kind),
+                    SoundRequest::MonsterDie(kind) => monster_death_lump(kind),
+                    SoundRequest::PlayerDie => "DSPLDETH",
+                };
+                if !lump.is_empty() {
+                    if let Some(&id) = self.sfx_lookup.get(lump) {
+                        audio.play_sfx(id);
+                    }
+                }
+            }
+        }
 
         // Log kill and item events.
         if self.debug_log.is_some() {
@@ -1111,6 +1139,10 @@ fn main() -> Result<()> {
     // Resolve player pain SFX (DSPLPAIN) once at startup so we can fire it cheaply.
     let pain_sfx_id = audio_system::find_sfx_id_by_name(&wad, "DSPLPAIN");
 
+    // Build a name→ID map for all DS* lumps so monster sounds can be resolved
+    // by lump name at play time without additional WAD scans.
+    let sfx_lookup = audio_system::build_sfx_lookup(&wad);
+
     let app = DoomGame::new(
         gs,
         level,
@@ -1122,6 +1154,7 @@ fn main() -> Result<()> {
         show_title,
         debug_log,
         pain_sfx_id,
+        sfx_lookup,
     );
 
     // Headless capture mode: tick N frames, render, save BMP, exit.
@@ -1366,6 +1399,7 @@ mod tests {
             false,
             None,
             None,
+            std::collections::HashMap::new(),
         )
     }
 

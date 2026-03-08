@@ -532,6 +532,10 @@ fn transition_to_see_state(
     mo.threshold = 60; // stay alerted for 60 tics
     mo.state = see_sn;
     mo.tics = new_tics;
+
+    // Emit wake sound event.
+    gs.sound_queue
+        .push(crate::state::SoundRequest::MonsterWake(kind));
 }
 
 // ---------------------------------------------------------------------------
@@ -1034,6 +1038,8 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         damage,
         level,
     );
+    gs.sound_queue
+        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Trooper));
 }
 
 // ---------------------------------------------------------------------------
@@ -1074,6 +1080,8 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
             level,
         );
     }
+    gs.sound_queue
+        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Sergeant));
 }
 
 // ---------------------------------------------------------------------------
@@ -1108,6 +1116,8 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
     } else {
         crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::ImpFireball);
     }
+    gs.sound_queue
+        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Imp));
 }
 
 // ---------------------------------------------------------------------------
@@ -1135,6 +1145,8 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
     if dist <= crate::combat::MELEERANGE.to_int() {
         let damage = ((gs.tic_num % 3) + 1) as i32 * 4;
         crate::combat::damage_mobj(gs, target, handle, damage);
+        gs.sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Demon));
     }
 }
 
@@ -1156,6 +1168,8 @@ fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::CacoFireball);
+    gs.sound_queue
+        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Cacodemon));
 }
 
 // ---------------------------------------------------------------------------
@@ -1176,6 +1190,10 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::BaronBall);
+    // Read the kind so we can distinguish Baron vs Hell Knight in the event.
+    let kind = gs.mobjslab.get(handle).map(|mo| mo.kind).unwrap_or(MobjKind::BaronOfHell);
+    gs.sound_queue
+        .push(crate::state::SoundRequest::MonsterAttack(kind));
 }
 
 // ---------------------------------------------------------------------------
@@ -1212,6 +1230,10 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         damage,
         level,
     );
+    // CPosAttack is shared by Chaingunner (and WolfSS); read the actual kind.
+    let kind = gs.mobjslab.get(handle).map(|mo| mo.kind).unwrap_or(MobjKind::Trooper);
+    gs.sound_queue
+        .push(crate::state::SoundRequest::MonsterAttack(kind));
 }
 
 // ---------------------------------------------------------------------------
@@ -1232,6 +1254,8 @@ fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::Rocket);
+    gs.sound_queue
+        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Cyberdemon));
 }
 
 // ---------------------------------------------------------------------------
@@ -1252,6 +1276,8 @@ fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::Tracer);
+    gs.sound_queue
+        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Revenant));
 }
 
 // ---------------------------------------------------------------------------
@@ -1315,6 +1341,8 @@ fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
     a_face_target(gs, handle);
     fat_shoot(gs, handle, FATSPREAD);
     fat_shoot(gs, handle, 0);
+    gs.sound_queue
+        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Mancubus));
 }
 
 /// Port of `A_FatAttack2` from Doom's `p_enemy.c`.

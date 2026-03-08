@@ -6,9 +6,30 @@
 
 use doom_types::Fixed16_16;
 
-use crate::mobj::{MobjHandle, MobjSlab};
+use crate::mobj::{MobjHandle, MobjKind, MobjSlab};
 use crate::player::PlayerState;
 use crate::spawn::Skill;
+
+// ---------------------------------------------------------------------------
+// Sound events
+// ---------------------------------------------------------------------------
+
+/// A sound event emitted by the game simulation.
+///
+/// The app (doom-app) drains `GameState::sound_queue` each tic and maps each
+/// variant to the appropriate WAD lump name for playback.  The game crate
+/// intentionally has no audio dependency — it only describes *what* happened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SoundRequest {
+    /// Monster spotted the player / woke up.
+    MonsterWake(MobjKind),
+    /// Monster was killed.
+    MonsterDie(MobjKind),
+    /// Monster fired a hitscan or projectile attack.
+    MonsterAttack(MobjKind),
+    /// Player died.
+    PlayerDie,
+}
 
 // ---------------------------------------------------------------------------
 // Exit request
@@ -532,6 +553,12 @@ pub struct GameState {
     /// Current skill level (affects Nightmare respawning).
     pub skill: Skill,
 
+    // --- Pending sound events ---
+    /// Sound events queued this tic.  The app drains this after each
+    /// `tick()` call and plays the corresponding WAD sound effects.
+    /// Cleared at the start of each tick so events don't accumulate.
+    pub sound_queue: Vec<SoundRequest>,
+
     // --- Boss Brain (Icon of Sin) ---
     /// Set `true` once the Boss Brain's see state fires; cubes only
     /// start spawning after this flag is set.
@@ -578,6 +605,7 @@ impl GameState {
             sound_gen: 0,
             seen_lines: Vec::new(),
             skill: Skill::Medium,
+            sound_queue: Vec::new(),
             brain_awake: false,
             brain_targets: Vec::new(),
             brain_target_index: 0,
