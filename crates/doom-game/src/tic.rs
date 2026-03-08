@@ -814,7 +814,7 @@ mod tests {
 
         let mo = gs.mobjslab.get(handle).unwrap();
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE2));
-        assert_eq!(mo.tics, -1, "DIE2 holds forever");
+        assert_eq!(mo.tics, 8, "DIE2 runs for 8 tics before DIE3");
     }
 
     #[test]
@@ -1136,11 +1136,11 @@ mod tests {
     #[test]
     fn full_death_sequence_die1_through_die2() {
         let mut gs = make_game_state();
-        // S_POSS_DIE1: 8 tics, next = S_POSS_DIE2 (tics=-1, holds)
+        // S_POSS_DIE1: 8 tics, next = S_POSS_DIE2 (8 tics, chains to die3)
         let trooper = make_trooper(StateNum(ids::S_POSS_DIE1), 8);
         let handle = gs.mobjslab.alloc(trooper);
 
-        // Tick 8 times to count down DIE1.
+        // Tick 8 times to count down DIE1 (7 decrements + 1 transition).
         for _ in 0..7 {
             let result = tick_mobj(&mut gs, handle, None);
             assert!(matches!(result, TickMobjResult::Alive));
@@ -1159,7 +1159,7 @@ mod tests {
 
         let mo = gs.mobjslab.get(handle).unwrap();
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE2));
-        assert_eq!(mo.tics, -1, "DIE2 holds forever");
+        assert_eq!(mo.tics, 8, "DIE2 runs for 8 tics before chaining to DIE3");
     }
 
     // =======================================================================
@@ -1169,12 +1169,9 @@ mod tests {
     #[test]
     fn tick_all_mobjs_removes_s_null_actors() {
         let mut gs = make_game_state();
-        // Create a mobj whose next_state will be S_NULL.
-        // We need a state whose next_state IS S_NULL.
-        // S_POSS_DIE2 has next_state = S_NULL but tics = -1, so it holds.
-        // Instead, let's create a custom scenario: set state to DIE2 with tics=1.
-        // When it transitions, next_state = S_NULL -> should be removed.
-        let mut trooper = make_trooper(StateNum(ids::S_POSS_DIE2), 1);
+        // S_POSS_DIE5 has next_state = S_NULL and tics = -1 (holds forever).
+        // Override tics to 1 so the transition to S_NULL fires.
+        let mut trooper = make_trooper(StateNum(ids::S_POSS_DIE5), 1);
         trooper.health = 0;
         let handle = gs.mobjslab.alloc(trooper);
 
@@ -1193,8 +1190,8 @@ mod tests {
     #[test]
     fn s_null_removal_does_not_affect_other_actors() {
         let mut gs = make_game_state();
-        // One trooper that will be removed (S_NULL next).
-        let mut dying = make_trooper(StateNum(ids::S_POSS_DIE2), 1);
+        // One trooper that will be removed (S_NULL next from DIE5).
+        let mut dying = make_trooper(StateNum(ids::S_POSS_DIE5), 1);
         dying.health = 0;
         let dying_handle = gs.mobjslab.alloc(dying);
 

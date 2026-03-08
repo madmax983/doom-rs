@@ -81,6 +81,8 @@ pub const ACTION_BSPI_ATTACK: u8 = 18;
 pub const ACTION_SPID_ATTACK: u8 = 19;
 /// `A_PainAttack`: Pain Elemental spawns Lost Soul.
 pub const ACTION_PAIN_ATTACK: u8 = 20;
+/// `A_Scream`: Play monster death sound on first death frame.
+pub const ACTION_SCREAM: u8 = 21;
 
 // --- Arch-Vile special actions ---
 /// `A_VileChase`: Chase with resurrection scan.
@@ -139,6 +141,7 @@ pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level
         ACTION_BSPI_ATTACK => a_bspi_attack(gs, handle),
         ACTION_SPID_ATTACK => a_spid_attack(gs, handle, level),
         ACTION_PAIN_ATTACK => a_pain_attack(gs, handle),
+        ACTION_SCREAM => a_scream(gs, handle),
         ACTION_VILE_CHASE => a_vile_chase(gs, handle, level),
         ACTION_VILE_START => a_vile_start(gs, handle),
         ACTION_VILE_TARGET => a_vile_target(gs, handle),
@@ -979,6 +982,22 @@ fn bam_from_xy(dx: i32, dy: i32) -> Bam {
 fn a_fall(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.flags &= !(crate::mobj::flags::MF_SOLID | crate::mobj::flags::MF_COUNTKILL);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A_Scream (death sound on first death frame)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_Scream` from Doom's `p_enemy.c`.
+///
+/// Fires on the first death frame; in the original engine this played
+/// the monster-specific death sound.  Here we set a flag so the app
+/// layer can trigger audio, matching the vanilla pattern without
+/// hard-coding a sound ID in the game crate.
+fn a_scream(gs: &mut GameState, handle: MobjHandle) {
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.flags |= crate::mobj::flags::MF_SCREAMED;
     }
 }
 

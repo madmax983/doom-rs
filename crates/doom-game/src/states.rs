@@ -31,6 +31,7 @@ const VILE_ATTACK: u8 = 25;
 const FIRE: u8 = 26;
 const BRAIN_AWAKE: u8 = 27;
 const BRAIN_SPIT: u8 = 28;
+const SCREAM: u8 = 21;
 const BRAIN_DIE: u8 = 30;
 const BRAIN_SCREAM: u8 = 31;
 const BRAIN_EXPLODE: u8 = 32;
@@ -192,7 +193,7 @@ pub mod ids {
     pub const S_SPID_RUN1: u16 = 23;
     pub const S_SPID_RUN2: u16 = 24;
 
-    // Death and pain states
+    // Death and pain states (original 8 monsters)
     pub const S_POSS_DIE1: u16 = 25;
     pub const S_POSS_DIE2: u16 = 26;
     pub const S_POSS_PAIN: u16 = 27;
@@ -217,6 +218,35 @@ pub mod ids {
     pub const S_SPID_DIE1: u16 = 46;
     pub const S_SPID_DIE2: u16 = 47;
     pub const S_SPID_PAIN: u16 = 48;
+    // Extended death frames for original 8 monsters (appended after state 314)
+    pub const S_POSS_DIE3: u16 = 315;
+    pub const S_POSS_DIE4: u16 = 316;
+    pub const S_POSS_DIE5: u16 = 317;
+    pub const S_SPOS_DIE3: u16 = 318;
+    pub const S_SPOS_DIE4: u16 = 319;
+    pub const S_SPOS_DIE5: u16 = 320;
+    pub const S_TROO_DIE3: u16 = 321;
+    pub const S_TROO_DIE4: u16 = 322;
+    pub const S_TROO_DIE5: u16 = 323;
+    pub const S_SARG_DIE3: u16 = 324;
+    pub const S_SARG_DIE4: u16 = 325;
+    pub const S_SARG_DIE5: u16 = 326;
+    pub const S_HEAD_DIE3: u16 = 327;
+    pub const S_HEAD_DIE4: u16 = 328;
+    pub const S_HEAD_DIE5: u16 = 329;
+    pub const S_BOSS_DIE3: u16 = 330;
+    pub const S_BOSS_DIE4: u16 = 331;
+    pub const S_BOSS_DIE5: u16 = 332;
+    pub const S_CYBER_DIE3: u16 = 333;
+    pub const S_CYBER_DIE4: u16 = 334;
+    pub const S_CYBER_DIE5: u16 = 335;
+    pub const S_SPID_DIE3: u16 = 336;
+    pub const S_SPID_DIE4: u16 = 337;
+    pub const S_SPID_DIE5: u16 = 338;
+    // Extended death frames for BOS2 (Hell Knight)
+    pub const S_BOS2_DIE3: u16 = 339;
+    pub const S_BOS2_DIE4: u16 = 340;
+    pub const S_BOS2_DIE5: u16 = 341;
 
     // Attack states
     pub const S_POSS_ATK1: u16 = 49;
@@ -540,7 +570,7 @@ pub mod ids {
     pub const S_BRAIN_DIE3: u16 = 314;
 
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 315;
+    pub const STATES_COUNT: usize = 342;
 }
 
 // ---------------------------------------------------------------------------
@@ -603,38 +633,38 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SPID, 0, 4, CHASE, ids::S_SPID_RUN2),
     st!(SPR_SPID, 1, 4, CHASE, ids::S_SPID_RUN1),
     // === Death and pain states (25..48) ===
-    // Trooper
-    st!(SPR_POSS, 4, 8, NONE, ids::S_POSS_DIE2), // 25
-    st!(SPR_POSS, 5, -1, NONE, ids::S_NULL),     // 26
-    st!(SPR_POSS, 6, 6, NONE, ids::S_POSS_STND), // 27: pain
-    // Sergeant
-    st!(SPR_SPOS, 4, 8, NONE, ids::S_SPOS_DIE2), // 28
-    st!(SPR_SPOS, 5, -1, NONE, ids::S_NULL),     // 29
-    st!(SPR_SPOS, 6, 6, NONE, ids::S_SPOS_STND), // 30
-    // Imp
-    st!(SPR_TROO, 4, 8, NONE, ids::S_TROO_DIE2), // 31
-    st!(SPR_TROO, 5, -1, NONE, ids::S_NULL),     // 32
-    st!(SPR_TROO, 6, 6, NONE, ids::S_TROO_STND), // 33
-    // Demon
-    st!(SPR_SARG, 4, 8, NONE, ids::S_SARG_DIE2), // 34
-    st!(SPR_SARG, 5, -1, NONE, ids::S_NULL),     // 35
-    st!(SPR_SARG, 6, 6, NONE, ids::S_SARG_STND), // 36
-    // Cacodemon
-    st!(SPR_HEAD, 4, 8, NONE, ids::S_HEAD_DIE2), // 37
-    st!(SPR_HEAD, 5, -1, NONE, ids::S_NULL),     // 38
-    st!(SPR_HEAD, 6, 6, NONE, ids::S_HEAD_STND), // 39
-    // Baron
-    st!(SPR_BOSS, 4, 8, NONE, ids::S_BOSS_DIE2), // 40
-    st!(SPR_BOSS, 5, -1, NONE, ids::S_NULL),     // 41
-    st!(SPR_BOSS, 6, 6, NONE, ids::S_BOSS_STND), // 42
-    // Cyberdemon
-    st!(SPR_CYBR, 4, 8, NONE, ids::S_CYBER_DIE2), // 43
-    st!(SPR_CYBR, 5, -1, NONE, ids::S_NULL),      // 44
-    st!(SPR_CYBR, 6, 6, NONE, ids::S_CYBER_STND), // 45
-    // Spider Mastermind
-    st!(SPR_SPID, 4, 8, NONE, ids::S_SPID_DIE2), // 46
-    st!(SPR_SPID, 5, -1, NONE, ids::S_NULL),     // 47
-    st!(SPR_SPID, 6, 6, NONE, ids::S_SPID_STND), // 48
+    // Trooper — death starts at WAD frame H(7), pain at G(6)
+    st!(SPR_POSS, 7, 8, SCREAM, ids::S_POSS_DIE2), // 25: die1
+    st!(SPR_POSS, 8, 8, FALL, ids::S_POSS_DIE3),   // 26: die2 → die3
+    st!(SPR_POSS, 6, 6, NONE, ids::S_POSS_STND),   // 27: pain (frame G)
+    // Sergeant — same layout as Trooper
+    st!(SPR_SPOS, 7, 8, SCREAM, ids::S_SPOS_DIE2), // 28: die1
+    st!(SPR_SPOS, 8, 8, FALL, ids::S_SPOS_DIE3),   // 29: die2 → die3
+    st!(SPR_SPOS, 6, 6, NONE, ids::S_SPOS_STND),   // 30: pain
+    // Imp — death at I(8), pain at H(7)
+    st!(SPR_TROO, 8, 8, SCREAM, ids::S_TROO_DIE2), // 31: die1
+    st!(SPR_TROO, 9, 8, FALL, ids::S_TROO_DIE3),   // 32: die2 → die3
+    st!(SPR_TROO, 7, 6, NONE, ids::S_TROO_STND),   // 33: pain (frame H)
+    // Demon — death at H(7), pain at G(6)
+    st!(SPR_SARG, 7, 8, SCREAM, ids::S_SARG_DIE2), // 34: die1
+    st!(SPR_SARG, 8, 4, FALL, ids::S_SARG_DIE3),   // 35: die2 → die3
+    st!(SPR_SARG, 6, 6, NONE, ids::S_SARG_STND),   // 36: pain
+    // Cacodemon — death at E(4), pain at D(3)
+    st!(SPR_HEAD, 4, 8, SCREAM, ids::S_HEAD_DIE2), // 37: die1
+    st!(SPR_HEAD, 5, 8, FALL, ids::S_HEAD_DIE3),   // 38: die2 → die3
+    st!(SPR_HEAD, 3, 6, NONE, ids::S_HEAD_STND),   // 39: pain (frame D)
+    // Baron of Hell — same layout as Trooper/Sergeant
+    st!(SPR_BOSS, 7, 8, SCREAM, ids::S_BOSS_DIE2), // 40: die1
+    st!(SPR_BOSS, 8, 8, FALL, ids::S_BOSS_DIE3),   // 41: die2 → die3
+    st!(SPR_BOSS, 6, 6, NONE, ids::S_BOSS_STND),   // 42: pain
+    // Cyberdemon — same layout
+    st!(SPR_CYBR, 7, 8, SCREAM, ids::S_CYBER_DIE2), // 43: die1
+    st!(SPR_CYBR, 8, 8, FALL, ids::S_CYBER_DIE3),   // 44: die2 → die3
+    st!(SPR_CYBR, 6, 6, NONE, ids::S_CYBER_STND),   // 45: pain
+    // Spider Mastermind — same layout
+    st!(SPR_SPID, 7, 8, SCREAM, ids::S_SPID_DIE2), // 46: die1
+    st!(SPR_SPID, 8, 8, FALL, ids::S_SPID_DIE3),   // 47: die2 → die3
+    st!(SPR_SPID, 6, 6, NONE, ids::S_SPID_STND),   // 48: pain
     // === Attack states (49..60) ===
     // Trooper
     st!(SPR_POSS, 2, 4, NONE, ids::S_POSS_ATK2), // 49
@@ -861,9 +891,9 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_BOS2, 2, 4, NONE, ids::S_BOS2_ATK2),  // 229
     st!(SPR_BOS2, 3, 4, BRUIS_ATTACK, ids::S_BOS2_ATK3), // 230
     st!(SPR_BOS2, 2, 4, NONE, ids::S_BOS2_RUN1),  // 231
-    st!(SPR_BOS2, 6, 6, NONE, ids::S_BOS2_STND),  // 232: pain
-    st!(SPR_BOS2, 4, 8, NONE, ids::S_BOS2_DIE2),  // 233: die1
-    st!(SPR_BOS2, 5, -1, NONE, ids::S_NULL),      // 234: die2
+    st!(SPR_BOS2, 6, 6, NONE, ids::S_BOS2_STND),      // 232: pain
+    st!(SPR_BOS2, 7, 8, SCREAM, ids::S_BOS2_DIE2),   // 233: die1
+    st!(SPR_BOS2, 8, 8, FALL, ids::S_BOS2_DIE3),     // 234: die2 → die3
     // ===================================================================
     // Weapon states (235..304)
     // ===================================================================
@@ -963,6 +993,47 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_BBRN, 2, 8, BRAIN_SCREAM, ids::S_BRAIN_DIE2), // 312: BRAIN_DIE1
     st!(SPR_BBRN, 3, 8, BRAIN_EXPLODE, ids::S_BRAIN_DIE3), // 313: BRAIN_DIE2
     st!(SPR_BBRN, 4, -1, BRAIN_DIE, ids::S_NULL), // 314: BRAIN_DIE3
+    // ===================================================================
+    // Extended death frames for original 8 monsters (315..338)
+    // ===================================================================
+    // Trooper DIE3-5 (frames I/J/K = 9/10/11)
+    st!(SPR_POSS, 9,  6, NONE, ids::S_POSS_DIE4), // 315
+    st!(SPR_POSS, 10, 6, NONE, ids::S_POSS_DIE5), // 316
+    st!(SPR_POSS, 11, -1, NONE, ids::S_NULL),     // 317
+    // Sergeant DIE3-5 (same frame layout as Trooper)
+    st!(SPR_SPOS, 9,  6, NONE, ids::S_SPOS_DIE4), // 318
+    st!(SPR_SPOS, 10, 6, NONE, ids::S_SPOS_DIE5), // 319
+    st!(SPR_SPOS, 11, -1, NONE, ids::S_NULL),     // 320
+    // Imp DIE3-5 (frames K/L/M = 10/11/12)
+    st!(SPR_TROO, 10, 6, NONE, ids::S_TROO_DIE4), // 321
+    st!(SPR_TROO, 11, 6, NONE, ids::S_TROO_DIE5), // 322
+    st!(SPR_TROO, 12, -1, NONE, ids::S_NULL),     // 323
+    // Demon DIE3-5 (frames J/K/L = 9/10/11)
+    st!(SPR_SARG, 9,  4, NONE, ids::S_SARG_DIE4), // 324
+    st!(SPR_SARG, 10, 4, NONE, ids::S_SARG_DIE5), // 325
+    st!(SPR_SARG, 11, -1, NONE, ids::S_NULL),     // 326
+    // Cacodemon DIE3-5 (frames G/H/I = 6/7/8)
+    st!(SPR_HEAD, 6, 8, NONE, ids::S_HEAD_DIE4), // 327
+    st!(SPR_HEAD, 7, 8, NONE, ids::S_HEAD_DIE5), // 328
+    st!(SPR_HEAD, 8, -1, NONE, ids::S_NULL),     // 329
+    // Baron of Hell DIE3-5 (frames I/J/K = 9/10/11)
+    st!(SPR_BOSS, 9,  8, NONE, ids::S_BOSS_DIE4), // 330
+    st!(SPR_BOSS, 10, 8, NONE, ids::S_BOSS_DIE5), // 331
+    st!(SPR_BOSS, 11, -1, NONE, ids::S_NULL),     // 332
+    // Cyberdemon DIE3-5 (frames I/J/K = 9/10/11)
+    st!(SPR_CYBR, 9,  8, NONE, ids::S_CYBER_DIE4), // 333
+    st!(SPR_CYBR, 10, 8, NONE, ids::S_CYBER_DIE5), // 334
+    st!(SPR_CYBR, 11, -1, NONE, ids::S_NULL),      // 335
+    // Spider Mastermind DIE3-5 (frames I/J/K = 9/10/11)
+    st!(SPR_SPID, 9,  8, NONE, ids::S_SPID_DIE4), // 336
+    st!(SPR_SPID, 10, 8, NONE, ids::S_SPID_DIE5), // 337
+    st!(SPR_SPID, 11, -1, NONE, ids::S_NULL),     // 338
+    // ===================================================================
+    // Extended death frames for Hell Knight BOS2 (339..341)
+    // ===================================================================
+    st!(SPR_BOS2, 9,  8, NONE, ids::S_BOS2_DIE4), // 339
+    st!(SPR_BOS2, 10, 8, NONE, ids::S_BOS2_DIE5), // 340
+    st!(SPR_BOS2, 11, -1, NONE, ids::S_NULL),     // 341
 ];
 
 // ---------------------------------------------------------------------------
@@ -1020,12 +1091,19 @@ mod tests {
     }
 
     #[test]
-    fn trooper_death_state_is_two_frames() {
+    fn trooper_death_state_is_five_frames() {
+        // DIE1 → DIE2 → DIE3 → DIE4 → DIE5 → S_NULL
         let die1 = &STATES[ids::S_POSS_DIE1 as usize];
         let die2 = &STATES[ids::S_POSS_DIE2 as usize];
+        let die3 = &STATES[ids::S_POSS_DIE3 as usize];
+        let die4 = &STATES[ids::S_POSS_DIE4 as usize];
+        let die5 = &STATES[ids::S_POSS_DIE5 as usize];
         assert_eq!(die1.next_state, StateNum(ids::S_POSS_DIE2));
-        assert_eq!(die2.tics, -1);
-        assert_eq!(die2.next_state, StateNum(ids::S_NULL));
+        assert_eq!(die2.next_state, StateNum(ids::S_POSS_DIE3));
+        assert_eq!(die3.next_state, StateNum(ids::S_POSS_DIE4));
+        assert_eq!(die4.next_state, StateNum(ids::S_POSS_DIE5));
+        assert_eq!(die5.tics, -1);
+        assert_eq!(die5.next_state, StateNum(ids::S_NULL));
     }
 
     #[test]
@@ -1543,9 +1621,14 @@ mod tests {
 
     #[test]
     fn hell_knight_death_terminates() {
-        assert_eq!(STATES[ids::S_BOS2_DIE2 as usize].tics, -1);
+        // DIE2 now chains to DIE3; the terminal state is DIE5.
         assert_eq!(
             STATES[ids::S_BOS2_DIE2 as usize].next_state,
+            StateNum(ids::S_BOS2_DIE3)
+        );
+        assert_eq!(STATES[ids::S_BOS2_DIE5 as usize].tics, -1);
+        assert_eq!(
+            STATES[ids::S_BOS2_DIE5 as usize].next_state,
             StateNum(ids::S_NULL)
         );
     }

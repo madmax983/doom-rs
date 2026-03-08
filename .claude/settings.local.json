@@ -10,7 +10,8 @@
       "Bash(cargo clippy:*)",
       "Bash(cargo run:*)",
       "Bash(powershell:*)",
-      "Bash(cargo check:*)"
+      "Bash(cargo check:*)",
+      "Skill(commit-commands:commit)"
     ]
   }
 }

@@ -224,7 +224,7 @@ impl DoomGame {
         }
     }
 
-    /// Snapshot player state to the log (position, health, armor, ammo).
+    /// Snapshot player state to the log (position, health, armor, ammo, weapon).
     fn dlog_player_snapshot(&mut self) {
         if self.debug_log.is_none() { return; }
         let (px, py, pa) = self.gs.mobjslab.get(self.gs.player.handle)
@@ -232,11 +232,85 @@ impl DoomGame {
             .unwrap_or((0, 0, 0));
         let hp  = self.gs.player.health();
         let arm = self.gs.player.armor();
+        let kills = self.gs.player.kill_count;
+        let weapon = self.gs.player.weapon;
+        use doom_game::player::{AmmoType, WEAPON_AMMO};
+        let cur_ammo_type = WEAPON_AMMO[weapon as usize];
+        let cur_ammo = if cur_ammo_type == AmmoType::None {
+            u32::MAX
+        } else {
+            self.gs.player.ammo(cur_ammo_type as usize)
+        };
+        let ammo_str = if cur_ammo == u32::MAX {
+            "inf".to_owned()
+        } else {
+            cur_ammo.to_string()
+        };
         let msg = format!(
-            "player pos=({},{}) angle={:#010x} health={} armor={}",
-            px, py, pa, hp, arm
+            "player pos=({},{}) angle={:#010x} health={} armor={} kills={} weapon={:?} ammo={}",
+            px, py, pa, hp, arm, kills, weapon, ammo_str
         );
         self.dlog(&msg);
+    }
+
+    /// Log the state of all live enemies within 1024 map units of the player.
+    fn dlog_nearby_enemies(&mut self) {
+        if self.debug_log.is_none() { return; }
+        let (px, py) = self.gs.mobjslab.get(self.gs.player.handle)
+            .map(|mo| (mo.x.to_int(), mo.y.to_int()))
+            .unwrap_or((0, 0));
+
+        let handles: Vec<_> = self.gs.mobjslab.iter_handles().collect();
+        for h in handles {
+            let Some(mo) = self.gs.mobjslab.get(h) else { continue };
+            // Monsters only, alive.
+            let is_monster = matches!(mo.kind,
+                doom_game::mobj::MobjKind::Trooper | doom_game::mobj::MobjKind::Sergeant
+                | doom_game::mobj::MobjKind::Imp | doom_game::mobj::MobjKind::Demon
+                | doom_game::mobj::MobjKind::Spectre | doom_game::mobj::MobjKind::Cacodemon
+                | doom_game::mobj::MobjKind::BaronOfHell | doom_game::mobj::MobjKind::HellKnight
+                | doom_game::mobj::MobjKind::Arachnotron | doom_game::mobj::MobjKind::PainElemental
+                | doom_game::mobj::MobjKind::Revenant | doom_game::mobj::MobjKind::Mancubus
+                | doom_game::mobj::MobjKind::ArchVile | doom_game::mobj::MobjKind::SpiderMastermind
+                | doom_game::mobj::MobjKind::Cyberdemon | doom_game::mobj::MobjKind::WolfSS
+                | doom_game::mobj::MobjKind::LostSoul
+            );
+            if !is_monster { continue; }
+            let ex = mo.x.to_int();
+            let ey = mo.y.to_int();
+            let dx = (ex - px) as i64;
+            let dy = (ey - py) as i64;
+            let dist_sq = dx * dx + dy * dy;
+            if dist_sq > 1024 * 1024 { continue; }
+            let state_idx = mo.state.0;
+            let flags = mo.flags;
+            let is_dead = mo.health <= 0;
+            let msg = format!(
+                "enemy {:?} pos=({},{}) health={} state={} tics={} dead={} flags={:#010x}",
+                mo.kind, ex, ey, mo.health, state_idx, mo.tics, is_dead, flags
+            );
+            self.dlog(&msg);
+        }
+    }
+
+    /// Log death events — enemies that fired A_Scream this tic (SCREAMED flag set).
+    /// Clears the flag after logging so each death is logged exactly once.
+    fn dlog_death_events(&mut self) {
+        if self.debug_log.is_none() { return; }
+        let handles: Vec<_> = self.gs.mobjslab.iter_handles().collect();
+        for h in handles {
+            let Some(mo) = self.gs.mobjslab.get_mut(h) else { continue };
+            if mo.flags & doom_game::mobj::flags::MF_SCREAMED != 0 {
+                // Clear the flag so we only log once.
+                mo.flags &= !doom_game::mobj::flags::MF_SCREAMED;
+                let kind = mo.kind;
+                let x = mo.x.to_int();
+                let y = mo.y.to_int();
+                let state_idx = mo.state.0;
+                let msg = format!("enemy_died {:?} pos=({},{}) death_state={}", kind, x, y, state_idx);
+                self.dlog(&msg);
+            }
+        }
     }
 }
 
@@ -523,7 +597,10 @@ impl DoomApp for DoomGame {
                 // Log player snapshot every 35 tics (once per second of gametime).
                 if self.gs.tic_num % 35 == 0 {
                     self.dlog_player_snapshot();
+                    self.dlog_nearby_enemies();
                 }
+                // Log any deaths that fired A_Scream this tic.
+                self.dlog_death_events();
             }
             self.prev_health = cur_health;
         }

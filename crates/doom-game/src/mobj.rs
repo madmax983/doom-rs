@@ -206,6 +206,8 @@ pub mod flags {
     pub const MF_SKULLFLY: u32 = 0x0080_0000;
     /// Not placed in deathmatch games.
     pub const MF_NOTDMATCH: u32 = 0x0100_0000;
+    /// Death scream has fired (set by A_Scream so audio layer can react).
+    pub const MF_SCREAMED: u32 = 0x0200_0000;
 }
 
 // ---------------------------------------------------------------------------

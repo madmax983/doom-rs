@@ -88,7 +88,8 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
 
     if new_health <= 0 {
         // -------------------------------------------------------------------
-        // Death transition
+        // Death transition — use p_set_mobj_state so the entry action
+        // (A_Scream on the first death frame) fires correctly.
         // -------------------------------------------------------------------
         let death_sn: StateNum = {
             let Some(mo) = gs.mobjslab.get(target) else {
@@ -97,13 +98,7 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             crate::mobjinfo::MOBJINFO[mo.kind as usize].death_state
         };
         if death_sn != StateNum::NULL {
-            if let Some(entry) = crate::states::STATES.get(death_sn.0 as usize) {
-                let new_tics = entry.tics;
-                if let Some(mo) = gs.mobjslab.get_mut(target) {
-                    mo.state = death_sn;
-                    mo.tics = new_tics;
-                }
-            }
+            crate::tic::p_set_mobj_state(gs, target, death_sn, None);
         }
     } else {
         // -------------------------------------------------------------------
