@@ -25,7 +25,7 @@ use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
     AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer, PaletteFlash,
     PaletteLut, SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_menu, draw_status_bar,
-    ActorRenderInfo, draw_title_screen, draw_weapon_sprite, render_actors_ex, render_level,
+    ActorRenderInfo, RenderOut, draw_title_screen, draw_weapon_sprite, render_actors_ex, render_level,
     render_flag_from_state, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
@@ -655,7 +655,7 @@ impl DoomApp for DoomGame {
             // Draw the first-person 3D view.
             // We pass a grayscale palette; render_level currently ignores it
             // (wall colors are derived from light levels only).
-            let z_buf = render_level(
+            let RenderOut { z_buf, clip_top, clip_bot } = render_level(
                 &self.level,
                 px,
                 py,
@@ -717,6 +717,7 @@ impl DoomApp for DoomGame {
                     cache,
                     Some(&z_buf),
                     self.colormap_cache.as_ref(),
+                    Some((&clip_top, &clip_bot)),
                 );
             }
 

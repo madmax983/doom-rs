@@ -579,6 +579,10 @@ pub fn render_actors_ex(
     cache: &SpriteCache,
     z_buffer: Option<&[f32; SCREEN_W]>,
     colormap: Option<&ColormapCache>,
+    // Per-column portal clip (mfloorclip/mceilingclip). Pass
+    // `Some((&out.clip_top, &out.clip_bot))` to prevent sprites from
+    // bleeding through two-sided window frames.
+    sprite_clip: Option<(&[i32; SCREEN_W], &[i32; SCREEN_W])>,
 ) {
     use doom_game::states::sprite_names;
 
@@ -742,16 +746,31 @@ pub fn render_actors_ex(
                 }
             }
 
+            // Narrow vertical extent by portal clip (mfloorclip/mceilingclip).
+            let col_top = if let Some((ct, _)) = sprite_clip {
+                sy_top_clamped.max(ct[sx as usize])
+            } else {
+                sy_top_clamped
+            };
+            let col_bot = if let Some((_, cb)) = sprite_clip {
+                sy_bot_clamped.min(cb[sx as usize])
+            } else {
+                sy_bot_clamped
+            };
+            if col_top > col_bot {
+                continue;
+            }
+
             if render_flag == RenderFlag::Fuzz {
-                let sy_top_u = sy_top_clamped.max(0) as usize;
-                let sy_bot_u = sy_bot_clamped.min(SCREEN_H as i32 - 1) as usize;
+                let sy_top_u = col_top.max(0) as usize;
+                let sy_bot_u = col_bot.min(SCREEN_H as i32 - 1) as usize;
                 if sy_top_u <= sy_bot_u {
                     draw_fuzz_column(fb, sx as usize, sy_top_u, sy_bot_u, &mut fuzz_pos, colormap);
                 }
                 continue;
             }
 
-            for sy in sy_top_clamped..=sy_bot_clamped {
+            for sy in col_top..=col_bot {
                 let sprite_row = (sy - screen_y_top) * frame.height as i32 / col_h.max(1);
                 let sprite_row = sprite_row.clamp(0, frame.height as i32 - 1) as usize;
                 let pixel_idx = sprite_col * frame.height as usize + sprite_row;
@@ -780,8 +799,9 @@ pub fn render_things_ex(
     cache: &SpriteCache,
     z_buffer: Option<&[f32; SCREEN_W]>,
     colormap: Option<&ColormapCache>,
+    sprite_clip: Option<(&[i32; SCREEN_W], &[i32; SCREEN_W])>,
 ) {
-    render_things_impl(things, level, player_x, player_y, player_angle, fb, cache, z_buffer, colormap);
+    render_things_impl(things, level, player_x, player_y, player_angle, fb, cache, z_buffer, colormap, sprite_clip);
 }
 
 /// Render all Things from `level.things` as billboard sprites.
@@ -794,8 +814,9 @@ pub fn render_things(
     cache: &SpriteCache,
     z_buffer: Option<&[f32; SCREEN_W]>,
     colormap: Option<&ColormapCache>,
+    sprite_clip: Option<(&[i32; SCREEN_W], &[i32; SCREEN_W])>,
 ) {
-    render_things_impl(&level.things, level, player_x, player_y, player_angle, fb, cache, z_buffer, colormap);
+    render_things_impl(&level.things, level, player_x, player_y, player_angle, fb, cache, z_buffer, colormap, sprite_clip);
 }
 
 fn render_things_impl(
@@ -808,6 +829,7 @@ fn render_things_impl(
     cache: &SpriteCache,
     z_buffer: Option<&[f32; SCREEN_W]>,
     colormap: Option<&ColormapCache>,
+    sprite_clip: Option<(&[i32; SCREEN_W], &[i32; SCREEN_W])>,
 ) {
     // Convert player angle (32-bit BAM) to radians.
     // BAM: 0x0000_0000 = 0, 0x4000_0000 = 90, 0x8000_0000 = 180, etc.
@@ -992,10 +1014,25 @@ fn render_things_impl(
                 }
             }
 
+            // Narrow vertical extent by portal clip (mfloorclip/mceilingclip).
+            let col_top = if let Some((ct, _)) = sprite_clip {
+                sy_top_clamped.max(ct[sx as usize])
+            } else {
+                sy_top_clamped
+            };
+            let col_bot = if let Some((_, cb)) = sprite_clip {
+                sy_bot_clamped.min(cb[sx as usize])
+            } else {
+                sy_bot_clamped
+            };
+            if col_top > col_bot {
+                continue;
+            }
+
             // Fuzz effect (Spectre).
             if render_flag == RenderFlag::Fuzz {
-                let sy_top_u = sy_top_clamped.max(0) as usize;
-                let sy_bot_u = sy_bot_clamped.min(SCREEN_H as i32 - 1) as usize;
+                let sy_top_u = col_top.max(0) as usize;
+                let sy_bot_u = col_bot.min(SCREEN_H as i32 - 1) as usize;
                 if sy_top_u <= sy_bot_u {
                     draw_fuzz_column(
                         fb,
@@ -1009,7 +1046,7 @@ fn render_things_impl(
                 continue;
             }
 
-            for sy in sy_top_clamped..=sy_bot_clamped {
+            for sy in col_top..=col_bot {
                 let sprite_row = (sy - screen_y_top) * frame.height as i32 / col_h.max(1);
                 let sprite_row = sprite_row.clamp(0, frame.height as i32 - 1) as usize;
 
@@ -1606,6 +1643,7 @@ mod tests {
             &cache,
             None,
             None,
+            None,
         );
         // Framebuffer stays zeroed (empty cache → nothing drawn).
         assert!(fb.data.iter().all(|&b| b == 0));
@@ -1644,6 +1682,7 @@ mod tests {
             &cache,
             None,
             None,
+            None,
         );
         // If the thing behind the player were rendered it would write pixel 42.
         // The framebuffer must remain all zeros.
@@ -1672,6 +1711,7 @@ mod tests {
             &cache,
             None,
             None,
+            None,
         );
         // Nothing drawn — no panic.
         assert!(fb.data.iter().all(|&b| b == 0));
@@ -1694,6 +1734,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
             None,
             None,
         );
@@ -1783,6 +1824,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
             None,
         );
 
@@ -2097,6 +2139,7 @@ mod tests {
             &cache,
             None,
             None,
+            None,
         );
         // The imp should be drawn (pixel 77 somewhere on screen).
         assert!(
@@ -2132,6 +2175,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
             None,
             None,
         );
@@ -2170,6 +2214,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
             None,
             None,
         );
@@ -2220,6 +2265,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
             None,
             None,
         );
@@ -2287,7 +2333,7 @@ mod tests {
         // The wall at y=128 is 128 map units away from player at (64,0)
         // facing north. At least some central columns should have finite depth.
         let center = SCREEN_W / 2;
-        let finite_count = zbuf[center.saturating_sub(10)..center.saturating_add(10).min(SCREEN_W)]
+        let finite_count = zbuf.z_buf[center.saturating_sub(10)..center.saturating_add(10).min(SCREEN_W)]
             .iter()
             .filter(|&&v| v < f32::MAX)
             .count();
@@ -2323,6 +2369,7 @@ mod tests {
             &cache,
             Some(&zbuf),
             None,
+            None,
         );
 
         assert!(
@@ -2356,6 +2403,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
             None,
         );
 
@@ -2399,6 +2447,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
             None,
         );
 
@@ -2447,6 +2496,7 @@ mod tests {
             &cache,
             Some(&zbuf),
             None,
+            None,
         );
         // Just verify it didn't panic. Some pixels might be drawn.
     }
@@ -2477,10 +2527,10 @@ mod tests {
         // columns in the portal's span (no one-sided wall occluded them).
         let center = SCREEN_W / 2;
         assert_eq!(
-            zbuf[center],
+            zbuf.z_buf[center],
             f32::MAX,
             "two-sided seg center column must not write to z_buffer (got {})",
-            zbuf[center]
+            zbuf.z_buf[center]
         );
     }
 
@@ -2517,6 +2567,7 @@ mod tests {
             &cache,
             Some(&zbuf),
             None,
+            None,
         );
 
         // Near barrel (depth ~100 < 150) should be drawn.
@@ -2552,6 +2603,7 @@ mod tests {
             &cache,
             Some(&zbuf),
             None,
+            None,
         );
 
         // Sprite depth == wall depth: wall wins, sprite clipped.
@@ -2583,6 +2635,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
             None,
         );
 
@@ -2623,6 +2676,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
             None,
         );
 
@@ -2669,6 +2723,7 @@ mod tests {
             &cache,
             Some(&zbuf),
             None,
+            None,
         );
 
         assert!(
@@ -2701,6 +2756,7 @@ mod tests {
             &cache,
             None, // no z_buffer
             None, // no colormap
+            None,
         );
 
         assert!(
@@ -2743,7 +2799,7 @@ mod tests {
         // at y=0 which is behind or sideways from (32,32) facing east.
         // Depending on exact geometry, most columns may be MAX.
         // At minimum, check that MAX values exist.
-        let max_count = zbuf.iter().filter(|&&v| v == f32::MAX).count();
+        let max_count = zbuf.z_buf.iter().filter(|&&v| v == f32::MAX).count();
         assert!(
             max_count > 0,
             "z_buffer should have some f32::MAX entries for columns with no wall"
@@ -3203,6 +3259,7 @@ mod tests {
             &cache,
             None,
             Some(&cm),
+            None,
         );
 
         // Pixels were drawn but NOT at the raw palette index 200.
@@ -3246,6 +3303,7 @@ mod tests {
             &cache,
             None,
             Some(&cm),
+            None,
         );
 
         // Fullbright thing should use colormap row 0 (identity in our test cache).
@@ -3267,6 +3325,7 @@ mod tests {
             &cache,
             None,
             Some(&id_cache),
+            None,
         );
         // With identity cache, fullbright uses row 0 which is identity.
         // So the raw palette index 123 should appear.
@@ -3301,6 +3360,7 @@ mod tests {
             &cache,
             None,
             Some(&cm),
+            None,
         );
 
         // In our test cache, dark rows (high index) map everything to that
@@ -3340,6 +3400,7 @@ mod tests {
             &cache,
             None,
             Some(&id_cache),
+            None,
         );
 
         assert!(
@@ -3369,6 +3430,7 @@ mod tests {
             &cache,
             None,
             None, // no colormap => fullbright
+            None,
         );
 
         // Without colormap, sprites render at raw palette index.
@@ -3404,6 +3466,7 @@ mod tests {
             doom_types::Bam(0),
             &mut fb,
             &cache,
+            None,
             None,
             None,
         );
@@ -3453,6 +3516,7 @@ mod tests {
             &cache,
             None,
             Some(&cm),
+            None,
         );
 
         // Fuzz with colormap row 6 should produce pixel value 42.
@@ -3552,6 +3616,7 @@ mod tests {
             &cache,
             Some(&zbuf),
             Some(&cm),
+            None,
         );
 
         // Sprite is in front of wall (depth ~100 < 200), so it's drawn.
@@ -3588,6 +3653,7 @@ mod tests {
             &cache,
             Some(&zbuf),
             Some(&cm),
+            None,
         );
 
         // Sprite is behind wall — nothing drawn.
@@ -3645,6 +3711,7 @@ mod tests {
             &cache,
             None,
             Some(&id_cache),
+            None,
         );
 
         // Identity cache maps every index to itself, regardless of row.
@@ -3681,6 +3748,7 @@ mod tests {
             &cache,
             None,
             Some(&cm),
+            None,
         );
 
         // The barrel (Normal) in a dark sector should be shaded.
@@ -3714,6 +3782,7 @@ mod tests {
             &mut fb,
             &cache,
             Some(&zbuf),
+            None,
             None,
         );
 

@@ -59,7 +59,7 @@ pub use menu_render::{
 };
 pub use palette::{PaletteLut, Rgb};
 pub use palette_flash::{PaletteFlash, PaletteFlashState};
-pub use render::render_level;
+pub use render::{RenderOut, render_level};
 pub use render_flags::RenderFlag;
 pub use sky::{
     SKY_FALLBACK_COLOR, SKY_FLAT_NAME, column_to_angle, draw_sky_columns, draw_sky_fallback,

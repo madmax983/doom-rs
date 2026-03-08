@@ -152,13 +152,29 @@ fn draw_masked_column(
 /// distance-attenuated colormap based on the sector light level and the
 /// surface distance from the camera.
 ///
-/// Returns the per-column z-buffer (`[f32; 320]`) populated during wall
-/// rendering.  Each entry holds the perpendicular depth (in map units) of
-/// the nearest *one-sided* wall drawn in that column, or [`f32::MAX`] if
-/// no wall was drawn.  Two-sided segs (portals) do **not** write to the
-/// z-buffer.  The returned array can be passed to
-/// [`render_things`](crate::sprite::render_things) for sprite-vs-wall
-/// per-column occlusion.
+/// Output of [`render_level`].
+///
+/// Contains both the depth (z) buffer used for sprite depth occlusion and the
+/// vertical clip arrays derived from portal openings.  Pass `clip_top`/`clip_bot`
+/// to sprite renderers so sprites are clipped to the visible portal window —
+/// this prevents sprites from bleeding through two-sided window frames.
+pub struct RenderOut {
+    /// Per-column z-buffer: perpendicular depth of nearest one-sided wall, or
+    /// `f32::MAX` where no solid wall was drawn.
+    pub z_buf: [f32; SCREEN_W],
+    /// Per-column sprite ceiling clip: topmost screen row a sprite may occupy.
+    /// Starts at 0; narrowed upward by portal openings (Doom `mceilingclip`).
+    pub clip_top: [i32; SCREEN_W],
+    /// Per-column sprite floor clip: bottommost screen row a sprite may occupy.
+    /// Starts at `SCREEN_H-1`; narrowed downward by portal openings (Doom `mfloorclip`).
+    pub clip_bot: [i32; SCREEN_W],
+}
+
+/// Render a Doom level into `fb` and return occlusion data for sprite clipping.
+///
+/// The z-buffer entry for each column holds the perpendicular depth of the
+/// nearest *one-sided* wall.  Two-sided segs (portals) do **not** write to the
+/// z-buffer.  Pass `render_out.z_buf` and the clip arrays to sprite renderers.
 pub fn render_level(
     level: &Level,
     player_x: i32,
@@ -171,7 +187,7 @@ pub fn render_level(
     colormap: Option<&ColormapCache>,
     anim: Option<&AnimState>,
     is_fullbright: bool,
-) -> [f32; SCREEN_W] {
+) -> RenderOut {
     // ------------------------------------------------------------------
     // Step 1: Draw background (ceiling top half, floor bottom half)
     // ------------------------------------------------------------------
@@ -958,7 +974,7 @@ pub fn render_level(
     // Each visplane already has correct per-column top/bottom bounds,
     // so no additional clip_plane_span_runs pass is needed.
     if flat_cache.is_none() {
-        return z_buf;
+        return RenderOut { z_buf, clip_top: wall_clip_top, clip_bot: wall_clip_bot };
     }
     let cache = flat_cache.unwrap();
 
@@ -1019,7 +1035,7 @@ pub fn render_level(
         }
     }
 
-    z_buf
+    RenderOut { z_buf, clip_top: wall_clip_top, clip_bot: wall_clip_bot }
 }
 
 // ---------------------------------------------------------------------------
@@ -1589,7 +1605,7 @@ mod tests {
 
         let cx = HALF_W as usize;
         assert!(
-            zbuf[cx].is_finite(),
+            zbuf.z_buf[cx].is_finite(),
             "one-sided wall with '-' middle texture must still write z-buffer and occlude"
         );
         let px = fb.get_pixel(cx, HALF_H as usize).unwrap_or(0);
@@ -1621,7 +1637,7 @@ mod tests {
 
         let cx = HALF_W as usize;
         assert!(
-            zbuf[cx].is_finite(),
+            zbuf.z_buf[cx].is_finite(),
             "renderer should fall back to the existing side when preferred side is missing"
         );
     }
@@ -1651,7 +1667,7 @@ mod tests {
 
         let cx = HALF_W as usize;
         assert!(
-            zbuf[cx].is_finite(),
+            zbuf.z_buf[cx].is_finite(),
             "one-sided seg should use opposite sidedef when preferred side has '-' middle texture"
         );
     }
@@ -1674,7 +1690,7 @@ mod tests {
 
         let cx = HALF_W as usize;
         assert!(
-            zbuf[cx] < f32::MAX,
+            zbuf.z_buf[cx] < f32::MAX,
             "line with no valid back sector must still render as solid wall"
         );
     }
@@ -2790,11 +2806,11 @@ mod tests {
         // Z-buffer should be identical: lighting does not affect geometry.
         for x in 0..SCREEN_W {
             assert!(
-                (zbuf_no_cm[x] - zbuf_cm[x]).abs() < f32::EPSILON
-                    || (zbuf_no_cm[x] == f32::MAX && zbuf_cm[x] == f32::MAX),
+                (zbuf_no_cm.z_buf[x] - zbuf_cm.z_buf[x]).abs() < f32::EPSILON
+                    || (zbuf_no_cm.z_buf[x] == f32::MAX && zbuf_cm.z_buf[x] == f32::MAX),
                 "z-buffer mismatch at column {x}: no_cm={}, cm={}",
-                zbuf_no_cm[x],
-                zbuf_cm[x]
+                zbuf_no_cm.z_buf[x],
+                zbuf_cm.z_buf[x]
             );
         }
     }
