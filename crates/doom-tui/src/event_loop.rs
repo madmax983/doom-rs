@@ -25,9 +25,15 @@ use crate::scaler::ScalingMode;
 use crate::sixel::DoomSixelWidget;
 use crate::widget::DoomFramebufferWidget;
 use crossterm::{
-    event::{self, KeyCode, KeyEventKind, KeyModifiers},
+    event::{
+        self, KeyCode, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
+        PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+    },
     execute,
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    terminal::{
+        EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
+        supports_keyboard_enhancement,
+    },
 };
 use doom_renderer::{Framebuffer, PaletteLut};
 use image::{DynamicImage, RgbImage};
@@ -110,6 +116,13 @@ pub struct DoomEventLoop {
     /// on most terminals.  Enable with [`DoomEventLoop::set_graphics_protocol`] or let the user
     /// toggle in-game.
     use_graphics_protocol: bool,
+
+    /// Whether keyboard enhancement flags were successfully pushed at startup.
+    ///
+    /// When active, the terminal sends real `KeyEventKind::Release` events so the
+    /// `held` set is properly cleared on key-up.  Without this, Release events
+    /// never arrive and keys can get stuck.
+    keyboard_enhancement_active: bool,
 }
 
 /// Query the primary monitor's refresh rate via platform APIs.
@@ -156,6 +169,21 @@ impl DoomEventLoop {
         execute!(out, EnterAlternateScreen)
             .map_err(|e| EventLoopError::TerminalSetup(e.to_string()))?;
 
+        // Enable keyboard enhancement so we receive KeyEventKind::Release events.
+        // This prevents keys from getting "stuck" in the held set when the terminal
+        // doesn't send release events by default (which is most terminals without this).
+        // We request: disambiguate escape codes + report all keys (for modifier-only keys).
+        // Falls back gracefully if the terminal doesn't support it.
+        let keyboard_enhancement_active = supports_keyboard_enhancement().unwrap_or(false)
+            && execute!(
+                out,
+                PushKeyboardEnhancementFlags(
+                    KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES
+                        | KeyboardEnhancementFlags::REPORT_ALL_KEYS_AS_ESCAPE_CODES
+                )
+            )
+            .is_ok();
+
         // Query the terminal for graphics protocol support AFTER entering alternate screen
         // but BEFORE consuming any terminal events.  Falls back to halfblocks if the query
         // fails or the terminal doesn't support any graphics protocol.
@@ -183,6 +211,7 @@ impl DoomEventLoop {
             scaling_mode: ScalingMode::Nearest,
             picker,
             use_graphics_protocol: false,
+            keyboard_enhancement_active,
         })
     }
 
@@ -264,8 +293,13 @@ impl DoomEventLoop {
 
                     match key.kind {
                         KeyEventKind::Press => {
-                            if matches!(key.code, KeyCode::Char('q') | KeyCode::Esc) {
+                            // Q = hard quit; Escape is forwarded to the app as an
+                            // edge-triggered signal so it can handle menu/console logic.
+                            if key.code == KeyCode::Char('q') {
                                 self.is_running = false;
+                            }
+                            if key.code == KeyCode::Esc {
+                                self.input.push_escape();
                             }
                             // Quick save / load via F5 / F9.
                             if key.code == KeyCode::F(5) {
@@ -274,6 +308,15 @@ impl DoomEventLoop {
                                 self.input.push_f9();
                             } else if key.code == KeyCode::Tab {
                                 self.input.push_tab();
+                            }
+                            // Edge-triggered menu navigation (Up/Down/Enter).
+                            // These are also registered as held keys below for gameplay.
+                            if key.code == KeyCode::Up {
+                                self.input.push_menu_up();
+                            } else if key.code == KeyCode::Down {
+                                self.input.push_menu_down();
+                            } else if key.code == KeyCode::Enter {
+                                self.input.push_menu_select();
                             }
                             // Queue raw char for console/cheat processing.
                             if let KeyCode::Char(ch) = key.code {
@@ -392,6 +435,9 @@ impl DoomEventLoop {
 impl Drop for DoomEventLoop {
     fn drop(&mut self) {
         // Restore terminal state on exit, even if we panic.
+        if self.keyboard_enhancement_active {
+            let _ = execute!(self.terminal.backend_mut(), PopKeyboardEnhancementFlags);
+        }
         let _ = disable_raw_mode();
         let _ = execute!(self.terminal.backend_mut(), LeaveAlternateScreen);
         let _ = self.terminal.show_cursor();

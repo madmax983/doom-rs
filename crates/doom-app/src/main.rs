@@ -207,48 +207,49 @@ impl DoomApp for DoomGame {
             ts.tick();
             self.menu.tick();
 
-            // Up/down navigation via movement keys (W/↑ = up, S/↓ = down).
-            if input.forward_move > 0 {
+            // Edge-triggered navigation: Up/Down arrows, Escape = back.
+            if input.menu_up {
                 self.menu.move_up();
-            } else if input.forward_move < 0 {
+            } else if input.menu_down {
                 self.menu.move_down();
             }
+            if input.escape_pressed {
+                self.menu.back();
+            }
 
-            // Enter (console_char '\n') = select; Backspace = back.
-            if let Some(ch) = input.console_char {
-                if ch == '\n' {
-                    if let Some(result) = self.menu.select() {
-                        match result {
-                            doom_game::menu::MenuResult::StartGame { episode: _, skill } => {
-                                // Map skill index to Skill enum (0=Baby..4=Nightmare).
-                                let sk = match skill {
-                                    0 => Skill::Baby,
-                                    1 => Skill::Easy,
-                                    3 => Skill::Hard,
-                                    4 => Skill::Nightmare,
-                                    _ => Skill::Medium,
-                                };
-                                // Re-spawn the level with the chosen skill.
-                                self.gs = GameState::new(&self.gs.level_name.clone());
-                                spawn_level_things(&mut self.gs, &self.level, sk, false);
-                                init_scrolling_walls(&mut self.gs, &self.level);
-                                init_conveyors(&mut self.gs, &self.level);
-                                init_sector_lights(&mut self.gs, &self.level);
-                                self.menu.close();
-                                self.title_screen = None;
-                            }
-                            doom_game::menu::MenuResult::Quit => {
-                                // Can't stop the event loop from here; just close the menu.
-                                self.menu.close();
-                                self.title_screen = None;
-                            }
-                            _ => {}
+            // Enter = select; Backspace = back.
+            if input.menu_select {
+                if let Some(result) = self.menu.select() {
+                    match result {
+                        doom_game::menu::MenuResult::StartGame { episode: _, skill } => {
+                            // Map skill index to Skill enum (0=Baby..4=Nightmare).
+                            let sk = match skill {
+                                0 => Skill::Baby,
+                                1 => Skill::Easy,
+                                3 => Skill::Hard,
+                                4 => Skill::Nightmare,
+                                _ => Skill::Medium,
+                            };
+                            // Re-spawn the level with the chosen skill.
+                            self.gs = GameState::new(&self.gs.level_name.clone());
+                            spawn_level_things(&mut self.gs, &self.level, sk, false);
+                            init_scrolling_walls(&mut self.gs, &self.level);
+                            init_conveyors(&mut self.gs, &self.level);
+                            init_sector_lights(&mut self.gs, &self.level);
+                            self.menu.close();
+                            self.title_screen = None;
                         }
+                        doom_game::menu::MenuResult::Quit => {
+                            // Can't stop the event loop from here; just close the menu.
+                            self.menu.close();
+                            self.title_screen = None;
+                        }
+                        _ => {}
                     }
-                } else if ch == '\x08' {
-                    // Backspace = back in menu.
-                    self.menu.back();
                 }
+            } else if let Some('\x08') = input.console_char {
+                // Backspace = back in menu (alternative to Escape).
+                self.menu.back();
             }
             return;
         }
@@ -258,22 +259,65 @@ impl DoomApp for DoomGame {
 
         // Handle console / cheat input before forwarding movement to the
         // game simulation.
+        // Escape: toggle the in-game menu (when console is not open).
+        if input.escape_pressed && !self.console.visible {
+            if self.menu.is_active() {
+                self.menu.close();
+            } else {
+                self.menu.open();
+            }
+        }
+
+        // Also handle in-game menu navigation via edge-triggered keys.
+        if self.menu.is_active() {
+            if input.menu_up {
+                self.menu.move_up();
+            } else if input.menu_down {
+                self.menu.move_down();
+            }
+            if input.menu_select {
+                if let Some(result) = self.menu.select() {
+                    match result {
+                        doom_game::menu::MenuResult::Quit => {
+                            // Signal quit; can't reach event loop directly, so
+                            // we just close the menu — user can press Q to exit.
+                            self.menu.close();
+                        }
+                        doom_game::menu::MenuResult::LoadGame(slot) => {
+                            let path = format!("doom_save_{slot}.bin");
+                            match savegame::load_game(std::path::Path::new(&path)) {
+                                Ok((_header, payload)) => {
+                                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
+                                        self.console.print(format!("Load failed: {e}"));
+                                    } else {
+                                        self.console.print("Game loaded.".to_string());
+                                        self.menu.close();
+                                    }
+                                }
+                                Err(e) => self.console.print(format!("Load failed: {e}")),
+                            }
+                        }
+                        doom_game::menu::MenuResult::SaveGame(slot) => {
+                            let path = format!("doom_save_{slot}.bin");
+                            if let Err(e) =
+                                savegame::save_game(std::path::Path::new(&path), &self.gs, slot)
+                            {
+                                self.console.print(format!("Save failed: {e}"));
+                            } else {
+                                self.console.print(format!("Saved to slot {slot}."));
+                                self.menu.close();
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+
         if let Some(ch) = input.console_char {
             if ch == '`' || ch == '~' {
                 // Toggle the console overlay on backtick/tilde.
                 self.console.toggle();
-            } else if ch == '\x1b' {
-                // Escape: toggle the in-game menu (when console is not open).
-                // Note: the event loop currently maps Escape to quit, so this
-                // branch fires only if the event loop is updated to forward
-                // Escape as a console_char instead.
-                if !self.console.visible {
-                    if self.menu.is_active() {
-                        self.menu.close();
-                    } else {
-                        self.menu.open();
-                    }
-                }
             } else if self.console.visible {
                 // Console is open: feed characters to the input line.
                 if ch == '\n' {

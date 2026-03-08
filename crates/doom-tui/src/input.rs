@@ -53,6 +53,14 @@ pub struct TicInput {
     pub f9_load: bool,
     /// Tab was pressed this tic — toggle automap.
     pub tab_pressed: bool,
+    /// Escape was pressed this tic — edge-triggered (open/close menu, etc.).
+    pub escape_pressed: bool,
+    /// Up arrow/W pressed this tic — edge-triggered for menu navigation.
+    pub menu_up: bool,
+    /// Down arrow/S pressed this tic — edge-triggered for menu navigation.
+    pub menu_down: bool,
+    /// Enter pressed this tic — edge-triggered for menu selection.
+    pub menu_select: bool,
 }
 
 /// Tracks which keys are currently held and produces `TicInput` on demand.
@@ -69,6 +77,14 @@ pub struct InputState {
     pending_f9: bool,
     /// Tab was pressed since the last tic — automap toggle trigger.
     pending_tab: bool,
+    /// Escape was pressed since the last tic — menu/console edge trigger.
+    pending_escape: bool,
+    /// Up arrow pressed this tic — edge-triggered menu navigation.
+    pending_menu_up: bool,
+    /// Down arrow pressed this tic — edge-triggered menu navigation.
+    pending_menu_down: bool,
+    /// Enter pressed this tic — edge-triggered menu select.
+    pending_menu_select: bool,
 }
 
 impl InputState {
@@ -127,6 +143,26 @@ impl InputState {
     /// Signal that Tab (automap toggle) was pressed.
     pub fn push_tab(&mut self) {
         self.pending_tab = true;
+    }
+
+    /// Signal that Escape was pressed (menu toggle, console close, etc.).
+    pub fn push_escape(&mut self) {
+        self.pending_escape = true;
+    }
+
+    /// Signal that the Up arrow was pressed (edge-triggered menu navigation).
+    pub fn push_menu_up(&mut self) {
+        self.pending_menu_up = true;
+    }
+
+    /// Signal that the Down arrow was pressed (edge-triggered menu navigation).
+    pub fn push_menu_down(&mut self) {
+        self.pending_menu_down = true;
+    }
+
+    /// Signal that Enter was pressed (edge-triggered menu select).
+    pub fn push_menu_select(&mut self) {
+        self.pending_menu_select = true;
     }
 
     /// Synthesize a `TicInput` from the current held state.
@@ -201,6 +237,14 @@ impl InputState {
         // Consume pending Tab press (cleared each tic).
         t.tab_pressed = std::mem::take(&mut self.pending_tab);
 
+        // Consume pending Escape press.
+        t.escape_pressed = std::mem::take(&mut self.pending_escape);
+
+        // Consume pending edge-triggered menu navigation.
+        t.menu_up = std::mem::take(&mut self.pending_menu_up);
+        t.menu_down = std::mem::take(&mut self.pending_menu_down);
+        t.menu_select = std::mem::take(&mut self.pending_menu_select);
+
         t
     }
 
@@ -212,6 +256,10 @@ impl InputState {
         self.pending_f5 = false;
         self.pending_f9 = false;
         self.pending_tab = false;
+        self.pending_escape = false;
+        self.pending_menu_up = false;
+        self.pending_menu_down = false;
+        self.pending_menu_select = false;
     }
 }
 
