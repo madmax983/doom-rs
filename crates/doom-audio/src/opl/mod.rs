@@ -375,8 +375,10 @@ impl OplChip {
                 mix += channel_out;
             }
 
-            // Mix all 9 channels; divide to keep in [-1, 1] range.
-            *s = (mix / 9.0).clamp(-1.0, 1.0);
+            // Clamp the mixed output — no per-channel division, matching real
+            // OPL2 DAC saturation behaviour.  Dividing by 9 makes music 9×
+            // too quiet and inaudible beneath SFX.
+            *s = mix.clamp(-1.0, 1.0);
         }
     }
 }

@@ -12,7 +12,9 @@
       "Bash(powershell:*)",
       "Bash(cargo check:*)",
       "Skill(commit-commands:commit)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "Bash(python3:*)"
     ]
   }
 }

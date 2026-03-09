@@ -87,7 +87,18 @@ impl AudioSystem {
         // Gracefully falls back to the default sine-wave instrument if absent or malformed.
         let genmidi_bank = wad
             .find_lump_data("GENMIDI")
-            .and_then(|data| GenmidiBank::parse(data).ok());
+            .and_then(|data| {
+                match GenmidiBank::parse(data) {
+                    Ok(bank) => {
+                        eprintln!("[audio] GENMIDI loaded: {} instruments", bank.instruments.len());
+                        Some(bank)
+                    }
+                    Err(e) => {
+                        eprintln!("[audio] GENMIDI parse failed: {e} — using default sine instrument");
+                        None
+                    }
+                }
+            });
 
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
 
@@ -99,7 +110,10 @@ impl AudioSystem {
             if let Some(bank) = genmidi_bank {
                 if let Ok(mut mp) = midi_arc.lock() {
                     mp.load_genmidi(bank);
+                    eprintln!("[audio] GENMIDI applied to MidiPlayer");
                 }
+            } else {
+                eprintln!("[audio] no GENMIDI — using default sine-wave instrument");
             }
             eprintln!("[audio] thread started");
             audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache);
@@ -209,15 +223,23 @@ fn audio_cmd_thread(
             }
 
             AudioEvent::StartMusic(data) => {
+                eprintln!("[music] StartMusic received, data_len={}", data.len());
                 match MusScore::parse(&data) {
                     Ok(score) => {
+                        eprintln!(
+                            "[music] score parsed: {} events, {} instruments",
+                            score.events.len(),
+                            score.instruments.len()
+                        );
                         if let Ok(mut mp) = midi_arc.lock() {
+                            eprintln!("[music] genmidi={}", mp.genmidi.is_some());
                             mp.load_score(score);
+                            eprintln!("[music] score loaded — playback started");
                         }
                     }
                     Err(e) => {
                         // Non-fatal: log and continue.
-                        eprintln!("audio: failed to parse MUS data: {e}");
+                        eprintln!("[music] parse failed: {e}");
                     }
                 }
             }
@@ -355,38 +377,15 @@ pub fn monster_death_lump(kind: doom_game::MobjKind) -> &'static str {
 }
 
 /// Resolve the SFX ID for a named DS* lump by scanning the WAD in the same
-/// order used by [`populate_sfx_cache`].
+/// order used by [`populate_sfx_cache`] and [`build_sfx_lookup`].
 ///
 /// Returns `None` if the lump is not present in the WAD.
 pub fn find_sfx_id_by_name(wad: &WadFile, lump_name: &str) -> Option<u16> {
-    let has_ds_markers =
-        wad.find_lump("DS_START").is_some() && wad.find_lump("DS_END").is_some();
-
-    // Build the ordered candidate list exactly as populate_sfx_cache does.
-    let mut idx = 0u16;
-    if has_ds_markers {
-        for l in wad
-            .lumps_between("DS_START", "DS_END")
-            .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
-        {
-            idx += 1;
-            if l.name.as_str().eq_ignore_ascii_case(lump_name) {
-                return Some(idx);
-            }
-        }
-    } else {
-        for l in wad
-            .lumps()
-            .iter()
-            .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
-        {
-            idx += 1;
-            if l.name.as_str().eq_ignore_ascii_case(lump_name) {
-                return Some(idx);
-            }
-        }
-    }
-    None
+    sfx_candidate_names(wad)
+        .iter()
+        .enumerate()
+        .find(|(_, n)| n.eq_ignore_ascii_case(lump_name))
+        .map(|(i, _)| (i + 1) as u16)
 }
 
 // ---------------------------------------------------------------------------

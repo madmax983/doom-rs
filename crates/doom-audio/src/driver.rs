@@ -67,11 +67,15 @@ impl AudioDriver {
             .default_output_config()
             .map_err(|e| AudioError::Stream(e.to_string()))?;
 
+        // Use the device's actual sample rate in the callback — not the caller's
+        // requested rate — so SFX resampling and OPL timing are correct.
+        let actual_rate = config.sample_rate().0;
+
         eprintln!(
             "[audio-driver] device={:?} channels={} sample_rate={} format={:?}",
             device.name().unwrap_or_default(),
             config.channels(),
-            config.sample_rate().0,
+            actual_rate,
             config.sample_format(),
         );
 
@@ -99,10 +103,10 @@ impl AudioDriver {
                     let mut opl_buf = vec![0.0f32; n_mono];
 
                     if let Ok(mut m) = mixer_cb.lock() {
-                        m.mix(&mut sfx_buf, sample_rate);
+                        m.mix(&mut sfx_buf, actual_rate);
                     }
                     if let Ok(mut mp) = midi_cb.lock() {
-                        mp.advance_samples(n_mono, sample_rate, &mut opl_buf);
+                        mp.advance_samples(n_mono, actual_rate, &mut opl_buf);
                     }
 
                     // Mix SFX (stereo) and OPL (mono) into the output buffer.
