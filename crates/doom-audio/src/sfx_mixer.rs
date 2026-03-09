@@ -35,14 +35,19 @@ pub enum SfxPriority {
 // SfxChannel
 // ---------------------------------------------------------------------------
 
+/// Source sample rate for Doom PCM sound effects.
+pub const SFX_SOURCE_RATE: u32 = 11_025;
+
 /// A single sound channel playing a sound effect.
 #[derive(Clone, Debug)]
 pub struct SfxChannel {
     /// Sound effect identifier (e.g., SFX lump index).
     pub sfx_id: u16,
-    /// Current playback position (sample index).
-    pub position: usize,
-    /// Total number of samples.
+    /// Current playback position as a fixed-point 16.16 fraction into `data`.
+    /// The integer part is the source sample index; the fractional part allows
+    /// sub-sample stepping for arbitrary output/source rate ratios.
+    pub position_fp: u64,
+    /// Total number of source samples.
     pub length: usize,
     /// Volume (`0.0` to `1.0`).
     pub volume: f32,
@@ -52,7 +57,7 @@ pub struct SfxChannel {
     pub priority: SfxPriority,
     /// Whether this channel is currently playing.
     pub active: bool,
-    /// Raw PCM data (8-bit unsigned, 11025 Hz).
+    /// Raw PCM data (8-bit unsigned, [`SFX_SOURCE_RATE`] Hz).
     pub data: Vec<u8>,
 }
 
@@ -109,7 +114,7 @@ impl SfxMixer {
 
         let channel = SfxChannel {
             sfx_id,
-            position: 0,
+            position_fp: 0,
             length,
             volume,
             pan,
@@ -168,11 +173,17 @@ impl SfxMixer {
     /// Mix all active channels into a stereo output buffer.
     ///
     /// Output is interleaved stereo f32 samples (`[L0, R0, L1, R1, ...]`)
-    /// at the given `sample_rate`. Source PCM is assumed to be 11025 Hz.
+    /// at `output_rate` Hz.  Source PCM is assumed to be [`SFX_SOURCE_RATE`] Hz
+    /// (11025 Hz); nearest-neighbour resampling upsamples to the output rate so
+    /// sounds play at the correct pitch and duration regardless of device rate.
     ///
-    /// After mixing, inactive (exhausted) channels are cleaned up.
-    #[allow(clippy::cast_precision_loss)] // u8->f32 is lossless; sample_rate unused for now
-    pub fn mix(&mut self, output: &mut [f32], _sample_rate: u32) {
+    /// After mixing, channels whose data is exhausted are marked inactive.
+    #[allow(clippy::cast_precision_loss)]
+    pub fn mix(&mut self, output: &mut [f32], output_rate: u32) {
+        // Fixed-point 16.16 step: how many source samples to advance per output frame.
+        // e.g. at 48000 Hz output, 11025 Hz source: step = 11025/48000 * 65536 ≈ 15052
+        let step_fp = ((SFX_SOURCE_RATE as u64) << 16) / (output_rate as u64).max(1);
+
         // Clear output buffer.
         output.fill(0.0);
 
@@ -184,16 +195,17 @@ impl SfxMixer {
 
                 // Process stereo frame pairs.
                 for i in (0..output.len()).step_by(2) {
-                    if ch.position >= ch.length {
+                    let src_idx = (ch.position_fp >> 16) as usize;
+                    if src_idx >= ch.length {
                         ch.active = false;
                         break;
                     }
 
                     // Convert 8-bit unsigned PCM to f32 in [-1.0, 1.0].
-                    let sample = (ch.data[ch.position] as f32 - 128.0) / 128.0;
+                    let sample = (ch.data[src_idx] as f32 - 128.0) / 128.0;
                     let scaled = sample * ch.volume;
 
-                    // Apply panning: equal-power-ish linear pan law.
+                    // Apply panning: linear pan law.
                     // pan = -1.0 => left_gain = 1.0, right_gain = 0.0
                     // pan =  0.0 => left_gain = 0.5, right_gain = 0.5
                     // pan =  1.0 => left_gain = 0.0, right_gain = 1.0
@@ -205,8 +217,7 @@ impl SfxMixer {
                         output[i + 1] += scaled * right_gain;
                     }
 
-                    // Advance playback position (1:1 for now; proper resampling is future work).
-                    ch.position += 1;
+                    ch.position_fp += step_fp;
                 }
             }
         }

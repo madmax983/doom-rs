@@ -159,59 +159,19 @@ impl AudioSystem {
 
 /// Populate `cache` with all SFX lumps found in `wad`.
 ///
-/// Strategy:
-/// 1. Look for lumps between `DS_START` / `DS_END` markers.
-/// 2. Fall back to scanning *all* lumps whose names begin with `"DS"`.
-///
-/// Each discovered lump is decoded as an 8-bit PCM sample and inserted into
-/// the cache keyed by its sequential discovery index (starting at 1).
-/// If decoding fails the lump is silently skipped.
+/// Uses [`sfx_candidate_names`] for lump discovery — the same ordering that
+/// [`build_sfx_lookup`] uses — so IDs are always consistent.
 fn populate_sfx_cache(wad: &WadFile, cache: &mut SfxCache) {
-    // Collect candidate lumps: prefer the DS_START/DS_END namespace when both
-    // markers exist and enclose at least one DS lump. Otherwise fall back to
-    // scanning all lumps with a "DS" prefix.
-    let candidates: Vec<(u16, Vec<u8>)> = {
-        let has_ds_markers =
-            wad.find_lump("DS_START").is_some() && wad.find_lump("DS_END").is_some();
-        let between: Vec<_> = if has_ds_markers {
-            wad.lumps_between("DS_START", "DS_END")
-                .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
-                .collect()
-        } else {
-            Vec::new()
-        };
-        if !between.is_empty() {
-            between
-                .into_iter()
-                .enumerate()
-                .map(|(i, l)| {
-                    let id = (i + 1) as u16;
-                    let data = wad.lump_data(l).to_vec();
-                    (id, data)
-                })
-                .collect()
-        } else {
-            // Fall back: all lumps whose name starts with "DS"
-            wad.lumps()
-                .iter()
-                .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
-                .enumerate()
-                .map(|(i, l)| {
-                    let id = (i + 1) as u16;
-                    let data = wad.lump_data(l).to_vec();
-                    (id, data)
-                })
-                .collect()
-        }
-    };
-
-    for (id, data) in candidates {
-        match PcmSample::parse_sfx_lump(&data) {
-            Ok(sample) => {
-                cache.insert(id, Arc::new(sample));
-            }
-            Err(_) => {
-                // Silently skip malformed lumps; non-fatal.
+    for (idx, name) in sfx_candidate_names(wad).into_iter().enumerate() {
+        let id = (idx + 1) as u16;
+        if let Some(data) = wad.find_lump_data(&name) {
+            match PcmSample::parse_sfx_lump(data) {
+                Ok(sample) => {
+                    cache.insert(id, Arc::new(sample));
+                }
+                Err(_) => {
+                    // Silently skip malformed lumps; non-fatal.
+                }
             }
         }
     }
@@ -304,34 +264,45 @@ pub fn weapon_fire_sfx_lump(weapon: doom_game::WeaponType) -> &'static str {
 
 /// Build a name → SFX ID lookup map over all DS* lumps in `wad`.
 ///
-/// The IDs are assigned in the same sequential order as [`populate_sfx_cache`],
-/// so `sfx_lookup["DSPISTOL"]` returns the same ID that the mixer uses.
-/// This lets the app resolve monster sound IDs by name in O(1) at play time.
+/// Uses the same candidate-lump strategy as [`populate_sfx_cache`] so that
+/// `sfx_lookup["DSPISTOL"]` always returns the same ID the mixer uses.
 pub fn build_sfx_lookup(wad: &WadFile) -> std::collections::HashMap<String, u16> {
     let mut map = std::collections::HashMap::new();
+    for (idx, name) in sfx_candidate_names(wad).into_iter().enumerate() {
+        map.insert(name, (idx + 1) as u16);
+    }
+    map
+}
+
+/// Collect the names (uppercase) of all candidate DS* SFX lumps in `wad` in
+/// the order that both `build_sfx_lookup` and `populate_sfx_cache` use.
+///
+/// Strategy (must match `populate_sfx_cache`):
+/// 1. Prefer lumps between `DS_START` / `DS_END` that have a `"DS"` prefix and
+///    non-zero size.  Only use the namespace if it contains at least one such lump.
+/// 2. Fall back to *all* lumps in the directory whose names start with `"DS"`
+///    and have non-zero size.
+fn sfx_candidate_names(wad: &WadFile) -> Vec<String> {
     let has_ds_markers =
         wad.find_lump("DS_START").is_some() && wad.find_lump("DS_END").is_some();
 
-    let mut idx = 0u16;
     if has_ds_markers {
-        for l in wad
+        let between: Vec<String> = wad
             .lumps_between("DS_START", "DS_END")
             .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
-        {
-            idx += 1;
-            map.insert(l.name.as_str().to_ascii_uppercase(), idx);
-        }
-    } else {
-        for l in wad
-            .lumps()
-            .iter()
-            .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
-        {
-            idx += 1;
-            map.insert(l.name.as_str().to_ascii_uppercase(), idx);
+            .map(|l| l.name.as_str().to_ascii_uppercase())
+            .collect();
+        if !between.is_empty() {
+            return between;
         }
     }
-    map
+
+    // Fallback: all DS* lumps anywhere in the WAD.
+    wad.lumps()
+        .iter()
+        .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
+        .map(|l| l.name.as_str().to_ascii_uppercase())
+        .collect()
 }
 
 /// Return the Doom DS* lump name for a monster's wake (see) sound.
