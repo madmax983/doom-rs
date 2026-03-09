@@ -547,21 +547,35 @@ impl DoomApp for DoomGame {
 
         self.gs.tick(cmd, Some(&mut self.level));
 
-        // Drain the game's sound event queue and play each sound via audio.
-        if let Some(ref audio) = self.audio {
-            // Collect so we can read sfx_lookup without aliasing self.
+        // Drain the game's sound event queue and play sounds with per-category
+        // throttling: at most one wake, one attack, and one die sound per tic.
+        // This prevents audio mixer overwhelm when many monsters act simultaneously
+        // while still giving audio feedback for each class of event.
+        {
+            use doom_game::SoundRequest;
             let events: Vec<_> = self.gs.sound_queue.drain(..).collect();
-            for ev in events {
-                use doom_game::SoundRequest;
-                let lump = match ev {
-                    SoundRequest::MonsterWake(kind) => monster_wake_lump(kind),
-                    SoundRequest::MonsterAttack(kind) => monster_attack_lump(kind),
-                    SoundRequest::MonsterDie(kind) => monster_death_lump(kind),
-                    SoundRequest::PlayerDie => "DSPLDETH",
-                };
-                if !lump.is_empty() {
-                    if let Some(&id) = self.sfx_lookup.get(lump) {
-                        audio.play_sfx(id);
+            if let Some(ref audio) = self.audio {
+                let mut wake_played = false;
+                let mut attack_played = false;
+                let mut die_played = false;
+                for ev in &events {
+                    let (lump, already_played) = match ev {
+                        SoundRequest::MonsterWake(kind) => {
+                            (monster_wake_lump(*kind), &mut wake_played)
+                        }
+                        SoundRequest::MonsterAttack(kind) => {
+                            (monster_attack_lump(*kind), &mut attack_played)
+                        }
+                        SoundRequest::MonsterDie(kind) => {
+                            (monster_death_lump(*kind), &mut die_played)
+                        }
+                        SoundRequest::PlayerDie => ("DSPLDETH", &mut die_played),
+                    };
+                    if !lump.is_empty() && !*already_played {
+                        *already_played = true;
+                        if let Some(&id) = self.sfx_lookup.get(lump) {
+                            audio.play_sfx(id);
+                        }
                     }
                 }
             }

@@ -1189,11 +1189,14 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
     }
 
     a_face_target(gs, handle);
+    let bruis_kind = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| mo.kind)
+        .unwrap_or(MobjKind::BaronOfHell);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::BaronBall);
-    // Read the kind so we can distinguish Baron vs Hell Knight in the event.
-    let kind = gs.mobjslab.get(handle).map(|mo| mo.kind).unwrap_or(MobjKind::BaronOfHell);
     gs.sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(kind));
+        .push(crate::state::SoundRequest::MonsterAttack(bruis_kind));
 }
 
 // ---------------------------------------------------------------------------
@@ -1222,6 +1225,11 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let spread = crate::random::p_missile_angle_spread(gs);
     let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
     let damage = crate::random::p_damage_with_variance(gs, 3);
+    let cpos_kind = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| mo.kind)
+        .unwrap_or(MobjKind::Trooper);
     crate::combat::p_line_attack(
         gs,
         handle,
@@ -1230,10 +1238,8 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         damage,
         level,
     );
-    // CPosAttack is shared by Chaingunner (and WolfSS); read the actual kind.
-    let kind = gs.mobjslab.get(handle).map(|mo| mo.kind).unwrap_or(MobjKind::Trooper);
     gs.sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(kind));
+        .push(crate::state::SoundRequest::MonsterAttack(cpos_kind));
 }
 
 // ---------------------------------------------------------------------------
