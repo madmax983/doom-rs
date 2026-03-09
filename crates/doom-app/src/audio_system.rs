@@ -32,7 +32,8 @@ pub enum AudioEvent {
     /// `sfx_id` is the sequential DS* lump index from `populate_sfx_cache`.
     /// Higher-priority sounds steal channels from lower-priority ones when
     /// all 8 channels are occupied — matching Doom's original behaviour.
-    PlaySfx(u16, SfxPriority),
+    /// Fields: (sfx_id, priority, volume 0‥1, pan -1‥1)
+    PlaySfx(u16, SfxPriority, f32, f32),
     /// Start playing a MUS track.  `data` is the raw MUS lump bytes.
     StartMusic(Vec<u8>),
     /// Stop current music (silences the OPL sequencer).
@@ -138,8 +139,8 @@ impl AudioSystem {
     /// The 8-channel mixer will steal the lowest-priority channel if all are
     /// occupied and the new sound's priority is >= that channel's priority.
     /// Fire-and-forget: silently ignored if the audio thread has exited.
-    pub fn play_sfx(&self, sfx_id: u16, priority: SfxPriority) {
-        let _ = self.sender.send(AudioEvent::PlaySfx(sfx_id, priority));
+    pub fn play_sfx(&self, sfx_id: u16, priority: SfxPriority, volume: f32, pan: f32) {
+        let _ = self.sender.send(AudioEvent::PlaySfx(sfx_id, priority, volume, pan));
     }
 
     /// Send a start-music command with raw MUS lump bytes.
@@ -199,20 +200,10 @@ fn audio_cmd_thread(
 ) {
     while let Ok(event) = rx.recv() {
         match event {
-            AudioEvent::PlaySfx(sfx_id, priority) => {
-                // Look up decoded PCM data from the cache, then hand it to the
-                // priority-based SfxMixer.  The mixer steals the lowest-priority
-                // channel when all 8 are occupied, matching Doom's behaviour.
-                match sfx_cache.get(sfx_id) {
-                    Some(sample) => {
-                        eprintln!("[audio] PlaySfx id={sfx_id} pri={priority:?} data_len={}", sample.data.len());
-                        if let Ok(mut mixer) = mixer_arc.lock() {
-                            let ch = mixer.play(sfx_id, sample.data.clone(), 1.0, 0.0, priority);
-                            eprintln!("[audio] -> channel={ch:?} active={}", mixer.active_count());
-                        }
-                    }
-                    None => {
-                        eprintln!("[audio] PlaySfx id={sfx_id} NOT IN CACHE (cache miss)");
+            AudioEvent::PlaySfx(sfx_id, priority, volume, pan) => {
+                if let Some(sample) = sfx_cache.get(sfx_id) {
+                    if let Ok(mut mixer) = mixer_arc.lock() {
+                        mixer.play(sfx_id, sample.data.clone(), volume, pan, priority);
                     }
                 }
             }
@@ -493,7 +484,7 @@ mod tests {
     fn send_events_to_null_system_does_not_panic() {
         let system = AudioSystem::try_open_null().expect("null audio must succeed");
         // Fire-and-forget: none of these should panic.
-        system.play_sfx(32, doom_audio::SfxPriority::Medium);
+        system.play_sfx(32, doom_audio::SfxPriority::Medium, 1.0, 0.0);
         system.start_music(vec![0u8; 4]); // invalid MUS — audio thread logs and continues
         system.stop_music();
     }

@@ -36,7 +36,7 @@ use audio_system::{
     AudioSystem, monster_attack_lump, monster_death_lump, monster_wake_lump, music_lump_for_map,
     weapon_fire_sfx_lump,
 };
-use doom_audio::SfxPriority;
+use doom_audio::{SfxPriority, SfxEmitter, compute_spatial};
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -556,24 +556,50 @@ impl DoomApp for DoomGame {
             use doom_game::SoundRequest;
             let events: Vec<_> = self.gs.sound_queue.drain(..).collect();
             if let Some(ref audio) = self.audio {
+                // Snapshot player position and angle for spatial audio.
+                let (pl_x, pl_y, pl_angle) = self
+                    .gs
+                    .mobjslab
+                    .get(self.gs.player.handle)
+                    .map(|mo| (mo.x, mo.y, mo.angle))
+                    .unwrap_or_default();
+
                 for ev in &events {
-                    let (lump, priority) = match ev {
-                        SoundRequest::MonsterWake(kind) => {
-                            (monster_wake_lump(*kind), SfxPriority::High)
+                    let (lump, priority, emitter_x, emitter_y) = match ev {
+                        SoundRequest::MonsterWake(kind, x, y) => {
+                            (monster_wake_lump(*kind), SfxPriority::High, *x, *y)
                         }
-                        SoundRequest::MonsterAttack(kind) => {
-                            (monster_attack_lump(*kind), SfxPriority::Medium)
+                        SoundRequest::MonsterAttack(kind, x, y) => {
+                            (monster_attack_lump(*kind), SfxPriority::Medium, *x, *y)
                         }
-                        SoundRequest::MonsterDie(kind) => {
-                            (monster_death_lump(*kind), SfxPriority::High)
+                        SoundRequest::MonsterDie(kind, x, y) => {
+                            (monster_death_lump(*kind), SfxPriority::High, *x, *y)
                         }
-                        SoundRequest::PlayerDie => ("DSPLDETH", SfxPriority::Weapon),
+                        SoundRequest::PlayerDie => {
+                            // Player sounds are always full volume / center.
+                            if let Some(&id) = self.sfx_lookup.get("DSPLDETH") {
+                                audio.play_sfx(id, SfxPriority::Weapon, 1.0, 0.0);
+                            }
+                            continue;
+                        }
                     };
-                    if !lump.is_empty() {
-                        match self.sfx_lookup.get(lump) {
-                            Some(&id) => audio.play_sfx(id, priority),
-                            None => eprintln!("[sfx] lookup miss for lump={lump:?} (lookup size={})", self.sfx_lookup.len()),
-                        }
+
+                    if lump.is_empty() {
+                        continue;
+                    }
+
+                    let spatial = compute_spatial(
+                        &SfxEmitter { x: emitter_x, y: emitter_y },
+                        pl_x, pl_y, pl_angle,
+                    );
+
+                    // Skip inaudible sounds to avoid wasting mixer channels.
+                    if spatial.volume < 0.01 {
+                        continue;
+                    }
+
+                    if let Some(&id) = self.sfx_lookup.get(lump) {
+                        audio.play_sfx(id, priority, spatial.volume, spatial.pan);
                     }
                 }
             }
@@ -626,7 +652,7 @@ impl DoomApp for DoomGame {
                 self.palette_flash.trigger(palette, 12);
                 // Play DSPLPAIN on any damage taken.
                 if let (Some(audio), Some(sfx_id)) = (&self.audio, self.pain_sfx_id) {
-                    audio.play_sfx(sfx_id, SfxPriority::High);
+                    audio.play_sfx(sfx_id, SfxPriority::High, 1.0, 0.0);
                 }
                 if self.debug_log.is_some() {
                     let msg = format!("damage -{} health={}", damage, cur_health);
@@ -651,9 +677,7 @@ impl DoomApp for DoomGame {
             if let Some(ref audio) = self.audio {
                 let lump = weapon_fire_sfx_lump(self.gs.player.weapon);
                 if let Some(&sfx_id) = self.sfx_lookup.get(lump) {
-                    audio.play_sfx(sfx_id, SfxPriority::Weapon);
-                } else {
-                    eprintln!("[sfx] weapon sound miss: lump={lump:?}");
+                    audio.play_sfx(sfx_id, SfxPriority::Weapon, 1.0, 0.0);
                 }
             }
         }

@@ -21,12 +21,13 @@ use crate::spawn::Skill;
 /// intentionally has no audio dependency — it only describes *what* happened.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SoundRequest {
-    /// Monster spotted the player / woke up.
-    MonsterWake(MobjKind),
-    /// Monster was killed.
-    MonsterDie(MobjKind),
-    /// Monster fired a hitscan or projectile attack.
-    MonsterAttack(MobjKind),
+    /// Monster spotted the player / woke up.  Fields: (kind, map_x, map_y)
+    /// where map_x/map_y are the emitter's position in Fixed16_16 map units.
+    MonsterWake(MobjKind, doom_types::Fixed16_16, doom_types::Fixed16_16),
+    /// Monster was killed.  Fields: (kind, map_x, map_y).
+    MonsterDie(MobjKind, doom_types::Fixed16_16, doom_types::Fixed16_16),
+    /// Monster fired a hitscan or projectile attack.  Fields: (kind, map_x, map_y).
+    MonsterAttack(MobjKind, doom_types::Fixed16_16, doom_types::Fixed16_16),
     /// Player died.
     PlayerDie,
 }

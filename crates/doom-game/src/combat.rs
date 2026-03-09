@@ -100,8 +100,9 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         if death_sn != StateNum::NULL {
             crate::tic::p_set_mobj_state(gs, target, death_sn, None);
         }
+        let (sx, sy) = gs.mobjslab.get(target).map(|mo| (mo.x, mo.y)).unwrap_or_default();
         gs.sound_queue
-            .push(crate::state::SoundRequest::MonsterDie(kind));
+            .push(crate::state::SoundRequest::MonsterDie(kind, sx, sy));
     } else {
         // -------------------------------------------------------------------
         // Pain transition — probabilistic via p_random()
