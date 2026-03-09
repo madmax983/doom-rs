@@ -12,10 +12,10 @@ pub mod spatial;
 
 pub use driver::AudioDriver;
 pub use midi::{GenmidiBank, GenmidiInstrument, MidiPlayer};
-pub use mixer::{Mixer, PcmSample};
+pub use mixer::PcmSample;
 pub use mus::{MusEvent, MusScore};
-pub use sfx::{SfxCache, SfxPriority, play_sfx};
-pub use sfx_mixer::{MAX_CHANNELS, SfxChannel, SfxMixer, SfxPriority as SfxPriorityLevel};
+pub use sfx::{SfxCache, play_sfx};
+pub use sfx_mixer::{MAX_CHANNELS, SfxChannel, SfxMixer, SfxPriority};
 pub use spatial::{MAX_SFX_DIST, SfxEmitter, SpatialParams, compute_spatial};
 
 /// Top-level error type for the doom-audio crate.

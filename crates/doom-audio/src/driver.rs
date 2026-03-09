@@ -1,15 +1,16 @@
 //! cpal audio output driver.
 //!
 //! Wraps a `cpal` output stream and routes its callback through a shared
-//! [`Mixer`] (PCM SFX) and [`MidiPlayer`] (OPL2 FM music).  Both outputs are
-//! mixed in the callback and written to the cpal buffer.
+//! [`SfxMixer`] (PCM SFX, priority-based) and [`MidiPlayer`] (OPL2 FM music).
+//! Both outputs are mixed in the callback and written to the cpal buffer.
+//! Music and SFX share no channels — they are independent paths.
 //!
 //! For environments without a real audio device (CI, tests) use
 //! [`AudioDriver::null`] which bypasses cpal entirely.
 
 use std::sync::{Arc, Mutex};
 
-use crate::{AudioError, midi::MidiPlayer, mixer::Mixer};
+use crate::{AudioError, midi::MidiPlayer, sfx_mixer::SfxMixer};
 
 // ---------------------------------------------------------------------------
 // SendStream — a Send wrapper around cpal::Stream
@@ -39,9 +40,9 @@ unsafe impl Send for SendStream {}
 pub struct AudioDriver {
     /// Held solely to keep the cpal stream alive.
     _stream: Option<Box<SendStream>>,
-    /// The shared PCM mixer.  Callers queue sounds here; the cpal callback
-    /// drains it on each audio buffer fill.
-    pub mixer: Arc<Mutex<Mixer>>,
+    /// The shared PCM SFX mixer (priority-based, 8 channels).
+    /// The cpal callback calls `mix()` on each buffer fill.
+    pub mixer: Arc<Mutex<SfxMixer>>,
     /// The shared MIDI/OPL2 player.  The cpal callback calls
     /// `advance_samples` on each buffer fill to generate FM music output.
     pub midi: Arc<Mutex<MidiPlayer>>,
@@ -66,7 +67,7 @@ impl AudioDriver {
             .default_output_config()
             .map_err(|e| AudioError::Stream(e.to_string()))?;
 
-        let mixer = Arc::new(Mutex::new(Mixer::new(sample_rate)));
+        let mixer = Arc::new(Mutex::new(SfxMixer::new()));
         let midi = Arc::new(Mutex::new(MidiPlayer::new()));
 
         let mixer_cb = Arc::clone(&mixer);
@@ -82,30 +83,30 @@ impl AudioDriver {
                     // n_mono == data.len() and the stereo loop below works
                     // correctly because i*2 == i*2+1 == i for channels=1
                     // — but we guard with saturating to handle odd lengths.
+                    // data is interleaved stereo f32: [L0, R0, L1, R1, ...].
                     let n_mono = (data.len() / 2).max(1);
 
-                    let mut pcm_buf = vec![0i16; data.len()];
+                    // SfxMixer outputs f32 stereo directly — no i16 conversion needed.
+                    let mut sfx_buf = vec![0.0f32; data.len()];
                     let mut opl_buf = vec![0.0f32; n_mono];
 
                     if let Ok(mut m) = mixer_cb.lock() {
-                        m.mix_frame(&mut pcm_buf);
+                        m.mix(&mut sfx_buf, sample_rate);
                     }
                     if let Ok(mut mp) = midi_cb.lock() {
                         mp.advance_samples(n_mono, sample_rate, &mut opl_buf);
                     }
 
-                    // Mix PCM and OPL into the output buffer.
-                    // data is interleaved stereo: [L0, R0, L1, R1, ...].
-                    // pcm_buf mirrors that layout; opl_buf is mono.
+                    // Mix SFX (stereo) and OPL (mono) into the output buffer.
                     for i in 0..n_mono {
-                        let pcm_l = f32::from(pcm_buf[i * 2]) / 32_768.0;
-                        let pcm_r = f32::from(*pcm_buf.get(i * 2 + 1).unwrap_or(&0i16)) / 32_768.0;
-                        let opl = opl_buf[i] * 0.5; // balance OPL volume
+                        let sfx_l = sfx_buf.get(i * 2).copied().unwrap_or(0.0);
+                        let sfx_r = sfx_buf.get(i * 2 + 1).copied().unwrap_or(0.0);
+                        let opl = opl_buf.get(i).copied().unwrap_or(0.0) * 0.5;
                         if let Some(out_l) = data.get_mut(i * 2) {
-                            *out_l = (pcm_l + opl).clamp(-1.0, 1.0);
+                            *out_l = (sfx_l + opl).clamp(-1.0, 1.0);
                         }
                         if let Some(out_r) = data.get_mut(i * 2 + 1) {
-                            *out_r = (pcm_r + opl).clamp(-1.0, 1.0);
+                            *out_r = (sfx_r + opl).clamp(-1.0, 1.0);
                         }
                     }
                 },
@@ -130,7 +131,7 @@ impl AudioDriver {
     pub fn null() -> Self {
         Self {
             _stream: None,
-            mixer: Arc::new(Mutex::new(Mixer::new(44_100))),
+            mixer: Arc::new(Mutex::new(SfxMixer::new())),
             midi: Arc::new(Mutex::new(MidiPlayer::new())),
         }
     }
@@ -148,8 +149,9 @@ mod tests {
     #[test]
     fn null_driver_can_be_created() {
         let driver = AudioDriver::null();
+        // SfxMixer has 8 channels; just verify the mutex is accessible.
         let mixer = driver.mixer.lock().expect("mutex should not be poisoned");
-        assert_eq!(mixer.sample_rate, 44_100);
+        assert_eq!(mixer.active_count(), 0);
     }
 
     #[test]

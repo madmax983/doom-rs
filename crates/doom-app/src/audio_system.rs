@@ -15,8 +15,8 @@
 use std::sync::{Arc, Mutex};
 
 use doom_audio::{
-    AudioDriver, GenmidiBank, MidiPlayer, Mixer, MusScore, SfxCache, mixer::PcmSample,
-    sfx::play_sfx,
+    AudioDriver, GenmidiBank, MidiPlayer, MusScore, SfxCache, SfxMixer, SfxPriority,
+    mixer::PcmSample,
 };
 use doom_wad::WadFile;
 
@@ -28,9 +28,11 @@ use doom_wad::WadFile;
 // StopMusic and try_open_null are public API; silence dead_code warnings.
 #[allow(dead_code)]
 pub enum AudioEvent {
-    /// Play a sound effect.  `sfx_id` is the Doom SFX lump number
-    /// (e.g. 32 = DSPISTOL).
-    PlaySfx(u16),
+    /// Play a sound effect with the given priority.
+    /// `sfx_id` is the sequential DS* lump index from `populate_sfx_cache`.
+    /// Higher-priority sounds steal channels from lower-priority ones when
+    /// all 8 channels are occupied — matching Doom's original behaviour.
+    PlaySfx(u16, SfxPriority),
     /// Start playing a MUS track.  `data` is the raw MUS lump bytes.
     StartMusic(Vec<u8>),
     /// Stop current music (silences the OPL sequencer).
@@ -65,8 +67,8 @@ impl AudioSystem {
 
         let driver = AudioDriver::open(SAMPLE_RATE).ok()?;
 
-        // Clone the Arc<Mutex<Mixer>> so the background thread can post samples.
-        let mixer_arc: Arc<Mutex<Mixer>> = Arc::clone(&driver.mixer);
+        // Clone the Arc<Mutex<SfxMixer>> so the background thread can post samples.
+        let mixer_arc: Arc<Mutex<SfxMixer>> = Arc::clone(&driver.mixer);
         // Clone the Arc<Mutex<MidiPlayer>> so the background thread can load/stop scores.
         let midi_arc: Arc<Mutex<MidiPlayer>> = Arc::clone(&driver.midi);
 
@@ -105,7 +107,7 @@ impl AudioSystem {
     #[must_use]
     pub fn try_open_null() -> Option<Self> {
         let driver = AudioDriver::null();
-        let mixer_arc: Arc<Mutex<Mixer>> = Arc::clone(&driver.mixer);
+        let mixer_arc: Arc<Mutex<SfxMixer>> = Arc::clone(&driver.mixer);
         let midi_arc: Arc<Mutex<MidiPlayer>> = Arc::clone(&driver.midi);
         let sfx_cache = SfxCache::new();
 
@@ -121,11 +123,13 @@ impl AudioSystem {
         })
     }
 
-    /// Send a play-SFX command (fire-and-forget; silently ignored if the
-    /// audio thread has exited).
-    pub fn play_sfx(&self, sfx_id: u16) {
-        // If the receiver has dropped, the error is silently swallowed.
-        let _ = self.sender.send(AudioEvent::PlaySfx(sfx_id));
+    /// Send a play-SFX command with explicit priority.
+    ///
+    /// The 8-channel mixer will steal the lowest-priority channel if all are
+    /// occupied and the new sound's priority is >= that channel's priority.
+    /// Fire-and-forget: silently ignored if the audio thread has exited.
+    pub fn play_sfx(&self, sfx_id: u16, priority: SfxPriority) {
+        let _ = self.sender.send(AudioEvent::PlaySfx(sfx_id, priority));
     }
 
     /// Send a start-music command with raw MUS lump bytes.
@@ -219,15 +223,20 @@ fn populate_sfx_cache(wad: &WadFile, cache: &mut SfxCache) {
 /// Exits when the sender side of the channel is dropped (game shutdown).
 fn audio_cmd_thread(
     rx: std::sync::mpsc::Receiver<AudioEvent>,
-    mixer_arc: &Arc<Mutex<Mixer>>,
+    mixer_arc: &Arc<Mutex<SfxMixer>>,
     midi_arc: &Arc<Mutex<MidiPlayer>>,
     sfx_cache: &SfxCache,
 ) {
     while let Ok(event) = rx.recv() {
         match event {
-            AudioEvent::PlaySfx(sfx_id) => {
-                if let Ok(mut mixer) = mixer_arc.lock() {
-                    play_sfx(&mut mixer, sfx_cache, sfx_id, 100);
+            AudioEvent::PlaySfx(sfx_id, priority) => {
+                // Look up decoded PCM data from the cache, then hand it to the
+                // priority-based SfxMixer.  The mixer steals the lowest-priority
+                // channel when all 8 are occupied, matching Doom's behaviour.
+                if let Some(sample) = sfx_cache.get(sfx_id) {
+                    if let Ok(mut mixer) = mixer_arc.lock() {
+                        mixer.play(sfx_id, sample.data.clone(), 1.0, 0.0, priority);
+                    }
                 }
             }
 
@@ -513,7 +522,7 @@ mod tests {
     fn send_events_to_null_system_does_not_panic() {
         let system = AudioSystem::try_open_null().expect("null audio must succeed");
         // Fire-and-forget: none of these should panic.
-        system.play_sfx(32);
+        system.play_sfx(32, doom_audio::SfxPriority::Medium);
         system.start_music(vec![0u8; 4]); // invalid MUS — audio thread logs and continues
         system.stop_music();
     }

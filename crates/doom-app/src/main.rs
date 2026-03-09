@@ -36,6 +36,7 @@ use audio_system::{
     AudioSystem, build_sfx_lookup, monster_attack_lump, monster_death_lump, monster_wake_lump,
     music_lump_for_map, weapon_fire_sfx,
 };
+use doom_audio::SfxPriority;
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -547,34 +548,30 @@ impl DoomApp for DoomGame {
 
         self.gs.tick(cmd, Some(&mut self.level));
 
-        // Drain the game's sound event queue and play sounds with per-category
-        // throttling: at most one wake, one attack, and one die sound per tic.
-        // This prevents audio mixer overwhelm when many monsters act simultaneously
-        // while still giving audio feedback for each class of event.
+        // Drain the game's sound event queue.  Each event maps to a DS* lump
+        // name and a priority.  The SfxMixer's 8-channel priority system handles
+        // contention — weapon-priority sounds always win; monster sounds compete
+        // with each other, matching Doom's original S_StartSound behaviour.
         {
             use doom_game::SoundRequest;
             let events: Vec<_> = self.gs.sound_queue.drain(..).collect();
             if let Some(ref audio) = self.audio {
-                let mut wake_played = false;
-                let mut attack_played = false;
-                let mut die_played = false;
                 for ev in &events {
-                    let (lump, already_played) = match ev {
+                    let (lump, priority) = match ev {
                         SoundRequest::MonsterWake(kind) => {
-                            (monster_wake_lump(*kind), &mut wake_played)
+                            (monster_wake_lump(*kind), SfxPriority::High)
                         }
                         SoundRequest::MonsterAttack(kind) => {
-                            (monster_attack_lump(*kind), &mut attack_played)
+                            (monster_attack_lump(*kind), SfxPriority::Medium)
                         }
                         SoundRequest::MonsterDie(kind) => {
-                            (monster_death_lump(*kind), &mut die_played)
+                            (monster_death_lump(*kind), SfxPriority::High)
                         }
-                        SoundRequest::PlayerDie => ("DSPLDETH", &mut die_played),
+                        SoundRequest::PlayerDie => ("DSPLDETH", SfxPriority::Weapon),
                     };
-                    if !lump.is_empty() && !*already_played {
-                        *already_played = true;
+                    if !lump.is_empty() {
                         if let Some(&id) = self.sfx_lookup.get(lump) {
-                            audio.play_sfx(id);
+                            audio.play_sfx(id, priority);
                         }
                     }
                 }
@@ -628,7 +625,7 @@ impl DoomApp for DoomGame {
                 self.palette_flash.trigger(palette, 12);
                 // Play DSPLPAIN on any damage taken.
                 if let (Some(audio), Some(sfx_id)) = (&self.audio, self.pain_sfx_id) {
-                    audio.play_sfx(sfx_id);
+                    audio.play_sfx(sfx_id, SfxPriority::High);
                 }
                 if self.debug_log.is_some() {
                     let msg = format!("damage -{} health={}", damage, cur_health);
@@ -652,7 +649,7 @@ impl DoomApp for DoomGame {
         if attack_just_fired && !self.gs.player.is_dead() && doom_game::player_can_fire(&self.gs) {
             if let Some(ref audio) = self.audio {
                 let sfx_id = weapon_fire_sfx(self.gs.player.weapon);
-                audio.play_sfx(sfx_id);
+                audio.play_sfx(sfx_id, SfxPriority::Weapon);
             }
         }
 
