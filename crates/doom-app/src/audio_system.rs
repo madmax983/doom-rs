@@ -274,30 +274,15 @@ pub fn build_sfx_lookup(wad: &WadFile) -> std::collections::HashMap<String, u16>
     map
 }
 
-/// Collect the names (uppercase) of all candidate DS* SFX lumps in `wad` in
-/// the order that both `build_sfx_lookup` and `populate_sfx_cache` use.
+/// Collect the names (uppercase) of all candidate DS* SFX lumps in `wad`.
 ///
-/// Strategy (must match `populate_sfx_cache`):
-/// 1. Prefer lumps between `DS_START` / `DS_END` that have a `"DS"` prefix and
-///    non-zero size.  Only use the namespace if it contains at least one such lump.
-/// 2. Fall back to *all* lumps in the directory whose names start with `"DS"`
-///    and have non-zero size.
+/// Scans all lumps in the WAD directory whose names start with `"DS"` and
+/// have non-zero size.  Both `build_sfx_lookup` and `populate_sfx_cache`
+/// must call this function to guarantee that name→ID assignments match.
+///
+/// Namespace markers (DS_START/DS_END) are intentionally ignored: they
+/// do not reliably contain all DS-prefixed SFX lumps in every WAD variant.
 fn sfx_candidate_names(wad: &WadFile) -> Vec<String> {
-    let has_ds_markers =
-        wad.find_lump("DS_START").is_some() && wad.find_lump("DS_END").is_some();
-
-    if has_ds_markers {
-        let between: Vec<String> = wad
-            .lumps_between("DS_START", "DS_END")
-            .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
-            .map(|l| l.name.as_str().to_ascii_uppercase())
-            .collect();
-        if !between.is_empty() {
-            return between;
-        }
-    }
-
-    // Fallback: all DS* lumps anywhere in the WAD.
     wad.lumps()
         .iter()
         .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
