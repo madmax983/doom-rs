@@ -443,6 +443,78 @@ mod tests {
         );
     }
 
+    // -----------------------------------------------------------------------
+    // Regression tests: the specific bug where play_sfx blindly stole channel
+    // 0 (unwrap_or(0)) instead of using priority, causing weapon sounds to be
+    // silenced by a flood of lower-priority monster sounds.
+    // -----------------------------------------------------------------------
+
+    /// Weapon sound must steal a channel even when all 8 are full of monster
+    /// attack sounds (Medium priority).  This was the original failure mode.
+    #[test]
+    fn weapon_sound_survives_monster_attack_flood() {
+        let mut mixer = SfxMixer::new();
+        for i in 0..MAX_CHANNELS {
+            mixer.play(i as u16, vec![128u8; 1000], 1.0, 0.0, SfxPriority::Medium);
+        }
+        assert_eq!(mixer.active_count(), MAX_CHANNELS);
+
+        let ch = mixer.play(99, vec![128u8; 100], 1.0, 0.0, SfxPriority::Weapon);
+        assert!(
+            ch.is_some(),
+            "weapon sound must steal a channel from Medium-priority monster sounds"
+        );
+    }
+
+    /// Weapon sound must steal a channel even when all 8 are full of high-priority
+    /// monster wake/die sounds.
+    #[test]
+    fn weapon_sound_survives_monster_wake_flood() {
+        let mut mixer = SfxMixer::new();
+        for i in 0..MAX_CHANNELS {
+            mixer.play(i as u16, vec![128u8; 1000], 1.0, 0.0, SfxPriority::High);
+        }
+        assert_eq!(mixer.active_count(), MAX_CHANNELS);
+
+        let ch = mixer.play(99, vec![128u8; 100], 1.0, 0.0, SfxPriority::Weapon);
+        assert!(
+            ch.is_some(),
+            "weapon sound must steal a channel from High-priority monster sounds"
+        );
+    }
+
+    /// Monster sounds (Medium) must NOT steal channels that are held by weapon
+    /// sounds (Weapon priority).
+    #[test]
+    fn monster_attack_cannot_steal_weapon_channel() {
+        let mut mixer = SfxMixer::new();
+        for i in 0..MAX_CHANNELS {
+            mixer.play(i as u16, vec![128u8; 1000], 1.0, 0.0, SfxPriority::Weapon);
+        }
+        assert_eq!(mixer.active_count(), MAX_CHANNELS);
+
+        let ch = mixer.play(99, vec![128u8; 100], 1.0, 0.0, SfxPriority::Medium);
+        assert!(
+            ch.is_none(),
+            "monster attack sound must not steal a Weapon-priority channel"
+        );
+    }
+
+    /// Monster wake/die sounds (High) must NOT steal weapon channels.
+    #[test]
+    fn monster_wake_cannot_steal_weapon_channel() {
+        let mut mixer = SfxMixer::new();
+        for i in 0..MAX_CHANNELS {
+            mixer.play(i as u16, vec![128u8; 1000], 1.0, 0.0, SfxPriority::Weapon);
+        }
+
+        let ch = mixer.play(99, vec![128u8; 100], 1.0, 0.0, SfxPriority::High);
+        assert!(
+            ch.is_none(),
+            "monster wake/die sound must not steal a Weapon-priority channel"
+        );
+    }
+
     #[test]
     fn mixer_clamps_output() {
         let mut mixer = SfxMixer::new();
