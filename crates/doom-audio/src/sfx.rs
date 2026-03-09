@@ -57,6 +57,18 @@ impl SfxCache {
     pub fn get(&self, id: u16) -> Option<Arc<PcmSample>> {
         self.samples.get(&id).cloned()
     }
+
+    /// Number of samples currently stored in the cache.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.samples.len()
+    }
+
+    /// Returns `true` if the cache is empty.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.samples.is_empty()
+    }
 }
 
 // ---------------------------------------------------------------------------

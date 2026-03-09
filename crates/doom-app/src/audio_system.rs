@@ -65,7 +65,13 @@ impl AudioSystem {
     pub fn try_open(wad: &WadFile) -> Option<Self> {
         const SAMPLE_RATE: u32 = 44_100;
 
-        let driver = AudioDriver::open(SAMPLE_RATE).ok()?;
+        let driver = match AudioDriver::open(SAMPLE_RATE) {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("[audio] INIT FAILED: {e} — running silently");
+                return None;
+            }
+        };
 
         // Clone the Arc<Mutex<SfxMixer>> so the background thread can post samples.
         let mixer_arc: Arc<Mutex<SfxMixer>> = Arc::clone(&driver.mixer);
@@ -84,6 +90,8 @@ impl AudioSystem {
 
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
 
+        eprintln!("[audio] SfxCache: {} entries loaded; spawning thread", sfx_cache.len());
+
         // Spawn the audio command thread.  It owns SfxCache and shared Arcs.
         std::thread::spawn(move || {
             // Apply GENMIDI bank to the player if one was found in the WAD.
@@ -92,7 +100,9 @@ impl AudioSystem {
                     mp.load_genmidi(bank);
                 }
             }
+            eprintln!("[audio] thread started");
             audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache);
+            eprintln!("[audio] thread exited");
         });
 
         Some(Self {
@@ -233,9 +243,16 @@ fn audio_cmd_thread(
                 // Look up decoded PCM data from the cache, then hand it to the
                 // priority-based SfxMixer.  The mixer steals the lowest-priority
                 // channel when all 8 are occupied, matching Doom's behaviour.
-                if let Some(sample) = sfx_cache.get(sfx_id) {
-                    if let Ok(mut mixer) = mixer_arc.lock() {
-                        mixer.play(sfx_id, sample.data.clone(), 1.0, 0.0, priority);
+                match sfx_cache.get(sfx_id) {
+                    Some(sample) => {
+                        eprintln!("[audio] PlaySfx id={sfx_id} pri={priority:?} data_len={}", sample.data.len());
+                        if let Ok(mut mixer) = mixer_arc.lock() {
+                            let ch = mixer.play(sfx_id, sample.data.clone(), 1.0, 0.0, priority);
+                            eprintln!("[audio] -> channel={ch:?} active={}", mixer.active_count());
+                        }
+                    }
+                    None => {
+                        eprintln!("[audio] PlaySfx id={sfx_id} NOT IN CACHE (cache miss)");
                     }
                 }
             }
@@ -264,26 +281,24 @@ fn audio_cmd_thread(
 }
 
 // ---------------------------------------------------------------------------
-// Weapon → SFX ID mapping
+// Weapon → SFX lump name mapping
 // ---------------------------------------------------------------------------
 
-/// Map a `WeaponType` to the Doom SFX lump ID used when the weapon fires.
+/// Map a `WeaponType` to the Doom DS* lump name for its fire sound.
 ///
-/// IDs below are the standard Doom SFX lump numbers for the DS* sounds.
-/// They correspond to the sequential indices assigned by `populate_sfx_cache`
-/// only when the WAD is a stock Doom IWAD; for generic WADs the values are
-/// approximate but the worst-case outcome is silence (cache miss = no-op).
-pub fn weapon_fire_sfx(weapon: doom_game::WeaponType) -> u16 {
+/// Returns the canonical lump name so the caller can resolve it via
+/// `sfx_lookup` — the same map used for monster sounds.  This avoids the
+/// fragile hardcoded-integer approach that assumed a specific WAD lump order.
+pub fn weapon_fire_sfx_lump(weapon: doom_game::WeaponType) -> &'static str {
     use doom_game::WeaponType;
     match weapon {
-        WeaponType::Fist | WeaponType::Chainsaw => 64, // DSPUNCH / DSSAWFUL
-        WeaponType::Pistol => 32,                      // DSPISTOL
-        WeaponType::Shotgun => 34,                     // DSSHOTGN
-        WeaponType::SuperShotgun => 84,                // DSDBOPN (approx)
-        WeaponType::Chaingun => 35,                    // DSPISTOL repeated
-        WeaponType::RocketLauncher => 36,              // DSRLAUNC
-        WeaponType::PlasmaRifle => 37,                 // DSPLASMA
-        WeaponType::Bfg => 39,                         // DSBFG
+        WeaponType::Fist => "DSPUNCH",
+        WeaponType::Chainsaw => "DSSAWFUL",
+        WeaponType::Pistol | WeaponType::Chaingun => "DSPISTOL",
+        WeaponType::Shotgun | WeaponType::SuperShotgun => "DSSHOTGN",
+        WeaponType::RocketLauncher => "DSRLAUNC",
+        WeaponType::PlasmaRifle => "DSPLASMA",
+        WeaponType::Bfg => "DSBFG",
     }
 }
 
@@ -553,13 +568,21 @@ mod tests {
     }
 
     #[test]
-    fn weapon_fire_sfx_pistol() {
-        assert_eq!(weapon_fire_sfx(doom_game::WeaponType::Pistol), 32);
+    fn weapon_fire_sfx_lump_pistol() {
+        assert_eq!(weapon_fire_sfx_lump(doom_game::WeaponType::Pistol), "DSPISTOL");
     }
 
     #[test]
-    fn weapon_fire_sfx_bfg() {
-        assert_eq!(weapon_fire_sfx(doom_game::WeaponType::Bfg), 39);
+    fn weapon_fire_sfx_lump_bfg() {
+        assert_eq!(weapon_fire_sfx_lump(doom_game::WeaponType::Bfg), "DSBFG");
+    }
+
+    #[test]
+    fn weapon_fire_sfx_lump_chaingun_same_as_pistol() {
+        assert_eq!(
+            weapon_fire_sfx_lump(doom_game::WeaponType::Chaingun),
+            weapon_fire_sfx_lump(doom_game::WeaponType::Pistol)
+        );
     }
 
     #[test]

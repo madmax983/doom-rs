@@ -33,8 +33,8 @@ use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
 
 use audio_system::{
-    AudioSystem, build_sfx_lookup, monster_attack_lump, monster_death_lump, monster_wake_lump,
-    music_lump_for_map, weapon_fire_sfx,
+    AudioSystem, monster_attack_lump, monster_death_lump, monster_wake_lump, music_lump_for_map,
+    weapon_fire_sfx_lump,
 };
 use doom_audio::SfxPriority;
 
@@ -570,8 +570,9 @@ impl DoomApp for DoomGame {
                         SoundRequest::PlayerDie => ("DSPLDETH", SfxPriority::Weapon),
                     };
                     if !lump.is_empty() {
-                        if let Some(&id) = self.sfx_lookup.get(lump) {
-                            audio.play_sfx(id, priority);
+                        match self.sfx_lookup.get(lump) {
+                            Some(&id) => audio.play_sfx(id, priority),
+                            None => eprintln!("[sfx] lookup miss for lump={lump:?} (lookup size={})", self.sfx_lookup.len()),
                         }
                     }
                 }
@@ -648,8 +649,12 @@ impl DoomApp for DoomGame {
         // when the player is alive and has enough ammo to fire.
         if attack_just_fired && !self.gs.player.is_dead() && doom_game::player_can_fire(&self.gs) {
             if let Some(ref audio) = self.audio {
-                let sfx_id = weapon_fire_sfx(self.gs.player.weapon);
-                audio.play_sfx(sfx_id, SfxPriority::Weapon);
+                let lump = weapon_fire_sfx_lump(self.gs.player.weapon);
+                if let Some(&sfx_id) = self.sfx_lookup.get(lump) {
+                    audio.play_sfx(sfx_id, SfxPriority::Weapon);
+                } else {
+                    eprintln!("[sfx] weapon sound miss: lump={lump:?}");
+                }
             }
         }
 

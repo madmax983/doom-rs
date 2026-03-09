@@ -67,6 +67,14 @@ impl AudioDriver {
             .default_output_config()
             .map_err(|e| AudioError::Stream(e.to_string()))?;
 
+        eprintln!(
+            "[audio-driver] device={:?} channels={} sample_rate={} format={:?}",
+            device.name().unwrap_or_default(),
+            config.channels(),
+            config.sample_rate().0,
+            config.sample_format(),
+        );
+
         let mixer = Arc::new(Mutex::new(SfxMixer::new()));
         let midi = Arc::new(Mutex::new(MidiPlayer::new()));
 
