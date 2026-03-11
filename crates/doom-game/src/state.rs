@@ -20,6 +20,13 @@ use crate::spawn::Skill;
 /// variant to the appropriate WAD lump name for playback.  The game crate
 /// intentionally has no audio dependency — it only describes *what* happened.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LockedDoorColor {
+    Blue,
+    Red,
+    Yellow,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SoundRequest {
     /// Monster spotted the player / woke up.  Fields: (kind, map_x, map_y)
     /// where map_x/map_y are the emitter's position in Fixed16_16 map units.
@@ -34,6 +41,8 @@ pub enum SoundRequest {
     PlayerDie,
     /// Player pressed use into a blocking ordinary wall.
     PlayerUseFail,
+    /// Player tried to use a keyed door without the required key color.
+    PlayerUseLockedDoor(LockedDoorColor),
 }
 
 // ---------------------------------------------------------------------------

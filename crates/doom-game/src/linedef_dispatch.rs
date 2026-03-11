@@ -12,7 +12,7 @@
 use doom_map::Level;
 
 use crate::mobj::MobjHandle;
-use crate::state::{ExitRequest, GameState};
+use crate::state::{ExitRequest, GameState, LockedDoorColor, SoundRequest};
 use crate::switch::KeyType;
 
 // ---------------------------------------------------------------------------
@@ -404,6 +404,7 @@ fn dispatch_effect(
             if !crate::switch::player_has_key(gs, KeyType::BlueCard)
                 && !crate::switch::player_has_key(gs, KeyType::BlueSkull)
             {
+                queue_locked_door_feedback(gs, activator, LockedDoorColor::Blue);
                 return false;
             }
             door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
@@ -413,6 +414,7 @@ fn dispatch_effect(
             if !crate::switch::player_has_key(gs, KeyType::RedCard)
                 && !crate::switch::player_has_key(gs, KeyType::RedSkull)
             {
+                queue_locked_door_feedback(gs, activator, LockedDoorColor::Red);
                 return false;
             }
             door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
@@ -422,6 +424,7 @@ fn dispatch_effect(
             if !crate::switch::player_has_key(gs, KeyType::YellowCard)
                 && !crate::switch::player_has_key(gs, KeyType::YellowSkull)
             {
+                queue_locked_door_feedback(gs, activator, LockedDoorColor::Yellow);
                 return false;
             }
             door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
@@ -431,6 +434,7 @@ fn dispatch_effect(
             if !crate::switch::player_has_key(gs, KeyType::BlueCard)
                 && !crate::switch::player_has_key(gs, KeyType::BlueSkull)
             {
+                queue_locked_door_feedback(gs, activator, LockedDoorColor::Blue);
                 return false;
             }
             door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
@@ -440,6 +444,7 @@ fn dispatch_effect(
             if !crate::switch::player_has_key(gs, KeyType::RedCard)
                 && !crate::switch::player_has_key(gs, KeyType::RedSkull)
             {
+                queue_locked_door_feedback(gs, activator, LockedDoorColor::Red);
                 return false;
             }
             door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
@@ -449,6 +454,7 @@ fn dispatch_effect(
             if !crate::switch::player_has_key(gs, KeyType::YellowCard)
                 && !crate::switch::player_has_key(gs, KeyType::YellowSkull)
             {
+                queue_locked_door_feedback(gs, activator, LockedDoorColor::Yellow);
                 return false;
             }
             door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
@@ -629,6 +635,13 @@ fn dispatch_effect(
             }
             true
         }
+    }
+}
+
+fn queue_locked_door_feedback(gs: &mut GameState, activator: MobjHandle, color: LockedDoorColor) {
+    if activator == gs.player.handle {
+        gs.sound_queue
+            .push(SoundRequest::PlayerUseLockedDoor(color));
     }
 }
 
@@ -970,8 +983,12 @@ pub fn check_cross_lines(
     new_x: i32,
     new_y: i32,
 ) {
-    // Collect linedef indices with walk specials to avoid borrow issues.
-    let walk_lines: Vec<(usize, u16)> = level
+    // Vanilla P_TryMove stores special hits as lines are encountered during
+    // movement validation, then processes them in reverse order once the move
+    // is accepted. We do not have the original spechit array here, so we use
+    // crossed-line distance along the movement path as the closest deterministic
+    // approximation and dispatch the farthest hit first.
+    let mut walk_lines: Vec<(i64, i64, usize, u16)> = level
         .linedefs
         .iter()
         .enumerate()
@@ -981,30 +998,72 @@ pub fn check_cross_lines(
             }
             match classify_trigger(ld.special) {
                 Some(TriggerType::WalkOnce) | Some(TriggerType::WalkRepeat) => {
-                    Some((i, ld.special))
+                    let v1 = &level.vertexes[ld.from_vertex as usize];
+                    let v2 = &level.vertexes[ld.to_vertex as usize];
+                    segment_intersection_frac(
+                        old_x,
+                        old_y,
+                        new_x,
+                        new_y,
+                        v1.x as i32,
+                        v1.y as i32,
+                        v2.x as i32,
+                        v2.y as i32,
+                    )
+                    .map(|(num, denom)| (num, denom, i, ld.special))
                 }
                 _ => None,
             }
         })
         .collect();
 
-    for (ld_idx, special) in walk_lines {
-        let ld = &level.linedefs[ld_idx];
-        let v1 = &level.vertexes[ld.from_vertex as usize];
-        let v2 = &level.vertexes[ld.to_vertex as usize];
+    walk_lines.sort_by(|a, b| {
+        let lhs = i128::from(a.0) * i128::from(b.1);
+        let rhs = i128::from(b.0) * i128::from(a.1);
+        lhs.cmp(&rhs)
+    });
 
-        let lx1 = v1.x as i32;
-        let ly1 = v1.y as i32;
-        let lx2 = v2.x as i32;
-        let ly2 = v2.y as i32;
-
-        if segments_intersect(old_x, old_y, new_x, new_y, lx1, ly1, lx2, ly2) {
-            let trigger = classify_trigger(special).unwrap();
-            dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
-            // Continue checking other lines (a single movement can cross
-            // multiple trigger lines).
-        }
+    for (_, _, ld_idx, special) in walk_lines.into_iter().rev() {
+        let trigger = classify_trigger(special).unwrap();
+        dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
     }
+}
+
+fn segment_intersection_frac(
+    ax: i32,
+    ay: i32,
+    bx: i32,
+    by: i32,
+    cx: i32,
+    cy: i32,
+    dx: i32,
+    dy: i32,
+) -> Option<(i64, i64)> {
+    let rdx = i64::from(bx - ax);
+    let rdy = i64::from(by - ay);
+    let sdx = i64::from(dx - cx);
+    let sdy = i64::from(dy - cy);
+    let qpx = i64::from(cx - ax);
+    let qpy = i64::from(cy - ay);
+
+    let denom = rdx * sdy - rdy * sdx;
+    if denom == 0 {
+        return None;
+    }
+
+    let t_num = qpx * sdy - qpy * sdx;
+    let u_num = qpx * rdy - qpy * rdx;
+    let (t_num, u_num, denom) = if denom < 0 {
+        (-t_num, -u_num, -denom)
+    } else {
+        (t_num, u_num, denom)
+    };
+
+    if !(0..=denom).contains(&t_num) || !(0..=denom).contains(&u_num) {
+        return None;
+    }
+
+    Some((t_num, denom))
 }
 
 /// Returns `true` if the segment from `(ax, ay)` to `(bx, by)` crosses the
@@ -1012,6 +1071,7 @@ pub fn check_cross_lines(
 ///
 /// Uses the cross-product straddling test: both segments must straddle each
 /// other's infinite line.
+#[cfg(test)]
 fn segments_intersect(
     ax: i32,
     ay: i32,
@@ -1429,6 +1489,66 @@ mod tests {
     }
 
     #[test]
+    fn dispatch_locked_blue_door_without_key_queues_player_feedback() {
+        let (mut gs, handle) = make_gs_with_player();
+        let mut level = make_test_level_with_tag(0);
+        level.linedefs[0].special = 26; // Blue locked door.
+
+        let result = dispatch_linedef(
+            &mut gs,
+            &mut level,
+            0,
+            26,
+            TriggerType::SwitchRepeat,
+            handle,
+            0,
+        );
+
+        assert!(!result, "locked door without key should fail");
+        assert_eq!(
+            gs.sound_queue,
+            vec![crate::state::SoundRequest::PlayerUseLockedDoor(
+                crate::state::LockedDoorColor::Blue,
+            )],
+            "player should get Doom-style keyed-door feedback"
+        );
+    }
+
+    #[test]
+    fn dispatch_locked_door_without_player_feedback_for_monsters() {
+        let (mut gs, player_handle) = make_gs_with_player();
+        let monster = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(-16),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let monster_handle = gs.mobjslab.alloc(monster);
+        let mut level = make_test_level_with_tag(0);
+        level.linedefs[0].special = 26; // Blue locked door.
+
+        let result = dispatch_linedef(
+            &mut gs,
+            &mut level,
+            0,
+            26,
+            TriggerType::SwitchRepeat,
+            monster_handle,
+            0,
+        );
+
+        assert!(!result, "monster without key should not activate the door");
+        assert!(
+            gs.sound_queue.is_empty(),
+            "monster should not get keyed-door feedback"
+        );
+        assert_eq!(
+            gs.player.handle, player_handle,
+            "precondition: player handle unchanged"
+        );
+    }
+
+    #[test]
     fn dispatch_locked_door_with_key_succeeds() {
         let (mut gs, handle) = make_gs_with_player();
         let mut level = make_test_level_with_tag(0);
@@ -1629,6 +1749,93 @@ mod tests {
         assert_eq!(
             level.linedefs[0].special, 97,
             "WR line should preserve special after trigger"
+        );
+    }
+
+    #[test]
+    fn cross_lines_reverse_crossing_order_matches_vanilla_spechit_processing() {
+        let (mut gs, handle) = make_gs_with_player();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).unwrap();
+        let mut level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![
+                doom_map::Linedef {
+                    from_vertex: 0,
+                    to_vertex: 1,
+                    flags: 0x0004,
+                    special: 124, // W1 secret exit, nearer line.
+                    tag: 0,
+                    right_sidedef: 0,
+                    left_sidedef: 1,
+                },
+                doom_map::Linedef {
+                    from_vertex: 2,
+                    to_vertex: 3,
+                    flags: 0x0004,
+                    special: 52, // W1 normal exit, farther line.
+                    tag: 0,
+                    right_sidedef: 0,
+                    left_sidedef: 1,
+                },
+            ],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"\0\0\0\0\0\0\0\0",
+                    lower_texture: *b"\0\0\0\0\0\0\0\0",
+                    middle_texture: *b"\0\0\0\0\0\0\0\0",
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"\0\0\0\0\0\0\0\0",
+                    lower_texture: *b"\0\0\0\0\0\0\0\0",
+                    middle_texture: *b"\0\0\0\0\0\0\0\0",
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: -10 },
+                doom_map::Vertex { x: 0, y: 10 },
+                doom_map::Vertex { x: 64, y: -10 },
+                doom_map::Vertex { x: 64, y: 10 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap: make_minimal_blockmap(),
+        };
+
+        check_cross_lines(&mut gs, &mut level, handle, -5, 0, 80, 0);
+
+        assert_eq!(
+            gs.exit_request,
+            Some(ExitRequest::Secret),
+            "crossed walk specials should resolve in reverse crossing order, not raw lump order"
         );
     }
 

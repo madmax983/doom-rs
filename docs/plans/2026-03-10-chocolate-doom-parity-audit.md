@@ -49,8 +49,8 @@ Each subsystem log should record:
 | Subsystem | Chocolate Doom | Local Rust Modules | Status | Notes |
 | --- | --- | --- | --- | --- |
 | Input and main tic loop | `d_event.c`, `d_loop.c`, `i_input.c`, `p_user.c` | `crates/doom-tui/src/input.rs`, `crates/doom-tui/src/event_loop.rs`, `crates/doom-game/src/tic.rs` | Partial | Batch D landed deterministic held-fire cadence and kept rocket/BFG release-gated. Desktop mouse should wait for a non-TUI frontend. Deeper demo/input parity is still unaudited. |
-| Player use, doors, linedef specials | `p_spec.c`, `p_map.c` | `crates/doom-game/src/specials.rs`, `crates/doom-game/src/trace.rs`, `crates/doom-game/src/linedef_dispatch.rs` | Partial | Batch A is green: `USE` stops on ordinary blockers, front/back use side is respected, and blocked-use now queues the Doom-style fail SFX. Remaining work is broader parity on interaction sequencing around adjacent triggers and locked-door nuance. |
-| Monster movement, sight, sound, door opening | `p_enemy.c`, `p_sight.c`, `p_map.c` | `crates/doom-game/src/actions.rs`, `crates/doom-game/src/sight.rs`, `crates/doom-game/src/sound.rs` | Partial | Batch B restored behind-the-back wakeup rules, one-soundblock propagation, retaliation, and Doom-shaped missile gating. Remaining audit work is the deeper `A_Chase` edge-case pass, not the old coarse blocker path. |
+| Player use, doors, linedef specials | `p_spec.c`, `p_map.c` | `crates/doom-game/src/specials.rs`, `crates/doom-game/src/trace.rs`, `crates/doom-game/src/linedef_dispatch.rs`, `crates/doom-game/src/tic.rs` | Partial | Batch A2 is green: locked doors now emit player-only keyed feedback and walk-trigger processing moved back into the game tick with deterministic reverse-crossing order. Remaining debt is the exact pathological `spechit` encounter order, not the old app-wrapper or lump-order behavior. |
+| Monster movement, sight, sound, door opening | `p_enemy.c`, `p_sight.c`, `p_map.c` | `crates/doom-game/src/actions.rs`, `crates/doom-game/src/sight.rs`, `crates/doom-game/src/sound.rs` | Partial | Batch B restored behind-the-back wakeup rules, one-soundblock propagation, retaliation, and Doom-shaped missile gating. B2 started by fixing the vanilla Arch-Vile and Revenant missile-range edge cases; elevated-target hitscan parity is still open. |
 | Spawn and thing placement | `p_mobj.c` | `crates/doom-game/src/spawn.rs`, `crates/doom-game/src/tic.rs` | Partial | Batch B now honors `MF_SPAWNCEILING`, randomizes positive spawn tics, and blocks invalid Nightmare respawns. Remaining audit item: broader map-thing spawn parity and any remaining flag-specific edge cases. |
 | Weapons, hitscan, damage | `p_pspr.c`, `p_map.c`, `p_inter.c` | `crates/doom-game/src/weapon_fire.rs`, `crates/doom-game/src/combat.rs`, `crates/doom-game/src/tic.rs` | Partial | Broken fixed-point aim rays are fixed, first pistol/chaingun shots are now accurate, fist snap-to-target matches chainsaw behavior, and Batch D landed held-fire/refire cadence in the tic loop. Remaining audit item: elevated-target autoaim and deeper damage-table parity. |
 | BSP, seg traversal, wall rendering | `r_bsp.c`, `r_segs.c` | `crates/doom-renderer/src/seg.rs`, `crates/doom-renderer/src/render.rs` | Partial | Batch C1 is green: pegging now uses logical texture height and masked midtextures are deferred instead of being painted inline. Remaining renderer debt is deeper seg/visplane/sky projection parity. |
@@ -88,8 +88,8 @@ Action taken across the initial gameplay slice and Batch A:
 
 Still open:
 
-- Audit lock-specific feedback and any remaining interaction-sequencing differences against Chocolate Doom's full `P_UseLines` path.
-- Add a regression for adjacent trigger interactions where movement crossing and use traces compete in the same local space.
+- `p_use_lines()` itself is in good shape now, but pathological same-block multi-trigger movement still uses a reverse-crossing approximation of vanilla `spechit` processing rather than the original blockmap encounter order.
+- If a real map surfaces a remaining discrepancy here, the next escalation is to collect crossed special lines during `p_try_move()` itself instead of reconstructing them after the move.
 
 ### Renderer: Batch C1 user-facing parity
 
@@ -118,20 +118,21 @@ Still open:
 
 ### System 1: Gameplay interactions
 
-- Status: Batch A complete, broader parity audit still open
+- Status: Batch A and Batch A2 complete, one narrow `spechit` caveat still open
 - Chocolate Doom sources: `p_spec.c`, `p_map.c`
-- Local Rust files: `crates/doom-game/src/specials.rs`, `crates/doom-game/src/trace.rs`, `crates/doom-game/src/linedef_dispatch.rs`, `crates/doom-game/src/movement.rs`
+- Local Rust files: `crates/doom-game/src/specials.rs`, `crates/doom-game/src/trace.rs`, `crates/doom-game/src/linedef_dispatch.rs`, `crates/doom-game/src/movement.rs`, `crates/doom-game/src/tic.rs`, `crates/doom-app/src/main.rs`
 - Confirmed parity wins:
   - `p_use_lines()` now stops on a closed ordinary blocker instead of tunneling to a special behind it.
   - Back-side player use now fails for front-only use specials while manual door specials still work from the back side like Doom.
   - Pressing use into a closed ordinary blocker now queues the blocked-use fail sound request.
   - Monster movement reuses the exact failed-move blocking linedef when trying to open a door.
+  - Locked doors now emit player-only `sfx_oof` keyed-door feedback plus the classic "You need a <color> key to open this door" message, matching `EV_DoLockedDoor`.
+  - Player crossed-line specials now fire during the game tick instead of from the app wrapper after `tick()`.
+  - Crossed walk specials now resolve in reverse crossing order instead of raw linedef order, which is a closer match to vanilla `spechit` processing.
 - Confirmed mismatches:
-  - `p_use_lines()` now sees all crossed lines, but the broader player and monster interaction path still needs a full parity pass against Chocolate Doom's intercept traversal and movement-trigger sequencing.
-  - Lock/key feedback nuance and any map-order edge cases around adjacent trigger lines remain unaudited.
+  - Exact vanilla `spechit` order still depends on blockmap encounter order, while the current port uses a deterministic reverse-crossing approximation after a successful move.
 - Recommended regressions:
-  - Movement-trigger ordering test: crossing and use interactions near adjacent trigger lines should follow intercept distance order rather than map-order accidents.
-  - Locked-door feedback test: keyed doors should match Chocolate Doom's exact fail semantics and sound/message behavior.
+  - Same-block multi-trigger torture case once we are ready to thread actual `spechit` collection through `p_try_move()`.
 - Recommended fix batch: Batch A
 
 ### System 2: Monsters, combat, and spawn
@@ -144,12 +145,12 @@ Still open:
   - `p_noise_alert()` now crosses one `ML_SOUNDBLOCK`, not two, and the mixed-topology regression matches that rule.
   - Monster retaliation now sets `MF_JUSTHIT` and threshold state so damaged monsters can immediately choose the missile path Doom allows.
   - `A_Chase` now routes missile decisions through a Doom-shaped range gate instead of the old pure `movecount <= 0 && LOS` shortcut.
+  - `P_CheckMissileRange` now respects the vanilla Arch-Vile maximum range and Revenant minimum missile range instead of using the old flattened monster grouping.
   - Spawn sync honors `MF_SPAWNCEILING`, non-Nightmare map-thing spawns randomize positive tics, and blocked Nightmare respawns now fail cleanly.
   - Pistol and chaingun now get accurate first shots after release, and fist hits snap the player toward the struck target like chainsaw hits.
 - Confirmed mismatches:
-  - `P_CheckMissileRange` is closer now, but the monster-specific edge cases still need a stricter source-to-source pass against Chocolate Doom.
   - Hitscan is still effectively 2D, so elevated-target autoaim and bullet-slope behavior remain open.
-  - The current tic loop still does not model full Doom held-fire/refire semantics for every weapon; that overlap belongs with the frontend/audio batch.
+  - The remaining `P_CheckMissileRange` debt is the broader source-to-source cleanup pass, not the obvious monster-specific edge cases.
 - Recommended regressions:
   - Seeded `A_Chase` retaliation and threshold test after damaging a monster mid-chase.
   - Monster-facing-away visual acquisition test where vanilla Doom would keep it idle.

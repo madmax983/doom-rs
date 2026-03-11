@@ -12,11 +12,12 @@ mod savegame;
 use anyhow::{Context, Result};
 use clap::Parser;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+use doom_game::LockedDoorColor;
 use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
 use doom_game::player::WeaponType;
 use doom_game::{
-    GameState, Skill, TicCmd, TitleScreen, check_cross_lines, init_conveyors, init_scrolling_walls,
+    GameState, Skill, TicCmd, TitleScreen, init_conveyors, init_scrolling_walls,
     init_sector_lights, kind_to_doomed_type, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
@@ -239,6 +240,69 @@ impl DoomGame {
 }
 
 impl DoomGame {
+    fn handle_sound_events(&mut self, events: &[doom_game::SoundRequest]) {
+        use doom_game::SoundRequest;
+
+        for ev in events {
+            if let SoundRequest::PlayerUseLockedDoor(color) = ev {
+                self.cheat_message = Some((locked_door_message(*color).to_string(), 105));
+            }
+        }
+
+        let Some(ref audio) = self.audio else {
+            return;
+        };
+
+        let (pl_x, pl_y, pl_angle) = self
+            .gs
+            .mobjslab
+            .get(self.gs.player.handle)
+            .map(|mo| (mo.x, mo.y, mo.angle))
+            .unwrap_or_default();
+
+        for ev in events {
+            let Some((lump, priority)) = sound_request_sfx(*ev) else {
+                continue;
+            };
+
+            let emitter = match ev {
+                SoundRequest::MonsterWake(_, x, y)
+                | SoundRequest::MonsterAttack(_, x, y)
+                | SoundRequest::MonsterDie(_, x, y) => Some((*x, *y)),
+                SoundRequest::PlayerWeaponFire(_) => Some((pl_x, pl_y)),
+                SoundRequest::PlayerDie
+                | SoundRequest::PlayerUseFail
+                | SoundRequest::PlayerUseLockedDoor(_) => None,
+            };
+
+            if lump.is_empty() {
+                continue;
+            }
+
+            if let Some(&id) = self.sfx_lookup.get(lump) {
+                if let Some((emitter_x, emitter_y)) = emitter {
+                    let spatial = compute_spatial(
+                        &SfxEmitter {
+                            x: emitter_x,
+                            y: emitter_y,
+                        },
+                        pl_x,
+                        pl_y,
+                        pl_angle,
+                    );
+
+                    if spatial.volume < 0.01 {
+                        continue;
+                    }
+
+                    audio.play_sfx(id, priority, spatial.volume, spatial.pan);
+                } else {
+                    audio.play_sfx(id, priority, 1.0, 0.0);
+                }
+            }
+        }
+    }
+
     /// Write a plain-text event line to the debug log (if active).
     ///
     /// Format: `tic=<N> <msg>\n`  — no ANSI codes, no box drawing.
@@ -582,12 +646,6 @@ impl DoomApp for DoomGame {
 
         let cmd = ticinput_to_ticcmd(input);
 
-        // Capture player position before the tick for walk-trigger detection.
-        let (old_px, old_py) = match self.gs.mobjslab.get(self.gs.player.handle) {
-            Some(mo) => (mo.x.to_int(), mo.y.to_int()),
-            None => (0, 0),
-        };
-
         // Snapshot kill/item counts before the tick to detect changes.
         let pre_kills = self.gs.player.kill_count;
         let pre_items = self.gs.player.item_count;
@@ -599,58 +657,8 @@ impl DoomApp for DoomGame {
         // contention — weapon-priority sounds always win; monster sounds compete
         // with each other, matching Doom's original S_StartSound behaviour.
         {
-            use doom_game::SoundRequest;
             let events: Vec<_> = self.gs.sound_queue.drain(..).collect();
-            if let Some(ref audio) = self.audio {
-                // Snapshot player position and angle for spatial audio.
-                let (pl_x, pl_y, pl_angle) = self
-                    .gs
-                    .mobjslab
-                    .get(self.gs.player.handle)
-                    .map(|mo| (mo.x, mo.y, mo.angle))
-                    .unwrap_or_default();
-
-                for ev in &events {
-                    let Some((lump, priority)) = sound_request_sfx(*ev) else {
-                        continue;
-                    };
-
-                    let emitter = match ev {
-                        SoundRequest::MonsterWake(_, x, y)
-                        | SoundRequest::MonsterAttack(_, x, y)
-                        | SoundRequest::MonsterDie(_, x, y) => Some((*x, *y)),
-                        SoundRequest::PlayerWeaponFire(_) => Some((pl_x, pl_y)),
-                        SoundRequest::PlayerDie | SoundRequest::PlayerUseFail => None,
-                    };
-
-                    if lump.is_empty() {
-                        continue;
-                    }
-
-                    if let Some(&id) = self.sfx_lookup.get(lump) {
-                        if let Some((emitter_x, emitter_y)) = emitter {
-                            let spatial = compute_spatial(
-                                &SfxEmitter {
-                                    x: emitter_x,
-                                    y: emitter_y,
-                                },
-                                pl_x,
-                                pl_y,
-                                pl_angle,
-                            );
-
-                            // Skip inaudible sounds to avoid wasting mixer channels.
-                            if spatial.volume < 0.01 {
-                                continue;
-                            }
-
-                            audio.play_sfx(id, priority, spatial.volume, spatial.pan);
-                        } else {
-                            audio.play_sfx(id, priority, 1.0, 0.0);
-                        }
-                    }
-                }
-            }
+            self.handle_sound_events(&events);
         }
 
         // Log kill and item events.
@@ -662,24 +670,6 @@ impl DoomApp for DoomGame {
             if self.gs.player.item_count > pre_items {
                 let msg = format!("pickup items={}", self.gs.player.item_count);
                 self.dlog(&msg);
-            }
-        }
-
-        // Check if the player crossed any walk-triggered linedefs.
-        let player_handle = self.gs.player.handle;
-        if let Some(mo) = self.gs.mobjslab.get(player_handle) {
-            let new_px = mo.x.to_int();
-            let new_py = mo.y.to_int();
-            if new_px != old_px || new_py != old_py {
-                check_cross_lines(
-                    &mut self.gs,
-                    &mut self.level,
-                    player_handle,
-                    old_px,
-                    old_py,
-                    new_px,
-                    new_py,
-                );
             }
         }
 
@@ -1008,6 +998,14 @@ fn draw_cheat_message_overlay(fb: &mut Framebuffer, msg: &str) {
                 }
             }
         }
+    }
+}
+
+fn locked_door_message(color: LockedDoorColor) -> &'static str {
+    match color {
+        LockedDoorColor::Blue => "You need a blue key to open this door",
+        LockedDoorColor::Red => "You need a red key to open this door",
+        LockedDoorColor::Yellow => "You need a yellow key to open this door",
     }
 }
 
@@ -1764,6 +1762,21 @@ mod tests {
         assert!(
             game.cheat_message.is_some(),
             "cheat_message must be set after cheat activation"
+        );
+    }
+
+    #[test]
+    fn locked_door_feedback_sets_overlay_message() {
+        let mut game = make_doom_game();
+
+        game.handle_sound_events(&[doom_game::SoundRequest::PlayerUseLockedDoor(
+            doom_game::LockedDoorColor::Blue,
+        )]);
+
+        assert_eq!(
+            game.cheat_message.as_ref().map(|(msg, _)| msg.as_str()),
+            Some("You need a blue key to open this door"),
+            "locked door feedback should surface the classic Doom HUD message"
         );
     }
 

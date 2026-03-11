@@ -323,17 +323,24 @@ fn p_check_missile_range(
         None => return false,
     };
 
-    let mut dist = approx_distance((tx - mo_x).to_int(), (ty - mo_y).to_int());
+    let mut dist = approx_distance((tx - mo_x).to_int(), (ty - mo_y).to_int()) - 64;
     if info.melee_state == crate::mobj::StateNum::NULL {
         dist -= 128;
     }
 
     match mo_kind {
-        MobjKind::ArchVile => return dist > 14 * 64,
-        MobjKind::Revenant
-        | MobjKind::Cyberdemon
-        | MobjKind::SpiderMastermind
-        | MobjKind::LostSoul => {
+        MobjKind::ArchVile => {
+            if dist > 14 * 64 {
+                return false;
+            }
+        }
+        MobjKind::Revenant => {
+            if dist < 196 {
+                return false;
+            }
+            dist >>= 1;
+        }
+        MobjKind::Cyberdemon | MobjKind::SpiderMastermind | MobjKind::LostSoul => {
             dist >>= 1;
         }
         _ => {}
@@ -2528,6 +2535,33 @@ mod tests {
         assert_ne!(
             mo.state, missile_sn,
             "trooper should NOT enter missile state when movecount > 0"
+        );
+    }
+
+    #[test]
+    fn p_check_missile_range_archvile_rejects_far_targets() {
+        let mut gs = make_game_state();
+        let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 1100, 0, 700);
+        gs.mobjslab.get_mut(vile).unwrap().reactiontime = 0;
+        let player = gs.player.handle;
+
+        assert!(
+            !p_check_missile_range(&mut gs, vile, player, None),
+            "Arch-Vile missile range should reject targets beyond 14 * 64 units"
+        );
+    }
+
+    #[test]
+    fn p_check_missile_range_revenant_rejects_targets_under_196_units() {
+        let mut gs = make_game_state();
+        let skel = spawn_monster_targeting_player(&mut gs, MobjKind::Revenant, 128, 0, 300);
+        gs.mobjslab.get_mut(skel).unwrap().reactiontime = 0;
+        let player = gs.player.handle;
+        gs.rng.set_index(2); // RNG_TABLE[2] = 109, high enough to pass the old random gate.
+
+        assert!(
+            !p_check_missile_range(&mut gs, skel, player, None),
+            "Revenant missile range should reject targets that are too close"
         );
     }
 

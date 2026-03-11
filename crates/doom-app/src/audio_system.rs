@@ -327,6 +327,7 @@ pub fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, 
         }
         doom_game::SoundRequest::PlayerDie => Some(("DSPLDETH", SfxPriority::Weapon)),
         doom_game::SoundRequest::PlayerUseFail => Some(("DSNOWAY", SfxPriority::High)),
+        doom_game::SoundRequest::PlayerUseLockedDoor(_) => Some(("DSOOF", SfxPriority::High)),
     }
 }
 
@@ -604,6 +605,16 @@ mod tests {
         assert_eq!(
             sound_request_sfx(doom_game::SoundRequest::PlayerUseFail),
             Some(("DSNOWAY", doom_audio::SfxPriority::High))
+        );
+    }
+
+    #[test]
+    fn sound_request_sfx_maps_locked_door_feedback_to_oof() {
+        assert_eq!(
+            sound_request_sfx(doom_game::SoundRequest::PlayerUseLockedDoor(
+                doom_game::LockedDoorColor::Blue,
+            )),
+            Some(("DSOOF", doom_audio::SfxPriority::High))
         );
     }
 

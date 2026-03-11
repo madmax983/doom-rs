@@ -337,7 +337,7 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
 /// - Checks for secret sector discovery
 pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level>) {
     // Movement + attack (immutable level borrow).
-    p_move_player(gs, cmd, level.as_deref());
+    p_move_player(gs, cmd, level.as_deref_mut());
 
     // Pickup check: scan MF_SPECIAL actors.
     if !gs.player.is_dead() {
@@ -510,7 +510,7 @@ impl GameState {
 /// 3. Apply side_move thrust (perpendicular)
 /// 4. Collision check via P_TryMove
 /// 5. Apply friction and velocity clamping
-fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+fn p_move_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level>) {
     let handle = gs.player.handle;
 
     // Thrust block: apply turn + acceleration, then release borrow.
@@ -540,7 +540,7 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
         Some(mo) => (mo.x, mo.y, mo.x + mo.momx, mo.y + mo.momy),
         None => return,
     };
-    let mut moved = match level {
+    let mut moved = match level.as_deref() {
         Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
         None => true,
     };
@@ -548,7 +548,7 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     let mut final_y = new_y;
 
     if !moved {
-        if let Some(lv) = level {
+        if let Some(lv) = level.as_deref() {
             let (sx, sy) =
                 crate::movement::p_slide_move(&gs.mobjslab, handle, old_x, old_y, new_x, new_y, lv);
             if sx != old_x || sy != old_y {
@@ -560,33 +560,49 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     }
 
     // 5. Apply position + friction + clamp.
-    let Some(mo) = gs.mobjslab.get_mut(handle) else {
-        return;
-    };
-    if moved {
-        mo.x = final_x;
-        mo.y = final_y;
-        mo.momx = final_x - old_x;
-        mo.momy = final_y - old_y;
-    }
-    mo.momx = mo.momx.fixed_mul(FRICTION);
-    mo.momy = mo.momy.fixed_mul(FRICTION);
-    mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
-    mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
-
-    // 6. Update floor height (mo.z) to track the sector the player is now in.
-    // This is critical for stair climbing: the step-height check in p_try_move
-    // compares `open_floor - mo_z` against MAX_STEP_HEIGHT (24 units).
-    // Without this update, mo.z stays at the spawn-point floor and multi-step
-    // stairs become impassable after the first step.
-    if let Some(lv) = level {
-        let fx = mo.x.to_int();
-        let fy = mo.y.to_int();
-        if let Some(floor_h) = lv.floor_at(fx, fy) {
-            mo.z = Fixed16_16::from_int(floor_h as i32);
+    {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+        if moved {
+            mo.x = final_x;
+            mo.y = final_y;
+            mo.momx = final_x - old_x;
+            mo.momy = final_y - old_y;
         }
-        if let Some(subsector) = lv.subsector_index_at(fx, fy) {
-            mo.subsector = subsector as u32;
+        mo.momx = mo.momx.fixed_mul(FRICTION);
+        mo.momy = mo.momy.fixed_mul(FRICTION);
+        mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
+        mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
+
+        // 6. Update floor height (mo.z) to track the sector the player is now in.
+        // This is critical for stair climbing: the step-height check in p_try_move
+        // compares `open_floor - mo_z` against MAX_STEP_HEIGHT (24 units).
+        // Without this update, mo.z stays at the spawn-point floor and multi-step
+        // stairs become impassable after the first step.
+        if let Some(lv) = level.as_deref() {
+            let fx = mo.x.to_int();
+            let fy = mo.y.to_int();
+            if let Some(floor_h) = lv.floor_at(fx, fy) {
+                mo.z = Fixed16_16::from_int(floor_h as i32);
+            }
+            if let Some(subsector) = lv.subsector_index_at(fx, fy) {
+                mo.subsector = subsector as u32;
+            }
+        }
+    }
+
+    if moved && (final_x != old_x || final_y != old_y) {
+        if let Some(lv) = level.as_deref_mut() {
+            crate::linedef_dispatch::check_cross_lines(
+                gs,
+                lv,
+                handle,
+                old_x.to_int(),
+                old_y.to_int(),
+                final_x.to_int(),
+                final_y.to_int(),
+            );
         }
     }
 }
@@ -1644,6 +1660,86 @@ mod tests {
         assert_eq!(
             gs.player.secret_count, 1,
             "secret_count must not increment again after sector special is cleared"
+        );
+    }
+
+    fn make_walk_exit_level() -> doom_map::Level {
+        let bm = make_minimal_blockmap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).unwrap();
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special: 52, // W1 exit
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            }],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"\0\0\0\0\0\0\0\0",
+                    lower_texture: *b"\0\0\0\0\0\0\0\0",
+                    middle_texture: *b"\0\0\0\0\0\0\0\0",
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"\0\0\0\0\0\0\0\0",
+                    lower_texture: *b"\0\0\0\0\0\0\0\0",
+                    middle_texture: *b"\0\0\0\0\0\0\0\0",
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: -10 },
+                doom_map::Vertex { x: 0, y: 10 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap: bm,
+        }
+    }
+
+    #[test]
+    fn tick_sets_exit_request_when_player_crosses_walk_line() {
+        let mut gs = make_game_state();
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().momx = Fixed16_16::from_int(40);
+        let mut level = make_walk_exit_level();
+
+        gs.tick(TicCmd::default(), Some(&mut level));
+
+        assert_eq!(
+            gs.exit_request,
+            Some(crate::state::ExitRequest::Normal),
+            "walk-trigger exits should be processed during the game tick, not only in the app wrapper"
         );
     }
 
