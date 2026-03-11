@@ -36,6 +36,7 @@ pub const SKY_FALLBACK_COLOR: u8 = 197;
 const SCREEN_W: usize = 320;
 const SCREEN_H: usize = 200;
 const SKY_MASK_WORDS: usize = SCREEN_H.div_ceil(64);
+const SKY_TEXTURE_MID_ROWS: i32 = (SCREEN_H / 2) as i32;
 
 /// Per-column sky coverage mask that can represent multiple disjoint spans.
 #[derive(Clone, Debug)]
@@ -200,6 +201,20 @@ pub fn column_to_angle(x: usize) -> Bam {
     Bam(bam_f64 as i64 as u32)
 }
 
+#[inline]
+fn sky_texel_row(y: usize, logical_tex_h: usize) -> usize {
+    if logical_tex_h == 0 {
+        return 0;
+    }
+
+    // Chocolate Doom's `R_InitSkyMap` sets `skytexturemid` to
+    // `SCREENHEIGHT / 2 * FRACUNIT`. With a centered horizon, the sky row
+    // sampled at screen row `y` is therefore horizon-relative rather than
+    // "stretch top half, clamp bottom half".
+    let row = SKY_TEXTURE_MID_ROWS + y as i32 - (SCREEN_H as i32 / 2);
+    row.rem_euclid(logical_tex_h as i32) as usize
+}
+
 // ---------------------------------------------------------------------------
 // Sky column renderer
 // ---------------------------------------------------------------------------
@@ -223,9 +238,10 @@ pub fn draw_sky_columns(
 ) {
     let fb_h = Framebuffer::height() as i32;
     let tex_w = sky_tex.width as usize;
-    let tex_h = sky_tex.height as usize;
+    let tex_h = sky_tex.logical_height as usize;
+    let tex_stride = sky_tex.height as usize;
 
-    if tex_w == 0 || tex_h == 0 {
+    if tex_w == 0 || tex_h == 0 || tex_stride == 0 {
         return;
     }
 
@@ -249,14 +265,10 @@ pub fn draw_sky_columns(
         let sky_u = ((view_angle.0 >> 22) as usize) % tex_w;
 
         // Column data in the texture is column-major: data[col * height + row].
-        let col_offset = sky_u * tex_h;
+        let col_offset = sky_u * tex_stride;
 
         for y in top..=bot {
-            // Map screen Y to sky texture V.
-            // The sky texture covers the upper half of the screen (rows 0..100).
-            // We scale: v = y * tex_h / 100, clamped to tex_h - 1.
-            // For rows below 100, we clamp to the bottom of the sky texture.
-            let v = ((y as usize) * tex_h / 100).min(tex_h - 1);
+            let v = sky_texel_row(y as usize, tex_h);
             let pixel = sky_tex.data[col_offset + v];
             fb.set_pixel(x, y as usize, pixel);
         }
@@ -271,21 +283,22 @@ pub fn draw_sky_coverage_columns(
     sky_tex: &WallTexture,
 ) {
     let tex_w = sky_tex.width as usize;
-    let tex_h = sky_tex.height as usize;
+    let tex_h = sky_tex.logical_height as usize;
+    let tex_stride = sky_tex.height as usize;
 
-    if tex_w == 0 || tex_h == 0 {
+    if tex_w == 0 || tex_h == 0 || tex_stride == 0 {
         return;
     }
 
     for x in 0..SCREEN_W {
         let view_angle = player_angle + column_to_angle(x);
         let sky_u = ((view_angle.0 >> 22) as usize) % tex_w;
-        let col_offset = sky_u * tex_h;
+        let col_offset = sky_u * tex_stride;
         for y in 0..SCREEN_H {
             if !coverage.contains(x, y) {
                 continue;
             }
-            let v = (y * tex_h / 100).min(tex_h - 1);
+            let v = sky_texel_row(y, tex_h);
             let pixel = sky_tex.data[col_offset + v];
             fb.set_pixel(x, y, pixel);
         }
@@ -859,5 +872,52 @@ mod tests {
             "fallback sky must also preserve disjoint gaps"
         );
         assert_eq!(fb.get_pixel(12, 41), Some(SKY_FALLBACK_COLOR));
+    }
+
+    #[test]
+    fn sky_vertical_mapping_draw_columns_tracks_full_screen_rows() {
+        let mut fb = Framebuffer::new();
+        let sky_tex = WallTexture {
+            width: 1,
+            logical_height: 200,
+            height: 200,
+            data: (0..200u16).map(|row| row as u8).collect(),
+        };
+        let ceil_top = [0i32; 320];
+        let mut ceil_bot = [-1i32; 320];
+        ceil_bot[0] = 199;
+
+        draw_sky_columns(&mut fb, &ceil_top, &ceil_bot, Bam::ZERO, &sky_tex);
+
+        assert_eq!(fb.get_pixel(0, 25), Some(25));
+        assert_eq!(fb.get_pixel(0, 100), Some(100));
+        assert_eq!(
+            fb.get_pixel(0, 150),
+            Some(150),
+            "rows below the horizon must keep advancing through the sky texture"
+        );
+    }
+
+    #[test]
+    fn sky_vertical_mapping_draw_coverage_tracks_full_screen_rows() {
+        let mut fb = Framebuffer::new();
+        let sky_tex = WallTexture {
+            width: 1,
+            logical_height: 200,
+            height: 200,
+            data: (0..200u16).map(|row| row as u8).collect(),
+        };
+        let mut coverage = SkyCoverage::new();
+        coverage.record_span(0, 0, 199);
+
+        draw_sky_coverage_columns(&mut fb, &coverage, Bam::ZERO, &sky_tex);
+
+        assert_eq!(fb.get_pixel(0, 40), Some(40));
+        assert_eq!(fb.get_pixel(0, 120), Some(120));
+        assert_eq!(
+            fb.get_pixel(0, 175),
+            Some(175),
+            "coverage-based sky draw must not clamp every row below the horizon to the final texel"
+        );
     }
 }

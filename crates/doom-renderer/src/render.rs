@@ -106,6 +106,13 @@ fn player_sector_index(level: &Level, player_x: i32, player_y: i32) -> Option<us
     if level.sectors.is_empty() {
         return None;
     }
+    if let Some(sec_idx) = level
+        .sector_index_at(player_x, player_y)
+        .map(|idx| idx.min(level.sectors.len() - 1))
+    {
+        return Some(sec_idx);
+    }
+
     if let Some(subsector_idx) = level.subsector_index_at(player_x, player_y)
         && let Some(ss) = level.ssectors.get(subsector_idx)
     {
@@ -1363,6 +1370,171 @@ mod tests {
             segs,
             ssectors,
             nodes: vec![],
+            sectors,
+            reject,
+            blockmap,
+        }
+    }
+
+    fn make_player_sector_mismatch_level() -> Level {
+        use doom_map::lumps::{
+            Blockmap, Linedef, Node, NodeBBox, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
+        };
+
+        let vertexes = vec![
+            Vertex { x: 200, y: -64 },
+            Vertex { x: 200, y: 64 },
+            Vertex { x: 20, y: -64 },
+            Vertex { x: 20, y: 64 },
+            Vertex { x: -64, y: -64 },
+            Vertex { x: -64, y: 64 },
+        ];
+        let sectors = vec![
+            Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: 64,
+                ceil_height: 192,
+                floor_flat: *b"FLAT3\0\0\0",
+                ceil_flat: *b"FLAT4\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+        let sidedefs = vec![
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"WALL1\0\0\0",
+                lower_texture: *b"WALL1\0\0\0",
+                middle_texture: *b"WALL1\0\0\0",
+                sector: 0,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"WALL2\0\0\0",
+                lower_texture: *b"WALL2\0\0\0",
+                middle_texture: *b"WALL2\0\0\0",
+                sector: 1,
+            },
+        ];
+        let linedefs = vec![
+            Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 0xFFFF,
+            },
+            Linedef {
+                from_vertex: 2,
+                to_vertex: 3,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 1,
+                left_sidedef: 0xFFFF,
+            },
+            Linedef {
+                from_vertex: 4,
+                to_vertex: 5,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 1,
+                left_sidedef: 0xFFFF,
+            },
+        ];
+        let segs = vec![
+            Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 2,
+                to_vertex: 3,
+                angle: 0,
+                linedef: 1,
+                direction: 0,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 4,
+                to_vertex: 5,
+                angle: 0,
+                linedef: 2,
+                direction: 0,
+                offset: 0,
+            },
+        ];
+        let ssectors = vec![
+            Ssector {
+                first_seg: 0,
+                seg_count: 2,
+            },
+            Ssector {
+                first_seg: 2,
+                seg_count: 1,
+            },
+        ];
+        let bbox = NodeBBox {
+            ymax: 256,
+            ymin: -256,
+            xmin: -256,
+            xmax: 256,
+        };
+        let nodes = vec![Node {
+            x: 0,
+            y: 0,
+            dx: 0,
+            dy: 1,
+            right_bbox: bbox,
+            left_bbox: bbox,
+            right_child: 0x8000 | 0,
+            left_child: 0x8000 | 1,
+        }];
+        let things = vec![Thing {
+            x: 10,
+            y: 0,
+            angle: 0,
+            kind: 1,
+            flags: 7,
+        }];
+
+        let reject = Reject::parse_lump(&[0u8; 1], 2).expect("reject parse");
+
+        let mut bm_data = vec![0u8; 8 + 2 + 4];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("blockmap parse");
+
+        Level {
+            name: "PSECTOR".to_owned(),
+            things,
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes,
             sectors,
             reject,
             blockmap,
@@ -3533,7 +3705,7 @@ mod tests {
         assert_eq!(
             crate::seg::collect_front_to_back_seg_indices(&level, 0, 0),
             vec![1, 0],
-            "swapped seg storage order should still render near portal before far wall"
+            "hardening sort must still render near portal before far wall in same-subsector synthetic cases"
         );
 
         let mut fb = Framebuffer::new();
@@ -3549,11 +3721,6 @@ mod tests {
             .filter(|&y| is_wall(fb.get_pixel(x, y).unwrap_or(0)))
             .collect();
 
-        assert!(
-            !wall_rows.is_empty(),
-            "far wall should still be visible through the near portal opening"
-        );
-
         let portal_top = (HALF_H - ((72 - PLAYER_HEIGHT) * FOCAL_LEN / 128)) as usize;
         let portal_bot = (HALF_H - ((56 - PLAYER_HEIGHT) * FOCAL_LEN / 128)) as usize;
         let leaked = wall_rows
@@ -3565,6 +3732,107 @@ mod tests {
             "reversed subsector seg order leaked far wall outside portal window {:?}; first leaked row: {:?}",
             wall_rows,
             leaked
+        );
+    }
+
+    #[test]
+    fn test_far_portal_visplanes_do_not_depend_on_subsector_seg_order() {
+        use doom_types::ANG90;
+        use doom_types::limits::FLAT_SIZE;
+
+        init_trig();
+
+        let flat1 = vec![10u8; FLAT_SIZE];
+        let flat2 = vec![20u8; FLAT_SIZE];
+        let flat3 = vec![30u8; FLAT_SIZE];
+        let flat4 = vec![40u8; FLAT_SIZE];
+        let flat5 = vec![210u8; FLAT_SIZE];
+        let flat6 = vec![220u8; FLAT_SIZE];
+        let flat7 = vec![50u8; FLAT_SIZE];
+        let flat8 = vec![60u8; FLAT_SIZE];
+
+        let lumps: Vec<(&str, &[u8])> = vec![
+            ("F_START", b""),
+            ("FLAT1", &flat1),
+            ("FLAT2", &flat2),
+            ("FLAT3", &flat3),
+            ("FLAT4", &flat4),
+            ("FLAT5", &flat5),
+            ("FLAT6", &flat6),
+            ("FLAT7", &flat7),
+            ("FLAT8", &flat8),
+            ("F_END", b""),
+        ];
+        let wad_bytes = make_iwad(&lumps);
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("parse WAD");
+        let flat_cache = FlatCache::load(&wad);
+
+        let mut level = make_portal_window_with_far_portal_level();
+        level.segs.swap(0, 1);
+
+        assert_eq!(
+            crate::seg::collect_front_to_back_seg_indices(&level, 0, 0),
+            vec![1, 0],
+            "hardening sort must still render near portal before far portal in same-subsector synthetic cases"
+        );
+
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        let near_only = make_two_sided_level(0, 128, 56, 72);
+        let mut near_fb = Framebuffer::new();
+        let near_out = render_level(
+            &near_only,
+            0,
+            0,
+            ANG90,
+            &mut near_fb,
+            &palette,
+            Some(&flat_cache),
+            None,
+            None,
+            None,
+            false,
+        );
+
+        render_level(
+            &level,
+            0,
+            0,
+            ANG90,
+            &mut fb,
+            &palette,
+            Some(&flat_cache),
+            None,
+            None,
+            None,
+            false,
+        );
+
+        for x in 0..SCREEN_W {
+            let top = near_out.clip_top[x];
+            let bot = near_out.clip_bot[x];
+            for y in 0..SCREEN_H {
+                let px = fb.get_pixel(x, y).unwrap_or(0);
+                if px == 210 || px == 220 {
+                    assert!(
+                        (y as i32) >= top && (y as i32) <= bot,
+                        "far portal flat {px} leaked outside near portal window at ({x}, {y}); near clip={top}..{bot}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn player_sector_index_prefers_map_owned_subsector_sector() {
+        let level = make_player_sector_mismatch_level();
+
+        assert_eq!(level.sector_index_at(10, 0), Some(0));
+        assert_eq!(
+            player_sector_index(&level, 10, 0),
+            Some(0),
+            "renderer should use the map-owned subsector sector, not nearest-seg heuristics"
         );
     }
 

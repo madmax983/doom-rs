@@ -172,33 +172,40 @@ Still open:
    Status: complete on 2026-03-11 for the planned scope.
    Scope landed: held-fire cadence, actual fire-driven player weapon SFX, map-music re-resolution, and title-loop demo sanity.
 5. Batch C2 and System 5
-   Reason: deeper renderer structure and save/demo/RNG parity should wait until the louder regressions stop moving.
+   Status: Batch C2 landed on 2026-03-11 for sky projection, visplane reuse, and renderer-side sector ownership hardening.
+   Remaining debt: raw subsector-order parity still needs deeper renderer work before the hardening sort in `seg.rs` can be removed safely.
+   Reason: save/demo/RNG parity still waits until the louder renderer and gameplay regressions stop moving.
 
 ### System 3: Renderer
 
-- Status: Batch C1 complete, Batch C2 still open
+- Status: Batch C1 complete, Batch C2 mostly complete with one explicit order-parity item still open
 - Chocolate Doom sources: `r_bsp.c`, `r_segs.c`, `r_plane.c`, `r_sky.c`, `r_things.c`
 - Local Rust files: `crates/doom-renderer/src/render.rs`, `crates/doom-renderer/src/seg.rs`, `crates/doom-renderer/src/sky.rs`, `crates/doom-renderer/src/sprite.rs`, `crates/doom-renderer/src/sprite_lookup.rs`, `crates/doom-renderer/src/texture.rs`, `crates/doom-renderer/src/visplane.rs`
 - Confirmed parity wins:
   - Masked midtextures no longer draw inline with solid walls; they are deferred and depth-sorted against sprites in a separate masked pass.
   - Pegging math now distinguishes logical texture height from padded cache height for upper, masked, and one-sided wall paths.
   - Sky selection now resolves from the map name instead of rendering `SKY1` everywhere.
+  - Sky vertical mapping now follows Doom-style `skytexturemid` behavior instead of stretching the upper half of the screen and clamping the lower half.
+  - `r_check_plane` now behaves like Doom's current-plane allocator instead of reusing arbitrary same-key sibling planes after a conflict.
+  - Renderer-side player sector lookup now prefers map-owned subsector sector resolution and only falls back to the older heuristic for malformed or synthetic no-BSP scenes.
 - Confirmed mismatches:
-  - Sky vertical mapping is still simplified and not driven by Doom's `skytexturemid` projection.
   - Subsector segs are still explicitly resorted nearest-first, which diverges from Doom's subsector processing order.
-  - `r_check_plane` appears more eager to split visplanes than Chocolate Doom's `R_CheckPlane`.
-  - Renderer-side sector ownership still needs scrutiny in synthetic or mixed-subsector edge cases, even though recent hardening fixed a failing regression.
+  - Synthetic same-subsector portal torture scenes still rely on that hardening sort; removing it currently reintroduces over-clip or leak regressions.
 - Regressions landed in Batch C1:
   - Midtexture transparency plus sprite-behind-mask ordering test.
   - Non-power-of-two pegging regression for upper and masked textures.
   - Map-specific sky selection regression using distinct `SKY1` and `SKY2`.
+- Regressions landed in Batch C2:
+  - Sky row-sampling regressions for full-screen horizon-relative vertical mapping.
+  - Visplane allocator regressions for overlap reuse and fresh-plane allocation after conflicts.
+  - Player-sector regression where map-owned subsector sector beats the older nearest-seg heuristic.
+  - Hardening regressions for swapped same-subsector far-wall and far-portal portal-window cases.
 - Recommended regressions for Batch C2:
-  - Sky row-sampling regression for vertical mapping.
-  - Subsector seg-order regression across multiple view angles.
-  - Visplane reuse regression where overlapping ranges are still empty.
+  - Subsector seg-order regression across multiple view angles once the hardening sort can actually be removed without reopening clip bugs.
 - Batch priority:
   - Batch C1: masked midtextures, logical texture height for pegging, map-specific sky selection.
-  - Batch C2: sky projection, subsector order, visplane reuse.
+  - Batch C2: sky projection, visplane reuse, and player-sector ownership hardening.
+  - Remaining renderer debt after Batch C2: subsector raw-order parity.
 - Recommended fix batch: Batch C
 
 ### System 4: Frontend, tic loop, and audio

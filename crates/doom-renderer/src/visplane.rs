@@ -172,35 +172,38 @@ impl VisplaneSet {
             return plane_idx;
         }
 
-        let conflict = {
+        let x1 = start_x.min(SCREEN_W - 1);
+        let x2 = end_x.min(SCREEN_W - 1);
+        if x1 > x2 {
+            return plane_idx;
+        }
+
+        let reuse_existing = {
             let p = &self.planes[plane_idx];
-            (start_x..=end_x).any(|x| p.has_column(x))
+            let union_start = p.min_x.min(x1);
+            let union_end = p.max_x.max(x2);
+            let overlap_start = p.min_x.max(x1);
+            let overlap_end = p.max_x.min(x2);
+
+            if p.is_empty() || overlap_start > overlap_end {
+                let _ = (union_start, union_end);
+                true
+            } else {
+                (overlap_start..=overlap_end).all(|x| !p.has_column(x))
+            }
         };
 
-        let target_idx = if conflict {
+        let target_idx = if reuse_existing {
+            plane_idx
+        } else {
             let key = {
                 let p = &self.planes[plane_idx];
                 (p.kind, p.height, p.flat_name, p.light_level)
             };
-
-            if let Some((idx, _)) = self.planes.iter().enumerate().find(|(_, p)| {
-                p.kind == key.0
-                    && p.height == key.1
-                    && p.flat_name == key.2
-                    && p.light_level == key.3
-                    && !(start_x..=end_x).any(|x| p.has_column(x))
-            }) {
-                idx
-            } else {
-                self.planes.push(Visplane::new(key.0, key.1, key.2, key.3));
-                self.planes.len() - 1
-            }
-        } else {
-            plane_idx
+            self.planes.push(Visplane::new(key.0, key.1, key.2, key.3));
+            self.planes.len() - 1
         };
 
-        let x1 = start_x.min(SCREEN_W - 1);
-        let x2 = end_x.min(SCREEN_W - 1);
         for x in x1..=x2 {
             self.planes[target_idx].set_column(x, top, bottom);
         }
@@ -241,6 +244,40 @@ mod tests {
         let p1 = set.r_check_plane(p0, 11, 13, 100, 120);
         assert_ne!(p0, p1);
         assert_eq!(set.planes().len(), 2);
+    }
+
+    #[test]
+    fn visplane_reuse_overlapping_empty_window_stays_on_same_plane() {
+        let mut set = VisplaneSet::new();
+        let p0 = set.r_find_plane(PlaneKind::Floor, 0, FLAT1, 160);
+        let p0 = set.r_check_plane(p0, 10, 10, 100, 120);
+        let p0 = set.r_check_plane(p0, 14, 14, 100, 120);
+        let p1 = set.r_check_plane(p0, 11, 13, 100, 120);
+
+        assert_eq!(p0, p1);
+        assert_eq!(set.planes().len(), 1);
+        for x in 10..=14 {
+            assert!(
+                set.planes()[0].has_column(x),
+                "column {x} should live on the reused plane"
+            );
+        }
+    }
+
+    #[test]
+    fn visplane_reuse_conflict_allocates_fresh_plane_even_with_matching_sibling() {
+        let mut set = VisplaneSet::new();
+        let p0 = set.r_find_plane(PlaneKind::Floor, 0, FLAT1, 160);
+        let p0 = set.r_check_plane(p0, 10, 10, 100, 120);
+        let p1 = set.r_check_plane(p0, 10, 10, 100, 120);
+        let p1 = set.r_check_plane(p1, 20, 20, 100, 120);
+
+        let p2 = set.r_check_plane(p0, 10, 10, 100, 120);
+
+        assert_ne!(p2, p0);
+        assert_ne!(p2, p1);
+        assert_eq!(set.planes().len(), 3);
+        assert!(set.planes()[p2].has_column(10));
     }
 
     #[test]
