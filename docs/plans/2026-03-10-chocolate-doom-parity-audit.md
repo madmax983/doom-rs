@@ -53,9 +53,9 @@ Each subsystem log should record:
 | Monster movement, sight, sound, door opening | `p_enemy.c`, `p_sight.c`, `p_map.c` | `crates/doom-game/src/actions.rs`, `crates/doom-game/src/sight.rs`, `crates/doom-game/src/sound.rs` | Partial | Recent fixes restored firing windows, sector ownership, and exact blocker-driven door opening. Remaining audit work is the larger `A_Chase`/sound propagation pass, not the old coarse blockmap door guess. |
 | Spawn and thing placement | `p_mobj.c` | `crates/doom-game/src/spawn.rs`, `crates/doom-game/src/tic.rs` | Partial | Floor snap and respawn height bugs are fixed. Remaining audit item: verify every map thing spawn path against subsector floor lookup and spawn flags. |
 | Weapons, hitscan, damage | `p_pspr.c`, `p_map.c`, `p_inter.c` | `crates/doom-game/src/weapon_fire.rs`, `crates/doom-game/src/combat.rs`, `crates/doom-game/src/tic.rs` | Partial | Broken fixed-point aim rays are fixed. Remaining audit item: pellet spread, damage tables, and pain/death edge cases. |
-| BSP, seg traversal, wall rendering | `r_bsp.c`, `r_segs.c` | `crates/doom-renderer/src/seg.rs`, `crates/doom-renderer/src/render.rs` | Active | Recent fixes killed several portal and projection bugs. Biggest remaining parity risk is wall pegging math using padded cache height instead of logical texture height for some textures. |
-| Planes and sky | `r_plane.c`, `r_sky.c` | `crates/doom-renderer/src/visplane.rs`, `crates/doom-renderer/src/sky.rs`, `crates/doom-renderer/src/render.rs` | Partial | Disjoint sky-span bugs are fixed. Remaining audit item: map-specific sky selection and deeper visplane parity. |
-| Sprites and clipping | `r_things.c` | `crates/doom-renderer/src/sprite.rs`, `crates/doom-renderer/src/sprite_lookup.rs` | Partial | World-space sprite anchoring and portal clip ordering are much better. Remaining audit item: residual edge cases where clip state is borrowed from the wrong sector context. |
+| BSP, seg traversal, wall rendering | `r_bsp.c`, `r_segs.c` | `crates/doom-renderer/src/seg.rs`, `crates/doom-renderer/src/render.rs` | Partial | Batch C1 is green: pegging now uses logical texture height and masked midtextures are deferred instead of being painted inline. Remaining renderer debt is deeper seg/visplane/sky projection parity. |
+| Planes and sky | `r_plane.c`, `r_sky.c` | `crates/doom-renderer/src/visplane.rs`, `crates/doom-renderer/src/sky.rs`, `crates/doom-renderer/src/render.rs` | Partial | Disjoint sky-span bugs are fixed and map-specific sky selection now resolves from the level name. Remaining audit item: deeper visplane parity and sky vertical mapping. |
+| Sprites and clipping | `r_things.c` | `crates/doom-renderer/src/sprite.rs`, `crates/doom-renderer/src/sprite_lookup.rs` | Partial | World-space sprite anchoring and portal clip ordering are much better, and masked midtextures now depth-sort with sprites. Remaining audit item: residual edge cases where clip state is borrowed from the wrong sector context. |
 | Audio and music | `s_sound.c`, `i_sound.c`, `mus2mid` path | `crates/doom-app/src/audio_system.rs`, `crates/doom-app/src/main.rs` | Partial | Level music startup regression is fixed. Need a full parity pass on sound origin, channel stealing, and map-change transitions. |
 | Savegames, demos, RNG parity | `p_saveg.c`, demo system, `m_random.c` | `crates/doom-game/src/savegame.rs`, demo code, RNG paths | Not started | Leave this until core gameplay/rendering behavior stops moving. |
 
@@ -91,17 +91,28 @@ Still open:
 - Audit lock-specific feedback and any remaining interaction-sequencing differences against Chocolate Doom's full `P_UseLines` path.
 - Add a regression for adjacent trigger interactions where movement crossing and use traces compete in the same local space.
 
-### Renderer: door/window wall texture parity
+### Renderer: Batch C1 user-facing parity
 
-Chocolate Doom `r_segs.c` uses the texture's logical height when computing pegged `texturemid` values. Our renderer still stores wall textures with `height` equal to the padded power-of-two cache height and then reuses that padded value in pegging math.
+Chocolate Doom `r_segs.c` uses the texture's logical height when computing pegged `texturemid` values and defers masked midtextures until after the solid wall pass. Our renderer previously stored wall textures with `height` equal to the padded power-of-two cache height and reused that padded value in pegging math, painted masked midtextures inline, and hardcoded sky selection to `SKY1`.
 
-Risk:
+Pre-Batch C1 risks:
 
-- Non-power-of-two upper or masked wall textures can slide vertically on doors and windows even when column sampling itself is otherwise correct.
+- Non-power-of-two upper or masked wall textures could slide vertically on doors and windows even when column sampling itself was otherwise correct.
+- Grates and other masked midtextures could sort wrong against sprites because they were drawn inline before the sprite pass.
+- Maps that should resolve to `SKY2` or `SKY3` still rendered `SKY1`.
 
-Next regression to add:
+Action taken in Batch C1:
 
-- Two-sided upper texture with a non-power-of-two logical height should peg exactly like Chocolate Doom, regardless of internal cache padding.
+- Added a logical texture height field alongside padded cache height and switched pegging math to use the logical height where Chocolate Doom uses texture height.
+- Switched sky selection to `sky_texture_name(level.name.as_str())` instead of hardcoding `SKY1`.
+- Deferred masked midtexture columns out of the solid wall pass and interleaved them with sprites by depth in the post pass.
+- Added focused regressions for map-specific sky selection and masked midtexture ordering, plus a pegging regression that keeps the logical-height path exercised.
+
+Still open:
+
+- Sky vertical mapping is still simplified compared to Doom's `skytexturemid` projection.
+- Subsector/seg processing and visplane reuse still need the deeper C2 audit.
+- Residual sprite clipping edge cases around sector context are still renderer debt, but no longer share the masked-midtexture root cause.
 
 ## System Logs
 
@@ -147,7 +158,8 @@ Next regression to add:
 1. Batch A: Gameplay interactions
    Reason: it affects doors, use semantics, and blocking behavior directly under the player's hands.
 2. Batch C1: Renderer user-facing lies
-   Reason: masked midtextures, pegging, and sky selection are still prime screenshot bait.
+   Status: complete on 2026-03-11.
+   Scope landed: masked midtextures, logical texture height pegging, and map-specific sky selection.
 3. Batch B: Monsters, combat, and spawn
    Reason: this is the main source of "the boys are weird again" behavior once doors and visuals stop lying.
 4. Batch D: Frontend and audio
@@ -157,20 +169,23 @@ Next regression to add:
 
 ### System 3: Renderer
 
-- Status: findings integrated, not yet patched
+- Status: Batch C1 complete, Batch C2 still open
 - Chocolate Doom sources: `r_bsp.c`, `r_segs.c`, `r_plane.c`, `r_sky.c`, `r_things.c`
 - Local Rust files: `crates/doom-renderer/src/render.rs`, `crates/doom-renderer/src/seg.rs`, `crates/doom-renderer/src/sky.rs`, `crates/doom-renderer/src/sprite.rs`, `crates/doom-renderer/src/sprite_lookup.rs`, `crates/doom-renderer/src/texture.rs`, `crates/doom-renderer/src/visplane.rs`
+- Confirmed parity wins:
+  - Masked midtextures no longer draw inline with solid walls; they are deferred and depth-sorted against sprites in a separate masked pass.
+  - Pegging math now distinguishes logical texture height from padded cache height for upper, masked, and one-sided wall paths.
+  - Sky selection now resolves from the map name instead of rendering `SKY1` everywhere.
 - Confirmed mismatches:
-  - Masked midtextures are still drawn inline instead of through a Doom-style deferred masked pass. Likely symptom: sprites behind grates or fences still sort and clip wrong.
-  - Wall pegging math still uses padded cache height where Chocolate Doom uses logical texture height. Likely symptom: non-power-of-two upper, masked, and one-sided textures hang at the wrong height.
-  - Sky selection is still effectively hardcoded to `SKY1` instead of map-dependent selection.
   - Sky vertical mapping is still simplified and not driven by Doom's `skytexturemid` projection.
   - Subsector segs are still explicitly resorted nearest-first, which diverges from Doom's subsector processing order.
   - `r_check_plane` appears more eager to split visplanes than Chocolate Doom's `R_CheckPlane`.
-- Recommended regressions:
+  - Renderer-side sector ownership still needs scrutiny in synthetic or mixed-subsector edge cases, even though recent hardening fixed a failing regression.
+- Regressions landed in Batch C1:
   - Midtexture transparency plus sprite-behind-mask ordering test.
   - Non-power-of-two pegging regression for upper and masked textures.
   - Map-specific sky selection regression using distinct `SKY1` and `SKY2`.
+- Recommended regressions for Batch C2:
   - Sky row-sampling regression for vertical mapping.
   - Subsector seg-order regression across multiple view angles.
   - Visplane reuse regression where overlapping ranges are still empty.

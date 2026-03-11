@@ -26,7 +26,7 @@ use doom_renderer::{
     ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
     PaletteFlash, PaletteLut, RenderOut, SpriteCache, SpriteClip, SwitchList, TextureCache,
     draw_automap_ex, draw_menu, draw_status_bar, draw_title_screen, draw_weapon_sprite,
-    render_actors_ex, render_flag_from_state, render_level, thing_sprite_prefix,
+    render_actors_with_masked_ex, render_flag_from_state, render_level, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -776,6 +776,7 @@ impl DoomApp for DoomGame {
                 clip_bot,
                 clip_top_depth,
                 clip_bot_depth,
+                masked_columns,
             } = render_level(
                 &self.level,
                 px,
@@ -832,7 +833,7 @@ impl DoomApp for DoomGame {
                         })
                     })
                     .collect();
-                render_actors_ex(
+                render_actors_with_masked_ex(
                     &actors,
                     &self.level,
                     Fixed16_16::from_int(px),
@@ -848,6 +849,7 @@ impl DoomApp for DoomGame {
                         top_depth: &clip_top_depth,
                         bottom_depth: &clip_bot_depth,
                     }),
+                    Some(&masked_columns),
                 );
             }
 

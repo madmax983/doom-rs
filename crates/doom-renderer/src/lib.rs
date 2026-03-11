@@ -59,7 +59,7 @@ pub use menu_render::{
 };
 pub use palette::{PaletteLut, Rgb};
 pub use palette_flash::{PaletteFlash, PaletteFlashState};
-pub use render::{RenderOut, render_level};
+pub use render::{MaskedColumnDraw, RenderOut, draw_masked_columns, render_level};
 pub use render_flags::RenderFlag;
 pub use sky::{
     SKY_FALLBACK_COLOR, SKY_FLAT_NAME, column_to_angle, draw_sky_columns, draw_sky_fallback,
@@ -68,8 +68,9 @@ pub use sky::{
 pub use span::{DrawSpanParams, FLAT_DIM, FLAT_MASK, draw_span, draw_span_solid};
 pub use sprite::{
     SpriteCache, SpriteClip, SpriteFrame, compute_sprite_rotation, draw_sprite, draw_sprite_ex,
-    draw_weapon_sprite, render_actors_ex, render_flag_for_thing, render_things, render_things_ex,
-    sector_for_point, sprite_lump_name, thing_has_rotations, thing_sprite_prefix,
+    draw_weapon_sprite, render_actors_ex, render_actors_with_masked_ex, render_flag_for_thing,
+    render_things, render_things_ex, sector_for_point, sprite_lump_name, thing_has_rotations,
+    thing_sprite_prefix,
 };
 pub use sprite_lookup::{
     ActorRenderInfo, ResolvedSprite, compute_rotation, render_flag_from_state, resolve_sprite,

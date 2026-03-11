@@ -42,7 +42,10 @@ use crate::framebuffer::Framebuffer;
 use crate::lighting::LightParams;
 use crate::palette::PaletteLut;
 use crate::seg::collect_front_to_back_seg_indices;
-use crate::sky::{SkyCoverage, draw_sky_coverage_columns, draw_sky_coverage_fallback, is_sky_flat};
+use crate::sky::{
+    SkyCoverage, draw_sky_coverage_columns, draw_sky_coverage_fallback, is_sky_flat,
+    sky_texture_name,
+};
 use crate::span::{DrawSpanParams, draw_span};
 use crate::texture::TextureCache;
 use crate::visplane::{PlaneKind, VisplaneSet, visplane_to_spans};
@@ -103,6 +106,62 @@ fn player_sector_index(level: &Level, player_x: i32, player_y: i32) -> Option<us
     if level.sectors.is_empty() {
         return None;
     }
+    if let Some(subsector_idx) = level.subsector_index_at(player_x, player_y)
+        && let Some(ss) = level.ssectors.get(subsector_idx)
+    {
+        let mut best_sector = None;
+        let mut best_key = i64::MAX;
+        let first_seg = ss.first_seg as usize;
+        let end_seg = first_seg
+            .saturating_add(ss.seg_count as usize)
+            .min(level.segs.len());
+
+        for seg_idx in first_seg..end_seg {
+            let Some(seg) = level.segs.get(seg_idx) else {
+                continue;
+            };
+            let Some(linedef) = level.linedefs.get(seg.linedef as usize) else {
+                continue;
+            };
+            let sidedef_idx = if seg.direction == 0 {
+                linedef.right_sidedef
+            } else {
+                linedef.left_sidedef
+            };
+            if sidedef_idx == 0xFFFF {
+                continue;
+            }
+            let Some(sidedef) = level.sidedefs.get(sidedef_idx as usize) else {
+                continue;
+            };
+            let Some(v1) = level.vertexes.get(seg.from_vertex as usize) else {
+                continue;
+            };
+            let Some(v2) = level.vertexes.get(seg.to_vertex as usize) else {
+                continue;
+            };
+
+            let v1_dx = i64::from(v1.x as i32 - player_x);
+            let v1_dy = i64::from(v1.y as i32 - player_y);
+            let v2_dx = i64::from(v2.x as i32 - player_x);
+            let v2_dy = i64::from(v2.y as i32 - player_y);
+            let mid_dx = i64::from(v1.x as i32 + v2.x as i32 - 2 * player_x);
+            let mid_dy = i64::from(v1.y as i32 + v2.y as i32 - 2 * player_y);
+            let key = (v1_dx * v1_dx + v1_dy * v1_dy)
+                .min(v2_dx * v2_dx + v2_dy * v2_dy)
+                .min(mid_dx * mid_dx + mid_dy * mid_dy);
+
+            if key < best_key {
+                best_key = key;
+                best_sector = Some((sidedef.sector as usize).min(level.sectors.len() - 1));
+            }
+        }
+
+        if best_sector.is_some() {
+            return best_sector;
+        }
+    }
+
     level
         .sector_index_at(player_x, player_y)
         .map(|idx| idx.min(level.sectors.len() - 1))
@@ -133,6 +192,33 @@ fn draw_masked_column(
             fb.data[y * SCREEN_W + x] = colormap[raw as usize];
         }
         frac = frac.wrapping_add(fracstep);
+    }
+}
+
+#[derive(Clone)]
+pub struct MaskedColumnDraw {
+    pub depth: f32,
+    pub x: usize,
+    pub y_top: usize,
+    pub y_bot: usize,
+    pub frac: u32,
+    pub fracstep: u32,
+    pub source: Vec<u8>,
+    pub colormap: [u8; 256],
+}
+
+pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw]) {
+    for column in columns {
+        draw_masked_column(
+            fb,
+            column.x,
+            column.y_top,
+            column.y_bot,
+            column.frac,
+            column.fracstep,
+            &column.source,
+            &column.colormap,
+        );
     }
 }
 
@@ -188,6 +274,8 @@ pub struct RenderOut {
     /// Depth of the portal segment that established `clip_bot[x]`, or
     /// `f32::MAX` when no bottom clip has been applied for that column.
     pub clip_bot_depth: [f32; SCREEN_W],
+    /// Deferred masked midtexture columns to interleave with sprite rendering.
+    pub masked_columns: Vec<MaskedColumnDraw>,
 }
 
 /// Render a Doom level into `fb` and return occlusion data for sprite clipping.
@@ -226,6 +314,7 @@ pub fn render_level(
     let mut wall_clip_bot = [SCREEN_H as i32 - 1; SCREEN_W];
     let mut wall_clip_top_depth = [f32::MAX; SCREEN_W];
     let mut wall_clip_bot_depth = [f32::MAX; SCREEN_W];
+    let mut masked_columns = Vec::new();
 
     // Doom-style open column tracking for inline visplane emission.
     // open_top[x]  = first unclaimed row for ceiling spans (initially 0).
@@ -644,7 +733,7 @@ pub fn render_level(
                                 ceil_h + i32::from(sidedef.y_offset) - view_z
                             } else {
                                 back_sector.map_or(ceil_h, |bs| bs.ceil_height as i32)
-                                    + tex.height as i32
+                                    + tex.logical_height as i32
                                     + i32::from(sidedef.y_offset)
                                     - view_z
                             };
@@ -769,7 +858,7 @@ pub fn render_level(
                         let fracstep = wall_fracstep(scale);
                         let texturemid = if linedef.flags & FLAG_DONTPEGBOTTOM != 0 {
                             floor_h.max(back_sector.map_or(floor_h, |bs| bs.floor_height as i32))
-                                + tex.height as i32
+                                + tex.logical_height as i32
                                 + i32::from(sidedef.y_offset)
                                 - view_z
                         } else {
@@ -780,16 +869,16 @@ pub fn render_level(
                         let frac_start = wall_frac_start(texturemid, mid_draw_top, fracstep);
                         let col_off = u_tex * tex_h as usize;
                         let col_data = &tex.data[col_off..col_off + tex_h as usize];
-                        draw_masked_column(
-                            fb,
+                        masked_columns.push(MaskedColumnDraw {
+                            depth: depth_f32,
                             x,
-                            mid_draw_top as usize,
-                            mid_draw_bot as usize,
-                            frac_start,
+                            y_top: mid_draw_top as usize,
+                            y_bot: mid_draw_bot as usize,
+                            frac: frac_start,
                             fracstep,
-                            col_data,
-                            wall_cm,
-                        );
+                            source: col_data.to_vec(),
+                            colormap: *wall_cm,
+                        });
                     }
                 }
             } else {
@@ -896,7 +985,8 @@ pub fn render_level(
                         let tex_h = tex.height as u32;
                         let fracstep = wall_fracstep(scale);
                         let texturemid = if linedef.flags & FLAG_DONTPEGBOTTOM != 0 {
-                            floor_h + tex.height as i32 + i32::from(sidedef.y_offset) - view_z
+                            floor_h + tex.logical_height as i32 + i32::from(sidedef.y_offset)
+                                - view_z
                         } else {
                             ceil_h + i32::from(sidedef.y_offset) - view_z
                         };
@@ -977,7 +1067,8 @@ pub fn render_level(
     // Draw sky after the open-column post-pass, because that pass may add
     // additional F_SKY1 spans for columns that no wall ever touched.
     {
-        let sky_tex = tex_cache.and_then(|c| c.get(b"SKY1\0\0\0\0"));
+        let sky_name = sky_texture_name(level.name.as_str());
+        let sky_tex = tex_cache.and_then(|c| c.get(&sky_name));
         if let Some(stex) = sky_tex {
             draw_sky_coverage_columns(fb, &sky_coverage, player_angle, stex);
         } else {
@@ -998,6 +1089,7 @@ pub fn render_level(
             clip_bot: wall_clip_bot,
             clip_top_depth: wall_clip_top_depth,
             clip_bot_depth: wall_clip_bot_depth,
+            masked_columns,
         };
     }
     let cache = flat_cache.unwrap();
@@ -1065,6 +1157,7 @@ pub fn render_level(
         clip_bot: wall_clip_bot,
         clip_top_depth: wall_clip_top_depth,
         clip_bot_depth: wall_clip_bot_depth,
+        masked_columns,
     }
 }
 
@@ -1076,7 +1169,10 @@ pub fn render_level(
 mod tests {
     use super::*;
     use crate::clip::clip_seg_to_near_plane;
+    use crate::render_flags::RenderFlag;
     use crate::sky::SKY_FALLBACK_COLOR;
+    use crate::sprite::{SpriteCache, SpriteFrame, render_actors_with_masked_ex};
+    use crate::sprite_lookup::ActorRenderInfo;
     use doom_map::lumps::FLAG_DONTPEGTOP;
     use doom_wad::WadFile;
 
@@ -2078,6 +2174,57 @@ mod tests {
         TextureCache::load(&wad)
     }
 
+    fn load_two_texture_cache(
+        tex_a_name: &str,
+        tex_a_rows: &[u8],
+        tex_b_name: &str,
+        tex_b_rows: &[u8],
+    ) -> TextureCache {
+        let patch_a = make_patch_from_rows(8, tex_a_rows);
+        let patch_b = make_patch_from_rows(8, tex_b_rows);
+        let pnames_data = make_pnames(&["PATCH01", "PATCH02"]);
+        let mut tex1_data = Vec::new();
+        tex1_data.extend_from_slice(&2u32.to_le_bytes());
+        let first_offset = 12u32;
+        let first_desc = make_texture1(tex_a_name, 8, tex_a_rows.len() as u16, 0, 0, 0);
+        let second_offset = first_offset + (first_desc.len() as u32 - 8);
+        tex1_data.extend_from_slice(&first_offset.to_le_bytes());
+        tex1_data.extend_from_slice(&second_offset.to_le_bytes());
+        tex1_data.extend_from_slice(&first_desc[8..]);
+        let second_desc = make_texture1(tex_b_name, 8, tex_b_rows.len() as u16, 1, 0, 0);
+        tex1_data.extend_from_slice(&second_desc[8..]);
+        let wad_bytes = make_iwad(&[
+            ("PNAMES", &pnames_data),
+            ("PATCH01", &patch_a),
+            ("PATCH02", &patch_b),
+            ("TEXTURE1", &tex1_data),
+        ]);
+        let wad = WadFile::parse(wad_bytes).expect("WAD parse");
+        TextureCache::load(&wad)
+    }
+
+    fn make_masked_grate_level() -> Level {
+        let mut level = make_two_sided_level(0, 128, 0, 128);
+        level.sidedefs[0].middle_texture = *b"GRATE\0\0\0";
+        level.sidedefs[1].middle_texture = *b"GRATE\0\0\0";
+        level
+    }
+
+    fn make_opaque_sprite_cache(name: &str, width: u16, height: u16, pixel: u8) -> SpriteCache {
+        let mut cache = SpriteCache::empty();
+        cache.insert(
+            name.to_string(),
+            SpriteFrame {
+                width,
+                height,
+                left_offset: 0,
+                top_offset: 0,
+                pixels: vec![Some(pixel); width as usize * height as usize],
+            },
+        );
+        cache
+    }
+
     fn first_wall_row(fb: &Framebuffer, x: usize) -> Option<usize> {
         (0..SCREEN_H).find(|&y| matches!(fb.get_pixel(x, y), Some(px) if (32..64).contains(&px)))
     }
@@ -2364,6 +2511,166 @@ mod tests {
         assert!(
             first_diff.is_some(),
             "FLAG_DONTPEGTOP must change upper-band texture alignment; otherwise the stair/window slab bug comes back"
+        );
+    }
+
+    #[test]
+    fn logical_height_pegging_distinguishes_72_from_128() {
+        use doom_types::ANG90;
+        init_trig();
+
+        let level = make_two_sided_level(0, 128, 0, 32);
+        let rows_72: Vec<u8> = (1..=72).collect();
+        let mut rows_128 = rows_72.clone();
+        rows_128.resize(128, 0);
+        let palette = PaletteLut::grayscale();
+        let tex_72 = load_single_texture_cache("UPPER", &rows_72);
+        let tex_128 = load_single_texture_cache("UPPER", &rows_128);
+        let mut fb_72 = Framebuffer::new();
+        let mut fb_128 = Framebuffer::new();
+
+        render_level(
+            &level,
+            0,
+            0,
+            ANG90,
+            &mut fb_72,
+            &palette,
+            None,
+            Some(&tex_72),
+            None,
+            None,
+            false,
+        );
+
+        render_level(
+            &level,
+            0,
+            0,
+            ANG90,
+            &mut fb_128,
+            &palette,
+            None,
+            Some(&tex_128),
+            None,
+            None,
+            false,
+        );
+
+        let sample_x = HALF_W as usize;
+        let first_diff = (0..HALF_H as usize).find_map(|y| {
+            let a = fb_72.get_pixel(sample_x, y).unwrap_or(0);
+            let b = fb_128.get_pixel(sample_x, y).unwrap_or(0);
+            (a != b).then_some((y, a, b))
+        });
+        assert!(
+            first_diff.is_some(),
+            "logical-height pegging must render a true 72-high texture differently from a 128-high texture with the same padded cache data"
+        );
+    }
+
+    #[test]
+    fn map_specific_sky_selection_uses_level_name() {
+        use doom_types::ANG90;
+        init_trig();
+
+        let mut level = make_minimal_level();
+        level.name = "MAP12".to_owned();
+        level.sectors[0].ceil_flat = *b"F_SKY1\0\0";
+        let tex_cache =
+            load_two_texture_cache("SKY1", &[17, 17, 17, 17], "SKY2", &[93, 93, 93, 93]);
+        let palette = PaletteLut::grayscale();
+        let mut fb = Framebuffer::new();
+
+        render_level(
+            &level,
+            64,
+            0,
+            ANG90,
+            &mut fb,
+            &palette,
+            None,
+            Some(&tex_cache),
+            None,
+            None,
+            false,
+        );
+
+        assert_eq!(
+            fb.get_pixel(SCREEN_W - 1, 0),
+            Some(93),
+            "MAP12 should render SKY2, not hardcoded SKY1"
+        );
+    }
+
+    #[test]
+    fn masked_midtexture_sprite_ordering_keeps_grate_in_front() {
+        use doom_game::states::sprite_names;
+        use doom_types::{ANG90, Fixed16_16};
+
+        init_trig();
+
+        let level = make_masked_grate_level();
+        let tex_cache =
+            load_single_texture_cache_from_columns("GRATE", &[0, 31, 0, 31, 0, 31, 0, 31]);
+        let palette = PaletteLut::grayscale();
+        let mut fb = Framebuffer::new();
+
+        let render_out = render_level(
+            &level,
+            0,
+            0,
+            ANG90,
+            &mut fb,
+            &palette,
+            None,
+            Some(&tex_cache),
+            None,
+            None,
+            false,
+        );
+
+        let sprite_cache = make_opaque_sprite_cache("TROOA0", 8, 8, 200);
+        let actors = [ActorRenderInfo {
+            x: 0,
+            y: 256 << 16,
+            z: 0,
+            angle: 0,
+            sprite: sprite_names::SPR_TROO,
+            frame: 0,
+            height: 56 << 16,
+            render_flag: RenderFlag::Normal,
+            fallback_prefix: None,
+        }];
+
+        render_actors_with_masked_ex(
+            &actors,
+            &level,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            ANG90,
+            &mut fb,
+            &sprite_cache,
+            Some(&render_out.z_buf),
+            None,
+            Some(crate::sprite::SpriteClip {
+                top: &render_out.clip_top,
+                bottom: &render_out.clip_bot,
+                top_depth: &render_out.clip_top_depth,
+                bottom_depth: &render_out.clip_bot_depth,
+            }),
+            Some(&render_out.masked_columns),
+        );
+
+        let has_sprite = (120..200).any(|x| (40..160).any(|y| fb.get_pixel(x, y) == Some(200)));
+        let has_grate = (120..200).any(|x| (40..160).any(|y| fb.get_pixel(x, y) == Some(31)));
+        assert!(
+            has_sprite,
+            "sprite should remain visible through transparent grate columns"
+        );
+        assert!(
+            has_grate,
+            "opaque grate columns must still draw in front of the sprite"
         );
     }
 
@@ -3222,6 +3529,12 @@ mod tests {
 
         let mut level = make_portal_window_with_far_solid_level();
         level.segs.swap(0, 1);
+
+        assert_eq!(
+            crate::seg::collect_front_to_back_seg_indices(&level, 0, 0),
+            vec![1, 0],
+            "swapped seg storage order should still render near portal before far wall"
+        );
 
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();

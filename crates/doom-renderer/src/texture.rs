@@ -29,6 +29,8 @@ use std::collections::HashMap;
 pub struct WallTexture {
     /// Texture width in texels.
     pub width: u32,
+    /// Logical texture height from TEXTURE1/TEXTURE2.
+    pub logical_height: u32,
     /// Texture height in texels (padded to the next power of 2).
     pub height: u32,
     /// Column-major texel data: `data[col * height + row]`.
@@ -254,6 +256,7 @@ fn parse_texture_lump(
             name,
             WallTexture {
                 width,
+                logical_height: height,
                 height: height_pow2,
                 data: texdata,
             },

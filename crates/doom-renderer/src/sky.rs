@@ -476,6 +476,7 @@ mod tests {
         // 4x4 sky texture, all pixels = 42.
         let sky_tex = WallTexture {
             width: 4,
+            logical_height: 4,
             height: 4,
             data: vec![42u8; 16],
         };
@@ -538,6 +539,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         let sky_tex = WallTexture {
             width: 4,
+            logical_height: 4,
             height: 4,
             data: vec![200u8; 16], // bright pixel value
         };
@@ -587,6 +589,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         let sky_tex = WallTexture {
             width: 4,
+            logical_height: 4,
             height: 4,
             data: vec![42u8; 16],
         };
@@ -623,6 +626,7 @@ mod tests {
 
         let sky_tex = WallTexture {
             width: 4,
+            logical_height: 4,
             height: 4,
             data: vec![42u8; 16],
         };
@@ -715,6 +719,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         let sky_tex = WallTexture {
             width: 4,
+            logical_height: 4,
             height: 4,
             data: vec![42u8; 16],
         };
@@ -735,6 +740,7 @@ mod tests {
         // Two different player angles should produce different sky U mappings.
         let sky_tex = WallTexture {
             width: 256,
+            logical_height: 128,
             height: 128,
             data: (0..256u32)
                 .flat_map(|c| std::iter::repeat_n(((c + 1) & 0xFF) as u8, 128))
@@ -771,6 +777,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         let sky_tex = WallTexture {
             width: 0,
+            logical_height: 0,
             height: 0,
             data: vec![],
         };
@@ -815,6 +822,7 @@ mod tests {
 
         let sky_tex = WallTexture {
             width: 1,
+            logical_height: 4,
             height: 4,
             data: vec![3, 4, 5, 6],
         };

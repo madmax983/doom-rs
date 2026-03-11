@@ -590,10 +590,38 @@ pub fn render_actors_ex(
     cache: &SpriteCache,
     z_buffer: Option<&[f32; SCREEN_W]>,
     colormap: Option<&ColormapCache>,
+    sprite_clip: Option<SpriteClip<'_>>,
+) {
+    render_actors_with_masked_ex(
+        actors,
+        level,
+        player_x,
+        player_y,
+        player_angle,
+        fb,
+        cache,
+        z_buffer,
+        colormap,
+        sprite_clip,
+        None,
+    );
+}
+
+pub fn render_actors_with_masked_ex(
+    actors: &[crate::sprite_lookup::ActorRenderInfo],
+    level: &doom_map::Level,
+    player_x: doom_types::Fixed16_16,
+    player_y: doom_types::Fixed16_16,
+    player_angle: doom_types::Bam,
+    fb: &mut Framebuffer,
+    cache: &SpriteCache,
+    z_buffer: Option<&[f32; SCREEN_W]>,
+    colormap: Option<&ColormapCache>,
     // Per-column portal clip (mfloorclip/mceilingclip). Pass
     // `Some((&out.clip_top, &out.clip_bot))` to prevent sprites from
     // bleeding through two-sided window frames.
     sprite_clip: Option<SpriteClip<'_>>,
+    masked_columns: Option<&[crate::render::MaskedColumnDraw]>,
 ) {
     use doom_game::states::sprite_names;
 
@@ -611,8 +639,22 @@ pub fn render_actors_ex(
         .map_or(0.0, |s| s.floor_height as f32);
     let view_z = player_floor + PLAYER_HEIGHT;
 
-    // Collect and depth-sort actors back-to-front.
-    let mut visible: Vec<(f32, &crate::sprite_lookup::ActorRenderInfo)> = actors
+    enum VisibleElement<'a> {
+        Actor(f32, &'a crate::sprite_lookup::ActorRenderInfo),
+        Masked(&'a crate::render::MaskedColumnDraw),
+    }
+
+    impl VisibleElement<'_> {
+        fn depth(&self) -> f32 {
+            match self {
+                Self::Actor(depth, _) => *depth,
+                Self::Masked(column) => column.depth,
+            }
+        }
+    }
+
+    // Collect and depth-sort sprites and masked midtextures back-to-front.
+    let mut visible: Vec<VisibleElement<'_>> = actors
         .iter()
         .filter_map(|a| {
             let ax = a.x as f32 / 65536.0;
@@ -620,14 +662,32 @@ pub fn render_actors_ex(
             let dx = ax - px;
             let dy = ay - py;
             let vx = dx * cos_a + dy * sin_a;
-            if vx > 0.5 { Some((vx, a)) } else { None }
+            if vx > 0.5 {
+                Some(VisibleElement::Actor(vx, a))
+            } else {
+                None
+            }
         })
         .collect();
-    visible.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    if let Some(masked) = masked_columns {
+        visible.extend(masked.iter().map(VisibleElement::Masked));
+    }
+    visible.sort_by(|a, b| {
+        b.depth()
+            .partial_cmp(&a.depth())
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
 
     let mut fuzz_pos: usize = 0;
 
-    for (vx, actor) in visible {
+    for entry in visible {
+        let (vx, actor) = match entry {
+            VisibleElement::Actor(vx, actor) => (vx, actor),
+            VisibleElement::Masked(column) => {
+                crate::render::draw_masked_columns(fb, std::slice::from_ref(column));
+                continue;
+            }
+        };
         let sprite_idx = actor.sprite as usize;
         let is_null_sprite =
             actor.sprite == sprite_names::SPR_NONE || sprite_idx >= sprite_names::SPRITE_COUNT;
