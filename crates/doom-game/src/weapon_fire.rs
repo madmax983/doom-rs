@@ -63,6 +63,11 @@ fn has_ammo(gs: &GameState, weapon: WeaponType) -> bool {
     gs.player.ammo(ammo_type as usize) >= cost
 }
 
+#[inline]
+fn weapon_makes_noise(weapon: WeaponType) -> bool {
+    !matches!(weapon, WeaponType::Fist)
+}
+
 /// Consume ammo for the given weapon.  Returns `false` if insufficient.
 /// Melee weapons always return `true` without consuming anything.
 fn consume_ammo(gs: &mut GameState, weapon: WeaponType) -> bool {
@@ -319,6 +324,7 @@ pub fn p_fire_bfg(gs: &mut GameState, _level: Option<&Level>) {
 /// best available weapon and returns without firing.
 pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) {
     let weapon = gs.player.weapon;
+    let player_handle = gs.player.handle;
 
     // Check ammo first.
     if !has_ammo(gs, weapon) {
@@ -341,6 +347,12 @@ pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) {
         WeaponType::Bfg => p_fire_bfg(gs, level),
         WeaponType::Chainsaw => p_fire_chainsaw(gs, level),
     }
+
+    if weapon_makes_noise(weapon) {
+        if let Some(lv) = level {
+            crate::sound::p_noise_alert(gs, lv, player_handle, player_handle);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -352,7 +364,10 @@ mod tests {
     use super::*;
     use crate::mobj::{Mobj, MobjKind, flags};
     use crate::player::PlayerState;
+    use crate::sound::{get_sound_target, init_sound_state};
     use crate::state::GameState;
+    use doom_map::lumps::{Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex};
+    use doom_map::{Level, SIDEDEF_NONE};
     use doom_types::{Bam, Fixed16_16};
 
     /// Build a minimal GameState with a live player Mobj at the origin.
@@ -381,6 +396,63 @@ mod tests {
         gs.player.give_ammo(AmmoType::Shells as usize, 50);
         gs.player.give_ammo(AmmoType::Cells as usize, 300);
         gs.player.give_ammo(AmmoType::Rockets as usize, 50);
+    }
+
+    fn make_sound_level() -> Level {
+        let mut bm_data = vec![0u8; 14];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+
+        Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: SIDEDEF_NONE,
+            }],
+            sidedefs: vec![Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"        ",
+                lower_texture: *b"        ",
+                middle_texture: *b"WALL1   ",
+                sector: 0,
+            }],
+            vertexes: vec![Vertex { x: 0, y: 0 }, Vertex { x: 128, y: 0 }],
+            segs: vec![Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            }],
+            ssectors: vec![Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            }],
+            nodes: vec![],
+            sectors: vec![Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            }],
+            reject: Reject::parse_lump(&[0u8], 1).unwrap(),
+            blockmap,
+        }
     }
 
     // =======================================================================
@@ -839,6 +911,18 @@ mod tests {
         fire_current_weapon(&mut gs, None);
         let after = gs.player.ammo(AmmoType::Rockets as usize);
         assert_eq!(after, before - 1, "dispatcher must fire rocket");
+    }
+
+    #[test]
+    fn fire_current_weapon_emits_noise_alert_when_level_present() {
+        let mut gs = make_game_state();
+        let level = make_sound_level();
+        init_sound_state(&mut gs, level.sectors.len());
+        gs.player.weapon = WeaponType::Pistol;
+
+        fire_current_weapon(&mut gs, Some(&level));
+
+        assert_eq!(get_sound_target(&gs, 0), Some(gs.player.handle));
     }
 
     // =======================================================================

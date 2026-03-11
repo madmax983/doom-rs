@@ -312,7 +312,10 @@ mod tests {
         let data = vec![7u8; 320 * 200];
         let out = encode_doom_sixel(&data, &lut, 0, 320, 200, 640, 400, 80);
         assert!(out.contains("#7;2;"));
-        assert!(out.len() < 4096, "uniform upscaled image should compress well");
+        assert!(
+            out.len() < 4096,
+            "uniform upscaled image should compress well"
+        );
     }
 
     #[test]

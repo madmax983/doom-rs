@@ -85,6 +85,31 @@ pub struct Level {
 }
 
 impl Level {
+    fn seg_front_sector_index(&self, seg_idx: usize) -> Option<usize> {
+        let seg = self.segs.get(seg_idx)?;
+        let linedef = self.linedefs.get(seg.linedef as usize)?;
+        let sidedef_idx = if seg.direction == 0 {
+            linedef.right_sidedef
+        } else {
+            linedef.left_sidedef
+        };
+        if sidedef_idx == 0xFFFF {
+            return None;
+        }
+        let sidedef = self.sidedefs.get(sidedef_idx as usize)?;
+        Some(sidedef.sector as usize)
+    }
+
+    /// Resolve the sector that owns a subsector.
+    ///
+    /// Vanilla Doom treats subsectors as belonging to a single sector and
+    /// resolves that sector from the first seg in the leaf.
+    #[must_use]
+    pub fn subsector_sector_index(&self, subsector_idx: usize) -> Option<usize> {
+        let ss = self.ssectors.get(subsector_idx)?;
+        self.seg_front_sector_index(ss.first_seg as usize)
+    }
+
     /// Load and validate a level from a WAD file.
     ///
     /// # Errors
@@ -207,25 +232,8 @@ impl Level {
     /// out of bounds.
     #[must_use]
     pub fn sector_index_at(&self, x: i32, y: i32) -> Option<usize> {
-        let bsp = BspTree::validate(
-            &self.nodes,
-            &self.ssectors,
-            self.segs.len(),
-        )
-        .ok()?;
-        let ssector = bsp.point_in_subsector(x, y)?;
-        let seg = self.segs.get(ssector.first_seg as usize)?;
-        let linedef = self.linedefs.get(seg.linedef as usize)?;
-        let sidedef_idx = if seg.direction == 0 {
-            linedef.right_sidedef
-        } else {
-            linedef.left_sidedef
-        };
-        if sidedef_idx == 0xFFFF {
-            return None;
-        }
-        let sidedef = self.sidedefs.get(sidedef_idx as usize)?;
-        Some(sidedef.sector as usize)
+        let subsector_idx = self.subsector_index_at(x, y)?;
+        self.subsector_sector_index(subsector_idx)
     }
 
     /// Return the floor height (in map units) at world point `(x, y)`.
@@ -236,6 +244,16 @@ impl Level {
     pub fn floor_at(&self, x: i32, y: i32) -> Option<i16> {
         let si = self.sector_index_at(x, y)?;
         self.sectors.get(si).map(|s| s.floor_height)
+    }
+
+    /// Return the subsector index containing world point `(x, y)`.
+    #[must_use]
+    pub fn subsector_index_at(&self, x: i32, y: i32) -> Option<usize> {
+        let bsp = BspTree::validate(&self.nodes, &self.ssectors, self.segs.len()).ok()?;
+        let ssector = bsp.point_in_subsector(x, y)?;
+        self.ssectors
+            .iter()
+            .position(|candidate| core::ptr::eq(candidate, ssector))
     }
 
     /// Print a one-line geometry summary (used by the Phase 3 CLI gate).
@@ -434,5 +452,139 @@ mod tests {
         let level = Level::from_wad(&wad, "E1M1").unwrap();
         // Just ensure print_stats doesn't panic.
         level.print_stats();
+    }
+
+    #[test]
+    fn subsector_sector_index_respects_seg_direction() {
+        let reject = Reject::parse_lump(&[0u8], 2).unwrap();
+        let mut bm_data = vec![0u8; 14];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+
+        let level = Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![
+                Linedef {
+                    from_vertex: 0,
+                    to_vertex: 1,
+                    flags: 0x0004,
+                    special: 0,
+                    tag: 0,
+                    right_sidedef: 0,
+                    left_sidedef: 1,
+                },
+                Linedef {
+                    from_vertex: 2,
+                    to_vertex: 3,
+                    flags: 0x0004,
+                    special: 0,
+                    tag: 0,
+                    right_sidedef: 0,
+                    left_sidedef: 1,
+                },
+            ],
+            sidedefs: vec![
+                Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"        ",
+                    lower_texture: *b"        ",
+                    middle_texture: *b"WALL0   ",
+                    sector: 0,
+                },
+                Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"        ",
+                    lower_texture: *b"        ",
+                    middle_texture: *b"WALL1   ",
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                Vertex { x: 0, y: 0 },
+                Vertex { x: 0, y: 64 },
+                Vertex { x: 64, y: 0 },
+                Vertex { x: 64, y: 64 },
+            ],
+            segs: vec![
+                Seg {
+                    from_vertex: 0,
+                    to_vertex: 1,
+                    angle: 0,
+                    linedef: 0,
+                    direction: 0,
+                    offset: 0,
+                },
+                Seg {
+                    from_vertex: 3,
+                    to_vertex: 2,
+                    angle: 0,
+                    linedef: 1,
+                    direction: 1,
+                    offset: 0,
+                },
+            ],
+            ssectors: vec![
+                Ssector {
+                    seg_count: 1,
+                    first_seg: 0,
+                },
+                Ssector {
+                    seg_count: 1,
+                    first_seg: 1,
+                },
+            ],
+            nodes: vec![],
+            sectors: vec![
+                Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                Sector {
+                    floor_height: 64,
+                    ceil_height: 192,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap,
+        };
+
+        assert_eq!(level.subsector_sector_index(0), Some(0));
+        assert_eq!(level.subsector_sector_index(1), Some(1));
+    }
+
+    #[test]
+    fn subsector_index_at_returns_leaf_index() {
+        let wad_bytes = build_minimal_wad_bytes();
+        let wad = doom_wad::WadFile::parse(wad_bytes).unwrap();
+        let level = Level::from_wad(&wad, "E1M1").unwrap();
+
+        assert_eq!(level.subsector_index_at(10, 10), Some(0));
+    }
+
+    #[test]
+    fn sector_index_at_uses_subsector_sector_in_valid_level() {
+        let wad_bytes = build_minimal_wad_bytes();
+        let wad = doom_wad::WadFile::parse(wad_bytes).unwrap();
+        let level = Level::from_wad(&wad, "E1M1").unwrap();
+
+        assert_eq!(level.sector_index_at(10, 10), Some(0));
+        assert_eq!(level.floor_at(10, 10), Some(0));
     }
 }

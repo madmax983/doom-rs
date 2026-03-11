@@ -7,3 +7,6 @@
 *.bmp
 *.png
 .claude/worktrees/
+gameplay.log
+.claude/
+audio-diag.txt

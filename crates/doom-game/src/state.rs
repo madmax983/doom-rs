@@ -30,6 +30,8 @@ pub enum SoundRequest {
     MonsterAttack(MobjKind, doom_types::Fixed16_16, doom_types::Fixed16_16),
     /// Player died.
     PlayerDie,
+    /// Player pressed use into a blocking ordinary wall.
+    PlayerUseFail,
 }
 
 // ---------------------------------------------------------------------------

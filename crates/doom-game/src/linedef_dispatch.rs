@@ -296,8 +296,15 @@ pub fn dispatch_linedef(
     special: u16,
     trigger: TriggerType,
     activator: MobjHandle,
-    _from_side: u8,
+    from_side: u8,
 ) -> bool {
+    if from_side != 0
+        && matches!(trigger, TriggerType::SwitchOnce | TriggerType::SwitchRepeat)
+        && !matches!(special, 1 | 32 | 33 | 34)
+    {
+        return false;
+    }
+
     let effect = match linedef_effect(special) {
         Some(e) => e,
         None => return false,
@@ -1314,6 +1321,53 @@ mod tests {
         );
         assert!(result, "door dispatch should succeed");
         assert_eq!(gs.active_doors.len(), 1, "door mover should be created");
+    }
+
+    #[test]
+    fn dispatch_back_side_blocks_non_manual_use_line() {
+        let (mut gs, handle) = make_gs_with_player();
+        let mut level = make_test_level_with_tag(0);
+        level.linedefs[0].special = 31; // S1 door open.
+
+        let result = dispatch_linedef(
+            &mut gs,
+            &mut level,
+            0,
+            31,
+            TriggerType::SwitchOnce,
+            handle,
+            1,
+        );
+
+        assert!(
+            !result,
+            "back-side use should fail for non-manual front-only use lines"
+        );
+        assert!(gs.active_doors.is_empty());
+        assert_eq!(level.linedefs[0].special, 31);
+    }
+
+    #[test]
+    fn dispatch_back_side_allows_manual_door_line() {
+        let (mut gs, handle) = make_gs_with_player();
+        let mut level = make_test_level_with_tag(0);
+        level.linedefs[0].special = 1; // DR door open wait close.
+
+        let result = dispatch_linedef(
+            &mut gs,
+            &mut level,
+            0,
+            1,
+            TriggerType::SwitchRepeat,
+            handle,
+            1,
+        );
+
+        assert!(
+            result,
+            "back-side use should still work for manual door lines Doom allows"
+        );
+        assert_eq!(gs.active_doors.len(), 1);
     }
 
     #[test]

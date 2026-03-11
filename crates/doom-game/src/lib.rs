@@ -70,7 +70,9 @@ pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_slide_move, p_try_move};
 pub use phase::{GamePhase, GamePhaseController, MapId};
-pub use pickups::{doomed_type_to_kind, kind_to_doomed_type, p_check_pickups, p_touch_special_thing};
+pub use pickups::{
+    doomed_type_to_kind, kind_to_doomed_type, p_check_pickups, p_touch_special_thing,
+};
 pub use player::{AmmoType, PlayerState, WEAPON_AMMO, WeaponType};
 pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
@@ -97,9 +99,8 @@ pub use specials::{
     ev_perpetual_platform, ev_teleport, highest_adjacent_ceiling, highest_adjacent_floor,
     init_conveyors, init_scrolling_walls, init_sector_lights, lowest_adjacent_ceiling,
     lowest_adjacent_floor, next_highest_floor, p_use_lines, player_sector_index, sector_linedefs,
-    tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms,
-    tick_scrollers, tick_sector_damage, tick_sector_lights, tick_sector_specials,
-    tick_sector_secrets,
+    tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
+    tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
 pub use state::{
     CeilingMover, CeilingType, ConveyorBelt, DoomRng, ExitRequest, FloorMover, GameState,

@@ -891,9 +891,9 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_BOS2, 2, 4, NONE, ids::S_BOS2_ATK2),  // 229
     st!(SPR_BOS2, 3, 4, BRUIS_ATTACK, ids::S_BOS2_ATK3), // 230
     st!(SPR_BOS2, 2, 4, NONE, ids::S_BOS2_RUN1),  // 231
-    st!(SPR_BOS2, 6, 6, NONE, ids::S_BOS2_STND),      // 232: pain
-    st!(SPR_BOS2, 7, 8, SCREAM, ids::S_BOS2_DIE2),   // 233: die1
-    st!(SPR_BOS2, 8, 8, FALL, ids::S_BOS2_DIE3),     // 234: die2 → die3
+    st!(SPR_BOS2, 6, 6, NONE, ids::S_BOS2_STND),  // 232: pain
+    st!(SPR_BOS2, 7, 8, SCREAM, ids::S_BOS2_DIE2), // 233: die1
+    st!(SPR_BOS2, 8, 8, FALL, ids::S_BOS2_DIE3),  // 234: die2 → die3
     // ===================================================================
     // Weapon states (235..304)
     // ===================================================================
@@ -997,11 +997,11 @@ pub static STATES: &[MobjStateEntry] = &[
     // Extended death frames for original 8 monsters (315..338)
     // ===================================================================
     // Trooper DIE3-5 (frames I/J/K = 9/10/11)
-    st!(SPR_POSS, 9,  6, NONE, ids::S_POSS_DIE4), // 315
+    st!(SPR_POSS, 9, 6, NONE, ids::S_POSS_DIE4),  // 315
     st!(SPR_POSS, 10, 6, NONE, ids::S_POSS_DIE5), // 316
     st!(SPR_POSS, 11, -1, NONE, ids::S_NULL),     // 317
     // Sergeant DIE3-5 (same frame layout as Trooper)
-    st!(SPR_SPOS, 9,  6, NONE, ids::S_SPOS_DIE4), // 318
+    st!(SPR_SPOS, 9, 6, NONE, ids::S_SPOS_DIE4),  // 318
     st!(SPR_SPOS, 10, 6, NONE, ids::S_SPOS_DIE5), // 319
     st!(SPR_SPOS, 11, -1, NONE, ids::S_NULL),     // 320
     // Imp DIE3-5 (frames K/L/M = 10/11/12)
@@ -1009,7 +1009,7 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_TROO, 11, 6, NONE, ids::S_TROO_DIE5), // 322
     st!(SPR_TROO, 12, -1, NONE, ids::S_NULL),     // 323
     // Demon DIE3-5 (frames J/K/L = 9/10/11)
-    st!(SPR_SARG, 9,  4, NONE, ids::S_SARG_DIE4), // 324
+    st!(SPR_SARG, 9, 4, NONE, ids::S_SARG_DIE4),  // 324
     st!(SPR_SARG, 10, 4, NONE, ids::S_SARG_DIE5), // 325
     st!(SPR_SARG, 11, -1, NONE, ids::S_NULL),     // 326
     // Cacodemon DIE3-5 (frames G/H/I = 6/7/8)
@@ -1017,21 +1017,21 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_HEAD, 7, 8, NONE, ids::S_HEAD_DIE5), // 328
     st!(SPR_HEAD, 8, -1, NONE, ids::S_NULL),     // 329
     // Baron of Hell DIE3-5 (frames I/J/K = 9/10/11)
-    st!(SPR_BOSS, 9,  8, NONE, ids::S_BOSS_DIE4), // 330
+    st!(SPR_BOSS, 9, 8, NONE, ids::S_BOSS_DIE4),  // 330
     st!(SPR_BOSS, 10, 8, NONE, ids::S_BOSS_DIE5), // 331
     st!(SPR_BOSS, 11, -1, NONE, ids::S_NULL),     // 332
     // Cyberdemon DIE3-5 (frames I/J/K = 9/10/11)
-    st!(SPR_CYBR, 9,  8, NONE, ids::S_CYBER_DIE4), // 333
+    st!(SPR_CYBR, 9, 8, NONE, ids::S_CYBER_DIE4),  // 333
     st!(SPR_CYBR, 10, 8, NONE, ids::S_CYBER_DIE5), // 334
     st!(SPR_CYBR, 11, -1, NONE, ids::S_NULL),      // 335
     // Spider Mastermind DIE3-5 (frames I/J/K = 9/10/11)
-    st!(SPR_SPID, 9,  8, NONE, ids::S_SPID_DIE4), // 336
+    st!(SPR_SPID, 9, 8, NONE, ids::S_SPID_DIE4),  // 336
     st!(SPR_SPID, 10, 8, NONE, ids::S_SPID_DIE5), // 337
     st!(SPR_SPID, 11, -1, NONE, ids::S_NULL),     // 338
     // ===================================================================
     // Extended death frames for Hell Knight BOS2 (339..341)
     // ===================================================================
-    st!(SPR_BOS2, 9,  8, NONE, ids::S_BOS2_DIE4), // 339
+    st!(SPR_BOS2, 9, 8, NONE, ids::S_BOS2_DIE4),  // 339
     st!(SPR_BOS2, 10, 8, NONE, ids::S_BOS2_DIE5), // 340
     st!(SPR_BOS2, 11, -1, NONE, ids::S_NULL),     // 341
 ];
@@ -1624,23 +1624,109 @@ mod tests {
     #[test]
     fn all_original_monsters_have_five_frame_death_chains() {
         let cases: &[(&str, u16, u16, u16, u16, u16)] = &[
-            ("Trooper",    ids::S_POSS_DIE1, ids::S_POSS_DIE2, ids::S_POSS_DIE3, ids::S_POSS_DIE4, ids::S_POSS_DIE5),
-            ("Sergeant",   ids::S_SPOS_DIE1, ids::S_SPOS_DIE2, ids::S_SPOS_DIE3, ids::S_SPOS_DIE4, ids::S_SPOS_DIE5),
-            ("Imp",        ids::S_TROO_DIE1, ids::S_TROO_DIE2, ids::S_TROO_DIE3, ids::S_TROO_DIE4, ids::S_TROO_DIE5),
-            ("Demon",      ids::S_SARG_DIE1, ids::S_SARG_DIE2, ids::S_SARG_DIE3, ids::S_SARG_DIE4, ids::S_SARG_DIE5),
-            ("Cacodemon",  ids::S_HEAD_DIE1, ids::S_HEAD_DIE2, ids::S_HEAD_DIE3, ids::S_HEAD_DIE4, ids::S_HEAD_DIE5),
-            ("Baron",      ids::S_BOSS_DIE1, ids::S_BOSS_DIE2, ids::S_BOSS_DIE3, ids::S_BOSS_DIE4, ids::S_BOSS_DIE5),
-            ("Cyberdemon", ids::S_CYBER_DIE1, ids::S_CYBER_DIE2, ids::S_CYBER_DIE3, ids::S_CYBER_DIE4, ids::S_CYBER_DIE5),
-            ("Spider",     ids::S_SPID_DIE1, ids::S_SPID_DIE2, ids::S_SPID_DIE3, ids::S_SPID_DIE4, ids::S_SPID_DIE5),
-            ("HellKnight", ids::S_BOS2_DIE1, ids::S_BOS2_DIE2, ids::S_BOS2_DIE3, ids::S_BOS2_DIE4, ids::S_BOS2_DIE5),
+            (
+                "Trooper",
+                ids::S_POSS_DIE1,
+                ids::S_POSS_DIE2,
+                ids::S_POSS_DIE3,
+                ids::S_POSS_DIE4,
+                ids::S_POSS_DIE5,
+            ),
+            (
+                "Sergeant",
+                ids::S_SPOS_DIE1,
+                ids::S_SPOS_DIE2,
+                ids::S_SPOS_DIE3,
+                ids::S_SPOS_DIE4,
+                ids::S_SPOS_DIE5,
+            ),
+            (
+                "Imp",
+                ids::S_TROO_DIE1,
+                ids::S_TROO_DIE2,
+                ids::S_TROO_DIE3,
+                ids::S_TROO_DIE4,
+                ids::S_TROO_DIE5,
+            ),
+            (
+                "Demon",
+                ids::S_SARG_DIE1,
+                ids::S_SARG_DIE2,
+                ids::S_SARG_DIE3,
+                ids::S_SARG_DIE4,
+                ids::S_SARG_DIE5,
+            ),
+            (
+                "Cacodemon",
+                ids::S_HEAD_DIE1,
+                ids::S_HEAD_DIE2,
+                ids::S_HEAD_DIE3,
+                ids::S_HEAD_DIE4,
+                ids::S_HEAD_DIE5,
+            ),
+            (
+                "Baron",
+                ids::S_BOSS_DIE1,
+                ids::S_BOSS_DIE2,
+                ids::S_BOSS_DIE3,
+                ids::S_BOSS_DIE4,
+                ids::S_BOSS_DIE5,
+            ),
+            (
+                "Cyberdemon",
+                ids::S_CYBER_DIE1,
+                ids::S_CYBER_DIE2,
+                ids::S_CYBER_DIE3,
+                ids::S_CYBER_DIE4,
+                ids::S_CYBER_DIE5,
+            ),
+            (
+                "Spider",
+                ids::S_SPID_DIE1,
+                ids::S_SPID_DIE2,
+                ids::S_SPID_DIE3,
+                ids::S_SPID_DIE4,
+                ids::S_SPID_DIE5,
+            ),
+            (
+                "HellKnight",
+                ids::S_BOS2_DIE1,
+                ids::S_BOS2_DIE2,
+                ids::S_BOS2_DIE3,
+                ids::S_BOS2_DIE4,
+                ids::S_BOS2_DIE5,
+            ),
         ];
         for &(name, d1, d2, d3, d4, d5) in cases {
-            assert_eq!(STATES[d1 as usize].next_state, StateNum(d2), "{name} DIE1→DIE2");
-            assert_eq!(STATES[d2 as usize].next_state, StateNum(d3), "{name} DIE2→DIE3");
-            assert_eq!(STATES[d3 as usize].next_state, StateNum(d4), "{name} DIE3→DIE4");
-            assert_eq!(STATES[d4 as usize].next_state, StateNum(d5), "{name} DIE4→DIE5");
-            assert_eq!(STATES[d5 as usize].tics, -1, "{name} DIE5 must hold forever");
-            assert_eq!(STATES[d5 as usize].next_state, StateNum(ids::S_NULL), "{name} DIE5→S_NULL");
+            assert_eq!(
+                STATES[d1 as usize].next_state,
+                StateNum(d2),
+                "{name} DIE1→DIE2"
+            );
+            assert_eq!(
+                STATES[d2 as usize].next_state,
+                StateNum(d3),
+                "{name} DIE2→DIE3"
+            );
+            assert_eq!(
+                STATES[d3 as usize].next_state,
+                StateNum(d4),
+                "{name} DIE3→DIE4"
+            );
+            assert_eq!(
+                STATES[d4 as usize].next_state,
+                StateNum(d5),
+                "{name} DIE4→DIE5"
+            );
+            assert_eq!(
+                STATES[d5 as usize].tics, -1,
+                "{name} DIE5 must hold forever"
+            );
+            assert_eq!(
+                STATES[d5 as usize].next_state,
+                StateNum(ids::S_NULL),
+                "{name} DIE5→S_NULL"
+            );
         }
     }
 

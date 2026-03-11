@@ -15,7 +15,7 @@
 //! | Space / E    | use                              |
 //! | 1-7          | weapon change                    |
 
-use crossterm::event::KeyCode;
+use crossterm::event::{KeyCode, ModifierKeyCode};
 use std::collections::HashSet;
 
 /// Movement speed per tic when a walk key is held.
@@ -68,6 +68,7 @@ pub struct TicInput {
 pub struct InputState {
     held: HashSet<KeyCode>,
     shift_held: bool,
+    control_held: bool,
     /// Pending raw character press to forward to the console/cheat system.
     /// Set by `push_console_char`; consumed (and cleared) by `to_tic_input`.
     pending_console_char: Option<char>,
@@ -88,6 +89,13 @@ pub struct InputState {
 }
 
 impl InputState {
+    fn normalize_key(key: KeyCode) -> KeyCode {
+        match key {
+            KeyCode::Char(ch) => KeyCode::Char(ch.to_ascii_lowercase()),
+            other => other,
+        }
+    }
+
     /// Create empty input state.
     pub fn new() -> Self {
         Self::default()
@@ -95,23 +103,60 @@ impl InputState {
 
     /// Record a key-down event.
     pub fn key_down(&mut self, key: KeyCode) {
-        if matches!(key, KeyCode::Modifier(_)) {
-            return; // modifiers tracked via `shift_held`
+        match key {
+            KeyCode::Modifier(ModifierKeyCode::LeftShift | ModifierKeyCode::RightShift) => {
+                self.shift_held = true;
+                return;
+            }
+            KeyCode::Modifier(ModifierKeyCode::LeftControl | ModifierKeyCode::RightControl) => {
+                self.control_held = true;
+                return;
+            }
+            KeyCode::Modifier(_) => {
+                return;
+            }
+            _ => {}
         }
-        if key == KeyCode::Char('s') {
-            // crossterm reports Shift+char as uppercase
-        }
-        self.held.insert(key);
+        self.held.insert(Self::normalize_key(key));
     }
 
     /// Record a key-up event.
     pub fn key_up(&mut self, key: KeyCode) {
-        self.held.remove(&key);
+        match key {
+            KeyCode::Modifier(ModifierKeyCode::LeftShift | ModifierKeyCode::RightShift) => {
+                self.shift_held = false;
+            }
+            KeyCode::Modifier(ModifierKeyCode::LeftControl | ModifierKeyCode::RightControl) => {
+                self.control_held = false;
+            }
+            KeyCode::Modifier(_) => {}
+            _ => {
+                self.held.remove(&Self::normalize_key(key));
+            }
+        }
     }
 
     /// Signal shift state (crossterm delivers this separately).
     pub fn set_shift(&mut self, down: bool) {
         self.shift_held = down;
+    }
+
+    /// Signal control state (crossterm also exposes this via modifiers).
+    pub fn set_control(&mut self, down: bool) {
+        self.control_held = down;
+    }
+
+    /// Synchronize modifier state from a platform-level snapshot.
+    ///
+    /// `None` leaves the existing state unchanged so callers can refresh only
+    /// the modifiers they can observe on the current platform.
+    pub fn sync_modifiers(&mut self, shift: Option<bool>, control: Option<bool>) {
+        if let Some(down) = shift {
+            self.shift_held = down;
+        }
+        if let Some(down) = control {
+            self.control_held = down;
+        }
     }
 
     /// Returns `true` if the key is currently held.
@@ -191,18 +236,24 @@ impl InputState {
             }
         } else {
             // No shift → A/D turn
-            if self.is_held(KeyCode::Char('a')) || self.is_held(KeyCode::Left) {
+            if self.is_held(KeyCode::Char('a')) {
                 t.angle_turn = t.angle_turn.saturating_add(TURN_SPEED);
             }
-            if self.is_held(KeyCode::Char('d')) || self.is_held(KeyCode::Right) {
+            if self.is_held(KeyCode::Char('d')) {
                 t.angle_turn = t.angle_turn.saturating_sub(TURN_SPEED);
             }
         }
 
+        // Arrow keys always turn, even while Shift is held for A/D strafing.
+        if self.is_held(KeyCode::Left) {
+            t.angle_turn = t.angle_turn.saturating_add(TURN_SPEED);
+        }
+        if self.is_held(KeyCode::Right) {
+            t.angle_turn = t.angle_turn.saturating_sub(TURN_SPEED);
+        }
+
         // Attack
-        if self.is_held(KeyCode::Char('\n'))    // Ctrl is tricky in crossterm
-            || self.is_held(KeyCode::Char('f'))
-        {
+        if self.control_held {
             t.buttons |= buttons::BT_ATTACK;
         }
 
@@ -229,6 +280,11 @@ impl InputState {
 
         // Consume pending console char (first-wins, cleared each tic).
         t.console_char = self.pending_console_char.take();
+        if let Some(ch) = t.console_char
+            && ch.is_ascii()
+        {
+            t.chatchar = ch as u8;
+        }
 
         // Consume pending F-key presses (cleared each tic).
         t.f5_save = std::mem::take(&mut self.pending_f5);
@@ -252,6 +308,7 @@ impl InputState {
     pub fn clear(&mut self) {
         self.held.clear();
         self.shift_held = false;
+        self.control_held = false;
         self.pending_console_char = None;
         self.pending_f5 = false;
         self.pending_f9 = false;
@@ -306,6 +363,66 @@ mod tests {
         let mut s = InputState::new();
         s.key_down(KeyCode::Char(' '));
         assert_ne!(s.to_tic_input().buttons & buttons::BT_USE, 0);
+    }
+
+    #[test]
+    fn uppercase_forward_key_is_normalized() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('W'));
+        assert_eq!(s.to_tic_input().forward_move, MOVE_SPEED);
+    }
+
+    #[test]
+    fn uppercase_a_strafes_with_shift() {
+        let mut s = InputState::new();
+        s.set_shift(true);
+        s.key_down(KeyCode::Char('A'));
+        let t = s.to_tic_input();
+        assert_eq!(t.angle_turn, 0);
+        assert!(t.side_move < 0);
+    }
+
+    #[test]
+    fn control_modifier_sets_attack_button() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Modifier(ModifierKeyCode::LeftControl));
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_ATTACK, 0);
+    }
+
+    #[test]
+    fn sampled_control_state_sets_and_clears_attack_button() {
+        let mut s = InputState::new();
+        s.sync_modifiers(None, Some(true));
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_ATTACK, 0);
+
+        s.sync_modifiers(None, Some(false));
+        assert_eq!(s.to_tic_input().buttons & buttons::BT_ATTACK, 0);
+    }
+
+    #[test]
+    fn f_key_does_not_set_attack_button() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('f'));
+        assert_eq!(s.to_tic_input().buttons & buttons::BT_ATTACK, 0);
+    }
+
+    #[test]
+    fn arrows_still_turn_while_shift_is_held() {
+        let mut s = InputState::new();
+        s.set_shift(true);
+        s.key_down(KeyCode::Left);
+        let t = s.to_tic_input();
+        assert!(t.angle_turn > 0);
+        assert_eq!(t.side_move, 0);
+    }
+
+    #[test]
+    fn console_char_also_populates_chatchar() {
+        let mut s = InputState::new();
+        s.push_console_char('i');
+        let t = s.to_tic_input();
+        assert_eq!(t.console_char, Some('i'));
+        assert_eq!(t.chatchar, b'i');
     }
 
     #[test]

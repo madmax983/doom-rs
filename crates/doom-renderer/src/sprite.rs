@@ -432,6 +432,43 @@ const FOCAL_LEN: f32 = 160.0;
 /// Eye height above floor in map units (matches render.rs PLAYER_HEIGHT).
 const PLAYER_HEIGHT: f32 = 41.0;
 
+#[derive(Clone, Copy)]
+pub struct SpriteClip<'a> {
+    pub top: &'a [i32; SCREEN_W],
+    pub bottom: &'a [i32; SCREEN_W],
+    pub top_depth: &'a [f32; SCREEN_W],
+    pub bottom_depth: &'a [f32; SCREEN_W],
+}
+
+impl<'a> SpriteClip<'a> {
+    fn clip_top(&self, x: usize, sprite_depth: f32, unclipped_top: i32) -> i32 {
+        if sprite_depth >= self.top_depth[x] {
+            unclipped_top.max(self.top[x])
+        } else {
+            unclipped_top
+        }
+    }
+
+    fn clip_bottom(&self, x: usize, sprite_depth: f32, unclipped_bottom: i32) -> i32 {
+        if sprite_depth >= self.bottom_depth[x] {
+            unclipped_bottom.min(self.bottom[x])
+        } else {
+            unclipped_bottom
+        }
+    }
+}
+
+fn project_sprite_vertical_bounds(
+    view_z: f32,
+    sprite_top_z: f32,
+    sprite_scale: f32,
+    screen_h: i32,
+) -> (i32, i32) {
+    let screen_y_top = HALF_H - ((sprite_top_z - view_z) * sprite_scale).round() as i32;
+    let screen_y_bot = screen_y_top + screen_h - 1;
+    (screen_y_top, screen_y_bot)
+}
+
 // ---------------------------------------------------------------------------
 // Sector lookup for sprites
 // ---------------------------------------------------------------------------
@@ -445,33 +482,7 @@ const PLAYER_HEIGHT: f32 = 41.0;
 /// out of bounds (graceful degradation for malformed levels).
 #[must_use]
 pub fn sector_for_point(level: &doom_map::Level, x: i32, y: i32) -> Option<usize> {
-    // Use the BSP tree to locate the subsector.
-    // Try to create the BSP; if the level's geometry is invalid/empty,
-    // return None gracefully rather than panicking.
-    let bsp =
-        doom_map::bsp::BspTree::validate(&level.nodes, &level.ssectors, level.segs.len()).ok()?;
-    let ssector = bsp.point_in_subsector(x, y)?;
-
-    // Follow the chain: ssector -> first seg -> linedef -> sidedef -> sector.
-    let seg = level.segs.get(ssector.first_seg as usize)?;
-    let linedef = level.linedefs.get(seg.linedef as usize)?;
-
-    // If the seg faces the same direction as the linedef, use right_sidedef;
-    // otherwise use left_sidedef.
-    let sidedef_idx = if seg.direction == 0 {
-        linedef.right_sidedef
-    } else {
-        linedef.left_sidedef
-    };
-
-    // 0xFFFF means "no sidedef" — shouldn't happen for valid geometry but
-    // handle it gracefully.
-    if sidedef_idx == 0xFFFF {
-        return None;
-    }
-
-    let sidedef = level.sidedefs.get(sidedef_idx as usize)?;
-    Some(sidedef.sector as usize)
+    level.sector_index_at(x, y)
 }
 
 /// Determine the [`RenderFlag`] for a DoomEd thing type.
@@ -582,7 +593,7 @@ pub fn render_actors_ex(
     // Per-column portal clip (mfloorclip/mceilingclip). Pass
     // `Some((&out.clip_top, &out.clip_bot))` to prevent sprites from
     // bleeding through two-sided window frames.
-    sprite_clip: Option<(&[i32; SCREEN_W], &[i32; SCREEN_W])>,
+    sprite_clip: Option<SpriteClip<'_>>,
 ) {
     use doom_game::states::sprite_names;
 
@@ -618,8 +629,8 @@ pub fn render_actors_ex(
 
     for (vx, actor) in visible {
         let sprite_idx = actor.sprite as usize;
-        let is_null_sprite = actor.sprite == sprite_names::SPR_NONE
-            || sprite_idx >= sprite_names::SPRITE_COUNT;
+        let is_null_sprite =
+            actor.sprite == sprite_names::SPR_NONE || sprite_idx >= sprite_names::SPRITE_COUNT;
 
         // Build a 4-byte sprite prefix.
         // State-driven path: use the sprite index from STATES.
@@ -649,7 +660,8 @@ pub fn render_actors_ex(
         };
 
         let (frame, flip_x) = if has_rotations {
-            let rotation = compute_sprite_rotation(thing_angle, thing_x, thing_y, player_x, player_y);
+            let rotation =
+                compute_sprite_rotation(thing_angle, thing_x, thing_y, player_x, player_y);
             let lump_name = sprite_lump_name(&prefix, frame_idx, rotation);
             if let Some(f) = cache.get(&lump_name) {
                 (f, false)
@@ -695,16 +707,11 @@ pub fn render_actors_ex(
             continue;
         }
 
-        // Sprite bottom screen position accounts for height difference between
-        // the player's eye (view_z) and the actor's floor sector.
-        // This makes sprites render at the correct height above/below stairs.
-        let actor_floor = sector_for_point(level, ax as i32, ay as i32)
-            .and_then(|si| level.sectors.get(si))
-            .map_or(0.0, |s| s.floor_height as f32);
-        let height_diff = view_z - actor_floor;
-        let screen_y_bot = HALF_H + (height_diff * sprite_scale).round() as i32;
-        let screen_y_top = screen_y_bot - screen_h;
-        let screen_x_left = sx_center as i32 - (frame.left_offset as i32 * screen_w / frame.width as i32);
+        let actor_top_z = actor.z as f32 / 65536.0 + frame.top_offset as f32;
+        let (screen_y_top, screen_y_bot) =
+            project_sprite_vertical_bounds(view_z, actor_top_z, sprite_scale, screen_h);
+        let screen_x_left =
+            sx_center as i32 - (frame.left_offset as i32 * screen_w / frame.width as i32);
         let screen_x_right = screen_x_left + screen_w;
 
         if screen_x_right <= 0 || screen_x_left >= SCREEN_W as i32 {
@@ -747,13 +754,13 @@ pub fn render_actors_ex(
             }
 
             // Narrow vertical extent by portal clip (mfloorclip/mceilingclip).
-            let col_top = if let Some((ct, _)) = sprite_clip {
-                sy_top_clamped.max(ct[sx as usize])
+            let col_top = if let Some(clip) = sprite_clip {
+                clip.clip_top(sx as usize, vx, sy_top_clamped)
             } else {
                 sy_top_clamped
             };
-            let col_bot = if let Some((_, cb)) = sprite_clip {
-                sy_bot_clamped.min(cb[sx as usize])
+            let col_bot = if let Some(clip) = sprite_clip {
+                clip.clip_bottom(sx as usize, vx, sy_bot_clamped)
             } else {
                 sy_bot_clamped
             };
@@ -799,9 +806,20 @@ pub fn render_things_ex(
     cache: &SpriteCache,
     z_buffer: Option<&[f32; SCREEN_W]>,
     colormap: Option<&ColormapCache>,
-    sprite_clip: Option<(&[i32; SCREEN_W], &[i32; SCREEN_W])>,
+    sprite_clip: Option<SpriteClip<'_>>,
 ) {
-    render_things_impl(things, level, player_x, player_y, player_angle, fb, cache, z_buffer, colormap, sprite_clip);
+    render_things_impl(
+        things,
+        level,
+        player_x,
+        player_y,
+        player_angle,
+        fb,
+        cache,
+        z_buffer,
+        colormap,
+        sprite_clip,
+    );
 }
 
 /// Render all Things from `level.things` as billboard sprites.
@@ -814,9 +832,20 @@ pub fn render_things(
     cache: &SpriteCache,
     z_buffer: Option<&[f32; SCREEN_W]>,
     colormap: Option<&ColormapCache>,
-    sprite_clip: Option<(&[i32; SCREEN_W], &[i32; SCREEN_W])>,
+    sprite_clip: Option<SpriteClip<'_>>,
 ) {
-    render_things_impl(&level.things, level, player_x, player_y, player_angle, fb, cache, z_buffer, colormap, sprite_clip);
+    render_things_impl(
+        &level.things,
+        level,
+        player_x,
+        player_y,
+        player_angle,
+        fb,
+        cache,
+        z_buffer,
+        colormap,
+        sprite_clip,
+    );
 }
 
 fn render_things_impl(
@@ -829,7 +858,7 @@ fn render_things_impl(
     cache: &SpriteCache,
     z_buffer: Option<&[f32; SCREEN_W]>,
     colormap: Option<&ColormapCache>,
-    sprite_clip: Option<(&[i32; SCREEN_W], &[i32; SCREEN_W])>,
+    sprite_clip: Option<SpriteClip<'_>>,
 ) {
     // Convert player angle (32-bit BAM) to radians.
     // BAM: 0x0000_0000 = 0, 0x4000_0000 = 90, 0x8000_0000 = 180, etc.
@@ -843,6 +872,10 @@ fn render_things_impl(
     // to convert to f32 map units.
     let px = player_x.raw() as f32 / 65536.0;
     let py = player_y.raw() as f32 / 65536.0;
+    let player_floor = sector_for_point(level, px as i32, py as i32)
+        .and_then(|si| level.sectors.get(si))
+        .map_or(0.0, |s| s.floor_height as f32);
+    let view_z = player_floor + PLAYER_HEIGHT;
 
     // Fuzz position counter shared across all fuzz-effect sprites in this frame.
     let mut fuzz_pos: usize = 0;
@@ -946,11 +979,12 @@ fn render_things_impl(
             continue;
         }
 
-        // Vertical placement: bottom of sprite is at floor level.
-        // Player eye is PLAYER_HEIGHT map units above the floor, so the floor
-        // projects to HALF_H + PLAYER_HEIGHT * sprite_scale below the horizon.
-        let screen_y_bot = HALF_H + (PLAYER_HEIGHT * sprite_scale).round() as i32;
-        let screen_y_top = screen_y_bot - screen_h;
+        let thing_floor = sector_for_point(level, i32::from(thing.x), i32::from(thing.y))
+            .and_then(|si| level.sectors.get(si))
+            .map_or(0.0, |s| s.floor_height as f32);
+        let thing_top_z = thing_floor + frame.top_offset as f32;
+        let (screen_y_top, screen_y_bot) =
+            project_sprite_vertical_bounds(view_z, thing_top_z, sprite_scale, screen_h);
 
         // Horizontal placement: left_offset tells us how many sprite pixels
         // the centre point is to the right of column 0.
@@ -1015,13 +1049,13 @@ fn render_things_impl(
             }
 
             // Narrow vertical extent by portal clip (mfloorclip/mceilingclip).
-            let col_top = if let Some((ct, _)) = sprite_clip {
-                sy_top_clamped.max(ct[sx as usize])
+            let col_top = if let Some(clip) = sprite_clip {
+                clip.clip_top(sx as usize, vx, sy_top_clamped)
             } else {
                 sy_top_clamped
             };
-            let col_bot = if let Some((_, cb)) = sprite_clip {
-                sy_bot_clamped.min(cb[sx as usize])
+            let col_bot = if let Some(clip) = sprite_clip {
+                clip.clip_bottom(sx as usize, vx, sy_bot_clamped)
             } else {
                 sy_bot_clamped
             };
@@ -1034,14 +1068,7 @@ fn render_things_impl(
                 let sy_top_u = col_top.max(0) as usize;
                 let sy_bot_u = col_bot.min(SCREEN_H as i32 - 1) as usize;
                 if sy_top_u <= sy_bot_u {
-                    draw_fuzz_column(
-                        fb,
-                        sx as usize,
-                        sy_top_u,
-                        sy_bot_u,
-                        &mut fuzz_pos,
-                        colormap,
-                    );
+                    draw_fuzz_column(fb, sx as usize, sy_top_u, sy_bot_u, &mut fuzz_pos, colormap);
                 }
                 continue;
             }
@@ -2296,6 +2323,346 @@ mod tests {
         }
     }
 
+    fn rendered_rows(fb: &Framebuffer, palette_idx: u8) -> Option<(usize, usize)> {
+        let top = (0..SCREEN_H)
+            .find(|&y| (0..SCREEN_W).any(|x| fb.get_pixel(x, y) == Some(palette_idx)))?;
+        let bottom = (0..SCREEN_H)
+            .rev()
+            .find(|&y| (0..SCREEN_W).any(|x| fb.get_pixel(x, y) == Some(palette_idx)))?;
+        Some((top, bottom))
+    }
+
+    fn full_screen_sprite_clip() -> SpriteClip<'static> {
+        static TOP: [i32; SCREEN_W] = [0; SCREEN_W];
+        static BOTTOM: [i32; SCREEN_W] = [SCREEN_H as i32 - 1; SCREEN_W];
+        static DEPTH: [f32; SCREEN_W] = [f32::MAX; SCREEN_W];
+        SpriteClip {
+            top: &TOP,
+            bottom: &BOTTOM,
+            top_depth: &DEPTH,
+            bottom_depth: &DEPTH,
+        }
+    }
+
+    #[test]
+    fn render_actors_respects_sprite_top_offset() {
+        let level = make_test_level(vec![]);
+        let player_x = doom_types::Fixed16_16::from_int(-96);
+        let player_y = doom_types::Fixed16_16::from_int(32);
+        let actor = crate::sprite_lookup::ActorRenderInfo {
+            x: doom_types::Fixed16_16::from_int(32).raw(),
+            y: doom_types::Fixed16_16::from_int(32).raw(),
+            z: doom_types::Fixed16_16::from_int(0).raw(),
+            angle: 0,
+            sprite: doom_game::states::sprite_names::SPR_NONE,
+            frame: 0,
+            height: doom_types::Fixed16_16::from_int(8).raw(),
+            render_flag: RenderFlag::Normal,
+            fallback_prefix: Some(*b"BAR1"),
+        };
+
+        let mut floor_cache = SpriteCache::empty();
+        let mut floor_sprite = make_opaque_sprite(8, 8, 71);
+        floor_sprite.top_offset = 8;
+        floor_cache.insert("BAR1A0".to_string(), floor_sprite);
+
+        let mut sunk_cache = SpriteCache::empty();
+        let mut sunk_sprite = make_opaque_sprite(8, 8, 72);
+        sunk_sprite.top_offset = 4;
+        sunk_cache.insert("BAR1A0".to_string(), sunk_sprite);
+
+        let mut floor_fb = Framebuffer::new();
+        render_actors_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut floor_fb,
+            &floor_cache,
+            None,
+            None,
+            None,
+        );
+
+        let mut sunk_fb = Framebuffer::new();
+        render_actors_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut sunk_fb,
+            &sunk_cache,
+            None,
+            None,
+            None,
+        );
+
+        let floor_rows = rendered_rows(&floor_fb, 71).expect("floor-aligned sprite should draw");
+        let sunk_rows = rendered_rows(&sunk_fb, 72).expect("reduced top_offset sprite should draw");
+
+        assert!(
+            sunk_rows.0 > floor_rows.0,
+            "smaller top_offset should move actor sprite down on screen: floor={floor_rows:?} sunk={sunk_rows:?}"
+        );
+        assert!(
+            sunk_rows.1 > floor_rows.1,
+            "smaller top_offset should also lower the actor sprite bottom edge"
+        );
+    }
+
+    #[test]
+    fn render_things_respects_sprite_top_offset() {
+        let level = make_test_level(vec![make_thing(32, 32, 2035)]);
+        let player_x = doom_types::Fixed16_16::from_int(-96);
+        let player_y = doom_types::Fixed16_16::from_int(32);
+
+        let mut floor_cache = SpriteCache::empty();
+        let mut floor_sprite = make_opaque_sprite(8, 8, 81);
+        floor_sprite.top_offset = 8;
+        floor_cache.insert("BAR1A0".to_string(), floor_sprite);
+
+        let mut sunk_cache = SpriteCache::empty();
+        let mut sunk_sprite = make_opaque_sprite(8, 8, 82);
+        sunk_sprite.top_offset = 4;
+        sunk_cache.insert("BAR1A0".to_string(), sunk_sprite);
+
+        let mut floor_fb = Framebuffer::new();
+        render_things(
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut floor_fb,
+            &floor_cache,
+            None,
+            None,
+            None,
+        );
+
+        let mut sunk_fb = Framebuffer::new();
+        render_things(
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut sunk_fb,
+            &sunk_cache,
+            None,
+            None,
+            None,
+        );
+
+        let floor_rows =
+            rendered_rows(&floor_fb, 81).expect("floor-aligned thing sprite should draw");
+        let sunk_rows =
+            rendered_rows(&sunk_fb, 82).expect("reduced top_offset thing sprite should draw");
+
+        assert!(
+            sunk_rows.0 > floor_rows.0,
+            "smaller top_offset should move map thing sprite down on screen: floor={floor_rows:?} sunk={sunk_rows:?}"
+        );
+        assert!(
+            sunk_rows.1 > floor_rows.1,
+            "smaller top_offset should also lower the thing sprite bottom edge"
+        );
+    }
+
+    #[test]
+    fn render_actors_respects_actor_z() {
+        let level = make_test_level(vec![]);
+        let player_x = doom_types::Fixed16_16::from_int(-96);
+        let player_y = doom_types::Fixed16_16::from_int(32);
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 8, 91));
+
+        let floor_actor = crate::sprite_lookup::ActorRenderInfo {
+            x: doom_types::Fixed16_16::from_int(32).raw(),
+            y: doom_types::Fixed16_16::from_int(32).raw(),
+            z: doom_types::Fixed16_16::from_int(0).raw(),
+            angle: 0,
+            sprite: doom_game::states::sprite_names::SPR_NONE,
+            frame: 0,
+            height: doom_types::Fixed16_16::from_int(8).raw(),
+            render_flag: RenderFlag::Normal,
+            fallback_prefix: Some(*b"BAR1"),
+        };
+
+        let raised_actor = crate::sprite_lookup::ActorRenderInfo {
+            z: doom_types::Fixed16_16::from_int(8).raw(),
+            ..floor_actor
+        };
+
+        let mut floor_fb = Framebuffer::new();
+        render_actors_ex(
+            &[floor_actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut floor_fb,
+            &cache,
+            None,
+            None,
+            None,
+        );
+
+        let mut raised_fb = Framebuffer::new();
+        render_actors_ex(
+            &[raised_actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut raised_fb,
+            &cache,
+            None,
+            None,
+            None,
+        );
+
+        let floor_rows = rendered_rows(&floor_fb, 91).expect("floor actor should draw");
+        let raised_rows = rendered_rows(&raised_fb, 91).expect("raised actor should draw");
+
+        assert!(
+            raised_rows.0 < floor_rows.0,
+            "higher actor z should move sprite up on screen: floor={floor_rows:?} raised={raised_rows:?}"
+        );
+        assert!(
+            raised_rows.1 < floor_rows.1,
+            "higher actor z should also raise the actor sprite bottom edge"
+        );
+    }
+
+    #[test]
+    fn render_actors_ignore_portal_clip_when_sprite_is_in_front() {
+        let level = make_test_level(vec![]);
+        let player_x = doom_types::Fixed16_16::from_int(-32);
+        let player_y = doom_types::Fixed16_16::from_int(32);
+        let actor = crate::sprite_lookup::ActorRenderInfo {
+            x: doom_types::Fixed16_16::from_int(32).raw(),
+            y: doom_types::Fixed16_16::from_int(32).raw(),
+            z: doom_types::Fixed16_16::from_int(0).raw(),
+            angle: 0,
+            sprite: doom_game::states::sprite_names::SPR_NONE,
+            frame: 0,
+            height: doom_types::Fixed16_16::from_int(8).raw(),
+            render_flag: RenderFlag::Normal,
+            fallback_prefix: Some(*b"BAR1"),
+        };
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 8, 92));
+
+        let mut top = [0i32; SCREEN_W];
+        let mut bottom = [SCREEN_H as i32 - 1; SCREEN_W];
+        let mut top_depth = [f32::MAX; SCREEN_W];
+        let mut bottom_depth = [f32::MAX; SCREEN_W];
+        top.fill(138);
+        bottom.fill(145);
+        top_depth.fill(128.0);
+        bottom_depth.fill(128.0);
+        let sprite_clip = SpriteClip {
+            top: &top,
+            bottom: &bottom,
+            top_depth: &top_depth,
+            bottom_depth: &bottom_depth,
+        };
+
+        let mut unclipped_fb = Framebuffer::new();
+        render_actors_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut unclipped_fb,
+            &cache,
+            None,
+            None,
+            Some(full_screen_sprite_clip()),
+        );
+
+        let mut clipped_fb = Framebuffer::new();
+        render_actors_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut clipped_fb,
+            &cache,
+            None,
+            None,
+            Some(sprite_clip),
+        );
+
+        let unclipped_rows = rendered_rows(&unclipped_fb, 92).expect("baseline sprite should draw");
+        let clipped_rows =
+            rendered_rows(&clipped_fb, 92).expect("foreground sprite should still draw");
+
+        assert_eq!(
+            clipped_rows, unclipped_rows,
+            "portal clip behind the sprite must not crop it"
+        );
+    }
+
+    #[test]
+    fn render_actors_apply_portal_clip_when_sprite_is_behind() {
+        let level = make_test_level(vec![]);
+        let player_x = doom_types::Fixed16_16::from_int(-96);
+        let player_y = doom_types::Fixed16_16::from_int(32);
+        let actor = crate::sprite_lookup::ActorRenderInfo {
+            x: doom_types::Fixed16_16::from_int(32).raw(),
+            y: doom_types::Fixed16_16::from_int(32).raw(),
+            z: doom_types::Fixed16_16::from_int(0).raw(),
+            angle: 0,
+            sprite: doom_game::states::sprite_names::SPR_NONE,
+            frame: 0,
+            height: doom_types::Fixed16_16::from_int(8).raw(),
+            render_flag: RenderFlag::Normal,
+            fallback_prefix: Some(*b"BAR1"),
+        };
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 8, 93));
+
+        let mut top = [0i32; SCREEN_W];
+        let mut bottom = [SCREEN_H as i32 - 1; SCREEN_W];
+        let mut top_depth = [f32::MAX; SCREEN_W];
+        let mut bottom_depth = [f32::MAX; SCREEN_W];
+        top.fill(145);
+        bottom.fill(148);
+        top_depth.fill(64.0);
+        bottom_depth.fill(64.0);
+        let sprite_clip = SpriteClip {
+            top: &top,
+            bottom: &bottom,
+            top_depth: &top_depth,
+            bottom_depth: &bottom_depth,
+        };
+
+        let mut fb = Framebuffer::new();
+        render_actors_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut fb,
+            &cache,
+            None,
+            None,
+            Some(sprite_clip),
+        );
+
+        let clipped_rows =
+            rendered_rows(&fb, 93).expect("background sprite should draw inside portal");
+        assert!(
+            clipped_rows.0 >= 145 && clipped_rows.1 <= 148,
+            "sprite behind portal should be clipped to the portal window, got {clipped_rows:?}"
+        );
+    }
+
     // ------------------------------------------------------------------
     // zbuf 1: z_buffer initialized to MAX (no walls) allows all sprites
     // ------------------------------------------------------------------
@@ -2333,7 +2700,8 @@ mod tests {
         // The wall at y=128 is 128 map units away from player at (64,0)
         // facing north. At least some central columns should have finite depth.
         let center = SCREEN_W / 2;
-        let finite_count = zbuf.z_buf[center.saturating_sub(10)..center.saturating_add(10).min(SCREEN_W)]
+        let finite_count = zbuf.z_buf
+            [center.saturating_sub(10)..center.saturating_add(10).min(SCREEN_W)]
             .iter()
             .filter(|&&v| v < f32::MAX)
             .count();

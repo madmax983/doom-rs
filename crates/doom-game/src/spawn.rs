@@ -88,6 +88,16 @@ fn apply_mobjinfo_defaults(mo: &mut Mobj) {
     }
 }
 
+/// Sync a freshly spawned map thing to the floor and subsector it occupies.
+fn sync_mobj_to_level(level: &Level, mo: &mut Mobj) {
+    if let Some(floor_height) = level.floor_at(mo.x.to_int(), mo.y.to_int()) {
+        mo.z = Fixed16_16::from_int(i32::from(floor_height));
+    }
+    if let Some(subsector) = level.subsector_index_at(mo.x.to_int(), mo.y.to_int()) {
+        mo.subsector = subsector as u32;
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Skill filtering
 // ---------------------------------------------------------------------------
@@ -153,6 +163,7 @@ pub fn spawn_level_things(
         if kind == MobjKind::Player {
             let mut mo = Mobj::new(kind, x, y, angle);
             apply_mobjinfo_defaults(&mut mo);
+            sync_mobj_to_level(level, &mut mo);
             let handle = gs.mobjslab.alloc(mo);
             gs.player = PlayerState::pistol_start(handle);
             player_handle = Some(handle);
@@ -162,6 +173,7 @@ pub fn spawn_level_things(
         // --- Non-player things (monsters, items, decorations) ---
         let mut mo = Mobj::new(kind, x, y, angle);
         apply_mobjinfo_defaults(&mut mo);
+        sync_mobj_to_level(level, &mut mo);
 
         // Apply ambush flag from thing flags (deaf monsters).
         if thing.flags & MTF_AMBUSH != 0 {
@@ -227,7 +239,7 @@ pub const NIGHTMARE_RESPAWN_TICS: i32 = 12 * TICRATE as i32;
 /// Returns `true` if the monster respawned (corpse should be removed by
 /// the caller), `false` if the timer is still counting or the mobj is
 /// ineligible.
-pub fn p_nightmare_respawn(gs: &mut GameState, handle: MobjHandle) -> bool {
+pub fn p_nightmare_respawn(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle) -> bool {
     // Read all the data we need from the corpse before mutating.
     let (spawn_x, spawn_y, spawn_angle, spawn_type, corpse_x, corpse_y, movecount) = {
         let Some(mo) = gs.mobjslab.get(handle) else {
@@ -267,6 +279,9 @@ pub fn p_nightmare_respawn(gs: &mut GameState, handle: MobjHandle) -> bool {
         fog_corpse.tics = entry.tics;
     }
     fog_corpse.flags = flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY;
+    if let Some(level) = level {
+        sync_mobj_to_level(level, &mut fog_corpse);
+    }
     gs.mobjslab.alloc(fog_corpse);
 
     // Spawn teleport fog at the original spawn point.
@@ -276,6 +291,9 @@ pub fn p_nightmare_respawn(gs: &mut GameState, handle: MobjHandle) -> bool {
         fog_spawn.tics = entry.tics;
     }
     fog_spawn.flags = flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY;
+    if let Some(level) = level {
+        sync_mobj_to_level(level, &mut fog_spawn);
+    }
     gs.mobjslab.alloc(fog_spawn);
 
     // Resolve the MobjKind from the DoomEd type.
@@ -287,6 +305,9 @@ pub fn p_nightmare_respawn(gs: &mut GameState, handle: MobjHandle) -> bool {
     // Spawn a fresh monster at the original position.
     let mut fresh = Mobj::new(kind, spawn_x, spawn_y, spawn_angle);
     apply_mobjinfo_defaults(&mut fresh);
+    if let Some(level) = level {
+        sync_mobj_to_level(level, &mut fresh);
+    }
 
     // Carry over the spawn-point data so it can respawn again.
     fresh.spawn_x = spawn_x;
@@ -312,8 +333,8 @@ mod tests {
     use crate::mobj::flags;
     use doom_map::Thing;
 
-    /// Build a minimal valid Level with the given things list.
-    fn make_test_level_with_things(things: Vec<Thing>) -> Level {
+    /// Build a minimal valid Level with the given things list and floor height.
+    fn make_test_level_with_things_and_floor(things: Vec<Thing>, floor_height: i16) -> Level {
         // 1x1 blockmap at origin with one empty block.
         let mut bm_data = vec![0u8; 14];
         bm_data[4..6].copy_from_slice(&1u16.to_le_bytes()); // x_count
@@ -328,14 +349,42 @@ mod tests {
         Level {
             name: "TEST".to_string(),
             things,
-            linedefs: vec![],
-            sidedefs: vec![],
-            vertexes: vec![],
-            segs: vec![],
-            ssectors: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: doom_map::SIDEDEF_NONE,
+            }],
+            sidedefs: vec![doom_map::Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"        ",
+                lower_texture: *b"        ",
+                middle_texture: *b"WALL1   ",
+                sector: 0,
+            }],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: 0 },
+                doom_map::Vertex { x: 128, y: 0 },
+            ],
+            segs: vec![doom_map::Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            }],
+            ssectors: vec![doom_map::Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            }],
             nodes: vec![],
             sectors: vec![doom_map::Sector {
-                floor_height: 0,
+                floor_height,
                 ceil_height: 128,
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
@@ -346,6 +395,11 @@ mod tests {
             reject,
             blockmap,
         }
+    }
+
+    /// Build a minimal valid Level with the given things list.
+    fn make_test_level_with_things(things: Vec<Thing>) -> Level {
+        make_test_level_with_things_and_floor(things, 0)
     }
 
     // ===================================================================
@@ -402,6 +456,50 @@ mod tests {
         assert_eq!(mo.health, 100);
         assert_eq!(mo.radius, Fixed16_16::from_int(16));
         assert_eq!(mo.height, Fixed16_16::from_int(56));
+    }
+
+    #[test]
+    fn spawn_player_snaps_to_sector_floor_height() {
+        let level = make_test_level_with_things_and_floor(
+            vec![Thing {
+                x: 32,
+                y: 0,
+                angle: 0,
+                kind: 1,
+                flags: 7,
+            }],
+            24,
+        );
+        let mut gs = GameState::new("E1M1");
+
+        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, false).unwrap();
+        let mo = gs.mobjslab.get(handle).unwrap();
+
+        assert_eq!(mo.z, Fixed16_16::from_int(24));
+    }
+
+    #[test]
+    fn spawn_nonplayer_snaps_to_sector_floor_height() {
+        let level = make_test_level_with_things_and_floor(
+            vec![Thing {
+                x: 64,
+                y: 0,
+                angle: 0,
+                kind: 3004,
+                flags: 7,
+            }],
+            -32,
+        );
+        let mut gs = GameState::new("E1M1");
+
+        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        let trooper = gs
+            .mobjslab
+            .iter_handles()
+            .find_map(|h| gs.mobjslab.get(h).filter(|mo| mo.kind == MobjKind::Trooper))
+            .expect("trooper should spawn");
+
+        assert_eq!(trooper.z, Fixed16_16::from_int(-32));
     }
 
     // ===================================================================
@@ -1084,11 +1182,11 @@ mod tests {
         let handle = make_dead_trooper_corpse(&mut gs);
 
         // First call: movecount goes from 0 to 1, returns false.
-        assert!(!p_nightmare_respawn(&mut gs, handle));
+        assert!(!p_nightmare_respawn(&mut gs, None, handle));
         assert_eq!(gs.mobjslab.get(handle).unwrap().movecount, 1);
 
         // Second call: movecount goes to 2.
-        assert!(!p_nightmare_respawn(&mut gs, handle));
+        assert!(!p_nightmare_respawn(&mut gs, None, handle));
         assert_eq!(gs.mobjslab.get(handle).unwrap().movecount, 2);
     }
 
@@ -1101,14 +1199,14 @@ mod tests {
         gs.mobjslab.get_mut(handle).unwrap().movecount = NIGHTMARE_RESPAWN_TICS - 1;
 
         // One more increment, still not at threshold.
-        assert!(!p_nightmare_respawn(&mut gs, handle));
+        assert!(!p_nightmare_respawn(&mut gs, None, handle));
         assert_eq!(
             gs.mobjslab.get(handle).unwrap().movecount,
             NIGHTMARE_RESPAWN_TICS
         );
 
         // Now at threshold — respawn should happen.
-        assert!(p_nightmare_respawn(&mut gs, handle));
+        assert!(p_nightmare_respawn(&mut gs, None, handle));
 
         // Original corpse handle should be freed.
         assert!(gs.mobjslab.get(handle).is_none());
@@ -1123,7 +1221,7 @@ mod tests {
         gs.mobjslab.get_mut(handle).unwrap().movecount = NIGHTMARE_RESPAWN_TICS;
 
         let initial_count = gs.mobjslab.len();
-        assert!(p_nightmare_respawn(&mut gs, handle));
+        assert!(p_nightmare_respawn(&mut gs, None, handle));
 
         // Corpse removed, but fresh monster + 2 fog effects added.
         // Net: -1 corpse + 1 monster + 2 fog = +2
@@ -1157,12 +1255,42 @@ mod tests {
     }
 
     #[test]
+    fn nightmare_respawn_snaps_fresh_monster_and_fog_to_sector_floor() {
+        let level = make_test_level_with_things_and_floor(vec![], 40);
+        let mut gs = GameState::new("TEST");
+        let handle = make_dead_trooper_corpse(&mut gs);
+        gs.mobjslab.get_mut(handle).unwrap().movecount = NIGHTMARE_RESPAWN_TICS;
+
+        assert!(p_nightmare_respawn(&mut gs, Some(&level), handle));
+
+        let fresh = gs
+            .mobjslab
+            .iter_handles()
+            .find_map(|h| gs.mobjslab.get(h).filter(|mo| mo.kind == MobjKind::Trooper))
+            .expect("fresh trooper should exist after respawn");
+        assert_eq!(fresh.z, Fixed16_16::from_int(40));
+
+        let fog_zs: Vec<Fixed16_16> = gs
+            .mobjslab
+            .iter_handles()
+            .filter_map(|h| {
+                gs.mobjslab
+                    .get(h)
+                    .filter(|mo| mo.kind == MobjKind::SpawnFire)
+                    .map(|mo| mo.z)
+            })
+            .collect();
+        assert_eq!(fog_zs.len(), 2);
+        assert!(fog_zs.iter().all(|&z| z == Fixed16_16::from_int(40)));
+    }
+
+    #[test]
     fn nightmare_respawn_spawns_teleport_fog() {
         let mut gs = GameState::new("TEST");
         let handle = make_dead_trooper_corpse(&mut gs);
         gs.mobjslab.get_mut(handle).unwrap().movecount = NIGHTMARE_RESPAWN_TICS;
 
-        assert!(p_nightmare_respawn(&mut gs, handle));
+        assert!(p_nightmare_respawn(&mut gs, None, handle));
 
         // Should have exactly 2 SpawnFire fog effects.
         let fog_count = gs
@@ -1193,7 +1321,7 @@ mod tests {
         let handle = gs.mobjslab.alloc(mo);
 
         // Should return false because spawn_type == 0.
-        assert!(!p_nightmare_respawn(&mut gs, handle));
+        assert!(!p_nightmare_respawn(&mut gs, None, handle));
     }
 
     #[test]
@@ -1203,7 +1331,7 @@ mod tests {
 
         // Run 419 tics — should not respawn.
         for _ in 0..419 {
-            assert!(!p_nightmare_respawn(&mut gs, handle));
+            assert!(!p_nightmare_respawn(&mut gs, None, handle));
         }
 
         // Monster should still be alive in the slab (corpse).
@@ -1211,14 +1339,14 @@ mod tests {
         assert_eq!(gs.mobjslab.get(handle).unwrap().movecount, 419);
 
         // 420th call pushes to threshold.
-        assert!(!p_nightmare_respawn(&mut gs, handle));
+        assert!(!p_nightmare_respawn(&mut gs, None, handle));
         assert_eq!(
             gs.mobjslab.get(handle).unwrap().movecount,
             NIGHTMARE_RESPAWN_TICS
         );
 
         // 421st call (at threshold) triggers respawn.
-        assert!(p_nightmare_respawn(&mut gs, handle));
+        assert!(p_nightmare_respawn(&mut gs, None, handle));
         assert!(gs.mobjslab.get(handle).is_none());
     }
 

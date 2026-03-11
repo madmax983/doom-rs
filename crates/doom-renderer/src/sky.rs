@@ -33,6 +33,82 @@ pub const SKY_FLAT_NAME: [u8; 8] = *b"F_SKY1\0\0";
 /// available.  Approximates dark blue in the default PLAYPAL.
 pub const SKY_FALLBACK_COLOR: u8 = 197;
 
+const SCREEN_W: usize = 320;
+const SCREEN_H: usize = 200;
+const SKY_MASK_WORDS: usize = SCREEN_H.div_ceil(64);
+
+/// Per-column sky coverage mask that can represent multiple disjoint spans.
+#[derive(Clone, Debug)]
+pub struct SkyCoverage {
+    columns: [[u64; SKY_MASK_WORDS]; SCREEN_W],
+}
+
+impl SkyCoverage {
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            columns: [[0; SKY_MASK_WORDS]; SCREEN_W],
+        }
+    }
+
+    pub fn record_span(&mut self, x: usize, top: i32, bot: i32) {
+        if x >= SCREEN_W {
+            return;
+        }
+
+        let top = top.clamp(0, SCREEN_H as i32 - 1);
+        let bot = bot.clamp(0, SCREEN_H as i32 - 1);
+        if bot < top {
+            return;
+        }
+
+        let start = top as usize;
+        let end = bot as usize;
+        let start_word = start / 64;
+        let end_word = end / 64;
+
+        if start_word == end_word {
+            let width = end - start + 1;
+            let mask = if width == 64 {
+                u64::MAX
+            } else {
+                ((1u64 << width) - 1) << (start % 64)
+            };
+            self.columns[x][start_word] |= mask;
+            return;
+        }
+
+        self.columns[x][start_word] |= u64::MAX << (start % 64);
+        for word in (start_word + 1)..end_word {
+            self.columns[x][word] = u64::MAX;
+        }
+
+        let end_bit = end % 64;
+        let tail_mask = if end_bit == 63 {
+            u64::MAX
+        } else {
+            (1u64 << (end_bit + 1)) - 1
+        };
+        self.columns[x][end_word] |= tail_mask;
+    }
+
+    #[must_use]
+    pub fn contains(&self, x: usize, y: usize) -> bool {
+        if x >= SCREEN_W || y >= SCREEN_H {
+            return false;
+        }
+        let word = y / 64;
+        let bit = y % 64;
+        (self.columns[x][word] & (1u64 << bit)) != 0
+    }
+}
+
+impl Default for SkyCoverage {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Check if a flat name is the sky marker `F_SKY1`.
 ///
 /// Compares the first 6 bytes case-insensitively; any trailing bytes
@@ -187,6 +263,35 @@ pub fn draw_sky_columns(
     }
 }
 
+/// Draw sky columns from a per-column coverage mask.
+pub fn draw_sky_coverage_columns(
+    fb: &mut Framebuffer,
+    coverage: &SkyCoverage,
+    player_angle: Bam,
+    sky_tex: &WallTexture,
+) {
+    let tex_w = sky_tex.width as usize;
+    let tex_h = sky_tex.height as usize;
+
+    if tex_w == 0 || tex_h == 0 {
+        return;
+    }
+
+    for x in 0..SCREEN_W {
+        let view_angle = player_angle + column_to_angle(x);
+        let sky_u = ((view_angle.0 >> 22) as usize) % tex_w;
+        let col_offset = sky_u * tex_h;
+        for y in 0..SCREEN_H {
+            if !coverage.contains(x, y) {
+                continue;
+            }
+            let v = (y * tex_h / 100).min(tex_h - 1);
+            let pixel = sky_tex.data[col_offset + v];
+            fb.set_pixel(x, y, pixel);
+        }
+    }
+}
+
 /// Draw a solid-colour sky fallback when no sky texture is available.
 ///
 /// Uses [`SKY_FALLBACK_COLOR`] (dark blue) for all sky pixels.  The
@@ -202,6 +307,17 @@ pub fn draw_sky_fallback(fb: &mut Framebuffer, ceil_top: &[i32; 320], ceil_bot: 
         }
         for y in top..=bot {
             fb.set_pixel(x, y as usize, SKY_FALLBACK_COLOR);
+        }
+    }
+}
+
+/// Draw fallback sky from a per-column coverage mask.
+pub fn draw_sky_coverage_fallback(fb: &mut Framebuffer, coverage: &SkyCoverage) {
+    for x in 0..SCREEN_W {
+        for y in 0..SCREEN_H {
+            if coverage.contains(x, y) {
+                fb.set_pixel(x, y, SKY_FALLBACK_COLOR);
+            }
         }
     }
 }
@@ -690,5 +806,50 @@ mod tests {
         draw_sky_fallback(&mut fb, &ceil_top, &ceil_bot);
         assert_eq!(fb.get_pixel(0, 0), Some(SKY_FALLBACK_COLOR));
         assert_eq!(fb.get_pixel(0, 199), Some(SKY_FALLBACK_COLOR));
+    }
+
+    #[test]
+    fn draw_sky_coverage_columns_preserves_disjoint_spans() {
+        let mut fb = Framebuffer::new();
+        fb.fill_rect(0, 0, 320, 200, 9);
+
+        let sky_tex = WallTexture {
+            width: 1,
+            height: 4,
+            data: vec![3, 4, 5, 6],
+        };
+        let mut coverage = SkyCoverage::new();
+        coverage.record_span(10, 10, 12);
+        coverage.record_span(10, 20, 22);
+
+        draw_sky_coverage_columns(&mut fb, &coverage, Bam::ZERO, &sky_tex);
+
+        assert_ne!(fb.get_pixel(10, 10), Some(9));
+        assert_eq!(
+            fb.get_pixel(10, 15),
+            Some(9),
+            "disjoint sky spans must not fill the solid gap between them"
+        );
+        assert_ne!(fb.get_pixel(10, 21), Some(9));
+    }
+
+    #[test]
+    fn draw_sky_coverage_fallback_preserves_disjoint_spans() {
+        let mut fb = Framebuffer::new();
+        fb.fill_rect(0, 0, 320, 200, 9);
+
+        let mut coverage = SkyCoverage::new();
+        coverage.record_span(12, 30, 31);
+        coverage.record_span(12, 40, 42);
+
+        draw_sky_coverage_fallback(&mut fb, &coverage);
+
+        assert_eq!(fb.get_pixel(12, 30), Some(SKY_FALLBACK_COLOR));
+        assert_eq!(
+            fb.get_pixel(12, 35),
+            Some(9),
+            "fallback sky must also preserve disjoint gaps"
+        );
+        assert_eq!(fb.get_pixel(12, 41), Some(SKY_FALLBACK_COLOR));
     }
 }

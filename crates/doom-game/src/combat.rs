@@ -9,7 +9,7 @@
 //! is used.
 
 use doom_map::Level;
-use doom_types::{Bam, Fixed16_16};
+use doom_types::{Bam, FIXED_ONE, Fixed16_16};
 
 use crate::mobj::{MobjHandle, StateNum, flags};
 use crate::state::GameState;
@@ -95,12 +95,19 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             let Some(mo) = gs.mobjslab.get(target) else {
                 return;
             };
-            (crate::mobjinfo::MOBJINFO[mo.kind as usize].death_state, mo.kind)
+            (
+                crate::mobjinfo::MOBJINFO[mo.kind as usize].death_state,
+                mo.kind,
+            )
         };
         if death_sn != StateNum::NULL {
             crate::tic::p_set_mobj_state(gs, target, death_sn, None);
         }
-        let (sx, sy) = gs.mobjslab.get(target).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+        let (sx, sy) = gs
+            .mobjslab
+            .get(target)
+            .map(|mo| (mo.x, mo.y))
+            .unwrap_or_default();
         gs.sound_queue
             .push(crate::state::SoundRequest::MonsterDie(kind, sx, sy));
     } else {
@@ -156,8 +163,8 @@ pub fn p_line_attack(
         None => return None,
     };
 
-    let angle_cos = angle.cos().to_int() as f32;
-    let angle_sin = angle.sin().to_int() as f32;
+    let angle_cos = angle.cos().raw() as f32 / FIXED_ONE.raw() as f32;
+    let angle_sin = angle.sin().raw() as f32 / FIXED_ONE.raw() as f32;
     let range_f = range.to_int() as f32;
 
     if let Some(lv) = level {
@@ -215,18 +222,18 @@ fn p_line_attack_fallback(
     damage: i32,
 ) -> Option<MobjHandle> {
     let (sx, sy) = match gs.mobjslab.get(source) {
-        Some(mo) => (mo.x.to_int() as i64, mo.y.to_int() as i64),
+        Some(mo) => (mo.x.to_int() as f32, mo.y.to_int() as f32),
         None => return None,
     };
 
-    let cos_int = angle.cos().to_int() as i64;
-    let sin_int = angle.sin().to_int() as i64;
-    let range_int = range.to_int() as i64;
+    let cos_f = angle.cos().raw() as f32 / FIXED_ONE.raw() as f32;
+    let sin_f = angle.sin().raw() as f32 / FIXED_ONE.raw() as f32;
+    let range_f = range.to_int() as f32;
 
     let handles: Vec<MobjHandle> = gs.mobjslab.iter_handles().collect();
 
     let mut best_handle: Option<MobjHandle> = None;
-    let mut best_t: i64 = i64::MAX;
+    let mut best_t = f32::INFINITY;
 
     for handle in handles {
         if handle == source {
@@ -235,9 +242,9 @@ fn p_line_attack_fallback(
 
         let (ax, ay, radius, alive, shootable) = match gs.mobjslab.get(handle) {
             Some(mo) => (
-                mo.x.to_int() as i64,
-                mo.y.to_int() as i64,
-                mo.radius.to_int() as i64,
+                mo.x.to_int() as f32,
+                mo.y.to_int() as f32,
+                mo.radius.to_int() as f32,
                 mo.health > 0,
                 mo.flags & flags::MF_SHOOTABLE != 0,
             ),
@@ -250,9 +257,9 @@ fn p_line_attack_fallback(
 
         let dx = ax - sx;
         let dy = ay - sy;
-        let t = dx * cos_int + dy * sin_int;
+        let t = dx * cos_f + dy * sin_f;
 
-        if t <= 0 || t > range_int {
+        if t <= 0.0 || t > range_f {
             continue;
         }
 
@@ -603,6 +610,24 @@ mod tests {
         // both the dead-check and t<=0 guard fire — None is the expected result.
         let result = p_line_attack(&mut gs, src, Bam::ZERO, MISSILERANGE, 10, None);
         assert!(result.is_none(), "dead actors must not be hit");
+    }
+
+    #[test]
+    fn line_attack_fallback_hits_fractional_angle_actor() {
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
+
+        let mut gs = make_game_state();
+        let src = gs.player.handle;
+        let trooper = spawn_trooper(&mut gs, 512, -21);
+        let angle = Bam(((-8i32) << 18) as u32);
+
+        let result = p_line_attack(&mut gs, src, angle, Fixed16_16::from_int(1024), 5, None);
+
+        assert_eq!(result, Some(trooper));
+        assert!(gs.mobjslab.get(trooper).unwrap().health < 20);
     }
 
     // -----------------------------------------------------------------------
@@ -996,6 +1021,84 @@ mod tests {
         // Regardless of trig tables, short range = miss.
         assert!(result.is_none());
         assert_eq!(gs.mobjslab.get(trooper).unwrap().health, 20);
+    }
+
+    #[test]
+    fn line_attack_with_level_hits_fractional_angle_actor() {
+        use doom_map::{Blockmap, Reject, Sector};
+
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
+
+        let cols = 6u16;
+        let rows = 3u16;
+        let n_blocks = cols as usize * rows as usize;
+        let data_start = 4u16 + n_blocks as u16;
+
+        let mut bm_raw = Vec::new();
+        bm_raw.extend_from_slice(&(-128i16).to_le_bytes());
+        bm_raw.extend_from_slice(&(-128i16).to_le_bytes());
+        bm_raw.extend_from_slice(&cols.to_le_bytes());
+        bm_raw.extend_from_slice(&rows.to_le_bytes());
+        for _ in 0..n_blocks {
+            bm_raw.extend_from_slice(&data_start.to_le_bytes());
+        }
+        bm_raw.extend_from_slice(&0u16.to_le_bytes());
+        bm_raw.extend_from_slice(&0xFFFFu16.to_le_bytes());
+
+        let blockmap = Blockmap::parse_lump(&bm_raw).expect("blockmap parse");
+        let reject_data = vec![0u8; 1];
+        let reject = Reject::parse_lump(&reject_data, 1).expect("reject parse");
+        let level = doom_map::Level {
+            name: "OPEN".to_string(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            }],
+            reject,
+            blockmap,
+        };
+
+        let mut gs = GameState::new("test");
+        let mut player_mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        player_mo.health = 100;
+        player_mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
+        let player_h = gs.mobjslab.alloc(player_mo);
+        gs.player = PlayerState::pistol_start(player_h);
+
+        let trooper = spawn_trooper(&mut gs, 512, -21);
+        let angle = Bam(((-8i32) << 18) as u32);
+
+        let result = p_line_attack(
+            &mut gs,
+            player_h,
+            angle,
+            Fixed16_16::from_int(1024),
+            5,
+            Some(&level),
+        );
+
+        assert_eq!(result, Some(trooper));
+        assert!(gs.mobjslab.get(trooper).unwrap().health < 20);
     }
 
     // -----------------------------------------------------------------------

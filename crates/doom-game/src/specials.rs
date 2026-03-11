@@ -16,7 +16,7 @@
 //! - `player_sector_index`: find which sector the player is standing in.
 
 use doom_map::{Level, SIDEDEF_NONE};
-use doom_types::Fixed16_16;
+use doom_types::{FIXED_ONE, Fixed16_16};
 
 use crate::mobj::MobjHandle;
 use crate::state::{
@@ -1856,7 +1856,11 @@ pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) 
         if sector.ceil_height >= top {
             continue;
         }
-        if gs.active_ceilings.iter().any(|c| c.sector_index == sector_idx) {
+        if gs
+            .active_ceilings
+            .iter()
+            .any(|c| c.sector_index == sector_idx)
+        {
             continue;
         }
         gs.active_ceilings.push(CeilingMover {
@@ -2170,6 +2174,38 @@ fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: b
     });
 }
 
+/// Allow monsters to open ordinary door linedefs without mutating the map.
+pub fn monster_activate_door_linedef(
+    gs: &mut GameState,
+    level: &Level,
+    linedef_idx: usize,
+) -> bool {
+    let Some(ld) = level.linedefs.get(linedef_idx) else {
+        return false;
+    };
+
+    let auto_close = match ld.special {
+        1 | 117 => true,
+        31 | 118 => false,
+        _ => return false,
+    };
+
+    if ld.left_sidedef == SIDEDEF_NONE {
+        return false;
+    }
+
+    let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+        return false;
+    };
+    let sector_idx = sd.sector as usize;
+    if sector_idx >= level.sectors.len() {
+        return false;
+    }
+
+    open_door(gs, level, sector_idx, auto_close);
+    true
+}
+
 /// Enqueue a door mover that closes a door.
 fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
     let sector = match level.sectors.get(sector_idx) {
@@ -2299,47 +2335,84 @@ pub fn p_use_lines(gs: &mut GameState, level: &mut Level, handle: MobjHandle) {
         None => return,
     };
 
-    let cos_int = angle.cos().to_int();
-    let sin_int = angle.sin().to_int();
+    let cos_raw = i64::from(angle.cos().raw());
+    let sin_raw = i64::from(angle.sin().raw());
 
     // Fall back if trig tables are uninitialised (both return 0).
-    let (ahead_x, ahead_y) = if cos_int == 0 && sin_int == 0 {
+    let (ahead_x, ahead_y) = if cos_raw == 0 && sin_raw == 0 {
         (ax + USE_RANGE, ay)
     } else {
-        (ax + USE_RANGE * cos_int, ay + USE_RANGE * sin_int)
+        (
+            ax + ((i64::from(USE_RANGE) * cos_raw) / i64::from(FIXED_ONE.raw())) as i32,
+            ay + ((i64::from(USE_RANGE) * sin_raw) / i64::from(FIXED_ONE.raw())) as i32,
+        )
     };
 
-    // Find and activate the first linedef whose special segment the ray crosses.
+    // Find crossed linedefs in front-to-back order. Vanilla Doom traverses all
+    // intercepts here: a closed ordinary wall in front of a special must block
+    // use instead of letting the player "reach through" it.
+    let mut intercepts = Vec::new();
     for ld_idx in 0..level.linedefs.len() {
         // Collect data while the borrow is immutable; drop before mutable dispatch.
-        let (lx1, ly1, lx2, ly2, special) = {
+        let (lx1, ly1, lx2, ly2) = {
             let ld = &level.linedefs[ld_idx];
-            if ld.special == 0 {
-                continue;
-            }
             let v1 = &level.vertexes[ld.from_vertex as usize];
             let v2 = &level.vertexes[ld.to_vertex as usize];
-            (v1.x as i32, v1.y as i32, v2.x as i32, v2.y as i32, ld.special)
+            (v1.x as i32, v1.y as i32, v2.x as i32, v2.y as i32)
         };
 
-        if !segment_crosses_line(ax, ay, ahead_x, ahead_y, lx1, ly1, lx2, ly2) {
+        let Some((num, denom)) =
+            segment_intersection_frac(ax, ay, ahead_x, ahead_y, lx1, ly1, lx2, ly2)
+        else {
             continue;
-        }
+        };
+        intercepts.push((num, denom, ld_idx));
+    }
+
+    intercepts.sort_by(|a, b| {
+        let lhs = i128::from(a.0) * i128::from(b.1);
+        let rhs = i128::from(b.0) * i128::from(a.1);
+        lhs.cmp(&rhs)
+    });
+
+    for (_, _, ld_idx) in intercepts {
+        let (special, blocks_use, use_side) = {
+            let linedef = &level.linedefs[ld_idx];
+            let blocks_use = match crate::trace::line_opening(level, linedef) {
+                None => true,
+                Some((open_bottom, open_top)) => open_top <= open_bottom,
+            };
+            let use_side = crate::sight::point_on_side(
+                Fixed16_16::from_int(ax),
+                Fixed16_16::from_int(ay),
+                ld_idx,
+                level,
+            ) as u8;
+            (linedef.special, blocks_use, use_side)
+        };
 
         // USE key only activates switch-type (S1/SR) triggers.
         use crate::linedef_dispatch::{TriggerType, classify_trigger, dispatch_linedef};
         if let Some(trigger) = classify_trigger(special) {
-            if matches!(
-                trigger,
-                TriggerType::SwitchOnce | TriggerType::SwitchRepeat
-            ) {
-                let activated = dispatch_linedef(gs, level, ld_idx, special, trigger, handle, 0);
+            if matches!(trigger, TriggerType::SwitchOnce | TriggerType::SwitchRepeat) {
+                let activated =
+                    dispatch_linedef(gs, level, ld_idx, special, trigger, handle, use_side);
                 if activated {
                     crate::switch::toggle_switch_texture(level, ld_idx);
                 }
+                return;
             }
         }
-        return;
+
+        if special == 0 && blocks_use {
+            gs.sound_queue
+                .push(crate::state::SoundRequest::PlayerUseFail);
+            return;
+        }
+
+        if blocks_use {
+            return;
+        }
     }
 }
 
@@ -3350,12 +3423,12 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
 // Private helpers
 // ---------------------------------------------------------------------------
 
-/// Returns `true` if the segment from `(ax, ay)` to `(bx, by)` crosses the
-/// infinite line defined by `(lx1, ly1)` → `(lx2, ly2)`.
+/// Return the parametric fraction `t` along the segment from `(ax, ay)` to
+/// `(bx, by)` where it intersects the linedef segment `(lx1, ly1)` → `(lx2, ly2)`.
 ///
-/// Uses the cross-product (sign) test: the segment crosses the line when the
-/// two endpoints lie on opposite sides.
-fn segment_crosses_line(
+/// The fraction is returned as `(numerator, denominator)` with
+/// `0 <= numerator <= denominator` and `denominator > 0`.
+fn segment_intersection_frac(
     ax: i32,
     ay: i32,
     bx: i32,
@@ -3364,17 +3437,32 @@ fn segment_crosses_line(
     ly1: i32,
     lx2: i32,
     ly2: i32,
-) -> bool {
-    // Direction of the linedef.
-    let ldx = (lx2 - lx1) as i64;
-    let ldy = (ly2 - ly1) as i64;
+) -> Option<(i64, i64)> {
+    let rdx = i64::from(bx - ax);
+    let rdy = i64::from(by - ay);
+    let sdx = i64::from(lx2 - lx1);
+    let sdy = i64::from(ly2 - ly1);
+    let qpx = i64::from(lx1 - ax);
+    let qpy = i64::from(ly1 - ay);
 
-    // Cross products of linedef direction with each segment endpoint.
-    let c1 = ldx * (ay - ly1) as i64 - ldy * (ax - lx1) as i64;
-    let c2 = ldx * (by - ly1) as i64 - ldy * (bx - lx1) as i64;
+    let denom = rdx * sdy - rdy * sdx;
+    if denom == 0 {
+        return None;
+    }
 
-    // Different signs (XOR of sign bits < 0) means the segment straddles the line.
-    (c1 ^ c2) < 0
+    let t_num = qpx * sdy - qpy * sdx;
+    let u_num = qpx * rdy - qpy * rdx;
+    let (t_num, u_num, denom) = if denom < 0 {
+        (-t_num, -u_num, -denom)
+    } else {
+        (t_num, u_num, denom)
+    };
+
+    if !(0..=denom).contains(&t_num) || !(0..=denom).contains(&u_num) {
+        return None;
+    }
+
+    Some((t_num, denom))
 }
 
 // ---------------------------------------------------------------------------
@@ -3534,7 +3622,7 @@ mod tests {
     use super::*;
     use crate::mobj::{Mobj, MobjKind};
     use crate::state::GameState;
-    use doom_types::{Bam, Fixed16_16};
+    use doom_types::{ANG45, Bam, Fixed16_16};
 
     // -----------------------------------------------------------------------
     // Helpers
@@ -3735,12 +3823,289 @@ mod tests {
 
         // After: a door mover was queued (animated open, target = floor+128 = 128).
         assert_eq!(
-            gs.active_doors.len(), 1,
+            gs.active_doors.len(),
+            1,
             "p_use_lines must enqueue a door mover"
         );
         assert_eq!(
             gs.active_doors[0].target_height, 128,
             "door target must be 128 above floor"
+        );
+    }
+
+    #[test]
+    fn p_use_lines_uses_fractional_angle_without_east_fallback() {
+        static INIT_TRIG: std::sync::Once = std::sync::Once::new();
+        INIT_TRIG.call_once(|| unsafe {
+            doom_types::Bam::init_trig_tables();
+        });
+
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level(0);
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::from_int(-32),
+            Fixed16_16::from_int(-32),
+            ANG45,
+        );
+        mo.health = 100;
+        let handle = gs.mobjslab.alloc(mo);
+
+        p_use_lines(&mut gs, &mut level, handle);
+
+        assert_eq!(gs.active_doors.len(), 1);
+    }
+
+    #[test]
+    fn p_use_lines_back_side_does_not_activate_front_only_special() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level_with_special(0, 31);
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::from_int(-32),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        let handle = gs.mobjslab.alloc(mo);
+
+        p_use_lines(&mut gs, &mut level, handle);
+
+        assert!(
+            gs.active_doors.is_empty(),
+            "front-only use special should not activate from the linedef back side"
+        );
+    }
+
+    #[test]
+    fn p_use_lines_prefers_nearest_crossed_special_over_lump_order() {
+        let mut gs = GameState::new("TEST");
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+
+        let mut level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![
+                doom_map::Linedef {
+                    from_vertex: 2,
+                    to_vertex: 3,
+                    flags: 0x0004,
+                    special: 1,
+                    tag: 0,
+                    right_sidedef: 2,
+                    left_sidedef: 3,
+                },
+                doom_map::Linedef {
+                    from_vertex: 0,
+                    to_vertex: 1,
+                    flags: 0x0004,
+                    special: 1,
+                    tag: 0,
+                    right_sidedef: 0,
+                    left_sidedef: 1,
+                },
+            ],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 1,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 2,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: -10 },
+                doom_map::Vertex { x: 0, y: 10 },
+                doom_map::Vertex { x: 24, y: -10 },
+                doom_map::Vertex { x: 24, y: 10 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 0,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 0,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap: make_minimal_blockmap(),
+        };
+
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::from_int(-32),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        let handle = gs.mobjslab.alloc(mo);
+
+        p_use_lines(&mut gs, &mut level, handle);
+
+        assert_eq!(gs.active_doors.len(), 1);
+        assert_eq!(
+            gs.active_doors[0].sector, 1,
+            "USE should activate the nearest crossed door, not whichever linedef appears first"
+        );
+    }
+
+    #[test]
+    fn p_use_lines_closed_nonspecial_wall_blocks_special_behind_it() {
+        let mut gs = GameState::new("TEST");
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).unwrap();
+
+        let mut level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![
+                doom_map::Linedef {
+                    from_vertex: 0,
+                    to_vertex: 1,
+                    flags: 0,
+                    special: 0,
+                    tag: 0,
+                    right_sidedef: 0,
+                    left_sidedef: SIDEDEF_NONE,
+                },
+                doom_map::Linedef {
+                    from_vertex: 2,
+                    to_vertex: 3,
+                    flags: 0x0004,
+                    special: 1,
+                    tag: 0,
+                    right_sidedef: 1,
+                    left_sidedef: 2,
+                },
+            ],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: -10 },
+                doom_map::Vertex { x: 0, y: 10 },
+                doom_map::Vertex { x: 24, y: -10 },
+                doom_map::Vertex { x: 24, y: 10 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 0,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap: make_minimal_blockmap(),
+        };
+
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::from_int(-32),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        let handle = gs.mobjslab.alloc(mo);
+
+        p_use_lines(&mut gs, &mut level, handle);
+
+        assert_eq!(
+            gs.active_doors.len(),
+            0,
+            "a closed ordinary wall in front of a special must block USE"
+        );
+        assert_eq!(
+            gs.sound_queue.len(),
+            1,
+            "blocked use should queue feedback for the player"
         );
     }
 
@@ -3778,6 +4143,16 @@ mod tests {
             level.sectors[1].ceil_height, 0,
             "activate_linedef must close an open door to floor height"
         );
+    }
+
+    #[test]
+    fn monster_activate_door_linedef_opens_regular_door() {
+        let mut gs = GameState::new("TEST");
+        let level = make_door_level_with_special(0, 1);
+
+        assert!(monster_activate_door_linedef(&mut gs, &level, 0));
+        assert_eq!(gs.active_doors.len(), 1);
+        assert_eq!(gs.active_doors[0].sector, 1);
     }
 
     // -----------------------------------------------------------------------

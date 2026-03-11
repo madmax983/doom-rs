@@ -17,7 +17,7 @@ use doom_map::Level;
 
 use crate::mobj::MobjHandle;
 use crate::mobj::flags::MF_AMBUSH;
-use crate::sight::{p_check_sight, sector_from_subsector};
+use crate::sight::{p_check_sight, sector_from_position_or_subsector};
 use crate::state::GameState;
 
 // ---------------------------------------------------------------------------
@@ -131,13 +131,13 @@ pub fn adjacent_sectors(level: &Level, sector_index: usize) -> Vec<usize> {
 /// After this call, `gs.sound_targets[sector]` will be `Some(target)` for
 /// every reached sector.
 pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emitter: MobjHandle) {
-    // Determine the emitter's sector from its subsector.
+    // Determine the emitter's sector from its current position.
     let emitter_sector = {
         let mo = match gs.mobjslab.get(emitter) {
             Some(mo) => mo,
             None => return, // stale handle, bail gracefully
         };
-        match sector_from_subsector(level, mo.subsector as usize) {
+        match sector_from_position_or_subsector(level, mo.x, mo.y, mo.subsector as usize) {
             Some(s) => s,
             None => return, // can't resolve sector, bail
         }
@@ -243,11 +243,12 @@ pub fn monster_should_wake(gs: &GameState, level: &Level, actor_handle: MobjHand
         None => return false,
     };
 
-    // Resolve the actor's sector.
-    let actor_sector = match sector_from_subsector(level, mo.subsector as usize) {
-        Some(s) => s,
-        None => return false,
-    };
+    // Resolve the actor's sector from its current position.
+    let actor_sector =
+        match sector_from_position_or_subsector(level, mo.x, mo.y, mo.subsector as usize) {
+            Some(s) => s,
+            None => return false,
+        };
 
     // Check if there's a sound target in this sector.
     let sound_target = match get_sound_target(gs, actor_sector) {

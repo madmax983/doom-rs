@@ -258,10 +258,12 @@ fn p_check_sight_local(
         None => return false,
     };
 
-    // REJECT-table culling: look up the sector indices from subsectors.
+    // REJECT-table culling: look up the sector indices from current positions.
     if let Some(lv) = level {
-        let src_sector = sector_from_subsector(lv, src_subsector);
-        let tgt_sector = sector_from_subsector(lv, tgt_subsector);
+        let src_sector =
+            crate::sight::sector_from_position_or_subsector(lv, src_x, src_y, src_subsector);
+        let tgt_sector =
+            crate::sight::sector_from_position_or_subsector(lv, tgt_x, tgt_y, tgt_subsector);
         if let (Some(ss), Some(ts)) = (src_sector, tgt_sector) {
             // If REJECT says definitely not visible, bail out immediately.
             if !lv.reject.visible(ss, ts) {
@@ -273,23 +275,6 @@ fn p_check_sight_local(
     // Secondary check: Manhattan distance ≤ 4096 map units.
     let dist = (tgt_x - src_x).to_int().abs() + (tgt_y - src_y).to_int().abs();
     dist <= 4096
-}
-
-/// Resolve the sector index for the given subsector index.
-///
-/// Path: ssectors[sub] → first seg → linedef → right sidedef → sector.
-/// Returns `None` if any index is out of range.
-fn sector_from_subsector(level: &Level, subsector: usize) -> Option<usize> {
-    let ss = level.ssectors.get(subsector)?;
-    let seg = level.segs.get(ss.first_seg as usize)?;
-    let ld = level.linedefs.get(seg.linedef as usize)?;
-    let sd_idx = if seg.direction == 0 {
-        ld.right_sidedef
-    } else {
-        ld.left_sidedef
-    };
-    let sd = level.sidedefs.get(sd_idx as usize)?;
-    Some(sd.sector as usize)
 }
 
 // ---------------------------------------------------------------------------
@@ -325,9 +310,9 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
     let new_x = mo_x + step_x;
     let new_y = mo_y + step_y;
 
-    let can_move = match level {
-        Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
-        None => true,
+    let (can_move, blocking_linedef) = match level {
+        Some(lv) => crate::movement::p_try_move_blocker(&gs.mobjslab, handle, new_x, new_y, lv),
+        None => (true, None),
     };
 
     if can_move {
@@ -345,85 +330,27 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
                     mo.z = Fixed16_16::from_int(floor_h as i32);
                 }
             }
+            if let Some(subsector) = lv.subsector_index_at(new_x.to_int(), new_y.to_int()) {
+                if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                    mo.subsector = subsector as u32;
+                }
+            }
         }
         true
     } else {
         // Movement failed. In vanilla Doom, if the blocking linedef is a door,
-        // the monster tries to open it. We check for door-like specials on
-        // nearby linedefs and activate them.
+        // the monster tries to open that exact door linedef.
         if let Some(lv) = level {
-            try_open_door(gs, handle, lv);
+            try_open_door(gs, lv, blocking_linedef);
         }
         false
     }
 }
 
 /// Attempt to open a door that is blocking the monster's path.
-///
-/// Simplified: scan linedefs near the monster's position for door specials
-/// and activate them. In vanilla Doom this checks the specific linedef that
-/// blocked movement, but we approximate by checking adjacent linedefs.
-fn try_open_door(gs: &mut GameState, handle: MobjHandle, level: &Level) {
-    let (mo_x, mo_y, mo_dir) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.x, mo.y, mo.movedir),
-        None => return,
-    };
-
-    if mo_dir == DI_NODIR || mo_dir > 7 {
-        return;
-    }
-
-    // Compute the position the monster was trying to reach.
-    let speed = mobjinfo::MOBJINFO
-        .get(
-            gs.mobjslab
-                .get(handle)
-                .map(|mo| mo.kind as usize)
-                .unwrap_or(0),
-        )
-        .map(|i| i.speed)
-        .unwrap_or(Fixed16_16::ZERO);
-
-    let try_x = mo_x + XMOVE[mo_dir as usize].fixed_mul(speed);
-    let try_y = mo_y + YMOVE[mo_dir as usize].fixed_mul(speed);
-
-    // Check blockmap for linedefs at the target position.
-    let bm = &level.blockmap;
-    let x_origin = bm.x_origin as i32;
-    let y_origin = bm.y_origin as i32;
-    let x_count = bm.x_count as i32;
-    let y_count = bm.y_count as i32;
-
-    let col = ((try_x.to_int() - x_origin) / 128).max(0).min(x_count - 1) as usize;
-    let row = ((try_y.to_int() - y_origin) / 128).max(0).min(y_count - 1) as usize;
-
-    // Door line specials that monsters can activate.
-    const DOOR_SPECIALS: &[u16] = &[
-        1,   // DR door open wait close
-        26,  // DR blue door
-        27,  // DR yellow door
-        28,  // DR red door
-        31,  // D1 open and stay
-        32,  // D1 blue door open stay
-        33,  // D1 red door open stay
-        34,  // D1 yellow door open stay
-        117, // DR blazing door
-        118, // D1 blazing door open stay
-    ];
-
-    for ld_idx in bm.block_linedefs(col, row) {
-        let Some(ld) = level.linedefs.get(ld_idx as usize) else {
-            continue;
-        };
-        if DOOR_SPECIALS.contains(&ld.special) {
-            // Monsters can open doors: activate the linedef special.
-            // We use a simplified activation: just spawn a door mover.
-            // The actual linedef activation is handled by specials::activate_linedef
-            // but calling it here would require &mut Level which we do not have.
-            // For now, we note the attempt but do not actually open the door.
-            // Full door-opening by monsters requires architectural changes.
-            break;
-        }
+fn try_open_door(gs: &mut GameState, level: &Level, blocking_linedef: Option<usize>) {
+    if let Some(ld_idx) = blocking_linedef {
+        let _ = crate::specials::monster_activate_door_linedef(gs, level, ld_idx);
     }
 }
 
@@ -443,8 +370,8 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let player_handle = gs.player.handle;
 
     // Read monster data.
-    let (mo_kind, mo_flags, mo_subsector) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.kind, mo.flags, mo.subsector),
+    let (mo_kind, mo_flags, mo_x, mo_y, mo_subsector) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.kind, mo.flags, mo.x, mo.y, mo.subsector as usize),
         None => return,
     };
 
@@ -452,8 +379,11 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     // --- Step 1: Check sound targets ---
     if let Some(lv) = level {
-        // Resolve the monster's sector from its subsector.
-        if let Some(actor_sector) = sector_from_subsector(lv, mo_subsector as usize) {
+        // Resolve the monster's sector from its current position, but keep a
+        // subsector fallback for synthetic/unit-test maps.
+        if let Some(actor_sector) =
+            crate::sight::sector_from_position_or_subsector(lv, mo_x, mo_y, mo_subsector)
+        {
             if let Some(sound_target) = crate::sound::get_sound_target(gs, actor_sector) {
                 // Verify the sound target is alive.
                 let target_alive = gs
@@ -887,31 +817,20 @@ fn do_chase_movement(gs: &mut GameState, handle: MobjHandle, level: Option<&Leve
     // Face the target.
     a_face_target(gs, handle);
 
-    // Decrement movecount each tic.
-    {
-        if let Some(mo) = gs.mobjslab.get_mut(handle) {
-            if mo.movecount > 0 {
-                mo.movecount -= 1;
-            }
-        }
-    }
+    // Doom decrements movecount before movement. When the count reaches zero,
+    // the monster still spends one final tic moving in the current direction;
+    // only negative counts force an immediate direction refresh. That leaves a
+    // full chase tic where movecount == 0 and missile attacks are allowed.
+    let need_new_dir = {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+        mo.movecount -= 1;
+        mo.movecount < 0
+    };
 
-    // Re-choose direction if movecount expired.
-    let need_new_dir = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| mo.movecount <= 0)
-        .unwrap_or(false);
-
-    if need_new_dir {
+    if need_new_dir || !p_move(gs, handle, level) {
         p_new_chase_dir(gs, handle, level);
-    } else {
-        // Try to keep moving in the current direction.
-        let moved = p_move(gs, handle, level);
-        if !moved {
-            // Blocked: immediately choose a new direction.
-            p_new_chase_dir(gs, handle, level);
-        }
     }
 }
 
@@ -1043,11 +962,18 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         damage,
         level,
     );
-    let (sx, sy) = gs.mobjslab.get(handle).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+    let (sx, sy) = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| (mo.x, mo.y))
+        .unwrap_or_default();
 
     gs.sound_queue
-
-        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Trooper, sx, sy));
+        .push(crate::state::SoundRequest::MonsterAttack(
+            MobjKind::Trooper,
+            sx,
+            sy,
+        ));
 }
 
 // ---------------------------------------------------------------------------
@@ -1088,11 +1014,18 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
             level,
         );
     }
-    let (sx, sy) = gs.mobjslab.get(handle).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+    let (sx, sy) = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| (mo.x, mo.y))
+        .unwrap_or_default();
 
     gs.sound_queue
-
-        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Sergeant, sx, sy));
+        .push(crate::state::SoundRequest::MonsterAttack(
+            MobjKind::Sergeant,
+            sx,
+            sy,
+        ));
 }
 
 // ---------------------------------------------------------------------------
@@ -1127,11 +1060,18 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
     } else {
         crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::ImpFireball);
     }
-    let (sx, sy) = gs.mobjslab.get(handle).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+    let (sx, sy) = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| (mo.x, mo.y))
+        .unwrap_or_default();
 
     gs.sound_queue
-
-        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Imp, sx, sy));
+        .push(crate::state::SoundRequest::MonsterAttack(
+            MobjKind::Imp,
+            sx,
+            sy,
+        ));
 }
 
 // ---------------------------------------------------------------------------
@@ -1159,11 +1099,18 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
     if dist <= crate::combat::MELEERANGE.to_int() {
         let damage = ((gs.tic_num % 3) + 1) as i32 * 4;
         crate::combat::damage_mobj(gs, target, handle, damage);
-        let (sx, sy) = gs.mobjslab.get(handle).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+        let (sx, sy) = gs
+            .mobjslab
+            .get(handle)
+            .map(|mo| (mo.x, mo.y))
+            .unwrap_or_default();
 
         gs.sound_queue
-
-            .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Demon, sx, sy));
+            .push(crate::state::SoundRequest::MonsterAttack(
+                MobjKind::Demon,
+                sx,
+                sy,
+            ));
     }
 }
 
@@ -1185,11 +1132,18 @@ fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::CacoFireball);
-    let (sx, sy) = gs.mobjslab.get(handle).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+    let (sx, sy) = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| (mo.x, mo.y))
+        .unwrap_or_default();
 
     gs.sound_queue
-
-        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Cacodemon, sx, sy));
+        .push(crate::state::SoundRequest::MonsterAttack(
+            MobjKind::Cacodemon,
+            sx,
+            sy,
+        ));
 }
 
 // ---------------------------------------------------------------------------
@@ -1215,11 +1169,16 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| mo.kind)
         .unwrap_or(MobjKind::BaronOfHell);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::BaronBall);
-    let (sx, sy) = gs.mobjslab.get(handle).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+    let (sx, sy) = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| (mo.x, mo.y))
+        .unwrap_or_default();
 
     gs.sound_queue
-
-        .push(crate::state::SoundRequest::MonsterAttack(bruis_kind, sx, sy));
+        .push(crate::state::SoundRequest::MonsterAttack(
+            bruis_kind, sx, sy,
+        ));
 }
 
 // ---------------------------------------------------------------------------
@@ -1261,10 +1220,13 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         damage,
         level,
     );
-    let (sx, sy) = gs.mobjslab.get(handle).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+    let (sx, sy) = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| (mo.x, mo.y))
+        .unwrap_or_default();
 
     gs.sound_queue
-
         .push(crate::state::SoundRequest::MonsterAttack(cpos_kind, sx, sy));
 }
 
@@ -1286,11 +1248,18 @@ fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::Rocket);
-    let (sx, sy) = gs.mobjslab.get(handle).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+    let (sx, sy) = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| (mo.x, mo.y))
+        .unwrap_or_default();
 
     gs.sound_queue
-
-        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Cyberdemon, sx, sy));
+        .push(crate::state::SoundRequest::MonsterAttack(
+            MobjKind::Cyberdemon,
+            sx,
+            sy,
+        ));
 }
 
 // ---------------------------------------------------------------------------
@@ -1311,11 +1280,18 @@ fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::Tracer);
-    let (sx, sy) = gs.mobjslab.get(handle).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+    let (sx, sy) = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| (mo.x, mo.y))
+        .unwrap_or_default();
 
     gs.sound_queue
-
-        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Revenant, sx, sy));
+        .push(crate::state::SoundRequest::MonsterAttack(
+            MobjKind::Revenant,
+            sx,
+            sy,
+        ));
 }
 
 // ---------------------------------------------------------------------------
@@ -1379,11 +1355,18 @@ fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
     a_face_target(gs, handle);
     fat_shoot(gs, handle, FATSPREAD);
     fat_shoot(gs, handle, 0);
-    let (sx, sy) = gs.mobjslab.get(handle).map(|mo| (mo.x, mo.y)).unwrap_or_default();
+    let (sx, sy) = gs
+        .mobjslab
+        .get(handle)
+        .map(|mo| (mo.x, mo.y))
+        .unwrap_or_default();
 
     gs.sound_queue
-
-        .push(crate::state::SoundRequest::MonsterAttack(MobjKind::Mancubus, sx, sy));
+        .push(crate::state::SoundRequest::MonsterAttack(
+            MobjKind::Mancubus,
+            sx,
+            sy,
+        ));
 }
 
 /// Port of `A_FatAttack2` from Doom's `p_enemy.c`.
@@ -2483,6 +2466,48 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_chase_can_fire_after_movecount_counts_down() {
+        let mut gs = make_game_state();
+        let kind = MobjKind::Trooper;
+        let see_sn = mobjinfo::MOBJINFO[kind as usize].see_state;
+        let missile_sn = mobjinfo::MOBJINFO[kind as usize].missile_state;
+
+        let mut mo = Mobj::new(
+            kind,
+            Fixed16_16::from_int(200),
+            Fixed16_16::from_int(0),
+            Bam::ZERO,
+        );
+        mo.health = 20;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.state = see_sn;
+        mo.tics = states::STATES[see_sn.0 as usize].tics;
+        mo.target = gs.player.handle;
+        mo.reactiontime = 0;
+        mo.movedir = DI_WEST;
+        mo.movecount = 1;
+        let trooper = gs.mobjslab.alloc(mo);
+
+        a_chase(&mut gs, trooper, None);
+        let after_first = gs.mobjslab.get(trooper).unwrap();
+        assert_eq!(
+            after_first.state, see_sn,
+            "first chase tic should spend the last movement step, not attack yet"
+        );
+        assert_eq!(
+            after_first.movecount, 0,
+            "movement countdown should reach zero and leave a firing window next tic"
+        );
+
+        a_chase(&mut gs, trooper, None);
+        let after_second = gs.mobjslab.get(trooper).unwrap();
+        assert_eq!(
+            after_second.state, missile_sn,
+            "trooper should enter missile state once movecount has counted down"
+        );
+    }
+
     // -----------------------------------------------------------------------
     // P_Move tests
     // -----------------------------------------------------------------------
@@ -2537,6 +2562,101 @@ mod tests {
         assert!(
             mo.momx > Fixed16_16::ZERO,
             "momentum x should be positive for east movement"
+        );
+    }
+
+    #[test]
+    fn p_move_opens_the_actual_blocking_door() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 104, 0);
+        gs.mobjslab.get_mut(trooper).unwrap().movedir = DI_EAST;
+
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).unwrap();
+
+        let mut bm_data = vec![0u8; 22];
+        bm_data[4..6].copy_from_slice(&2u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&6u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&8u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[14..16].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        bm_data[16..18].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[18..20].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[20..22].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).unwrap();
+
+        let level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special: 1,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            }],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 128, y: -32 },
+                doom_map::Vertex { x: 128, y: 32 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 0,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap,
+        };
+
+        let moved = p_move(&mut gs, trooper, Some(&level));
+
+        assert!(!moved, "the move should be blocked by the near door");
+        assert_eq!(
+            gs.active_doors.len(),
+            1,
+            "monster should still open a blocking door even when the door lives in a neighbouring blockmap cell"
+        );
+        assert_eq!(
+            gs.active_doors[0].sector, 1,
+            "monster should open the actual blocking door"
         );
     }
 
@@ -2698,8 +2818,8 @@ mod tests {
     /// and second death frame carries ACTION_FALL — matching the vanilla state table.
     #[test]
     fn die1_and_die2_actions_correct_for_all_original_monsters() {
-        use crate::states::ids;
         use crate::states::STATES;
+        use crate::states::ids;
 
         let cases: &[(u16, u16, &str)] = &[
             (ids::S_POSS_DIE1, ids::S_POSS_DIE2, "Trooper"),
@@ -2714,13 +2834,11 @@ mod tests {
         ];
         for &(die1, die2, name) in cases {
             assert_eq!(
-                STATES[die1 as usize].action,
-                ACTION_SCREAM,
+                STATES[die1 as usize].action, ACTION_SCREAM,
                 "{name} DIE1 must have ACTION_SCREAM"
             );
             assert_eq!(
-                STATES[die2 as usize].action,
-                ACTION_FALL,
+                STATES[die2 as usize].action, ACTION_FALL,
                 "{name} DIE2 must have ACTION_FALL"
             );
         }

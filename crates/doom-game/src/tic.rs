@@ -255,7 +255,7 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
             if is_dead_monster {
                 // p_nightmare_respawn handles timer increment and respawn.
                 // If it returns true, the corpse has been freed — skip to next.
-                if crate::spawn::p_nightmare_respawn(gs, handle) {
+                if crate::spawn::p_nightmare_respawn(gs, level, handle) {
                     continue;
                 }
             }
@@ -353,18 +353,19 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
         WeaponType::Chaingun | WeaponType::PlasmaRifle | WeaponType::Chainsaw
     );
     if attack_held && (!gs.player.attack_down || is_auto_weapon) {
-        let handle = gs.player.handle;
-        crate::weapons::fire_weapon(gs, level.as_deref(), handle);
+        crate::weapon_fire::fire_current_weapon(gs, level.as_deref());
     }
     gs.player.attack_down = attack_held;
 
-    // BT_USE: activate linedef ahead of player.
-    if cmd.buttons & bt::BT_USE != 0 {
+    // BT_USE: activate linedef ahead of player on the leading edge only.
+    let use_held = cmd.buttons & bt::BT_USE != 0;
+    if use_held && !gs.player.use_down {
         if let Some(lv) = level.as_deref_mut() {
             let handle = gs.player.handle;
             crate::specials::p_use_lines(gs, lv, handle);
         }
     }
+    gs.player.use_down = use_held;
 
     // BT_CHANGE: weapon switch.
     if cmd.buttons & bt::BT_CHANGE != 0 {
@@ -579,6 +580,9 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
         let fy = mo.y.to_int();
         if let Some(floor_h) = lv.floor_at(fx, fy) {
             mo.z = Fixed16_16::from_int(floor_h as i32);
+        }
+        if let Some(subsector) = lv.subsector_index_at(fx, fy) {
+            mo.subsector = subsector as u32;
         }
     }
 }
@@ -1019,6 +1023,39 @@ mod tests {
         assert!(
             mo.momx > Fixed16_16::ZERO,
             "friction must not zero momx in one step"
+        );
+    }
+
+    #[test]
+    fn tick_player_pistol_can_hit_slightly_off_axis_target() {
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
+
+        let mut gs = make_game_state();
+        let mut trooper = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(512),
+            Fixed16_16::from_int(-21),
+            Bam::ZERO,
+        );
+        trooper.health = 20;
+        trooper.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        let trooper_handle = gs.mobjslab.alloc(trooper);
+
+        tick_player(
+            &mut gs,
+            TicCmd {
+                buttons: bt::BT_ATTACK,
+                ..Default::default()
+            },
+            None,
+        );
+
+        assert!(
+            gs.mobjslab.get(trooper_handle).unwrap().health < 20,
+            "player attack should use Doom-style bullet spread, not a zero-spread laser"
         );
     }
 
@@ -1643,5 +1680,27 @@ mod tests {
         // Trooper should have been ticked.
         let trooper_mo = gs.mobjslab.get(trooper_handle).unwrap();
         assert_eq!(trooper_mo.tics, 4, "trooper should be ticked");
+    }
+
+    #[test]
+    fn tick_player_tracks_use_button_hold_state() {
+        let mut gs = make_game_state();
+        assert!(!gs.player.use_down);
+
+        tick_player(
+            &mut gs,
+            TicCmd {
+                buttons: bt::BT_USE,
+                ..TicCmd::default()
+            },
+            None,
+        );
+        assert!(gs.player.use_down, "use_down must latch while use is held");
+
+        tick_player(&mut gs, TicCmd::default(), None);
+        assert!(
+            !gs.player.use_down,
+            "use_down must clear when the key is released"
+        );
     }
 }

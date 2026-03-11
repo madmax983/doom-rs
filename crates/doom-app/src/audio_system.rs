@@ -12,7 +12,10 @@
 //! If audio initialisation fails (no device, CI, headless) `try_open` returns
 //! `None` and the game runs silently — no panics, no unwraps in hot paths.
 
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicUsize, Ordering},
+};
 
 use doom_audio::{
     AudioDriver, GenmidiBank, MidiPlayer, MusScore, SfxCache, SfxMixer, SfxPriority,
@@ -53,6 +56,7 @@ pub struct AudioSystem {
     /// Keeps the cpal stream alive.  Must stay on the same thread that called
     /// `AudioDriver::open` (the main thread).
     _driver: AudioDriver,
+    music_start_count: Arc<AtomicUsize>,
 }
 
 // try_open_null and stop_music are used in tests and are intentional public API;
@@ -87,22 +91,28 @@ impl AudioSystem {
         // Gracefully falls back to the default sine-wave instrument if absent or malformed.
         let genmidi_bank = wad
             .find_lump_data("GENMIDI")
-            .and_then(|data| {
-                match GenmidiBank::parse(data) {
-                    Ok(bank) => {
-                        eprintln!("[audio] GENMIDI loaded: {} instruments", bank.instruments.len());
-                        Some(bank)
-                    }
-                    Err(e) => {
-                        eprintln!("[audio] GENMIDI parse failed: {e} — using default sine instrument");
-                        None
-                    }
+            .and_then(|data| match GenmidiBank::parse(data) {
+                Ok(bank) => {
+                    eprintln!(
+                        "[audio] GENMIDI loaded: {} instruments",
+                        bank.instruments.len()
+                    );
+                    Some(bank)
+                }
+                Err(e) => {
+                    eprintln!("[audio] GENMIDI parse failed: {e} — using default sine instrument");
+                    None
                 }
             });
 
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
+        let music_start_count = Arc::new(AtomicUsize::new(0));
+        let music_start_count_thread = Arc::clone(&music_start_count);
 
-        eprintln!("[audio] SfxCache: {} entries loaded; spawning thread", sfx_cache.len());
+        eprintln!(
+            "[audio] SfxCache: {} entries loaded; spawning thread",
+            sfx_cache.len()
+        );
 
         // Spawn the audio command thread.  It owns SfxCache and shared Arcs.
         std::thread::spawn(move || {
@@ -116,13 +126,20 @@ impl AudioSystem {
                 eprintln!("[audio] no GENMIDI — using default sine-wave instrument");
             }
             eprintln!("[audio] thread started");
-            audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache);
+            audio_cmd_thread(
+                rx,
+                &mixer_arc,
+                &midi_arc,
+                &sfx_cache,
+                &music_start_count_thread,
+            );
             eprintln!("[audio] thread exited");
         });
 
         Some(Self {
             sender: tx,
             _driver: driver,
+            music_start_count,
         })
     }
 
@@ -137,14 +154,23 @@ impl AudioSystem {
         let sfx_cache = SfxCache::new();
 
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
+        let music_start_count = Arc::new(AtomicUsize::new(0));
+        let music_start_count_thread = Arc::clone(&music_start_count);
 
         std::thread::spawn(move || {
-            audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache);
+            audio_cmd_thread(
+                rx,
+                &mixer_arc,
+                &midi_arc,
+                &sfx_cache,
+                &music_start_count_thread,
+            );
         });
 
         Some(Self {
             sender: tx,
             _driver: driver,
+            music_start_count,
         })
     }
 
@@ -154,7 +180,9 @@ impl AudioSystem {
     /// occupied and the new sound's priority is >= that channel's priority.
     /// Fire-and-forget: silently ignored if the audio thread has exited.
     pub fn play_sfx(&self, sfx_id: u16, priority: SfxPriority, volume: f32, pan: f32) {
-        let _ = self.sender.send(AudioEvent::PlaySfx(sfx_id, priority, volume, pan));
+        let _ = self
+            .sender
+            .send(AudioEvent::PlaySfx(sfx_id, priority, volume, pan));
     }
 
     /// Send a start-music command with raw MUS lump bytes.
@@ -165,6 +193,11 @@ impl AudioSystem {
     /// Send a stop-music command.
     pub fn stop_music(&self) {
         let _ = self.sender.send(AudioEvent::StopMusic);
+    }
+
+    #[cfg(test)]
+    pub fn debug_music_start_count(&self) -> usize {
+        self.music_start_count.load(Ordering::SeqCst)
     }
 }
 
@@ -211,6 +244,7 @@ fn audio_cmd_thread(
     mixer_arc: &Arc<Mutex<SfxMixer>>,
     midi_arc: &Arc<Mutex<MidiPlayer>>,
     sfx_cache: &SfxCache,
+    music_start_count: &Arc<AtomicUsize>,
 ) {
     while let Ok(event) = rx.recv() {
         match event {
@@ -223,6 +257,7 @@ fn audio_cmd_thread(
             }
 
             AudioEvent::StartMusic(data) => {
+                music_start_count.fetch_add(1, Ordering::SeqCst);
                 eprintln!("[music] StartMusic received, data_len={}", data.len());
                 match MusScore::parse(&data) {
                     Ok(score) => {
@@ -272,6 +307,23 @@ pub fn weapon_fire_sfx_lump(weapon: doom_game::WeaponType) -> &'static str {
         WeaponType::RocketLauncher => "DSRLAUNC",
         WeaponType::PlasmaRifle => "DSPLASMA",
         WeaponType::Bfg => "DSBFG",
+    }
+}
+
+/// Map a game sound request to its Doom DS* lump name and priority.
+pub fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, SfxPriority)> {
+    match req {
+        doom_game::SoundRequest::MonsterWake(kind, _, _) => {
+            Some((monster_wake_lump(kind), SfxPriority::High))
+        }
+        doom_game::SoundRequest::MonsterAttack(kind, _, _) => {
+            Some((monster_attack_lump(kind), SfxPriority::Medium))
+        }
+        doom_game::SoundRequest::MonsterDie(kind, _, _) => {
+            Some((monster_death_lump(kind), SfxPriority::High))
+        }
+        doom_game::SoundRequest::PlayerDie => Some(("DSPLDETH", SfxPriority::Weapon)),
+        doom_game::SoundRequest::PlayerUseFail => Some(("DSNOWAY", SfxPriority::High)),
     }
 }
 
@@ -515,7 +567,10 @@ mod tests {
 
     #[test]
     fn weapon_fire_sfx_lump_pistol() {
-        assert_eq!(weapon_fire_sfx_lump(doom_game::WeaponType::Pistol), "DSPISTOL");
+        assert_eq!(
+            weapon_fire_sfx_lump(doom_game::WeaponType::Pistol),
+            "DSPISTOL"
+        );
     }
 
     #[test]
@@ -528,6 +583,14 @@ mod tests {
         assert_eq!(
             weapon_fire_sfx_lump(doom_game::WeaponType::Chaingun),
             weapon_fire_sfx_lump(doom_game::WeaponType::Pistol)
+        );
+    }
+
+    #[test]
+    fn sound_request_sfx_maps_player_use_fail_to_noway() {
+        assert_eq!(
+            sound_request_sfx(doom_game::SoundRequest::PlayerUseFail),
+            Some(("DSNOWAY", doom_audio::SfxPriority::High))
         );
     }
 

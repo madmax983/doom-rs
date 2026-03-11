@@ -53,8 +53,12 @@ pub fn clip_seg_to_near_plane(
 /// Returns the (possibly shortened) segment, or `None` if fully outside.
 #[inline]
 fn clip_one_plane(
-    vx1: i64, vy1: i64, vx2: i64, vy2: i64,
-    d1: i64, d2: i64,
+    vx1: i64,
+    vy1: i64,
+    vx2: i64,
+    vy2: i64,
+    d1: i64,
+    d2: i64,
 ) -> Option<(i64, i64, i64, i64)> {
     if d1 >= 0 && d2 >= 0 {
         return Some((vx1, vy1, vx2, vy2));
@@ -92,17 +96,17 @@ fn clip_one_plane(
 /// from them.  Returns `None` if the seg is entirely outside the frustum.
 #[must_use]
 pub fn clip_seg_to_view_frustum(
-    vx1: i64, vy1: i64, vx2: i64, vy2: i64,
+    vx1: i64,
+    vy1: i64,
+    vx2: i64,
+    vy2: i64,
 ) -> Option<(i64, i64, i64, i64)> {
     // 1. Near plane: d = vx - 1
-    let (vx1, vy1, vx2, vy2) =
-        clip_one_plane(vx1, vy1, vx2, vy2, vx1 - 1, vx2 - 1)?;
+    let (vx1, vy1, vx2, vy2) = clip_one_plane(vx1, vy1, vx2, vy2, vx1 - 1, vx2 - 1)?;
     // 2. Left frustum: d = vx + vy  (inside when vy >= -vx)
-    let (vx1, vy1, vx2, vy2) =
-        clip_one_plane(vx1, vy1, vx2, vy2, vx1 + vy1, vx2 + vy2)?;
+    let (vx1, vy1, vx2, vy2) = clip_one_plane(vx1, vy1, vx2, vy2, vx1 + vy1, vx2 + vy2)?;
     // 3. Right frustum: d = vx - vy  (inside when vy <= vx)
-    let (vx1, vy1, vx2, vy2) =
-        clip_one_plane(vx1, vy1, vx2, vy2, vx1 - vy1, vx2 - vy2)?;
+    let (vx1, vy1, vx2, vy2) = clip_one_plane(vx1, vy1, vx2, vy2, vx1 - vy1, vx2 - vy2)?;
     Some((vx1, vy1, vx2, vy2))
 }
 

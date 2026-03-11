@@ -48,6 +48,8 @@ pub struct ActorRenderInfo {
     pub x: i32,
     /// World Y position (fixed-point raw value).
     pub y: i32,
+    /// World Z position of the actor base (fixed-point raw value).
+    pub z: i32,
     /// Actor's facing angle (BAM, 32-bit).
     pub angle: u32,
     /// Current state's sprite index (into `sprite_names::SPRITE_NAMES`).
@@ -537,6 +539,7 @@ mod tests {
         let info = ActorRenderInfo {
             x: 100 * 65536,
             y: 200 * 65536,
+            z: 24 * 65536,
             angle: 0x4000_0000,
             sprite: 10,  // SPR_POSS
             frame: 0x80, // frame A + fullbright
@@ -546,6 +549,7 @@ mod tests {
         };
         assert_eq!(info.x, 100 * 65536);
         assert_eq!(info.y, 200 * 65536);
+        assert_eq!(info.z, 24 * 65536);
         assert_eq!(info.angle, 0x4000_0000);
         assert_eq!(info.sprite, 10);
         assert_eq!(info.frame, 0x80);
@@ -558,6 +562,7 @@ mod tests {
         let info = ActorRenderInfo {
             x: 0,
             y: 0,
+            z: 0,
             angle: 0,
             sprite: 10,
             frame: 0x80 | 2, // frame C + fullbright
@@ -579,6 +584,7 @@ mod tests {
         let info = ActorRenderInfo {
             x: 0,
             y: 0,
+            z: 0,
             angle: 0,
             sprite: 10,
             frame: 3, // frame D, no fullbright

@@ -41,6 +41,20 @@ pub fn sector_from_subsector(level: &Level, subsector: usize) -> Option<usize> {
     Some(sd.sector as usize)
 }
 
+/// Resolve an actor's sector from its current position, falling back to the
+/// stored subsector when test geometry or synthetic levels cannot answer the
+/// BSP query.
+pub fn sector_from_position_or_subsector(
+    level: &Level,
+    x: Fixed16_16,
+    y: Fixed16_16,
+    subsector: usize,
+) -> Option<usize> {
+    level
+        .sector_index_at(x.to_int(), y.to_int())
+        .or_else(|| sector_from_subsector(level, subsector))
+}
+
 // ---------------------------------------------------------------------------
 // point_on_side
 // ---------------------------------------------------------------------------
@@ -217,9 +231,10 @@ pub fn p_check_sight(
         None => return false,
     };
 
-    // Resolve sector indices from subsectors.
-    let src_sector = sector_from_subsector(level, src_subsector);
-    let tgt_sector = sector_from_subsector(level, tgt_subsector);
+    // Resolve sector indices from current world positions, falling back to the
+    // actor's tracked subsector in synthetic/unit-test geometry.
+    let src_sector = sector_from_position_or_subsector(level, src_x, src_y, src_subsector);
+    let tgt_sector = sector_from_position_or_subsector(level, tgt_x, tgt_y, tgt_subsector);
 
     // Step 1: Reject table quick-reject.
     if let (Some(ss), Some(ts)) = (src_sector, tgt_sector) {

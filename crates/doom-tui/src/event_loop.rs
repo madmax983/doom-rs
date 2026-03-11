@@ -50,6 +50,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 /// Doom simulation runs at exactly 35 tics per second.
 pub const TIC_RATE_HZ: u32 = 35;
 
@@ -57,6 +60,15 @@ pub const TIC_RATE_HZ: u32 = 35;
 pub const TIC_DURATION: Duration = Duration::from_nanos(1_000_000_000 / TIC_RATE_HZ as u64);
 
 const DEFAULT_REFRESH_HZ: u32 = 60;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct ModifierSnapshot {
+    shift: Option<bool>,
+    control: Option<bool>,
+}
+
+#[cfg(test)]
+static MODIFIER_SAMPLE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 /// Errors that can occur during event loop setup or execution.
 #[derive(Debug, Error)]
@@ -160,7 +172,48 @@ fn query_refresh_rate() -> u32 {
     }
 }
 
+fn sampled_modifier_snapshot() -> ModifierSnapshot {
+    #[cfg(test)]
+    MODIFIER_SAMPLE_COUNT.fetch_add(1, Ordering::Relaxed);
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            GetAsyncKeyState, VK_CONTROL, VK_SHIFT,
+        };
+
+        // SAFETY: `GetAsyncKeyState` is a pure Win32 query for the current
+        // asynchronous key state. We only read the high bit to determine if
+        // either Shift or Control is physically down right now.
+        let is_down =
+            |virtual_key: i32| unsafe { (GetAsyncKeyState(virtual_key) as u16 & 0x8000) != 0 };
+
+        ModifierSnapshot {
+            shift: Some(is_down(VK_SHIFT as i32)),
+            control: Some(is_down(VK_CONTROL as i32)),
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        ModifierSnapshot::default()
+    }
+}
+
 impl DoomEventLoop {
+    fn sync_sampled_modifiers(&mut self) {
+        let snapshot = sampled_modifier_snapshot();
+        self.input.sync_modifiers(snapshot.shift, snapshot.control);
+    }
+
+    fn drain_ready_tics<A: DoomApp>(&mut self, app: &mut A) {
+        while self.tic_accumulator >= TIC_DURATION {
+            self.sync_sampled_modifiers();
+            let tic_input = self.input.to_tic_input();
+            app.tick(tic_input);
+            self.tic_accumulator -= TIC_DURATION;
+        }
+    }
+
     /// Set up the terminal (raw mode, alternate screen) and return the event loop.
     pub fn new() -> Result<Self, EventLoopError> {
         enable_raw_mode().map_err(|e| EventLoopError::TerminalSetup(e.to_string()))?;
@@ -261,11 +314,7 @@ impl DoomEventLoop {
 
             // --- Fixed-step tic simulation ---
             self.tic_accumulator += elapsed;
-            while self.tic_accumulator >= TIC_DURATION {
-                let tic_input = self.input.to_tic_input(); // consumes pending_console_char
-                app.tick(tic_input);
-                self.tic_accumulator -= TIC_DURATION;
-            }
+            self.drain_ready_tics(app);
 
             // --- Render ---
             app.render(&mut fb);
@@ -288,8 +337,10 @@ impl DoomEventLoop {
             match event::read() {
                 Ok(event::Event::Key(key)) => {
                     // Mirror shift state into InputState for strafe detection.
-                    self.input
-                        .set_shift(key.modifiers.contains(KeyModifiers::SHIFT));
+                    self.input.sync_modifiers(
+                        Some(key.modifiers.contains(KeyModifiers::SHIFT)),
+                        Some(key.modifiers.contains(KeyModifiers::CONTROL)),
+                    );
 
                     match key.kind {
                         KeyEventKind::Press => {
@@ -385,8 +436,15 @@ impl DoomEventLoop {
                         [rgb.r, rgb.g, rgb.b]
                     })
                     .collect();
-                RgbImage::from_raw(Framebuffer::width() as u32, Framebuffer::height() as u32, rgb_data)
-                    .map(|img| self.picker.new_resize_protocol(DynamicImage::ImageRgb8(img)))
+                RgbImage::from_raw(
+                    Framebuffer::width() as u32,
+                    Framebuffer::height() as u32,
+                    rgb_data,
+                )
+                .map(|img| {
+                    self.picker
+                        .new_resize_protocol(DynamicImage::ImageRgb8(img))
+                })
             }
             _ => None,
         };
@@ -448,6 +506,35 @@ impl Drop for DoomEventLoop {
 mod tests {
     use super::*;
 
+    fn reset_modifier_sample_count() {
+        MODIFIER_SAMPLE_COUNT.store(0, Ordering::Relaxed);
+    }
+
+    fn modifier_sample_count() -> usize {
+        MODIFIER_SAMPLE_COUNT.load(Ordering::Relaxed)
+    }
+
+    fn make_test_event_loop() -> DoomEventLoop {
+        let backend = CrosstermBackend::new(stdout());
+        let terminal = Terminal::new(backend).expect("test terminal");
+        DoomEventLoop {
+            terminal,
+            input: InputState::new(),
+            is_running: true,
+            target_frame_time: Duration::from_secs_f64(1.0 / f64::from(DEFAULT_REFRESH_HZ)),
+            tic_accumulator: Duration::ZERO,
+            frame_start: Instant::now(),
+            fps: 0.0,
+            frames_since_update: 0,
+            last_fps_update: Instant::now(),
+            frame_count: 0,
+            scaling_mode: ScalingMode::Nearest,
+            picker: Picker::halfblocks(),
+            use_graphics_protocol: false,
+            keyboard_enhancement_active: false,
+        }
+    }
+
     #[test]
     fn tic_duration_is_approx_28ms() {
         // 1/35s ≈ 28.571 ms — check we're within 1µs of the exact value.
@@ -506,6 +593,30 @@ mod tests {
         }
 
         assert_eq!(app.ticks, 2);
+    }
+
+    #[test]
+    fn poll_events_does_not_sample_modifiers() {
+        reset_modifier_sample_count();
+        let mut loop_ = make_test_event_loop();
+
+        loop_.poll_events();
+
+        assert_eq!(modifier_sample_count(), 0);
+    }
+
+    #[test]
+    fn drain_ready_tics_samples_modifiers_once_per_tic() {
+        reset_modifier_sample_count();
+        let mut loop_ = make_test_event_loop();
+        let mut app = CountingApp { ticks: 0 };
+        loop_.tic_accumulator = TIC_DURATION * 2 + TIC_DURATION / 2;
+
+        loop_.drain_ready_tics(&mut app);
+
+        assert_eq!(app.ticks, 2);
+        assert_eq!(modifier_sample_count(), 2);
+        assert_eq!(loop_.tic_accumulator, TIC_DURATION / 2);
     }
 
     #[test]

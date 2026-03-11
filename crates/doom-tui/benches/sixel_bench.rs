@@ -55,18 +55,20 @@ fn bench_sixel_encoder(c: &mut Criterion) {
 
     let scenarios: &[(&str, usize, usize, u16, u16)] = &[
         // (label,  dst_w, dst_h, area_w, area_h)
-        ("small_640x400",    640,  400,  80, 25),
-        ("medium_1280x800", 1280,  800, 160, 50),
-        ("full_1760x1100",  1760, 1100, 220, 55),
+        ("small_640x400", 640, 400, 80, 25),
+        ("medium_1280x800", 1280, 800, 160, 50),
+        ("full_1760x1100", 1760, 1100, 220, 55),
     ];
 
     let mut group = c.benchmark_group("sixel_encode");
     for &(label, dst_w, dst_h, area_w, _area_h) in scenarios {
-        group.bench_with_input(BenchmarkId::new("encode", label), &(dst_w, dst_h), |b, &(dw, dh)| {
-            b.iter(|| {
-                encode_doom_sixel(&data, &lut, 0, SRC_W, SRC_H, dw, dh, area_w)
-            });
-        });
+        group.bench_with_input(
+            BenchmarkId::new("encode", label),
+            &(dst_w, dst_h),
+            |b, &(dw, dh)| {
+                b.iter(|| encode_doom_sixel(&data, &lut, 0, SRC_W, SRC_H, dw, dh, area_w));
+            },
+        );
     }
     group.finish();
 }

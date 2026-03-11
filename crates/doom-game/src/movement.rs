@@ -18,6 +18,7 @@ use doom_types::Fixed16_16;
 
 #[derive(Clone, Copy, Debug)]
 struct BlockingLine {
+    linedef_idx: usize,
     x1: Fixed16_16,
     y1: Fixed16_16,
     x2: Fixed16_16,
@@ -58,6 +59,19 @@ pub fn p_try_move(
     level: &Level,
 ) -> bool {
     try_move_with_blocker(slab, handle, new_x, new_y, level).0
+}
+
+/// Attempt to move actor `handle` to `(new_x, new_y)` and report the exact
+/// blocking linedef index when movement fails on geometry.
+pub fn p_try_move_blocker(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    new_x: Fixed16_16,
+    new_y: Fixed16_16,
+    level: &Level,
+) -> (bool, Option<usize>) {
+    let (can_move, blocker) = try_move_with_blocker(slab, handle, new_x, new_y, level);
+    (can_move, blocker.map(|line| line.linedef_idx))
 }
 
 /// Attempt a movement with wall-sliding fallback.
@@ -137,14 +151,19 @@ fn try_move_with_blocker(
     level: &Level,
 ) -> (bool, Option<BlockingLine>) {
     // Extract what we need, releasing the borrow before iterating blockmap.
-    let (radius, height, mo_flags, mo_z) = match slab.get(handle) {
-        Some(mo) => (mo.radius, mo.height, mo.flags, mo.z),
+    let (old_x, old_y, radius, height, mo_flags, mo_z) = match slab.get(handle) {
+        Some(mo) => (mo.x, mo.y, mo.radius, mo.height, mo.flags, mo.z),
         None => return (false, None),
     };
 
     if mo_flags & flags::MF_NOCLIP != 0 {
         return (true, None);
     }
+
+    let current_floor = level
+        .floor_at(old_x.to_int(), old_y.to_int())
+        .map(|floor| Fixed16_16::from_int(floor as i32));
+    let step_base_z = current_floor.map_or(mo_z, |floor_z| mo_z.max(floor_z));
 
     // Proposed bounding box.
     let left = new_x - radius;
@@ -204,6 +223,7 @@ fn try_move_with_blocker(
                     return (
                         false,
                         Some(BlockingLine {
+                            linedef_idx: ld_idx as usize,
                             x1: lx1,
                             y1: ly1,
                             x2: lx2,
@@ -217,6 +237,7 @@ fn try_move_with_blocker(
                     return (
                         false,
                         Some(BlockingLine {
+                            linedef_idx: ld_idx as usize,
                             x1: lx1,
                             y1: ly1,
                             x2: lx2,
@@ -232,6 +253,7 @@ fn try_move_with_blocker(
                     return (
                         false,
                         Some(BlockingLine {
+                            linedef_idx: ld_idx as usize,
                             x1: lx1,
                             y1: ly1,
                             x2: lx2,
@@ -245,6 +267,7 @@ fn try_move_with_blocker(
                     return (
                         false,
                         Some(BlockingLine {
+                            linedef_idx: ld_idx as usize,
                             x1: lx1,
                             y1: ly1,
                             x2: lx2,
@@ -256,6 +279,7 @@ fn try_move_with_blocker(
                     return (
                         false,
                         Some(BlockingLine {
+                            linedef_idx: ld_idx as usize,
                             x1: lx1,
                             y1: ly1,
                             x2: lx2,
@@ -276,6 +300,7 @@ fn try_move_with_blocker(
                     return (
                         false,
                         Some(BlockingLine {
+                            linedef_idx: ld_idx as usize,
                             x1: lx1,
                             y1: ly1,
                             x2: lx2,
@@ -285,10 +310,11 @@ fn try_move_with_blocker(
                 }
 
                 // Step too high to climb.
-                if open_floor - mo_z > MAX_STEP_HEIGHT {
+                if open_floor - step_base_z > MAX_STEP_HEIGHT {
                     return (
                         false,
                         Some(BlockingLine {
+                            linedef_idx: ld_idx as usize,
                             x1: lx1,
                             y1: ly1,
                             x2: lx2,
@@ -465,6 +491,86 @@ mod tests {
         }
     }
 
+    fn make_two_sided_step_level(front_floor: i16, back_floor: i16) -> doom_map::Level {
+        use doom_map::{Blockmap, FLAG_TWO_SIDED, Linedef, Reject, Sector, Sidedef, Vertex};
+
+        let vertexes = vec![Vertex { x: 64, y: 0 }, Vertex { x: 64, y: 128 }];
+        let linedefs = vec![Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: FLAG_TWO_SIDED,
+            special: 0,
+            tag: 0,
+            right_sidedef: 0,
+            left_sidedef: 1,
+        }];
+        let sidedefs = vec![
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+        ];
+        let sectors = vec![
+            Sector {
+                floor_height: front_floor,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: back_floor,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+
+        let mut bm_data = Vec::new();
+        bm_data.extend_from_slice(&0i16.to_le_bytes());
+        bm_data.extend_from_slice(&0i16.to_le_bytes());
+        bm_data.extend_from_slice(&1u16.to_le_bytes());
+        bm_data.extend_from_slice(&1u16.to_le_bytes());
+        let data_start = 4u16 + 1;
+        bm_data.extend_from_slice(&data_start.to_le_bytes());
+        bm_data.extend_from_slice(&0u16.to_le_bytes());
+        bm_data.extend_from_slice(&0u16.to_le_bytes());
+        bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+        let reject = Reject::parse_lump(&[0u8], 2).unwrap();
+
+        doom_map::Level {
+            name: "STEP".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap,
+        }
+    }
+
     fn make_player_slab() -> (MobjSlab, MobjHandle) {
         let mut slab = MobjSlab::new();
         let mut mo = Mobj::new(
@@ -620,5 +726,26 @@ mod tests {
             &level,
         );
         assert_eq!((slide_x, slide_y), (old_x, old_y));
+    }
+
+    #[test]
+    fn step_height_uses_current_sector_floor_when_mobj_z_is_stale() {
+        let level = make_two_sided_step_level(16, 32);
+        let (mut slab, handle) = make_player_slab();
+        let mo = slab.get_mut(handle).unwrap();
+        mo.x = Fixed16_16::from_int(48);
+        mo.y = Fixed16_16::from_int(64);
+        mo.z = Fixed16_16::ZERO;
+
+        assert!(
+            p_try_move(
+                &slab,
+                handle,
+                Fixed16_16::from_int(80),
+                Fixed16_16::from_int(64),
+                &level
+            ),
+            "current sector floor (16) should allow stepping up to 32 even if mo.z is stale at 0"
+        );
     }
 }

@@ -16,27 +16,24 @@ use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
 use doom_game::player::WeaponType;
 use doom_game::{
-    GameState, Skill, TicCmd, TitleScreen, check_cross_lines, init_conveyors,
-    init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
+    GameState, Skill, TicCmd, TitleScreen, check_cross_lines, init_conveyors, init_scrolling_walls,
+    init_sector_lights, kind_to_doomed_type, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
-    AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer, PaletteFlash,
-    PaletteLut, SpriteCache, SwitchList, TextureCache, draw_automap_ex, draw_menu, draw_status_bar,
-    ActorRenderInfo, RenderOut, draw_title_screen, draw_weapon_sprite, render_actors_ex, render_level,
-    render_flag_from_state, thing_sprite_prefix,
+    ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
+    PaletteFlash, PaletteLut, RenderOut, SpriteCache, SpriteClip, SwitchList, TextureCache,
+    draw_automap_ex, draw_menu, draw_status_bar, draw_title_screen, draw_weapon_sprite,
+    render_actors_ex, render_flag_from_state, render_level, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
 
-use audio_system::{
-    AudioSystem, monster_attack_lump, monster_death_lump, monster_wake_lump, music_lump_for_map,
-    weapon_fire_sfx_lump,
-};
-use doom_audio::{SfxPriority, SfxEmitter, compute_spatial};
+use audio_system::{AudioSystem, music_lump_for_map, sound_request_sfx, weapon_fire_sfx_lump};
+use doom_audio::{SfxEmitter, SfxPriority, compute_spatial};
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -127,6 +124,8 @@ pub(crate) struct DoomGame {
     automap_full_reveal: bool,
     /// Optional audio subsystem.  `None` when no audio device is available.
     audio: Option<AudioSystem>,
+    /// Raw MUS bytes for the current map's background music.
+    level_music: Option<Vec<u8>>,
     /// Whether the attack button was held during the previous tic (for edge detection).
     prev_attack_down: bool,
     /// Flat texture cache (floor/ceiling textures loaded from the WAD).
@@ -165,6 +164,7 @@ impl DoomGame {
         mut gs: GameState,
         level: Level,
         audio: Option<AudioSystem>,
+        level_music: Option<Vec<u8>>,
         flat_cache: Option<FlatCache>,
         tex_cache: Option<TextureCache>,
         sprite_cache: Option<SpriteCache>,
@@ -192,7 +192,7 @@ impl DoomGame {
             None
         };
 
-        Self {
+        let game = Self {
             gs,
             level,
             cheat_detector: cheats::CheatDetector::new(),
@@ -203,6 +203,7 @@ impl DoomGame {
             automap: AutomapState::new(),
             automap_full_reveal: false,
             audio,
+            level_music,
             prev_attack_down: false,
             flat_cache,
             tex_cache,
@@ -218,6 +219,18 @@ impl DoomGame {
             debug_log,
             pain_sfx_id,
             sfx_lookup,
+        };
+
+        if game.title_screen.is_none() {
+            game.start_level_music();
+        }
+
+        game
+    }
+
+    fn start_level_music(&self) {
+        if let (Some(audio), Some(level_music)) = (&self.audio, &self.level_music) {
+            audio.start_music(level_music.clone());
         }
     }
 }
@@ -235,11 +248,16 @@ impl DoomGame {
 
     /// Snapshot player state to the log (position, health, armor, ammo, weapon).
     fn dlog_player_snapshot(&mut self) {
-        if self.debug_log.is_none() { return; }
-        let (px, py, pa) = self.gs.mobjslab.get(self.gs.player.handle)
+        if self.debug_log.is_none() {
+            return;
+        }
+        let (px, py, pa) = self
+            .gs
+            .mobjslab
+            .get(self.gs.player.handle)
             .map(|mo| (mo.x.to_int(), mo.y.to_int(), mo.angle.0))
             .unwrap_or((0, 0, 0));
-        let hp  = self.gs.player.health();
+        let hp = self.gs.player.health();
         let arm = self.gs.player.armor();
         let kills = self.gs.player.kill_count;
         let weapon = self.gs.player.weapon;
@@ -264,33 +282,53 @@ impl DoomGame {
 
     /// Log the state of all live enemies within 1024 map units of the player.
     fn dlog_nearby_enemies(&mut self) {
-        if self.debug_log.is_none() { return; }
-        let (px, py) = self.gs.mobjslab.get(self.gs.player.handle)
+        if self.debug_log.is_none() {
+            return;
+        }
+        let (px, py) = self
+            .gs
+            .mobjslab
+            .get(self.gs.player.handle)
             .map(|mo| (mo.x.to_int(), mo.y.to_int()))
             .unwrap_or((0, 0));
 
         let handles: Vec<_> = self.gs.mobjslab.iter_handles().collect();
         for h in handles {
-            let Some(mo) = self.gs.mobjslab.get(h) else { continue };
+            let Some(mo) = self.gs.mobjslab.get(h) else {
+                continue;
+            };
             // Monsters only, alive.
-            let is_monster = matches!(mo.kind,
-                doom_game::mobj::MobjKind::Trooper | doom_game::mobj::MobjKind::Sergeant
-                | doom_game::mobj::MobjKind::Imp | doom_game::mobj::MobjKind::Demon
-                | doom_game::mobj::MobjKind::Spectre | doom_game::mobj::MobjKind::Cacodemon
-                | doom_game::mobj::MobjKind::BaronOfHell | doom_game::mobj::MobjKind::HellKnight
-                | doom_game::mobj::MobjKind::Arachnotron | doom_game::mobj::MobjKind::PainElemental
-                | doom_game::mobj::MobjKind::Revenant | doom_game::mobj::MobjKind::Mancubus
-                | doom_game::mobj::MobjKind::ArchVile | doom_game::mobj::MobjKind::SpiderMastermind
-                | doom_game::mobj::MobjKind::Cyberdemon | doom_game::mobj::MobjKind::WolfSS
-                | doom_game::mobj::MobjKind::LostSoul
+            let is_monster = matches!(
+                mo.kind,
+                doom_game::mobj::MobjKind::Trooper
+                    | doom_game::mobj::MobjKind::Sergeant
+                    | doom_game::mobj::MobjKind::Imp
+                    | doom_game::mobj::MobjKind::Demon
+                    | doom_game::mobj::MobjKind::Spectre
+                    | doom_game::mobj::MobjKind::Cacodemon
+                    | doom_game::mobj::MobjKind::BaronOfHell
+                    | doom_game::mobj::MobjKind::HellKnight
+                    | doom_game::mobj::MobjKind::Arachnotron
+                    | doom_game::mobj::MobjKind::PainElemental
+                    | doom_game::mobj::MobjKind::Revenant
+                    | doom_game::mobj::MobjKind::Mancubus
+                    | doom_game::mobj::MobjKind::ArchVile
+                    | doom_game::mobj::MobjKind::SpiderMastermind
+                    | doom_game::mobj::MobjKind::Cyberdemon
+                    | doom_game::mobj::MobjKind::WolfSS
+                    | doom_game::mobj::MobjKind::LostSoul
             );
-            if !is_monster { continue; }
+            if !is_monster {
+                continue;
+            }
             let ex = mo.x.to_int();
             let ey = mo.y.to_int();
             let dx = (ex - px) as i64;
             let dy = (ey - py) as i64;
             let dist_sq = dx * dx + dy * dy;
-            if dist_sq > 1024 * 1024 { continue; }
+            if dist_sq > 1024 * 1024 {
+                continue;
+            }
             let state_idx = mo.state.0;
             let flags = mo.flags;
             let is_dead = mo.health <= 0;
@@ -305,10 +343,14 @@ impl DoomGame {
     /// Log death events — enemies that fired A_Scream this tic (SCREAMED flag set).
     /// Clears the flag after logging so each death is logged exactly once.
     fn dlog_death_events(&mut self) {
-        if self.debug_log.is_none() { return; }
+        if self.debug_log.is_none() {
+            return;
+        }
         let handles: Vec<_> = self.gs.mobjslab.iter_handles().collect();
         for h in handles {
-            let Some(mo) = self.gs.mobjslab.get_mut(h) else { continue };
+            let Some(mo) = self.gs.mobjslab.get_mut(h) else {
+                continue;
+            };
             if mo.flags & doom_game::mobj::flags::MF_SCREAMED != 0 {
                 // Clear the flag so we only log once.
                 mo.flags &= !doom_game::mobj::flags::MF_SCREAMED;
@@ -316,7 +358,10 @@ impl DoomGame {
                 let x = mo.x.to_int();
                 let y = mo.y.to_int();
                 let state_idx = mo.state.0;
-                let msg = format!("enemy_died {:?} pos=({},{}) death_state={}", kind, x, y, state_idx);
+                let msg = format!(
+                    "enemy_died {:?} pos=({},{}) death_state={}",
+                    kind, x, y, state_idx
+                );
                 self.dlog(&msg);
             }
         }
@@ -363,6 +408,7 @@ impl DoomApp for DoomGame {
                             init_sector_lights(&mut self.gs, &self.level);
                             self.menu.close();
                             self.title_screen = None;
+                            self.start_level_music();
                         }
                         doom_game::menu::MenuResult::Quit => {
                             // Can't stop the event loop from here; just close the menu.
@@ -565,41 +611,42 @@ impl DoomApp for DoomGame {
                     .unwrap_or_default();
 
                 for ev in &events {
-                    let (lump, priority, emitter_x, emitter_y) = match ev {
-                        SoundRequest::MonsterWake(kind, x, y) => {
-                            (monster_wake_lump(*kind), SfxPriority::High, *x, *y)
-                        }
-                        SoundRequest::MonsterAttack(kind, x, y) => {
-                            (monster_attack_lump(*kind), SfxPriority::Medium, *x, *y)
-                        }
-                        SoundRequest::MonsterDie(kind, x, y) => {
-                            (monster_death_lump(*kind), SfxPriority::High, *x, *y)
-                        }
-                        SoundRequest::PlayerDie => {
-                            // Player sounds are always full volume / center.
-                            if let Some(&id) = self.sfx_lookup.get("DSPLDETH") {
-                                audio.play_sfx(id, SfxPriority::Weapon, 1.0, 0.0);
-                            }
-                            continue;
-                        }
+                    let Some((lump, priority)) = sound_request_sfx(*ev) else {
+                        continue;
+                    };
+
+                    let emitter = match ev {
+                        SoundRequest::MonsterWake(_, x, y)
+                        | SoundRequest::MonsterAttack(_, x, y)
+                        | SoundRequest::MonsterDie(_, x, y) => Some((*x, *y)),
+                        SoundRequest::PlayerDie | SoundRequest::PlayerUseFail => None,
                     };
 
                     if lump.is_empty() {
                         continue;
                     }
 
-                    let spatial = compute_spatial(
-                        &SfxEmitter { x: emitter_x, y: emitter_y },
-                        pl_x, pl_y, pl_angle,
-                    );
-
-                    // Skip inaudible sounds to avoid wasting mixer channels.
-                    if spatial.volume < 0.01 {
-                        continue;
-                    }
-
                     if let Some(&id) = self.sfx_lookup.get(lump) {
-                        audio.play_sfx(id, priority, spatial.volume, spatial.pan);
+                        if let Some((emitter_x, emitter_y)) = emitter {
+                            let spatial = compute_spatial(
+                                &SfxEmitter {
+                                    x: emitter_x,
+                                    y: emitter_y,
+                                },
+                                pl_x,
+                                pl_y,
+                                pl_angle,
+                            );
+
+                            // Skip inaudible sounds to avoid wasting mixer channels.
+                            if spatial.volume < 0.01 {
+                                continue;
+                            }
+
+                            audio.play_sfx(id, priority, spatial.volume, spatial.pan);
+                        } else {
+                            audio.play_sfx(id, priority, 1.0, 0.0);
+                        }
                     }
                 }
             }
@@ -723,7 +770,13 @@ impl DoomApp for DoomGame {
             // Draw the first-person 3D view.
             // We pass a grayscale palette; render_level currently ignores it
             // (wall colors are derived from light levels only).
-            let RenderOut { z_buf, clip_top, clip_bot } = render_level(
+            let RenderOut {
+                z_buf,
+                clip_top,
+                clip_bot,
+                clip_top_depth,
+                clip_bot_depth,
+            } = render_level(
                 &self.level,
                 px,
                 py,
@@ -754,18 +807,22 @@ impl DoomApp for DoomGame {
                             .unwrap_or((doom_game::states::sprite_names::SPR_NONE, 0));
                         // For items whose spawn_state is S_NULL (sprite = SPR_NONE),
                         // fall back to the DoomEd-type-derived prefix so they still render.
-                        let fallback_prefix = if sprite == doom_game::states::sprite_names::SPR_NONE {
+                        let fallback_prefix = if sprite == doom_game::states::sprite_names::SPR_NONE
+                        {
                             kind_to_doomed_type(mo.kind).and_then(thing_sprite_prefix)
                         } else {
                             None
                         };
                         // Skip completely if no sprite and no fallback.
-                        if sprite == doom_game::states::sprite_names::SPR_NONE && fallback_prefix.is_none() {
+                        if sprite == doom_game::states::sprite_names::SPR_NONE
+                            && fallback_prefix.is_none()
+                        {
                             return None;
                         }
                         Some(ActorRenderInfo {
                             x: mo.x.0,
                             y: mo.y.0,
+                            z: mo.z.0,
                             angle: mo.angle.0,
                             sprite,
                             frame,
@@ -785,7 +842,12 @@ impl DoomApp for DoomGame {
                     cache,
                     Some(&z_buf),
                     self.colormap_cache.as_ref(),
-                    Some((&clip_top, &clip_bot)),
+                    Some(SpriteClip {
+                        top: &clip_top,
+                        bottom: &clip_bot,
+                        top_depth: &clip_top_depth,
+                        bottom_depth: &clip_bot_depth,
+                    }),
                 );
             }
 
@@ -1136,16 +1198,10 @@ fn main() -> Result<()> {
     // Try to open the audio subsystem.  Returns None in headless/CI environments.
     let audio = AudioSystem::try_open(&wad);
 
-    // Start map music if audio is available (skip during title screen).
-    if !show_title {
-        if let Some(ref audio) = audio {
-            if let Some(music_lump) = music_lump_for_map(warp_str) {
-                if let Some(mus_data) = wad.find_lump_data(&music_lump) {
-                    audio.start_music(mus_data.to_vec());
-                }
-            }
-        }
-    }
+    let level_music = music_lump_for_map(warp_str).and_then(|music_lump| {
+        wad.find_lump_data(&music_lump)
+            .map(|mus_data| mus_data.to_vec())
+    });
 
     // Validate mutually exclusive mode args: at most one of the four modes.
     let exclusive_modes = [
@@ -1166,15 +1222,16 @@ fn main() -> Result<()> {
     }
 
     // Build the app.
-    let debug_log = args.debug_log.as_ref().and_then(|p| {
-        match std::fs::File::create(p) {
+    let debug_log = args
+        .debug_log
+        .as_ref()
+        .and_then(|p| match std::fs::File::create(p) {
             Ok(f) => Some(f),
             Err(e) => {
                 eprintln!("Warning: could not open debug log '{}': {e}", p.display());
                 None
             }
-        }
-    });
+        });
 
     // Resolve player pain SFX (DSPLPAIN) once at startup so we can fire it cheaply.
     let pain_sfx_id = audio_system::find_sfx_id_by_name(&wad, "DSPLPAIN");
@@ -1187,6 +1244,7 @@ fn main() -> Result<()> {
         gs,
         level,
         audio,
+        level_music,
         flat_cache,
         tex_cache,
         sprite_cache,
@@ -1436,11 +1494,22 @@ mod tests {
             None,
             None,
             None,
+            None,
             false,
             None,
             None,
             std::collections::HashMap::new(),
         )
+    }
+
+    fn wait_for_music_requests(audio: &AudioSystem, expected: usize) {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_millis(100);
+        while std::time::Instant::now() < deadline {
+            if audio.debug_music_start_count() >= expected {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -1670,6 +1739,62 @@ mod tests {
             game.cheat_message.is_some(),
             "cheat_message must be set after cheat activation"
         );
+    }
+
+    #[test]
+    fn game_without_title_starts_level_music_immediately() {
+        let audio = AudioSystem::try_open_null().expect("null audio must succeed");
+        let game = DoomGame::new(
+            make_game_state(),
+            make_test_level(),
+            Some(audio),
+            Some(vec![1, 2, 3, 4]),
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+        );
+
+        let audio = game.audio.as_ref().expect("audio must be present");
+        wait_for_music_requests(audio, 1);
+        assert_eq!(audio.debug_music_start_count(), 1);
+    }
+
+    #[test]
+    fn starting_game_from_title_starts_level_music() {
+        let audio = AudioSystem::try_open_null().expect("null audio must succeed");
+        let mut game = DoomGame::new(
+            make_game_state(),
+            make_test_level(),
+            Some(audio),
+            Some(vec![1, 2, 3, 4]),
+            None,
+            None,
+            None,
+            None,
+            true,
+            None,
+            None,
+            std::collections::HashMap::new(),
+        );
+
+        for _ in 0..3 {
+            let mut input = TicInput::default();
+            input.menu_select = true;
+            game.tick(input);
+        }
+
+        assert!(
+            game.title_screen.is_none(),
+            "title screen should be dismissed"
+        );
+        let audio = game.audio.as_ref().expect("audio must be present");
+        wait_for_music_requests(audio, 1);
+        assert_eq!(audio.debug_music_start_count(), 1);
     }
 
     // ===================================================================

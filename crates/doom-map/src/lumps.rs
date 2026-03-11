@@ -54,6 +54,10 @@ pub const FLAG_BLOCKING: u16 = 0x0001;
 pub const FLAG_BLOCKMONSTERS: u16 = 0x0002;
 /// Linedef flags bit for two-sided lines.
 pub const FLAG_TWO_SIDED: u16 = 0x0004;
+/// Linedef flags bit for upper-unpegged textures.
+pub const FLAG_DONTPEGTOP: u16 = 0x0008;
+/// Linedef flags bit for lower-unpegged / bottom-pegged textures.
+pub const FLAG_DONTPEGBOTTOM: u16 = 0x0010;
 
 /// Sentinel value meaning "no sidedef assigned".
 pub const SIDEDEF_NONE: u16 = 0xFFFF;
