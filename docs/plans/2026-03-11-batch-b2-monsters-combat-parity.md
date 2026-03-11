@@ -4,11 +4,11 @@
 
 **Status:** In progress on 2026-03-11.
 
-**Outcome so far:** The first B2 slice is landed and green. `p_check_missile_range()` now matches the vanilla Arch-Vile maximum-range rule and the Revenant minimum-range rule, with regressions to keep both from drifting.
+**Outcome so far:** Two B2 slices are landed and green. `p_check_missile_range()` now matches the vanilla Arch-Vile maximum-range rule and the Revenant minimum-range rule, and hitscan now uses Doom-shaped vertical slope clipping instead of the old 2D-only actor pick.
 
-**Goal:** Finish the remaining monster/combat parity debt from System 2, starting with source-backed `P_CheckMissileRange` fixes and then tackling elevated-target hitscan autoaim / bullet slope behavior.
+**Goal:** Finish the remaining monster/combat parity debt from System 2, starting with source-backed `P_CheckMissileRange` fixes, then the vertical hitscan path, and then the remaining `P_BulletSlope` / refire nuances.
 
-**Architecture:** Keep monster missile gating and hitscan parity separate. Missile-range fixes belong in `actions.rs` with direct unit coverage. Elevated-target autoaim is a larger combat-path change: it needs a more Doom-shaped vertical slope model instead of the current 2D-only hitscan path.
+**Architecture:** Keep monster missile gating and hitscan parity separate. Missile-range fixes belong in `actions.rs` with direct unit coverage. The hitscan pass now uses an ordered intercept walk in `combat.rs` that clips a Doom-style vertical slope window across lines and actors; the next remaining combat debt is the player bullet autoaim search in `weapon_fire.rs`.
 
 **Tech Stack:** Rust workspace crate `doom-game`, unit tests with `cargo test`.
 
@@ -68,15 +68,22 @@ Expected: the new regressions and surrounding chase tests pass.
 - Compare local `p_line_attack()` and `p_aim_line_slope()` against Chocolate Doom `P_AimLineAttack` / `P_LineAttack`.
 - Identify the minimum viable path to add vertical slope-aware hitscan without reopening the earlier 2D hit detection fixes.
 
-**Current finding:**
+**Initial finding:**
 
-- Local hitscan is still effectively 2D. `p_line_attack()` in `combat.rs` does not use slope at all, and `trace::trace_ray()` actor tests ignore actor `z`.
+- Local hitscan was still effectively 2D. `p_line_attack()` in `combat.rs` did not use slope at all, and `trace::trace_ray()` actor tests ignored actor `z`.
 - `p_aim_line_slope()` exists, but it is not currently part of hitscan selection or occlusion.
 
-**Next regression to write:**
+**Red regressions written:**
 
-- An elevated target directly ahead in open space should be auto-aimed and hit.
-- A target that is only aligned in 2D but vertically outside the shot window should not be hit.
+- A target entirely below the autoaim window must not be hit.
+- A low near target must be skipped so a farther target in the actual autoaim lane can be hit.
+
+**Result:** Passed. `combat.rs` now walks ordered wall and actor intercepts, uses Chocolate Doom-style `shootz = z + height/2 + 8`, starts with the vanilla `±0.625` slope window, narrows that window across two-sided openings, and only damages actors whose vertical span overlaps the surviving shot cone.
+
+**Remaining combat debt after Task 2:**
+
+- `P_BulletSlope` still needs the player-only three-try angle probe from `p_pspr.c` (`straight`, `+5.625°`, `-5.625°`) instead of the current single-angle path.
+- Full psprite-state refire cadence is still less source-faithful than Chocolate Doom, even though the gross held-fire behavior is now correct in the tic loop.
 
 ### Task 3: Verification
 
@@ -89,6 +96,8 @@ cargo fmt --all
 cargo test -p doom-game p_check_missile_range_archvile_rejects_far_targets -- --nocapture
 cargo test -p doom-game p_check_missile_range_revenant_rejects_targets_under_196_units -- --nocapture
 cargo test -p doom-game a_chase -- --nocapture
+cargo test -p doom-game line_attack_with_level_skips_ -- --nocapture
+cargo test -p doom-game line_attack -- --nocapture
 cargo test -p doom-game --lib
 ```
 

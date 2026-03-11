@@ -50,9 +50,9 @@ Each subsystem log should record:
 | --- | --- | --- | --- | --- |
 | Input and main tic loop | `d_event.c`, `d_loop.c`, `i_input.c`, `p_user.c` | `crates/doom-tui/src/input.rs`, `crates/doom-tui/src/event_loop.rs`, `crates/doom-game/src/tic.rs` | Partial | Batch D landed deterministic held-fire cadence and kept rocket/BFG release-gated. Desktop mouse should wait for a non-TUI frontend. Deeper demo/input parity is still unaudited. |
 | Player use, doors, linedef specials | `p_spec.c`, `p_map.c` | `crates/doom-game/src/specials.rs`, `crates/doom-game/src/trace.rs`, `crates/doom-game/src/linedef_dispatch.rs`, `crates/doom-game/src/tic.rs` | Partial | Batch A2 is green: locked doors now emit player-only keyed feedback and walk-trigger processing moved back into the game tick with deterministic reverse-crossing order. Remaining debt is the exact pathological `spechit` encounter order, not the old app-wrapper or lump-order behavior. |
-| Monster movement, sight, sound, door opening | `p_enemy.c`, `p_sight.c`, `p_map.c` | `crates/doom-game/src/actions.rs`, `crates/doom-game/src/sight.rs`, `crates/doom-game/src/sound.rs` | Partial | Batch B restored behind-the-back wakeup rules, one-soundblock propagation, retaliation, and Doom-shaped missile gating. B2 started by fixing the vanilla Arch-Vile and Revenant missile-range edge cases; elevated-target hitscan parity is still open. |
+| Monster movement, sight, sound, door opening | `p_enemy.c`, `p_sight.c`, `p_map.c` | `crates/doom-game/src/actions.rs`, `crates/doom-game/src/sight.rs`, `crates/doom-game/src/sound.rs` | Partial | Batch B restored behind-the-back wakeup rules, one-soundblock propagation, retaliation, and Doom-shaped missile gating. B2 added the vanilla Arch-Vile and Revenant missile-range edge cases plus Doom-style vertical hitscan slope clipping; the remaining combat debt is the player bullet autoaim probe and deeper refire parity. |
 | Spawn and thing placement | `p_mobj.c` | `crates/doom-game/src/spawn.rs`, `crates/doom-game/src/tic.rs` | Partial | Batch B now honors `MF_SPAWNCEILING`, randomizes positive spawn tics, and blocks invalid Nightmare respawns. Remaining audit item: broader map-thing spawn parity and any remaining flag-specific edge cases. |
-| Weapons, hitscan, damage | `p_pspr.c`, `p_map.c`, `p_inter.c` | `crates/doom-game/src/weapon_fire.rs`, `crates/doom-game/src/combat.rs`, `crates/doom-game/src/tic.rs` | Partial | Broken fixed-point aim rays are fixed, first pistol/chaingun shots are now accurate, fist snap-to-target matches chainsaw behavior, and Batch D landed held-fire/refire cadence in the tic loop. Remaining audit item: elevated-target autoaim and deeper damage-table parity. |
+| Weapons, hitscan, damage | `p_pspr.c`, `p_map.c`, `p_inter.c` | `crates/doom-game/src/weapon_fire.rs`, `crates/doom-game/src/combat.rs`, `crates/doom-game/src/tic.rs` | Partial | Broken fixed-point aim rays are fixed, first pistol/chaingun shots are now accurate, fist snap-to-target matches chainsaw behavior, Batch D landed held-fire/refire cadence in the tic loop, and B2 replaced the old 2D hitscan pick with Doom-shaped vertical slope clipping. Remaining audit item: true `P_BulletSlope` probing and deeper damage-table parity. |
 | BSP, seg traversal, wall rendering | `r_bsp.c`, `r_segs.c` | `crates/doom-renderer/src/seg.rs`, `crates/doom-renderer/src/render.rs` | Partial | Batch C1 is green: pegging now uses logical texture height and masked midtextures are deferred instead of being painted inline. Remaining renderer debt is deeper seg/visplane/sky projection parity. |
 | Planes and sky | `r_plane.c`, `r_sky.c` | `crates/doom-renderer/src/visplane.rs`, `crates/doom-renderer/src/sky.rs`, `crates/doom-renderer/src/render.rs` | Partial | Disjoint sky-span bugs are fixed and map-specific sky selection now resolves from the level name. Remaining audit item: deeper visplane parity and sky vertical mapping. |
 | Sprites and clipping | `r_things.c` | `crates/doom-renderer/src/sprite.rs`, `crates/doom-renderer/src/sprite_lookup.rs` | Partial | World-space sprite anchoring and portal clip ordering are much better, and masked midtextures now depth-sort with sprites. Remaining audit item: residual edge cases where clip state is borrowed from the wrong sector context. |
@@ -149,14 +149,15 @@ Still open:
   - Spawn sync honors `MF_SPAWNCEILING`, non-Nightmare map-thing spawns randomize positive tics, and blocked Nightmare respawns now fail cleanly.
   - Pistol and chaingun now get accurate first shots after release, and fist hits snap the player toward the struck target like chainsaw hits.
 - Confirmed mismatches:
-  - Hitscan is still effectively 2D, so elevated-target autoaim and bullet-slope behavior remain open.
+  - Hitscan now clips a Doom-style vertical slope window across line and actor intercepts instead of using the old 2D-only actor pick.
   - The remaining `P_CheckMissileRange` debt is the broader source-to-source cleanup pass, not the obvious monster-specific edge cases.
+  - `P_BulletSlope` is still simplified: the player does not yet do the vanilla `straight / +5.625° / -5.625°` target probe from `p_pspr.c`.
 - Recommended regressions:
   - Seeded `A_Chase` retaliation and threshold test after damaging a monster mid-chase.
   - Monster-facing-away visual acquisition test where vanilla Doom would keep it idle.
   - Two-soundblock wakeup test: noise should cross one blocker but not two.
   - Ceiling-spawn, initial-tics, and blocked Nightmare respawn tests.
-  - Elevated-target pistol autoaim and broader held-fire/refire tests.
+  - Player bullet autoaim probe parity and broader held-fire/refire tests.
 - Recommended fix batch: Batch B
 
 ## Proposed Fix Order

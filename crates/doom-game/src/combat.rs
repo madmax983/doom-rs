@@ -2,11 +2,11 @@
 //!
 //! Port of Doom's `p_inter.c` and parts of `p_map.c`.
 //!
-//! When a `Level` reference is available, `p_line_attack` uses blockmap-based
-//! DDA ray traversal (via `trace::trace_ray`) for wall-occluded hitscan, and
+//! When a `Level` reference is available, `p_line_attack` processes ordered
+//! wall/actor intercepts with Doom-style vertical slope clipping, and
 //! `p_radius_attack` uses Euclidean distance with LOS checking.  When no level
-//! is provided (unit tests, pre-map-load), the original brute-force fallback
-//! is used.
+//! is provided (unit tests, pre-map-load), hitscan falls back to actor-only
+//! intercept processing without map geometry.
 
 use doom_map::Level;
 use doom_types::{Bam, FIXED_ONE, Fixed16_16};
@@ -20,6 +20,140 @@ pub const MISSILERANGE: Fixed16_16 = Fixed16_16(2048 << 16);
 
 /// Maximum melee attack range in map units (64 units).
 pub const MELEERANGE: Fixed16_16 = Fixed16_16(64 << 16);
+
+const HITSCAN_EPSILON: f32 = 1.0e-6;
+const AUTOAIM_TOP_SLOPE: f32 = 100.0 / 160.0;
+const AUTOAIM_BOTTOM_SLOPE: f32 = -100.0 / 160.0;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HitscanInterceptKind {
+    Line(usize),
+    Actor(MobjHandle),
+}
+
+#[derive(Clone, Copy, Debug)]
+struct HitscanIntercept {
+    frac: f32,
+    kind: HitscanInterceptKind,
+}
+
+fn fixed_to_f32(value: Fixed16_16) -> f32 {
+    value.raw() as f32 / FIXED_ONE.raw() as f32
+}
+
+fn hitscan_shootz(z: Fixed16_16, height: Fixed16_16) -> f32 {
+    fixed_to_f32(z) + fixed_to_f32(height) * 0.5 + 8.0
+}
+
+fn ray_actor_intersection(
+    rx: f32,
+    ry: f32,
+    rdx: f32,
+    rdy: f32,
+    ax: f32,
+    ay: f32,
+    radius: f32,
+) -> Option<f32> {
+    let min_x = ax - radius;
+    let max_x = ax + radius;
+    let min_y = ay - radius;
+    let max_y = ay + radius;
+
+    let (mut t_min, mut t_max) = (f32::NEG_INFINITY, f32::INFINITY);
+
+    if rdx.abs() < HITSCAN_EPSILON {
+        if rx < min_x || rx > max_x {
+            return None;
+        }
+    } else {
+        let t1 = (min_x - rx) / rdx;
+        let t2 = (max_x - rx) / rdx;
+        let (t_near, t_far) = if t1 < t2 { (t1, t2) } else { (t2, t1) };
+        t_min = t_min.max(t_near);
+        t_max = t_max.min(t_far);
+    }
+
+    if rdy.abs() < HITSCAN_EPSILON {
+        if ry < min_y || ry > max_y {
+            return None;
+        }
+    } else {
+        let t1 = (min_y - ry) / rdy;
+        let t2 = (max_y - ry) / rdy;
+        let (t_near, t_far) = if t1 < t2 { (t1, t2) } else { (t2, t1) };
+        t_min = t_min.max(t_near);
+        t_max = t_max.min(t_far);
+    }
+
+    if t_min > t_max || t_max < 0.0 {
+        return None;
+    }
+
+    let t = if t_min >= 0.0 { t_min } else { t_max };
+    (t >= 0.0).then_some(t)
+}
+
+fn collect_actor_hitscan_intercepts(
+    gs: &GameState,
+    source: MobjHandle,
+    sx: f32,
+    sy: f32,
+    rdx: f32,
+    rdy: f32,
+) -> Vec<HitscanIntercept> {
+    let mut intercepts = Vec::new();
+
+    for handle in gs.mobjslab.iter_handles() {
+        if handle == source {
+            continue;
+        }
+
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            continue;
+        };
+        if mo.health <= 0 || mo.flags & flags::MF_SHOOTABLE == 0 {
+            continue;
+        }
+
+        if let Some(frac) = ray_actor_intersection(
+            sx,
+            sy,
+            rdx,
+            rdy,
+            fixed_to_f32(mo.x),
+            fixed_to_f32(mo.y),
+            fixed_to_f32(mo.radius),
+        ) {
+            if (0.0..=1.0).contains(&frac) {
+                intercepts.push(HitscanIntercept {
+                    frac,
+                    kind: HitscanInterceptKind::Actor(handle),
+                });
+            }
+        }
+    }
+
+    intercepts
+}
+
+fn sort_hitscan_intercepts(intercepts: &mut [HitscanIntercept]) {
+    intercepts.sort_by(|a, b| {
+        let frac_cmp = a.frac.total_cmp(&b.frac);
+        if frac_cmp.is_ne() {
+            return frac_cmp;
+        }
+
+        match (a.kind, b.kind) {
+            (HitscanInterceptKind::Line(_), HitscanInterceptKind::Actor(_)) => {
+                std::cmp::Ordering::Less
+            }
+            (HitscanInterceptKind::Actor(_), HitscanInterceptKind::Line(_)) => {
+                std::cmp::Ordering::Greater
+            }
+            _ => std::cmp::Ordering::Equal,
+        }
+    });
+}
 
 // ---------------------------------------------------------------------------
 // damage_mobj
@@ -160,12 +294,12 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
 // p_line_attack
 // ---------------------------------------------------------------------------
 
-/// Hitscan attack with optional blockmap-accelerated wall occlusion.
+/// Hitscan attack with optional wall-occluded slope clipping.
 ///
 /// Fires a ray from `source` in direction `angle` up to `range` map units.
-/// When `level` is `Some`, uses DDA blockmap traversal to detect wall hits
-/// and only damages actors that have clear line-of-fire. When `level` is
-/// `None`, falls back to brute-force ray-circle testing (no wall checks).
+/// When `level` is `Some`, ordered line and actor intercepts clip the
+/// autoaim slope window Doom-style before selecting a target. When `level` is
+/// `None`, only actor intercepts are considered.
 ///
 /// Returns `Some(handle)` if an actor was hit and damaged, `None` otherwise.
 pub fn p_line_attack(
@@ -176,129 +310,119 @@ pub fn p_line_attack(
     damage: i32,
     level: Option<&Level>,
 ) -> Option<MobjHandle> {
-    // Extract source position.
-    let (sx, sy) = match gs.mobjslab.get(source) {
-        Some(mo) => (mo.x.to_int(), mo.y.to_int()),
+    let (sx, sy, shootz) = match gs.mobjslab.get(source) {
+        Some(mo) => (
+            fixed_to_f32(mo.x),
+            fixed_to_f32(mo.y),
+            hitscan_shootz(mo.z, mo.height),
+        ),
         None => return None,
     };
 
     let angle_cos = angle.cos().raw() as f32 / FIXED_ONE.raw() as f32;
     let angle_sin = angle.sin().raw() as f32 / FIXED_ONE.raw() as f32;
-    let range_f = range.to_int() as f32;
+    let range_f = fixed_to_f32(range);
+
+    if range_f <= 0.0 || (angle_cos.abs() < HITSCAN_EPSILON && angle_sin.abs() < HITSCAN_EPSILON) {
+        return None;
+    }
+
+    let rdx = angle_cos * range_f;
+    let rdy = angle_sin * range_f;
+    let mut intercepts = collect_actor_hitscan_intercepts(gs, source, sx, sy, rdx, rdy);
 
     if let Some(lv) = level {
-        // --- Blockmap-accelerated path ---
-        // Build actor positions snapshot for trace_ray.
-        let handles: Vec<MobjHandle> = gs.mobjslab.iter_handles().collect();
-        let source_idx = handles.iter().position(|h| *h == source);
+        for (linedef_idx, linedef) in lv.linedefs.iter().enumerate() {
+            let Some(v1) = lv.vertexes.get(linedef.from_vertex as usize) else {
+                continue;
+            };
+            let Some(v2) = lv.vertexes.get(linedef.to_vertex as usize) else {
+                continue;
+            };
 
-        let actor_positions: Vec<(i32, i32, i32, i32, bool)> = handles
-            .iter()
-            .map(|h| match gs.mobjslab.get(*h) {
-                Some(mo) => (
-                    mo.x.to_int(),
-                    mo.y.to_int(),
-                    mo.radius.to_int(),
-                    mo.height.to_int(),
-                    mo.health > 0 && (mo.flags & flags::MF_SHOOTABLE != 0),
-                ),
-                None => (0, 0, 0, 0, false),
-            })
-            .collect();
-
-        let result = trace::trace_ray(
-            lv,
-            sx,
-            sy,
-            angle_cos,
-            angle_sin,
-            range_f,
-            true,
-            source_idx,
-            &actor_positions,
-        );
-
-        match result.hit {
-            TraceHit::Actor { actor_index, .. } => {
-                let hit_handle = handles[actor_index];
-                damage_mobj(gs, hit_handle, source, damage);
-                Some(hit_handle)
+            if let Some(frac) = trace::ray_linedef_intersection(
+                sx,
+                sy,
+                rdx,
+                rdy,
+                v1.x as f32,
+                v1.y as f32,
+                v2.x as f32,
+                v2.y as f32,
+            ) {
+                if (0.0..=1.0).contains(&frac) {
+                    intercepts.push(HitscanIntercept {
+                        frac,
+                        kind: HitscanInterceptKind::Line(linedef_idx),
+                    });
+                }
             }
-            _ => None,
-        }
-    } else {
-        // --- Brute-force fallback (no level geometry) ---
-        p_line_attack_fallback(gs, source, angle, range, damage)
-    }
-}
-
-/// Brute-force hitscan without wall occlusion (used when no Level is available).
-fn p_line_attack_fallback(
-    gs: &mut GameState,
-    source: MobjHandle,
-    angle: Bam,
-    range: Fixed16_16,
-    damage: i32,
-) -> Option<MobjHandle> {
-    let (sx, sy) = match gs.mobjslab.get(source) {
-        Some(mo) => (mo.x.to_int() as f32, mo.y.to_int() as f32),
-        None => return None,
-    };
-
-    let cos_f = angle.cos().raw() as f32 / FIXED_ONE.raw() as f32;
-    let sin_f = angle.sin().raw() as f32 / FIXED_ONE.raw() as f32;
-    let range_f = range.to_int() as f32;
-
-    let handles: Vec<MobjHandle> = gs.mobjslab.iter_handles().collect();
-
-    let mut best_handle: Option<MobjHandle> = None;
-    let mut best_t = f32::INFINITY;
-
-    for handle in handles {
-        if handle == source {
-            continue;
-        }
-
-        let (ax, ay, radius, alive, shootable) = match gs.mobjslab.get(handle) {
-            Some(mo) => (
-                mo.x.to_int() as f32,
-                mo.y.to_int() as f32,
-                mo.radius.to_int() as f32,
-                mo.health > 0,
-                mo.flags & flags::MF_SHOOTABLE != 0,
-            ),
-            None => continue,
-        };
-
-        if !alive || !shootable {
-            continue;
-        }
-
-        let dx = ax - sx;
-        let dy = ay - sy;
-        let t = dx * cos_f + dy * sin_f;
-
-        if t <= 0.0 || t > range_f {
-            continue;
-        }
-
-        let perp_sq = dx * dx + dy * dy - t * t;
-        if perp_sq > radius * radius {
-            continue;
-        }
-
-        if t < best_t {
-            best_t = t;
-            best_handle = Some(handle);
         }
     }
 
-    if let Some(hit) = best_handle {
-        damage_mobj(gs, hit, source, damage);
-        Some(hit)
-    } else {
-        None
+    sort_hitscan_intercepts(&mut intercepts);
+
+    let mut topslope = AUTOAIM_TOP_SLOPE;
+    let mut bottomslope = AUTOAIM_BOTTOM_SLOPE;
+
+    for intercept in intercepts {
+        let dist = intercept.frac * range_f;
+        if dist <= HITSCAN_EPSILON {
+            continue;
+        }
+
+        match intercept.kind {
+            HitscanInterceptKind::Line(linedef_idx) => {
+                let Some(lv) = level else {
+                    continue;
+                };
+                let Some(linedef) = lv.linedefs.get(linedef_idx) else {
+                    continue;
+                };
+
+                if !linedef.is_two_sided() {
+                    return None;
+                }
+
+                let Some((open_bottom, open_top)) = trace::line_opening(lv, linedef) else {
+                    return None;
+                };
+                if open_top <= open_bottom {
+                    return None;
+                }
+
+                let open_bottom_slope = (open_bottom as f32 - shootz) / dist;
+                let open_top_slope = (open_top as f32 - shootz) / dist;
+
+                if open_bottom_slope > bottomslope {
+                    bottomslope = open_bottom_slope;
+                }
+                if open_top_slope < topslope {
+                    topslope = open_top_slope;
+                }
+
+                if topslope <= bottomslope {
+                    return None;
+                }
+            }
+            HitscanInterceptKind::Actor(handle) => {
+                let Some(mo) = gs.mobjslab.get(handle) else {
+                    continue;
+                };
+                let target_bottom_slope = (fixed_to_f32(mo.z) - shootz) / dist;
+                let target_top_slope = (fixed_to_f32(mo.z + mo.height) - shootz) / dist;
+
+                if target_top_slope < bottomslope || target_bottom_slope > topslope {
+                    continue;
+                }
+
+                damage_mobj(gs, handle, source, damage);
+                return Some(handle);
+            }
+        }
     }
+
+    None
 }
 
 // ---------------------------------------------------------------------------
@@ -431,6 +555,52 @@ mod tests {
         mo.state = spawn_sn;
         mo.tics = STATES[spawn_sn.0 as usize].tics;
         gs.mobjslab.alloc(mo)
+    }
+
+    fn make_open_combat_level() -> doom_map::Level {
+        use doom_map::{Blockmap, Reject, Sector};
+
+        let cols = 8u16;
+        let rows = 8u16;
+        let n_blocks = cols as usize * rows as usize;
+        let data_start = 4u16 + n_blocks as u16;
+
+        let mut bm_raw = Vec::new();
+        bm_raw.extend_from_slice(&(-256i16).to_le_bytes());
+        bm_raw.extend_from_slice(&(-256i16).to_le_bytes());
+        bm_raw.extend_from_slice(&cols.to_le_bytes());
+        bm_raw.extend_from_slice(&rows.to_le_bytes());
+        for _ in 0..n_blocks {
+            bm_raw.extend_from_slice(&data_start.to_le_bytes());
+        }
+        bm_raw.extend_from_slice(&0u16.to_le_bytes());
+        bm_raw.extend_from_slice(&0xFFFFu16.to_le_bytes());
+
+        let blockmap = Blockmap::parse_lump(&bm_raw).expect("blockmap parse");
+        let reject_data = vec![0u8; 1];
+        let reject = Reject::parse_lump(&reject_data, 1).expect("reject parse");
+
+        doom_map::Level {
+            name: "OPEN".to_string(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![Sector {
+                floor_height: 0,
+                ceil_height: 256,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            }],
+            reject,
+            blockmap,
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -1079,53 +1249,11 @@ mod tests {
 
     #[test]
     fn line_attack_with_level_hits_fractional_angle_actor() {
-        use doom_map::{Blockmap, Reject, Sector};
-
         // SAFETY: trig tables are process-global and internally guarded.
         unsafe {
             doom_types::Bam::init_trig_tables();
         }
-
-        let cols = 6u16;
-        let rows = 3u16;
-        let n_blocks = cols as usize * rows as usize;
-        let data_start = 4u16 + n_blocks as u16;
-
-        let mut bm_raw = Vec::new();
-        bm_raw.extend_from_slice(&(-128i16).to_le_bytes());
-        bm_raw.extend_from_slice(&(-128i16).to_le_bytes());
-        bm_raw.extend_from_slice(&cols.to_le_bytes());
-        bm_raw.extend_from_slice(&rows.to_le_bytes());
-        for _ in 0..n_blocks {
-            bm_raw.extend_from_slice(&data_start.to_le_bytes());
-        }
-        bm_raw.extend_from_slice(&0u16.to_le_bytes());
-        bm_raw.extend_from_slice(&0xFFFFu16.to_le_bytes());
-
-        let blockmap = Blockmap::parse_lump(&bm_raw).expect("blockmap parse");
-        let reject_data = vec![0u8; 1];
-        let reject = Reject::parse_lump(&reject_data, 1).expect("reject parse");
-        let level = doom_map::Level {
-            name: "OPEN".to_string(),
-            things: vec![],
-            linedefs: vec![],
-            sidedefs: vec![],
-            vertexes: vec![],
-            segs: vec![],
-            ssectors: vec![],
-            nodes: vec![],
-            sectors: vec![Sector {
-                floor_height: 0,
-                ceil_height: 128,
-                floor_flat: *b"FLAT1\0\0\0",
-                ceil_flat: *b"FLAT2\0\0\0",
-                light_level: 192,
-                special: 0,
-                tag: 0,
-            }],
-            reject,
-            blockmap,
-        };
+        let level = make_open_combat_level();
 
         let mut gs = GameState::new("test");
         let mut player_mo = Mobj::new(
@@ -1153,6 +1281,73 @@ mod tests {
 
         assert_eq!(result, Some(trooper));
         assert!(gs.mobjslab.get(trooper).unwrap().health < 20);
+    }
+
+    #[test]
+    fn line_attack_with_level_skips_target_below_autoaim_window() {
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
+
+        let level = make_open_combat_level();
+        let mut gs = make_game_state();
+        let player_h = gs.player.handle;
+        gs.mobjslab.get_mut(player_h).unwrap().z = Fixed16_16::from_int(128);
+
+        let low_trooper = spawn_trooper(&mut gs, 128, 0);
+        gs.mobjslab.get_mut(low_trooper).unwrap().z = Fixed16_16::ZERO;
+
+        let result = p_line_attack(
+            &mut gs,
+            player_h,
+            Bam::ZERO,
+            Fixed16_16::from_int(256),
+            5,
+            Some(&level),
+        );
+
+        assert!(
+            result.is_none(),
+            "target entirely below the autoaim window should not be hit"
+        );
+        assert_eq!(gs.mobjslab.get(low_trooper).unwrap().health, 20);
+    }
+
+    #[test]
+    fn line_attack_with_level_skips_low_near_target_and_hits_far_target_in_lane() {
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
+
+        let level = make_open_combat_level();
+        let mut gs = make_game_state();
+        let player_h = gs.player.handle;
+        gs.mobjslab.get_mut(player_h).unwrap().z = Fixed16_16::from_int(128);
+
+        let low_near = spawn_trooper(&mut gs, 96, 0);
+        gs.mobjslab.get_mut(low_near).unwrap().z = Fixed16_16::ZERO;
+
+        let high_far = spawn_trooper(&mut gs, 160, 0);
+        gs.mobjslab.get_mut(high_far).unwrap().z = Fixed16_16::from_int(128);
+
+        let result = p_line_attack(
+            &mut gs,
+            player_h,
+            Bam::ZERO,
+            Fixed16_16::from_int(256),
+            5,
+            Some(&level),
+        );
+
+        assert_eq!(
+            result,
+            Some(high_far),
+            "shot should ignore the low near actor and hit the farther actor in the autoaim lane"
+        );
+        assert_eq!(gs.mobjslab.get(low_near).unwrap().health, 20);
+        assert!(gs.mobjslab.get(high_far).unwrap().health < 20);
     }
 
     // -----------------------------------------------------------------------
