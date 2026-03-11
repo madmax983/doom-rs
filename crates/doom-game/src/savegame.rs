@@ -30,7 +30,7 @@ pub const SAVE_MAGIC: [u8; 4] = *b"DRS1";
 pub const MAX_SAVE_SLOTS: usize = 6;
 
 /// Current save format version.
-const SAVE_VERSION: u32 = 1;
+const SAVE_VERSION: u32 = 2;
 
 // ---------------------------------------------------------------------------
 // SaveHeader
@@ -41,7 +41,7 @@ const SAVE_VERSION: u32 = 1;
 pub struct SaveHeader {
     /// Magic bytes (`SAVE_MAGIC`).
     pub magic: [u8; 4],
-    /// Format version (currently 1).
+    /// Format version (currently 2).
     pub version: u32,
     /// Level name, null-padded to 8 bytes (e.g. `b"E1M1\0\0\0\0"`).
     pub level_name: [u8; 8],
@@ -508,6 +508,7 @@ fn write_player_state(w: &mut WriteCursor, p: &PlayerState) {
         }
     }
     w.write_bool(p.attack_down);
+    w.write_u8(p.attack_cooldown);
     w.write_bool(p.use_down);
     for i in 0..NUM_POWERS {
         w.write_u32(p.powers[i]);
@@ -549,6 +550,7 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
     };
 
     let attack_down = r.read_bool()?;
+    let attack_cooldown = r.read_u8()?;
     let use_down = r.read_bool()?;
 
     let mut powers = [0u32; NUM_POWERS];
@@ -597,6 +599,7 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
     ps.weapon = weapon;
     ps.pending_weapon = pending_weapon;
     ps.attack_down = attack_down;
+    ps.attack_cooldown = attack_cooldown;
     ps.use_down = use_down;
     ps.powers = powers;
     ps.keys = keys;
@@ -1264,7 +1267,7 @@ mod tests {
         let gs = test_game_state();
         let data = save_game(&gs, &test_level_name(), 2, "test save");
         let version = u32::from_le_bytes([data[4], data[5], data[6], data[7]]);
-        assert_eq!(version, 1);
+        assert_eq!(version, SAVE_VERSION);
     }
 
     // --- Test 3: save_game header stores level_name ---
@@ -1288,7 +1291,7 @@ mod tests {
         let mut data = vec![0u8; 64];
         data[..4].copy_from_slice(b"NOPE");
         // Fill version as valid.
-        data[4..8].copy_from_slice(&1u32.to_le_bytes());
+        data[4..8].copy_from_slice(&SAVE_VERSION.to_le_bytes());
         assert_eq!(load_game(&data).unwrap_err(), SaveError::BadMagic);
     }
 
@@ -1728,5 +1731,14 @@ mod tests {
         let data = save_game(&gs, &test_level_name(), 2, "no pending");
         let loaded = load_game(&data).expect("load must succeed");
         assert_eq!(loaded.state.player.pending_weapon, None);
+    }
+
+    #[test]
+    fn roundtrip_attack_cooldown() {
+        let mut gs = test_game_state();
+        gs.player.attack_cooldown = 9;
+        let data = save_game(&gs, &test_level_name(), 2, "cooldown test");
+        let loaded = load_game(&data).expect("load must succeed");
+        assert_eq!(loaded.state.player.attack_cooldown, 9);
     }
 }

@@ -48,15 +48,15 @@ Each subsystem log should record:
 
 | Subsystem | Chocolate Doom | Local Rust Modules | Status | Notes |
 | --- | --- | --- | --- | --- |
-| Input and main tic loop | `d_event.c`, `d_loop.c`, `i_input.c`, `p_user.c` | `crates/doom-tui/src/input.rs`, `crates/doom-tui/src/event_loop.rs`, `crates/doom-game/src/tic.rs` | Partial | `Ctrl` attack is fixed. Desktop mouse should wait for a non-TUI frontend. Demo/input parity still unaudited. |
+| Input and main tic loop | `d_event.c`, `d_loop.c`, `i_input.c`, `p_user.c` | `crates/doom-tui/src/input.rs`, `crates/doom-tui/src/event_loop.rs`, `crates/doom-game/src/tic.rs` | Partial | Batch D landed deterministic held-fire cadence and kept rocket/BFG release-gated. Desktop mouse should wait for a non-TUI frontend. Deeper demo/input parity is still unaudited. |
 | Player use, doors, linedef specials | `p_spec.c`, `p_map.c` | `crates/doom-game/src/specials.rs`, `crates/doom-game/src/trace.rs`, `crates/doom-game/src/linedef_dispatch.rs` | Partial | Batch A is green: `USE` stops on ordinary blockers, front/back use side is respected, and blocked-use now queues the Doom-style fail SFX. Remaining work is broader parity on interaction sequencing around adjacent triggers and locked-door nuance. |
-| Monster movement, sight, sound, door opening | `p_enemy.c`, `p_sight.c`, `p_map.c` | `crates/doom-game/src/actions.rs`, `crates/doom-game/src/sight.rs`, `crates/doom-game/src/sound.rs` | Partial | Recent fixes restored firing windows, sector ownership, and exact blocker-driven door opening. Remaining audit work is the larger `A_Chase`/sound propagation pass, not the old coarse blockmap door guess. |
-| Spawn and thing placement | `p_mobj.c` | `crates/doom-game/src/spawn.rs`, `crates/doom-game/src/tic.rs` | Partial | Floor snap and respawn height bugs are fixed. Remaining audit item: verify every map thing spawn path against subsector floor lookup and spawn flags. |
-| Weapons, hitscan, damage | `p_pspr.c`, `p_map.c`, `p_inter.c` | `crates/doom-game/src/weapon_fire.rs`, `crates/doom-game/src/combat.rs`, `crates/doom-game/src/tic.rs` | Partial | Broken fixed-point aim rays are fixed. Remaining audit item: pellet spread, damage tables, and pain/death edge cases. |
+| Monster movement, sight, sound, door opening | `p_enemy.c`, `p_sight.c`, `p_map.c` | `crates/doom-game/src/actions.rs`, `crates/doom-game/src/sight.rs`, `crates/doom-game/src/sound.rs` | Partial | Batch B restored behind-the-back wakeup rules, one-soundblock propagation, retaliation, and Doom-shaped missile gating. Remaining audit work is the deeper `A_Chase` edge-case pass, not the old coarse blocker path. |
+| Spawn and thing placement | `p_mobj.c` | `crates/doom-game/src/spawn.rs`, `crates/doom-game/src/tic.rs` | Partial | Batch B now honors `MF_SPAWNCEILING`, randomizes positive spawn tics, and blocks invalid Nightmare respawns. Remaining audit item: broader map-thing spawn parity and any remaining flag-specific edge cases. |
+| Weapons, hitscan, damage | `p_pspr.c`, `p_map.c`, `p_inter.c` | `crates/doom-game/src/weapon_fire.rs`, `crates/doom-game/src/combat.rs`, `crates/doom-game/src/tic.rs` | Partial | Broken fixed-point aim rays are fixed, first pistol/chaingun shots are now accurate, fist snap-to-target matches chainsaw behavior, and Batch D landed held-fire/refire cadence in the tic loop. Remaining audit item: elevated-target autoaim and deeper damage-table parity. |
 | BSP, seg traversal, wall rendering | `r_bsp.c`, `r_segs.c` | `crates/doom-renderer/src/seg.rs`, `crates/doom-renderer/src/render.rs` | Partial | Batch C1 is green: pegging now uses logical texture height and masked midtextures are deferred instead of being painted inline. Remaining renderer debt is deeper seg/visplane/sky projection parity. |
 | Planes and sky | `r_plane.c`, `r_sky.c` | `crates/doom-renderer/src/visplane.rs`, `crates/doom-renderer/src/sky.rs`, `crates/doom-renderer/src/render.rs` | Partial | Disjoint sky-span bugs are fixed and map-specific sky selection now resolves from the level name. Remaining audit item: deeper visplane parity and sky vertical mapping. |
 | Sprites and clipping | `r_things.c` | `crates/doom-renderer/src/sprite.rs`, `crates/doom-renderer/src/sprite_lookup.rs` | Partial | World-space sprite anchoring and portal clip ordering are much better, and masked midtextures now depth-sort with sprites. Remaining audit item: residual edge cases where clip state is borrowed from the wrong sector context. |
-| Audio and music | `s_sound.c`, `i_sound.c`, `mus2mid` path | `crates/doom-app/src/audio_system.rs`, `crates/doom-app/src/main.rs` | Partial | Level music startup regression is fixed. Need a full parity pass on sound origin, channel stealing, and map-change transitions. |
+| Audio and music | `s_sound.c`, `i_sound.c`, `mus2mid` path | `crates/doom-app/src/audio_system.rs`, `crates/doom-app/src/main.rs` | Partial | Batch D moved player weapon SFX onto actual fire events, re-resolves map music from current level state, and removed the fake timer-driven demo loop. Remaining audit work is deeper sound-origin/channel parity and true attract-mode demo playback. |
 | Savegames, demos, RNG parity | `p_saveg.c`, demo system, `m_random.c` | `crates/doom-game/src/savegame.rs`, demo code, RNG paths | Not started | Leave this until core gameplay/rendering behavior stops moving. |
 
 ## First Slice Findings
@@ -136,21 +136,26 @@ Still open:
 
 ### System 2: Monsters, combat, and spawn
 
-- Status: findings integrated, not yet patched
+- Status: Batch B complete for the planned scope, deeper combat parity still open
 - Chocolate Doom sources: `p_enemy.c`, `p_sight.c`, `p_mobj.c`, `p_inter.c`, `p_pspr.c`
 - Local Rust files: `crates/doom-game/src/actions.rs`, `crates/doom-game/src/sight.rs`, `crates/doom-game/src/sound.rs`, `crates/doom-game/src/spawn.rs`, `crates/doom-game/src/combat.rs`, `crates/doom-game/src/weapon_fire.rs`, `crates/doom-game/src/tic.rs`
+- Confirmed parity wins:
+  - `p_look_for_players()` now respects Doom's behind-the-back restriction outside melee range.
+  - `p_noise_alert()` now crosses one `ML_SOUNDBLOCK`, not two, and the mixed-topology regression matches that rule.
+  - Monster retaliation now sets `MF_JUSTHIT` and threshold state so damaged monsters can immediately choose the missile path Doom allows.
+  - `A_Chase` now routes missile decisions through a Doom-shaped range gate instead of the old pure `movecount <= 0 && LOS` shortcut.
+  - Spawn sync honors `MF_SPAWNCEILING`, non-Nightmare map-thing spawns randomize positive tics, and blocked Nightmare respawns now fail cleanly.
+  - Pistol and chaingun now get accurate first shots after release, and fist hits snap the player toward the struck target like chainsaw hits.
 - Confirmed mismatches:
-  - `A_Chase` is still much simpler than Doom's `P_CheckMissileRange` path and does not capture just-hit retaliation, threshold behavior, or Doom-like missile gating.
-  - Visual acquisition is too eager because `A_Look` is not really using Doom's `P_LookForPlayers` behavior, including behind-the-back restrictions.
-  - Sound propagation still crosses two `ML_SOUNDBLOCK` barriers instead of one.
-  - Spawn initialization still misses several Doom semantics: ceiling spawns, initial tic randomization, and blocked Nightmare respawn handling.
-  - Hitscan and weapon behavior still diverge from Doom's bullet-slope and refire logic, especially for elevated targets and accurate first shots.
+  - `P_CheckMissileRange` is closer now, but the monster-specific edge cases still need a stricter source-to-source pass against Chocolate Doom.
+  - Hitscan is still effectively 2D, so elevated-target autoaim and bullet-slope behavior remain open.
+  - The current tic loop still does not model full Doom held-fire/refire semantics for every weapon; that overlap belongs with the frontend/audio batch.
 - Recommended regressions:
   - Seeded `A_Chase` retaliation and threshold test after damaging a monster mid-chase.
   - Monster-facing-away visual acquisition test where vanilla Doom would keep it idle.
   - Two-soundblock wakeup test: noise should cross one blocker but not two.
   - Ceiling-spawn, initial-tics, and blocked Nightmare respawn tests.
-  - Elevated-target pistol autoaim, accurate-first-shot pistol, and melee snap-to-target tests.
+  - Elevated-target pistol autoaim and broader held-fire/refire tests.
 - Recommended fix batch: Batch B
 
 ## Proposed Fix Order
@@ -161,9 +166,11 @@ Still open:
    Status: complete on 2026-03-11.
    Scope landed: masked midtextures, logical texture height pegging, and map-specific sky selection.
 3. Batch B: Monsters, combat, and spawn
-   Reason: this is the main source of "the boys are weird again" behavior once doors and visuals stop lying.
+   Status: complete on 2026-03-11 for the planned scope.
+   Scope landed: wakeup and sound parity, retaliation and missile gating, spawn semantics, first-shot accuracy, and fist snap-to-target.
 4. Batch D: Frontend and audio
-   Reason: held-fire semantics and fire-SFX need to move in lockstep, and music transitions should be fixed before demo/title work.
+   Status: complete on 2026-03-11 for the planned scope.
+   Scope landed: held-fire cadence, actual fire-driven player weapon SFX, map-music re-resolution, and title-loop demo sanity.
 5. Batch C2 and System 5
    Reason: deeper renderer structure and save/demo/RNG parity should wait until the louder regressions stop moving.
 
@@ -196,24 +203,23 @@ Still open:
 
 ### System 4: Frontend, tic loop, and audio
 
-- Status: findings integrated, not yet patched
+- Status: Batch D complete for the planned scope, deeper mixer/demo parity still open
 - Chocolate Doom sources: `d_event.c`, `d_loop.c`, `i_input.c`, `p_user.c`, `s_sound.c`
 - Local Rust files: `crates/doom-tui/src/input.rs`, `crates/doom-tui/src/event_loop.rs`, `crates/doom-game/src/tic.rs`, `crates/doom-app/src/audio_system.rs`, `crates/doom-app/src/main.rs`
 - Confirmed parity wins:
   - `Ctrl` attack works again.
-  - map music startup was restored.
+  - Held pistol and shotgun now refire on hold after deterministic cooldowns, while rocket launcher and BFG stay release-gated.
+  - Player weapon SFX now come from actual weapon fire events instead of raw attack-button edges.
+  - Map music now re-resolves from `GameState.level_name` and restarts at gameplay entry/load points.
+  - The timer-driven title loop no longer walks into blank `Demo(_)` phases when no playback path exists.
 - Confirmed mismatches:
-  - Held-fire semantics are still non-vanilla for several weapons; only a subset currently refire while the button is held.
-  - Weapon SFX are keyed off attack-button edge instead of actual weapon fire events.
-  - Map music is still too tied to startup state and not fully re-resolved on map or phase transitions.
   - Sound origin and channel behavior are much simpler than Doom's source-aware `S_StartSound` behavior.
-  - The title/demo attract loop advances state, but there is no real demo playback path behind it.
+  - True attract-mode demo playback still does not exist; we now stay out of fake demo phases instead of pretending otherwise.
+  - Weapon cadence is deterministic and much closer, but it is still a simplified cooldown model rather than a full psprite state machine.
 - Recommended regressions:
-  - Held pistol and shotgun should continue firing over multiple tics without releasing `BT_ATTACK`.
-  - Held chaingun or plasma should emit repeated fire-SFX requests, not a single startup sound.
-  - Map change or quick-load to a different map should request different music.
+  - Held chaingun and plasma cadence should be tightened against Chocolate Doom's psprite timing rather than the current simplified cooldown table.
   - Repeated sound events from the same origin should reuse/update channels in a Doom-shaped way.
-  - Title mode should either play demos or stay out of demo phases until playback exists.
+  - Real title demo playback should replace the current `Title <-> Credits` fallback loop.
 - Known intentional divergence:
   - TUI frontend constraints mean terminal mouse is not a Doom-parity target.
 - Accepted non-parity:

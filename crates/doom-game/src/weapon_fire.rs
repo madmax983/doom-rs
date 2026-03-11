@@ -15,7 +15,7 @@ use crate::player::powers::PW_STRENGTH;
 use crate::player::{AmmoType, WeaponType};
 use crate::projectile::p_spawn_player_missile;
 use crate::random::p_damage_with_variance;
-use crate::state::GameState;
+use crate::state::{GameState, SoundRequest};
 
 // ---------------------------------------------------------------------------
 // Ammo cost table
@@ -68,6 +68,26 @@ fn weapon_makes_noise(weapon: WeaponType) -> bool {
     !matches!(weapon, WeaponType::Fist)
 }
 
+/// Return the minimum number of tics before `weapon` may fire again.
+pub fn weapon_refire_tics(weapon: WeaponType) -> u8 {
+    match weapon {
+        WeaponType::Fist => 12,
+        WeaponType::Pistol => 14,
+        WeaponType::Shotgun => 20,
+        WeaponType::Chaingun => 4,
+        WeaponType::RocketLauncher => 20,
+        WeaponType::PlasmaRifle => 3,
+        WeaponType::Bfg => 30,
+        WeaponType::Chainsaw => 4,
+        WeaponType::SuperShotgun => 34,
+    }
+}
+
+/// Doom's launcher weapons require a release before the next shot.
+pub fn weapon_allows_hold_fire(weapon: WeaponType) -> bool {
+    !matches!(weapon, WeaponType::RocketLauncher | WeaponType::Bfg)
+}
+
 /// Consume ammo for the given weapon.  Returns `false` if insufficient.
 /// Melee weapons always return `true` without consuming anything.
 fn consume_ammo(gs: &mut GameState, weapon: WeaponType) -> bool {
@@ -82,6 +102,36 @@ fn consume_ammo(gs: &mut GameState, weapon: WeaponType) -> bool {
 /// invalid.
 fn player_angle(gs: &GameState) -> Option<Bam> {
     gs.mobjslab.get(gs.player.handle).map(|mo| mo.angle)
+}
+
+#[inline]
+fn hitscan_shot_angle(gs: &mut GameState, base_angle: Bam, accurate_first_shot: bool) -> Bam {
+    if accurate_first_shot && !gs.player.attack_down {
+        return base_angle;
+    }
+
+    let spread = gs.p_subrandom() << 18;
+    Bam(base_angle.0.wrapping_add(spread as u32))
+}
+
+fn snap_player_to_target(gs: &mut GameState, target_handle: crate::mobj::MobjHandle) {
+    let handle = gs.player.handle;
+    if let (Some(src), Some(tgt)) = (
+        gs.mobjslab.get(handle).map(|m| (m.x, m.y)),
+        gs.mobjslab.get(target_handle).map(|m| (m.x, m.y)),
+    ) {
+        let dx = tgt.0 - src.0;
+        let dy = tgt.1 - src.1;
+        let dx_f = dx.to_int() as f32;
+        let dy_f = dy.to_int() as f32;
+        let angle_rad = dy_f.atan2(dx_f);
+        let new_angle =
+            Bam((angle_rad / std::f32::consts::TAU * (u32::MAX as f64 + 1.0) as f32) as u32);
+
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.angle = new_angle;
+        }
+    }
 }
 
 /// Select the best available weapon when the current one runs out of ammo.
@@ -136,8 +186,7 @@ pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
         None => return,
     };
 
-    let spread = gs.p_subrandom() << 18;
-    let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
+    let shot_angle = hitscan_shot_angle(gs, base_angle, true);
     let damage = p_damage_with_variance(gs, 5);
 
     p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level);
@@ -203,8 +252,7 @@ pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
         None => return,
     };
 
-    let spread = gs.p_subrandom() << 18;
-    let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
+    let shot_angle = hitscan_shot_angle(gs, base_angle, true);
     let damage = p_damage_with_variance(gs, 5);
 
     p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level);
@@ -235,7 +283,10 @@ pub fn p_fire_fist(gs: &mut GameState, level: Option<&Level>) {
     let spread = gs.p_subrandom() << 18;
     let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
 
-    p_line_attack(gs, handle, shot_angle, MELEERANGE, damage, level);
+    let hit = p_line_attack(gs, handle, shot_angle, MELEERANGE, damage, level);
+    if let Some(target_handle) = hit {
+        snap_player_to_target(gs, target_handle);
+    }
 }
 
 /// Fire the chainsaw: no ammo, hitscan at MELEERANGE+1.
@@ -261,24 +312,7 @@ pub fn p_fire_chainsaw(gs: &mut GameState, level: Option<&Level>) {
 
     // Auto-aim snap: if we hit something, turn the player toward the target.
     if let Some(target_handle) = hit {
-        if let (Some(src), Some(tgt)) = (
-            gs.mobjslab.get(handle).map(|m| (m.x, m.y)),
-            gs.mobjslab.get(target_handle).map(|m| (m.x, m.y)),
-        ) {
-            let dx = tgt.0 - src.0;
-            let dy = tgt.1 - src.1;
-            // Compute angle from delta using f32 atan2 (same approach as
-            // projectile.rs::angle_from_delta).
-            let dx_f = dx.to_int() as f32;
-            let dy_f = dy.to_int() as f32;
-            let angle_rad = dy_f.atan2(dx_f);
-            let new_angle =
-                Bam((angle_rad / std::f32::consts::TAU * (u32::MAX as f64 + 1.0) as f32) as u32);
-
-            if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.angle = new_angle;
-            }
-        }
+        snap_player_to_target(gs, target_handle);
     }
 }
 
@@ -322,7 +356,7 @@ pub fn p_fire_bfg(gs: &mut GameState, _level: Option<&Level>) {
 ///
 /// If the player lacks ammo for the current weapon, auto-switches to the
 /// best available weapon and returns without firing.
-pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) {
+pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) -> bool {
     let weapon = gs.player.weapon;
     let player_handle = gs.player.handle;
 
@@ -333,7 +367,7 @@ pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) {
             gs.player.pending_weapon = Some(next);
             gs.player.weapon = next;
         }
-        return;
+        return false;
     }
 
     match weapon {
@@ -348,11 +382,15 @@ pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) {
         WeaponType::Chainsaw => p_fire_chainsaw(gs, level),
     }
 
+    gs.sound_queue.push(SoundRequest::PlayerWeaponFire(weapon));
+
     if weapon_makes_noise(weapon) {
         if let Some(lv) = level {
             crate::sound::p_noise_alert(gs, lv, player_handle, player_handle);
         }
     }
+
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -365,7 +403,7 @@ mod tests {
     use crate::mobj::{Mobj, MobjKind, flags};
     use crate::player::PlayerState;
     use crate::sound::{get_sound_target, init_sound_state};
-    use crate::state::GameState;
+    use crate::state::{GameState, SoundRequest};
     use doom_map::lumps::{Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex};
     use doom_map::{Level, SIDEDEF_NONE};
     use doom_types::{Bam, Fixed16_16};
@@ -385,6 +423,32 @@ mod tests {
         let handle = gs.mobjslab.alloc(mo);
         gs.player = PlayerState::pistol_start(handle);
         gs
+    }
+
+    fn init_trig() {
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
+    }
+
+    fn spawn_shootable_target(
+        gs: &mut GameState,
+        x: i32,
+        y: i32,
+        radius: i32,
+        health: i32,
+    ) -> crate::mobj::MobjHandle {
+        let mut target = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(x),
+            Fixed16_16::from_int(y),
+            Bam::ZERO,
+        );
+        target.health = health;
+        target.radius = Fixed16_16::from_int(radius);
+        target.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        gs.mobjslab.alloc(target)
     }
 
     /// Give the player all weapons and max ammo for testing.
@@ -540,6 +604,41 @@ mod tests {
         assert!(max_seen <= 40, "max damage {max_seen} must be <= 40");
     }
 
+    #[test]
+    fn pistol_first_shot_after_release_is_accurate() {
+        init_trig();
+
+        let mut gs = make_game_state();
+        let target_handle = spawn_shootable_target(&mut gs, 512, 0, 8, 20);
+        gs.rng.set_index(16);
+        gs.player.attack_down = false;
+
+        p_fire_pistol(&mut gs, None);
+
+        assert!(
+            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            "first pistol shot after release should be accurate"
+        );
+    }
+
+    #[test]
+    fn pistol_refire_uses_spread_and_can_miss_exactly_aimed_target() {
+        init_trig();
+
+        let mut gs = make_game_state();
+        let target_handle = spawn_shootable_target(&mut gs, 512, 0, 8, 20);
+        gs.rng.set_index(16);
+        gs.player.attack_down = true;
+
+        p_fire_pistol(&mut gs, None);
+
+        assert_eq!(
+            gs.mobjslab.get(target_handle).unwrap().health,
+            20,
+            "refire pistol shot should still use spread"
+        );
+    }
+
     // =======================================================================
     // Shotgun tests
     // =======================================================================
@@ -612,6 +711,41 @@ mod tests {
         gs.player.use_ammo(AmmoType::Bullets as usize, 50);
         p_fire_chaingun(&mut gs, None);
         assert_eq!(gs.player.ammo(AmmoType::Bullets as usize), 0);
+    }
+
+    #[test]
+    fn chaingun_first_shot_after_release_is_accurate() {
+        init_trig();
+
+        let mut gs = make_game_state();
+        let target_handle = spawn_shootable_target(&mut gs, 512, 0, 8, 20);
+        gs.rng.set_index(16);
+        gs.player.attack_down = false;
+
+        p_fire_chaingun(&mut gs, None);
+
+        assert!(
+            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            "first chaingun shot after release should be accurate"
+        );
+    }
+
+    #[test]
+    fn chaingun_refire_uses_spread_and_can_miss_exactly_aimed_target() {
+        init_trig();
+
+        let mut gs = make_game_state();
+        let target_handle = spawn_shootable_target(&mut gs, 512, 0, 8, 20);
+        gs.rng.set_index(16);
+        gs.player.attack_down = true;
+
+        p_fire_chaingun(&mut gs, None);
+
+        assert_eq!(
+            gs.mobjslab.get(target_handle).unwrap().health,
+            20,
+            "held chaingun shots should keep spread"
+        );
     }
 
     // =======================================================================
@@ -689,6 +823,27 @@ mod tests {
         // Call p_fire_fist — should not multiply damage.
         p_fire_fist(&mut gs, None);
         // No crash = success for this path.
+    }
+
+    #[test]
+    fn fist_hit_snaps_player_toward_target() {
+        init_trig();
+
+        let mut gs = make_game_state();
+        let target_handle = spawn_shootable_target(&mut gs, 32, 16, 20, 20);
+        let before = gs.mobjslab.get(gs.player.handle).unwrap().angle;
+
+        p_fire_fist(&mut gs, None);
+
+        let after = gs.mobjslab.get(gs.player.handle).unwrap().angle;
+        assert_ne!(
+            after, before,
+            "fist hit should turn the player toward the target"
+        );
+        assert!(
+            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            "fist snap regression should hit the melee target"
+        );
     }
 
     // =======================================================================
@@ -879,6 +1034,35 @@ mod tests {
         fire_current_weapon(&mut gs, None);
         let after = gs.player.ammo(AmmoType::Bullets as usize);
         assert_eq!(after, before - 1, "dispatcher must fire pistol");
+    }
+
+    #[test]
+    fn fire_current_weapon_queues_player_weapon_sound_when_it_fires() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::Pistol;
+
+        let fired = fire_current_weapon(&mut gs, None);
+
+        assert!(fired, "dispatcher should report a successful shot");
+        assert_eq!(
+            gs.sound_queue,
+            vec![SoundRequest::PlayerWeaponFire(WeaponType::Pistol)]
+        );
+    }
+
+    #[test]
+    fn fire_current_weapon_does_not_queue_sound_when_switching_empty_weapon() {
+        let mut gs = make_game_state();
+        gs.player.use_ammo(AmmoType::Bullets as usize, 50);
+        gs.player.weapon = WeaponType::Pistol;
+
+        let fired = fire_current_weapon(&mut gs, None);
+
+        assert!(!fired, "switching away from an empty weapon is not a shot");
+        assert!(
+            gs.sound_queue.is_empty(),
+            "no player weapon sound should be queued when nothing fired"
+        );
     }
 
     #[test]

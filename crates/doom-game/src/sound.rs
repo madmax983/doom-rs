@@ -7,7 +7,7 @@
 //! # Vanilla Doom behavior
 //! - Sound starts at the emitter's sector and spreads through two-sided linedefs.
 //! - A linedef with the `ML_SOUNDBLOCK` flag counts as one "sound block".
-//! - Sound can pass through up to 2 sound block linedefs total, but not more.
+//! - Sound can pass through one sound block linedef total, but not two.
 //! - Each reached sector records the target (typically the player) as its
 //!   sound target.  Monster AI checks this during `A_Look`.
 //! - The flood fill uses a generation counter to avoid revisiting sectors
@@ -126,7 +126,7 @@ pub fn adjacent_sectors(level: &Level, sector_index: usize) -> Vec<usize> {
 ///
 /// Sound flood-fills from the emitter's sector through two-sided linedefs.
 /// Linedefs with `ML_SOUNDBLOCK` count against the propagation budget:
-/// sound can cross up to 2 such lines total (matching vanilla Doom).
+/// sound can cross one such line total (matching vanilla Doom).
 ///
 /// After this call, `gs.sound_targets[sector]` will be `Some(target)` for
 /// every reached sector.
@@ -156,14 +156,15 @@ pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emit
 
     let new_gen = gs.sound_gen;
 
-    // Start flood fill from the emitter's sector with full sound budget (2).
-    recursive_sound(gs, level, emitter_sector, 2, target, new_gen);
+    // Start flood fill from the emitter's sector with one soundblock crossing
+    // available. Crossing a second `ML_SOUNDBLOCK` stops propagation.
+    recursive_sound(gs, level, emitter_sector, 1, target, new_gen);
 }
 
 /// Recursive flood fill: propagate sound into `sector_idx` and its neighbors.
 ///
 /// `sound_blocks_remaining` tracks how many `ML_SOUNDBLOCK` linedefs sound
-/// can still pass through (starts at 2, decremented by each soundblock line).
+/// can still pass through (starts at 1, decremented by each soundblock line).
 fn recursive_sound(
     gs: &mut GameState,
     level: &Level,
@@ -534,16 +535,11 @@ mod tests {
 
         assert_eq!(get_sound_target(&gs, 0), Some(player));
         assert_eq!(get_sound_target(&gs, 1), Some(player));
-        // Sector 2 is behind two soundblock lines: sound shouldn't reach it.
-        // Budget starts at 2, first SOUNDBLOCK costs 1 (remaining=1),
-        // second SOUNDBLOCK costs 1 (remaining=0), which is >= 0, so it
-        // actually DOES propagate.
-        // With budget=2 and each line costing 1, sector 2 at depth 2 gets
-        // remaining = 2 - 1 - 1 = 0 >= 0, so it IS reached.
-        //
-        // To truly block, we need 3 consecutive soundblock lines.
-        // Let's verify that 3 soundblock lines blocks sector 3:
-        assert_eq!(get_sound_target(&gs, 2), Some(player));
+        assert_eq!(
+            get_sound_target(&gs, 2),
+            None,
+            "sector behind two consecutive soundblock lines must not receive sound"
+        );
     }
 
     #[test]
@@ -564,8 +560,11 @@ mod tests {
 
         assert_eq!(get_sound_target(&gs, 0), Some(player));
         assert_eq!(get_sound_target(&gs, 1), Some(player));
-        assert_eq!(get_sound_target(&gs, 2), Some(player));
-        // Budget: 2 - 1 - 1 - 1 = -1 < 0, so sector 3 should NOT be reached.
+        assert_eq!(
+            get_sound_target(&gs, 2),
+            None,
+            "second consecutive soundblock must already stop the flood fill"
+        );
         assert_eq!(
             get_sound_target(&gs, 3),
             None,
@@ -1084,13 +1083,9 @@ mod tests {
 
         p_noise_alert(&mut gs, &level, player, player);
 
-        // All sectors should be reached:
-        // 0: start, budget=2
-        // 1: normal line, budget=2
-        // 2: soundblock, budget=1
-        // 3: normal line, budget=1
-        // 4: soundblock, budget=0 (still >= 0)
-        for i in 0..5 {
+        // Doom-style sound can cross one soundblock, even if normal sectors sit
+        // between blockers. The second soundblock still stops propagation.
+        for i in 0..4 {
             assert_eq!(
                 get_sound_target(&gs, i),
                 Some(player),
@@ -1098,5 +1093,10 @@ mod tests {
                 i
             );
         }
+        assert_eq!(
+            get_sound_target(&gs, 4),
+            None,
+            "second soundblock in a mixed path must still stop propagation"
+        );
     }
 }

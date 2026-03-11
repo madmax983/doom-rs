@@ -90,11 +90,21 @@ fn apply_mobjinfo_defaults(mo: &mut Mobj) {
 
 /// Sync a freshly spawned map thing to the floor and subsector it occupies.
 fn sync_mobj_to_level(level: &Level, mo: &mut Mobj) {
-    if let Some(floor_height) = level.floor_at(mo.x.to_int(), mo.y.to_int()) {
-        mo.z = Fixed16_16::from_int(i32::from(floor_height));
-    }
     if let Some(subsector) = level.subsector_index_at(mo.x.to_int(), mo.y.to_int()) {
         mo.subsector = subsector as u32;
+    }
+
+    let sector_idx = level
+        .sector_index_at(mo.x.to_int(), mo.y.to_int())
+        .or_else(|| crate::sight::sector_from_subsector(level, mo.subsector as usize));
+    if let Some(sector_idx) = sector_idx
+        && let Some(sector) = level.sectors.get(sector_idx)
+    {
+        mo.z = if mo.flags & flags::MF_SPAWNCEILING != 0 {
+            Fixed16_16::from_int(i32::from(sector.ceil_height)) - mo.height
+        } else {
+            Fixed16_16::from_int(i32::from(sector.floor_height))
+        };
     }
 }
 
@@ -173,6 +183,9 @@ pub fn spawn_level_things(
         // --- Non-player things (monsters, items, decorations) ---
         let mut mo = Mobj::new(kind, x, y, angle);
         apply_mobjinfo_defaults(&mut mo);
+        if mo.tics > 0 && skill != Skill::Nightmare {
+            mo.tics = 1 + i16::from(gs.p_random() % (mo.tics as u8));
+        }
         sync_mobj_to_level(level, &mut mo);
 
         // Apply ambush flag from thing flags (deaf monsters).
@@ -270,6 +283,35 @@ pub fn p_nightmare_respawn(gs: &mut GameState, level: Option<&Level>, handle: Mo
         return false;
     }
 
+    let kind = match doomed_type_to_kind(spawn_type) {
+        Some(k) => k,
+        None => return false,
+    };
+
+    let spawn_radius = MOBJINFO[kind as usize].radius;
+    let spawn_blocked = gs.mobjslab.iter_handles().any(|other| {
+        if other == handle {
+            return false;
+        }
+        let Some(mo) = gs.mobjslab.get(other) else {
+            return false;
+        };
+        if mo.flags & flags::MF_SOLID == 0 || mo.health <= 0 {
+            return false;
+        }
+
+        let combined_radius = spawn_radius + mo.radius;
+        (spawn_x - mo.x).abs() < combined_radius && (spawn_y - mo.y).abs() < combined_radius
+    });
+    if spawn_blocked {
+        return false;
+    }
+    if let Some(level) = level
+        && !crate::movement::p_try_move(&gs.mobjslab, handle, spawn_x, spawn_y, level)
+    {
+        return false;
+    }
+
     // --- Timer expired: respawn the monster ---
 
     // Spawn teleport fog at the corpse location.
@@ -295,12 +337,6 @@ pub fn p_nightmare_respawn(gs: &mut GameState, level: Option<&Level>, handle: Mo
         sync_mobj_to_level(level, &mut fog_spawn);
     }
     gs.mobjslab.alloc(fog_spawn);
-
-    // Resolve the MobjKind from the DoomEd type.
-    let kind = match doomed_type_to_kind(spawn_type) {
-        Some(k) => k,
-        None => return false,
-    };
 
     // Spawn a fresh monster at the original position.
     let mut fresh = Mobj::new(kind, spawn_x, spawn_y, spawn_angle);
@@ -500,6 +536,54 @@ mod tests {
             .expect("trooper should spawn");
 
         assert_eq!(trooper.z, Fixed16_16::from_int(-32));
+    }
+
+    #[test]
+    fn sync_mobj_to_level_honors_spawnceiling() {
+        let mut level = make_test_level_with_things(vec![]);
+        level.sectors[0].ceil_height = 128;
+
+        let mut mo = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(32),
+            Fixed16_16::from_int(0),
+            Bam::ZERO,
+        );
+        apply_mobjinfo_defaults(&mut mo);
+        mo.flags |= flags::MF_SPAWNCEILING;
+
+        sync_mobj_to_level(&level, &mut mo);
+
+        assert_eq!(
+            mo.z,
+            Fixed16_16::from_int(72),
+            "spawnceiling thing should hang from ceiling minus actor height"
+        );
+    }
+
+    #[test]
+    fn spawn_nonplayer_randomizes_positive_spawn_tics_outside_nightmare() {
+        let level = make_test_level_with_things(vec![Thing {
+            x: 64,
+            y: 0,
+            angle: 0,
+            kind: 3004,
+            flags: 7,
+        }]);
+        let mut gs = GameState::new("E1M1");
+        gs.rng.set_index(3); // 220 % 10 = 0, so Doom-style randomized tics should become 1.
+
+        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        let trooper = gs
+            .mobjslab
+            .iter_handles()
+            .find_map(|h| gs.mobjslab.get(h).filter(|mo| mo.kind == MobjKind::Trooper))
+            .expect("trooper should spawn");
+
+        assert_eq!(
+            trooper.tics, 1,
+            "non-Nightmare map thing spawn should randomize initial positive tics"
+        );
     }
 
     // ===================================================================
@@ -1304,6 +1388,39 @@ mod tests {
             })
             .count();
         assert_eq!(fog_count, 2, "Should spawn fog at corpse and spawn point");
+    }
+
+    #[test]
+    fn nightmare_respawn_fails_when_spawn_spot_is_blocked_by_solid_actor() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_dead_trooper_corpse(&mut gs);
+        gs.mobjslab.get_mut(handle).unwrap().movecount = NIGHTMARE_RESPAWN_TICS;
+
+        let mut blocker = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(200),
+            Fixed16_16::from_int(300),
+            Bam::ZERO,
+        );
+        apply_mobjinfo_defaults(&mut blocker);
+        blocker.health = 20;
+        blocker.flags |= flags::MF_SOLID;
+        gs.mobjslab.alloc(blocker);
+
+        let initial_count = gs.mobjslab.len();
+        assert!(
+            !p_nightmare_respawn(&mut gs, None, handle),
+            "blocked spawn spot should prevent Nightmare respawn"
+        );
+        assert!(
+            gs.mobjslab.get(handle).is_some(),
+            "corpse should remain when respawn is blocked"
+        );
+        assert_eq!(
+            gs.mobjslab.len(),
+            initial_count,
+            "blocked respawn must not spawn fog or a fresh monster"
+        );
     }
 
     #[test]

@@ -472,10 +472,10 @@ mod tests {
         let mut fb = Framebuffer::new();
         let mut title = TitleScreen::new();
         // Advance to Credits phase.
-        for _ in 0..700 {
+        for _ in 0..350 {
             title.tick();
         }
-        // After Title(350) → Demo(0), Demo(350) → Credits
+        // After Title(350) -> Credits
         assert_eq!(title.phase(), TitlePhase::Credits);
 
         draw_title_screen(&mut fb, &title, &font);
@@ -496,12 +496,7 @@ mod tests {
         fb.clear(42);
         let before = fb.data.clone();
 
-        let mut title = TitleScreen::new();
-        // Advance to Demo phase.
-        for _ in 0..350 {
-            title.tick();
-        }
-        assert!(matches!(title.phase(), TitlePhase::Demo(_)));
+        let title = TitleScreen::from_phase(TitlePhase::Demo(0));
 
         draw_title_screen(&mut fb, &title, &font);
 

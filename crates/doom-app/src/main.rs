@@ -32,7 +32,7 @@ use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
 
-use audio_system::{AudioSystem, music_lump_for_map, sound_request_sfx, weapon_fire_sfx_lump};
+use audio_system::{AudioSystem, music_lump_for_map, sound_request_sfx};
 use doom_audio::{SfxEmitter, SfxPriority, compute_spatial};
 
 // ---------------------------------------------------------------------------
@@ -124,10 +124,8 @@ pub(crate) struct DoomGame {
     automap_full_reveal: bool,
     /// Optional audio subsystem.  `None` when no audio device is available.
     audio: Option<AudioSystem>,
-    /// Raw MUS bytes for the current map's background music.
-    level_music: Option<Vec<u8>>,
-    /// Whether the attack button was held during the previous tic (for edge detection).
-    prev_attack_down: bool,
+    /// WAD music lumps keyed by their canonical `D_*` lump names.
+    music_library: std::collections::HashMap<String, Vec<u8>>,
     /// Flat texture cache (floor/ceiling textures loaded from the WAD).
     flat_cache: Option<FlatCache>,
     /// Wall texture cache (TEXTURE1/TEXTURE2 composed textures from the WAD).
@@ -164,7 +162,7 @@ impl DoomGame {
         mut gs: GameState,
         level: Level,
         audio: Option<AudioSystem>,
-        level_music: Option<Vec<u8>>,
+        music_library: std::collections::HashMap<String, Vec<u8>>,
         flat_cache: Option<FlatCache>,
         tex_cache: Option<TextureCache>,
         sprite_cache: Option<SpriteCache>,
@@ -203,8 +201,7 @@ impl DoomGame {
             automap: AutomapState::new(),
             automap_full_reveal: false,
             audio,
-            level_music,
-            prev_attack_down: false,
+            music_library,
             flat_cache,
             tex_cache,
             sprite_cache,
@@ -229,7 +226,13 @@ impl DoomGame {
     }
 
     fn start_level_music(&self) {
-        if let (Some(audio), Some(level_music)) = (&self.audio, &self.level_music) {
+        let Some(audio) = &self.audio else {
+            return;
+        };
+        let Some(music_lump) = music_lump_for_map(self.gs.level_name.as_str()) else {
+            return;
+        };
+        if let Some(level_music) = self.music_library.get(&music_lump) {
             audio.start_music(level_music.clone());
         }
     }
@@ -462,6 +465,7 @@ impl DoomApp for DoomGame {
                                         self.console.print(format!("Load failed: {e}"));
                                     } else {
                                         self.console.print("Game loaded.".to_string());
+                                        self.start_level_music();
                                         self.menu.close();
                                     }
                                 }
@@ -567,6 +571,7 @@ impl DoomApp for DoomGame {
                         self.console.print(format!("Load failed: {e}"));
                     } else {
                         self.console.print("Game loaded.".to_string());
+                        self.start_level_music();
                     }
                 }
                 Err(e) => {
@@ -576,11 +581,6 @@ impl DoomApp for DoomGame {
         }
 
         let cmd = ticinput_to_ticcmd(input);
-
-        // Capture attack state *before* the tick so we can detect the leading
-        // edge (button just pressed, not held from a previous tic).
-        let attack_pressed_now = cmd.buttons & doom_tui::buttons::BT_ATTACK != 0;
-        let attack_just_fired = attack_pressed_now && !self.prev_attack_down;
 
         // Capture player position before the tick for walk-trigger detection.
         let (old_px, old_py) = match self.gs.mobjslab.get(self.gs.player.handle) {
@@ -619,6 +619,7 @@ impl DoomApp for DoomGame {
                         SoundRequest::MonsterWake(_, x, y)
                         | SoundRequest::MonsterAttack(_, x, y)
                         | SoundRequest::MonsterDie(_, x, y) => Some((*x, *y)),
+                        SoundRequest::PlayerWeaponFire(_) => Some((pl_x, pl_y)),
                         SoundRequest::PlayerDie | SoundRequest::PlayerUseFail => None,
                     };
 
@@ -717,19 +718,6 @@ impl DoomApp for DoomGame {
             }
             self.prev_health = cur_health;
         }
-
-        // Emit weapon SFX on the leading edge of the attack button, and only
-        // when the player is alive and has enough ammo to fire.
-        if attack_just_fired && !self.gs.player.is_dead() && doom_game::player_can_fire(&self.gs) {
-            if let Some(ref audio) = self.audio {
-                let lump = weapon_fire_sfx_lump(self.gs.player.weapon);
-                if let Some(&sfx_id) = self.sfx_lookup.get(lump) {
-                    audio.play_sfx(sfx_id, SfxPriority::Weapon, 1.0, 0.0);
-                }
-            }
-        }
-
-        self.prev_attack_down = attack_pressed_now;
 
         // Update automap center to follow the player position.
         if self.automap.active {
@@ -1114,6 +1102,34 @@ pub(crate) fn ticinput_to_ticcmd(input: TicInput) -> TicCmd {
 // `spawn_player` removed — replaced by `spawn_level_things` which spawns
 // ALL map things (player, monsters, items, decorations, keys).
 
+fn load_music_library(wad: &WadFile) -> std::collections::HashMap<String, Vec<u8>> {
+    let mut music_library = std::collections::HashMap::new();
+
+    for episode in 1..=4 {
+        for map in 1..=9 {
+            let map_name = format!("E{episode}M{map}");
+            let Some(music_lump) = music_lump_for_map(&map_name) else {
+                continue;
+            };
+            if let Some(mus_data) = wad.find_lump_data(&music_lump) {
+                music_library.insert(music_lump, mus_data.to_vec());
+            }
+        }
+    }
+
+    for map in 1..=32 {
+        let map_name = format!("MAP{map:02}");
+        let Some(music_lump) = music_lump_for_map(&map_name) else {
+            continue;
+        };
+        if let Some(mus_data) = wad.find_lump_data(&music_lump) {
+            music_library.insert(music_lump, mus_data.to_vec());
+        }
+    }
+
+    music_library
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -1200,10 +1216,7 @@ fn main() -> Result<()> {
     // Try to open the audio subsystem.  Returns None in headless/CI environments.
     let audio = AudioSystem::try_open(&wad);
 
-    let level_music = music_lump_for_map(warp_str).and_then(|music_lump| {
-        wad.find_lump_data(&music_lump)
-            .map(|mus_data| mus_data.to_vec())
-    });
+    let music_library = load_music_library(&wad);
 
     // Validate mutually exclusive mode args: at most one of the four modes.
     let exclusive_modes = [
@@ -1246,7 +1259,7 @@ fn main() -> Result<()> {
         gs,
         level,
         audio,
-        level_music,
+        music_library,
         flat_cache,
         tex_cache,
         sprite_cache,
@@ -1492,7 +1505,7 @@ mod tests {
             make_game_state(),
             make_test_level(),
             None,
-            None,
+            std::collections::HashMap::new(),
             None,
             None,
             None,
@@ -1502,6 +1515,17 @@ mod tests {
             None,
             std::collections::HashMap::new(),
         )
+    }
+
+    fn music_library_for(
+        level_name: &str,
+        data: Vec<u8>,
+    ) -> std::collections::HashMap<String, Vec<u8>> {
+        let mut library = std::collections::HashMap::new();
+        if let Some(lump) = music_lump_for_map(level_name) {
+            library.insert(lump, data);
+        }
+        library
     }
 
     fn wait_for_music_requests(audio: &AudioSystem, expected: usize) {
@@ -1750,7 +1774,7 @@ mod tests {
             make_game_state(),
             make_test_level(),
             Some(audio),
-            Some(vec![1, 2, 3, 4]),
+            music_library_for("E1M1", vec![1, 2, 3, 4]),
             None,
             None,
             None,
@@ -1773,7 +1797,7 @@ mod tests {
             make_game_state(),
             make_test_level(),
             Some(audio),
-            Some(vec![1, 2, 3, 4]),
+            music_library_for("E1M1", vec![1, 2, 3, 4]),
             None,
             None,
             None,
@@ -1797,6 +1821,37 @@ mod tests {
         let audio = game.audio.as_ref().expect("audio must be present");
         wait_for_music_requests(audio, 1);
         assert_eq!(audio.debug_music_start_count(), 1);
+    }
+
+    #[test]
+    fn start_level_music_resolves_from_current_level_name() {
+        let audio = AudioSystem::try_open_null().expect("null audio must succeed");
+        let mut music_library = music_library_for("E1M1", vec![1, 2, 3, 4]);
+        music_library.extend(music_library_for("MAP01", vec![5, 6, 7, 8]));
+        let mut game = DoomGame::new(
+            make_game_state(),
+            make_test_level(),
+            Some(audio),
+            music_library,
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+        );
+
+        let audio = game.audio.as_ref().expect("audio must be present");
+        wait_for_music_requests(audio, 1);
+        assert_eq!(audio.debug_music_start_count(), 1);
+
+        game.gs.level_name = "MAP01".to_string();
+        game.start_level_music();
+
+        wait_for_music_requests(audio, 2);
+        assert_eq!(audio.debug_music_start_count(), 2);
     }
 
     // ===================================================================

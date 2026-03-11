@@ -199,7 +199,7 @@ mod tests {
             make_game_state(),
             make_test_level(),
             None,
-            None,
+            std::collections::HashMap::new(),
             None,
             None,
             None,

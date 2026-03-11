@@ -137,6 +137,8 @@ pub struct PlayerState {
     // --- Input debounce ---
     /// Was attack held last tic (for auto-fire).
     pub attack_down: bool,
+    /// Tics remaining before the current weapon may fire again.
+    pub attack_cooldown: u8,
     /// Was use held last tic (prevents continuous use on key hold).
     pub use_down: bool,
 
@@ -193,6 +195,7 @@ impl PlayerState {
             weapon: WeaponType::Pistol,
             pending_weapon: None,
             attack_down: false,
+            attack_cooldown: 0,
             use_down: false,
             powers: [0; NUM_POWERS],
             god_mode: false,
@@ -544,6 +547,7 @@ mod tests {
         assert!(p.weapons[WeaponType::Fist as usize]);
         assert!(!p.weapons[WeaponType::Shotgun as usize]);
         assert_eq!(p.ammo(AmmoType::Bullets as usize), 50);
+        assert_eq!(p.attack_cooldown, 0);
     }
 
     #[test]

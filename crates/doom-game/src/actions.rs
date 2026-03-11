@@ -277,6 +277,78 @@ fn p_check_sight_local(
     dist <= 4096
 }
 
+fn approx_distance(dx: i32, dy: i32) -> i32 {
+    let dx = dx.abs();
+    let dy = dy.abs();
+    let (hi, lo) = if dx >= dy { (dx, dy) } else { (dy, dx) };
+    hi + lo - (lo / 2)
+}
+
+fn p_check_missile_range(
+    gs: &mut GameState,
+    handle: MobjHandle,
+    target: MobjHandle,
+    level: Option<&Level>,
+) -> bool {
+    let (mo_kind, mo_flags, reactiontime, mo_x, mo_y) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.kind, mo.flags, mo.reactiontime, mo.x, mo.y),
+        None => return false,
+    };
+
+    let has_los = if let Some(lv) = level {
+        crate::sight::p_check_sight(gs, lv, handle, target)
+    } else {
+        p_check_sight_local(gs, handle, target, None)
+    };
+    if !has_los {
+        return false;
+    }
+
+    if mo_flags & flags::MF_JUSTHIT != 0 {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.flags &= !flags::MF_JUSTHIT;
+        }
+        return true;
+    }
+
+    if reactiontime != 0 {
+        return false;
+    }
+
+    let Some(info) = mobjinfo::MOBJINFO.get(mo_kind as usize) else {
+        return false;
+    };
+    let (tx, ty) = match gs.mobjslab.get(target) {
+        Some(t) => (t.x, t.y),
+        None => return false,
+    };
+
+    let mut dist = approx_distance((tx - mo_x).to_int(), (ty - mo_y).to_int());
+    if info.melee_state == crate::mobj::StateNum::NULL {
+        dist -= 128;
+    }
+
+    match mo_kind {
+        MobjKind::ArchVile => return dist > 14 * 64,
+        MobjKind::Revenant
+        | MobjKind::Cyberdemon
+        | MobjKind::SpiderMastermind
+        | MobjKind::LostSoul => {
+            dist >>= 1;
+        }
+        _ => {}
+    }
+
+    if dist > 200 {
+        dist = 200;
+    }
+    if mo_kind == MobjKind::Cyberdemon && dist > 160 {
+        dist = 160;
+    }
+
+    dist <= 0 || i32::from(gs.p_random()) >= dist
+}
+
 // ---------------------------------------------------------------------------
 // P_Move — one step monster movement with collision detection
 // ---------------------------------------------------------------------------
@@ -776,26 +848,18 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
         // Don't fire if still moving from last direction change (gives monsters
         // a movement phase between attacks), unless movecount has expired.
-        let can_fire = cur_movecount <= 0;
+        let can_fire =
+            cur_movecount <= 0 && p_check_missile_range(gs, handle, current_target, level);
 
         if can_fire {
-            // Check line of sight before firing.
-            let has_los = if let Some(lv) = level {
-                crate::sight::p_check_sight(gs, lv, handle, current_target)
-            } else {
-                p_check_sight_local(gs, handle, current_target, None)
-            };
-
-            if has_los {
-                // Face the target and enter missile state.
-                a_face_target(gs, handle);
-                set_mobj_state(gs, handle, missile_sn);
-                // Set MF_JUSTATTACKED so we skip attack next tic.
-                if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                    mo.flags |= flags::MF_JUSTATTACKED;
-                }
-                return;
+            // Face the target and enter missile state.
+            a_face_target(gs, handle);
+            set_mobj_state(gs, handle, missile_sn);
+            // Set MF_JUSTATTACKED so we skip attack next tic.
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.flags |= flags::MF_JUSTATTACKED;
             }
+            return;
         }
     }
 
@@ -2420,6 +2484,7 @@ mod tests {
         mo.movecount = 0;
         let trooper = gs.mobjslab.alloc(mo);
 
+        gs.rng.set_index(9);
         a_chase(&mut gs, trooper, None);
 
         let mo = gs.mobjslab.get(trooper).unwrap();
@@ -2489,6 +2554,7 @@ mod tests {
         mo.movecount = 1;
         let trooper = gs.mobjslab.alloc(mo);
 
+        gs.rng.set_index(9);
         a_chase(&mut gs, trooper, None);
         let after_first = gs.mobjslab.get(trooper).unwrap();
         assert_eq!(
@@ -2505,6 +2571,42 @@ mod tests {
         assert_eq!(
             after_second.state, missile_sn,
             "trooper should enter missile state once movecount has counted down"
+        );
+    }
+
+    #[test]
+    fn a_chase_far_trooper_respects_random_missile_gate() {
+        let mut gs = make_game_state();
+        let kind = MobjKind::Trooper;
+        let see_sn = mobjinfo::MOBJINFO[kind as usize].see_state;
+        let missile_sn = mobjinfo::MOBJINFO[kind as usize].missile_state;
+
+        let mut mo = Mobj::new(
+            kind,
+            Fixed16_16::from_int(2000),
+            Fixed16_16::from_int(0),
+            Bam::ZERO,
+        );
+        mo.health = 20;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.state = see_sn;
+        mo.tics = states::STATES[see_sn.0 as usize].tics;
+        mo.target = gs.player.handle;
+        mo.reactiontime = 0;
+        mo.movecount = 0;
+        let trooper = gs.mobjslab.alloc(mo);
+
+        gs.rng.set_index(0);
+        a_chase(&mut gs, trooper, None);
+
+        let mo = gs.mobjslab.get(trooper).unwrap();
+        assert_eq!(
+            mo.state, see_sn,
+            "far trooper should stay in chase state when the missile-range random gate rejects firing"
+        );
+        assert_ne!(
+            mo.state, missile_sn,
+            "far trooper should not always enter missile state"
         );
     }
 

@@ -322,6 +322,9 @@ pub fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, 
         doom_game::SoundRequest::MonsterDie(kind, _, _) => {
             Some((monster_death_lump(kind), SfxPriority::High))
         }
+        doom_game::SoundRequest::PlayerWeaponFire(weapon) => {
+            Some((weapon_fire_sfx_lump(weapon), SfxPriority::Weapon))
+        }
         doom_game::SoundRequest::PlayerDie => Some(("DSPLDETH", SfxPriority::Weapon)),
         doom_game::SoundRequest::PlayerUseFail => Some(("DSNOWAY", SfxPriority::High)),
     }
@@ -583,6 +586,16 @@ mod tests {
         assert_eq!(
             weapon_fire_sfx_lump(doom_game::WeaponType::Chaingun),
             weapon_fire_sfx_lump(doom_game::WeaponType::Pistol)
+        );
+    }
+
+    #[test]
+    fn sound_request_sfx_maps_player_weapon_fire_to_weapon_lump() {
+        assert_eq!(
+            sound_request_sfx(doom_game::SoundRequest::PlayerWeaponFire(
+                doom_game::WeaponType::Shotgun
+            )),
+            Some(("DSSHOTGN", doom_audio::SfxPriority::Weapon))
         );
     }
 

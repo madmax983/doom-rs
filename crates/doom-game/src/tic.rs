@@ -345,15 +345,19 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
     }
 
     // BT_ATTACK: fire current weapon.
-    // Auto-fire weapons (chaingun, plasma) fire every tic the button is held.
-    // All others are edge-triggered: fire only on the leading edge of the press.
+    if gs.player.attack_cooldown > 0 {
+        gs.player.attack_cooldown -= 1;
+    }
     let attack_held = cmd.buttons & bt::BT_ATTACK != 0;
-    let is_auto_weapon = matches!(
-        gs.player.weapon,
-        WeaponType::Chaingun | WeaponType::PlasmaRifle | WeaponType::Chainsaw
-    );
-    if attack_held && (!gs.player.attack_down || is_auto_weapon) {
-        crate::weapon_fire::fire_current_weapon(gs, level.as_deref());
+    let ready_for_hold_refire = gs.player.attack_down
+        && gs.player.attack_cooldown == 0
+        && crate::weapon_fire::weapon_allows_hold_fire(gs.player.weapon);
+    let wants_attack = attack_held && (!gs.player.attack_down || ready_for_hold_refire);
+    if wants_attack && gs.player.attack_cooldown == 0 {
+        let weapon = gs.player.weapon;
+        if crate::weapon_fire::fire_current_weapon(gs, level.as_deref()) {
+            gs.player.attack_cooldown = crate::weapon_fire::weapon_refire_tics(weapon);
+        }
     }
     gs.player.attack_down = attack_held;
 
@@ -616,7 +620,7 @@ fn p_thrust(mo: &mut crate::mobj::Mobj, angle: Bam, move_units: i8) {
 mod tests {
     use super::*;
     use crate::mobj::{Mobj, MobjKind, flags};
-    use crate::player::PlayerState;
+    use crate::player::{AmmoType, PlayerState, WeaponType};
     use crate::states::ids;
     use doom_types::{Bam, Fixed16_16};
 
@@ -1027,7 +1031,7 @@ mod tests {
     }
 
     #[test]
-    fn tick_player_pistol_can_hit_slightly_off_axis_target() {
+    fn tick_player_first_pistol_shot_is_accurate() {
         // SAFETY: trig tables are process-global and internally guarded.
         unsafe {
             doom_types::Bam::init_trig_tables();
@@ -1037,12 +1041,15 @@ mod tests {
         let mut trooper = Mobj::new(
             MobjKind::Trooper,
             Fixed16_16::from_int(512),
-            Fixed16_16::from_int(-21),
+            Fixed16_16::ZERO,
             Bam::ZERO,
         );
         trooper.health = 20;
+        trooper.radius = Fixed16_16::from_int(8);
         trooper.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
         let trooper_handle = gs.mobjslab.alloc(trooper);
+        gs.rng.set_index(16);
+        gs.player.attack_down = false;
 
         tick_player(
             &mut gs,
@@ -1055,7 +1062,91 @@ mod tests {
 
         assert!(
             gs.mobjslab.get(trooper_handle).unwrap().health < 20,
-            "player attack should use Doom-style bullet spread, not a zero-spread laser"
+            "first pistol shot through tick_player should be accurate"
+        );
+    }
+
+    #[test]
+    fn held_pistol_refires_after_cooldown() {
+        let mut gs = make_game_state();
+        let cmd = TicCmd {
+            buttons: bt::BT_ATTACK,
+            ..Default::default()
+        };
+
+        tick_player(&mut gs, cmd, None);
+        assert_eq!(gs.player.ammo(AmmoType::Bullets as usize), 49);
+
+        for _ in 0..crate::weapon_fire::weapon_refire_tics(WeaponType::Pistol) - 1 {
+            tick_player(&mut gs, cmd, None);
+        }
+        assert_eq!(
+            gs.player.ammo(AmmoType::Bullets as usize),
+            49,
+            "held pistol should wait for its refire cooldown"
+        );
+
+        tick_player(&mut gs, cmd, None);
+        assert_eq!(
+            gs.player.ammo(AmmoType::Bullets as usize),
+            48,
+            "held pistol should refire once its cooldown elapses"
+        );
+    }
+
+    #[test]
+    fn held_shotgun_refires_after_cooldown() {
+        let mut gs = make_game_state();
+        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.weapon = WeaponType::Shotgun;
+        gs.player.give_ammo(AmmoType::Shells as usize, 4);
+        let cmd = TicCmd {
+            buttons: bt::BT_ATTACK,
+            ..Default::default()
+        };
+
+        tick_player(&mut gs, cmd, None);
+        assert_eq!(gs.player.ammo(AmmoType::Shells as usize), 3);
+
+        for _ in 0..crate::weapon_fire::weapon_refire_tics(WeaponType::Shotgun) - 1 {
+            tick_player(&mut gs, cmd, None);
+        }
+        assert_eq!(
+            gs.player.ammo(AmmoType::Shells as usize),
+            3,
+            "held shotgun should respect its refire cooldown"
+        );
+
+        tick_player(&mut gs, cmd, None);
+        assert_eq!(
+            gs.player.ammo(AmmoType::Shells as usize),
+            2,
+            "held shotgun should refire after waiting out the cooldown"
+        );
+    }
+
+    #[test]
+    fn held_rocket_launcher_does_not_autofire() {
+        let mut gs = make_game_state();
+        gs.player.weapons[WeaponType::RocketLauncher as usize] = true;
+        gs.player.weapon = WeaponType::RocketLauncher;
+        gs.player.give_ammo(AmmoType::Rockets as usize, 3);
+        let cmd = TicCmd {
+            buttons: bt::BT_ATTACK,
+            ..Default::default()
+        };
+
+        tick_player(&mut gs, cmd, None);
+        assert_eq!(gs.player.ammo(AmmoType::Rockets as usize), 2);
+
+        for _ in 0..(crate::weapon_fire::weapon_refire_tics(WeaponType::RocketLauncher) + 5) {
+            tick_player(&mut gs, cmd, None);
+        }
+
+        assert_eq!(
+            gs.player.ammo(AmmoType::Rockets as usize),
+            2,
+            "held rocket launcher should require a release before the next shot"
         );
     }
 

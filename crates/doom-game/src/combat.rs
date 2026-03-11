@@ -74,6 +74,17 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         damage
     };
 
+    let retaliation = if target != gs.player.handle && inflictor != MobjHandle::NULL {
+        gs.mobjslab.get(target).map(|mo| {
+            let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
+            let wake_state = (mo.state == info.spawn_state && info.see_state != StateNum::NULL)
+                .then_some(info.see_state);
+            wake_state
+        })
+    } else {
+        None
+    };
+
     // Apply damage + inflictor.
     let new_health = {
         let Some(mo) = gs.mobjslab.get_mut(target) else {
@@ -82,6 +93,14 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         mo.health = (mo.health - effective_damage).max(0);
         if inflictor != MobjHandle::NULL {
             mo.target = inflictor;
+            if target != gs.player.handle {
+                mo.threshold = 60;
+                mo.flags |= flags::MF_JUSTHIT;
+                if let Some(see_state) = retaliation.flatten() {
+                    mo.state = see_state;
+                    mo.tics = crate::states::STATES[see_state.0 as usize].tics;
+                }
+            }
         }
         mo.health
     };
@@ -425,6 +444,41 @@ mod tests {
         // Trooper starts with 20 health; deal 5 damage.
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 5);
         assert_eq!(gs.mobjslab.get(trooper).unwrap().health, 15);
+    }
+
+    #[test]
+    fn damage_wakes_monster_and_marks_justhit() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        let player = gs.player.handle;
+        let spawn_state = gs.mobjslab.get(trooper).unwrap().state;
+        let see_state = crate::mobjinfo::MOBJINFO[MobjKind::Trooper as usize].see_state;
+
+        gs.rng.set_index(3); // 220 >= trooper pain chance, so no pain-state detour.
+        damage_mobj(&mut gs, trooper, player, 5);
+
+        let mo = gs.mobjslab.get(trooper).unwrap();
+        assert_eq!(
+            mo.target, player,
+            "monster should retaliate against the attacker"
+        );
+        assert_eq!(
+            mo.threshold, 60,
+            "monster should enter alert threshold after being hit"
+        );
+        assert_ne!(
+            mo.flags & flags::MF_JUSTHIT,
+            0,
+            "monster should be marked JUSTHIT for immediate retaliation"
+        );
+        assert_ne!(
+            spawn_state, see_state,
+            "trooper should have distinct idle and see states"
+        );
+        assert_eq!(
+            mo.state, see_state,
+            "idle monster should wake into see_state when damaged"
+        );
     }
 
     #[test]

@@ -476,15 +476,17 @@ pub enum TitlePhase {
     Credits,
 }
 
-/// Tics the title graphic is shown before transitioning to Demo(0).
+/// Tics the title graphic is shown before transitioning to credits.
 const TITLE_DURATION: u32 = 350;
 
-/// Tics the credits graphic is shown before transitioning to the next demo.
+/// Tics the credits graphic is shown before cycling back to the title.
 const CREDITS_DURATION: u32 = 200;
 
-/// Title screen demo sequence timing.
+/// Title screen attract-mode timing.
 ///
-/// Cycles through: Title -> Demo(0) -> Credits -> Demo(1) -> Title -> Demo(2) -> Credits -> ...
+/// The timer-driven loop currently cycles through `Title -> Credits -> Title`.
+/// `Demo(_)` remains representable for future real playback, but normal ticking
+/// intentionally stays out of demo phases until that playback path exists.
 pub struct TitleScreen {
     /// Current tic in the current phase.
     tic: u32,
@@ -501,40 +503,34 @@ impl TitleScreen {
         }
     }
 
+    /// Create a title screen starting in a specific phase.
+    pub fn from_phase(phase: TitlePhase) -> Self {
+        Self { tic: 0, phase }
+    }
+
     /// Advance the title screen by one tic.
     ///
     /// Auto-transitions:
-    /// - Title (350 tics) -> Demo(0)
+    /// - Title (350 tics) -> Credits
     /// - Demo(n) is expected to be driven externally (demo playback); when
     ///   the demo ends, the caller should call `advance_from_demo()`.
-    ///   For simplicity in the timer model, we auto-transition after 350 tics.
-    /// - Credits (200 tics) -> Demo(n+1) or back to Title
+    /// - Credits (200 tics) -> Title
     pub fn tick(&mut self) {
         self.tic += 1;
 
         match self.phase {
             TitlePhase::Title => {
                 if self.tic >= TITLE_DURATION {
-                    self.phase = TitlePhase::Demo(0);
+                    self.phase = TitlePhase::Credits;
                     self.tic = 0;
                 }
             }
             TitlePhase::Demo(n) => {
-                // Demos are variable-length; auto-advance after a generous
-                // timeout so the cycle always progresses.
-                if self.tic >= TITLE_DURATION {
-                    self.phase = TitlePhase::Credits;
-                    self.tic = 0;
-                }
-                // Otherwise, wait for external advance_from_demo() or timeout.
+                // Demo playback is not timer-driven yet.
                 let _ = n; // suppress unused warning
             }
             TitlePhase::Credits => {
                 if self.tic >= CREDITS_DURATION {
-                    // Cycle: Credits -> Demo(next) or Title
-                    // The original Doom cycles: Title -> Demo0 -> Credits ->
-                    // Demo1 -> Title -> Demo2 -> Credits -> Demo0 -> ...
-                    // We model the next demo number based on the last demo.
                     self.advance_after_credits();
                 }
             }
@@ -543,18 +539,7 @@ impl TitleScreen {
 
     /// Transition from credits to the next phase.
     fn advance_after_credits(&mut self) {
-        // After credits, go to Demo(1) if the last demo was 0, etc.
-        // But we need to know which demo preceded credits. We'll use
-        // a simple rotating pattern:
-        //   Title -> Demo(0) -> Credits -> Demo(1) -> Title -> Demo(2) -> Credits -> ...
-        // To implement this without extra state, we cycle:
-        //   Credits always transitions to Demo(1), then Demo(1) -> Title,
-        //   Title -> Demo(2), Demo(2) -> Credits, etc.
-        // Actually, to keep it simple and match Doom:
-        //   We go back to Demo(1) after first Credits, then Title after Demo(1), etc.
-        // The simplest correct model: Credits -> Demo(1), and when Demo times out or
-        // is advanced externally, we go to Title.
-        self.phase = TitlePhase::Demo(1);
+        self.phase = TitlePhase::Title;
         self.tic = 0;
     }
 
@@ -1237,29 +1222,26 @@ mod tests {
             assert_eq!(ts.phase(), TitlePhase::Title);
         }
         ts.tick(); // tic 350
-        assert_eq!(ts.phase(), TitlePhase::Demo(0));
+        assert_eq!(ts.phase(), TitlePhase::Credits);
     }
 
     #[test]
-    fn title_transitions_to_demo_0() {
+    fn title_transitions_to_credits() {
         let mut ts = TitleScreen::new();
         for _ in 0..TITLE_DURATION {
             ts.tick();
         }
-        assert_eq!(ts.phase(), TitlePhase::Demo(0));
+        assert_eq!(ts.phase(), TitlePhase::Credits);
         assert_eq!(ts.tic(), 0);
     }
 
     #[test]
     fn credits_phase_lasts_200_tics() {
         let mut ts = TitleScreen::new();
-        // Title -> Demo(0)
+        // Title -> Credits
         for _ in 0..TITLE_DURATION {
             ts.tick();
         }
-        assert_eq!(ts.phase(), TitlePhase::Demo(0));
-        // Demo(0) -> Credits via advance
-        ts.advance_from_demo();
         assert_eq!(ts.phase(), TitlePhase::Credits);
         // Credits lasts 200 tics
         for _ in 0..199 {
@@ -1267,16 +1249,13 @@ mod tests {
             assert_eq!(ts.phase(), TitlePhase::Credits);
         }
         ts.tick(); // tic 200
-        assert_ne!(ts.phase(), TitlePhase::Credits);
+        assert_eq!(ts.phase(), TitlePhase::Title);
     }
 
     #[test]
     fn demo_0_advances_to_credits() {
         let mut ts = TitleScreen::new();
-        for _ in 0..TITLE_DURATION {
-            ts.tick();
-        }
-        assert_eq!(ts.phase(), TitlePhase::Demo(0));
+        ts.phase = TitlePhase::Demo(0);
         ts.advance_from_demo();
         assert_eq!(ts.phase(), TitlePhase::Credits);
     }
@@ -1284,16 +1263,7 @@ mod tests {
     #[test]
     fn demo_1_advances_to_title() {
         let mut ts = TitleScreen::new();
-        // Get to Demo(1) via full cycle
-        for _ in 0..TITLE_DURATION {
-            ts.tick();
-        }
-        ts.advance_from_demo(); // Demo(0) -> Credits
-        for _ in 0..CREDITS_DURATION {
-            ts.tick();
-        }
-        // Credits -> Demo(1)
-        assert_eq!(ts.phase(), TitlePhase::Demo(1));
+        ts.phase = TitlePhase::Demo(1);
         ts.advance_from_demo();
         assert_eq!(ts.phase(), TitlePhase::Title);
     }
@@ -1304,7 +1274,7 @@ mod tests {
         for _ in 0..TITLE_DURATION {
             ts.tick();
         }
-        assert_eq!(ts.phase(), TitlePhase::Demo(0));
+        assert_eq!(ts.phase(), TitlePhase::Credits);
         ts.reset();
         assert_eq!(ts.phase(), TitlePhase::Title);
         assert_eq!(ts.tic(), 0);
@@ -1330,21 +1300,13 @@ mod tests {
             ts.tick();
         }
 
-        // Phase 2: Demo(0)
-        assert_eq!(ts.phase(), TitlePhase::Demo(0));
-        ts.advance_from_demo();
-
-        // Phase 3: Credits
+        // Phase 2: Credits
         assert_eq!(ts.phase(), TitlePhase::Credits);
         for _ in 0..CREDITS_DURATION {
             ts.tick();
         }
 
-        // Phase 4: Demo(1)
-        assert_eq!(ts.phase(), TitlePhase::Demo(1));
-        ts.advance_from_demo();
-
-        // Phase 5: Title (cycle complete)
+        // Phase 3: Title (cycle complete)
         assert_eq!(ts.phase(), TitlePhase::Title);
     }
 
@@ -1354,7 +1316,6 @@ mod tests {
         for _ in 0..TITLE_DURATION {
             ts.tick();
         }
-        ts.advance_from_demo(); // -> Credits
         assert_eq!(ts.phase(), TitlePhase::Credits);
         ts.reset();
         assert_eq!(ts.phase(), TitlePhase::Title);
@@ -1384,7 +1345,19 @@ mod tests {
         for _ in 0..TITLE_DURATION {
             ts.tick();
         }
-        // Just transitioned to Demo(0)
+        // Just transitioned to Credits
         assert_eq!(ts.tic(), 0);
+    }
+
+    #[test]
+    fn timer_driven_title_loop_never_enters_demo_phase() {
+        let mut ts = TitleScreen::new();
+        for _ in 0..(TITLE_DURATION + CREDITS_DURATION + TITLE_DURATION) {
+            ts.tick();
+            assert!(
+                !matches!(ts.phase(), TitlePhase::Demo(_)),
+                "timer-driven title loop should stay out of demo phases until playback exists"
+            );
+        }
     }
 }

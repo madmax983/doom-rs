@@ -15,7 +15,7 @@
 //! 4. If the ray reaches the target without being blocked, return `true`.
 
 use doom_map::Level;
-use doom_types::Fixed16_16;
+use doom_types::{ANG90, ANG270, Bam, Fixed16_16};
 
 use crate::mobj::MobjHandle;
 use crate::state::GameState;
@@ -395,11 +395,25 @@ pub fn p_look_for_players(gs: &GameState, level: &Level, actor: MobjHandle) -> O
     let player_handle = gs.player.handle;
 
     // Check the actor itself exists.
-    gs.mobjslab.get(actor)?;
+    let actor_mo = gs.mobjslab.get(actor)?;
 
     // Check the player exists and is alive.
     let player_mo = gs.mobjslab.get(player_handle)?;
     if player_mo.is_dead() {
+        return None;
+    }
+
+    let dx = player_mo.x.to_int() - actor_mo.x.to_int();
+    let dy = player_mo.y.to_int() - actor_mo.y.to_int();
+
+    let angle_to_player = bam_from_delta(dx, dy);
+    let angle_delta = angle_to_player - actor_mo.angle;
+    let dist_sq = i64::from(dx) * i64::from(dx) + i64::from(dy) * i64::from(dy);
+    let melee_range = i64::from(crate::combat::MELEERANGE.to_int());
+
+    // Doom's default look path does not acquire targets behind the monster
+    // unless they are close enough for melee.
+    if angle_delta > ANG90 && angle_delta < ANG270 && dist_sq > melee_range * melee_range {
         return None;
     }
 
@@ -409,6 +423,16 @@ pub fn p_look_for_players(gs: &GameState, level: &Level, actor: MobjHandle) -> O
     } else {
         None
     }
+}
+
+fn bam_from_delta(dx: i32, dy: i32) -> Bam {
+    if dx == 0 && dy == 0 {
+        return Bam::ZERO;
+    }
+
+    let angle_rad = (dy as f64).atan2(dx as f64);
+    let turns = angle_rad / std::f64::consts::TAU;
+    Bam((turns * (u32::MAX as f64 + 1.0)) as u32)
 }
 
 // ---------------------------------------------------------------------------
@@ -1035,6 +1059,20 @@ mod tests {
         assert!(
             p_look_for_players(&gs, &level, monster).is_none(),
             "wall between player and monster must block sight"
+        );
+    }
+
+    #[test]
+    fn look_for_players_rejects_player_behind_back_outside_melee_range() {
+        let level = make_open_level();
+        let (mut gs, player_h) = make_gs_with_player(-200, 0);
+        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
+        let monster = spawn_actor(&mut gs, 0, 0, 0, 20);
+        gs.mobjslab.get_mut(monster).unwrap().angle = Bam::ZERO; // facing east
+
+        assert!(
+            p_look_for_players(&gs, &level, monster).is_none(),
+            "player behind the monster and outside melee range must not be acquired"
         );
     }
 

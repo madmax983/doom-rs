@@ -28,6 +28,8 @@ pub enum SoundRequest {
     MonsterDie(MobjKind, doom_types::Fixed16_16, doom_types::Fixed16_16),
     /// Monster fired a hitscan or projectile attack.  Fields: (kind, map_x, map_y).
     MonsterAttack(MobjKind, doom_types::Fixed16_16, doom_types::Fixed16_16),
+    /// Player weapon actually fired this tic.
+    PlayerWeaponFire(crate::player::WeaponType),
     /// Player died.
     PlayerDie,
     /// Player pressed use into a blocking ordinary wall.
