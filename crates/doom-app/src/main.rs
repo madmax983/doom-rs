@@ -25,9 +25,10 @@ use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
     ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
-    PaletteFlash, PaletteLut, RenderOut, SpriteCache, SpriteClip, SwitchList, TextureCache,
-    draw_automap_ex, draw_menu, draw_status_bar, draw_title_screen, draw_weapon_sprite,
-    render_actors_with_masked_ex, render_flag_from_state, render_level, thing_sprite_prefix,
+    PLAYER_HEIGHT, PaletteFlash, PaletteLut, RenderOut, SpriteCache, SpriteClip, SwitchList,
+    TextureCache, draw_automap_ex, draw_menu, draw_status_bar, draw_title_screen,
+    draw_weapon_sprite, render_actors_with_masked_ex, render_flag_from_state,
+    render_level_with_view_height, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -143,6 +144,8 @@ pub(crate) struct DoomGame {
     switch_list: SwitchList,
     /// Player health from the previous tic — used to detect damage for pain flash.
     prev_health: i32,
+    /// First-person view height above the floor, lowered while the player is dead.
+    player_view_height: i32,
     /// In-game menu (Esc toggles it).
     menu: doom_game::menu::GameMenu,
     /// Bitmap font for menu/console text rendering.
@@ -156,6 +159,17 @@ pub(crate) struct DoomGame {
     /// Name → SFX ID lookup built from the WAD at startup (same ordering as
     /// `SfxCache`).  Used to play monster wake/attack/death sounds by lump name.
     sfx_lookup: std::collections::HashMap<String, u16>,
+}
+
+const DEAD_PLAYER_VIEW_HEIGHT: i32 = 6;
+
+#[inline]
+fn next_player_view_height(current: i32, player_dead: bool) -> i32 {
+    if player_dead {
+        current.saturating_sub(1).max(DEAD_PLAYER_VIEW_HEIGHT)
+    } else {
+        PLAYER_HEIGHT
+    }
 }
 
 impl DoomGame {
@@ -211,6 +225,7 @@ impl DoomGame {
             palette_flash: PaletteFlash::new(),
             switch_list: SwitchList::new(),
             prev_health: initial_health,
+            player_view_height: PLAYER_HEIGHT,
             menu,
             bitmap_font: BitmapFont::new(),
             title_screen,
@@ -473,6 +488,7 @@ impl DoomApp for DoomGame {
                             init_scrolling_walls(&mut self.gs, &self.level);
                             init_conveyors(&mut self.gs, &self.level);
                             init_sector_lights(&mut self.gs, &self.level);
+                            self.player_view_height = PLAYER_HEIGHT;
                             self.menu.close();
                             self.title_screen = None;
                             self.start_level_music();
@@ -528,6 +544,11 @@ impl DoomApp for DoomGame {
                                     if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
                                         self.console.print(format!("Load failed: {e}"));
                                     } else {
+                                        self.player_view_height = if self.gs.player.is_dead() {
+                                            DEAD_PLAYER_VIEW_HEIGHT
+                                        } else {
+                                            PLAYER_HEIGHT
+                                        };
                                         self.console.print("Game loaded.".to_string());
                                         self.start_level_music();
                                         self.menu.close();
@@ -651,6 +672,8 @@ impl DoomApp for DoomGame {
         let pre_items = self.gs.player.item_count;
 
         self.gs.tick(cmd, Some(&mut self.level));
+        self.player_view_height =
+            next_player_view_height(self.player_view_height, self.gs.player.is_dead());
 
         // Drain the game's sound event queue.  Each event maps to a DS* lump
         // name and a priority.  The SfxMixer's 8-channel priority system handles
@@ -755,11 +778,12 @@ impl DoomApp for DoomGame {
                 clip_top_depth,
                 clip_bot_depth,
                 masked_columns,
-            } = render_level(
+            } = render_level_with_view_height(
                 &self.level,
                 px,
                 py,
                 angle,
+                self.player_view_height,
                 fb,
                 &palette,
                 self.flat_cache.as_ref(),
@@ -832,7 +856,9 @@ impl DoomApp for DoomGame {
             }
 
             // Draw weapon sprite overlay using the player's current weapon.
-            if let Some(ref cache) = self.sprite_cache {
+            if let Some(ref cache) = self.sprite_cache
+                && !self.gs.player.is_dead()
+            {
                 let sprite_name = weapon_idle_sprite(self.gs.player.weapon);
                 draw_weapon_sprite(fb, &sprite_name, cache, &IDENTITY_COLORMAP);
             }
@@ -1682,6 +1708,48 @@ mod tests {
         assert!(
             game.cheat_message.is_none(),
             "cheat_message must start None"
+        );
+        assert_eq!(
+            game.player_view_height, PLAYER_HEIGHT,
+            "player view height must start at the normal standing height"
+        );
+    }
+
+    #[test]
+    fn dead_player_view_height_lowers_toward_floor() {
+        let mut game = make_doom_game();
+        game.gs.player.apply_damage(200);
+        assert!(
+            game.gs.player.is_dead(),
+            "player must be dead for death view test"
+        );
+
+        game.tick(TicInput::default());
+        assert_eq!(
+            game.player_view_height,
+            PLAYER_HEIGHT - 1,
+            "dead player view height must start lowering one unit per tic"
+        );
+
+        for _ in 0..128 {
+            game.tick(TicInput::default());
+        }
+
+        assert_eq!(
+            game.player_view_height, DEAD_PLAYER_VIEW_HEIGHT,
+            "dead player view height must clamp to the low vanilla death view"
+        );
+    }
+
+    #[test]
+    fn alive_player_view_height_resets_after_revival() {
+        let mut game = make_doom_game();
+        game.player_view_height = DEAD_PLAYER_VIEW_HEIGHT;
+
+        game.tick(TicInput::default());
+        assert_eq!(
+            game.player_view_height, PLAYER_HEIGHT,
+            "alive player must render from the normal standing height"
         );
     }
 

@@ -196,6 +196,7 @@ pub fn p_spawn_missile(
 
     // Build the projectile Mobj.
     let mut proj = Mobj::new(kind, sx, sy, angle);
+    crate::spawn::apply_mobjinfo_defaults(&mut proj);
     proj.z = spawn_z;
     proj.radius = info.radius;
     proj.height = info.height;
@@ -237,6 +238,7 @@ pub fn p_spawn_player_missile(
     let momy = info.speed.fixed_mul(angle.sin());
 
     let mut proj = Mobj::new(kind, sx, sy, angle);
+    crate::spawn::apply_mobjinfo_defaults(&mut proj);
     proj.z = spawn_z;
     proj.radius = info.radius;
     proj.height = info.height;
@@ -378,9 +380,11 @@ pub fn p_move_projectiles(gs: &mut GameState, level: Option<&Level>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, flags};
+    use crate::mobj::{Mobj, MobjKind, StateNum, flags};
+    use crate::mobjinfo::MOBJINFO;
     use crate::player::PlayerState;
     use crate::state::GameState;
+    use crate::states::{STATES, ids};
     use doom_types::{Bam, Fixed16_16};
 
     /// Build a minimal GameState with a live player at the origin.
@@ -504,6 +508,21 @@ mod tests {
     }
 
     #[test]
+    fn spawn_missile_initializes_visible_spawn_state() {
+        let mut gs = make_game_state();
+        let source = gs.player.handle;
+        let target = spawn_target(&mut gs, 100, 0, 60);
+
+        let proj_h = p_spawn_missile(&mut gs, source, target, MobjKind::ImpFireball).unwrap();
+        let proj = gs.mobjslab.get(proj_h).unwrap();
+        let info = &MOBJINFO[MobjKind::ImpFireball as usize];
+
+        assert_eq!(info.spawn_state, StateNum(ids::S_TBALL1));
+        assert_eq!(proj.state, info.spawn_state);
+        assert_eq!(proj.tics, STATES[info.spawn_state.0 as usize].tics);
+    }
+
+    #[test]
     fn spawn_missile_returns_none_for_non_projectile_kind() {
         let mut gs = make_game_state();
         let source = gs.player.handle;
@@ -576,6 +595,20 @@ mod tests {
         let proj = gs.mobjslab.get(proj_h).unwrap();
         // Player z=0, height=56, so chest height = 56/2 = 28.
         assert_eq!(proj.z, Fixed16_16::from_int(28));
+    }
+
+    #[test]
+    fn player_missile_initializes_visible_spawn_state() {
+        let mut gs = make_game_state();
+        let source = gs.player.handle;
+
+        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket).unwrap();
+        let proj = gs.mobjslab.get(proj_h).unwrap();
+        let info = &MOBJINFO[MobjKind::Rocket as usize];
+
+        assert_eq!(info.spawn_state, StateNum(ids::S_ROCKET));
+        assert_eq!(proj.state, info.spawn_state);
+        assert_eq!(proj.tics, STATES[info.spawn_state.0 as usize].tics);
     }
 
     // -----------------------------------------------------------------------

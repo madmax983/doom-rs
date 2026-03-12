@@ -59,7 +59,10 @@ pub use menu_render::{
 };
 pub use palette::{PaletteLut, Rgb};
 pub use palette_flash::{PaletteFlash, PaletteFlashState};
-pub use render::{MaskedColumnDraw, RenderOut, draw_masked_columns, render_level};
+pub use render::{
+    MaskedColumnDraw, PLAYER_HEIGHT, RenderOut, draw_masked_columns, render_level,
+    render_level_with_view_height,
+};
 pub use render_flags::RenderFlag;
 pub use sky::{
     SKY_FALLBACK_COLOR, SKY_FLAT_NAME, column_to_angle, draw_sky_columns, draw_sky_fallback,

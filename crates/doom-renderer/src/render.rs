@@ -61,7 +61,7 @@ const HALF_H: i32 = (SCREEN_H / 2) as i32; // 100
 const FOCAL_LEN: i32 = 160; // = HALF_W, 90° horizontal FOV
 
 /// Assumed player eye height above the floor (map units, fixed-point integer).
-const PLAYER_HEIGHT: i32 = 41;
+pub const PLAYER_HEIGHT: i32 = 41;
 
 #[inline]
 fn is_no_texture(name: &[u8; 8]) -> bool {
@@ -303,6 +303,37 @@ pub fn render_level(
     anim: Option<&AnimState>,
     is_fullbright: bool,
 ) -> RenderOut {
+    render_level_with_view_height(
+        level,
+        player_x,
+        player_y,
+        player_angle,
+        PLAYER_HEIGHT,
+        fb,
+        _palette,
+        flat_cache,
+        tex_cache,
+        colormap,
+        anim,
+        is_fullbright,
+    )
+}
+
+/// Render a Doom level using an explicit player view height above the floor.
+pub fn render_level_with_view_height(
+    level: &Level,
+    player_x: i32,
+    player_y: i32,
+    player_angle: Bam,
+    player_view_height: i32,
+    fb: &mut Framebuffer,
+    _palette: &PaletteLut,
+    flat_cache: Option<&FlatCache>,
+    tex_cache: Option<&TextureCache>,
+    colormap: Option<&ColormapCache>,
+    anim: Option<&AnimState>,
+    is_fullbright: bool,
+) -> RenderOut {
     // ------------------------------------------------------------------
     // Step 1: Draw background (ceiling top half, floor bottom half)
     // ------------------------------------------------------------------
@@ -333,7 +364,8 @@ pub fn render_level(
 
     // Camera height in world space (map units). We anchor view Z to the floor
     // of the sector containing the player.
-    let mut view_z = PLAYER_HEIGHT;
+    let player_view_height = player_view_height.max(0);
+    let mut view_z = player_view_height;
     // Save player sector info for post-pass open column filling.
     let mut player_ceil_flat = *b"FLAT2\0\0\0";
     let mut player_floor_flat = *b"FLAT1\0\0\0";
@@ -343,7 +375,7 @@ pub fn render_level(
     if let Some(sec_idx) = player_sector_index(level, player_x, player_y)
         && let Some(sec) = level.sectors.get(sec_idx)
     {
-        view_z = sec.floor_height as i32 + PLAYER_HEIGHT;
+        view_z = sec.floor_height as i32 + player_view_height;
         player_ceil_flat = sec.ceil_flat;
         player_floor_flat = sec.floor_flat;
         player_ceil_h = sec.ceil_height as i32;

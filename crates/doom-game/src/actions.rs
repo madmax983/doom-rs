@@ -2243,10 +2243,11 @@ mod tests {
         }
 
         let mo = gs.mobjslab.get(trooper).unwrap();
-        // Should still be in spawn state (idle).
-        assert_eq!(
-            mo.state, spawn_sn,
-            "trooper must stay idle when player is out of range"
+        let idle_ok =
+            mo.state == spawn_sn || mo.state == StateNum(crate::states::ids::S_POSS_STND2);
+        assert!(
+            idle_ok,
+            "trooper must stay in one of the idle stand frames when player is out of range"
         );
     }
 

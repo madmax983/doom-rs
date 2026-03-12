@@ -69,7 +69,7 @@ fn degrees_to_bam(degrees: u16) -> Bam {
 ///
 /// Sets health, radius, height, speed, flags, and initial state/tics from
 /// the table entry corresponding to `mo.kind`.
-fn apply_mobjinfo_defaults(mo: &mut Mobj) {
+pub(crate) fn apply_mobjinfo_defaults(mo: &mut Mobj) {
     let idx = mo.kind as usize;
     if idx >= MOBJINFO.len() {
         return;
@@ -367,7 +367,8 @@ pub fn p_nightmare_respawn(gs: &mut GameState, level: Option<&Level>, handle: Mo
 mod tests {
     use super::*;
     use crate::mobj::flags;
-    use doom_map::Thing;
+    use doom_map::lumps::NODE_SUBSECTOR_BIT;
+    use doom_map::{Node, NodeBBox, Thing};
 
     /// Build a minimal valid Level with the given things list and floor height.
     fn make_test_level_with_things_and_floor(things: Vec<Thing>, floor_height: i16) -> Level {
@@ -436,6 +437,136 @@ mod tests {
     /// Build a minimal valid Level with the given things list.
     fn make_test_level_with_things(things: Vec<Thing>) -> Level {
         make_test_level_with_things_and_floor(things, 0)
+    }
+
+    fn make_partition_test_level(things: Vec<Thing>, right_floor: i16, left_floor: i16) -> Level {
+        let mut bm_data = vec![0u8; 14];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+
+        Level {
+            name: "TEST".to_string(),
+            things,
+            linedefs: vec![
+                doom_map::Linedef {
+                    from_vertex: 0,
+                    to_vertex: 1,
+                    flags: doom_map::FLAG_TWO_SIDED,
+                    special: 0,
+                    tag: 0,
+                    right_sidedef: 0,
+                    left_sidedef: 1,
+                },
+                doom_map::Linedef {
+                    from_vertex: 2,
+                    to_vertex: 3,
+                    flags: doom_map::FLAG_TWO_SIDED,
+                    special: 0,
+                    tag: 0,
+                    right_sidedef: 0,
+                    left_sidedef: 1,
+                },
+            ],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"        ",
+                    lower_texture: *b"        ",
+                    middle_texture: *b"WALL0   ",
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"        ",
+                    lower_texture: *b"        ",
+                    middle_texture: *b"WALL1   ",
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: -128 },
+                doom_map::Vertex { x: 0, y: 128 },
+                doom_map::Vertex { x: 64, y: -128 },
+                doom_map::Vertex { x: 64, y: 128 },
+            ],
+            segs: vec![
+                doom_map::Seg {
+                    from_vertex: 0,
+                    to_vertex: 1,
+                    angle: 0,
+                    linedef: 0,
+                    direction: 0,
+                    offset: 0,
+                },
+                doom_map::Seg {
+                    from_vertex: 3,
+                    to_vertex: 2,
+                    angle: 0,
+                    linedef: 1,
+                    direction: 1,
+                    offset: 0,
+                },
+            ],
+            ssectors: vec![
+                doom_map::Ssector {
+                    seg_count: 1,
+                    first_seg: 0,
+                },
+                doom_map::Ssector {
+                    seg_count: 1,
+                    first_seg: 1,
+                },
+            ],
+            nodes: vec![Node {
+                x: 0,
+                y: 0,
+                dx: 0,
+                dy: 1,
+                right_bbox: NodeBBox {
+                    ymax: 128,
+                    ymin: -128,
+                    xmin: 0,
+                    xmax: 128,
+                },
+                left_bbox: NodeBBox {
+                    ymax: 128,
+                    ymin: -128,
+                    xmin: -128,
+                    xmax: 0,
+                },
+                right_child: NODE_SUBSECTOR_BIT,
+                left_child: NODE_SUBSECTOR_BIT | 1,
+            }],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: right_floor,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: left_floor,
+                    ceil_height: 192,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap,
+        }
     }
 
     // ===================================================================
@@ -536,6 +667,39 @@ mod tests {
             .expect("trooper should spawn");
 
         assert_eq!(trooper.z, Fixed16_16::from_int(-32));
+    }
+
+    #[test]
+    fn spawn_nonplayer_on_partition_line_uses_doom_subsector_tiebreak_for_floor() {
+        let level = make_partition_test_level(
+            vec![Thing {
+                x: 0,
+                y: 0,
+                angle: 0,
+                kind: 3004,
+                flags: 7,
+            }],
+            0,
+            64,
+        );
+        let mut gs = GameState::new("E1M1");
+
+        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        let trooper = gs
+            .mobjslab
+            .iter_handles()
+            .find_map(|h| gs.mobjslab.get(h).filter(|mo| mo.kind == MobjKind::Trooper))
+            .expect("trooper should spawn");
+
+        assert_eq!(
+            trooper.z,
+            Fixed16_16::from_int(64),
+            "thing on a partition line should inherit the floor from Doom's chosen subsector"
+        );
+        assert_eq!(
+            trooper.subsector, 1,
+            "partition-line thing should resolve to the left subsector"
+        );
     }
 
     #[test]

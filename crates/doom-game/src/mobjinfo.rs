@@ -460,6 +460,8 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         height: fixed(8),
         mass: 100,
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_ROCKET),
+        death_state: sn(ids::S_EXPLODE1),
         ..ITEM
     },
     // 23: PlasmaBall
@@ -468,6 +470,8 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         height: fixed(8),
         mass: 100,
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_PLASBALL1),
+        death_state: sn(ids::S_PLASEXP1),
         ..ITEM
     },
     // 24: BfgBall
@@ -476,6 +480,8 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         height: fixed(8),
         mass: 100,
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_BFGSHOT1),
+        death_state: sn(ids::S_BFGLAND1),
         ..ITEM
     },
     // 25: ArachPlaz
@@ -484,6 +490,8 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         height: fixed(8),
         mass: 100,
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_ARACH_PLAZ1),
+        death_state: sn(ids::S_ARACH_PLEX1),
         ..ITEM
     },
     // 26: Tracer (Revenant missile)
@@ -492,6 +500,8 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         height: fixed(8),
         mass: 100,
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_TRACER1),
+        death_state: sn(ids::S_TRACEEXP1),
         ..ITEM
     },
     // -----------------------------------------------------------------------
@@ -619,6 +629,8 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         height: fixed(8),
         mass: 100,
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_BFGLAND1),
+        death_state: sn(ids::S_BFGLAND1),
         ..ITEM
     },
     // 68: ImpFireball
@@ -628,6 +640,8 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         height: fixed(8),
         mass: 100,
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_TBALL1),
+        death_state: sn(ids::S_TBALLX1),
         ..ITEM
     },
     // 69: CacoFireball
@@ -637,6 +651,8 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         height: fixed(8),
         mass: 100,
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_TBALL1),
+        death_state: sn(ids::S_TBALLX1),
         ..ITEM
     },
     // 70: BaronBall
@@ -646,6 +662,8 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         height: fixed(8),
         mass: 100,
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_BRBALL1),
+        death_state: sn(ids::S_BRBALLX1),
         ..ITEM
     },
     // 71: FatShot (Mancubus fireball)
@@ -655,6 +673,8 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         height: fixed(8),
         mass: 100,
         flags: flags::MF_NOBLOCKMAP | flags::MF_MISSILE | flags::MF_DROPOFF | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_FATSHOT1),
+        death_state: sn(ids::S_FATSHOTX1),
         ..ITEM
     },
     // -----------------------------------------------------------------------

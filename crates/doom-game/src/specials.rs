@@ -442,6 +442,8 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
 
     let mut i = 0;
     while i < gs.active_doors.len() {
+        let sector_idx = gs.active_doors[i].sector;
+
         // ── Close-wait-open: waiting at closed position before reopening ──
         if gs.active_doors[i].reopen_countdown > 0 {
             gs.active_doors[i].reopen_countdown -= 1;
@@ -470,15 +472,18 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
         if countdown == 0 {
             // Start closing — negate speed so it moves downward.
             gs.active_doors[i].speed = -speed_abs;
+            if let Some(sector) = level.sectors.get(sector_idx) {
+                gs.active_doors[i].target_height = sector.floor_height;
+            }
             gs.active_doors[i].countdown = -1;
         }
 
         // ── Move toward target ──
-        let sector_idx = gs.active_doors[i].sector;
         let speed = gs.active_doors[i].speed;
         let target = gs.active_doors[i].target_height;
         let is_ceiling = gs.active_doors[i].is_ceiling;
         let reopen_height = gs.active_doors[i].reopen_height;
+        let wait_tics = gs.active_doors[i].wait_tics;
 
         if sector_idx < level.sectors.len() {
             let sector = &mut level.sectors[sector_idx];
@@ -498,6 +503,12 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
             if reached {
                 *height = target;
                 gs.active_doors[i].current_height = target;
+
+                if speed > 0 && wait_tics > 0 {
+                    gs.active_doors[i].countdown = wait_tics;
+                    i += 1;
+                    continue;
+                }
 
                 // Close-wait-open: start the reopen delay instead of removing.
                 if speed < 0 && reopen_height != 0 {
@@ -2153,8 +2164,7 @@ fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: b
         None => return,
     };
 
-    // Use sector's current ceiling as the open target (at least 128 above floor).
-    let target = sector.ceil_height.max(sector.floor_height + 128);
+    let target = lowest_adjacent_ceiling(level, sector_idx) - 4;
 
     // Avoid duplicate movers for the same sector.
     if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
@@ -2168,7 +2178,7 @@ fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: b
         speed: DOOR_SPEED,
         is_ceiling: true,
         wait_tics: if auto_close { DOOR_WAIT } else { -1 },
-        countdown: if auto_close { DOOR_WAIT } else { -1 },
+        countdown: -1,
         reopen_height: 0,
         reopen_countdown: -1,
     });
@@ -2213,7 +2223,7 @@ fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         None => return,
     };
 
-    let target = sector.floor_height + 4;
+    let target = sector.floor_height;
 
     // Avoid duplicate movers for the same sector.
     if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
@@ -2244,11 +2254,10 @@ fn close_wait_open_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
     if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
         return;
     }
-    // Reopen to highest adjacent ceiling (mirrors Doom's EV_DoDoor logic).
-    let reopen_h = highest_adjacent_ceiling(level, sector_idx);
+    let reopen_h = lowest_adjacent_ceiling(level, sector_idx) - 4;
     gs.active_doors.push(DoorMover {
         sector: sector_idx,
-        target_height: sector.floor_height + 4,
+        target_height: sector.floor_height,
         current_height: sector.ceil_height,
         speed: -DOOR_SPEED,
         is_ceiling: true,
@@ -2268,7 +2277,7 @@ fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_
         None => return,
     };
 
-    let target = sector.ceil_height.max(sector.floor_height + 128);
+    let target = lowest_adjacent_ceiling(level, sector_idx) - 4;
 
     if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
         return;
@@ -2281,7 +2290,7 @@ fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_
         speed: BLAZING_DOOR_SPEED,
         is_ceiling: true,
         wait_tics: if auto_close { DOOR_WAIT } else { -1 },
-        countdown: if auto_close { DOOR_WAIT } else { -1 },
+        countdown: -1,
         reopen_height: 0,
         reopen_countdown: -1,
     });
@@ -2294,7 +2303,7 @@ fn close_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         None => return,
     };
 
-    let target = sector.floor_height + 4;
+    let target = sector.floor_height;
 
     if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
         return;
@@ -3821,15 +3830,15 @@ mod tests {
 
         p_use_lines(&mut gs, &mut level, handle);
 
-        // After: a door mover was queued (animated open, target = floor+128 = 128).
+        // After: a door mover was queued toward the standard door top height.
         assert_eq!(
             gs.active_doors.len(),
             1,
             "p_use_lines must enqueue a door mover"
         );
         assert_eq!(
-            gs.active_doors[0].target_height, 128,
-            "door target must be 128 above floor"
+            gs.active_doors[0].target_height, 124,
+            "door target must be four units below the lowest adjacent ceiling"
         );
     }
 
@@ -4110,7 +4119,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Tests: activate_linedef (door toggle — type 1)
+    // Tests: activate_linedef (legacy helper path for type 1)
     // -----------------------------------------------------------------------
 
     #[test]
@@ -4180,6 +4189,36 @@ mod tests {
         assert!(
             level.sectors[1].ceil_height > initial_ceil,
             "ceiling must rise after ticking doors"
+        );
+    }
+
+    #[test]
+    fn auto_close_door_starts_opening_on_first_tic() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level_with_special(0, 1);
+
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::from_int(-32),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        let handle = gs.mobjslab.alloc(mo);
+
+        p_use_lines(&mut gs, &mut level, handle);
+
+        assert_eq!(gs.active_doors.len(), 1, "door mover should be queued");
+        assert_eq!(
+            gs.active_doors[0].countdown, -1,
+            "auto-close doors should not spend their wait time before opening"
+        );
+
+        tick_doors(&mut gs, &mut level);
+
+        assert_eq!(
+            level.sectors[1].ceil_height, 2,
+            "normal doors should begin raising on the first tic"
         );
     }
 
@@ -8209,6 +8248,10 @@ mod tests {
         assert_eq!(gs.active_doors.len(), 1);
         // Close = negative speed.
         assert_eq!(gs.active_doors[0].speed, -BLAZING_DOOR_SPEED);
+        assert_eq!(
+            gs.active_doors[0].target_height, 0,
+            "closing doors should lower back to floor height"
+        );
     }
 
     // -----------------------------------------------------------------------

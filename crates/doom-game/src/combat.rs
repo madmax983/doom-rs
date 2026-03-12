@@ -529,6 +529,7 @@ mod tests {
     use crate::player::PlayerState;
     use crate::state::GameState;
     use crate::states::ids;
+    use crate::tic::TicCmd;
     use doom_types::{Bam, Fixed16_16};
 
     // -----------------------------------------------------------------------
@@ -660,6 +661,54 @@ mod tests {
         assert_eq!(
             mo.state, see_state,
             "idle monster should wake into see_state when damaged"
+        );
+    }
+
+    #[test]
+    fn damage_pain_resumes_chase_instead_of_idle() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        let player = gs.player.handle;
+        let info = &crate::mobjinfo::MOBJINFO[MobjKind::Trooper as usize];
+        let spawn_state = info.spawn_state;
+        let pain_state = info.pain_state;
+        let see_state = info.see_state;
+        let pain_tics = crate::states::STATES[pain_state.0 as usize].tics as usize;
+
+        gs.rng.set_index(0); // 0 < 200, so the trooper definitely enters pain.
+        damage_mobj(&mut gs, trooper, player, 5);
+
+        let mo = gs.mobjslab.get(trooper).unwrap();
+        assert_eq!(
+            mo.state, pain_state,
+            "damage should enter the pain state first"
+        );
+        assert_eq!(
+            mo.target, player,
+            "damage should still retarget the attacker"
+        );
+
+        for _ in 0..pain_tics {
+            gs.tick(TicCmd::default(), None);
+        }
+
+        let mo = gs.mobjslab.get(trooper).unwrap();
+        assert_ne!(
+            mo.state, pain_state,
+            "monster should leave pain after its pain tics expire"
+        );
+        assert_ne!(
+            mo.state, spawn_state,
+            "monster must not return to spawn idle after pain"
+        );
+        assert_eq!(
+            mo.target, player,
+            "monster should keep retaliating against the attacker"
+        );
+        assert!(
+            mo.state == see_state || mo.state == StateNum(ids::S_POSS_ATK1),
+            "monster should resume aggression after pain, got state {:?}",
+            mo.state
         );
     }
 

@@ -569,8 +569,24 @@ pub mod ids {
     pub const S_BRAIN_DIE2: u16 = 313;
     pub const S_BRAIN_DIE3: u16 = 314;
 
+    // -----------------------------------------------------------------------
+    // Additional original-monster idle/run states (342..353)
+    // -----------------------------------------------------------------------
+    pub const S_POSS_STND2: u16 = 342;
+    pub const S_POSS_RUN3: u16 = 343;
+    pub const S_POSS_RUN4: u16 = 344;
+    pub const S_SPOS_STND2: u16 = 345;
+    pub const S_SPOS_RUN3: u16 = 346;
+    pub const S_SPOS_RUN4: u16 = 347;
+    pub const S_TROO_STND2: u16 = 348;
+    pub const S_TROO_RUN3: u16 = 349;
+    pub const S_TROO_RUN4: u16 = 350;
+    pub const S_SARG_STND2: u16 = 351;
+    pub const S_SARG_RUN3: u16 = 352;
+    pub const S_SARG_RUN4: u16 = 353;
+
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 342;
+    pub const STATES_COUNT: usize = 354;
 }
 
 // ---------------------------------------------------------------------------
@@ -601,21 +617,21 @@ pub static STATES: &[MobjStateEntry] = &[
     // === Original monsters (1..60) ===
 
     // --- Trooper (1..3) ---
-    st!(SPR_POSS, 0, 10, LOOK, ids::S_POSS_STND), // 1: idle
-    st!(SPR_POSS, 0, 4, CHASE, ids::S_POSS_RUN2), // 2: run1
-    st!(SPR_POSS, 1, 4, CHASE, ids::S_POSS_RUN1), // 3: run2
+    st!(SPR_POSS, 0, 10, LOOK, ids::S_POSS_STND2), // 1: idle A
+    st!(SPR_POSS, 0, 4, CHASE, ids::S_POSS_RUN2),  // 2: run1
+    st!(SPR_POSS, 1, 4, CHASE, ids::S_POSS_RUN3),  // 3: run2
     // --- Sergeant (4..6) ---
-    st!(SPR_SPOS, 0, 10, LOOK, ids::S_SPOS_STND),
+    st!(SPR_SPOS, 0, 10, LOOK, ids::S_SPOS_STND2),
     st!(SPR_SPOS, 0, 4, CHASE, ids::S_SPOS_RUN2),
-    st!(SPR_SPOS, 1, 4, CHASE, ids::S_SPOS_RUN1),
+    st!(SPR_SPOS, 1, 4, CHASE, ids::S_SPOS_RUN3),
     // --- Imp (7..9) ---
-    st!(SPR_TROO, 0, 10, LOOK, ids::S_TROO_STND),
+    st!(SPR_TROO, 0, 10, LOOK, ids::S_TROO_STND2),
     st!(SPR_TROO, 0, 4, CHASE, ids::S_TROO_RUN2),
-    st!(SPR_TROO, 1, 4, CHASE, ids::S_TROO_RUN1),
+    st!(SPR_TROO, 1, 4, CHASE, ids::S_TROO_RUN3),
     // --- Demon (10..12) ---
-    st!(SPR_SARG, 0, 10, LOOK, ids::S_SARG_STND),
+    st!(SPR_SARG, 0, 10, LOOK, ids::S_SARG_STND2),
     st!(SPR_SARG, 0, 4, CHASE, ids::S_SARG_RUN2),
-    st!(SPR_SARG, 1, 4, CHASE, ids::S_SARG_RUN1),
+    st!(SPR_SARG, 1, 4, CHASE, ids::S_SARG_RUN3),
     // --- Cacodemon (13..15) ---
     st!(SPR_HEAD, 0, 10, LOOK, ids::S_HEAD_STND),
     st!(SPR_HEAD, 0, 4, CHASE, ids::S_HEAD_RUN2),
@@ -636,52 +652,52 @@ pub static STATES: &[MobjStateEntry] = &[
     // Trooper — death starts at WAD frame H(7), pain at G(6)
     st!(SPR_POSS, 7, 8, SCREAM, ids::S_POSS_DIE2), // 25: die1
     st!(SPR_POSS, 8, 8, FALL, ids::S_POSS_DIE3),   // 26: die2 → die3
-    st!(SPR_POSS, 6, 6, NONE, ids::S_POSS_STND),   // 27: pain (frame G)
+    st!(SPR_POSS, 6, 6, NONE, ids::S_POSS_RUN1),   // 27: pain (frame G)
     // Sergeant — same layout as Trooper
     st!(SPR_SPOS, 7, 8, SCREAM, ids::S_SPOS_DIE2), // 28: die1
     st!(SPR_SPOS, 8, 8, FALL, ids::S_SPOS_DIE3),   // 29: die2 → die3
-    st!(SPR_SPOS, 6, 6, NONE, ids::S_SPOS_STND),   // 30: pain
+    st!(SPR_SPOS, 6, 6, NONE, ids::S_SPOS_RUN1),   // 30: pain
     // Imp — death at I(8), pain at H(7)
     st!(SPR_TROO, 8, 8, SCREAM, ids::S_TROO_DIE2), // 31: die1
     st!(SPR_TROO, 9, 8, FALL, ids::S_TROO_DIE3),   // 32: die2 → die3
-    st!(SPR_TROO, 7, 6, NONE, ids::S_TROO_STND),   // 33: pain (frame H)
+    st!(SPR_TROO, 7, 6, NONE, ids::S_TROO_RUN1),   // 33: pain (frame H)
     // Demon — death at H(7), pain at G(6)
     st!(SPR_SARG, 7, 8, SCREAM, ids::S_SARG_DIE2), // 34: die1
     st!(SPR_SARG, 8, 4, FALL, ids::S_SARG_DIE3),   // 35: die2 → die3
-    st!(SPR_SARG, 6, 6, NONE, ids::S_SARG_STND),   // 36: pain
+    st!(SPR_SARG, 6, 6, NONE, ids::S_SARG_RUN1),   // 36: pain
     // Cacodemon — death at E(4), pain at D(3)
     st!(SPR_HEAD, 4, 8, SCREAM, ids::S_HEAD_DIE2), // 37: die1
     st!(SPR_HEAD, 5, 8, FALL, ids::S_HEAD_DIE3),   // 38: die2 → die3
-    st!(SPR_HEAD, 3, 6, NONE, ids::S_HEAD_STND),   // 39: pain (frame D)
+    st!(SPR_HEAD, 3, 6, NONE, ids::S_HEAD_RUN1),   // 39: pain (frame D)
     // Baron of Hell — same layout as Trooper/Sergeant
     st!(SPR_BOSS, 7, 8, SCREAM, ids::S_BOSS_DIE2), // 40: die1
     st!(SPR_BOSS, 8, 8, FALL, ids::S_BOSS_DIE3),   // 41: die2 → die3
-    st!(SPR_BOSS, 6, 6, NONE, ids::S_BOSS_STND),   // 42: pain
+    st!(SPR_BOSS, 6, 6, NONE, ids::S_BOSS_RUN1),   // 42: pain
     // Cyberdemon — same layout
     st!(SPR_CYBR, 7, 8, SCREAM, ids::S_CYBER_DIE2), // 43: die1
     st!(SPR_CYBR, 8, 8, FALL, ids::S_CYBER_DIE3),   // 44: die2 → die3
-    st!(SPR_CYBR, 6, 6, NONE, ids::S_CYBER_STND),   // 45: pain
+    st!(SPR_CYBR, 6, 6, NONE, ids::S_CYBER_RUN1),   // 45: pain
     // Spider Mastermind — same layout
     st!(SPR_SPID, 7, 8, SCREAM, ids::S_SPID_DIE2), // 46: die1
     st!(SPR_SPID, 8, 8, FALL, ids::S_SPID_DIE3),   // 47: die2 → die3
-    st!(SPR_SPID, 6, 6, NONE, ids::S_SPID_STND),   // 48: pain
+    st!(SPR_SPID, 6, 6, NONE, ids::S_SPID_RUN1),   // 48: pain
     // === Attack states (49..60) ===
     // Trooper
-    st!(SPR_POSS, 2, 4, NONE, ids::S_POSS_ATK2), // 49
-    st!(SPR_POSS, 3, 4, POS_ATTACK, ids::S_POSS_ATK3), // 50
-    st!(SPR_POSS, 2, 4, NONE, ids::S_POSS_RUN1), // 51
+    st!(SPR_POSS, 4, 4, NONE, ids::S_POSS_ATK2), // 49: E
+    st!(SPR_POSS, 5, 4, POS_ATTACK, ids::S_POSS_ATK3), // 50: F
+    st!(SPR_POSS, 4, 4, NONE, ids::S_POSS_RUN1), // 51: E
     // Sergeant
-    st!(SPR_SPOS, 2, 4, NONE, ids::S_SPOS_ATK2), // 52
-    st!(SPR_SPOS, 3, 4, SPOS_ATTACK, ids::S_SPOS_ATK3), // 53
-    st!(SPR_SPOS, 2, 4, NONE, ids::S_SPOS_RUN1), // 54
+    st!(SPR_SPOS, 4, 4, NONE, ids::S_SPOS_ATK2), // 52: E
+    st!(SPR_SPOS, 5, 4, SPOS_ATTACK, ids::S_SPOS_ATK3), // 53: F
+    st!(SPR_SPOS, 4, 4, NONE, ids::S_SPOS_RUN1), // 54: E
     // Imp
-    st!(SPR_TROO, 2, 4, NONE, ids::S_TROO_ATK2), // 55
-    st!(SPR_TROO, 3, 4, TROO_ATTACK, ids::S_TROO_ATK3), // 56
-    st!(SPR_TROO, 2, 4, NONE, ids::S_TROO_RUN1), // 57
+    st!(SPR_TROO, 4, 4, NONE, ids::S_TROO_ATK2), // 55: E
+    st!(SPR_TROO, 5, 4, TROO_ATTACK, ids::S_TROO_ATK3), // 56: F
+    st!(SPR_TROO, 6, 4, NONE, ids::S_TROO_RUN1), // 57: G
     // Demon
-    st!(SPR_SARG, 2, 4, NONE, ids::S_SARG_ATK2), // 58
-    st!(SPR_SARG, 3, 4, SARG_ATTACK, ids::S_SARG_ATK3), // 59
-    st!(SPR_SARG, 2, 4, NONE, ids::S_SARG_RUN1), // 60
+    st!(SPR_SARG, 4, 4, NONE, ids::S_SARG_ATK2), // 58: E
+    st!(SPR_SARG, 5, 4, SARG_ATTACK, ids::S_SARG_ATK3), // 59: F
+    st!(SPR_SARG, 6, 4, NONE, ids::S_SARG_RUN1), // 60: G
     // ===================================================================
     // Projectile states (61..103)
     // ===================================================================
@@ -891,7 +907,7 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_BOS2, 2, 4, NONE, ids::S_BOS2_ATK2),  // 229
     st!(SPR_BOS2, 3, 4, BRUIS_ATTACK, ids::S_BOS2_ATK3), // 230
     st!(SPR_BOS2, 2, 4, NONE, ids::S_BOS2_RUN1),  // 231
-    st!(SPR_BOS2, 6, 6, NONE, ids::S_BOS2_STND),  // 232: pain
+    st!(SPR_BOS2, 6, 6, NONE, ids::S_BOS2_RUN1),  // 232: pain
     st!(SPR_BOS2, 7, 8, SCREAM, ids::S_BOS2_DIE2), // 233: die1
     st!(SPR_BOS2, 8, 8, FALL, ids::S_BOS2_DIE3),  // 234: die2 → die3
     // ===================================================================
@@ -1034,6 +1050,21 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_BOS2, 9, 8, NONE, ids::S_BOS2_DIE4),  // 339
     st!(SPR_BOS2, 10, 8, NONE, ids::S_BOS2_DIE5), // 340
     st!(SPR_BOS2, 11, -1, NONE, ids::S_NULL),     // 341
+    // ===================================================================
+    // Additional original-monster idle/run states (342..353)
+    // ===================================================================
+    st!(SPR_POSS, 1, 10, LOOK, ids::S_POSS_STND), // 342: idle B
+    st!(SPR_POSS, 2, 4, CHASE, ids::S_POSS_RUN4), // 343: run3 (C)
+    st!(SPR_POSS, 3, 4, CHASE, ids::S_POSS_RUN1), // 344: run4 (D)
+    st!(SPR_SPOS, 1, 10, LOOK, ids::S_SPOS_STND), // 345: idle B
+    st!(SPR_SPOS, 2, 4, CHASE, ids::S_SPOS_RUN4), // 346: run3 (C)
+    st!(SPR_SPOS, 3, 4, CHASE, ids::S_SPOS_RUN1), // 347: run4 (D)
+    st!(SPR_TROO, 1, 10, LOOK, ids::S_TROO_STND), // 348: idle B
+    st!(SPR_TROO, 2, 4, CHASE, ids::S_TROO_RUN4), // 349: run3 (C)
+    st!(SPR_TROO, 3, 4, CHASE, ids::S_TROO_RUN1), // 350: run4 (D)
+    st!(SPR_SARG, 1, 10, LOOK, ids::S_SARG_STND), // 351: idle B
+    st!(SPR_SARG, 2, 4, CHASE, ids::S_SARG_RUN4), // 352: run3 (C)
+    st!(SPR_SARG, 3, 4, CHASE, ids::S_SARG_RUN1), // 353: run4 (D)
 ];
 
 // ---------------------------------------------------------------------------
@@ -1055,23 +1086,36 @@ mod tests {
     }
 
     #[test]
-    fn poss_stnd_loops_to_self_with_look() {
+    fn poss_stnd_alternates_with_second_idle_frame() {
         let e = &STATES[ids::S_POSS_STND as usize];
         assert_eq!(e.tics, 10);
-        assert_eq!(e.next_state, StateNum(ids::S_POSS_STND));
+        assert_eq!(e.next_state, StateNum(ids::S_POSS_STND2));
         assert_eq!(e.action, actions::ACTION_LOOK);
         assert_eq!(e.sprite, SPR_POSS);
         assert_eq!(e.frame, 0);
+
+        let e2 = &STATES[ids::S_POSS_STND2 as usize];
+        assert_eq!(e2.tics, 10);
+        assert_eq!(e2.next_state, StateNum(ids::S_POSS_STND));
+        assert_eq!(e2.action, actions::ACTION_LOOK);
+        assert_eq!(e2.sprite, SPR_POSS);
+        assert_eq!(e2.frame, 1);
     }
 
     #[test]
     fn poss_run_cycles_with_chase() {
         let run1 = &STATES[ids::S_POSS_RUN1 as usize];
         let run2 = &STATES[ids::S_POSS_RUN2 as usize];
+        let run3 = &STATES[ids::S_POSS_RUN3 as usize];
+        let run4 = &STATES[ids::S_POSS_RUN4 as usize];
         assert_eq!(run1.next_state, StateNum(ids::S_POSS_RUN2));
-        assert_eq!(run2.next_state, StateNum(ids::S_POSS_RUN1));
+        assert_eq!(run2.next_state, StateNum(ids::S_POSS_RUN3));
+        assert_eq!(run3.next_state, StateNum(ids::S_POSS_RUN4));
+        assert_eq!(run4.next_state, StateNum(ids::S_POSS_RUN1));
         assert_eq!(run1.action, actions::ACTION_CHASE);
         assert_eq!(run2.action, actions::ACTION_CHASE);
+        assert_eq!(run3.action, actions::ACTION_CHASE);
+        assert_eq!(run4.action, actions::ACTION_CHASE);
     }
 
     #[test]
@@ -1107,10 +1151,28 @@ mod tests {
     }
 
     #[test]
-    fn pain_state_returns_to_idle() {
-        let pain = &STATES[ids::S_POSS_PAIN as usize];
-        assert_eq!(pain.next_state, StateNum(ids::S_POSS_STND));
-        assert_eq!(pain.tics, 6);
+    fn monster_pain_states_return_to_chase() {
+        let cases = [
+            (ids::S_POSS_PAIN, ids::S_POSS_RUN1, "trooper"),
+            (ids::S_SPOS_PAIN, ids::S_SPOS_RUN1, "sergeant"),
+            (ids::S_TROO_PAIN, ids::S_TROO_RUN1, "imp"),
+            (ids::S_SARG_PAIN, ids::S_SARG_RUN1, "demon"),
+            (ids::S_HEAD_PAIN, ids::S_HEAD_RUN1, "cacodemon"),
+            (ids::S_BOSS_PAIN, ids::S_BOSS_RUN1, "baron"),
+            (ids::S_CYBER_PAIN, ids::S_CYBER_RUN1, "cyberdemon"),
+            (ids::S_SPID_PAIN, ids::S_SPID_RUN1, "spider mastermind"),
+            (ids::S_BOS2_PAIN, ids::S_BOS2_RUN1, "hell knight"),
+        ];
+
+        for (pain_state, next_state, name) in cases {
+            let pain = &STATES[pain_state as usize];
+            assert_eq!(
+                pain.next_state,
+                StateNum(next_state),
+                "{name} pain state must resume chasing, not idle"
+            );
+            assert_eq!(pain.tics, 6, "{name} pain state tics changed unexpectedly");
+        }
     }
 
     #[test]
@@ -1146,6 +1208,137 @@ mod tests {
         assert_eq!(
             STATES[ids::S_SARG_ATK2 as usize].action,
             actions::ACTION_SARG_ATTACK
+        );
+    }
+
+    #[test]
+    fn nearby_monster_attack_frames_match_vanilla_sequences() {
+        assert_eq!(
+            STATES[ids::S_POSS_ATK1 as usize].frame,
+            4,
+            "trooper ATK1 must use E"
+        );
+        assert_eq!(
+            STATES[ids::S_POSS_ATK2 as usize].frame,
+            5,
+            "trooper ATK2 must use F"
+        );
+        assert_eq!(
+            STATES[ids::S_POSS_ATK3 as usize].frame,
+            4,
+            "trooper ATK3 must use E"
+        );
+
+        assert_eq!(
+            STATES[ids::S_SPOS_ATK1 as usize].frame,
+            4,
+            "sergeant ATK1 must use E"
+        );
+        assert_eq!(
+            STATES[ids::S_SPOS_ATK2 as usize].frame,
+            5,
+            "sergeant ATK2 must use F"
+        );
+        assert_eq!(
+            STATES[ids::S_SPOS_ATK3 as usize].frame,
+            4,
+            "sergeant ATK3 must use E"
+        );
+
+        assert_eq!(
+            STATES[ids::S_TROO_ATK1 as usize].frame,
+            4,
+            "imp ATK1 must use E"
+        );
+        assert_eq!(
+            STATES[ids::S_TROO_ATK2 as usize].frame,
+            5,
+            "imp ATK2 must use F"
+        );
+        assert_eq!(
+            STATES[ids::S_TROO_ATK3 as usize].frame,
+            6,
+            "imp ATK3 must use G"
+        );
+
+        assert_eq!(
+            STATES[ids::S_SARG_ATK1 as usize].frame,
+            4,
+            "demon ATK1 must use E"
+        );
+        assert_eq!(
+            STATES[ids::S_SARG_ATK2 as usize].frame,
+            5,
+            "demon ATK2 must use F"
+        );
+        assert_eq!(
+            STATES[ids::S_SARG_ATK3 as usize].frame,
+            6,
+            "demon ATK3 must use G"
+        );
+    }
+
+    #[test]
+    fn nearby_monster_run_chains_cover_four_frames() {
+        assert_eq!(
+            STATES[ids::S_POSS_RUN1 as usize].next_state,
+            StateNum(ids::S_POSS_RUN2)
+        );
+        assert_eq!(
+            STATES[ids::S_POSS_RUN2 as usize].next_state,
+            StateNum(ids::S_POSS_RUN3)
+        );
+        assert_eq!(
+            STATES[ids::S_POSS_RUN3 as usize].next_state,
+            StateNum(ids::S_POSS_RUN4)
+        );
+        assert_eq!(
+            STATES[ids::S_POSS_RUN4 as usize].next_state,
+            StateNum(ids::S_POSS_RUN1)
+        );
+        assert_eq!(
+            STATES[ids::S_POSS_RUN4 as usize].frame,
+            3,
+            "trooper RUN4 must use D"
+        );
+
+        assert_eq!(
+            STATES[ids::S_SPOS_RUN2 as usize].next_state,
+            StateNum(ids::S_SPOS_RUN3)
+        );
+        assert_eq!(
+            STATES[ids::S_SPOS_RUN3 as usize].next_state,
+            StateNum(ids::S_SPOS_RUN4)
+        );
+        assert_eq!(
+            STATES[ids::S_SPOS_RUN4 as usize].next_state,
+            StateNum(ids::S_SPOS_RUN1)
+        );
+
+        assert_eq!(
+            STATES[ids::S_TROO_RUN2 as usize].next_state,
+            StateNum(ids::S_TROO_RUN3)
+        );
+        assert_eq!(
+            STATES[ids::S_TROO_RUN3 as usize].next_state,
+            StateNum(ids::S_TROO_RUN4)
+        );
+        assert_eq!(
+            STATES[ids::S_TROO_RUN4 as usize].next_state,
+            StateNum(ids::S_TROO_RUN1)
+        );
+
+        assert_eq!(
+            STATES[ids::S_SARG_RUN2 as usize].next_state,
+            StateNum(ids::S_SARG_RUN3)
+        );
+        assert_eq!(
+            STATES[ids::S_SARG_RUN3 as usize].next_state,
+            StateNum(ids::S_SARG_RUN4)
+        );
+        assert_eq!(
+            STATES[ids::S_SARG_RUN4 as usize].next_state,
+            StateNum(ids::S_SARG_RUN1)
         );
     }
 

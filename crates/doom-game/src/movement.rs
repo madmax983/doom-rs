@@ -294,6 +294,8 @@ fn try_move_with_blocker(
                     Fixed16_16::from_int(front.floor_height.max(back.floor_height) as i32);
                 let open_ceil =
                     Fixed16_16::from_int(front.ceil_height.min(back.ceil_height) as i32);
+                let dropoff_floor =
+                    Fixed16_16::from_int(front.floor_height.min(back.floor_height) as i32);
 
                 // Gap too small for actor to fit.
                 if open_ceil - open_floor < height {
@@ -311,6 +313,21 @@ fn try_move_with_blocker(
 
                 // Step too high to climb.
                 if open_floor - step_base_z > MAX_STEP_HEIGHT {
+                    return (
+                        false,
+                        Some(BlockingLine {
+                            linedef_idx: ld_idx as usize,
+                            x1: lx1,
+                            y1: ly1,
+                            x2: lx2,
+                            y2: ly2,
+                        }),
+                    );
+                }
+
+                if mo_flags & (flags::MF_DROPOFF | flags::MF_FLOAT) == 0
+                    && open_floor - dropoff_floor > MAX_STEP_HEIGHT
+                {
                     return (
                         false,
                         Some(BlockingLine {
@@ -379,6 +396,7 @@ fn bbox_straddles_line(
 mod tests {
     use super::*;
     use crate::mobj::{Mobj, MobjKind, MobjSlab};
+    use doom_map::{Node, NodeBBox, lumps::NODE_SUBSECTOR_BIT};
     use doom_types::Bam;
 
     // -----------------------------------------------------------------------
@@ -571,6 +589,157 @@ mod tests {
         }
     }
 
+    fn make_partition_step_level(right_floor: i16, left_floor: i16) -> doom_map::Level {
+        use doom_map::{
+            Blockmap, FLAG_TWO_SIDED, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex,
+        };
+
+        let vertexes = vec![
+            Vertex { x: 64, y: -128 },
+            Vertex { x: 64, y: 128 },
+            Vertex { x: 0, y: -128 },
+            Vertex { x: 0, y: 128 },
+        ];
+        let linedefs = vec![
+            Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: FLAG_TWO_SIDED,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+            Linedef {
+                from_vertex: 2,
+                to_vertex: 3,
+                flags: FLAG_TWO_SIDED,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+        ];
+        let sidedefs = vec![
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+        ];
+        let sectors = vec![
+            Sector {
+                floor_height: right_floor,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: left_floor,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+        let segs = vec![
+            Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 3,
+                to_vertex: 2,
+                angle: 0,
+                linedef: 1,
+                direction: 1,
+                offset: 0,
+            },
+        ];
+        let ssectors = vec![
+            Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            },
+            Ssector {
+                seg_count: 1,
+                first_seg: 1,
+            },
+        ];
+        let nodes = vec![Node {
+            x: 64,
+            y: 0,
+            dx: 0,
+            dy: 1,
+            right_bbox: NodeBBox {
+                ymax: 128,
+                ymin: -128,
+                xmin: 64,
+                xmax: 256,
+            },
+            left_bbox: NodeBBox {
+                ymax: 128,
+                ymin: -128,
+                xmin: -128,
+                xmax: 64,
+            },
+            right_child: NODE_SUBSECTOR_BIT,
+            left_child: NODE_SUBSECTOR_BIT | 1,
+        }];
+
+        let mut bm_data = Vec::new();
+        bm_data.extend_from_slice(&0i16.to_le_bytes());
+        bm_data.extend_from_slice(&0i16.to_le_bytes());
+        bm_data.extend_from_slice(&2u16.to_le_bytes());
+        bm_data.extend_from_slice(&1u16.to_le_bytes());
+        let data_start = 4u16 + 2;
+        bm_data.extend_from_slice(&data_start.to_le_bytes());
+        bm_data.extend_from_slice(&(data_start + 4).to_le_bytes());
+        bm_data.extend_from_slice(&0u16.to_le_bytes());
+        bm_data.extend_from_slice(&0u16.to_le_bytes());
+        bm_data.extend_from_slice(&1u16.to_le_bytes());
+        bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        bm_data.extend_from_slice(&0u16.to_le_bytes());
+        bm_data.extend_from_slice(&1u16.to_le_bytes());
+        bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+        let reject = Reject::parse_lump(&[0u8; 1], 2).unwrap();
+
+        doom_map::Level {
+            name: "DROP".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes,
+            sectors,
+            reject,
+            blockmap,
+        }
+    }
+
     fn make_player_slab() -> (MobjSlab, MobjHandle) {
         let mut slab = MobjSlab::new();
         let mut mo = Mobj::new(
@@ -583,6 +752,23 @@ mod tests {
         mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
         mo.radius = Fixed16_16::from_int(16);
         mo.height = Fixed16_16::from_int(56);
+        let handle = slab.alloc(mo);
+        (slab, handle)
+    }
+
+    fn make_monster_slab(x: i32, y: i32, z: i32) -> (MobjSlab, MobjHandle) {
+        let mut slab = MobjSlab::new();
+        let mut mo = Mobj::new(
+            MobjKind::Imp,
+            Fixed16_16::from_int(x),
+            Fixed16_16::from_int(y),
+            Bam::ZERO,
+        );
+        mo.health = 60;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.radius = Fixed16_16::from_int(20);
+        mo.height = Fixed16_16::from_int(56);
+        mo.z = Fixed16_16::from_int(z);
         let handle = slab.alloc(mo);
         (slab, handle)
     }
@@ -746,6 +932,45 @@ mod tests {
                 &level
             ),
             "current sector floor (16) should allow stepping up to 32 even if mo.z is stale at 0"
+        );
+    }
+
+    #[test]
+    fn monsters_without_dropoff_flag_cannot_walk_off_high_ledges() {
+        let level = make_partition_step_level(64, 0);
+        let (slab, handle) = make_monster_slab(96, 0, 64);
+
+        assert!(
+            !p_try_move(
+                &slab,
+                handle,
+                Fixed16_16::from_int(72),
+                Fixed16_16::ZERO,
+                &level
+            ),
+            "ground monsters should refuse drop-offs higher than 24 units"
+        );
+    }
+
+    #[test]
+    fn player_with_dropoff_flag_can_step_to_ledge_edge() {
+        let level = make_partition_step_level(64, 0);
+        let (mut slab, handle) = make_player_slab();
+        let mo = slab.get_mut(handle).unwrap();
+        mo.flags |= flags::MF_DROPOFF;
+        mo.x = Fixed16_16::from_int(96);
+        mo.y = Fixed16_16::ZERO;
+        mo.z = Fixed16_16::from_int(64);
+
+        assert!(
+            p_try_move(
+                &slab,
+                handle,
+                Fixed16_16::from_int(72),
+                Fixed16_16::ZERO,
+                &level
+            ),
+            "players keep MF_DROPOFF and should not inherit the monster ledge restriction"
         );
     }
 }

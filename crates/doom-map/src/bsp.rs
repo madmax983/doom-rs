@@ -198,6 +198,37 @@ impl<'a> BspTree<'a> {
 
     // -- traversal -----------------------------------------------------------
 
+    /// Doom's `R_PointOnSide`: `false` = right/front child, `true` = left/back child.
+    fn point_on_side(node: &Node, px: i32, py: i32) -> bool {
+        let nx = node.x as i32;
+        let ny = node.y as i32;
+        let dx = node.dx as i32;
+        let dy = node.dy as i32;
+
+        if dx == 0 {
+            if px <= nx {
+                return dy > 0;
+            }
+            return dy < 0;
+        }
+
+        if dy == 0 {
+            if py <= ny {
+                return dx < 0;
+            }
+            return dx > 0;
+        }
+
+        let rel_x = px - nx;
+        let rel_y = py - ny;
+
+        if (dy ^ dx ^ rel_x ^ rel_y) < 0 {
+            return (dy ^ rel_x) < 0;
+        }
+
+        rel_y * dx >= dy * rel_x
+    }
+
     /// Walk to the subsector containing point `(px, py)`.
     ///
     /// Implements Doom's `R_PointInSubsector`: traverse from the root node,
@@ -215,15 +246,7 @@ impl<'a> BspTree<'a> {
         loop {
             let node = &self.nodes[node_idx as usize];
 
-            // Partition-line side test.
-            // dx*(py - y) - dy*(px - x):
-            // positive → left side, negative → right side (or on the line).
-            let dx = node.dx as i32;
-            let dy = node.dy as i32;
-            let nx = node.x as i32;
-            let ny = node.y as i32;
-            let cross = dx * (py - ny) - dy * (px - nx);
-            let child_raw = if cross > 0 {
+            let child_raw = if Self::point_on_side(node, px, py) {
                 node.left_child
             } else {
                 node.right_child
@@ -377,7 +400,7 @@ mod tests {
     #[test]
     fn point_in_subsector_right_side() {
         // Partition line: x=0, y=0, dx=0, dy=1 (vertical line at x=0).
-        // Point (10, 5): cross = 0*(5-0) - 1*(10-0) = -10 < 0 → right child.
+        // Point (10, 5) is on the right/front side -> child 0.
         let mut node = make_node(leaf(0), leaf(1));
         node.x = 0;
         node.y = 0;
@@ -388,6 +411,44 @@ mod tests {
         let tree = BspTree::validate(&nodes, &ssectors, 2).unwrap();
         let ss = tree.point_in_subsector(10, 5).unwrap();
         assert_eq!(ss.first_seg, 0); // right subsector
+    }
+
+    #[test]
+    fn point_in_subsector_on_vertical_partition_uses_doom_tiebreak() {
+        // Vanilla Doom sends points exactly on an upward vertical partition to side 1.
+        let mut node = make_node(leaf(0), leaf(1));
+        node.x = 0;
+        node.y = 0;
+        node.dx = 0;
+        node.dy = 1;
+        let nodes = vec![node];
+        let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
+        let tree = BspTree::validate(&nodes, &ssectors, 2).unwrap();
+
+        let ss = tree.point_in_subsector(0, 5).unwrap();
+        assert_eq!(
+            ss.first_seg, 1,
+            "point on partition line should follow Doom's side tie-break"
+        );
+    }
+
+    #[test]
+    fn point_in_subsector_on_horizontal_partition_uses_doom_tiebreak() {
+        // Vanilla Doom sends points exactly on a rightward horizontal partition to side 0.
+        let mut node = make_node(leaf(0), leaf(1));
+        node.x = 0;
+        node.y = 0;
+        node.dx = 1;
+        node.dy = 0;
+        let nodes = vec![node];
+        let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
+        let tree = BspTree::validate(&nodes, &ssectors, 2).unwrap();
+
+        let ss = tree.point_in_subsector(5, 0).unwrap();
+        assert_eq!(
+            ss.first_seg, 0,
+            "point on partition line should follow Doom's side tie-break"
+        );
     }
 
     #[test]

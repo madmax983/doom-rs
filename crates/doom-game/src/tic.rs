@@ -336,6 +336,12 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
 /// - Checks for item pickups
 /// - Checks for secret sector discovery
 pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level>) {
+    if gs.player.is_dead() {
+        gs.player.attack_down = false;
+        gs.player.use_down = false;
+        return;
+    }
+
     // Movement + attack (immutable level borrow).
     p_move_player(gs, cmd, level.as_deref_mut());
 
@@ -795,7 +801,7 @@ mod tests {
     #[test]
     fn tick_mobj_transitions_at_zero() {
         let mut gs = make_game_state();
-        // S_POSS_STND loops to itself with tics=10 and ACTION_LOOK.
+        // S_POSS_STND now alternates between idle frames A and B.
         let trooper = make_trooper(StateNum(ids::S_POSS_STND), 1);
         let handle = gs.mobjslab.alloc(trooper);
 
@@ -803,8 +809,7 @@ mod tests {
         assert!(matches!(result, TickMobjResult::Alive));
 
         let mo = gs.mobjslab.get(handle).unwrap();
-        // S_POSS_STND next_state = S_POSS_STND (loops), tics = 10.
-        assert_eq!(mo.state, StateNum(ids::S_POSS_STND));
+        assert_eq!(mo.state, StateNum(ids::S_POSS_STND2));
         assert_eq!(mo.tics, 10, "should have reloaded tics from STATES table");
     }
 
@@ -1083,6 +1088,44 @@ mod tests {
     }
 
     #[test]
+    fn dead_player_ignores_input_and_clears_held_buttons() {
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
+
+        let mut gs = make_game_state();
+        gs.player.apply_damage(200);
+        gs.player.attack_down = true;
+        gs.player.use_down = true;
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().health = 0;
+        let start_ammo = gs.player.ammo(AmmoType::Bullets as usize);
+
+        tick_player(
+            &mut gs,
+            TicCmd {
+                forward_move: 50,
+                angle_turn: 640,
+                buttons: bt::BT_ATTACK | bt::BT_USE,
+                ..Default::default()
+            },
+            None,
+        );
+
+        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        assert_eq!(mo.x, Fixed16_16::ZERO, "dead player must not move");
+        assert_eq!(mo.y, Fixed16_16::ZERO, "dead player must not move");
+        assert_eq!(mo.angle, Bam::ZERO, "dead player must not turn");
+        assert_eq!(
+            gs.player.ammo(AmmoType::Bullets as usize),
+            start_ammo,
+            "dead player must not fire"
+        );
+        assert!(!gs.player.attack_down, "dead player must clear held attack");
+        assert!(!gs.player.use_down, "dead player must clear held use");
+    }
+
+    #[test]
     fn held_pistol_refires_after_cooldown() {
         let mut gs = make_game_state();
         let cmd = TicCmd {
@@ -1233,10 +1276,10 @@ mod tests {
     }
 
     #[test]
-    fn state_transition_run2_back_to_run1() {
+    fn state_transition_run4_back_to_run1() {
         let mut gs = make_game_state();
-        // S_POSS_RUN2: 4 tics, next = S_POSS_RUN1, action = A_Chase.
-        let trooper = make_trooper(StateNum(ids::S_POSS_RUN2), 1);
+        // S_POSS_RUN4: 4 tics, next = S_POSS_RUN1, action = A_Chase.
+        let trooper = make_trooper(StateNum(ids::S_POSS_RUN4), 1);
         let handle = gs.mobjslab.alloc(trooper);
         gs.mobjslab.get_mut(handle).unwrap().target = gs.player.handle;
 
@@ -1248,9 +1291,10 @@ mod tests {
     }
 
     #[test]
-    fn state_transition_pain_to_idle() {
+    fn state_transition_pain_without_target_returns_to_idle() {
         let mut gs = make_game_state();
-        // S_POSS_PAIN: 6 tics, next = S_POSS_STND
+        // S_POSS_PAIN now resumes S_POSS_RUN1, but without a target A_Chase
+        // immediately falls back to idle.
         let trooper = make_trooper(StateNum(ids::S_POSS_PAIN), 1);
         let handle = gs.mobjslab.alloc(trooper);
 
