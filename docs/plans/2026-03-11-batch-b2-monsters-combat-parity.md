@@ -4,11 +4,11 @@
 
 **Status:** In progress on 2026-03-11.
 
-**Outcome so far:** Two B2 slices are landed and green. `p_check_missile_range()` now matches the vanilla Arch-Vile maximum-range rule and the Revenant minimum-range rule, and hitscan now uses Doom-shaped vertical slope clipping instead of the old 2D-only actor pick.
+**Outcome so far:** Three B2 slices are landed and green. `p_check_missile_range()` now matches the vanilla Arch-Vile maximum-range rule and the Revenant minimum-range rule, hitscan now uses Doom-shaped vertical slope clipping instead of the old 2D-only actor pick, and player bullet weapons now probe center/right/left before firing so near-off-center targets are no longer ignored.
 
 **Goal:** Finish the remaining monster/combat parity debt from System 2, starting with source-backed `P_CheckMissileRange` fixes, then the vertical hitscan path, and then the remaining `P_BulletSlope` / refire nuances.
 
-**Architecture:** Keep monster missile gating and hitscan parity separate. Missile-range fixes belong in `actions.rs` with direct unit coverage. The hitscan pass now uses an ordered intercept walk in `combat.rs` that clips a Doom-style vertical slope window across lines and actors; the next remaining combat debt is the player bullet autoaim search in `weapon_fire.rs`.
+**Architecture:** Keep monster missile gating and hitscan parity separate. Missile-range fixes belong in `actions.rs` with direct unit coverage. The hitscan pass now uses an ordered intercept walk in `combat.rs` that clips a Doom-style vertical slope window across lines and actors. Player bullet autoaim now probes the Chocolate Doom center/right/left order in `weapon_fire.rs`, but within the current exact-ray port that probe is realized as choosing the firing angle rather than as a source-identical slope-only pass.
 
 **Tech Stack:** Rust workspace crate `doom-game`, unit tests with `cargo test`.
 
@@ -80,10 +80,27 @@ Expected: the new regressions and surrounding chase tests pass.
 
 **Result:** Passed. `combat.rs` now walks ordered wall and actor intercepts, uses Chocolate Doom-style `shootz = z + height/2 + 8`, starts with the vanilla `±0.625` slope window, narrows that window across two-sided openings, and only damages actors whose vertical span overlaps the surviving shot cone.
 
-**Remaining combat debt after Task 2:**
+### Task 3: Player Bullet Autoaim Probe
 
-- `P_BulletSlope` still needs the player-only three-try angle probe from `p_pspr.c` (`straight`, `+5.625°`, `-5.625°`) instead of the current single-angle path.
+**Files:**
+- Modify: `crates/doom-game/src/weapon_fire.rs`
+- Modify: `crates/doom-game/src/combat.rs`
+- Test: `crates/doom-game/src/weapon_fire.rs`
+
+**Red regressions written:**
+
+- Pistol should acquire a near-off-center target on the right probe.
+- Pistol should acquire a near-off-center target on the left probe.
+- Chaingun should reuse the same probe behavior.
+
+**Result:** Passed. `weapon_fire.rs` now probes `straight`, `+5.625°`, then `-5.625°` before firing pistol, chaingun, shotgun, and SSG hitscan. `combat.rs` exposes a pure target query helper so the probe can happen without dealing damage first.
+
+**Important note:** Chocolate Doom uses this probe to choose bullet slope, not to replace the shot angle. In this port, exact ray/actor intersection means a pure slope-only probe has almost no observable effect, so the side probe is currently applied as angle selection. That is a deliberate approximation, not an attempt to pass it off as source-identical.
+
+**Remaining combat debt after Task 3:**
+
 - Full psprite-state refire cadence is still less source-faithful than Chocolate Doom, even though the gross held-fire behavior is now correct in the tic loop.
+- If we want stricter source parity later, the bullet probe can be split into an explicit aim-slope pass plus a separate fire pass instead of the current angle-selection approximation.
 
 ### Task 3: Verification
 
@@ -98,6 +115,8 @@ cargo test -p doom-game p_check_missile_range_revenant_rejects_targets_under_196
 cargo test -p doom-game a_chase -- --nocapture
 cargo test -p doom-game line_attack_with_level_skips_ -- --nocapture
 cargo test -p doom-game line_attack -- --nocapture
+cargo test -p doom-game autoaim_probe_hits_target -- --nocapture
+cargo test -p doom-game weapon_fire -- --nocapture
 cargo test -p doom-game --lib
 ```
 

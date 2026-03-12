@@ -294,20 +294,12 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
 // p_line_attack
 // ---------------------------------------------------------------------------
 
-/// Hitscan attack with optional wall-occluded slope clipping.
-///
-/// Fires a ray from `source` in direction `angle` up to `range` map units.
-/// When `level` is `Some`, ordered line and actor intercepts clip the
-/// autoaim slope window Doom-style before selecting a target. When `level` is
-/// `None`, only actor intercepts are considered.
-///
-/// Returns `Some(handle)` if an actor was hit and damaged, `None` otherwise.
-pub fn p_line_attack(
-    gs: &mut GameState,
+/// Query the first actor a hitscan attack would strike.
+pub(crate) fn p_line_attack_target(
+    gs: &GameState,
     source: MobjHandle,
     angle: Bam,
     range: Fixed16_16,
-    damage: i32,
     level: Option<&Level>,
 ) -> Option<MobjHandle> {
     let (sx, sy, shootz) = match gs.mobjslab.get(source) {
@@ -416,13 +408,33 @@ pub fn p_line_attack(
                     continue;
                 }
 
-                damage_mobj(gs, handle, source, damage);
                 return Some(handle);
             }
         }
     }
 
     None
+}
+
+/// Hitscan attack with optional wall-occluded slope clipping.
+///
+/// Fires a ray from `source` in direction `angle` up to `range` map units.
+/// When `level` is `Some`, ordered line and actor intercepts clip the
+/// autoaim slope window Doom-style before selecting a target. When `level` is
+/// `None`, only actor intercepts are considered.
+///
+/// Returns `Some(handle)` if an actor was hit and damaged, `None` otherwise.
+pub fn p_line_attack(
+    gs: &mut GameState,
+    source: MobjHandle,
+    angle: Bam,
+    range: Fixed16_16,
+    damage: i32,
+    level: Option<&Level>,
+) -> Option<MobjHandle> {
+    let hit = p_line_attack_target(gs, source, angle, range, level)?;
+    damage_mobj(gs, hit, source, damage);
+    Some(hit)
 }
 
 // ---------------------------------------------------------------------------

@@ -9,7 +9,8 @@
 use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
 
-use crate::combat::{MELEERANGE, MISSILERANGE, p_line_attack};
+use crate::combat::{MELEERANGE, MISSILERANGE, p_line_attack, p_line_attack_target};
+use crate::mobj::MobjHandle;
 use crate::mobj::MobjKind;
 use crate::player::powers::PW_STRENGTH;
 use crate::player::{AmmoType, WeaponType};
@@ -35,6 +36,9 @@ pub const AMMO_PER_SHOT: [(WeaponType, AmmoType, u32); 9] = [
     (WeaponType::Bfg, AmmoType::Cells, 40),
     (WeaponType::Chainsaw, AmmoType::None, 0),
 ];
+
+const BULLET_AUTOAIM_RANGE: Fixed16_16 = Fixed16_16(1024 << 16);
+const BULLET_AUTOAIM_SIDE_PROBE: u32 = 1 << 26;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -114,6 +118,23 @@ fn hitscan_shot_angle(gs: &mut GameState, base_angle: Bam, accurate_first_shot: 
     Bam(base_angle.0.wrapping_add(spread as u32))
 }
 
+fn bullet_autoaim_angle(
+    gs: &GameState,
+    handle: MobjHandle,
+    base_angle: Bam,
+    level: Option<&Level>,
+) -> Bam {
+    let right_probe = Bam(base_angle.0.wrapping_add(BULLET_AUTOAIM_SIDE_PROBE));
+    let left_probe = Bam(base_angle.0.wrapping_sub(BULLET_AUTOAIM_SIDE_PROBE));
+
+    [base_angle, right_probe, left_probe]
+        .into_iter()
+        .find(|angle| {
+            p_line_attack_target(gs, handle, *angle, BULLET_AUTOAIM_RANGE, level).is_some()
+        })
+        .unwrap_or(base_angle)
+}
+
 fn snap_player_to_target(gs: &mut GameState, target_handle: crate::mobj::MobjHandle) {
     let handle = gs.player.handle;
     if let (Some(src), Some(tgt)) = (
@@ -186,7 +207,8 @@ pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
         None => return,
     };
 
-    let shot_angle = hitscan_shot_angle(gs, base_angle, true);
+    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level);
+    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
     let damage = p_damage_with_variance(gs, 5);
 
     p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level);
@@ -205,10 +227,11 @@ pub fn p_fire_shotgun(gs: &mut GameState, level: Option<&Level>) {
         Some(a) => a,
         None => return,
     };
+    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level);
 
     for _ in 0..7 {
         let spread = gs.p_subrandom() << 18;
-        let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
+        let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
         let damage = p_damage_with_variance(gs, 5);
         p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level);
     }
@@ -228,10 +251,11 @@ pub fn p_fire_super_shotgun(gs: &mut GameState, level: Option<&Level>) {
         Some(a) => a,
         None => return,
     };
+    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level);
 
     for _ in 0..20 {
         let spread = gs.p_subrandom() << 19;
-        let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
+        let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
         let damage = p_damage_with_variance(gs, 5);
         p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level);
     }
@@ -252,7 +276,8 @@ pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
         None => return,
     };
 
-    let shot_angle = hitscan_shot_angle(gs, base_angle, true);
+    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level);
+    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
     let damage = p_damage_with_variance(gs, 5);
 
     p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level);
@@ -519,6 +544,49 @@ mod tests {
         }
     }
 
+    fn make_open_level() -> Level {
+        let cols = 8u16;
+        let rows = 8u16;
+        let n_blocks = cols as usize * rows as usize;
+        let data_start = 4u16 + n_blocks as u16;
+
+        let mut bm_raw = Vec::new();
+        bm_raw.extend_from_slice(&(-256i16).to_le_bytes());
+        bm_raw.extend_from_slice(&(-256i16).to_le_bytes());
+        bm_raw.extend_from_slice(&cols.to_le_bytes());
+        bm_raw.extend_from_slice(&rows.to_le_bytes());
+        for _ in 0..n_blocks {
+            bm_raw.extend_from_slice(&data_start.to_le_bytes());
+        }
+        bm_raw.extend_from_slice(&0u16.to_le_bytes());
+        bm_raw.extend_from_slice(&0xFFFFu16.to_le_bytes());
+
+        let blockmap = Blockmap::parse_lump(&bm_raw).expect("blockmap parse");
+        let reject = Reject::parse_lump(&[0u8], 1).expect("reject parse");
+
+        Level {
+            name: "OPEN".to_string(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![Sector {
+                floor_height: 0,
+                ceil_height: 256,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            }],
+            reject,
+            blockmap,
+        }
+    }
+
     // =======================================================================
     // AMMO_PER_SHOT table tests
     // =======================================================================
@@ -639,6 +707,42 @@ mod tests {
         );
     }
 
+    #[test]
+    fn pistol_autoaim_probe_hits_target_slightly_right_of_center() {
+        init_trig();
+
+        let level = make_open_level();
+        let mut gs = make_game_state();
+        let target_handle = spawn_shootable_target(&mut gs, 512, 50, 20, 20);
+        gs.rng.set_index(16);
+        gs.player.attack_down = false;
+
+        p_fire_pistol(&mut gs, Some(&level));
+
+        assert!(
+            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            "pistol autoaim probe should acquire a target within Doom's side-angle search"
+        );
+    }
+
+    #[test]
+    fn pistol_autoaim_probe_hits_target_slightly_left_of_center() {
+        init_trig();
+
+        let level = make_open_level();
+        let mut gs = make_game_state();
+        let target_handle = spawn_shootable_target(&mut gs, 512, -50, 20, 20);
+        gs.rng.set_index(16);
+        gs.player.attack_down = false;
+
+        p_fire_pistol(&mut gs, Some(&level));
+
+        assert!(
+            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            "pistol autoaim probe should search both sides of center"
+        );
+    }
+
     // =======================================================================
     // Shotgun tests
     // =======================================================================
@@ -745,6 +849,24 @@ mod tests {
             gs.mobjslab.get(target_handle).unwrap().health,
             20,
             "held chaingun shots should keep spread"
+        );
+    }
+
+    #[test]
+    fn chaingun_autoaim_probe_hits_target_slightly_off_center() {
+        init_trig();
+
+        let level = make_open_level();
+        let mut gs = make_game_state();
+        let target_handle = spawn_shootable_target(&mut gs, 512, 50, 20, 20);
+        gs.rng.set_index(16);
+        gs.player.attack_down = false;
+
+        p_fire_chaingun(&mut gs, Some(&level));
+
+        assert!(
+            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            "chaingun should reuse the same Doom bullet autoaim probe as the pistol"
         );
     }
 
