@@ -225,7 +225,7 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
         CheatCode::GodMode => {
             gs.player.god_mode = !gs.player.god_mode;
             if gs.player.god_mode {
-                gs.player.set_health_capped(100, 100);
+                gs.set_player_health_capped(100, 100);
             }
             true
         }

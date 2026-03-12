@@ -626,6 +626,42 @@ impl GameState {
         }
     }
 
+    /// Mirror `PlayerState::health()` onto the live player mobj.
+    ///
+    /// Several gameplay systems still consult the player mobj health directly
+    /// (for example monster target liveness), so pickup/heal/damage paths must
+    /// keep both representations aligned.
+    pub fn sync_player_mobj_health(&mut self) {
+        let health = self.player.health();
+        if let Some(player_mo) = self.mobjslab.get_mut(self.player.handle) {
+            player_mo.health = health;
+        }
+    }
+
+    /// Apply damage to the player and keep the player mobj health in sync.
+    pub fn damage_player(&mut self, amount: i32) {
+        self.player.apply_damage(amount);
+        self.sync_player_mobj_health();
+    }
+
+    /// Heal the player up to the normal cap and keep the player mobj in sync.
+    pub fn heal_player(&mut self, amount: i32) {
+        self.player.heal(amount);
+        self.sync_player_mobj_health();
+    }
+
+    /// Heal the player past 100 up to `cap`, keeping the player mobj in sync.
+    pub fn heal_player_overheal(&mut self, amount: i32, cap: i32) {
+        self.player.heal_overheal(amount, cap);
+        self.sync_player_mobj_health();
+    }
+
+    /// Set the player's health directly and keep the player mobj in sync.
+    pub fn set_player_health_capped(&mut self, value: i32, cap: i32) {
+        self.player.set_health_capped(value, cap);
+        self.sync_player_mobj_health();
+    }
+
     // -----------------------------------------------------------------------
     // P_Random helpers — deterministic RNG used for all game randomness
     // -----------------------------------------------------------------------

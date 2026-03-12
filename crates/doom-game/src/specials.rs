@@ -58,8 +58,8 @@ const BLINK_SLOW_PERIOD: i32 = 35;
 /// Sector containment is approximated: the actor is considered to be "in" a
 /// special sector if `actor.z.to_int() == sector.floor_height as i32`.
 ///
-/// Damage is applied directly to `mobj.health` without routing through combat
-/// to avoid circular dependencies at this stage.
+/// Damage sectors update both the player state and player mobj health so
+/// monster AI sees the same liveness the HUD does.
 pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandle) {
     // Read actor position.
     let (az, _ax, _ay) = match gs.mobjslab.get(handle) {
@@ -84,7 +84,9 @@ pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandl
             _ => continue,
         };
 
-        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        if handle == gs.player.handle {
+            gs.damage_player(dmg);
+        } else if let Some(mo) = gs.mobjslab.get_mut(handle) {
             mo.health -= dmg;
             if mo.health < 0 {
                 mo.health = 0;
@@ -187,7 +189,9 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
 
 /// Apply damage to an actor from a sector special.
 fn apply_sector_damage(gs: &mut GameState, handle: MobjHandle, damage: i32) {
-    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+    if handle == gs.player.handle {
+        gs.damage_player(damage);
+    } else if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.health -= damage;
         if mo.health < 0 {
             mo.health = 0;
@@ -1612,12 +1616,7 @@ pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
                     if let Some(pmo) = gs.mobjslab.get(player_handle) {
                         if pmo.z.to_int() == floor as i32 {
                             // Very simplified sector check: just damage if z matches.
-                            if let Some(pmo_mut) = gs.mobjslab.get_mut(player_handle) {
-                                pmo_mut.health -= crush_dmg;
-                                if pmo_mut.health < 0 {
-                                    pmo_mut.health = 0;
-                                }
-                            }
+                            gs.damage_player(crush_dmg);
                         }
                     }
 
@@ -1743,10 +1742,7 @@ pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
                         let player_handle = gs.player.handle;
                         if let Some(pmo) = gs.mobjslab.get_mut(player_handle) {
                             if pmo.z.to_int() >= (floor - 8) as i32 {
-                                pmo.health -= crush_dmg;
-                                if pmo.health < 0 {
-                                    pmo.health = 0;
-                                }
+                                gs.damage_player(crush_dmg);
                             }
                         }
                     }
@@ -3794,6 +3790,27 @@ mod tests {
     }
 
     #[test]
+    fn damage_floor_syncs_player_state_health() {
+        let mut gs = GameState::new("TEST");
+        let level = make_damage_level(0, 5); // special 5 = lava, floor=0
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+
+        tick_sector_specials(&mut gs, &level, handle);
+
+        assert_eq!(
+            gs.player.health(),
+            90,
+            "player state must track sector damage"
+        );
+        assert_eq!(
+            gs.mobjslab.get(handle).unwrap().health,
+            90,
+            "player mobj health must stay aligned with player state"
+        );
+    }
+
+    #[test]
     fn damage_floor_ignores_actor_above_it() {
         let mut gs = GameState::new("TEST");
         let level = make_damage_level(0, 5); // lava at floor=0
@@ -5388,6 +5405,28 @@ mod tests {
     }
 
     #[test]
+    fn sector_damage_special_5_syncs_player_state_health() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let level = make_damage_level(0, 5);
+
+        gs.level_time = 32;
+        tick_sector_damage(&mut gs, &level);
+
+        assert_eq!(
+            gs.player.health(),
+            95,
+            "player state must track periodic sector damage"
+        );
+        assert_eq!(
+            gs.mobjslab.get(handle).unwrap().health,
+            95,
+            "player mobj health must stay aligned with periodic sector damage"
+        );
+    }
+
+    #[test]
     fn sector_damage_special_7_hurts_less() {
         let mut gs = GameState::new("TEST");
         let handle = make_actor_at_z(&mut gs, 0);
@@ -5440,7 +5479,7 @@ mod tests {
         let handle = make_actor_at_z(&mut gs, 0);
         gs.player = crate::player::PlayerState::pistol_start(handle);
         // Set player health low enough that after 20 damage it triggers exit.
-        gs.mobjslab.get_mut(handle).unwrap().health = 25;
+        gs.set_player_health_capped(25, 100);
         let level = make_damage_level(0, 11);
 
         gs.level_time = 32;

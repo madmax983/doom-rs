@@ -277,7 +277,7 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
         // ---- Health ----
         MobjKind::HealthBonus => {
             // Always picked up. +1 health, cap at 200 (overheal).
-            gs.player.heal_overheal(1, 200);
+            gs.heal_player_overheal(1, 200);
             true
         }
         MobjKind::Stimpack => {
@@ -285,7 +285,7 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             if gs.player.health() >= 100 {
                 return false;
             }
-            gs.player.heal(10);
+            gs.heal_player(10);
             true
         }
         MobjKind::Medikit => {
@@ -293,17 +293,17 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             if gs.player.health() >= 100 {
                 return false;
             }
-            gs.player.heal(25);
+            gs.heal_player(25);
             true
         }
         MobjKind::Soulsphere => {
             // Always picked up. Overheal up to 200 hp, gives 100 hp.
-            gs.player.heal_overheal(100, 200);
+            gs.heal_player_overheal(100, 200);
             true
         }
         MobjKind::Megasphere => {
             // Always picked up. Set health to 200, give 200 blue armor.
-            gs.player.set_health_capped(200, 200);
+            gs.set_player_health_capped(200, 200);
             gs.player.give_armor(200, 2);
             true
         }
@@ -420,7 +420,7 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
         MobjKind::Berserk => {
             // Set health to max(100, current), give PW_STRENGTH, auto-switch to fist.
             if gs.player.health() < 100 {
-                gs.player.set_health_capped(100, 200);
+                gs.set_player_health_capped(100, 200);
             }
             gs.player.powers[powers::PW_STRENGTH] = STRENGTH_TICS;
             gs.player.weapons[WeaponType::Fist as usize] = true;
@@ -557,6 +557,28 @@ mod tests {
         let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
         assert_eq!(gs.player.health(), 51);
+    }
+
+    #[test]
+    fn pickup_health_bonus_syncs_player_mobj_health() {
+        let mut gs = make_game_state();
+        gs.player.apply_damage(50);
+        assert_eq!(gs.player.health(), 50);
+        assert_eq!(
+            gs.mobjslab.get(gs.player.handle).unwrap().health,
+            100,
+            "setup should start desynced so the pickup path has to repair it"
+        );
+
+        let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
+        assert!(p_touch_special_thing(&mut gs, item));
+
+        assert_eq!(gs.player.health(), 51);
+        assert_eq!(
+            gs.mobjslab.get(gs.player.handle).unwrap().health,
+            51,
+            "pickup health must sync the live player mobj used by monster AI"
+        );
     }
 
     #[test]

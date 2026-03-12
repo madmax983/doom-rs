@@ -362,17 +362,14 @@ impl DoomGame {
         self.dlog(&msg);
     }
 
-    /// Log the state of all live enemies within 1024 map units of the player.
-    fn dlog_nearby_enemies(&mut self) {
+    /// Log the state of all live enemies.
+    ///
+    /// Include enough AI state to distinguish "never woke up" from
+    /// "woke up but got stuck on movement/pathing".
+    fn dlog_live_enemies(&mut self) {
         if self.debug_log.is_none() {
             return;
         }
-        let (px, py) = self
-            .gs
-            .mobjslab
-            .get(self.gs.player.handle)
-            .map(|mo| (mo.x.to_int(), mo.y.to_int()))
-            .unwrap_or((0, 0));
 
         let handles: Vec<_> = self.gs.mobjslab.iter_handles().collect();
         for h in handles {
@@ -405,18 +402,28 @@ impl DoomGame {
             }
             let ex = mo.x.to_int();
             let ey = mo.y.to_int();
-            let dx = (ex - px) as i64;
-            let dy = (ey - py) as i64;
-            let dist_sq = dx * dx + dy * dy;
-            if dist_sq > 1024 * 1024 {
-                continue;
-            }
             let state_idx = mo.state.0;
             let flags = mo.flags;
             let is_dead = mo.health <= 0;
+            let target = mo.target;
             let msg = format!(
-                "enemy {:?} pos=({},{}) health={} state={} tics={} dead={} flags={:#010x}",
-                mo.kind, ex, ey, mo.health, state_idx, mo.tics, is_dead, flags
+                "enemy idx={} gen={} {:?} pos=({},{}) health={} state={} tics={} dead={} flags={:#010x} target=({}, {}) threshold={} reaction={} movecount={} subsector={}",
+                h.index,
+                h.generation,
+                mo.kind,
+                ex,
+                ey,
+                mo.health,
+                state_idx,
+                mo.tics,
+                is_dead,
+                flags,
+                target.index,
+                target.generation,
+                mo.threshold,
+                mo.reactiontime,
+                mo.movecount,
+                mo.subsector,
             );
             self.dlog(&msg);
         }
@@ -724,7 +731,7 @@ impl DoomApp for DoomGame {
                 // Log player snapshot every 35 tics (once per second of gametime).
                 if self.gs.tic_num % 35 == 0 {
                     self.dlog_player_snapshot();
-                    self.dlog_nearby_enemies();
+                    self.dlog_live_enemies();
                 }
                 // Log any deaths that fired A_Scream this tic.
                 self.dlog_death_events();
@@ -1468,6 +1475,7 @@ mod tests {
     use doom_map::{Blockmap, Level, Reject, Sector};
     use doom_renderer::{Framebuffer, StatusBarData};
     use doom_types::{Bam, Fixed16_16};
+    use std::path::PathBuf;
 
     // -----------------------------------------------------------------------
     // Test helpers
@@ -1539,6 +1547,16 @@ mod tests {
             None,
             std::collections::HashMap::new(),
         )
+    }
+
+    fn unique_temp_log_path(name: &str) -> PathBuf {
+        let mut path = std::env::temp_dir();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time must be after unix epoch")
+            .as_nanos();
+        path.push(format!("doom-rs-{name}-{nanos}.log"));
+        path
     }
 
     fn music_library_for(
@@ -1750,6 +1768,73 @@ mod tests {
         assert_eq!(
             game.player_view_height, PLAYER_HEIGHT,
             "alive player must render from the normal standing height"
+        );
+    }
+
+    #[test]
+    fn debug_log_includes_far_enemy_ai_state() {
+        let log_path = unique_temp_log_path("far-enemy");
+        let log_file = std::fs::File::create(&log_path).expect("temp debug log must open");
+        let mut game = DoomGame::new(
+            make_game_state(),
+            make_test_level(),
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+            None,
+            false,
+            Some(log_file),
+            None,
+            std::collections::HashMap::new(),
+        );
+
+        let mut imp = Mobj::new(
+            MobjKind::Imp,
+            Fixed16_16::from_int(5000),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        imp.health = 60;
+        imp.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        imp.state = doom_game::MOBJINFO[MobjKind::Imp as usize].spawn_state;
+        imp.tics = 10;
+        imp.threshold = 60;
+        imp.reactiontime = 18;
+        imp.movecount = 7;
+        imp.subsector = 3;
+        let imp_handle = game.gs.mobjslab.alloc(imp);
+
+        game.dlog_live_enemies();
+        game.debug_log
+            .as_ref()
+            .expect("debug log should still be present")
+            .sync_all()
+            .expect("debug log should flush");
+        drop(game);
+
+        let log_text = std::fs::read_to_string(&log_path).expect("debug log should be readable");
+        let _ = std::fs::remove_file(&log_path);
+
+        assert!(
+            log_text.contains("enemy idx="),
+            "debug log should include enemy handle identity, got: {log_text}"
+        );
+        assert!(
+            log_text.contains("Imp"),
+            "debug log should include the far enemy kind, got: {log_text}"
+        );
+        assert!(
+            log_text.contains(&format!("idx={}", imp_handle.index)),
+            "debug log should include the far enemy handle index, got: {log_text}"
+        );
+        assert!(
+            log_text.contains("threshold=60")
+                && log_text.contains("reaction=18")
+                && log_text.contains("movecount=7")
+                && log_text.contains("subsector=3"),
+            "debug log should include AI state fields for diagnosis, got: {log_text}"
         );
     }
 
