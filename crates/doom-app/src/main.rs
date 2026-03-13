@@ -17,18 +17,18 @@ use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
 use doom_game::player::WeaponType;
 use doom_game::{
-    GameState, Skill, TicCmd, TitleScreen, init_conveyors, init_scrolling_walls,
-    init_sector_lights, kind_to_doomed_type, spawn_level_things,
+    GamePhase, GamePhaseController, GameState, Skill, TicCmd, TitleScreen, init_conveyors,
+    init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
     ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
-    PLAYER_HEIGHT, PaletteFlash, PaletteLut, RenderOut, SpriteCache, SpriteClip, SwitchList,
-    TextureCache, draw_automap_ex, draw_menu, draw_status_bar, draw_title_screen,
-    draw_weapon_sprite, render_actors_with_masked_ex, render_flag_from_state,
-    render_level_with_view_height, thing_sprite_prefix,
+    IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, RenderOut, SpriteCache,
+    SpriteClip, SwitchList, TextureCache, draw_automap_ex, draw_intermission, draw_menu,
+    draw_status_bar, draw_title_screen, draw_weapon_sprite, render_actors_with_masked_ex,
+    render_flag_from_state, render_level_with_view_height, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -159,6 +159,14 @@ pub(crate) struct DoomGame {
     /// Name → SFX ID lookup built from the WAD at startup (same ordering as
     /// `SfxCache`).  Used to play monster wake/attack/death sounds by lump name.
     sfx_lookup: std::collections::HashMap<String, u16>,
+    /// Parsed WAD retained for phase-driven map loads after intermission.
+    wad: Option<WadFile>,
+    /// Current skill used when spawning the next map.
+    skill: Skill,
+    /// Top-level playing/intermission/finale controller.
+    phase_controller: GamePhaseController,
+    /// Animated intermission tally renderer, active only during intermission.
+    intermission_renderer: Option<IntermissionRenderer>,
 }
 
 const DEAD_PLAYER_VIEW_HEIGHT: i32 = 6;
@@ -204,6 +212,12 @@ impl DoomGame {
         } else {
             None
         };
+        let start_map = Self::map_id_from_level_name(gs.level_name.as_str());
+        let phase_controller = if show_title {
+            GamePhaseController::new_at_title()
+        } else {
+            GamePhaseController::new(start_map)
+        };
 
         let game = Self {
             gs,
@@ -232,6 +246,10 @@ impl DoomGame {
             debug_log,
             pain_sfx_id,
             sfx_lookup,
+            wad: None,
+            skill: Skill::Medium,
+            phase_controller,
+            intermission_renderer: None,
         };
 
         if game.title_screen.is_none() {
@@ -251,6 +269,95 @@ impl DoomGame {
         if let Some(level_music) = self.music_library.get(&music_lump) {
             audio.start_music(level_music.clone());
         }
+    }
+
+    fn map_id_from_level_name(level_name: &str) -> doom_game::MapId {
+        doom_game::MapId::from_name(level_name).unwrap_or(doom_game::MapId::new(1, 1))
+    }
+
+    fn attach_wad_for_transitions(&mut self, wad: WadFile, skill: Skill) {
+        self.wad = Some(wad);
+        self.skill = skill;
+    }
+
+    fn enter_title_screen(&mut self) {
+        self.title_screen = Some(TitleScreen::new());
+        self.menu = doom_game::menu::GameMenu::new(false);
+        self.menu.open();
+        self.intermission_renderer = None;
+    }
+
+    fn update_intermission_renderer(&mut self) {
+        match self.phase_controller.phase() {
+            GamePhase::Intermission { stats, .. } => {
+                if self.intermission_renderer.is_none() {
+                    self.intermission_renderer = Some(IntermissionRenderer::new(
+                        stats,
+                        self.gs.level_name.as_str(),
+                    ));
+                }
+            }
+            _ => {
+                self.intermission_renderer = None;
+            }
+        }
+    }
+
+    fn load_map_after_intermission(&mut self, map_id: doom_game::MapId, carry_player_state: bool) {
+        let Some(wad) = self.wad.as_ref() else {
+            self.console
+                .print("Cannot load next level: no WAD attached for transitions.".to_string());
+            self.phase_controller.clear_load_request();
+            return;
+        };
+
+        let map_name = map_id.map_name();
+        let level = match Level::from_wad(wad, &map_name) {
+            Ok(level) => level,
+            Err(e) => {
+                self.console
+                    .print(format!("Failed to load next map {map_name}: {e}"));
+                self.phase_controller.clear_load_request();
+                return;
+            }
+        };
+
+        let carried_player = carry_player_state.then(|| self.gs.player.clone());
+        let mut gs = GameState::new(&map_name);
+        let player_handle = spawn_level_things(&mut gs, &level, self.skill, false);
+
+        if let (Some(mut player), Some(handle)) = (carried_player, player_handle) {
+            player.handle = handle;
+            player.pending_weapon = None;
+            player.attack_down = false;
+            player.attack_cooldown = 0;
+            player.use_down = false;
+            player.bonus_count = 0;
+            player.damage_count = 0;
+            player.kill_count = 0;
+            player.item_count = 0;
+            player.secret_count = 0;
+            gs.player = player;
+            gs.sync_player_mobj_health();
+        }
+
+        init_scrolling_walls(&mut gs, &level);
+        init_conveyors(&mut gs, &level);
+        init_sector_lights(&mut gs, &level);
+
+        self.gs = gs;
+        self.level = level;
+        self.player_view_height = PLAYER_HEIGHT;
+        self.prev_health = self.gs.player.health();
+        self.phase_controller.clear_load_request();
+        self.intermission_renderer = None;
+        self.start_level_music();
+    }
+
+    fn transition_input_pressed(input: TicInput) -> bool {
+        input.menu_select
+            || input.escape_pressed
+            || (input.buttons & (doom_game::bt::BT_ATTACK | doom_game::bt::BT_USE)) != 0
     }
 }
 
@@ -496,6 +603,13 @@ impl DoomApp for DoomGame {
                             init_conveyors(&mut self.gs, &self.level);
                             init_sector_lights(&mut self.gs, &self.level);
                             self.player_view_height = PLAYER_HEIGHT;
+                            self.prev_health = self.gs.player.health();
+                            self.skill = sk;
+                            self.phase_controller
+                                .start_new_game(Self::map_id_from_level_name(
+                                    self.gs.level_name.as_str(),
+                                ));
+                            self.intermission_renderer = None;
                             self.menu.close();
                             self.title_screen = None;
                             self.start_level_music();
@@ -513,6 +627,41 @@ impl DoomApp for DoomGame {
                 self.menu.back();
             }
             return;
+        }
+
+        match self.phase_controller.phase() {
+            GamePhase::Intermission { .. } => {
+                let transition_pressed = Self::transition_input_pressed(input);
+                if let Some(renderer) = self.intermission_renderer.as_mut() {
+                    if transition_pressed {
+                        if renderer.is_done() {
+                            self.phase_controller.request_skip();
+                        } else {
+                            renderer.skip();
+                        }
+                    } else {
+                        renderer.tick();
+                    }
+                }
+
+                self.phase_controller.tick(&mut self.gs);
+                if let Some(map_id) = self.phase_controller.should_load_map() {
+                    self.load_map_after_intermission(map_id, true);
+                }
+                self.update_intermission_renderer();
+                return;
+            }
+            GamePhase::Finale { .. } => {
+                if Self::transition_input_pressed(input) {
+                    self.phase_controller.request_skip();
+                }
+                self.phase_controller.tick(&mut self.gs);
+                if matches!(self.phase_controller.phase(), GamePhase::TitleScreen) {
+                    self.enter_title_screen();
+                }
+                return;
+            }
+            GamePhase::TitleScreen | GamePhase::Playing => {}
         }
 
         // Tick menu skull animation each tic regardless of menu state.
@@ -681,6 +830,11 @@ impl DoomApp for DoomGame {
         self.gs.tick(cmd, Some(&mut self.level));
         self.player_view_height =
             next_player_view_height(self.player_view_height, self.gs.player.is_dead());
+        self.phase_controller.tick(&mut self.gs);
+        self.update_intermission_renderer();
+        if let Some(map_id) = self.phase_controller.should_load_map() {
+            self.load_map_after_intermission(map_id, true);
+        }
 
         // Drain the game's sound event queue.  Each event maps to a DS* lump
         // name and a priority.  The SfxMixer's 8-channel priority system handles
@@ -753,6 +907,26 @@ impl DoomApp for DoomGame {
             draw_title_screen(fb, ts, &self.bitmap_font);
             draw_menu(fb, &self.menu, &self.bitmap_font);
             return;
+        }
+
+        match self.phase_controller.phase() {
+            GamePhase::Intermission { .. } => {
+                fb.clear(0);
+                if let Some(renderer) = self.intermission_renderer.as_ref() {
+                    draw_intermission(fb, renderer);
+                }
+                return;
+            }
+            GamePhase::Finale { .. } => {
+                fb.clear(0);
+                draw_mini_string(fb, 96, "THE END", 176);
+                return;
+            }
+            GamePhase::TitleScreen => {
+                fb.clear(0);
+                return;
+            }
+            GamePhase::Playing => {}
         }
 
         let handle = self.gs.player.handle;
@@ -1286,7 +1460,7 @@ fn main() -> Result<()> {
     // by lump name at play time without additional WAD scans.
     let sfx_lookup = audio_system::build_sfx_lookup(&wad);
 
-    let app = DoomGame::new(
+    let mut app = DoomGame::new(
         gs,
         level,
         audio,
@@ -1300,6 +1474,7 @@ fn main() -> Result<()> {
         pain_sfx_id,
         sfx_lookup,
     );
+    app.attach_wad_for_transitions(wad, skill);
 
     // Headless capture mode: tick N frames, render, save BMP, exit.
     if let Some(ref capture_path) = args.capture {
@@ -1515,8 +1690,8 @@ mod tests {
         }
     }
 
-    pub(crate) fn make_game_state() -> GameState {
-        let mut gs = GameState::new("E1M1");
+    pub(crate) fn make_game_state_with_level(level_name: &str) -> GameState {
+        let mut gs = GameState::new(level_name);
         let mut mo = Mobj::new(
             MobjKind::Player,
             Fixed16_16::ZERO,
@@ -1530,6 +1705,10 @@ mod tests {
         let handle = gs.mobjslab.alloc(mo);
         gs.player = PlayerState::pistol_start(handle);
         gs
+    }
+
+    pub(crate) fn make_game_state() -> GameState {
+        make_game_state_with_level("E1M1")
     }
 
     pub(crate) fn make_doom_game() -> DoomGame {
@@ -1547,6 +1726,181 @@ mod tests {
             None,
             std::collections::HashMap::new(),
         )
+    }
+
+    fn make_minimal_blockmap() -> Blockmap {
+        let mut bm_data = vec![0u8; 14];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        Blockmap::parse_lump(&bm_data).expect("blockmap parse")
+    }
+
+    fn make_walk_exit_level_named(level_name: &str) -> Level {
+        let reject = Reject::parse_lump(&[0u8], 2).expect("reject parse");
+        Level {
+            name: level_name.to_string(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special: 52, // W1 exit
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            }],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"\0\0\0\0\0\0\0\0",
+                    lower_texture: *b"\0\0\0\0\0\0\0\0",
+                    middle_texture: *b"\0\0\0\0\0\0\0\0",
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"\0\0\0\0\0\0\0\0",
+                    lower_texture: *b"\0\0\0\0\0\0\0\0",
+                    middle_texture: *b"\0\0\0\0\0\0\0\0",
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: -10 },
+                doom_map::Vertex { x: 0, y: 10 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    fn make_walk_exit_level() -> Level {
+        make_walk_exit_level_named("E1M1")
+    }
+
+    fn build_minimal_wad_for_maps(map_names: &[&str]) -> WadFile {
+        let mut lump_payloads: Vec<([u8; 8], Vec<u8>)> = Vec::new();
+
+        for &map_name in map_names {
+            let mut marker = [0u8; 8];
+            for (i, &b) in map_name.as_bytes().iter().take(8).enumerate() {
+                marker[i] = b.to_ascii_uppercase();
+            }
+
+            let mut sector_data = vec![0u8; 26];
+            sector_data[0..2].copy_from_slice(&0i16.to_le_bytes());
+            sector_data[2..4].copy_from_slice(&128i16.to_le_bytes());
+            sector_data[4..12].copy_from_slice(b"FLAT1\0\0\0");
+            sector_data[12..20].copy_from_slice(b"FLAT2\0\0\0");
+            sector_data[20..22].copy_from_slice(&192i16.to_le_bytes());
+
+            let mut vert_data = vec![0u8; 16];
+            let verts = [(0i16, 0i16), (64, 0), (64, 64), (0, 64)];
+            for (i, (x, y)) in verts.iter().enumerate() {
+                vert_data[i * 4..i * 4 + 2].copy_from_slice(&x.to_le_bytes());
+                vert_data[i * 4 + 2..i * 4 + 4].copy_from_slice(&y.to_le_bytes());
+            }
+
+            let mut sd_data = vec![0u8; 120];
+            for i in 0..4 {
+                sd_data[i * 30 + 20..i * 30 + 28].copy_from_slice(b"WALL1\0\0\0");
+                sd_data[i * 30 + 28..i * 30 + 30].copy_from_slice(&0u16.to_le_bytes());
+            }
+
+            let mut ld_data = vec![0u8; 56];
+            let edges = [(0u16, 1u16), (1, 2), (2, 3), (3, 0)];
+            for (i, (from, to)) in edges.iter().enumerate() {
+                let b = &mut ld_data[i * 14..i * 14 + 14];
+                b[0..2].copy_from_slice(&from.to_le_bytes());
+                b[2..4].copy_from_slice(&to.to_le_bytes());
+                b[10..12].copy_from_slice(&(i as u16).to_le_bytes());
+                b[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+            }
+
+            let mut seg_data = vec![0u8; 12];
+            seg_data[2..4].copy_from_slice(&1u16.to_le_bytes());
+
+            let mut ss_data = vec![0u8; 4];
+            ss_data[0..2].copy_from_slice(&1u16.to_le_bytes());
+
+            let node_data = vec![];
+
+            let mut thing_data = vec![0u8; 10];
+            thing_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+            thing_data[8..10].copy_from_slice(&7u16.to_le_bytes());
+
+            let reject_data = vec![0u8; 1];
+
+            let mut bm_data = vec![0u8; 14];
+            bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+            bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+            bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+            bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+            bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+
+            lump_payloads.push((marker, Vec::new()));
+            lump_payloads.push((*b"THINGS\0\0", thing_data));
+            lump_payloads.push((*b"LINEDEFS", ld_data));
+            lump_payloads.push((*b"SIDEDEFS", sd_data));
+            lump_payloads.push((*b"VERTEXES", vert_data));
+            lump_payloads.push((*b"SEGS\0\0\0\0", seg_data));
+            lump_payloads.push((*b"SSECTORS", ss_data));
+            lump_payloads.push((*b"NODES\0\0\0", node_data));
+            lump_payloads.push((*b"SECTORS\0", sector_data));
+            lump_payloads.push((*b"REJECT\0\0", reject_data));
+            lump_payloads.push((*b"BLOCKMAP", bm_data));
+        }
+
+        let mut data = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
+        data.extend_from_slice(&0i32.to_le_bytes());
+
+        let mut offsets = Vec::new();
+        for (_, payload) in &lump_payloads {
+            let pos = data.len();
+            data.extend_from_slice(payload);
+            offsets.push((pos, payload.len()));
+        }
+
+        let dir_offset = data.len() as i32;
+        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+        for (i, (name, _)) in lump_payloads.iter().enumerate() {
+            let (filepos, size) = offsets[i];
+            data.extend_from_slice(&(filepos as i32).to_le_bytes());
+            data.extend_from_slice(&(size as i32).to_le_bytes());
+            data.extend_from_slice(name);
+        }
+
+        WadFile::parse(data).expect("test WAD parse")
     }
 
     fn unique_temp_log_path(name: &str) -> PathBuf {
@@ -2018,6 +2372,112 @@ mod tests {
 
         wait_for_music_requests(audio, 2);
         assert_eq!(audio.debug_music_start_count(), 2);
+    }
+
+    #[test]
+    fn level_exit_renders_intermission_summary() {
+        let mut game = DoomGame::new(
+            make_game_state(),
+            make_walk_exit_level(),
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+        );
+        game.gs
+            .mobjslab
+            .get_mut(game.gs.player.handle)
+            .unwrap()
+            .momx = Fixed16_16::from_int(40);
+
+        game.tick(TicInput::default());
+
+        let mut fb = Framebuffer::new();
+        game.render(&mut fb);
+        assert!(
+            fb.get_pixel(160, 199) == Some(0),
+            "level exit should replace the gameplay HUD with the intermission screen"
+        );
+    }
+
+    #[test]
+    fn level_exit_advances_to_next_level_after_intermission() {
+        let mut game = DoomGame::new(
+            make_game_state(),
+            make_walk_exit_level(),
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+        );
+        game.attach_wad_for_transitions(
+            build_minimal_wad_for_maps(&["E1M1", "E1M2"]),
+            Skill::Medium,
+        );
+        game.gs
+            .mobjslab
+            .get_mut(game.gs.player.handle)
+            .unwrap()
+            .momx = Fixed16_16::from_int(40);
+
+        game.tick(TicInput::default());
+        for _ in 0..350 {
+            game.tick(TicInput::default());
+        }
+
+        assert_eq!(
+            game.gs.level_name, "E1M2",
+            "after finishing E1M1 and waiting through intermission, the next level should load"
+        );
+    }
+
+    #[test]
+    fn doom2_level_exit_advances_to_map02_after_intermission() {
+        let mut game = DoomGame::new(
+            make_game_state_with_level("MAP01"),
+            make_walk_exit_level_named("MAP01"),
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+        );
+        game.attach_wad_for_transitions(
+            build_minimal_wad_for_maps(&["MAP01", "MAP02"]),
+            Skill::Medium,
+        );
+        game.gs
+            .mobjslab
+            .get_mut(game.gs.player.handle)
+            .unwrap()
+            .momx = Fixed16_16::from_int(40);
+
+        game.tick(TicInput::default());
+        for _ in 0..350 {
+            game.tick(TicInput::default());
+        }
+
+        assert_eq!(
+            game.gs.level_name, "MAP02",
+            "after finishing MAP01 and waiting through intermission, the next level should load"
+        );
     }
 
     // ===================================================================

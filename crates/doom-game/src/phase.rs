@@ -13,46 +13,67 @@ use crate::state::{ExitRequest, GameState};
 // MapId
 // ---------------------------------------------------------------------------
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MapFormat {
+    Doom1,
+    Doom2,
+}
+
 /// Identifies a specific map in Doom 1 (episode+map) or Doom 2 (map only).
 ///
 /// For Doom 1: `episode` is 1-3, `map` is 1-9.
-/// For Doom 2: `episode` is 1 (unused), `map` is 1-32.
+/// For Doom 2: `episode` remains `1` for demo/header compatibility, `map` is
+/// 1-32, and `format` disambiguates `MAP01` from `E1M1`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MapId {
     /// Episode number (1-3 for Doom 1, 1 for Doom 2).
     pub episode: u8,
     /// Map number within the episode (1-9 for Doom 1, 1-32 for Doom 2).
     pub map: u8,
+    format: MapFormat,
 }
 
 impl MapId {
     /// Create a new MapId.
     pub fn new(episode: u8, map: u8) -> Self {
-        Self { episode, map }
+        Self {
+            episode,
+            map,
+            format: MapFormat::Doom1,
+        }
     }
 
     /// Create a Doom 2 MapId (episode is always 1).
     pub fn doom2(map: u8) -> Self {
-        Self { episode: 1, map }
+        Self {
+            episode: 1,
+            map,
+            format: MapFormat::Doom2,
+        }
     }
 
-    /// Returns `true` if this looks like a Doom 2 map (episode == 1, map > 9).
+    /// Parse a canonical map name such as `E1M1` or `MAP01`.
+    pub fn from_name(level_name: &str) -> Option<Self> {
+        let upper = level_name.trim().to_ascii_uppercase();
+        if let Some(rest) = upper.strip_prefix('E') {
+            if let Some(mid) = rest.find('M') {
+                let episode = rest[..mid].parse::<u8>().ok()?;
+                let map = rest[mid + 1..].parse::<u8>().ok()?;
+                return Some(Self::new(episode, map));
+            }
+        }
+
+        if let Some(rest) = upper.strip_prefix("MAP") {
+            let map = rest.parse::<u8>().ok()?;
+            return Some(Self::doom2(map));
+        }
+
+        None
+    }
+
+    /// Returns `true` if this is a Doom 2 map.
     pub fn is_doom2(&self) -> bool {
-        self.episode == 1 && self.map > 9
-    }
-
-    /// Returns `true` if this looks like a Doom 2 map based on range.
-    ///
-    /// Doom 2 uses episode=1, map 1-32 — but maps 1-9 overlap with E1M1-E1M9.
-    /// We use a heuristic: if `map > 9`, it is definitely Doom 2.
-    /// For maps 1-9 with episode=1, the caller must know the game mode.
-    /// This method returns true for all episode=1 maps >= 10.
-    fn is_doom2_progression(&self) -> bool {
-        // Maps 10+ are unambiguously Doom 2.
-        // For maps 1-9, we treat episode != 1 as Doom 1,
-        // and episode == 1 map <= 9 as Doom 1 E1 by default.
-        // The `next_map_doom2` method can be called explicitly for Doom 2.
-        self.map >= 10
+        matches!(self.format, MapFormat::Doom2)
     }
 
     /// Compute the next map after this one.
@@ -76,8 +97,7 @@ impl MapId {
     /// - MAP32 normal -> MAP16
     /// - MAP30 -> None (game end)
     pub fn next_map(&self, secret_exit: bool) -> Option<MapId> {
-        // Doom 2 maps (unambiguous: map >= 10, or secret maps 31/32)
-        if self.is_doom2_progression() || self.map >= 10 {
+        if self.is_doom2() {
             return self.next_map_doom2(secret_exit);
         }
 
@@ -156,7 +176,7 @@ impl MapId {
 
     /// Returns `true` if this is the final map of the episode (Doom 1) or game (Doom 2).
     pub fn is_final_map(&self) -> bool {
-        if self.is_doom2_progression() {
+        if self.is_doom2() {
             return self.map == 30;
         }
         // Doom 1: ExM8 ends the episode
@@ -172,7 +192,7 @@ impl MapId {
 
     /// Return the canonical map name string (e.g., "E1M1" or "MAP01").
     pub fn map_name(&self) -> String {
-        if self.is_doom2_progression() {
+        if self.is_doom2() {
             format!("MAP{:02}", self.map)
         } else {
             format!("E{}M{}", self.episode, self.map)
@@ -567,8 +587,8 @@ mod tests {
 
     #[test]
     fn next_map_map01_normal() {
-        let id = MapId::doom2(10);
-        assert_eq!(id.next_map(false), Some(MapId::doom2(11)));
+        let id = MapId::doom2(1);
+        assert_eq!(id.next_map(false), Some(MapId::doom2(2)));
     }
 
     #[test]
@@ -710,9 +730,7 @@ mod tests {
 
     #[test]
     fn map_name_map01() {
-        // MAP01 with episode=1, map=1 is Doom 1 E1M1 format
-        // since map < 10 it uses ExMy format
-        assert_eq!(MapId::new(1, 1).map_name(), "E1M1");
+        assert_eq!(MapId::doom2(1).map_name(), "MAP01");
     }
 
     #[test]
@@ -1032,6 +1050,22 @@ mod tests {
     }
 
     #[test]
+    fn doom2_map01_normal_exit_goes_to_map02() {
+        let mut ctrl = GamePhaseController::new(MapId::doom2(1));
+        let mut gs = make_test_game_state("MAP01");
+        gs.exit_request = Some(ExitRequest::Normal);
+
+        ctrl.tick(&mut gs);
+
+        match ctrl.phase() {
+            GamePhase::Intermission { next_map, .. } => {
+                assert_eq!(*next_map, MapId::doom2(2));
+            }
+            _ => panic!("expected Intermission"),
+        }
+    }
+
+    #[test]
     fn phase_tic_resets_on_transition() {
         let mut ctrl = GamePhaseController::new(MapId::new(1, 1));
         let mut gs = make_test_game_state("E1M1");
@@ -1132,6 +1166,7 @@ mod tests {
         assert_eq!(MapId::new(1, 1), MapId::new(1, 1));
         assert_ne!(MapId::new(1, 1), MapId::new(1, 2));
         assert_ne!(MapId::new(1, 1), MapId::new(2, 1));
+        assert_ne!(MapId::new(1, 1), MapId::doom2(1));
     }
 
     #[test]
@@ -1152,5 +1187,12 @@ mod tests {
         // MAP32 doesn't have a further secret — secret_exit is ignored
         let id = MapId::doom2(32);
         assert_eq!(id.next_map(true), Some(MapId::doom2(16)));
+    }
+
+    #[test]
+    fn parse_map_name_distinguishes_doom1_from_doom2() {
+        assert_eq!(MapId::from_name("E1M1"), Some(MapId::new(1, 1)));
+        assert_eq!(MapId::from_name("MAP01"), Some(MapId::doom2(1)));
+        assert_eq!(MapId::from_name("map09"), Some(MapId::doom2(9)));
     }
 }
