@@ -647,8 +647,17 @@ pub fn render_level_with_view_height(
 
                 // Narrow the wall drawing window for farther geometry to this
                 // portal opening so solid walls behind do not leak outside it.
+                let lower_top = screen_back_floor.max(w_top);
+                let has_lower = lower_top < w_bot;
+                let has_portal_opening = screen_back_ceil < screen_back_floor;
                 let portal_top = screen_back_ceil.clamp(0, SCREEN_H as i32 - 1);
-                let portal_bot = screen_back_floor.clamp(0, SCREEN_H as i32 - 1);
+                let portal_bot = if !has_portal_opening {
+                    (screen_back_floor - 1).clamp(-1, SCREEN_H as i32 - 1)
+                } else if has_lower {
+                    (screen_back_floor - 1).clamp(-1, SCREEN_H as i32 - 1)
+                } else {
+                    screen_back_floor.clamp(-1, SCREEN_H as i32 - 1)
+                };
                 if portal_top <= portal_bot {
                     if portal_top > wall_clip_top[x] {
                         wall_clip_top[x] = portal_top;
@@ -727,13 +736,18 @@ pub fn render_level_with_view_height(
                         }
                     }
                     // Advance trackers past the wall / upper-lower bands.
-                    if has_upper {
+                    if !has_portal_opening {
+                        open_top[x] = SCREEN_H as i32;
+                        open_bot[x] = -1;
+                    } else if has_upper {
                         open_top[x] = open_top[x].max(upper_bot);
                     } else {
                         open_top[x] = open_top[x].max(w_top);
                     }
-                    if has_lower {
-                        open_bot[x] = open_bot[x].min(lower_top);
+                    if !has_portal_opening {
+                        // Closed door / degenerate portal already sealed the column.
+                    } else if has_lower {
+                        open_bot[x] = open_bot[x].min(lower_top - 1);
                     } else {
                         open_bot[x] = open_bot[x].min(w_bot);
                     }
@@ -748,7 +762,11 @@ pub fn render_level_with_view_height(
                 // Skip upper texture if both front and back are sky (sky-to-sky portal).
                 let skip_upper_for_sky = front_is_sky && back_is_sky;
                 let upper_draw_top = w_top.max(clip_top);
-                let upper_draw_bot = (upper_bot - 1).min(clip_bot);
+                let upper_draw_bot = if has_portal_opening {
+                    (upper_bot - 1).min(clip_bot)
+                } else {
+                    w_bot.min(clip_bot)
+                };
                 if has_upper
                     && upper_draw_top <= upper_draw_bot
                     && !skip_upper_for_sky
@@ -3276,6 +3294,383 @@ mod tests {
         assert!(
             !is_wall_color(px_below),
             "pixel at ({center_x}, {row_below_center}) = {px_below} should NOT be wall-colored (portal opening)"
+        );
+    }
+
+    /// Regression: the front floor visplane must not overwrite the first row of
+    /// a two-sided lower wall band. When it does, doors show a little floor
+    /// patch bleeding through the seam.
+    #[test]
+    fn test_front_floor_does_not_leak_into_two_sided_lower_wall() {
+        use doom_types::ANG90;
+        use doom_types::limits::FLAT_SIZE;
+
+        init_trig();
+
+        let flat1 = vec![180u8; FLAT_SIZE];
+        let flat2 = vec![20u8; FLAT_SIZE];
+        let flat3 = vec![40u8; FLAT_SIZE];
+        let flat4 = vec![60u8; FLAT_SIZE];
+        let lumps: Vec<(&str, &[u8])> = vec![
+            ("F_START", b""),
+            ("FLAT1", &flat1),
+            ("FLAT2", &flat2),
+            ("FLAT3", &flat3),
+            ("FLAT4", &flat4),
+            ("F_END", b""),
+        ];
+        let wad_bytes = make_iwad(&lumps);
+        let wad = WadFile::parse(wad_bytes).expect("parse WAD");
+        let flat_cache = FlatCache::load(&wad);
+
+        let level = make_two_sided_level(0, 128, 56, 96);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        render_level(
+            &level,
+            0,
+            0,
+            ANG90,
+            &mut fb,
+            &palette,
+            Some(&flat_cache),
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let center_x = HALF_W as usize;
+        let lower_wall_top = project_wall_y(56 - PLAYER_HEIGHT, FOCAL_LEN as f32 / 128.0) as usize;
+        let px = fb
+            .get_pixel(center_x, lower_wall_top)
+            .expect("pixel inside lower wall band");
+
+        assert!(
+            (32..64).contains(&px),
+            "lower wall seam at row {lower_wall_top} should stay wall-colored, got {px}"
+        );
+    }
+
+    /// Regression: at oblique angles, the lower wall band of a two-sided door
+    /// must remain wall-colored across the visible span. The back sector floor
+    /// must not bleed into the band through the portal.
+    #[test]
+    fn test_oblique_two_sided_lower_wall_does_not_show_back_floor() {
+        use doom_types::ANG90;
+        use doom_types::limits::FLAT_SIZE;
+
+        init_trig();
+
+        let flat1 = vec![180u8; FLAT_SIZE];
+        let flat2 = vec![20u8; FLAT_SIZE];
+        let flat3 = vec![200u8; FLAT_SIZE];
+        let flat4 = vec![220u8; FLAT_SIZE];
+        let lumps: Vec<(&str, &[u8])> = vec![
+            ("F_START", b""),
+            ("FLAT1", &flat1),
+            ("FLAT2", &flat2),
+            ("FLAT3", &flat3),
+            ("FLAT4", &flat4),
+            ("F_END", b""),
+        ];
+        let wad_bytes = make_iwad(&lumps);
+        let wad = WadFile::parse(wad_bytes).expect("parse WAD");
+        let flat_cache = FlatCache::load(&wad);
+
+        let level = make_two_sided_level_with_vertices((-96, 160), (64, 256), 0, 128, 56, 96);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+        let out = render_level(
+            &level,
+            0,
+            0,
+            ANG90,
+            &mut fb,
+            &palette,
+            Some(&flat_cache),
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let v1 = &level.vertexes[0];
+        let v2 = &level.vertexes[1];
+        let angle = ANG90;
+        let cos_a = angle.cos();
+        let sin_a = angle.sin();
+        let cos_i = cos_a.0 as i64;
+        let sin_i = sin_a.0 as i64;
+
+        let dx1 = v1.x as i64;
+        let dy1 = v1.y as i64;
+        let dx2 = v2.x as i64;
+        let dy2 = v2.y as i64;
+        let vx1 = (dx1 * cos_i + dy1 * sin_i) >> 16;
+        let vy1 = (dx1 * sin_i - dy1 * cos_i) >> 16;
+        let vx2 = (dx2 * cos_i + dy2 * sin_i) >> 16;
+        let vy2 = (dx2 * sin_i - dy2 * cos_i) >> 16;
+        let (vx1, vy1, vx2, vy2) =
+            crate::clip::clip_seg_to_view_frustum(vx1, vy1, vx2, vy2).expect("wall visible");
+
+        let sx1 = HALF_W as i64 + (FOCAL_LEN as i64 * vy1) / vx1.max(1);
+        let sx2 = HALF_W as i64 + (FOCAL_LEN as i64 * vy2) / vx2.max(1);
+        let (sx_left, sx_right) = if sx1 <= sx2 { (sx1, sx2) } else { (sx2, sx1) };
+        let col_start = sx_left.max(0).min((SCREEN_W - 1) as i64) as usize;
+        let col_end = sx_right.max(0).min((SCREEN_W - 1) as i64) as usize;
+        assert!(col_end > col_start + 8, "need a visible oblique span");
+
+        let mut leaked = Vec::new();
+        for x in col_start + 2..col_end.saturating_sub(2) {
+            let lower_row = out.clip_bot[x] + 1;
+            if !(0..SCREEN_H as i32).contains(&lower_row) {
+                continue;
+            }
+            let px = fb
+                .get_pixel(x, lower_row as usize)
+                .expect("pixel inside framebuffer");
+            if !(32..64).contains(&px) {
+                leaked.push((x, lower_row as usize, px));
+            }
+        }
+
+        assert!(
+            leaked.is_empty(),
+            "lower wall band leaked non-wall pixels across oblique span: {leaked:?}"
+        );
+    }
+
+    #[test]
+    fn test_oblique_two_sided_lower_wall_band_stays_wall_colored() {
+        use doom_types::ANG90;
+        use doom_types::limits::FLAT_SIZE;
+
+        init_trig();
+
+        let flat1 = vec![180u8; FLAT_SIZE];
+        let flat2 = vec![20u8; FLAT_SIZE];
+        let flat3 = vec![200u8; FLAT_SIZE];
+        let flat4 = vec![220u8; FLAT_SIZE];
+        let lumps: Vec<(&str, &[u8])> = vec![
+            ("F_START", b""),
+            ("FLAT1", &flat1),
+            ("FLAT2", &flat2),
+            ("FLAT3", &flat3),
+            ("FLAT4", &flat4),
+            ("F_END", b""),
+        ];
+        let wad_bytes = make_iwad(&lumps);
+        let wad = WadFile::parse(wad_bytes).expect("parse WAD");
+        let flat_cache = FlatCache::load(&wad);
+
+        let level = make_two_sided_level_with_vertices((-96, 160), (64, 256), 0, 128, 56, 96);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        render_level(
+            &level,
+            0,
+            0,
+            ANG90,
+            &mut fb,
+            &palette,
+            Some(&flat_cache),
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let v1 = &level.vertexes[0];
+        let v2 = &level.vertexes[1];
+        let angle = ANG90;
+        let cos_a = angle.cos();
+        let sin_a = angle.sin();
+        let cos_i = cos_a.0 as i64;
+        let sin_i = sin_a.0 as i64;
+        let dx1 = v1.x as i64;
+        let dy1 = v1.y as i64;
+        let dx2 = v2.x as i64;
+        let dy2 = v2.y as i64;
+        let vx1 = (dx1 * cos_i + dy1 * sin_i) >> 16;
+        let vy1 = (dx1 * sin_i - dy1 * cos_i) >> 16;
+        let vx2 = (dx2 * cos_i + dy2 * sin_i) >> 16;
+        let vy2 = (dx2 * sin_i - dy2 * cos_i) >> 16;
+        let (vx1, vy1, vx2, vy2) =
+            crate::clip::clip_seg_to_view_frustum(vx1, vy1, vx2, vy2).expect("wall visible");
+
+        let sx1 = HALF_W as i64 + (FOCAL_LEN as i64 * vy1) / vx1.max(1);
+        let sx2 = HALF_W as i64 + (FOCAL_LEN as i64 * vy2) / vx2.max(1);
+        let (sx_left, sx_right) = if sx1 <= sx2 { (sx1, sx2) } else { (sx2, sx1) };
+        let col_start = sx_left.max(0).min((SCREEN_W - 1) as i64) as usize;
+        let col_end = sx_right.max(0).min((SCREEN_W - 1) as i64) as usize;
+        assert!(col_end > col_start + 8, "need a visible oblique span");
+
+        let view_left = (vx1 as f32, vy1 as f32);
+        let view_right = (vx2 as f32, vy2 as f32);
+        let mut leaked = Vec::new();
+        for x in col_start + 2..col_end.saturating_sub(2) {
+            let Some(depth) = exact_view_depth_for_screen_x(x, view_left, view_right) else {
+                continue;
+            };
+            let scale = FOCAL_LEN as f32 / depth;
+            let lower_top = project_wall_y(56 - PLAYER_HEIGHT, scale).clamp(0, SCREEN_H as i32 - 1);
+            let lower_bot = project_wall_y(0 - PLAYER_HEIGHT, scale).clamp(0, SCREEN_H as i32 - 1);
+            if lower_top > lower_bot {
+                continue;
+            }
+            for y in lower_top as usize..=lower_bot as usize {
+                let px = fb.get_pixel(x, y).expect("pixel inside framebuffer");
+                if !(32..64).contains(&px) {
+                    leaked.push((x, y, px));
+                    break;
+                }
+            }
+        }
+
+        assert!(
+            leaked.is_empty(),
+            "lower wall band contained non-wall pixels across oblique span: {leaked:?}"
+        );
+    }
+
+    #[test]
+    fn test_far_portal_flats_do_not_repaint_near_wall_pixels_at_oblique_view() {
+        use doom_types::ANG90;
+        use doom_types::limits::FLAT_SIZE;
+
+        init_trig();
+
+        let flat1 = vec![10u8; FLAT_SIZE];
+        let flat2 = vec![20u8; FLAT_SIZE];
+        let flat3 = vec![210u8; FLAT_SIZE];
+        let flat4 = vec![220u8; FLAT_SIZE];
+        let lumps: Vec<(&str, &[u8])> = vec![
+            ("F_START", b""),
+            ("FLAT1", &flat1),
+            ("FLAT2", &flat2),
+            ("FLAT3", &flat3),
+            ("FLAT4", &flat4),
+            ("F_END", b""),
+        ];
+        let wad_bytes = make_iwad(&lumps);
+        let wad = WadFile::parse(wad_bytes).expect("parse WAD");
+        let flat_cache = FlatCache::load(&wad);
+        let palette = PaletteLut::grayscale();
+
+        let level = make_occluded_portal_level();
+        let mut full_fb = Framebuffer::new();
+        render_level(
+            &level,
+            48,
+            0,
+            ANG90,
+            &mut full_fb,
+            &palette,
+            Some(&flat_cache),
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let mut near_only = make_minimal_level();
+        near_only.vertexes[0] = doom_map::lumps::Vertex { x: -64, y: 128 };
+        near_only.vertexes[1] = doom_map::lumps::Vertex { x: 64, y: 128 };
+
+        let mut near_fb = Framebuffer::new();
+        render_level(
+            &near_only,
+            48,
+            0,
+            ANG90,
+            &mut near_fb,
+            &palette,
+            Some(&flat_cache),
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let mut leaked = Vec::new();
+        for x in 0..SCREEN_W {
+            for y in 0..SCREEN_H {
+                let near_px = near_fb.get_pixel(x, y).unwrap_or(0);
+                if !(32..64).contains(&near_px) {
+                    continue;
+                }
+                let full_px = full_fb.get_pixel(x, y).unwrap_or(0);
+                if full_px == 210 || full_px == 220 {
+                    leaked.push((x, y, full_px));
+                    if leaked.len() >= 8 {
+                        break;
+                    }
+                }
+            }
+            if leaked.len() >= 8 {
+                break;
+            }
+        }
+
+        assert!(
+            leaked.is_empty(),
+            "far portal flats repainted near wall pixels at oblique view: {leaked:?}"
+        );
+    }
+
+    #[test]
+    fn test_closed_two_sided_door_does_not_leave_floor_slit() {
+        use doom_types::ANG90;
+        use doom_types::limits::FLAT_SIZE;
+
+        init_trig();
+
+        let flat1 = vec![180u8; FLAT_SIZE];
+        let flat2 = vec![20u8; FLAT_SIZE];
+        let flat3 = vec![210u8; FLAT_SIZE];
+        let flat4 = vec![220u8; FLAT_SIZE];
+        let lumps: Vec<(&str, &[u8])> = vec![
+            ("F_START", b""),
+            ("FLAT1", &flat1),
+            ("FLAT2", &flat2),
+            ("FLAT3", &flat3),
+            ("FLAT4", &flat4),
+            ("F_END", b""),
+        ];
+        let wad_bytes = make_iwad(&lumps);
+        let wad = WadFile::parse(wad_bytes).expect("parse WAD");
+        let flat_cache = FlatCache::load(&wad);
+
+        let level = make_two_sided_level(0, 128, 0, 0);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+
+        render_level(
+            &level,
+            0,
+            0,
+            ANG90,
+            &mut fb,
+            &palette,
+            Some(&flat_cache),
+            None,
+            None,
+            None,
+            false,
+        );
+
+        let center_x = HALF_W as usize;
+        let floor_row = project_wall_y(0 - PLAYER_HEIGHT, FOCAL_LEN as f32 / 128.0) as usize;
+        let px = fb
+            .get_pixel(center_x, floor_row)
+            .expect("pixel inside closed door span");
+
+        assert!(
+            (32..64).contains(&px),
+            "closed two-sided door should stay wall-colored at floor row {floor_row}, got {px}"
         );
     }
 
