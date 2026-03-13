@@ -503,7 +503,10 @@ impl DoomGame {
                 SoundRequest::MonsterWake(_, x, y)
                 | SoundRequest::MonsterAttack(_, x, y)
                 | SoundRequest::MonsterDie(_, x, y) => Some((*x, *y)),
-                SoundRequest::PlayerWeaponFire(_) => Some((pl_x, pl_y)),
+                SoundRequest::PlayerWeaponFire(_)
+                | SoundRequest::PlayerSuperShotgunOpen
+                | SoundRequest::PlayerSuperShotgunLoad
+                | SoundRequest::PlayerSuperShotgunClose => Some((pl_x, pl_y)),
                 SoundRequest::PlayerDie
                 | SoundRequest::PlayerUseFail
                 | SoundRequest::PlayerUseLockedDoor(_) => None,

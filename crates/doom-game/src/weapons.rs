@@ -420,6 +420,36 @@ fn a_gun_flash(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     start_weapon_flash(gs, cmd, level);
 }
 
+fn a_refire(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    let attack_held = cmd.buttons & bt::BT_ATTACK != 0;
+    if attack_held && gs.player.pending_weapon.is_none() && !gs.player.is_dead() {
+        gs.player.refire = gs.player.refire.saturating_add(1);
+        let info = weapon_psprite_info(gs.player.weapon);
+        set_psprite_state(gs, psprite_slots::WEAPON, info.attack, cmd, level);
+        return;
+    }
+
+    gs.player.refire = 0;
+    let _ = check_ammo(gs, cmd, level);
+}
+
+fn a_check_reload(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    let _ = check_ammo(gs, cmd, level);
+}
+
+fn a_open_shotgun2(gs: &mut GameState) {
+    gs.sound_queue.push(SoundRequest::PlayerSuperShotgunOpen);
+}
+
+fn a_load_shotgun2(gs: &mut GameState) {
+    gs.sound_queue.push(SoundRequest::PlayerSuperShotgunLoad);
+}
+
+fn a_close_shotgun2(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    gs.sound_queue.push(SoundRequest::PlayerSuperShotgunClose);
+    a_refire(gs, cmd, level);
+}
+
 fn a_punch(gs: &mut GameState, _cmd: TicCmd, level: Option<&Level>) {
     let _ = crate::weapon_fire::p_fire_fist(gs, level);
     queue_weapon_sound_and_noise(gs, WeaponType::Fist, level);
@@ -512,6 +542,11 @@ fn dispatch_psprite_action(gs: &mut GameState, action: u8, cmd: TicCmd, level: O
         crate::actions::ACTION_BFG_SOUND => a_bfg_sound(gs, cmd, level),
         crate::actions::ACTION_FIRE_BFG => a_fire_bfg(gs, cmd, level),
         crate::actions::ACTION_SAW => a_saw(gs, cmd, level),
+        crate::actions::ACTION_REFIRE => a_refire(gs, cmd, level),
+        crate::actions::ACTION_CHECK_RELOAD => a_check_reload(gs, cmd, level),
+        crate::actions::ACTION_OPEN_SHOTGUN2 => a_open_shotgun2(gs),
+        crate::actions::ACTION_LOAD_SHOTGUN2 => a_load_shotgun2(gs),
+        crate::actions::ACTION_CLOSE_SHOTGUN2 => a_close_shotgun2(gs, cmd, level),
         _ => {}
     }
 }
@@ -1038,6 +1073,35 @@ mod tests {
     }
 
     #[test]
+    fn held_plasma_fires_a_second_shot_six_tics_later() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::PlasmaRifle;
+        gs.player.weapons[WeaponType::PlasmaRifle as usize] = true;
+        gs.player.give_ammo(AmmoType::Cells as usize, 50);
+        ready_player_psprites(&mut gs);
+
+        let cells_before = gs.player.ammo(AmmoType::Cells as usize);
+        let plasma_before = count_mobjs_of_kind(&gs, MobjKind::PlasmaBall);
+        let attack = cmd_with_buttons(bt::BT_ATTACK);
+
+        tick_psprites(&mut gs, attack, None);
+        for _ in 0..6 {
+            tick_psprites(&mut gs, attack, None);
+        }
+
+        assert_eq!(
+            gs.player.ammo(AmmoType::Cells as usize),
+            cells_before - 2,
+            "held plasma should fire its second burst shot before returning to ready"
+        );
+        assert_eq!(
+            count_mobjs_of_kind(&gs, MobjKind::PlasmaBall),
+            plasma_before + 2,
+            "held plasma should spawn a second plasma ball during the second firing state"
+        );
+    }
+
+    #[test]
     fn chaingun_attack_cycle_fires_a_second_shot_before_returning_ready() {
         let mut gs = make_game_state();
         gs.player.weapon = WeaponType::Chaingun;
@@ -1112,6 +1176,69 @@ mod tests {
             count_mobjs_of_kind(&gs, MobjKind::BfgBall),
             bfg_before + 1,
             "the BFG projectile should spawn when the fire state begins"
+        );
+    }
+
+    #[test]
+    fn super_shotgun_reload_sequence_queues_open_load_and_close_sounds() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::SuperShotgun;
+        gs.player.weapons[WeaponType::SuperShotgun as usize] = true;
+        gs.player.give_ammo(AmmoType::Shells as usize, 4);
+        ready_player_psprites(&mut gs);
+
+        tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+        gs.sound_queue.clear();
+
+        for _ in 0..17 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+        assert!(
+            gs.sound_queue.is_empty(),
+            "the super shotgun should not play reload sounds before the reload sequence starts"
+        );
+
+        for _ in 0..7 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+        assert_eq!(gs.sound_queue, vec![SoundRequest::PlayerSuperShotgunOpen]);
+        gs.sound_queue.clear();
+
+        for _ in 0..6 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+        assert_eq!(gs.sound_queue, vec![SoundRequest::PlayerSuperShotgunLoad]);
+        gs.sound_queue.clear();
+
+        for _ in 0..6 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+        assert_eq!(gs.sound_queue, vec![SoundRequest::PlayerSuperShotgunClose]);
+    }
+
+    #[test]
+    fn super_shotgun_empty_after_firing_lowers_at_reload_check() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::SuperShotgun;
+        gs.player.weapons[WeaponType::SuperShotgun as usize] = true;
+        gs.player.give_ammo(AmmoType::Shells as usize, 2);
+        ready_player_psprites(&mut gs);
+
+        tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+
+        for _ in 0..17 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            StateNum(ids::S_DSGUN_DOWN),
+            "the super shotgun should begin lowering as soon as its reload check sees no shells left"
+        );
+        assert_eq!(
+            gs.player.pending_weapon,
+            Some(WeaponType::Pistol),
+            "running the super shotgun dry should stage the next usable weapon"
         );
     }
 }

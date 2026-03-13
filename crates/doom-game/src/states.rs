@@ -49,6 +49,11 @@ const FIRE_PLASMA: u8 = 43;
 const BFG_SOUND: u8 = 44;
 const FIRE_BFG: u8 = 45;
 const SAW: u8 = 46;
+const REFIRE: u8 = 47;
+const CHECK_RELOAD: u8 = 48;
+const OPEN_SHOTGUN2: u8 = 49;
+const LOAD_SHOTGUN2: u8 = 50;
+const CLOSE_SHOTGUN2: u8 = 51;
 
 /// Fullbright bit for frame field.
 const FB: u8 = 0x80;
@@ -601,9 +606,19 @@ pub mod ids {
     pub const S_SARG_RUN4: u16 = 353;
     pub const S_PLASMA_FLASH1: u16 = 354;
     pub const S_PLASMA_FLASH2: u16 = 355;
+    pub const S_PUNCH5: u16 = 356;
+    pub const S_SGUN5: u16 = 357;
+    pub const S_CHAIN3: u16 = 358;
+    pub const S_CHAIN_FLASH3: u16 = 359;
+    pub const S_DSGUN8: u16 = 360;
+    pub const S_DSGUN9: u16 = 361;
+    pub const S_DSGUN_FLASH3: u16 = 362;
+    pub const S_PLASMA3: u16 = 363;
+    pub const S_PLASMA4: u16 = 364;
+    pub const S_PLASMA5: u16 = 365;
 
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 356;
+    pub const STATES_COUNT: usize = 366;
 }
 
 // ---------------------------------------------------------------------------
@@ -938,14 +953,14 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_PUNG, 1, 4, PUNCH, ids::S_PUNCH2),   // 238: fire1
     st!(SPR_PUNG, 2, 4, NONE, ids::S_PUNCH3),    // 239: fire2
     st!(SPR_PUNG, 3, 5, NONE, ids::S_PUNCH4),    // 240: fire3
-    st!(SPR_PUNG, 2, 4, NONE, ids::S_PUNCH_READY), // 241: fire4
+    st!(SPR_PUNG, 2, 4, NONE, ids::S_PUNCH5),    // 241: fire4
     // --- Pistol (PISG) 242..249 ---
     st!(SPR_PISG, 0, 1, RAISE, ids::S_PISTOL_UP), // 242: up
     st!(SPR_PISG, 0, 1, LOWER, ids::S_PISTOL_DOWN), // 243: down
     st!(SPR_PISG, 0, 1, WEAPON_READY, ids::S_PISTOL_READY), // 244: ready
     st!(SPR_PISG, 1, 4, FIRE_PISTOL, ids::S_PISTOL2), // 245: fire1
     st!(SPR_PISG, 2, 6, NONE, ids::S_PISTOL3),    // 246: fire2
-    st!(SPR_PISG, 1, 4, NONE, ids::S_PISTOL_READY), // 247: fire3
+    st!(SPR_PISG, 1, 4, REFIRE, ids::S_PISTOL_READY), // 247: fire3
     st!(SPR_PISG, 3 | FB, 7, NONE, ids::S_PISTOL_FLASH2), // 248: flash1
     st!(SPR_PISG, 4 | FB, 7, NONE, ids::S_NULL),  // 249: flash2
     // --- Shotgun (SHTG) 250..258 ---
@@ -955,7 +970,7 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SHTG, 1, 3, FIRE_SHOTGUN, ids::S_SGUN2), // 253: fire1
     st!(SPR_SHTG, 2, 7, NONE, ids::S_SGUN3),    // 254: fire2
     st!(SPR_SHTG, 3, 5, NONE, ids::S_SGUN4),    // 255: fire3
-    st!(SPR_SHTG, 2, 5, NONE, ids::S_SGUN_READY), // 256: fire4
+    st!(SPR_SHTG, 2, 5, REFIRE, ids::S_SGUN5),  // 256: fire4
     st!(SPR_SHTG, 4 | FB, 4, NONE, ids::S_SGUN_FLASH2), // 257: flash1
     st!(SPR_SHTG, 5 | FB, 3, NONE, ids::S_NULL), // 258: flash2
     // --- SSG (SHT2) 259..270 ---
@@ -964,21 +979,21 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SHT2, 0, 1, WEAPON_READY, ids::S_DSGUN_READY), // 261: ready
     st!(SPR_SHT2, 1, 3, FIRE_SHOTGUN2, ids::S_DSGUN2), // 262: fire1
     st!(SPR_SHT2, 2, 7, NONE, ids::S_DSGUN3),    // 263: fire2
-    st!(SPR_SHT2, 3, 5, NONE, ids::S_DSGUN4),    // 264: fire3
-    st!(SPR_SHT2, 4, 5, NONE, ids::S_DSGUN5),    // 265: fire4
-    st!(SPR_SHT2, 5, 7, NONE, ids::S_DSGUN6),    // 266: fire5
-    st!(SPR_SHT2, 6, 7, NONE, ids::S_DSGUN7),    // 267: fire6
-    st!(SPR_SHT2, 7, 7, NONE, ids::S_DSGUN_READY), // 268: fire7
+    st!(SPR_SHT2, 3, 7, NONE, ids::S_DSGUN4),    // 264: fire3
+    st!(SPR_SHT2, 4, 7, CHECK_RELOAD, ids::S_DSGUN5), // 265: fire4
+    st!(SPR_SHT2, 5, 6, OPEN_SHOTGUN2, ids::S_DSGUN6), // 266: fire5
+    st!(SPR_SHT2, 6, 6, LOAD_SHOTGUN2, ids::S_DSGUN7), // 267: fire6
+    st!(SPR_SHT2, 7, 5, CLOSE_SHOTGUN2, ids::S_DSGUN9), // 268: fire7
     st!(SPR_SHT2, 1 | FB, 5, NONE, ids::S_DSGUN_FLASH2), // 269: flash1
-    st!(SPR_SHT2, 2 | FB, 4, NONE, ids::S_NULL), // 270: flash2
+    st!(SPR_SHT2, 2 | FB, 4, NONE, ids::S_DSGUN_FLASH3), // 270: flash2
     // --- Chaingun (CHGG) 271..277 ---
     st!(SPR_CHGG, 0, 1, RAISE, ids::S_CHAIN_UP), // 271: up
     st!(SPR_CHGG, 0, 1, LOWER, ids::S_CHAIN_DOWN), // 272: down
     st!(SPR_CHGG, 0, 1, WEAPON_READY, ids::S_CHAIN_READY), // 273: ready
     st!(SPR_CHGG, 0, 4, FIRE_CGUN, ids::S_CHAIN2), // 274: fire1
-    st!(SPR_CHGG, 1, 4, FIRE_CGUN, ids::S_CHAIN_READY), // 275: fire2
+    st!(SPR_CHGG, 1, 4, FIRE_CGUN, ids::S_CHAIN3), // 275: fire2
     st!(SPR_CHGG, 1 | FB, 5, NONE, ids::S_CHAIN_FLASH2), // 276: flash1
-    st!(SPR_CHGG, 2 | FB, 5, NONE, ids::S_NULL), // 277: flash2
+    st!(SPR_CHGG, 2 | FB, 5, NONE, ids::S_CHAIN_FLASH3), // 277: flash2
     // --- Rocket launcher (ROCK) 278..285 ---
     st!(SPR_ROCK, 0, 1, RAISE, ids::S_MISSILE_UP), // 278: up
     st!(SPR_ROCK, 0, 1, LOWER, ids::S_MISSILE_DOWN), // 279: down
@@ -993,7 +1008,7 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_PLSG, 0, 1, LOWER, ids::S_PLASMA_DOWN), // 287: down
     st!(SPR_PLSG, 0, 1, WEAPON_READY, ids::S_PLASMA_READY), // 288: ready
     st!(SPR_PLSG, 0, 3, FIRE_PLASMA, ids::S_PLASMA2), // 289: fire1
-    st!(SPR_PLSG, 1, 20, NONE, ids::S_PLASMA_READY), // 290: fire2
+    st!(SPR_PLSG, 1, 3, NONE, ids::S_PLASMA3),    // 290: fire2
     // --- BFG (BFGG) 291..297 ---
     st!(SPR_BFGG, 0, 1, RAISE, ids::S_BFG_UP),   // 291: up
     st!(SPR_BFGG, 0, 1, LOWER, ids::S_BFG_DOWN), // 292: down
@@ -1005,11 +1020,11 @@ pub static STATES: &[MobjStateEntry] = &[
     // --- Chainsaw (SAWG) 298..304 ---
     st!(SPR_SAWG, 0, 1, RAISE, ids::S_SAW_UP),   // 298: up
     st!(SPR_SAWG, 0, 1, LOWER, ids::S_SAW_DOWN), // 299: down
-    st!(SPR_SAWG, 0, 4, WEAPON_READY, ids::S_SAW_READY2), // 300: ready1
-    st!(SPR_SAWG, 1, 4, WEAPON_READY, ids::S_SAW_READY1), // 301: ready2
+    st!(SPR_SAWG, 0, 1, WEAPON_READY, ids::S_SAW_READY2), // 300: ready1
+    st!(SPR_SAWG, 1, 1, WEAPON_READY, ids::S_SAW_READY1), // 301: ready2
     st!(SPR_SAWG, 0, 4, SAW, ids::S_SAW2),       // 302: fire1
     st!(SPR_SAWG, 1, 4, SAW, ids::S_SAW3),       // 303: fire2
-    st!(SPR_SAWG, 1, 0, NONE, ids::S_SAW_READY1), // 304: fire3
+    st!(SPR_SAWG, 1, 0, REFIRE, ids::S_SAW_READY1), // 304: fire3
     // ===================================================================
     // Fire column states (305..308) — Arch-Vile fire effect
     // ===================================================================
@@ -1082,8 +1097,21 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SARG, 1, 10, LOOK, ids::S_SARG_STND), // 351: idle B
     st!(SPR_SARG, 2, 4, CHASE, ids::S_SARG_RUN4), // 352: run3 (C)
     st!(SPR_SARG, 3, 4, CHASE, ids::S_SARG_RUN1), // 353: run4 (D)
-    st!(SPR_PLAS, 0 | FB, 4, NONE, ids::S_NULL),  // 354: plasma flash1
-    st!(SPR_PLAS, 1 | FB, 4, NONE, ids::S_NULL),  // 355: plasma flash2
+    st!(SPR_PLAS, 0 | FB, 4, NONE, ids::S_PLASMA_FLASH2), // 354: plasma flash1
+    st!(SPR_PLAS, 1 | FB, 4, NONE, ids::S_NULL),          // 355: plasma flash2
+    // ===================================================================
+    // Additional psprite parity states (356..365)
+    // ===================================================================
+    st!(SPR_PUNG, 0, 5, REFIRE, ids::S_PUNCH_READY), // 356: punch5
+    st!(SPR_SHTG, 0, 1, WEAPON_READY, ids::S_SGUN_READY), // 357: sgun5
+    st!(SPR_CHGG, 0, 0, REFIRE, ids::S_CHAIN_READY), // 358: chain3
+    st!(SPR_CHGG, 0 | FB, 4, NONE, ids::S_NULL),     // 359: chain flash3
+    st!(SPR_SHT2, 0, 5, REFIRE, ids::S_DSGUN9),      // 360: dsgun8
+    st!(SPR_SHT2, 0, 1, WEAPON_READY, ids::S_DSGUN_READY), // 361: dsgun9
+    st!(SPR_SHT2, 3 | FB, 5, NONE, ids::S_NULL),     // 362: dsgun flash3
+    st!(SPR_PLSG, 0, 3, FIRE_PLASMA, ids::S_PLASMA4), // 363: plasma3
+    st!(SPR_PLSG, 1, 3, NONE, ids::S_PLASMA5),       // 364: plasma4
+    st!(SPR_PLSG, 0, 0, REFIRE, ids::S_PLASMA_READY), // 365: plasma5
 ];
 
 // ---------------------------------------------------------------------------
@@ -1623,7 +1651,11 @@ mod tests {
     #[test]
     fn fist_fire_returns_to_ready() {
         let last = &STATES[ids::S_PUNCH4 as usize];
-        assert_eq!(last.next_state, StateNum(ids::S_PUNCH_READY));
+        assert_eq!(last.next_state, StateNum(ids::S_PUNCH5));
+        assert_eq!(
+            STATES[ids::S_PUNCH5 as usize].next_state,
+            StateNum(ids::S_PUNCH_READY)
+        );
     }
 
     #[test]
@@ -1671,6 +1703,10 @@ mod tests {
             actions::ACTION_FIRE_CGUN
         );
         assert_eq!(
+            STATES[ids::S_CHAIN3 as usize].action,
+            actions::ACTION_REFIRE
+        );
+        assert_eq!(
             STATES[ids::S_MISSILE1 as usize].action,
             actions::ACTION_GUN_FLASH
         );
@@ -1683,6 +1719,14 @@ mod tests {
             actions::ACTION_FIRE_PLASMA
         );
         assert_eq!(
+            STATES[ids::S_PLASMA3 as usize].action,
+            actions::ACTION_FIRE_PLASMA
+        );
+        assert_eq!(
+            STATES[ids::S_PLASMA5 as usize].action,
+            actions::ACTION_REFIRE
+        );
+        assert_eq!(
             STATES[ids::S_BFG1 as usize].action,
             actions::ACTION_BFG_SOUND
         );
@@ -1690,6 +1734,66 @@ mod tests {
             STATES[ids::S_BFG2 as usize].action,
             actions::ACTION_FIRE_BFG
         );
+        assert_eq!(
+            STATES[ids::S_DSGUN4 as usize].action,
+            actions::ACTION_CHECK_RELOAD
+        );
+        assert_eq!(
+            STATES[ids::S_DSGUN5 as usize].action,
+            actions::ACTION_OPEN_SHOTGUN2
+        );
+        assert_eq!(
+            STATES[ids::S_DSGUN6 as usize].action,
+            actions::ACTION_LOAD_SHOTGUN2
+        );
+        assert_eq!(
+            STATES[ids::S_DSGUN7 as usize].action,
+            actions::ACTION_CLOSE_SHOTGUN2
+        );
+        assert_eq!(
+            STATES[ids::S_DSGUN8 as usize].action,
+            actions::ACTION_REFIRE
+        );
+    }
+
+    #[test]
+    fn plasma_and_ssg_attack_chains_match_doom_psprite_shape() {
+        assert_eq!(STATES[ids::S_PLASMA2 as usize].tics, 3);
+        assert_eq!(
+            STATES[ids::S_PLASMA2 as usize].next_state,
+            StateNum(ids::S_PLASMA3)
+        );
+        assert_eq!(
+            STATES[ids::S_PLASMA4 as usize].next_state,
+            StateNum(ids::S_PLASMA5)
+        );
+        assert_eq!(
+            STATES[ids::S_CHAIN2 as usize].next_state,
+            StateNum(ids::S_CHAIN3)
+        );
+        assert_eq!(
+            STATES[ids::S_CHAIN_FLASH2 as usize].next_state,
+            StateNum(ids::S_CHAIN_FLASH3)
+        );
+        assert_eq!(STATES[ids::S_DSGUN4 as usize].tics, 7);
+        assert_eq!(STATES[ids::S_DSGUN5 as usize].tics, 6);
+        assert_eq!(STATES[ids::S_DSGUN6 as usize].tics, 6);
+        assert_eq!(STATES[ids::S_DSGUN7 as usize].tics, 5);
+        assert_eq!(STATES[ids::S_DSGUN8 as usize].tics, 5);
+        assert_eq!(
+            STATES[ids::S_DSGUN_FLASH2 as usize].next_state,
+            StateNum(ids::S_DSGUN_FLASH3)
+        );
+        assert_eq!(
+            STATES[ids::S_PUNCH4 as usize].next_state,
+            StateNum(ids::S_PUNCH5)
+        );
+        assert_eq!(
+            STATES[ids::S_PUNCH5 as usize].action,
+            actions::ACTION_REFIRE
+        );
+        assert_eq!(STATES[ids::S_SGUN4 as usize].action, actions::ACTION_REFIRE);
+        assert_eq!(STATES[ids::S_SAW3 as usize].action, actions::ACTION_REFIRE);
     }
 
     // -----------------------------------------------------------------------

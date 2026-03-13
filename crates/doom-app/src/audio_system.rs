@@ -325,6 +325,9 @@ pub fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, 
         doom_game::SoundRequest::PlayerWeaponFire(weapon) => {
             Some((weapon_fire_sfx_lump(weapon), SfxPriority::Weapon))
         }
+        doom_game::SoundRequest::PlayerSuperShotgunOpen => Some(("DSDBOPN", SfxPriority::Weapon)),
+        doom_game::SoundRequest::PlayerSuperShotgunLoad => Some(("DSDBLOAD", SfxPriority::Weapon)),
+        doom_game::SoundRequest::PlayerSuperShotgunClose => Some(("DSDBCLS", SfxPriority::Weapon)),
         doom_game::SoundRequest::PlayerDie => Some(("DSPLDETH", SfxPriority::Weapon)),
         doom_game::SoundRequest::PlayerUseFail => Some(("DSNOWAY", SfxPriority::High)),
         doom_game::SoundRequest::PlayerUseLockedDoor(_) => Some(("DSOOF", SfxPriority::High)),
@@ -597,6 +600,22 @@ mod tests {
                 doom_game::WeaponType::Shotgun
             )),
             Some(("DSSHOTGN", doom_audio::SfxPriority::Weapon))
+        );
+    }
+
+    #[test]
+    fn sound_request_sfx_maps_ssg_mechanism_sounds() {
+        assert_eq!(
+            sound_request_sfx(doom_game::SoundRequest::PlayerSuperShotgunOpen),
+            Some(("DSDBOPN", doom_audio::SfxPriority::Weapon))
+        );
+        assert_eq!(
+            sound_request_sfx(doom_game::SoundRequest::PlayerSuperShotgunLoad),
+            Some(("DSDBLOAD", doom_audio::SfxPriority::Weapon))
+        );
+        assert_eq!(
+            sound_request_sfx(doom_game::SoundRequest::PlayerSuperShotgunClose),
+            Some(("DSDBCLS", doom_audio::SfxPriority::Weapon))
         );
     }
 

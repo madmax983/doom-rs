@@ -1123,7 +1123,7 @@ mod tests {
         tick_player(&mut gs, cmd, None);
         assert_eq!(gs.player.ammo(AmmoType::Bullets as usize), 49);
 
-        for _ in 0..13 {
+        for _ in 0..9 {
             tick_player(&mut gs, cmd, None);
         }
         assert_eq!(
@@ -1155,7 +1155,7 @@ mod tests {
         tick_player(&mut gs, cmd, None);
         assert_eq!(gs.player.ammo(AmmoType::Shells as usize), 3);
 
-        for _ in 0..19 {
+        for _ in 0..14 {
             tick_player(&mut gs, cmd, None);
         }
         assert_eq!(

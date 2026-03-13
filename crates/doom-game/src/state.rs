@@ -37,6 +37,12 @@ pub enum SoundRequest {
     MonsterAttack(MobjKind, doom_types::Fixed16_16, doom_types::Fixed16_16),
     /// Player weapon actually fired this tic.
     PlayerWeaponFire(crate::player::WeaponType),
+    /// Super shotgun break-open sound.
+    PlayerSuperShotgunOpen,
+    /// Super shotgun shell-load sound.
+    PlayerSuperShotgunLoad,
+    /// Super shotgun close-and-lock sound.
+    PlayerSuperShotgunClose,
     /// Player died.
     PlayerDie,
     /// Player pressed use into a blocking ordinary wall.

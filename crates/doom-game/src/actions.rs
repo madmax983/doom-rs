@@ -137,6 +137,16 @@ pub const ACTION_BFG_SOUND: u8 = 44;
 pub const ACTION_FIRE_BFG: u8 = 45;
 /// `A_Saw`: chainsaw attack.
 pub const ACTION_SAW: u8 = 46;
+/// `A_ReFire`: continue firing when the attack button remains held.
+pub const ACTION_REFIRE: u8 = 47;
+/// `A_CheckReload`: lower the weapon if it no longer has enough ammo.
+pub const ACTION_CHECK_RELOAD: u8 = 48;
+/// `A_OpenShotgun2`: play the super shotgun open sound.
+pub const ACTION_OPEN_SHOTGUN2: u8 = 49;
+/// `A_LoadShotgun2`: play the super shotgun load sound.
+pub const ACTION_LOAD_SHOTGUN2: u8 = 50;
+/// `A_CloseShotgun2`: play the super shotgun close sound and optionally refire.
+pub const ACTION_CLOSE_SHOTGUN2: u8 = 51;
 
 // ---------------------------------------------------------------------------
 // Public dispatcher
