@@ -387,11 +387,10 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
         }
     }
 
-    // Sector specials: damage floors, etc. (immutable level borrow).
+    // Sector specials: periodic player floor damage, etc. (immutable level borrow).
     if let Some(lv) = level.as_deref() {
-        let handle = gs.player.handle;
-        crate::specials::tick_sector_specials(gs, lv, handle);
-        // Periodic sector damage with RadSuit protection.
+        // Damage floors are handled by the periodic Doom path; the legacy
+        // per-tic helper is kept for isolated tests/compat only.
         crate::specials::tick_sector_damage(gs, lv);
     }
 
@@ -580,21 +579,16 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level>)
         mo.momy = mo.momy.fixed_mul(FRICTION);
         mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
         mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
+    }
 
-        // 6. Update floor height (mo.z) to track the sector the player is now in.
-        // This is critical for stair climbing: the step-height check in p_try_move
-        // compares `open_floor - mo_z` against MAX_STEP_HEIGHT (24 units).
-        // Without this update, mo.z stays at the spawn-point floor and multi-step
-        // stairs become impassable after the first step.
-        if let Some(lv) = level.as_deref() {
-            let fx = mo.x.to_int();
-            let fy = mo.y.to_int();
-            if let Some(floor_h) = lv.floor_at(fx, fy) {
-                mo.z = Fixed16_16::from_int(floor_h as i32);
-            }
-            if let Some(subsector) = lv.subsector_index_at(fx, fy) {
-                mo.subsector = subsector as u32;
-            }
+    if let Some(lv) = level.as_deref()
+        && let Some((support_floor, subsector)) =
+            crate::movement::support_state_at(&gs.mobjslab, handle, final_x, final_y, lv)
+        && let Some(mo) = gs.mobjslab.get_mut(handle)
+    {
+        mo.z = support_floor;
+        if let Some(subsector) = subsector {
+            mo.subsector = subsector as u32;
         }
     }
 
@@ -1672,6 +1666,154 @@ mod tests {
         doom_map::Blockmap::parse_lump(&bm_data).unwrap()
     }
 
+    fn make_partition_step_level(right_floor: i16, left_floor: i16) -> doom_map::Level {
+        use doom_map::{
+            Blockmap, FLAG_TWO_SIDED, Linedef, Node, NodeBBox, Reject, Sector, Seg, Sidedef,
+            Ssector, Vertex, lumps::NODE_SUBSECTOR_BIT,
+        };
+
+        let vertexes = vec![
+            Vertex { x: 64, y: -128 },
+            Vertex { x: 64, y: 128 },
+            Vertex { x: 0, y: -128 },
+            Vertex { x: 0, y: 128 },
+        ];
+        let linedefs = vec![
+            Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: FLAG_TWO_SIDED,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+            Linedef {
+                from_vertex: 2,
+                to_vertex: 3,
+                flags: FLAG_TWO_SIDED,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+        ];
+        let sidedefs = vec![
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+        ];
+        let sectors = vec![
+            Sector {
+                floor_height: right_floor,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: left_floor,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+        let segs = vec![
+            Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 3,
+                to_vertex: 2,
+                angle: 0,
+                linedef: 1,
+                direction: 1,
+                offset: 0,
+            },
+        ];
+        let ssectors = vec![
+            Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            },
+            Ssector {
+                seg_count: 1,
+                first_seg: 1,
+            },
+        ];
+        let nodes = vec![Node {
+            x: 64,
+            y: 0,
+            dx: 0,
+            dy: 1,
+            right_bbox: NodeBBox {
+                ymax: 128,
+                ymin: -128,
+                xmin: 64,
+                xmax: 256,
+            },
+            left_bbox: NodeBBox {
+                ymax: 128,
+                ymin: -128,
+                xmin: -128,
+                xmax: 64,
+            },
+            right_child: NODE_SUBSECTOR_BIT,
+            left_child: NODE_SUBSECTOR_BIT | 1,
+        }];
+
+        let mut bm_data = Vec::new();
+        bm_data.extend_from_slice(&0i16.to_le_bytes());
+        bm_data.extend_from_slice(&0i16.to_le_bytes());
+        bm_data.extend_from_slice(&1u16.to_le_bytes());
+        bm_data.extend_from_slice(&1u16.to_le_bytes());
+        let data_start = 4u16 + 1;
+        bm_data.extend_from_slice(&data_start.to_le_bytes());
+        bm_data.extend_from_slice(&0u16.to_le_bytes());
+        bm_data.extend_from_slice(&0u16.to_le_bytes());
+        bm_data.extend_from_slice(&1u16.to_le_bytes());
+        bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+        let reject = Reject::parse_lump(&[0u8], 2).unwrap();
+
+        doom_map::Level {
+            name: "STEP".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes,
+            sectors,
+            reject,
+            blockmap,
+        }
+    }
+
     #[test]
     fn secret_sector_increments_secret_count() {
         let mut gs = make_game_state();
@@ -1704,6 +1846,71 @@ mod tests {
         assert_eq!(
             gs.player.secret_count, 1,
             "secret_count must not increment again after sector special is cleared"
+        );
+    }
+
+    #[test]
+    fn damaging_floor_in_gameplay_is_periodic_not_every_tic() {
+        let mut gs = make_game_state();
+        let mut level = make_damage_level(0, 5);
+
+        for _ in 0..33 {
+            gs.tick(TicCmd::default(), Some(&mut level));
+        }
+
+        let health = gs.mobjslab.get(gs.player.handle).unwrap().health;
+        assert_eq!(
+            health, 90,
+            "hellslime during gameplay should deal 5 damage on tic 0 and tic 32 only"
+        );
+    }
+
+    #[test]
+    fn tick_player_keeps_support_floor_while_descending_partial_dropoff() {
+        let mut gs = make_game_state();
+        let mut level = make_partition_step_level(64, 0);
+        let mo = gs.mobjslab.get_mut(gs.player.handle).unwrap();
+        mo.flags |= flags::MF_DROPOFF;
+        mo.x = Fixed16_16::from_int(96);
+        mo.y = Fixed16_16::ZERO;
+        mo.z = Fixed16_16::from_int(64);
+        mo.momx = Fixed16_16::from_int(-40);
+
+        tick_player(&mut gs, TicCmd::default(), Some(&mut level));
+
+        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        assert_eq!(mo.x, Fixed16_16::from_int(56));
+        assert_eq!(
+            mo.z,
+            Fixed16_16::from_int(64),
+            "player should stay supported by the higher stair until their bbox fully clears the dropoff"
+        );
+    }
+
+    #[test]
+    fn tick_player_can_keep_moving_after_starting_down_stairs() {
+        let mut gs = make_game_state();
+        let mut level = make_partition_step_level(64, 0);
+        let mo = gs.mobjslab.get_mut(gs.player.handle).unwrap();
+        mo.flags |= flags::MF_DROPOFF;
+        mo.x = Fixed16_16::from_int(96);
+        mo.y = Fixed16_16::ZERO;
+        mo.z = Fixed16_16::from_int(64);
+        mo.momx = Fixed16_16::from_int(-40);
+
+        tick_player(&mut gs, TicCmd::default(), Some(&mut level));
+
+        let mo = gs.mobjslab.get_mut(gs.player.handle).unwrap();
+        mo.momx = Fixed16_16::from_int(-4);
+        mo.momy = Fixed16_16::ZERO;
+
+        tick_player(&mut gs, TicCmd::default(), Some(&mut level));
+
+        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        assert_eq!(
+            mo.x,
+            Fixed16_16::from_int(52),
+            "player should continue descending instead of getting stuck on the stair edge"
         );
     }
 
@@ -1767,6 +1974,32 @@ mod tests {
                     tag: 0,
                 },
             ],
+            reject,
+            blockmap: bm,
+        }
+    }
+
+    fn make_damage_level(floor_height: i16, special: u16) -> doom_map::Level {
+        let bm = make_minimal_blockmap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![doom_map::Sector {
+                floor_height,
+                ceil_height: floor_height + 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special,
+                tag: 0,
+            }],
             reject,
             blockmap: bm,
         }

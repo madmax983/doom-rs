@@ -167,6 +167,8 @@ pub(crate) struct DoomGame {
     phase_controller: GamePhaseController,
     /// Animated intermission tally renderer, active only during intermission.
     intermission_renderer: Option<IntermissionRenderer>,
+    /// Previous tic's held attack/use mask for transition skip edge detection.
+    transition_buttons_down: u8,
 }
 
 const DEAD_PLAYER_VIEW_HEIGHT: i32 = 6;
@@ -250,6 +252,7 @@ impl DoomGame {
             skill: Skill::Medium,
             phase_controller,
             intermission_renderer: None,
+            transition_buttons_down: 0,
         };
 
         if game.title_screen.is_none() {
@@ -259,15 +262,42 @@ impl DoomGame {
         game
     }
 
-    fn start_level_music(&self) {
+    fn start_music_lump(&self, lump_name: &str) -> bool {
         let Some(audio) = &self.audio else {
-            return;
+            return false;
         };
+        let Some(music) = self.music_library.get(lump_name) else {
+            return false;
+        };
+        audio.start_music(music.clone());
+        true
+    }
+
+    fn start_level_music(&self) {
         let Some(music_lump) = music_lump_for_map(self.gs.level_name.as_str()) else {
             return;
         };
-        if let Some(level_music) = self.music_library.get(&music_lump) {
-            audio.start_music(level_music.clone());
+        let _ = self.start_music_lump(&music_lump);
+    }
+
+    fn start_intermission_music(&self, next_map: doom_game::MapId) {
+        let primary = if next_map.is_doom2() {
+            "D_DM2INT"
+        } else {
+            "D_INTER"
+        };
+        let fallback = if next_map.is_doom2() {
+            Some("D_INTER")
+        } else {
+            None
+        };
+
+        if self.start_music_lump(primary) {
+            return;
+        }
+
+        if let Some(fallback) = fallback {
+            let _ = self.start_music_lump(fallback);
         }
     }
 
@@ -289,12 +319,13 @@ impl DoomGame {
 
     fn update_intermission_renderer(&mut self) {
         match self.phase_controller.phase() {
-            GamePhase::Intermission { stats, .. } => {
+            GamePhase::Intermission { stats, next_map } => {
                 if self.intermission_renderer.is_none() {
                     self.intermission_renderer = Some(IntermissionRenderer::new(
                         stats,
                         self.gs.level_name.as_str(),
                     ));
+                    self.start_intermission_music(*next_map);
                 }
             }
             _ => {
@@ -354,10 +385,11 @@ impl DoomGame {
         self.start_level_music();
     }
 
-    fn transition_input_pressed(input: TicInput) -> bool {
-        input.menu_select
-            || input.escape_pressed
-            || (input.buttons & (doom_game::bt::BT_ATTACK | doom_game::bt::BT_USE)) != 0
+    fn transition_input_pressed(&mut self, input: &TicInput) -> bool {
+        let button_mask = input.buttons & (doom_game::bt::BT_ATTACK | doom_game::bt::BT_USE);
+        let button_pressed = button_mask != 0 && self.transition_buttons_down == 0;
+        self.transition_buttons_down = button_mask;
+        input.menu_select || input.escape_pressed || button_pressed
     }
 }
 
@@ -566,6 +598,8 @@ impl DoomGame {
 
 impl DoomApp for DoomGame {
     fn tick(&mut self, input: TicInput) {
+        let transition_pressed = self.transition_input_pressed(&input);
+
         // --- Title screen mode ---
         // While the title screen is showing, route input to the menu and skip
         // all game simulation.  StartGame dismisses the title screen.
@@ -631,7 +665,6 @@ impl DoomApp for DoomGame {
 
         match self.phase_controller.phase() {
             GamePhase::Intermission { .. } => {
-                let transition_pressed = Self::transition_input_pressed(input);
                 if let Some(renderer) = self.intermission_renderer.as_mut() {
                     if transition_pressed {
                         if renderer.is_done() {
@@ -652,7 +685,7 @@ impl DoomApp for DoomGame {
                 return;
             }
             GamePhase::Finale { .. } => {
-                if Self::transition_input_pressed(input) {
+                if transition_pressed {
                     self.phase_controller.request_skip();
                 }
                 self.phase_controller.tick(&mut self.gs);
@@ -1332,6 +1365,12 @@ fn load_music_library(wad: &WadFile) -> std::collections::HashMap<String, Vec<u8
         }
     }
 
+    for lump in ["D_INTER", "D_DM2INT"] {
+        if let Some(mus_data) = wad.find_lump_data(lump) {
+            music_library.insert(lump.to_string(), mus_data.to_vec());
+        }
+    }
+
     music_library
 }
 
@@ -1806,6 +1845,31 @@ mod tests {
         make_walk_exit_level_named("E1M1")
     }
 
+    fn build_test_wad_from_lumps(lump_payloads: Vec<([u8; 8], Vec<u8>)>) -> WadFile {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
+        data.extend_from_slice(&0i32.to_le_bytes());
+
+        let mut offsets = Vec::new();
+        for (_, payload) in &lump_payloads {
+            let pos = data.len();
+            data.extend_from_slice(payload);
+            offsets.push((pos, payload.len()));
+        }
+
+        let dir_offset = data.len() as i32;
+        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+        for (i, (name, _)) in lump_payloads.iter().enumerate() {
+            let (filepos, size) = offsets[i];
+            data.extend_from_slice(&(filepos as i32).to_le_bytes());
+            data.extend_from_slice(&(size as i32).to_le_bytes());
+            data.extend_from_slice(name);
+        }
+
+        WadFile::parse(data).expect("test WAD parse")
+    }
+
     fn build_minimal_wad_for_maps(map_names: &[&str]) -> WadFile {
         let mut lump_payloads: Vec<([u8; 8], Vec<u8>)> = Vec::new();
 
@@ -1879,28 +1943,7 @@ mod tests {
             lump_payloads.push((*b"BLOCKMAP", bm_data));
         }
 
-        let mut data = Vec::new();
-        data.extend_from_slice(b"IWAD");
-        data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
-        data.extend_from_slice(&0i32.to_le_bytes());
-
-        let mut offsets = Vec::new();
-        for (_, payload) in &lump_payloads {
-            let pos = data.len();
-            data.extend_from_slice(payload);
-            offsets.push((pos, payload.len()));
-        }
-
-        let dir_offset = data.len() as i32;
-        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
-        for (i, (name, _)) in lump_payloads.iter().enumerate() {
-            let (filepos, size) = offsets[i];
-            data.extend_from_slice(&(filepos as i32).to_le_bytes());
-            data.extend_from_slice(&(size as i32).to_le_bytes());
-            data.extend_from_slice(name);
-        }
-
-        WadFile::parse(data).expect("test WAD parse")
+        build_test_wad_from_lumps(lump_payloads)
     }
 
     fn unique_temp_log_path(name: &str) -> PathBuf {
@@ -2372,6 +2415,119 @@ mod tests {
 
         wait_for_music_requests(audio, 2);
         assert_eq!(audio.debug_music_start_count(), 2);
+    }
+
+    #[test]
+    fn load_music_library_includes_intermission_lumps() {
+        let wad = build_test_wad_from_lumps(vec![
+            (*b"D_INTER\0", vec![1, 2, 3, 4]),
+            (*b"D_DM2INT", vec![5, 6, 7, 8]),
+        ]);
+
+        let library = load_music_library(&wad);
+
+        assert_eq!(library.get("D_INTER"), Some(&vec![1, 2, 3, 4]));
+        assert_eq!(library.get("D_DM2INT"), Some(&vec![5, 6, 7, 8]));
+    }
+
+    #[test]
+    fn held_attack_on_exit_does_not_skip_intermission_summary() {
+        let mut game = DoomGame::new(
+            make_game_state(),
+            make_walk_exit_level(),
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+        );
+        game.gs
+            .mobjslab
+            .get_mut(game.gs.player.handle)
+            .unwrap()
+            .momx = Fixed16_16::from_int(40);
+
+        game.tick(TicInput {
+            buttons: doom_game::bt::BT_ATTACK,
+            ..TicInput::default()
+        });
+        game.tick(TicInput {
+            buttons: doom_game::bt::BT_ATTACK,
+            ..TicInput::default()
+        });
+
+        let renderer = game
+            .intermission_renderer
+            .as_ref()
+            .expect("intermission renderer should exist after level exit");
+        assert!(
+            !renderer.is_done(),
+            "held attack from gameplay must not auto-skip the intermission summary on entry"
+        );
+    }
+
+    #[test]
+    fn level_exit_starts_intermission_music_then_next_level_music() {
+        let audio = AudioSystem::try_open_null().expect("null audio must succeed");
+        let mut music_library = music_library_for("E1M1", vec![1, 2, 3, 4]);
+        music_library.extend(music_library_for("E1M2", vec![5, 6, 7, 8]));
+        music_library.insert("D_INTER".to_string(), vec![9, 10, 11, 12]);
+        let mut game = DoomGame::new(
+            make_game_state(),
+            make_walk_exit_level(),
+            Some(audio),
+            music_library,
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+        );
+        game.attach_wad_for_transitions(
+            build_minimal_wad_for_maps(&["E1M1", "E1M2"]),
+            Skill::Medium,
+        );
+        game.gs
+            .mobjslab
+            .get_mut(game.gs.player.handle)
+            .unwrap()
+            .momx = Fixed16_16::from_int(40);
+
+        wait_for_music_requests(game.audio.as_ref().expect("audio must be present"), 1);
+
+        game.tick(TicInput::default());
+        wait_for_music_requests(game.audio.as_ref().expect("audio must be present"), 2);
+        assert_eq!(
+            game.audio
+                .as_ref()
+                .expect("audio must be present")
+                .debug_music_start_count(),
+            2,
+            "entering intermission should start the intermission track"
+        );
+
+        for _ in 0..350 {
+            game.tick(TicInput::default());
+        }
+
+        wait_for_music_requests(game.audio.as_ref().expect("audio must be present"), 3);
+        assert_eq!(
+            game.audio
+                .as_ref()
+                .expect("audio must be present")
+                .debug_music_start_count(),
+            3,
+            "loading the next level should start its map music after intermission"
+        );
+        assert_eq!(game.gs.level_name, "E1M2");
     }
 
     #[test]

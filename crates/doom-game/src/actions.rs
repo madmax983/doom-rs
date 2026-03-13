@@ -401,18 +401,14 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
             mo.momx = step_x;
             mo.momy = step_y;
         }
-        // Update floor height (mo.z) so the step-height check stays valid
-        // across multi-step stairs and sector transitions.
-        if let Some(lv) = level {
-            if let Some(floor_h) = lv.floor_at(new_x.to_int(), new_y.to_int()) {
-                if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                    mo.z = Fixed16_16::from_int(floor_h as i32);
-                }
-            }
-            if let Some(subsector) = lv.subsector_index_at(new_x.to_int(), new_y.to_int()) {
-                if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                    mo.subsector = subsector as u32;
-                }
+        if let Some(lv) = level
+            && let Some((support_floor, subsector)) =
+                crate::movement::support_state_at(&gs.mobjslab, handle, new_x, new_y, lv)
+            && let Some(mo) = gs.mobjslab.get_mut(handle)
+        {
+            mo.z = support_floor;
+            if let Some(subsector) = subsector {
+                mo.subsector = subsector as u32;
             }
         }
         true
@@ -590,6 +586,16 @@ fn try_move_in_dir(
             mo.momx = step_x;
             mo.momy = step_y;
             mo.movedir = dir;
+        }
+        if let Some(lv) = level
+            && let Some((support_floor, subsector)) =
+                crate::movement::support_state_at(&gs.mobjslab, handle, new_x, new_y, lv)
+            && let Some(mo) = gs.mobjslab.get_mut(handle)
+        {
+            mo.z = support_floor;
+            if let Some(subsector) = subsector {
+                mo.subsector = subsector as u32;
+            }
         }
     }
     can_move

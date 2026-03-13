@@ -139,6 +139,92 @@ pub fn p_slide_move(
     best.map(|(x, y, _)| (x, y)).unwrap_or((old_x, old_y))
 }
 
+/// Compute the Doom-shaped support floor under an actor at `(x, y)`.
+///
+/// This uses the actor's full bounding box rather than just the center point,
+/// so a player descending stairs keeps the higher support floor until their
+/// bbox fully clears the upper step.
+#[must_use]
+pub(crate) fn support_state_at(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    x: Fixed16_16,
+    y: Fixed16_16,
+    level: &Level,
+) -> Option<(Fixed16_16, Option<usize>)> {
+    let (radius, fallback_z) = slab.get(handle).map(|mo| (mo.radius, mo.z))?;
+
+    let left = x - radius;
+    let right = x + radius;
+    let bottom = y - radius;
+    let top = y + radius;
+
+    let bm = &level.blockmap;
+    let x_origin = bm.x_origin as i32;
+    let y_origin = bm.y_origin as i32;
+    let x_count = bm.x_count as i32;
+    let y_count = bm.y_count as i32;
+    let to_block = |world: Fixed16_16, origin: i32, count: i32| -> usize {
+        let cell = (world.to_int() - origin) / BLOCK_SIZE;
+        cell.max(0).min(count - 1) as usize
+    };
+
+    let mut floor_z = level
+        .floor_at(x.to_int(), y.to_int())
+        .map(|floor| Fixed16_16::from_int(floor as i32))
+        .unwrap_or(fallback_z);
+
+    let col_lo = to_block(left, x_origin, x_count);
+    let col_hi = to_block(right, x_origin, x_count);
+    let row_lo = to_block(bottom, y_origin, y_count);
+    let row_hi = to_block(top, y_origin, y_count);
+
+    for row in row_lo..=row_hi {
+        for col in col_lo..=col_hi {
+            for ld_idx in bm.block_linedefs(col, row) {
+                let Some(ld) = level.linedefs.get(ld_idx as usize) else {
+                    continue;
+                };
+                if !ld.is_two_sided() {
+                    continue;
+                }
+
+                let v1 = &level.vertexes[ld.from_vertex as usize];
+                let v2 = &level.vertexes[ld.to_vertex as usize];
+                let lx1 = Fixed16_16::from_int(v1.x as i32);
+                let ly1 = Fixed16_16::from_int(v1.y as i32);
+                let lx2 = Fixed16_16::from_int(v2.x as i32);
+                let ly2 = Fixed16_16::from_int(v2.y as i32);
+
+                let lx_min = lx1.min(lx2);
+                let lx_max = lx1.max(lx2);
+                let ly_min = ly1.min(ly2);
+                let ly_max = ly1.max(ly2);
+                if right <= lx_min || left >= lx_max || top <= ly_min || bottom >= ly_max {
+                    continue;
+                }
+                if !bbox_straddles_line(left, bottom, right, top, lx1, ly1, lx2, ly2) {
+                    continue;
+                }
+
+                let Some(right_sd) = level.sidedefs.get(ld.right_sidedef as usize) else {
+                    continue;
+                };
+                let Some(left_sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+                    continue;
+                };
+                let front = &level.sectors[right_sd.sector as usize];
+                let back = &level.sectors[left_sd.sector as usize];
+                let open_floor =
+                    Fixed16_16::from_int(front.floor_height.max(back.floor_height) as i32);
+                floor_z = floor_z.max(open_floor);
+            }
+        }
+    }
+
+    Some((floor_z, level.subsector_index_at(x.to_int(), y.to_int())))
+}
+
 fn clamp_i128_to_i32(v: i128) -> i32 {
     v.clamp(i32::MIN as i128, i32::MAX as i128) as i32
 }
