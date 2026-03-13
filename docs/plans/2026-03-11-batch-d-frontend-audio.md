@@ -215,6 +215,6 @@ Expected: Batch D regressions and the broader impacted suites stay green.
 
 ## Explicitly Deferred
 
-- Full `S_StartSound`-style channel reuse and source-aware stealing parity.
+- Full `S_UpdateSounds`-style per-tic spatial refresh parity for long-lived sounds.
 - True attract-mode demo playback during the title loop.
 - Elevated-target bullet slope and other deeper combat parity still tracked outside Batch D.

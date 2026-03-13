@@ -56,7 +56,7 @@ Each subsystem log should record:
 | BSP, seg traversal, wall rendering | `r_bsp.c`, `r_segs.c` | `crates/doom-renderer/src/seg.rs`, `crates/doom-renderer/src/render.rs` | Partial | Batch C1 is green: pegging now uses logical texture height and masked midtextures are deferred instead of being painted inline. Remaining renderer debt is deeper seg/visplane/sky projection parity. |
 | Planes and sky | `r_plane.c`, `r_sky.c` | `crates/doom-renderer/src/visplane.rs`, `crates/doom-renderer/src/sky.rs`, `crates/doom-renderer/src/render.rs` | Partial | Disjoint sky-span bugs are fixed and map-specific sky selection now resolves from the level name. Remaining audit item: deeper visplane parity and sky vertical mapping. |
 | Sprites and clipping | `r_things.c` | `crates/doom-renderer/src/sprite.rs`, `crates/doom-renderer/src/sprite_lookup.rs` | Partial | World-space sprite anchoring and portal clip ordering are much better, and masked midtextures now depth-sort with sprites. Remaining audit item: residual edge cases where clip state is borrowed from the wrong sector context. |
-| Audio and music | `s_sound.c`, `i_sound.c`, `mus2mid` path | `crates/doom-app/src/audio_system.rs`, `crates/doom-app/src/main.rs` | Partial | Batch D moved player weapon SFX onto actual fire events, re-resolves map music from current level state, and removed the fake timer-driven demo loop. Remaining audit work is deeper sound-origin/channel parity and true attract-mode demo playback. |
+| Audio and music | `s_sound.c`, `i_sound.c`, `mus2mid` path | `crates/doom-app/src/audio_system.rs`, `crates/doom-app/src/main.rs` | Partial | Batch D moved player weapon SFX onto actual fire events, re-resolves map music from current level state, and removed the fake timer-driven demo loop. The next parity gap is mostly continuous `S_UpdateSounds`-style spatial refresh for long-lived sounds plus true attract-mode demo playback. |
 | Savegames, demos, RNG parity | `p_saveg.c`, demo system, `m_random.c` | `crates/doom-game/src/savegame.rs`, demo code, RNG paths | Not started | Leave this until core gameplay/rendering behavior stops moving. |
 
 ## First Slice Findings
@@ -223,12 +223,12 @@ Still open:
   - Map music now re-resolves from `GameState.level_name` and restarts at gameplay entry/load points.
   - The timer-driven title loop no longer walks into blank `Demo(_)` phases when no playback path exists.
 - Confirmed mismatches:
-  - Sound origin and channel behavior are much simpler than Doom's source-aware `S_StartSound` behavior.
+  - Repeated same-origin sounds now reuse a single live channel, but long-lived sounds still do not get a full Doom-style per-tic spatial refresh pass.
   - True attract-mode demo playback still does not exist; we now stay out of fake demo phases instead of pretending otherwise.
   - Weapon cadence is deterministic and much closer, but it is still a simplified cooldown model rather than a full psprite state machine.
 - Recommended regressions:
   - Held chaingun and plasma cadence should be tightened against Chocolate Doom's psprite timing rather than the current simplified cooldown table.
-  - Repeated sound events from the same origin should reuse/update channels in a Doom-shaped way.
+  - Long-lived sounds should keep spatial parameters updated as the listener or origin moves.
   - Real title demo playback should replace the current `Title <-> Credits` fallback loop.
 - Known intentional divergence:
   - TUI frontend constraints mean terminal mouse is not a Doom-parity target.

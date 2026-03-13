@@ -324,6 +324,41 @@ fn queue_weapon_sound_and_noise(gs: &mut GameState, weapon: WeaponType, level: O
     }
 }
 
+fn set_player_mobj_state(gs: &mut GameState, state: StateNum) {
+    let tics = STATES.get(state.0 as usize).map_or(0, |entry| entry.tics);
+    if let Some(player_mobj) = gs.mobjslab.get_mut(gs.player.handle) {
+        player_mobj.state = state;
+        player_mobj.tics = tics;
+    }
+}
+
+fn ensure_player_mobj_state(gs: &mut GameState) {
+    let needs_init = gs
+        .mobjslab
+        .get(gs.player.handle)
+        .map(|mo| mo.state == StateNum::NULL)
+        .unwrap_or(false);
+    if needs_init {
+        set_player_mobj_state(gs, StateNum(ids::S_PLAY));
+    }
+}
+
+fn restore_player_ready_state(gs: &mut GameState) {
+    gs.player.extra_light = 0;
+    let state = gs.mobjslab.get(gs.player.handle).map(|mo| mo.state);
+    if matches!(
+        state,
+        Some(StateNum(ids::S_PLAY_ATK1) | StateNum(ids::S_PLAY_ATK2))
+    ) {
+        set_player_mobj_state(gs, StateNum(ids::S_PLAY));
+    }
+}
+
+fn begin_player_weapon_attack(gs: &mut GameState) {
+    ensure_player_mobj_state(gs);
+    set_player_mobj_state(gs, StateNum(ids::S_PLAY_ATK1));
+}
+
 fn start_weapon_flash(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     let weapon_state = gs.player.psprites[psprite_slots::WEAPON].state;
     let flash_state = match gs.player.weapon {
@@ -353,6 +388,7 @@ fn start_weapon_flash(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
         return;
     }
 
+    set_player_mobj_state(gs, StateNum(ids::S_PLAY_ATK2));
     let weapon_psprite = gs.player.psprites[psprite_slots::WEAPON];
     gs.player.psprites[psprite_slots::FLASH].sx = weapon_psprite.sx;
     gs.player.psprites[psprite_slots::FLASH].sy = WEAPON_TOP;
@@ -373,6 +409,9 @@ fn apply_pending_weapon_change(gs: &mut GameState, cmd: TicCmd) {
 }
 
 fn a_weapon_ready(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    ensure_player_mobj_state(gs);
+    restore_player_ready_state(gs);
+
     if gs.player.pending_weapon.is_some() || !player_can_fire(gs) {
         begin_lower_weapon(gs, cmd, level);
         return;
@@ -395,6 +434,7 @@ fn a_weapon_ready(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     } else {
         0
     };
+    begin_player_weapon_attack(gs);
     let info = weapon_psprite_info(gs.player.weapon);
     set_psprite_state(gs, psprite_slots::WEAPON, info.attack, cmd, level);
 }
@@ -424,6 +464,7 @@ fn a_refire(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     let attack_held = cmd.buttons & bt::BT_ATTACK != 0;
     if attack_held && gs.player.pending_weapon.is_none() && !gs.player.is_dead() {
         gs.player.refire = gs.player.refire.saturating_add(1);
+        begin_player_weapon_attack(gs);
         let info = weapon_psprite_info(gs.player.weapon);
         set_psprite_state(gs, psprite_slots::WEAPON, info.attack, cmd, level);
         return;
@@ -448,6 +489,18 @@ fn a_load_shotgun2(gs: &mut GameState) {
 fn a_close_shotgun2(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     gs.sound_queue.push(SoundRequest::PlayerSuperShotgunClose);
     a_refire(gs, cmd, level);
+}
+
+fn a_light0(gs: &mut GameState) {
+    gs.player.extra_light = 0;
+}
+
+fn a_light1(gs: &mut GameState) {
+    gs.player.extra_light = 1;
+}
+
+fn a_light2(gs: &mut GameState) {
+    gs.player.extra_light = 2;
 }
 
 fn a_punch(gs: &mut GameState, _cmd: TicCmd, level: Option<&Level>) {
@@ -547,6 +600,9 @@ fn dispatch_psprite_action(gs: &mut GameState, action: u8, cmd: TicCmd, level: O
         crate::actions::ACTION_OPEN_SHOTGUN2 => a_open_shotgun2(gs),
         crate::actions::ACTION_LOAD_SHOTGUN2 => a_load_shotgun2(gs),
         crate::actions::ACTION_CLOSE_SHOTGUN2 => a_close_shotgun2(gs, cmd, level),
+        crate::actions::ACTION_LIGHT0 => a_light0(gs),
+        crate::actions::ACTION_LIGHT1 => a_light1(gs),
+        crate::actions::ACTION_LIGHT2 => a_light2(gs),
         _ => {}
     }
 }
@@ -578,6 +634,7 @@ fn tick_psprite_slot(gs: &mut GameState, slot: usize, cmd: TicCmd, level: Option
 /// Initialize player psprites for a freshly-spawned or restored player.
 pub fn setup_psprites(player: &mut PlayerState) {
     player.refire = 0;
+    player.extra_light = 0;
     player.psprites = [PspriteState::default(); crate::player::NUM_PSPRITES];
     player.pending_weapon = Some(player.weapon);
     bring_up_weapon(player);
@@ -586,6 +643,9 @@ pub fn setup_psprites(player: &mut PlayerState) {
 
 /// Tick the player's weapon and flash psprites for one game tic.
 pub fn tick_psprites(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    if !gs.player.is_dead() {
+        ensure_player_mobj_state(gs);
+    }
     if gs.player.psprites[psprite_slots::WEAPON].state == StateNum::NULL && !gs.player.is_dead() {
         setup_psprites(&mut gs.player);
     }
@@ -974,6 +1034,75 @@ mod tests {
             gs.player.psprites[psprite_slots::FLASH].state,
             crate::mobj::StateNum(ids::S_PISTOL_FLASH1),
             "attack should also start the muzzle-flash psprite"
+        );
+    }
+
+    #[test]
+    fn pistol_attack_sets_player_attack_state_and_extra_light() {
+        let mut gs = make_game_state();
+        ready_player_psprites(&mut gs);
+
+        tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+
+        let player_mobj = gs
+            .mobjslab
+            .get(gs.player.handle)
+            .expect("player mobj must exist");
+        assert_eq!(
+            player_mobj.state,
+            crate::mobj::StateNum(ids::S_PLAY_ATK2),
+            "pistol attack should leave the player mobj in the flash attack state"
+        );
+        assert_eq!(
+            gs.player.extra_light, 1,
+            "pistol flash should apply the first extra-light level"
+        );
+    }
+
+    #[test]
+    fn fist_attack_uses_player_attack_state_without_extra_light_and_ready_resets_both() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::Fist;
+        gs.player.weapons[WeaponType::Fist as usize] = true;
+        ready_player_psprites(&mut gs);
+
+        tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+
+        let player_mobj = gs
+            .mobjslab
+            .get(gs.player.handle)
+            .expect("player mobj must exist");
+        assert_eq!(
+            player_mobj.state,
+            crate::mobj::StateNum(ids::S_PLAY_ATK1),
+            "melee attacks should put the player mobj into the primary attack state"
+        );
+        assert_eq!(
+            gs.player.extra_light, 0,
+            "melee attacks should not illuminate the scene"
+        );
+
+        for _ in 0..24 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+            if gs.player.psprites[psprite_slots::WEAPON].state
+                == crate::mobj::StateNum(ids::S_PUNCH_READY)
+            {
+                break;
+            }
+        }
+
+        let player_mobj = gs
+            .mobjslab
+            .get(gs.player.handle)
+            .expect("player mobj must still exist");
+        assert_eq!(
+            player_mobj.state,
+            crate::mobj::StateNum(ids::S_PLAY),
+            "returning to the ready loop should restore the normal player state"
+        );
+        assert_eq!(
+            gs.player.extra_light, 0,
+            "weapon ready should clear any lingering extra-light bonus"
         );
     }
 

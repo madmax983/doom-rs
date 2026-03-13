@@ -524,6 +524,7 @@ fn write_player_state(w: &mut WriteCursor, p: &PlayerState) {
         }
     }
     w.write_u8(p.refire);
+    w.write_u8(p.extra_light);
     for psprite in &p.psprites {
         write_psprite_state(w, psprite);
     }
@@ -570,6 +571,7 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
     };
 
     let refire = r.read_u8()?;
+    let extra_light = r.read_u8()?;
     let mut psprites = [PspriteState::default(); NUM_PSPRITES];
     for psprite in &mut psprites {
         *psprite = read_psprite_state(r)?;
@@ -625,6 +627,7 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
     ps.weapon = weapon;
     ps.pending_weapon = pending_weapon;
     ps.refire = refire;
+    ps.extra_light = extra_light;
     ps.psprites = psprites;
     ps.attack_down = attack_down;
     ps.attack_cooldown = attack_cooldown;
@@ -1799,5 +1802,19 @@ mod tests {
         let loaded = load_game(&data).expect("load must succeed");
 
         assert_eq!(loaded.state.player.psprites, gs.player.psprites);
+    }
+
+    #[test]
+    fn roundtrip_player_extra_light() {
+        let mut gs = test_game_state();
+        gs.player.extra_light = 2;
+
+        let data = save_game(&gs, &test_level_name(), 2, "extra light test");
+        let loaded = load_game(&data).expect("load must succeed");
+
+        assert_eq!(
+            loaded.state.player.extra_light, 2,
+            "player extra_light must survive save/load so weapon flash lighting stays deterministic"
+        );
     }
 }

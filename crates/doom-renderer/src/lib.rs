@@ -61,7 +61,7 @@ pub use palette::{PaletteLut, Rgb};
 pub use palette_flash::{PaletteFlash, PaletteFlashState};
 pub use render::{
     MaskedColumnDraw, PLAYER_HEIGHT, RenderOut, draw_masked_columns, render_level,
-    render_level_with_view_height,
+    render_level_with_view_height, render_level_with_view_height_and_extra_light,
 };
 pub use render_flags::RenderFlag;
 pub use sky::{

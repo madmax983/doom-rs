@@ -506,6 +506,14 @@ impl Drop for DoomEventLoop {
 mod tests {
     use super::*;
 
+    /// Mutex that serializes tests sharing the global `MODIFIER_SAMPLE_COUNT`.
+    ///
+    /// Rust's test harness runs tests in parallel by default.  Both
+    /// `poll_events_does_not_sample_modifiers` and
+    /// `drain_ready_tics_samples_modifiers_once_per_tic` reset and inspect the
+    /// same `AtomicUsize`; without serialization they race.
+    static MODIFIER_COUNT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn reset_modifier_sample_count() {
         MODIFIER_SAMPLE_COUNT.store(0, Ordering::Relaxed);
     }
@@ -597,6 +605,7 @@ mod tests {
 
     #[test]
     fn poll_events_does_not_sample_modifiers() {
+        let _guard = MODIFIER_COUNT_LOCK.lock().unwrap();
         reset_modifier_sample_count();
         let mut loop_ = make_test_event_loop();
 
@@ -607,6 +616,7 @@ mod tests {
 
     #[test]
     fn drain_ready_tics_samples_modifiers_once_per_tic() {
+        let _guard = MODIFIER_COUNT_LOCK.lock().unwrap();
         reset_modifier_sample_count();
         let mut loop_ = make_test_event_loop();
         let mut app = CountingApp { ticks: 0 };

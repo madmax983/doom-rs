@@ -114,7 +114,7 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         mass: 100,
         flags: MF_PLAYER,
         pain_chance: 255,
-        spawn_state: sn(ids::S_NULL),
+        spawn_state: sn(ids::S_PLAY),
         see_state: sn(ids::S_NULL),
         pain_state: sn(ids::S_NULL),
         death_state: sn(ids::S_NULL),

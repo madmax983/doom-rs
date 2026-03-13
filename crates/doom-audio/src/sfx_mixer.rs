@@ -85,6 +85,27 @@ impl Default for SfxMixer {
 }
 
 impl SfxMixer {
+    fn make_channel(
+        sfx_id: u16,
+        data: Vec<u8>,
+        volume: f32,
+        pan: f32,
+        priority: SfxPriority,
+    ) -> SfxChannel {
+        let length = data.len();
+
+        SfxChannel {
+            sfx_id,
+            position_fp: 0,
+            length,
+            volume,
+            pan,
+            priority,
+            active: true,
+            data,
+        }
+    }
+
     /// Create a new mixer with all channels empty.
     #[must_use]
     pub fn new() -> Self {
@@ -110,18 +131,7 @@ impl SfxMixer {
         pan: f32,
         priority: SfxPriority,
     ) -> Option<usize> {
-        let length = data.len();
-
-        let channel = SfxChannel {
-            sfx_id,
-            position_fp: 0,
-            length,
-            volume,
-            pan,
-            priority,
-            active: true,
-            data,
-        };
+        let channel = Self::make_channel(sfx_id, data, volume, pan, priority);
 
         // 1. Find first empty (None) slot.
         if let Some(idx) = self.channels.iter().position(Option::is_none) {
@@ -153,6 +163,29 @@ impl SfxMixer {
         } else {
             None
         }
+    }
+
+    /// Replace a specific channel with a newly started sound effect.
+    ///
+    /// This preserves Doom's "one live channel per origin" rule: if the same
+    /// actor starts another sound, the old one is restarted in place instead of
+    /// allocating a second channel.
+    ///
+    /// # Panics (debug only)
+    /// Asserts `channel < MAX_CHANNELS` in debug builds. Callers must only pass
+    /// indices returned by [`SfxMixer::play`].
+    pub fn play_on_channel(
+        &mut self,
+        channel: usize,
+        sfx_id: u16,
+        data: Vec<u8>,
+        volume: f32,
+        pan: f32,
+        priority: SfxPriority,
+    ) -> usize {
+        debug_assert!(channel < MAX_CHANNELS, "channel index {channel} out of range");
+        self.channels[channel] = Some(Self::make_channel(sfx_id, data, volume, pan, priority));
+        channel
     }
 
     /// Update the spatial parameters of a specific channel.
@@ -193,6 +226,13 @@ impl SfxMixer {
                     continue;
                 }
 
+                // Pan gains are constant for this channel across the whole buffer.
+                // pan = -1.0 => left_gain = 1.0, right_gain = 0.0
+                // pan =  0.0 => left_gain = 0.5, right_gain = 0.5
+                // pan =  1.0 => left_gain = 0.0, right_gain = 1.0
+                let left_gain = (1.0 - ch.pan) * 0.5;
+                let right_gain = (1.0 + ch.pan) * 0.5;
+
                 // Process stereo frame pairs.
                 for i in (0..output.len()).step_by(2) {
                     let src_idx = (ch.position_fp >> 16) as usize;
@@ -204,13 +244,6 @@ impl SfxMixer {
                     // Convert 8-bit unsigned PCM to f32 in [-1.0, 1.0].
                     let sample = (ch.data[src_idx] as f32 - 128.0) / 128.0;
                     let scaled = sample * ch.volume;
-
-                    // Apply panning: linear pan law.
-                    // pan = -1.0 => left_gain = 1.0, right_gain = 0.0
-                    // pan =  0.0 => left_gain = 0.5, right_gain = 0.5
-                    // pan =  1.0 => left_gain = 0.0, right_gain = 1.0
-                    let left_gain = (1.0 - ch.pan) * 0.5;
-                    let right_gain = (1.0 + ch.pan) * 0.5;
 
                     output[i] += scaled * left_gain;
                     if i + 1 < output.len() {
@@ -392,6 +425,27 @@ mod tests {
         let channel = mixer.channels[ch].as_ref().expect("channel should exist");
         assert!((channel.volume - 0.5).abs() < 0.01);
         assert!((channel.pan - (-0.8)).abs() < 0.01);
+    }
+
+    #[test]
+    fn mixer_play_on_channel_restarts_in_place() {
+        let mut mixer = SfxMixer::new();
+        let ch = mixer
+            .play(1, vec![200u8; 1000], 1.0, 0.0, SfxPriority::Medium)
+            .expect("should allocate a channel");
+
+        let replaced =
+            mixer.play_on_channel(ch, 2, vec![220u8; 1000], 0.4, -0.5, SfxPriority::High);
+
+        assert_eq!(replaced, ch);
+        assert_eq!(mixer.active_count(), 1);
+
+        let channel = mixer.channels[ch].as_ref().expect("channel should exist");
+        assert_eq!(channel.sfx_id, 2);
+        assert_eq!(channel.priority, SfxPriority::High);
+        assert!((channel.volume - 0.4).abs() < 0.01);
+        assert!((channel.pan - (-0.5)).abs() < 0.01);
+        assert_eq!(channel.position_fp, 0);
     }
 
     #[test]

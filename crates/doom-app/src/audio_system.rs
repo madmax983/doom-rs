@@ -12,13 +12,13 @@
 //! If audio initialisation fails (no device, CI, headless) `try_open` returns
 //! `None` and the game runs silently — no panics, no unwraps in hot paths.
 
-use std::sync::{
-    Arc, Mutex,
-    atomic::{AtomicUsize, Ordering},
-};
+use std::sync::{Arc, Mutex};
+
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use doom_audio::{
-    AudioDriver, GenmidiBank, MidiPlayer, MusScore, SfxCache, SfxMixer, SfxPriority,
+    AudioDriver, GenmidiBank, MAX_CHANNELS, MidiPlayer, MusScore, SfxCache, SfxMixer, SfxPriority,
     mixer::PcmSample,
 };
 use doom_wad::WadFile;
@@ -36,7 +36,7 @@ pub enum AudioEvent {
     /// Higher-priority sounds steal channels from lower-priority ones when
     /// all 8 channels are occupied — matching Doom's original behaviour.
     /// Fields: (sfx_id, priority, volume 0‥1, pan -1‥1)
-    PlaySfx(u16, SfxPriority, f32, f32),
+    PlaySfx(u16, SfxPriority, f32, f32, Option<doom_game::MobjHandle>),
     /// Start playing a MUS track.  `data` is the raw MUS lump bytes.
     StartMusic(Vec<u8>),
     /// Stop current music (silences the OPL sequencer).
@@ -56,6 +56,9 @@ pub struct AudioSystem {
     /// Keeps the cpal stream alive.  Must stay on the same thread that called
     /// `AudioDriver::open` (the main thread).
     _driver: AudioDriver,
+    /// Per-system count of `StartMusic` events.  Test-only: absent in production
+    /// builds so there is no runtime overhead outside the test harness.
+    #[cfg(test)]
     music_start_count: Arc<AtomicUsize>,
 }
 
@@ -106,8 +109,18 @@ impl AudioSystem {
             });
 
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
+
+        #[cfg(test)]
         let music_start_count = Arc::new(AtomicUsize::new(0));
-        let music_start_count_thread = Arc::clone(&music_start_count);
+        #[cfg(test)]
+        let on_music_start = {
+            let c = Arc::clone(&music_start_count);
+            move || {
+                c.fetch_add(1, Ordering::SeqCst);
+            }
+        };
+        #[cfg(not(test))]
+        let on_music_start = || {};
 
         eprintln!(
             "[audio] SfxCache: {} entries loaded; spawning thread",
@@ -126,19 +139,14 @@ impl AudioSystem {
                 eprintln!("[audio] no GENMIDI — using default sine-wave instrument");
             }
             eprintln!("[audio] thread started");
-            audio_cmd_thread(
-                rx,
-                &mixer_arc,
-                &midi_arc,
-                &sfx_cache,
-                &music_start_count_thread,
-            );
+            audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache, on_music_start);
             eprintln!("[audio] thread exited");
         });
 
         Some(Self {
             sender: tx,
             _driver: driver,
+            #[cfg(test)]
             music_start_count,
         })
     }
@@ -154,22 +162,27 @@ impl AudioSystem {
         let sfx_cache = SfxCache::new();
 
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
+
+        #[cfg(test)]
         let music_start_count = Arc::new(AtomicUsize::new(0));
-        let music_start_count_thread = Arc::clone(&music_start_count);
+        #[cfg(test)]
+        let on_music_start = {
+            let c = Arc::clone(&music_start_count);
+            move || {
+                c.fetch_add(1, Ordering::SeqCst);
+            }
+        };
+        #[cfg(not(test))]
+        let on_music_start = || {};
 
         std::thread::spawn(move || {
-            audio_cmd_thread(
-                rx,
-                &mixer_arc,
-                &midi_arc,
-                &sfx_cache,
-                &music_start_count_thread,
-            );
+            audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache, on_music_start);
         });
 
         Some(Self {
             sender: tx,
             _driver: driver,
+            #[cfg(test)]
             music_start_count,
         })
     }
@@ -179,10 +192,17 @@ impl AudioSystem {
     /// The 8-channel mixer will steal the lowest-priority channel if all are
     /// occupied and the new sound's priority is >= that channel's priority.
     /// Fire-and-forget: silently ignored if the audio thread has exited.
-    pub fn play_sfx(&self, sfx_id: u16, priority: SfxPriority, volume: f32, pan: f32) {
+    pub fn play_sfx(
+        &self,
+        sfx_id: u16,
+        priority: SfxPriority,
+        volume: f32,
+        pan: f32,
+        origin: Option<doom_game::MobjHandle>,
+    ) {
         let _ = self
             .sender
-            .send(AudioEvent::PlaySfx(sfx_id, priority, volume, pan));
+            .send(AudioEvent::PlaySfx(sfx_id, priority, volume, pan, origin));
     }
 
     /// Send a start-music command with raw MUS lump bytes.
@@ -244,20 +264,49 @@ fn audio_cmd_thread(
     mixer_arc: &Arc<Mutex<SfxMixer>>,
     midi_arc: &Arc<Mutex<MidiPlayer>>,
     sfx_cache: &SfxCache,
-    music_start_count: &Arc<AtomicUsize>,
+    on_music_start: impl Fn(),
 ) {
+    let mut origin_channels = std::collections::HashMap::<doom_game::MobjHandle, usize>::new();
+    let mut channel_origins = [None; MAX_CHANNELS];
+
     while let Ok(event) = rx.recv() {
         match event {
-            AudioEvent::PlaySfx(sfx_id, priority, volume, pan) => {
+            AudioEvent::PlaySfx(sfx_id, priority, volume, pan, origin) => {
                 if let Some(sample) = sfx_cache.get(sfx_id) {
                     if let Ok(mut mixer) = mixer_arc.lock() {
-                        mixer.play(sfx_id, sample.data.clone(), volume, pan, priority);
+                        if let Some(origin) = origin {
+                            if let Some(&channel) = origin_channels.get(&origin) {
+                                mixer.play_on_channel(
+                                    channel,
+                                    sfx_id,
+                                    sample.data.clone(),
+                                    volume,
+                                    pan,
+                                    priority,
+                                );
+                                channel_origins[channel] = Some(origin);
+                                continue;
+                            }
+                        }
+
+                        if let Some(channel) =
+                            mixer.play(sfx_id, sample.data.clone(), volume, pan, priority)
+                        {
+                            if let Some(previous_origin) = channel_origins[channel].take() {
+                                origin_channels.remove(&previous_origin);
+                            }
+
+                            if let Some(origin) = origin {
+                                origin_channels.insert(origin, channel);
+                                channel_origins[channel] = Some(origin);
+                            }
+                        }
                     }
                 }
             }
 
             AudioEvent::StartMusic(data) => {
-                music_start_count.fetch_add(1, Ordering::SeqCst);
+                on_music_start();
                 eprintln!("[music] StartMusic received, data_len={}", data.len());
                 match MusScore::parse(&data) {
                     Ok(score) => {
@@ -313,13 +362,13 @@ pub fn weapon_fire_sfx_lump(weapon: doom_game::WeaponType) -> &'static str {
 /// Map a game sound request to its Doom DS* lump name and priority.
 pub fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, SfxPriority)> {
     match req {
-        doom_game::SoundRequest::MonsterWake(kind, _, _) => {
+        doom_game::SoundRequest::MonsterWake(kind, _, _, _) => {
             Some((monster_wake_lump(kind), SfxPriority::High))
         }
-        doom_game::SoundRequest::MonsterAttack(kind, _, _) => {
+        doom_game::SoundRequest::MonsterAttack(kind, _, _, _) => {
             Some((monster_attack_lump(kind), SfxPriority::Medium))
         }
-        doom_game::SoundRequest::MonsterDie(kind, _, _) => {
+        doom_game::SoundRequest::MonsterDie(kind, _, _, _) => {
             Some((monster_death_lump(kind), SfxPriority::High))
         }
         doom_game::SoundRequest::PlayerWeaponFire(weapon) => {
@@ -435,18 +484,6 @@ pub fn monster_death_lump(kind: doom_game::MobjKind) -> &'static str {
     }
 }
 
-/// Resolve the SFX ID for a named DS* lump by scanning the WAD in the same
-/// order used by [`populate_sfx_cache`] and [`build_sfx_lookup`].
-///
-/// Returns `None` if the lump is not present in the WAD.
-pub fn find_sfx_id_by_name(wad: &WadFile, lump_name: &str) -> Option<u16> {
-    sfx_candidate_names(wad)
-        .iter()
-        .enumerate()
-        .find(|(_, n)| n.eq_ignore_ascii_case(lump_name))
-        .map(|(i, _)| (i + 1) as u16)
-}
-
 // ---------------------------------------------------------------------------
 // Music lump name helpers
 // ---------------------------------------------------------------------------
@@ -458,29 +495,7 @@ pub fn find_sfx_id_by_name(wad: &WadFile, lump_name: &str) -> Option<u16> {
 /// - `"MAP01"` → `"D_MAP01"`
 /// - Unknown format → `None`
 pub fn music_lump_for_map(map: &str) -> Option<String> {
-    let upper = map.to_ascii_uppercase();
-    let bytes = upper.as_bytes();
-    if bytes.len() == 4
-        && bytes[0] == b'E'
-        && bytes[2] == b'M'
-        && bytes[1].is_ascii_digit()
-        && bytes[1] != b'0'
-        && bytes[3].is_ascii_digit()
-        && bytes[3] != b'0'
-    {
-        Some(format!("D_{upper}"))
-    } else if let Some(rest) = upper.strip_prefix("MAP") {
-        if rest.is_empty() || rest.len() > 2 || !rest.bytes().all(|b| b.is_ascii_digit()) {
-            return None;
-        }
-        let map_num: u8 = rest.parse().ok()?;
-        if map_num == 0 {
-            return None;
-        }
-        Some(format!("D_MAP{map_num:02}"))
-    } else {
-        None
-    }
+    Some(format!("D_{}", doom_game::MapId::from_name(map)?.map_name()))
 }
 
 // ---------------------------------------------------------------------------
@@ -530,6 +545,34 @@ mod tests {
         data
     }
 
+    fn test_pcm_sample() -> Arc<PcmSample> {
+        Arc::new(PcmSample {
+            sample_rate: 11_025,
+            data: vec![200u8; 512],
+        })
+    }
+
+    fn run_audio_events(events: Vec<AudioEvent>) -> SfxMixer {
+        let mixer = Arc::new(Mutex::new(SfxMixer::new()));
+        let midi = Arc::new(Mutex::new(MidiPlayer::new()));
+        let mut cache = SfxCache::new();
+        cache.insert(1, test_pcm_sample());
+        cache.insert(2, test_pcm_sample());
+
+        let (tx, rx) = std::sync::mpsc::channel();
+        for event in events {
+            tx.send(event).expect("test send should succeed");
+        }
+        drop(tx);
+
+        audio_cmd_thread(rx, &mixer, &midi, &cache, || {});
+
+        Arc::try_unwrap(mixer)
+            .expect("test mixer Arc should be unique")
+            .into_inner()
+            .expect("test mixer mutex should not be poisoned")
+    }
+
     #[test]
     fn audio_system_try_open_null_does_not_panic() {
         // Verifies that try_open_null() succeeds regardless of audio device
@@ -542,9 +585,59 @@ mod tests {
     fn send_events_to_null_system_does_not_panic() {
         let system = AudioSystem::try_open_null().expect("null audio must succeed");
         // Fire-and-forget: none of these should panic.
-        system.play_sfx(32, doom_audio::SfxPriority::Medium, 1.0, 0.0);
+        system.play_sfx(32, doom_audio::SfxPriority::Medium, 1.0, 0.0, None);
         system.start_music(vec![0u8; 4]); // invalid MUS — audio thread logs and continues
         system.stop_music();
+    }
+
+    #[test]
+    fn audio_cmd_thread_reuses_channel_for_same_origin() {
+        let origin = doom_game::MobjHandle {
+            index: 7,
+            generation: 3,
+        };
+        let mixer = run_audio_events(vec![
+            AudioEvent::PlaySfx(1, SfxPriority::High, 1.0, 0.0, Some(origin)),
+            AudioEvent::PlaySfx(2, SfxPriority::Medium, 0.6, -0.3, Some(origin)),
+        ]);
+
+        assert_eq!(
+            mixer.active_count(),
+            1,
+            "same-origin sound retriggers should restart one live channel, not allocate two"
+        );
+    }
+
+    #[test]
+    fn audio_cmd_thread_keeps_distinct_origins_on_distinct_channels() {
+        let mixer = run_audio_events(vec![
+            AudioEvent::PlaySfx(
+                1,
+                SfxPriority::High,
+                1.0,
+                0.0,
+                Some(doom_game::MobjHandle {
+                    index: 1,
+                    generation: 1,
+                }),
+            ),
+            AudioEvent::PlaySfx(
+                2,
+                SfxPriority::High,
+                0.8,
+                0.2,
+                Some(doom_game::MobjHandle {
+                    index: 2,
+                    generation: 1,
+                }),
+            ),
+        ]);
+
+        assert_eq!(
+            mixer.active_count(),
+            2,
+            "different origins should still occupy distinct channels"
+        );
     }
 
     #[test]

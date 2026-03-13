@@ -337,6 +337,7 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
 pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level>) {
     if gs.player.is_dead() {
         gs.player.attack_down = false;
+        gs.player.extra_light = 0;
         gs.player.use_down = false;
         return;
     }

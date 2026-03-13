@@ -28,8 +28,8 @@ use doom_renderer::{
     IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, RenderOut, SpriteCache,
     SpriteClip, SwitchList, TextureCache, WeaponAnimState, draw_automap_ex, draw_intermission,
     draw_menu, draw_status_bar, draw_title_screen, draw_weapon_animated,
-    render_actors_with_masked_ex, render_flag_from_state, render_level_with_view_height,
-    thing_sprite_prefix,
+    render_actors_with_masked_ex, render_flag_from_state,
+    render_level_with_view_height_and_extra_light, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -493,6 +493,7 @@ impl DoomGame {
             .get(self.gs.player.handle)
             .map(|mo| (mo.x, mo.y, mo.angle))
             .unwrap_or_default();
+        let player_origin = Some(self.gs.player.handle);
 
         for ev in events {
             let Some((lump, priority)) = sound_request_sfx(*ev) else {
@@ -500,13 +501,25 @@ impl DoomGame {
             };
 
             let emitter = match ev {
-                SoundRequest::MonsterWake(_, x, y)
-                | SoundRequest::MonsterAttack(_, x, y)
-                | SoundRequest::MonsterDie(_, x, y) => Some((*x, *y)),
+                SoundRequest::MonsterWake(_, _, x, y)
+                | SoundRequest::MonsterAttack(_, _, x, y)
+                | SoundRequest::MonsterDie(_, _, x, y) => Some((*x, *y)),
                 SoundRequest::PlayerWeaponFire(_)
                 | SoundRequest::PlayerSuperShotgunOpen
                 | SoundRequest::PlayerSuperShotgunLoad
                 | SoundRequest::PlayerSuperShotgunClose => Some((pl_x, pl_y)),
+                SoundRequest::PlayerDie
+                | SoundRequest::PlayerUseFail
+                | SoundRequest::PlayerUseLockedDoor(_) => None,
+            };
+            let origin = match ev {
+                SoundRequest::MonsterWake(_, handle, _, _)
+                | SoundRequest::MonsterAttack(_, handle, _, _)
+                | SoundRequest::MonsterDie(_, handle, _, _) => Some(*handle),
+                SoundRequest::PlayerWeaponFire(_)
+                | SoundRequest::PlayerSuperShotgunOpen
+                | SoundRequest::PlayerSuperShotgunLoad
+                | SoundRequest::PlayerSuperShotgunClose => player_origin,
                 SoundRequest::PlayerDie
                 | SoundRequest::PlayerUseFail
                 | SoundRequest::PlayerUseLockedDoor(_) => None,
@@ -532,9 +545,9 @@ impl DoomGame {
                         continue;
                     }
 
-                    audio.play_sfx(id, priority, spatial.volume, spatial.pan);
+                    audio.play_sfx(id, priority, spatial.volume, spatial.pan, origin);
                 } else {
-                    audio.play_sfx(id, priority, 1.0, 0.0);
+                    audio.play_sfx(id, priority, 1.0, 0.0, origin);
                 }
             }
         }
@@ -598,28 +611,8 @@ impl DoomGame {
             let Some(mo) = self.gs.mobjslab.get(h) else {
                 continue;
             };
-            // Monsters only, alive.
-            let is_monster = matches!(
-                mo.kind,
-                doom_game::mobj::MobjKind::Trooper
-                    | doom_game::mobj::MobjKind::Sergeant
-                    | doom_game::mobj::MobjKind::Imp
-                    | doom_game::mobj::MobjKind::Demon
-                    | doom_game::mobj::MobjKind::Spectre
-                    | doom_game::mobj::MobjKind::Cacodemon
-                    | doom_game::mobj::MobjKind::BaronOfHell
-                    | doom_game::mobj::MobjKind::HellKnight
-                    | doom_game::mobj::MobjKind::Arachnotron
-                    | doom_game::mobj::MobjKind::PainElemental
-                    | doom_game::mobj::MobjKind::Revenant
-                    | doom_game::mobj::MobjKind::Mancubus
-                    | doom_game::mobj::MobjKind::ArchVile
-                    | doom_game::mobj::MobjKind::SpiderMastermind
-                    | doom_game::mobj::MobjKind::Cyberdemon
-                    | doom_game::mobj::MobjKind::WolfSS
-                    | doom_game::mobj::MobjKind::LostSoul
-            );
-            if !is_monster {
+            // Monsters only (MF_COUNTKILL is the canonical "killable monster" flag).
+            if mo.flags & doom_game::mobj::flags::MF_COUNTKILL == 0 {
                 continue;
             }
             let ex = mo.x.to_int();
@@ -992,7 +985,13 @@ impl DoomApp for DoomGame {
                 self.palette_flash.trigger(palette, 12);
                 // Play DSPLPAIN on any damage taken.
                 if let (Some(audio), Some(sfx_id)) = (&self.audio, self.pain_sfx_id) {
-                    audio.play_sfx(sfx_id, SfxPriority::High, 1.0, 0.0);
+                    audio.play_sfx(
+                        sfx_id,
+                        SfxPriority::High,
+                        1.0,
+                        0.0,
+                        Some(self.gs.player.handle),
+                    );
                 }
                 if self.debug_log.is_some() {
                     let msg = format!("damage -{} health={}", damage, cur_health);
@@ -1077,7 +1076,7 @@ impl DoomApp for DoomGame {
                 clip_top_depth,
                 clip_bot_depth,
                 masked_columns,
-            } = render_level_with_view_height(
+            } = render_level_with_view_height_and_extra_light(
                 &self.level,
                 px,
                 py,
@@ -1090,6 +1089,7 @@ impl DoomApp for DoomGame {
                 self.colormap_cache.as_ref(),
                 None,
                 false,
+                self.gs.player.extra_light,
             );
 
             // Project live mobj positions as state-driven billboard sprites.
@@ -1617,12 +1617,12 @@ fn main() -> Result<()> {
             }
         });
 
-    // Resolve player pain SFX (DSPLPAIN) once at startup so we can fire it cheaply.
-    let pain_sfx_id = audio_system::find_sfx_id_by_name(&wad, "DSPLPAIN");
-
     // Build a name→ID map for all DS* lumps so monster sounds can be resolved
     // by lump name at play time without additional WAD scans.
     let sfx_lookup = audio_system::build_sfx_lookup(&wad);
+
+    // Resolve player pain SFX (DSPLPAIN) once at startup so we can fire it cheaply.
+    let pain_sfx_id = sfx_lookup.get("DSPLPAIN").copied();
 
     let mut app = DoomGame::new(
         gs,

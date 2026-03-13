@@ -147,6 +147,12 @@ pub const ACTION_OPEN_SHOTGUN2: u8 = 49;
 pub const ACTION_LOAD_SHOTGUN2: u8 = 50;
 /// `A_CloseShotgun2`: play the super shotgun close sound and optionally refire.
 pub const ACTION_CLOSE_SHOTGUN2: u8 = 51;
+/// `A_Light0`: clear the player's weapon flash light bonus.
+pub const ACTION_LIGHT0: u8 = 52;
+/// `A_Light1`: set the player's weapon flash light bonus to level 1.
+pub const ACTION_LIGHT1: u8 = 53;
+/// `A_Light2`: set the player's weapon flash light bonus to level 2.
+pub const ACTION_LIGHT2: u8 = 54;
 
 // ---------------------------------------------------------------------------
 // Public dispatcher
@@ -582,8 +588,9 @@ fn transition_to_see_state(
         .get(handle)
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
-    gs.sound_queue
-        .push(crate::state::SoundRequest::MonsterWake(kind, mo_x, mo_y));
+    gs.sound_queue.push(crate::state::SoundRequest::MonsterWake(
+        kind, handle, mo_x, mo_y,
+    ));
 }
 
 // ---------------------------------------------------------------------------
@@ -1086,6 +1093,7 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     gs.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Trooper,
+            handle,
             sx,
             sy,
         ));
@@ -1138,6 +1146,7 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     gs.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Sergeant,
+            handle,
             sx,
             sy,
         ));
@@ -1184,6 +1193,7 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
     gs.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Imp,
+            handle,
             sx,
             sy,
         ));
@@ -1223,6 +1233,7 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
         gs.sound_queue
             .push(crate::state::SoundRequest::MonsterAttack(
                 MobjKind::Demon,
+                handle,
                 sx,
                 sy,
             ));
@@ -1256,6 +1267,7 @@ fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
     gs.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Cacodemon,
+            handle,
             sx,
             sy,
         ));
@@ -1292,7 +1304,7 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
 
     gs.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
-            bruis_kind, sx, sy,
+            bruis_kind, handle, sx, sy,
         ));
 }
 
@@ -1342,7 +1354,9 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         .unwrap_or_default();
 
     gs.sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(cpos_kind, sx, sy));
+        .push(crate::state::SoundRequest::MonsterAttack(
+            cpos_kind, handle, sx, sy,
+        ));
 }
 
 // ---------------------------------------------------------------------------
@@ -1372,6 +1386,7 @@ fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
     gs.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Cyberdemon,
+            handle,
             sx,
             sy,
         ));
@@ -1404,6 +1419,7 @@ fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
     gs.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Revenant,
+            handle,
             sx,
             sy,
         ));
@@ -1479,6 +1495,7 @@ fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
     gs.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Mancubus,
+            handle,
             sx,
             sy,
         ));

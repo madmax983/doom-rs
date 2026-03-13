@@ -334,6 +334,39 @@ pub fn render_level_with_view_height(
     anim: Option<&AnimState>,
     is_fullbright: bool,
 ) -> RenderOut {
+    render_level_with_view_height_and_extra_light(
+        level,
+        player_x,
+        player_y,
+        player_angle,
+        player_view_height,
+        fb,
+        _palette,
+        flat_cache,
+        tex_cache,
+        colormap,
+        anim,
+        is_fullbright,
+        0,
+    )
+}
+
+/// Render a Doom level using an explicit player view height and player extra-light bonus.
+pub fn render_level_with_view_height_and_extra_light(
+    level: &Level,
+    player_x: i32,
+    player_y: i32,
+    player_angle: Bam,
+    player_view_height: i32,
+    fb: &mut Framebuffer,
+    _palette: &PaletteLut,
+    flat_cache: Option<&FlatCache>,
+    tex_cache: Option<&TextureCache>,
+    colormap: Option<&ColormapCache>,
+    anim: Option<&AnimState>,
+    is_fullbright: bool,
+    extra_light: u8,
+) -> RenderOut {
     // ------------------------------------------------------------------
     // Step 1: Draw background (ceiling top half, floor bottom half)
     // ------------------------------------------------------------------
@@ -365,6 +398,7 @@ pub fn render_level_with_view_height(
     // Camera height in world space (map units). We anchor view Z to the floor
     // of the sector containing the player.
     let player_view_height = player_view_height.max(0);
+    let extra_light_bonus = extra_light.saturating_mul(64);
     let mut view_z = player_view_height;
     // Save player sector info for post-pass open column filling.
     let mut player_ceil_flat = *b"FLAT2\0\0\0";
@@ -380,7 +414,7 @@ pub fn render_level_with_view_height(
         player_floor_flat = sec.floor_flat;
         player_ceil_h = sec.ceil_height as i32;
         player_floor_h = sec.floor_height as i32;
-        player_light = (sec.light_level as u32).min(255) as u8;
+        player_light = ((sec.light_level as u32).min(255) as u8).saturating_add(extra_light_bonus);
     }
 
     // Visplane set — built inline during the wall pass (Doom R_RenderSegLoop
@@ -514,7 +548,8 @@ pub fn render_level_with_view_height(
 
         let floor_h = sector.floor_height as i32;
         let ceil_h = sector.ceil_height as i32;
-        let sector_light = (sector.light_level as u32).min(255) as u8;
+        let sector_light =
+            ((sector.light_level as u32).min(255) as u8).saturating_add(extra_light_bonus);
 
         // Build per-sector lighting parameters.  `LightParams` caches the
         // base colormap index and fullbright flag so each column can quickly
@@ -4728,6 +4763,69 @@ mod tests {
                 "light=0 sector should use dark colormap rows (pixel values > 0 in test colormap)"
             );
         }
+    }
+
+    #[test]
+    fn player_extra_light_brightens_world_rendering() {
+        init_trig();
+        let palette = PaletteLut::grayscale();
+        let cm = make_test_colormap();
+        let level = make_level_with_light(0);
+
+        let mut fb_base = Framebuffer::new();
+        render_level(
+            &level,
+            64,
+            0,
+            doom_types::ANG90,
+            &mut fb_base,
+            &palette,
+            None,
+            None,
+            Some(&cm),
+            None,
+            false,
+        );
+
+        let mut fb_boosted = Framebuffer::new();
+        render_level_with_view_height_and_extra_light(
+            &level,
+            64,
+            0,
+            doom_types::ANG90,
+            PLAYER_HEIGHT,
+            &mut fb_boosted,
+            &palette,
+            None,
+            None,
+            Some(&cm),
+            None,
+            false,
+            2,
+        );
+
+        let cx = HALF_W as usize;
+        let base_pixels: Vec<u8> = (0..SCREEN_H)
+            .filter_map(|y| fb_base.get_pixel(cx, y))
+            .filter(|&px| px != 25 && px != 119)
+            .collect();
+        let boosted_pixels: Vec<u8> = (0..SCREEN_H)
+            .filter_map(|y| fb_boosted.get_pixel(cx, y))
+            .filter(|&px| px != 25 && px != 119)
+            .collect();
+        assert!(
+            !base_pixels.is_empty() && !boosted_pixels.is_empty(),
+            "test level should produce visible wall pixels in the center column"
+        );
+
+        let base_avg =
+            base_pixels.iter().map(|&px| u32::from(px)).sum::<u32>() / base_pixels.len() as u32;
+        let boosted_avg = boosted_pixels.iter().map(|&px| u32::from(px)).sum::<u32>()
+            / boosted_pixels.len() as u32;
+        assert!(
+            boosted_avg < base_avg,
+            "player extra-light should use brighter colormap rows (base={base_avg}, boosted={boosted_avg})"
+        );
     }
 
     // --- Test 6: no colormap cache defaults to identity ---
