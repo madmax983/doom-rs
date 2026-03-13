@@ -263,6 +263,7 @@ pub fn apply_save(gs: &mut GameState, payload: &SavePayload) -> Result<(), SaveE
     // Restore active weapon.
     if let Some(wt) = doom_game::WeaponType::from_num(payload.active_weapon as usize) {
         gs.player.weapon = wt;
+        doom_game::setup_psprites(&mut gs.player);
     }
 
     // Restore player Mobj position if the handle is valid.

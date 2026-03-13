@@ -176,6 +176,7 @@ pub fn spawn_level_things(
             sync_mobj_to_level(level, &mut mo);
             let handle = gs.mobjslab.alloc(mo);
             gs.player = PlayerState::pistol_start(handle);
+            crate::weapons::setup_psprites(&mut gs.player);
             player_handle = Some(handle);
             continue;
         }

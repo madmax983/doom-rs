@@ -9,7 +9,7 @@
 
 use doom_types::limits::{MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_WEAPONS};
 
-use crate::mobj::MobjHandle;
+use crate::mobj::{MobjHandle, StateNum};
 
 // ---------------------------------------------------------------------------
 // Key bit constants
@@ -34,6 +34,17 @@ pub const KEY_RED_SKULL: u8 = 0x20;
 
 /// Number of distinct power-up types.
 pub const NUM_POWERS: usize = 6;
+
+/// Number of player psprite slots (`weapon`, `flash`).
+pub const NUM_PSPRITES: usize = 2;
+
+/// Psprite slot indices matching vanilla Doom's `ps_weapon` / `ps_flash`.
+pub mod psprite_slots {
+    /// Main weapon sprite.
+    pub const WEAPON: usize = 0;
+    /// Muzzle-flash overlay sprite.
+    pub const FLASH: usize = 1;
+}
 
 /// Power-up slot indices.
 pub mod powers {
@@ -87,6 +98,30 @@ pub enum AmmoType {
     None = 255,
 }
 
+/// Current state of one player psprite slot.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PspriteState {
+    /// State-table entry currently driving this psprite.
+    pub state: StateNum,
+    /// Tics remaining in the current state (0 = advance next tic).
+    pub tics: i32,
+    /// Horizontal screen offset in pixels.
+    pub sx: i32,
+    /// Vertical screen offset in pixels.
+    pub sy: i32,
+}
+
+impl Default for PspriteState {
+    fn default() -> Self {
+        Self {
+            state: StateNum(crate::states::ids::S_NULL),
+            tics: 0,
+            sx: 0,
+            sy: 0,
+        }
+    }
+}
+
 /// Which ammo pool each weapon draws from.
 pub const WEAPON_AMMO: [AmmoType; NUM_WEAPONS] = [
     AmmoType::None,    // Fist
@@ -133,12 +168,16 @@ pub struct PlayerState {
     pub weapon: WeaponType,
     /// Weapon to switch to next tic (if `Some`).
     pub pending_weapon: Option<WeaponType>,
+    /// Weapon and flash psprite slots (vanilla `ps_weapon`, `ps_flash`).
+    pub psprites: [PspriteState; NUM_PSPRITES],
 
     // --- Input debounce ---
     /// Was attack held last tic (for auto-fire).
     pub attack_down: bool,
     /// Tics remaining before the current weapon may fire again.
     pub attack_cooldown: u8,
+    /// Consecutive refire count while the attack button is held.
+    pub refire: u8,
     /// Was use held last tic (prevents continuous use on key hold).
     pub use_down: bool,
 
@@ -194,8 +233,10 @@ impl PlayerState {
             weapons,
             weapon: WeaponType::Pistol,
             pending_weapon: None,
+            psprites: [PspriteState::default(); NUM_PSPRITES],
             attack_down: false,
             attack_cooldown: 0,
+            refire: 0,
             use_down: false,
             powers: [0; NUM_POWERS],
             god_mode: false,

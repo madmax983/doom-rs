@@ -26,9 +26,10 @@ use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
     ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
     IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, RenderOut, SpriteCache,
-    SpriteClip, SwitchList, TextureCache, draw_automap_ex, draw_intermission, draw_menu,
-    draw_status_bar, draw_title_screen, draw_weapon_sprite, render_actors_with_masked_ex,
-    render_flag_from_state, render_level_with_view_height, thing_sprite_prefix,
+    SpriteClip, SwitchList, TextureCache, WeaponAnimState, draw_automap_ex, draw_intermission,
+    draw_menu, draw_status_bar, draw_title_screen, draw_weapon_animated,
+    render_actors_with_masked_ex, render_flag_from_state, render_level_with_view_height,
+    thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -169,10 +170,11 @@ pub(crate) struct DoomGame {
     intermission_renderer: Option<IntermissionRenderer>,
     /// Previous tic's held attack/use mask for transition skip edge detection.
     transition_buttons_down: u8,
+    /// First-person weapon bob/raise/flash controller.
+    weapon_anim: WeaponAnimState,
 }
 
 const DEAD_PLAYER_VIEW_HEIGHT: i32 = 6;
-
 #[inline]
 fn next_player_view_height(current: i32, player_dead: bool) -> i32 {
     if player_dead {
@@ -221,7 +223,7 @@ impl DoomGame {
             GamePhaseController::new(start_map)
         };
 
-        let game = Self {
+        let mut game = Self {
             gs,
             level,
             cheat_detector: cheats::CheatDetector::new(),
@@ -253,7 +255,10 @@ impl DoomGame {
             phase_controller,
             intermission_renderer: None,
             transition_buttons_down: 0,
+            weapon_anim: WeaponAnimState::new(),
         };
+
+        game.reset_weapon_anim();
 
         if game.title_screen.is_none() {
             game.start_level_music();
@@ -362,12 +367,14 @@ impl DoomGame {
             player.pending_weapon = None;
             player.attack_down = false;
             player.attack_cooldown = 0;
+            player.refire = 0;
             player.use_down = false;
             player.bonus_count = 0;
             player.damage_count = 0;
             player.kill_count = 0;
             player.item_count = 0;
             player.secret_count = 0;
+            doom_game::weapons::setup_psprites(&mut player);
             gs.player = player;
             gs.sync_player_mobj_health();
         }
@@ -382,7 +389,77 @@ impl DoomGame {
         self.prev_health = self.gs.player.health();
         self.phase_controller.clear_load_request();
         self.intermission_renderer = None;
+        self.reset_weapon_anim();
         self.start_level_music();
+    }
+
+    fn reset_weapon_anim(&mut self) {
+        self.weapon_anim = WeaponAnimState::new();
+        self.ensure_player_psprites_initialized();
+        self.sync_weapon_anim_from_player_psprites(false);
+    }
+
+    fn player_weapon_anim_speed(&self) -> i32 {
+        let Some(mo) = self.gs.mobjslab.get(self.gs.player.handle) else {
+            return 0;
+        };
+        let momx = i64::from(mo.momx.0);
+        let momy = i64::from(mo.momy.0);
+        ((momx * momx + momy * momy) as f64).sqrt() as i32
+    }
+
+    fn ensure_player_psprites_initialized(&mut self) {
+        use doom_game::player::psprite_slots;
+
+        let weapon = self.gs.player.psprites[psprite_slots::WEAPON].state;
+        let flash = self.gs.player.psprites[psprite_slots::FLASH].state;
+        if weapon == doom_game::StateNum::NULL && flash == doom_game::StateNum::NULL {
+            doom_game::weapons::setup_psprites(&mut self.gs.player);
+        }
+    }
+
+    fn sync_weapon_anim_from_player_psprites(&mut self, preserve_motion: bool) {
+        use doom_game::player::psprite_slots;
+
+        let weapon_psprite = self.gs.player.psprites[psprite_slots::WEAPON];
+        let flash_psprite = self.gs.player.psprites[psprite_slots::FLASH];
+        let previous_offset = preserve_motion.then_some(self.weapon_anim.raise_offset);
+
+        self.weapon_anim.current.sprite_name =
+            psprite_patch_name(weapon_psprite.state).unwrap_or(*b"PISGA0\0\0");
+        self.weapon_anim.current.flash_active = flash_psprite.state != doom_game::StateNum::NULL;
+        self.weapon_anim.current.flash_sprite =
+            psprite_patch_name(flash_psprite.state).unwrap_or([0; 8]);
+        self.weapon_anim.current.flash_tics = flash_psprite.tics.max(0) as u32;
+        self.weapon_anim.current.full_bright = self.weapon_anim.current.flash_active
+            || psprite_state_is_fullbright(weapon_psprite.state);
+        self.weapon_anim.raise_offset = weapon_psprite.sy;
+
+        let (state_raising, state_lowering) =
+            psprite_transition_flags(self.gs.player.weapon, weapon_psprite.state);
+
+        if state_raising || state_lowering {
+            self.weapon_anim.current.raising = state_raising;
+            self.weapon_anim.current.lowering = state_lowering;
+        } else if let Some(previous_offset) = previous_offset {
+            self.weapon_anim.current.raising = weapon_psprite.sy < previous_offset;
+            self.weapon_anim.current.lowering = weapon_psprite.sy > previous_offset;
+        } else {
+            self.weapon_anim.current.raising = false;
+            self.weapon_anim.current.lowering = false;
+        }
+    }
+
+    fn tick_weapon_anim(&mut self) {
+        self.ensure_player_psprites_initialized();
+        if self.gs.player.is_dead() {
+            self.weapon_anim.bob.reset();
+            self.sync_weapon_anim_from_player_psprites(false);
+            return;
+        }
+
+        self.weapon_anim.bob.tick(self.player_weapon_anim_speed());
+        self.sync_weapon_anim_from_player_psprites(true);
     }
 
     fn transition_input_pressed(&mut self, input: &TicInput) -> bool {
@@ -398,8 +475,11 @@ impl DoomGame {
         use doom_game::SoundRequest;
 
         for ev in events {
-            if let SoundRequest::PlayerUseLockedDoor(color) = ev {
-                self.cheat_message = Some((locked_door_message(*color).to_string(), 105));
+            match ev {
+                SoundRequest::PlayerUseLockedDoor(color) => {
+                    self.cheat_message = Some((locked_door_message(*color).to_string(), 105));
+                }
+                _ => {}
             }
         }
 
@@ -844,6 +924,7 @@ impl DoomApp for DoomGame {
                     if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
                         self.console.print(format!("Load failed: {e}"));
                     } else {
+                        self.reset_weapon_anim();
                         self.console.print("Game loaded.".to_string());
                         self.start_level_music();
                     }
@@ -863,6 +944,7 @@ impl DoomApp for DoomGame {
         self.gs.tick(cmd, Some(&mut self.level));
         self.player_view_height =
             next_player_view_height(self.player_view_height, self.gs.player.is_dead());
+        self.tick_weapon_anim();
         self.phase_controller.tick(&mut self.gs);
         self.update_intermission_renderer();
         if let Some(map_id) = self.phase_controller.should_load_map() {
@@ -1073,8 +1155,7 @@ impl DoomApp for DoomGame {
             if let Some(ref cache) = self.sprite_cache
                 && !self.gs.player.is_dead()
             {
-                let sprite_name = weapon_idle_sprite(self.gs.player.weapon);
-                draw_weapon_sprite(fb, &sprite_name, cache, &IDENTITY_COLORMAP);
+                draw_weapon_animated(fb, &self.weapon_anim, cache, &IDENTITY_COLORMAP);
             }
 
             // Draw HUD status bar over the bottom 32 rows.
@@ -1305,19 +1386,60 @@ fn mini_glyph(ch: char) -> [u8; 6] {
 // Weapon sprite mapping
 // ---------------------------------------------------------------------------
 
-/// Map the player's current weapon to its idle sprite lump name (8 bytes).
-fn weapon_idle_sprite(weapon: WeaponType) -> [u8; 8] {
-    match weapon {
-        WeaponType::Fist => *b"PUNGA0\0\0",
-        WeaponType::Pistol => *b"PISGA0\0\0",
-        WeaponType::Shotgun => *b"SHTGA0\0\0",
-        WeaponType::Chaingun => *b"CHGGA0\0\0",
-        WeaponType::RocketLauncher => *b"MISGA0\0\0",
-        WeaponType::PlasmaRifle => *b"PLSGA0\0\0",
-        WeaponType::Bfg => *b"BFGGA0\0\0",
-        WeaponType::Chainsaw => *b"SAWGA0\0\0",
-        WeaponType::SuperShotgun => *b"SHT2A0\0\0",
+fn psprite_state_is_fullbright(state: doom_game::StateNum) -> bool {
+    if state == doom_game::StateNum::NULL {
+        return false;
     }
+
+    STATES
+        .get(state.0 as usize)
+        .map(|entry| entry.frame & 0x80 != 0)
+        .unwrap_or(false)
+}
+
+fn psprite_patch_name(state: doom_game::StateNum) -> Option<[u8; 8]> {
+    if state == doom_game::StateNum::NULL {
+        return None;
+    }
+
+    let entry = STATES.get(state.0 as usize)?;
+    if entry.sprite == doom_game::sprite_names::SPR_NONE {
+        return None;
+    }
+
+    let sprite_index = entry.sprite as usize;
+    let sprite_name = *doom_game::sprite_names::SPRITE_NAMES.get(sprite_index)?;
+    let frame_index = entry.frame & 0x7f;
+    if frame_index >= 26 {
+        return None;
+    }
+
+    let mut lump = [0u8; 8];
+    lump[..4].copy_from_slice(sprite_name.as_bytes());
+    lump[4] = b'A' + frame_index;
+    lump[5] = b'0';
+    Some(lump)
+}
+
+fn psprite_transition_flags(weapon: WeaponType, state: doom_game::StateNum) -> (bool, bool) {
+    use doom_game::states::ids;
+
+    let (up, down) = match weapon {
+        WeaponType::Fist => (ids::S_PUNCH_UP, ids::S_PUNCH_DOWN),
+        WeaponType::Pistol => (ids::S_PISTOL_UP, ids::S_PISTOL_DOWN),
+        WeaponType::Shotgun => (ids::S_SGUN_UP, ids::S_SGUN_DOWN),
+        WeaponType::Chaingun => (ids::S_CHAIN_UP, ids::S_CHAIN_DOWN),
+        WeaponType::RocketLauncher => (ids::S_MISSILE_UP, ids::S_MISSILE_DOWN),
+        WeaponType::PlasmaRifle => (ids::S_PLASMA_UP, ids::S_PLASMA_DOWN),
+        WeaponType::Bfg => (ids::S_BFG_UP, ids::S_BFG_DOWN),
+        WeaponType::Chainsaw => (ids::S_SAW_UP, ids::S_SAW_DOWN),
+        WeaponType::SuperShotgun => (ids::S_DSGUN_UP, ids::S_DSGUN_DOWN),
+    };
+
+    (
+        state == doom_game::StateNum(up),
+        state == doom_game::StateNum(down),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -2127,6 +2249,108 @@ mod tests {
         assert_eq!(
             game.player_view_height, PLAYER_HEIGHT,
             "player view height must start at the normal standing height"
+        );
+    }
+
+    #[test]
+    fn doom_game_new_syncs_weapon_anim_to_player_weapon() {
+        let mut gs = make_game_state();
+        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.weapon = WeaponType::Shotgun;
+        let game = DoomGame::new(
+            gs,
+            make_test_level(),
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+            None,
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+        );
+
+        assert_eq!(
+            game.weapon_anim.current.sprite_name, *b"SHTGA0\0\0",
+            "weapon overlay must initialize from the player's psprite state, not always pistol"
+        );
+    }
+
+    #[test]
+    fn player_attack_tick_triggers_weapon_flash_from_psprites() {
+        let mut game = make_doom_game();
+        for _ in 0..24 {
+            game.tick(TicInput::default());
+        }
+
+        game.tick(TicInput {
+            buttons: doom_game::bt::BT_ATTACK,
+            ..TicInput::default()
+        });
+
+        assert!(
+            game.weapon_anim.current.flash_active,
+            "player attack should drive the overlay flash from the game psprite state"
+        );
+        assert_eq!(
+            game.weapon_anim.current.flash_sprite, *b"PISGD0\0\0",
+            "pistol flash should come from the current psprite frame, not a hard-coded patch name"
+        );
+    }
+
+    #[test]
+    fn weapon_anim_bobs_when_player_has_momentum() {
+        let mut game = make_doom_game();
+        game.gs
+            .mobjslab
+            .get_mut(game.gs.player.handle)
+            .expect("player mobj must exist")
+            .momx = Fixed16_16::from_int(4);
+
+        game.tick(TicInput::default());
+
+        assert!(
+            game.weapon_anim.bob.offset_x != 0 || game.weapon_anim.bob.offset_y != 0,
+            "moving player momentum must drive first-person weapon sway"
+        );
+    }
+
+    #[test]
+    fn weapon_switch_lowers_then_raises_new_weapon() {
+        let mut game = make_doom_game();
+        game.gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        for _ in 0..24 {
+            game.tick(TicInput::default());
+        }
+
+        game.tick(TicInput {
+            buttons: doom_game::bt::BT_CHANGE | (2u8 << 3),
+            ..TicInput::default()
+        });
+
+        assert_eq!(
+            game.gs.player.pending_weapon,
+            Some(WeaponType::Shotgun),
+            "weapon switch should stage the new weapon in the gameplay psprite state"
+        );
+        assert!(
+            game.weapon_anim.current.lowering,
+            "weapon switch should start by lowering the current weapon psprite"
+        );
+
+        for _ in 0..80 {
+            game.tick(TicInput::default());
+        }
+
+        assert_eq!(
+            game.weapon_anim.current.sprite_name, *b"SHTGA0\0\0",
+            "after the transition finishes the overlay must show the new weapon"
+        );
+        assert!(
+            game.gs.player.pending_weapon.is_none(),
+            "pending weapon must clear once the new weapon is raised"
         );
     }
 

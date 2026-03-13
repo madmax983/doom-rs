@@ -123,4 +123,4 @@ pub use weapon_fire::{
     p_fire_pistol, p_fire_plasma, p_fire_rocket, p_fire_shotgun, p_fire_super_shotgun,
     select_next_weapon, weapon_ammo_cost,
 };
-pub use weapons::{fire_weapon, player_can_fire};
+pub use weapons::{fire_weapon, player_can_fire, setup_psprites, tick_psprites};

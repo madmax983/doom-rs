@@ -12,7 +12,7 @@ use doom_types::limits::{NUM_AMMO, NUM_WEAPONS};
 use doom_types::{Bam, Fixed16_16};
 
 use crate::mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum};
-use crate::player::{NUM_POWERS, PlayerState, WeaponType};
+use crate::player::{NUM_POWERS, NUM_PSPRITES, PlayerState, PspriteState, WeaponType};
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoomRng, DoorMover, ExitRequest, FloorMover,
     FloorType, GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
@@ -30,7 +30,7 @@ pub const SAVE_MAGIC: [u8; 4] = *b"DRS1";
 pub const MAX_SAVE_SLOTS: usize = 6;
 
 /// Current save format version.
-const SAVE_VERSION: u32 = 2;
+const SAVE_VERSION: u32 = 3;
 
 // ---------------------------------------------------------------------------
 // SaveHeader
@@ -286,6 +286,22 @@ fn read_state_num(r: &mut ReadCursor<'_>) -> Result<StateNum, SaveError> {
     Ok(StateNum(r.read_u16()?))
 }
 
+fn write_psprite_state(w: &mut WriteCursor, ps: &PspriteState) {
+    write_state_num(w, ps.state);
+    w.write_i32(ps.tics);
+    w.write_i32(ps.sx);
+    w.write_i32(ps.sy);
+}
+
+fn read_psprite_state(r: &mut ReadCursor<'_>) -> Result<PspriteState, SaveError> {
+    Ok(PspriteState {
+        state: read_state_num(r)?,
+        tics: r.read_i32()?,
+        sx: r.read_i32()?,
+        sy: r.read_i32()?,
+    })
+}
+
 fn write_mobj_kind(w: &mut WriteCursor, k: MobjKind) {
     w.write_u16(k as u16);
 }
@@ -507,6 +523,10 @@ fn write_player_state(w: &mut WriteCursor, p: &PlayerState) {
             w.write_u8(0);
         }
     }
+    w.write_u8(p.refire);
+    for psprite in &p.psprites {
+        write_psprite_state(w, psprite);
+    }
     w.write_bool(p.attack_down);
     w.write_u8(p.attack_cooldown);
     w.write_bool(p.use_down);
@@ -548,6 +568,12 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
         0 => None,
         _ => Some(read_weapon_type(r)?),
     };
+
+    let refire = r.read_u8()?;
+    let mut psprites = [PspriteState::default(); NUM_PSPRITES];
+    for psprite in &mut psprites {
+        *psprite = read_psprite_state(r)?;
+    }
 
     let attack_down = r.read_bool()?;
     let attack_cooldown = r.read_u8()?;
@@ -598,6 +624,8 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
     ps.weapons = weapons;
     ps.weapon = weapon;
     ps.pending_weapon = pending_weapon;
+    ps.refire = refire;
+    ps.psprites = psprites;
     ps.attack_down = attack_down;
     ps.attack_cooldown = attack_cooldown;
     ps.use_down = use_down;
@@ -1740,5 +1768,36 @@ mod tests {
         let data = save_game(&gs, &test_level_name(), 2, "cooldown test");
         let loaded = load_game(&data).expect("load must succeed");
         assert_eq!(loaded.state.player.attack_cooldown, 9);
+    }
+
+    #[test]
+    fn roundtrip_player_refire() {
+        let mut gs = test_game_state();
+        gs.player.refire = 7;
+        let data = save_game(&gs, &test_level_name(), 2, "refire test");
+        let loaded = load_game(&data).expect("load must succeed");
+        assert_eq!(loaded.state.player.refire, 7);
+    }
+
+    #[test]
+    fn roundtrip_psprites() {
+        let mut gs = test_game_state();
+        gs.player.psprites[0] = PspriteState {
+            state: StateNum(crate::states::ids::S_SGUN3),
+            tics: 5,
+            sx: 12,
+            sy: 34,
+        };
+        gs.player.psprites[1] = PspriteState {
+            state: StateNum(crate::states::ids::S_SGUN_FLASH1),
+            tics: 2,
+            sx: -3,
+            sy: 99,
+        };
+
+        let data = save_game(&gs, &test_level_name(), 2, "psprite test");
+        let loaded = load_game(&data).expect("load must succeed");
+
+        assert_eq!(loaded.state.player.psprites, gs.player.psprites);
     }
 }

@@ -1,7 +1,6 @@
 //! Weapon firing — maps WeaponType to attack parameters and fires.
 //!
-//! Port of Doom's `p_pspr.c` (simplified — no weapon bob, no raise/lower
-//! animations, no flash states).
+//! Port of Doom's `p_pspr.c` weapon state machine.
 //!
 //! Each weapon dispatches to either `p_line_attack` (hitscan) or
 //! `p_radius_attack` (splash) from `combat.rs`.
@@ -10,10 +9,12 @@ use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
 
 use crate::combat::{MISSILERANGE, p_line_attack};
-use crate::mobj::{MobjHandle, MobjKind};
-use crate::player::AmmoType;
+use crate::mobj::{MobjHandle, MobjKind, StateNum};
+use crate::player::{AmmoType, PlayerState, PspriteState, WeaponType, psprite_slots};
 use crate::projectile::p_spawn_player_missile;
-use crate::state::GameState;
+use crate::state::{GameState, SoundRequest};
+use crate::states::{STATES, ids, sprite_names};
+use crate::tic::{TicCmd, bt};
 
 // ---------------------------------------------------------------------------
 // Weapon stat table
@@ -146,6 +147,425 @@ static WEAPON_INFO: [WeaponInfo; 9] = [
     },
 ];
 
+/// Normal fully-raised psprite Y offset.
+pub const WEAPON_TOP: i32 = 0;
+/// Fully-lowered psprite Y offset.
+pub const WEAPON_BOTTOM: i32 = 128;
+const RAISE_SPEED: i32 = 6;
+const LOWER_SPEED: i32 = 6;
+
+#[derive(Clone, Copy)]
+struct WeaponPspriteInfo {
+    up: StateNum,
+    down: StateNum,
+    ready: StateNum,
+    attack: StateNum,
+}
+
+fn weapon_psprite_sprite(weapon: WeaponType) -> u16 {
+    match weapon {
+        WeaponType::Fist => sprite_names::SPR_PUNG,
+        WeaponType::Pistol => sprite_names::SPR_PISG,
+        WeaponType::Shotgun => sprite_names::SPR_SHTG,
+        WeaponType::Chaingun => sprite_names::SPR_CHGG,
+        WeaponType::RocketLauncher => sprite_names::SPR_ROCK,
+        WeaponType::PlasmaRifle => sprite_names::SPR_PLSG,
+        WeaponType::Bfg => sprite_names::SPR_BFGG,
+        WeaponType::Chainsaw => sprite_names::SPR_SAWG,
+        WeaponType::SuperShotgun => sprite_names::SPR_SHT2,
+    }
+}
+
+fn weapon_psprite_info(weapon: WeaponType) -> WeaponPspriteInfo {
+    match weapon {
+        WeaponType::Fist => WeaponPspriteInfo {
+            up: StateNum(ids::S_PUNCH_UP),
+            down: StateNum(ids::S_PUNCH_DOWN),
+            ready: StateNum(ids::S_PUNCH_READY),
+            attack: StateNum(ids::S_PUNCH1),
+        },
+        WeaponType::Pistol => WeaponPspriteInfo {
+            up: StateNum(ids::S_PISTOL_UP),
+            down: StateNum(ids::S_PISTOL_DOWN),
+            ready: StateNum(ids::S_PISTOL_READY),
+            attack: StateNum(ids::S_PISTOL1),
+        },
+        WeaponType::Shotgun => WeaponPspriteInfo {
+            up: StateNum(ids::S_SGUN_UP),
+            down: StateNum(ids::S_SGUN_DOWN),
+            ready: StateNum(ids::S_SGUN_READY),
+            attack: StateNum(ids::S_SGUN1),
+        },
+        WeaponType::Chaingun => WeaponPspriteInfo {
+            up: StateNum(ids::S_CHAIN_UP),
+            down: StateNum(ids::S_CHAIN_DOWN),
+            ready: StateNum(ids::S_CHAIN_READY),
+            attack: StateNum(ids::S_CHAIN1),
+        },
+        WeaponType::RocketLauncher => WeaponPspriteInfo {
+            up: StateNum(ids::S_MISSILE_UP),
+            down: StateNum(ids::S_MISSILE_DOWN),
+            ready: StateNum(ids::S_MISSILE_READY),
+            attack: StateNum(ids::S_MISSILE1),
+        },
+        WeaponType::PlasmaRifle => WeaponPspriteInfo {
+            up: StateNum(ids::S_PLASMA_UP),
+            down: StateNum(ids::S_PLASMA_DOWN),
+            ready: StateNum(ids::S_PLASMA_READY),
+            attack: StateNum(ids::S_PLASMA1),
+        },
+        WeaponType::Bfg => WeaponPspriteInfo {
+            up: StateNum(ids::S_BFG_UP),
+            down: StateNum(ids::S_BFG_DOWN),
+            ready: StateNum(ids::S_BFG_READY),
+            attack: StateNum(ids::S_BFG1),
+        },
+        WeaponType::Chainsaw => WeaponPspriteInfo {
+            up: StateNum(ids::S_SAW_UP),
+            down: StateNum(ids::S_SAW_DOWN),
+            ready: StateNum(ids::S_SAW_READY1),
+            attack: StateNum(ids::S_SAW1),
+        },
+        WeaponType::SuperShotgun => WeaponPspriteInfo {
+            up: StateNum(ids::S_DSGUN_UP),
+            down: StateNum(ids::S_DSGUN_DOWN),
+            ready: StateNum(ids::S_DSGUN_READY),
+            attack: StateNum(ids::S_DSGUN1),
+        },
+    }
+}
+
+fn init_psprite_state(player: &mut PlayerState, slot: usize, state: StateNum) {
+    let psprite = &mut player.psprites[slot];
+    psprite.state = state;
+    if state == StateNum::NULL {
+        psprite.tics = 0;
+        return;
+    }
+
+    let Some(entry) = STATES.get(state.0 as usize) else {
+        psprite.state = StateNum::NULL;
+        psprite.tics = 0;
+        return;
+    };
+
+    psprite.tics = i32::from(entry.tics);
+}
+
+fn set_psprite_state(
+    gs: &mut GameState,
+    slot: usize,
+    mut state: StateNum,
+    cmd: TicCmd,
+    level: Option<&Level>,
+) {
+    loop {
+        if state == StateNum::NULL {
+            gs.player.psprites[slot].state = StateNum::NULL;
+            gs.player.psprites[slot].tics = 0;
+            return;
+        }
+
+        let Some(entry) = STATES.get(state.0 as usize) else {
+            gs.player.psprites[slot].state = StateNum::NULL;
+            gs.player.psprites[slot].tics = 0;
+            return;
+        };
+
+        gs.player.psprites[slot].state = state;
+        gs.player.psprites[slot].tics = i32::from(entry.tics);
+
+        if entry.action != crate::actions::ACTION_NONE {
+            dispatch_psprite_action(gs, entry.action, cmd, level);
+            if gs.player.psprites[slot].state != state {
+                return;
+            }
+        }
+
+        if gs.player.psprites[slot].tics != 0 {
+            return;
+        }
+
+        state = entry.next_state;
+    }
+}
+
+fn bring_up_weapon(player: &mut PlayerState) {
+    let weapon = player.pending_weapon.take().unwrap_or(player.weapon);
+    let info = weapon_psprite_info(weapon);
+    player.weapon = weapon;
+    player.psprites[psprite_slots::WEAPON].sx = 0;
+    player.psprites[psprite_slots::WEAPON].sy = WEAPON_BOTTOM;
+    init_psprite_state(player, psprite_slots::WEAPON, info.up);
+}
+
+fn begin_lower_weapon(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    let info = weapon_psprite_info(gs.player.weapon);
+    set_psprite_state(gs, psprite_slots::WEAPON, info.down, cmd, level);
+}
+
+fn check_ammo(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) -> bool {
+    if player_can_fire(gs) {
+        return true;
+    }
+    gs.player.refire = 0;
+    gs.player.pending_weapon = crate::weapon_fire::select_next_weapon(gs);
+    begin_lower_weapon(gs, cmd, level);
+    false
+}
+
+fn queue_weapon_sound_and_noise(gs: &mut GameState, weapon: WeaponType, level: Option<&Level>) {
+    gs.sound_queue.push(SoundRequest::PlayerWeaponFire(weapon));
+    if !matches!(weapon, WeaponType::Fist)
+        && let Some(lv) = level
+    {
+        let handle = gs.player.handle;
+        crate::sound::p_noise_alert(gs, lv, handle, handle);
+    }
+}
+
+fn start_weapon_flash(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    let weapon_state = gs.player.psprites[psprite_slots::WEAPON].state;
+    let flash_state = match gs.player.weapon {
+        WeaponType::Fist | WeaponType::Chainsaw => StateNum::NULL,
+        WeaponType::Pistol => StateNum(ids::S_PISTOL_FLASH1),
+        WeaponType::Shotgun => StateNum(ids::S_SGUN_FLASH1),
+        WeaponType::SuperShotgun => StateNum(ids::S_DSGUN_FLASH1),
+        WeaponType::Chaingun => {
+            if weapon_state == StateNum(ids::S_CHAIN2) {
+                StateNum(ids::S_CHAIN_FLASH2)
+            } else {
+                StateNum(ids::S_CHAIN_FLASH1)
+            }
+        }
+        WeaponType::RocketLauncher => StateNum(ids::S_MISSILE_FLASH1),
+        WeaponType::PlasmaRifle => {
+            if gs.p_random() & 1 == 0 {
+                StateNum(ids::S_PLASMA_FLASH1)
+            } else {
+                StateNum(ids::S_PLASMA_FLASH2)
+            }
+        }
+        WeaponType::Bfg => StateNum(ids::S_BFG_FLASH1),
+    };
+
+    if flash_state == StateNum::NULL {
+        return;
+    }
+
+    let weapon_psprite = gs.player.psprites[psprite_slots::WEAPON];
+    gs.player.psprites[psprite_slots::FLASH].sx = weapon_psprite.sx;
+    gs.player.psprites[psprite_slots::FLASH].sy = WEAPON_TOP;
+    set_psprite_state(gs, psprite_slots::FLASH, flash_state, cmd, level);
+}
+
+fn apply_pending_weapon_change(gs: &mut GameState, cmd: TicCmd) {
+    if cmd.buttons & bt::BT_CHANGE == 0 {
+        return;
+    }
+    let weapon_num = ((cmd.buttons & bt::BT_WEAPONMASK) >> 3) as usize;
+    if let Some(weapon) = WeaponType::from_num(weapon_num)
+        && gs.player.weapons[weapon as usize]
+        && weapon != gs.player.weapon
+    {
+        gs.player.pending_weapon = Some(weapon);
+    }
+}
+
+fn a_weapon_ready(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    if gs.player.pending_weapon.is_some() || !player_can_fire(gs) {
+        begin_lower_weapon(gs, cmd, level);
+        return;
+    }
+
+    let attack_held = cmd.buttons & bt::BT_ATTACK != 0;
+    if !attack_held {
+        gs.player.refire = 0;
+        return;
+    }
+
+    let may_fire =
+        !gs.player.attack_down || crate::weapon_fire::weapon_allows_hold_fire(gs.player.weapon);
+    if !may_fire {
+        return;
+    }
+
+    gs.player.refire = if gs.player.attack_down {
+        gs.player.refire.saturating_add(1)
+    } else {
+        0
+    };
+    let info = weapon_psprite_info(gs.player.weapon);
+    set_psprite_state(gs, psprite_slots::WEAPON, info.attack, cmd, level);
+}
+
+fn a_lower(gs: &mut GameState) {
+    let weapon = &mut gs.player.psprites[psprite_slots::WEAPON];
+    weapon.sy = (weapon.sy + LOWER_SPEED).min(WEAPON_BOTTOM);
+    if weapon.sy == WEAPON_BOTTOM {
+        bring_up_weapon(&mut gs.player);
+    }
+}
+
+fn a_raise(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    let weapon = &mut gs.player.psprites[psprite_slots::WEAPON];
+    weapon.sy = (weapon.sy - RAISE_SPEED).max(WEAPON_TOP);
+    if weapon.sy == WEAPON_TOP {
+        let ready = weapon_psprite_info(gs.player.weapon).ready;
+        set_psprite_state(gs, psprite_slots::WEAPON, ready, cmd, level);
+    }
+}
+
+fn a_gun_flash(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    start_weapon_flash(gs, cmd, level);
+}
+
+fn a_punch(gs: &mut GameState, _cmd: TicCmd, level: Option<&Level>) {
+    let _ = crate::weapon_fire::p_fire_fist(gs, level);
+    queue_weapon_sound_and_noise(gs, WeaponType::Fist, level);
+}
+
+fn a_fire_pistol(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    if !check_ammo(gs, cmd, level) {
+        return;
+    }
+    crate::weapon_fire::p_fire_pistol(gs, level);
+    queue_weapon_sound_and_noise(gs, WeaponType::Pistol, level);
+    start_weapon_flash(gs, cmd, level);
+}
+
+fn a_fire_shotgun(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    if !check_ammo(gs, cmd, level) {
+        return;
+    }
+    crate::weapon_fire::p_fire_shotgun(gs, level);
+    queue_weapon_sound_and_noise(gs, WeaponType::Shotgun, level);
+    start_weapon_flash(gs, cmd, level);
+}
+
+fn a_fire_shotgun2(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    if !check_ammo(gs, cmd, level) {
+        return;
+    }
+    crate::weapon_fire::p_fire_super_shotgun(gs, level);
+    queue_weapon_sound_and_noise(gs, WeaponType::SuperShotgun, level);
+    start_weapon_flash(gs, cmd, level);
+}
+
+fn a_fire_cgun(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    if !check_ammo(gs, cmd, level) {
+        return;
+    }
+    crate::weapon_fire::p_fire_chaingun(gs, level);
+    queue_weapon_sound_and_noise(gs, WeaponType::Chaingun, level);
+    start_weapon_flash(gs, cmd, level);
+}
+
+fn a_fire_missile(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    if !check_ammo(gs, cmd, level) {
+        return;
+    }
+    crate::weapon_fire::p_fire_rocket(gs, level);
+    queue_weapon_sound_and_noise(gs, WeaponType::RocketLauncher, level);
+    let _ = cmd;
+}
+
+fn a_fire_plasma(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    if !check_ammo(gs, cmd, level) {
+        return;
+    }
+    crate::weapon_fire::p_fire_plasma(gs, level);
+    queue_weapon_sound_and_noise(gs, WeaponType::PlasmaRifle, level);
+    start_weapon_flash(gs, cmd, level);
+}
+
+fn a_bfg_sound(gs: &mut GameState, _cmd: TicCmd, level: Option<&Level>) {
+    queue_weapon_sound_and_noise(gs, WeaponType::Bfg, level);
+}
+
+fn a_fire_bfg(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    if !check_ammo(gs, cmd, level) {
+        return;
+    }
+    crate::weapon_fire::p_fire_bfg(gs, level);
+    start_weapon_flash(gs, cmd, level);
+}
+
+fn a_saw(gs: &mut GameState, _cmd: TicCmd, level: Option<&Level>) {
+    crate::weapon_fire::p_fire_chainsaw(gs, level);
+    queue_weapon_sound_and_noise(gs, WeaponType::Chainsaw, level);
+}
+
+fn dispatch_psprite_action(gs: &mut GameState, action: u8, cmd: TicCmd, level: Option<&Level>) {
+    match action {
+        crate::actions::ACTION_WEAPON_READY => a_weapon_ready(gs, cmd, level),
+        crate::actions::ACTION_LOWER => a_lower(gs),
+        crate::actions::ACTION_RAISE => a_raise(gs, cmd, level),
+        crate::actions::ACTION_GUN_FLASH => a_gun_flash(gs, cmd, level),
+        crate::actions::ACTION_PUNCH => a_punch(gs, cmd, level),
+        crate::actions::ACTION_FIRE_PISTOL => a_fire_pistol(gs, cmd, level),
+        crate::actions::ACTION_FIRE_SHOTGUN => a_fire_shotgun(gs, cmd, level),
+        crate::actions::ACTION_FIRE_SHOTGUN2 => a_fire_shotgun2(gs, cmd, level),
+        crate::actions::ACTION_FIRE_CGUN => a_fire_cgun(gs, cmd, level),
+        crate::actions::ACTION_FIRE_MISSILE => a_fire_missile(gs, cmd, level),
+        crate::actions::ACTION_FIRE_PLASMA => a_fire_plasma(gs, cmd, level),
+        crate::actions::ACTION_BFG_SOUND => a_bfg_sound(gs, cmd, level),
+        crate::actions::ACTION_FIRE_BFG => a_fire_bfg(gs, cmd, level),
+        crate::actions::ACTION_SAW => a_saw(gs, cmd, level),
+        _ => {}
+    }
+}
+
+fn tick_psprite_slot(gs: &mut GameState, slot: usize, cmd: TicCmd, level: Option<&Level>) {
+    let state = gs.player.psprites[slot].state;
+    if state == StateNum::NULL {
+        return;
+    }
+
+    let tics = gs.player.psprites[slot].tics;
+    if tics == -1 {
+        return;
+    }
+    if tics > 0 {
+        gs.player.psprites[slot].tics -= 1;
+    }
+    if gs.player.psprites[slot].tics != 0 {
+        return;
+    }
+
+    let next_state = STATES
+        .get(state.0 as usize)
+        .map(|entry| entry.next_state)
+        .unwrap_or(StateNum::NULL);
+    set_psprite_state(gs, slot, next_state, cmd, level);
+}
+
+/// Initialize player psprites for a freshly-spawned or restored player.
+pub fn setup_psprites(player: &mut PlayerState) {
+    player.refire = 0;
+    player.psprites = [PspriteState::default(); crate::player::NUM_PSPRITES];
+    player.pending_weapon = Some(player.weapon);
+    bring_up_weapon(player);
+    init_psprite_state(player, psprite_slots::FLASH, StateNum::NULL);
+}
+
+/// Tick the player's weapon and flash psprites for one game tic.
+pub fn tick_psprites(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    if gs.player.psprites[psprite_slots::WEAPON].state == StateNum::NULL && !gs.player.is_dead() {
+        setup_psprites(&mut gs.player);
+    }
+    if let Some(state) = STATES.get(gs.player.psprites[psprite_slots::WEAPON].state.0 as usize)
+        && state.sprite != weapon_psprite_sprite(gs.player.weapon)
+        && !gs.player.is_dead()
+    {
+        setup_psprites(&mut gs.player);
+    }
+    apply_pending_weapon_change(gs, cmd);
+    tick_psprite_slot(gs, psprite_slots::FLASH, cmd, level);
+    tick_psprite_slot(gs, psprite_slots::WEAPON, cmd, level);
+    gs.player.attack_down = cmd.buttons & bt::BT_ATTACK != 0;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -260,8 +680,10 @@ pub fn player_can_fire(gs: &GameState) -> bool {
 mod tests {
     use super::*;
     use crate::mobj::{Mobj, MobjKind, flags};
-    use crate::player::{PlayerState, WeaponType};
+    use crate::player::{PlayerState, WeaponType, psprite_slots};
     use crate::state::GameState;
+    use crate::states::ids;
+    use crate::tic::{TicCmd, bt};
     use doom_types::{Bam, Fixed16_16};
 
     /// Build a minimal GameState with a live player Mobj at the origin.
@@ -280,6 +702,27 @@ mod tests {
         let handle = gs.mobjslab.alloc(mo);
         gs.player = PlayerState::pistol_start(handle);
         gs
+    }
+
+    fn cmd_with_buttons(buttons: u8) -> TicCmd {
+        let mut cmd = TicCmd::default();
+        cmd.buttons = buttons;
+        cmd
+    }
+
+    fn ready_player_psprites(gs: &mut GameState) {
+        setup_psprites(&mut gs.player);
+        for _ in 0..24 {
+            tick_psprites(gs, TicCmd::default(), None);
+        }
+    }
+
+    fn count_mobjs_of_kind(gs: &GameState, kind: MobjKind) -> usize {
+        gs.mobjslab
+            .iter_handles()
+            .filter_map(|handle| gs.mobjslab.get(handle))
+            .filter(|mo| mo.kind == kind)
+            .count()
     }
 
     // -----------------------------------------------------------------------
@@ -442,5 +885,233 @@ mod tests {
         gs.player.weapon = WeaponType::Chainsaw;
         let _ = gs.player.use_ammo(AmmoType::Bullets as usize, 200);
         assert!(player_can_fire(&gs), "chainsaw must always be fireable");
+    }
+
+    #[test]
+    fn setup_psprites_starts_with_weapon_raise_state() {
+        let mut gs = make_game_state();
+
+        setup_psprites(&mut gs.player);
+
+        let weapon = gs.player.psprites[psprite_slots::WEAPON];
+        assert_eq!(
+            weapon.state,
+            crate::mobj::StateNum(ids::S_PISTOL_UP),
+            "setup must begin by raising the ready weapon from the bottom"
+        );
+        assert_eq!(weapon.sy, WEAPON_BOTTOM, "weapon should start lowered");
+    }
+
+    #[test]
+    fn tick_psprites_raise_reaches_ready_state() {
+        let mut gs = make_game_state();
+        setup_psprites(&mut gs.player);
+
+        for _ in 0..24 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+
+        let weapon = gs.player.psprites[psprite_slots::WEAPON];
+        assert_eq!(
+            weapon.state,
+            crate::mobj::StateNum(ids::S_PISTOL_READY),
+            "raising should settle on the ready state"
+        );
+        assert_eq!(weapon.sy, WEAPON_TOP, "ready weapon should be fully raised");
+    }
+
+    #[test]
+    fn tick_psprites_attack_enters_fire_and_flash_states() {
+        let mut gs = make_game_state();
+        setup_psprites(&mut gs.player);
+        for _ in 0..24 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+
+        tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            crate::mobj::StateNum(ids::S_PISTOL1),
+            "attack from ready should enter the pistol firing sequence"
+        );
+        assert_eq!(
+            gs.player.psprites[psprite_slots::FLASH].state,
+            crate::mobj::StateNum(ids::S_PISTOL_FLASH1),
+            "attack should also start the muzzle-flash psprite"
+        );
+    }
+
+    #[test]
+    fn tick_psprites_weapon_change_lowers_then_raises_new_weapon() {
+        let mut gs = make_game_state();
+        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_ammo(AmmoType::Shells as usize, 4);
+        setup_psprites(&mut gs.player);
+        for _ in 0..24 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+
+        tick_psprites(&mut gs, cmd_with_buttons(bt::BT_CHANGE | (2u8 << 3)), None);
+
+        assert_eq!(
+            gs.player.pending_weapon,
+            Some(WeaponType::Shotgun),
+            "weapon change should stage the requested weapon as pending"
+        );
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            crate::mobj::StateNum(ids::S_PISTOL_DOWN),
+            "switching should lower the current weapon first"
+        );
+
+        for _ in 0..48 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+
+        assert_eq!(
+            gs.player.weapon,
+            WeaponType::Shotgun,
+            "ready weapon should change only after the lower/raise transition"
+        );
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            crate::mobj::StateNum(ids::S_SGUN_READY),
+            "the new weapon should end in its ready state"
+        );
+    }
+
+    #[test]
+    fn tick_psprites_resyncs_after_out_of_band_weapon_change() {
+        let mut gs = make_game_state();
+        setup_psprites(&mut gs.player);
+        for _ in 0..24 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+
+        gs.player.weapon = WeaponType::Shotgun;
+        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_ammo(AmmoType::Shells as usize, 4);
+
+        tick_psprites(&mut gs, TicCmd::default(), None);
+
+        assert_eq!(
+            STATES[gs.player.psprites[psprite_slots::WEAPON].state.0 as usize].sprite,
+            sprite_names::SPR_SHTG,
+            "psprite ticking must repair stale weapon overlay state after an out-of-band weapon change"
+        );
+    }
+
+    #[test]
+    fn plasma_attack_starts_flash_psprite() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::PlasmaRifle;
+        gs.player.weapons[WeaponType::PlasmaRifle as usize] = true;
+        gs.player.give_ammo(AmmoType::Cells as usize, 50);
+        ready_player_psprites(&mut gs);
+
+        let cells_before = gs.player.ammo(AmmoType::Cells as usize);
+        let plasma_before = count_mobjs_of_kind(&gs, MobjKind::PlasmaBall);
+
+        tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            crate::mobj::StateNum(ids::S_PLASMA1),
+            "plasma attack should enter the first plasma fire state"
+        );
+        assert_ne!(
+            gs.player.psprites[psprite_slots::FLASH].state,
+            StateNum::NULL,
+            "plasma attack should start a dedicated muzzle-flash psprite"
+        );
+        assert_eq!(
+            gs.player.ammo(AmmoType::Cells as usize),
+            cells_before - 1,
+            "plasma attack should consume one cell on the firing tic"
+        );
+        assert_eq!(
+            count_mobjs_of_kind(&gs, MobjKind::PlasmaBall),
+            plasma_before + 1,
+            "plasma attack should spawn a plasma ball on the firing tic"
+        );
+    }
+
+    #[test]
+    fn chaingun_attack_cycle_fires_a_second_shot_before_returning_ready() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::Chaingun;
+        gs.player.weapons[WeaponType::Chaingun as usize] = true;
+        gs.player.give_ammo(AmmoType::Bullets as usize, 50);
+        ready_player_psprites(&mut gs);
+
+        let bullets_before = gs.player.ammo(AmmoType::Bullets as usize);
+
+        tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+        assert_eq!(
+            gs.player.ammo(AmmoType::Bullets as usize),
+            bullets_before - 1,
+            "the first chaingun firing state should consume one bullet immediately"
+        );
+
+        for _ in 0..4 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+
+        assert_eq!(
+            gs.player.ammo(AmmoType::Bullets as usize),
+            bullets_before - 2,
+            "the second chaingun firing state should also fire before returning to ready"
+        );
+    }
+
+    #[test]
+    fn bfg_attack_delays_projectile_and_ammo_until_the_second_attack_state() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::Bfg;
+        gs.player.weapons[WeaponType::Bfg as usize] = true;
+        gs.player.give_ammo(AmmoType::Cells as usize, 200);
+        ready_player_psprites(&mut gs);
+
+        let cells_before = gs.player.ammo(AmmoType::Cells as usize);
+        let bfg_before = count_mobjs_of_kind(&gs, MobjKind::BfgBall);
+
+        tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            crate::mobj::StateNum(ids::S_BFG1),
+            "BFG attack should enter its windup state first"
+        );
+        assert_eq!(
+            gs.player.ammo(AmmoType::Cells as usize),
+            cells_before,
+            "BFG windup should not consume ammo before the actual fire state"
+        );
+        assert_eq!(
+            count_mobjs_of_kind(&gs, MobjKind::BfgBall),
+            bfg_before,
+            "BFG windup should not spawn the projectile yet"
+        );
+
+        for _ in 0..20 {
+            tick_psprites(&mut gs, TicCmd::default(), None);
+        }
+
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            crate::mobj::StateNum(ids::S_BFG2),
+            "after the windup, the BFG should advance into the actual firing state"
+        );
+        assert_eq!(
+            gs.player.ammo(AmmoType::Cells as usize),
+            cells_before - 40,
+            "the BFG should consume its 40 cells when the fire state begins"
+        );
+        assert_eq!(
+            count_mobjs_of_kind(&gs, MobjKind::BfgBall),
+            bfg_before + 1,
+            "the BFG projectile should spawn when the fire state begins"
+        );
     }
 }

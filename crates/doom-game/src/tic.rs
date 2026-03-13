@@ -33,7 +33,6 @@ use doom_map::Level;
 use doom_types::{ANG90, Bam, Fixed16_16};
 
 use crate::mobj::{MobjHandle, StateNum, flags};
-use crate::player::WeaponType;
 use crate::state::GameState;
 
 // ---------------------------------------------------------------------------
@@ -350,23 +349,6 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
         crate::pickups::p_check_pickups(gs);
     }
 
-    // BT_ATTACK: fire current weapon.
-    if gs.player.attack_cooldown > 0 {
-        gs.player.attack_cooldown -= 1;
-    }
-    let attack_held = cmd.buttons & bt::BT_ATTACK != 0;
-    let ready_for_hold_refire = gs.player.attack_down
-        && gs.player.attack_cooldown == 0
-        && crate::weapon_fire::weapon_allows_hold_fire(gs.player.weapon);
-    let wants_attack = attack_held && (!gs.player.attack_down || ready_for_hold_refire);
-    if wants_attack && gs.player.attack_cooldown == 0 {
-        let weapon = gs.player.weapon;
-        if crate::weapon_fire::fire_current_weapon(gs, level.as_deref()) {
-            gs.player.attack_cooldown = crate::weapon_fire::weapon_refire_tics(weapon);
-        }
-    }
-    gs.player.attack_down = attack_held;
-
     // BT_USE: activate linedef ahead of player on the leading edge only.
     let use_held = cmd.buttons & bt::BT_USE != 0;
     if use_held && !gs.player.use_down {
@@ -377,15 +359,7 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
     }
     gs.player.use_down = use_held;
 
-    // BT_CHANGE: weapon switch.
-    if cmd.buttons & bt::BT_CHANGE != 0 {
-        let weapon_num = ((cmd.buttons & bt::BT_WEAPONMASK) >> 3) as usize;
-        if let Some(weapon) = WeaponType::from_num(weapon_num) {
-            if gs.player.weapons[weapon as usize] {
-                gs.player.weapon = weapon;
-            }
-        }
-    }
+    crate::weapons::tick_psprites(gs, cmd, level.as_deref());
 
     // Sector specials: periodic player floor damage, etc. (immutable level borrow).
     if let Some(lv) = level.as_deref() {
@@ -653,7 +627,26 @@ mod tests {
         mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
         let handle = gs.mobjslab.alloc(mo);
         gs.player = PlayerState::pistol_start(handle);
+        ready_player_psprites(&mut gs);
+        for _ in 0..24 {
+            crate::weapons::tick_psprites(&mut gs, TicCmd::default(), None);
+        }
         gs
+    }
+
+    fn ready_player_psprites(gs: &mut GameState) {
+        crate::weapons::setup_psprites(&mut gs.player);
+        for _ in 0..24 {
+            crate::weapons::tick_psprites(gs, TicCmd::default(), None);
+        }
+    }
+
+    fn count_mobjs_of_kind(gs: &GameState, kind: MobjKind) -> usize {
+        gs.mobjslab
+            .iter_handles()
+            .filter_map(|handle| gs.mobjslab.get(handle))
+            .filter(|mo| mo.kind == kind)
+            .count()
     }
 
     /// Construct a non-player mobj (trooper) in a specific state with given tics.
@@ -1120,7 +1113,7 @@ mod tests {
     }
 
     #[test]
-    fn held_pistol_refires_after_cooldown() {
+    fn held_pistol_refires_when_the_attack_chain_reenters_ready() {
         let mut gs = make_game_state();
         let cmd = TicCmd {
             buttons: bt::BT_ATTACK,
@@ -1130,29 +1123,30 @@ mod tests {
         tick_player(&mut gs, cmd, None);
         assert_eq!(gs.player.ammo(AmmoType::Bullets as usize), 49);
 
-        for _ in 0..crate::weapon_fire::weapon_refire_tics(WeaponType::Pistol) - 1 {
+        for _ in 0..13 {
             tick_player(&mut gs, cmd, None);
         }
         assert_eq!(
             gs.player.ammo(AmmoType::Bullets as usize),
             49,
-            "held pistol should wait for its refire cooldown"
+            "held pistol should not refire before its psprite chain reenters the ready state"
         );
 
         tick_player(&mut gs, cmd, None);
         assert_eq!(
             gs.player.ammo(AmmoType::Bullets as usize),
             48,
-            "held pistol should refire once its cooldown elapses"
+            "held pistol should refire on the same tic the ready state is re-entered"
         );
     }
 
     #[test]
-    fn held_shotgun_refires_after_cooldown() {
+    fn held_shotgun_refires_when_the_attack_chain_reenters_ready() {
         let mut gs = make_game_state();
         gs.player.weapons[WeaponType::Shotgun as usize] = true;
         gs.player.weapon = WeaponType::Shotgun;
         gs.player.give_ammo(AmmoType::Shells as usize, 4);
+        ready_player_psprites(&mut gs);
         let cmd = TicCmd {
             buttons: bt::BT_ATTACK,
             ..Default::default()
@@ -1161,36 +1155,64 @@ mod tests {
         tick_player(&mut gs, cmd, None);
         assert_eq!(gs.player.ammo(AmmoType::Shells as usize), 3);
 
-        for _ in 0..crate::weapon_fire::weapon_refire_tics(WeaponType::Shotgun) - 1 {
+        for _ in 0..19 {
             tick_player(&mut gs, cmd, None);
         }
         assert_eq!(
             gs.player.ammo(AmmoType::Shells as usize),
             3,
-            "held shotgun should respect its refire cooldown"
+            "held shotgun should not refire before its psprite chain reenters ready"
         );
 
         tick_player(&mut gs, cmd, None);
         assert_eq!(
             gs.player.ammo(AmmoType::Shells as usize),
             2,
-            "held shotgun should refire after waiting out the cooldown"
+            "held shotgun should refire on the same tic the ready state is re-entered"
         );
     }
 
     #[test]
-    fn held_rocket_launcher_does_not_autofire() {
+    fn rocket_launcher_has_a_windup_and_still_requires_release_to_refire() {
         let mut gs = make_game_state();
         gs.player.weapons[WeaponType::RocketLauncher as usize] = true;
         gs.player.weapon = WeaponType::RocketLauncher;
         gs.player.give_ammo(AmmoType::Rockets as usize, 3);
+        ready_player_psprites(&mut gs);
+        let rockets_before = count_mobjs_of_kind(&gs, MobjKind::Rocket);
         let cmd = TicCmd {
             buttons: bt::BT_ATTACK,
             ..Default::default()
         };
 
         tick_player(&mut gs, cmd, None);
+        assert_eq!(
+            gs.player.psprites[crate::player::psprite_slots::WEAPON].state,
+            StateNum(ids::S_MISSILE1),
+            "the first launcher attack tic should enter the windup state"
+        );
+        assert_eq!(gs.player.ammo(AmmoType::Rockets as usize), 3);
+        assert_eq!(
+            count_mobjs_of_kind(&gs, MobjKind::Rocket),
+            rockets_before,
+            "the launcher windup state must not spawn a rocket yet"
+        );
+
+        for _ in 0..8 {
+            tick_player(&mut gs, cmd, None);
+        }
+
+        assert_eq!(
+            gs.player.psprites[crate::player::psprite_slots::WEAPON].state,
+            StateNum(ids::S_MISSILE2),
+            "after the windup, the launcher should advance into its fire state"
+        );
         assert_eq!(gs.player.ammo(AmmoType::Rockets as usize), 2);
+        assert_eq!(
+            count_mobjs_of_kind(&gs, MobjKind::Rocket),
+            rockets_before + 1,
+            "the launcher should spawn a rocket when the fire state begins"
+        );
 
         for _ in 0..(crate::weapon_fire::weapon_refire_tics(WeaponType::RocketLauncher) + 5) {
             tick_player(&mut gs, cmd, None);
@@ -1215,7 +1237,12 @@ mod tests {
         };
         tick_player(&mut gs, cmd, None);
 
-        assert_eq!(gs.player.weapon, WeaponType::Shotgun);
+        assert_eq!(gs.player.weapon, WeaponType::Pistol);
+        assert_eq!(gs.player.pending_weapon, Some(WeaponType::Shotgun));
+        assert_eq!(
+            gs.player.psprites[crate::player::psprite_slots::WEAPON].state,
+            StateNum(ids::S_PISTOL_DOWN)
+        );
     }
 
     #[test]
@@ -1563,6 +1590,7 @@ mod tests {
         let mut gs = make_game_state();
         // Give player the shotgun.
         gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_ammo(AmmoType::Shells as usize, 4);
         // BT_CHANGE | (weapon_num=2 << 3) = 0x04 | 0x10 = 0x14
         let cmd = TicCmd {
             buttons: bt::BT_CHANGE | (2u8 << 3),
@@ -1571,8 +1599,21 @@ mod tests {
         gs.tick(cmd, None);
         assert_eq!(
             gs.player.weapon,
+            WeaponType::Pistol,
+            "psprite-owned switching keeps the old weapon active until the lower/raise transition completes"
+        );
+        assert_eq!(
+            gs.player.pending_weapon,
+            Some(WeaponType::Shotgun),
+            "owned BT_CHANGE should stage the requested weapon"
+        );
+        for _ in 0..48 {
+            gs.tick(TicCmd::default(), None);
+        }
+        assert_eq!(
+            gs.player.weapon,
             WeaponType::Shotgun,
-            "Should switch to Shotgun when owned"
+            "staged weapon should become active after the lower/raise transition"
         );
     }
 

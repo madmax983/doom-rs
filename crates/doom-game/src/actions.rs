@@ -109,6 +109,34 @@ pub const ACTION_BRAIN_DIE: u8 = 30;
 pub const ACTION_BRAIN_SCREAM: u8 = 31;
 /// `A_BrainExplode`: Spawn a single explosion at a random position.
 pub const ACTION_BRAIN_EXPLODE: u8 = 32;
+/// `A_WeaponReady`: bob-ready player weapon loop, handles fire/switch input.
+pub const ACTION_WEAPON_READY: u8 = 33;
+/// `A_Lower`: lower the current player weapon toward the bottom of the screen.
+pub const ACTION_LOWER: u8 = 34;
+/// `A_Raise`: raise the pending/current player weapon toward the ready position.
+pub const ACTION_RAISE: u8 = 35;
+/// `A_GunFlash`: start the weapon's muzzle flash psprite.
+pub const ACTION_GUN_FLASH: u8 = 36;
+/// `A_Punch`: fist attack.
+pub const ACTION_PUNCH: u8 = 37;
+/// `A_FirePistol`: pistol attack.
+pub const ACTION_FIRE_PISTOL: u8 = 38;
+/// `A_FireShotgun`: shotgun attack.
+pub const ACTION_FIRE_SHOTGUN: u8 = 39;
+/// `A_FireShotgun2`: super shotgun attack.
+pub const ACTION_FIRE_SHOTGUN2: u8 = 40;
+/// `A_FireCGun`: chaingun attack.
+pub const ACTION_FIRE_CGUN: u8 = 41;
+/// `A_FireMissile`: rocket launcher attack.
+pub const ACTION_FIRE_MISSILE: u8 = 42;
+/// `A_FirePlasma`: plasma rifle attack.
+pub const ACTION_FIRE_PLASMA: u8 = 43;
+/// `A_BFGSound`: play the BFG windup sound before the projectile launches.
+pub const ACTION_BFG_SOUND: u8 = 44;
+/// `A_FireBFG`: BFG projectile launch.
+pub const ACTION_FIRE_BFG: u8 = 45;
+/// `A_Saw`: chainsaw attack.
+pub const ACTION_SAW: u8 = 46;
 
 // ---------------------------------------------------------------------------
 // Public dispatcher

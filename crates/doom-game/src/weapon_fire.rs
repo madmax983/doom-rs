@@ -4,7 +4,7 @@
 //! This module provides individual fire functions that match the original
 //! Doom source (`p_pspr.c`) behavior more closely than the table-driven
 //! `fire_weapon` in `weapons.rs`, and adds a `fire_current_weapon`
-//! dispatcher with auto-switch on empty.
+//! dispatcher that stages Doom-style pending weapon switches on empty.
 
 use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
@@ -379,7 +379,7 @@ pub fn p_fire_bfg(gs: &mut GameState, _level: Option<&Level>) {
 /// Fire the player's current weapon, dispatching to the appropriate fire
 /// function.
 ///
-/// If the player lacks ammo for the current weapon, auto-switches to the
+/// If the player lacks ammo for the current weapon, stages a switch to the
 /// best available weapon and returns without firing.
 pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) -> bool {
     let weapon = gs.player.weapon;
@@ -387,10 +387,10 @@ pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) -> bool {
 
     // Check ammo first.
     if !has_ammo(gs, weapon) {
-        // Auto-switch to next best weapon.
+        // Stage the next best weapon; the psprite state machine performs the
+        // visible lower/raise transition before `player.weapon` changes.
         if let Some(next) = select_next_weapon(gs) {
             gs.player.pending_weapon = Some(next);
-            gs.player.weapon = next;
         }
         return false;
     }
@@ -1236,7 +1236,7 @@ mod tests {
     // =======================================================================
 
     #[test]
-    fn fire_current_weapon_switches_when_empty() {
+    fn fire_current_weapon_stages_switch_when_empty() {
         let mut gs = make_game_state();
         // Player has pistol with 0 bullets.
         gs.player.use_ammo(AmmoType::Bullets as usize, 50);
@@ -1244,11 +1244,15 @@ mod tests {
 
         fire_current_weapon(&mut gs, None);
 
-        // Should have switched to fist (or chainsaw if owned).
         assert_ne!(
+            gs.player.pending_weapon,
+            Some(WeaponType::Pistol),
+            "must stage a different pending weapon when the current one is empty"
+        );
+        assert_eq!(
             gs.player.weapon,
             WeaponType::Pistol,
-            "must switch away from empty pistol"
+            "empty-weapon fire should not swap `player.weapon` immediately"
         );
     }
 
