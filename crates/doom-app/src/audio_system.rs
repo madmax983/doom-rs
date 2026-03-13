@@ -495,7 +495,10 @@ pub fn monster_death_lump(kind: doom_game::MobjKind) -> &'static str {
 /// - `"MAP01"` → `"D_MAP01"`
 /// - Unknown format → `None`
 pub fn music_lump_for_map(map: &str) -> Option<String> {
-    Some(format!("D_{}", doom_game::MapId::from_name(map)?.map_name()))
+    Some(format!(
+        "D_{}",
+        doom_game::MapId::from_name(map)?.map_name()
+    ))
 }
 
 // ---------------------------------------------------------------------------

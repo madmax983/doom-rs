@@ -183,7 +183,10 @@ impl SfxMixer {
         pan: f32,
         priority: SfxPriority,
     ) -> usize {
-        debug_assert!(channel < MAX_CHANNELS, "channel index {channel} out of range");
+        debug_assert!(
+            channel < MAX_CHANNELS,
+            "channel index {channel} out of range"
+        );
         self.channels[channel] = Some(Self::make_channel(sfx_id, data, volume, pan, priority));
         channel
     }
