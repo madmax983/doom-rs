@@ -425,6 +425,7 @@ impl DoomGame {
         let flash_psprite = self.gs.player.psprites[psprite_slots::FLASH];
         let previous_offset = preserve_motion.then_some(self.weapon_anim.raise_offset);
 
+        self.weapon_anim.current.sx = weapon_psprite.sx;
         self.weapon_anim.current.sprite_name =
             psprite_patch_name(weapon_psprite.state).unwrap_or(*b"PISGA0\0\0");
         self.weapon_anim.current.flash_active = flash_psprite.state != doom_game::StateNum::NULL;

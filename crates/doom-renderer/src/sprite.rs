@@ -1248,11 +1248,12 @@ pub fn draw_sprite_ex(
     }
 }
 
-/// Draw a weapon sprite at the standard weapon-overlay position (bottom-center).
+/// Draw a weapon sprite at the standard weapon-overlay position.
 ///
-/// Looks up `lump_name` in the cache and draws it centred at `x=160, y=167`
-/// (the standard Doom weapon position in a 320×168 view — the area above the
-/// status bar).  Does nothing if the sprite is not found in the cache.
+/// Uses Doom's psprite draw semantics at `x=160, y=167`: the patch's raw
+/// `left_offset` controls horizontal placement, while the sprite remains
+/// bottom-anchored to the weapon baseline above the status bar. Does nothing if
+/// the sprite is not found in the cache.
 pub fn draw_weapon_sprite(
     fb: &mut Framebuffer,
     lump_name: &[u8; 8],
@@ -1264,17 +1265,11 @@ pub fn draw_weapon_sprite(
     }
 }
 
-fn weapon_draw_anchor_x(base_x: i32, frame: &SpriteFrame) -> i32 {
-    // Keep the overlay centered by visible width, even when source data uses
-    // non-standard patch offsets.
-    base_x + frame.left_offset as i32 - (frame.width as i32 / 2)
-}
-
-/// Draw a pre-parsed weapon frame at a desired visual center.
+/// Draw a pre-parsed weapon frame at a psprite overlay anchor.
 ///
-/// World sprites should still use [`draw_sprite`]; this helper is specific to
-/// weapon overlays where center stability is more important than raw patch
-/// offset semantics.
+/// Weapon overlays use the patch's raw horizontal offset, but keep Doom's
+/// bottom-anchored Y behaviour so the sprite sits on the weapon baseline rather
+/// than reapplying the patch `top_offset`.
 pub fn draw_weapon_frame(
     fb: &mut Framebuffer,
     frame: &SpriteFrame,
@@ -1282,8 +1277,7 @@ pub fn draw_weapon_frame(
     base_y: i32,
     colormap: &[u8; 256],
 ) {
-    let draw_center_x = weapon_draw_anchor_x(base_x, frame);
-    draw_sprite(fb, frame, draw_center_x, base_y, colormap);
+    draw_sprite(fb, frame, base_x, base_y, colormap);
 }
 
 // ---------------------------------------------------------------------------
@@ -1472,7 +1466,7 @@ mod tests {
         assert!(fb.data.iter().all(|&b| b == 0), "fb should remain zeroed");
     }
     #[test]
-    fn test_draw_weapon_sprite_centers_when_left_offset_is_zero() {
+    fn test_draw_weapon_sprite_uses_raw_zero_offsets() {
         let mut cache = SpriteCache::empty();
         let frame = SpriteFrame {
             width: 4,
@@ -1486,8 +1480,8 @@ mod tests {
         let mut fb = Framebuffer::new();
         draw_weapon_sprite(&mut fb, b"PISGA0\0\0", &cache, &IDENTITY_COLORMAP);
 
-        // Width 4 centered at x=160 occupies [158, 161].
-        for x in 158..=161 {
+        // With zero offsets, the raw psprite origin is the sprite origin.
+        for x in 160..=163 {
             assert_eq!(
                 fb.get_pixel(x, 167),
                 Some(77),
@@ -1497,7 +1491,7 @@ mod tests {
     }
 
     #[test]
-    fn test_draw_weapon_sprite_centers_with_pathological_left_offset() {
+    fn test_draw_weapon_sprite_respects_pathological_left_offset() {
         let mut cache = SpriteCache::empty();
         let frame = SpriteFrame {
             width: 4,
@@ -1511,14 +1505,44 @@ mod tests {
         let mut fb = Framebuffer::new();
         draw_weapon_sprite(&mut fb, b"PISGA0\0\0", &cache, &IDENTITY_COLORMAP);
 
-        // Must still render centered despite unusual source offset.
-        for x in 158..=161 {
+        // Raw offsets should drive placement even for weird source data.
+        for x in 280..=283 {
             assert_eq!(
                 fb.get_pixel(x, 167),
                 Some(88),
-                "x={x} should be centered weapon pixel"
+                "x={x} should be weapon pixel at the raw patch origin"
             );
         }
+    }
+
+    #[test]
+    fn test_draw_weapon_frame_anchors_to_bottom_not_patch_top_offset() {
+        let frame = SpriteFrame {
+            width: 8,
+            height: 3,
+            left_offset: 1,
+            top_offset: 0,
+            pixels: vec![Some(99); 8 * 3],
+        };
+
+        let mut fb = Framebuffer::new();
+        draw_weapon_frame(&mut fb, &frame, 160, 167, &IDENTITY_COLORMAP);
+
+        assert_eq!(
+            fb.get_pixel(159, 165),
+            Some(99),
+            "weapon overlays should stay bottom-anchored above the status bar even when patch top_offset is zero"
+        );
+        assert_eq!(
+            fb.get_pixel(166, 167),
+            Some(99),
+            "weapon overlays should extend down to the requested screen-bottom anchor"
+        );
+        assert_eq!(
+            fb.get_pixel(159, 164),
+            Some(0),
+            "rows above the bottom-anchored weapon should remain untouched"
+        );
     }
 
     // ------------------------------------------------------------------

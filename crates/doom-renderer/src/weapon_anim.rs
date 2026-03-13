@@ -80,7 +80,7 @@ impl Default for WeaponSprite {
     fn default() -> Self {
         Self {
             sprite_name: *b"PISGA0\0\0",
-            sx: WEAPON_BASE_X,
+            sx: 0,
             sy: WEAPON_BASE_Y,
             raising: false,
             lowering: false,
@@ -131,10 +131,10 @@ impl WeaponBob {
         let cos_val = phase_rad.cos();
         self.offset_x = ((self.amplitude as f32 * cos_val) as i64 >> 16) as i32;
 
-        // Vertical bounce: sin(2 * phase) * amplitude >> 17.
-        // Double frequency, half amplitude produces a bounce rhythm.
-        let sin_val = (phase_rad * 2.0).sin();
-        self.offset_y = ((self.amplitude as f32 * sin_val) as i64 >> 17) as i32;
+        // Doom's weapon bob never lifts above the resting baseline; the
+        // weapon sways sideways and dips downward through the walk cycle.
+        let sin_val = phase_rad.sin().abs();
+        self.offset_y = ((self.amplitude as f32 * sin_val) as i64 >> 16) as i32;
     }
 
     /// Reset all bob state to zero.
@@ -250,7 +250,7 @@ impl WeaponAnimState {
 
     /// Compute the final screen X including bob offset.
     pub fn screen_x(&self) -> i32 {
-        WEAPON_BASE_X + self.bob.offset_x
+        self.current.sx + self.bob.offset_x
     }
 
     /// Compute the final screen Y including bob offset and raise offset.
@@ -451,7 +451,7 @@ mod tests {
     fn weapon_sprite_default_values() {
         let ws = WeaponSprite::default();
         assert_eq!(ws.sprite_name, *b"PISGA0\0\0");
-        assert_eq!(ws.sx, WEAPON_BASE_X);
+        assert_eq!(ws.sx, 0);
         assert_eq!(ws.sy, WEAPON_BASE_Y);
         assert!(!ws.raising);
         assert!(!ws.lowering);
@@ -493,6 +493,18 @@ mod tests {
             bob.offset_x != 0 || bob.offset_y != 0,
             "at least one bob offset should be nonzero with speed and phase"
         );
+    }
+
+    #[test]
+    fn weapon_bob_vertical_offset_never_lifts_above_rest_position() {
+        let mut bob = WeaponBob::default();
+        for _ in 0..64 {
+            bob.tick(MAX_BOB);
+            assert!(
+                bob.offset_y >= 0,
+                "Doom weapon bob dips the gun; it should not rise above the resting baseline"
+            );
+        }
     }
 
     #[test]
@@ -666,10 +678,11 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[test]
-    fn screen_x_includes_bob_offset() {
+    fn screen_x_uses_psprite_origin_plus_bob_offset() {
         let mut state = WeaponAnimState::new();
+        state.current.sx = -3;
         state.bob.offset_x = 5;
-        assert_eq!(state.screen_x(), WEAPON_BASE_X + 5);
+        assert_eq!(state.screen_x(), 2);
     }
 
     #[test]
