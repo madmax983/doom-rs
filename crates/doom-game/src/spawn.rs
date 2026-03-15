@@ -1148,7 +1148,7 @@ mod tests {
         let expected = Bam(0x8000_0000);
         let diff = mo.angle.0.wrapping_sub(expected.0);
         assert!(
-            diff < 0x0100_0000 || diff > 0xFF00_0000,
+            !(0x0100_0000..=0xFF00_0000).contains(&diff),
             "180 degrees should convert to approximately ANG180, got {:08X}",
             mo.angle.0
         );
@@ -1205,7 +1205,7 @@ mod tests {
         let expected = Bam(0x4000_0000);
         let diff = mo.angle.0.wrapping_sub(expected.0);
         assert!(
-            diff < 0x0100_0000 || diff > 0xFF00_0000,
+            !(0x0100_0000..=0xFF00_0000).contains(&diff),
             "90 degrees should convert to approximately ANG90, got {:08X}",
             mo.angle.0
         );
@@ -1377,15 +1377,15 @@ mod tests {
         // 90 degrees ~ 0x4000_0000
         let bam90 = degrees_to_bam(90);
         let diff90 = bam90.0.wrapping_sub(0x4000_0000);
-        assert!(diff90 < 0x0100_0000 || diff90 > 0xFF00_0000);
+        assert!(!(0x0100_0000..=0xFF00_0000).contains(&diff90));
         // 180 degrees ~ 0x8000_0000
         let bam180 = degrees_to_bam(180);
         let diff180 = bam180.0.wrapping_sub(0x8000_0000);
-        assert!(diff180 < 0x0100_0000 || diff180 > 0xFF00_0000);
+        assert!(!(0x0100_0000..=0xFF00_0000).contains(&diff180));
         // 270 degrees ~ 0xC000_0000
         let bam270 = degrees_to_bam(270);
         let diff270 = bam270.0.wrapping_sub(0xC000_0000);
-        assert!(diff270 < 0x0100_0000 || diff270 > 0xFF00_0000);
+        assert!(!(0x0100_0000..=0xFF00_0000).contains(&diff270));
     }
 
     // ===================================================================

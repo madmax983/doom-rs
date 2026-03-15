@@ -178,7 +178,7 @@ pub fn draw_large_text(fb: &mut Framebuffer, font: &BitmapFont, y: i32, text: &s
 
 /// Draw a single character at 2x scale (16x16 pixels).
 fn draw_large_char(fb: &mut Framebuffer, font: &BitmapFont, x: i32, y: i32, ch: u8, color: u8) {
-    let glyph_idx = if ch >= 32 && ch < 128 {
+    let glyph_idx = if (32..128).contains(&ch) {
         (ch - 32) as usize
     } else {
         0

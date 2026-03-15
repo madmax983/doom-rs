@@ -490,7 +490,7 @@ impl GameState {
 /// 3. Apply side_move thrust (perpendicular)
 /// 4. Collision check via P_TryMove
 /// 5. Apply friction and velocity clamping
-fn p_move_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level>) {
+fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
     let handle = gs.player.handle;
 
     // Thrust block: apply turn + acceleration, then release borrow.
@@ -568,7 +568,7 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level>)
     }
 
     if moved && (final_x != old_x || final_y != old_y) {
-        if let Some(lv) = level.as_deref_mut() {
+        if let Some(lv) = level {
             crate::linedef_dispatch::check_cross_lines(
                 gs,
                 lv,
@@ -2071,7 +2071,7 @@ mod tests {
         use crate::state::ExitRequest;
         let a = ExitRequest::Normal;
         let b = a; // Copy
-        let c = a.clone(); // Clone
+        let c = a; // Clone
         assert_eq!(a, b, "ExitRequest must implement Copy");
         assert_eq!(a, c, "ExitRequest must implement Clone");
         assert_ne!(ExitRequest::Normal, ExitRequest::Secret, "Normal != Secret");

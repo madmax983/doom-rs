@@ -493,7 +493,7 @@ impl SwitchList {
     /// - `SW2EXIT` -> `Some(SW1EXIT)`
     /// - Unknown   -> `None`
     pub fn get_opposite(&self, name: &[u8; 8]) -> Option<[u8; 8]> {
-        for &(ref off, ref on) in &self.pairs {
+        for (off, on) in &self.pairs {
             if names_equal(off, name) {
                 return Some(*on);
             }
@@ -718,7 +718,7 @@ mod tests {
             .take(8)
         {
             assert!(
-                names_equal(&anim.resolve_flat(b"FWATER1\0"), *expected),
+                names_equal(&anim.resolve_flat(b"FWATER1\0"), expected),
                 "at tic {}, expected {:?}",
                 anim.tic_count(),
                 core::str::from_utf8(*expected).unwrap_or("?"),

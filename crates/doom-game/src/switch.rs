@@ -112,7 +112,7 @@ pub const SWITCH_PAIRS: [([u8; 8], [u8; 8]); 29] = [
 /// returns `Some(opposite)` with the alternate texture name. Returns `None`
 /// if the texture is not a known switch texture.
 pub fn find_switch_opposite(texture: &[u8; 8]) -> Option<[u8; 8]> {
-    for &(ref off, ref on) in &SWITCH_PAIRS {
+    for (off, on) in &SWITCH_PAIRS {
         if texture == off {
             return Some(*on);
         }
@@ -292,7 +292,7 @@ mod tests {
 
     #[test]
     fn all_switch_pairs_bidirectional() {
-        for &(ref off, ref on) in &SWITCH_PAIRS {
+        for (off, on) in &SWITCH_PAIRS {
             assert_eq!(
                 find_switch_opposite(off),
                 Some(*on),

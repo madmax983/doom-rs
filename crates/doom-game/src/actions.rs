@@ -1890,7 +1890,7 @@ fn a_vile_attack(gs: &mut GameState, handle: MobjHandle) {
     // Upward thrust: momz += 15 * FRACUNIT (1000/256 ~ 62915, but we use
     // simpler from_int for clarity — this is Doom's `1000<<8/256`).
     if let Some(t) = gs.mobjslab.get_mut(target) {
-        t.momz = t.momz + Fixed16_16::from_int(15);
+        t.momz += Fixed16_16::from_int(15);
     }
 }
 
@@ -3804,7 +3804,7 @@ mod tests {
         let speed_sq = mo.momx.to_int() * mo.momx.to_int() + mo.momy.to_int() * mo.momy.to_int();
         let speed = (speed_sq as f32).sqrt();
         assert!(
-            speed >= 15.0 && speed <= 25.0,
+            (15.0..=25.0).contains(&speed),
             "skull speed should be ~20, got {speed}"
         );
     }

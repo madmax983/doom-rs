@@ -72,8 +72,8 @@ pub fn sample_bilinear(
     // Weight 0 means "all from the left/top sample"; 255 means "almost all from
     // the right/bottom sample".  The denominator in bilerp is 256 so that
     // integer coordinates (wx=0) produce the exact corner value.
-    let wx = ((fx & 0xFFFF) >> 8) as u32; // 0..=255
-    let wy = ((fy & 0xFFFF) >> 8) as u32;
+    let wx = (fx & 0xFFFF) >> 8; // 0..=255
+    let wy = (fy & 0xFFFF) >> 8;
 
     // Sample 4 corners.
     let c00 = lookup(fb_data, palette, palette_idx, x0, y0);

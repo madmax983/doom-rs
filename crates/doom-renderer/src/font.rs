@@ -879,7 +879,7 @@ impl BitmapFont {
     /// Transparent pixels (where the bitmap bit is 0) are skipped.
     /// Out-of-bounds coordinates are silently ignored per `Framebuffer::set_pixel`.
     pub fn draw_char(&self, fb: &mut Framebuffer, x: i32, y: i32, ch: u8, color: u8) {
-        let idx = if ch >= 32 && ch < 128 {
+        let idx = if (32..128).contains(&ch) {
             (ch - 32) as usize
         } else {
             0 // unmapped characters render as space

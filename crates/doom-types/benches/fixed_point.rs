@@ -22,7 +22,7 @@ fn bench_fixed_div(c: &mut Criterion) {
 
 fn bench_fixed_mul_chain(c: &mut Criterion) {
     // Simulates a column-renderer inner loop: multiply a series of fixed values.
-    let vals: Vec<Fixed16_16> = (1..=64).map(|i| Fixed16_16::from_int(i)).collect();
+    let vals: Vec<Fixed16_16> = (1..=64).map(Fixed16_16::from_int).collect();
     c.bench_function("Fixed16_16::fixed_mul x64 chain", |bench| {
         bench.iter(|| {
             vals.iter().fold(Fixed16_16::from_int(1), |acc, &v| {

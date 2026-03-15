@@ -54,7 +54,7 @@ fn bench_bam_sin_loop(c: &mut Criterion) {
             let mut angle = Bam::ZERO;
             let mut acc = doom_types::Fixed16_16::ZERO;
             for _ in 0..320 {
-                acc = acc + black_box(angle).sin();
+                acc += black_box(angle).sin();
                 angle = angle.wrapping_add(step);
             }
             black_box(acc)

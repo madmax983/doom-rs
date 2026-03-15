@@ -99,10 +99,10 @@ impl Widget for DoomFramebufferWidget<'_> {
                         // fx maps cx in [0, term_w) to [0, fb_w<<16).
                         // fy_top maps the top sub-pixel; fy_bot maps the bottom.
                         // We use u64 intermediate to avoid overflow before >> 16.
-                        let fx: u32 = ((cx as u64 * (fb_w as u64) << 16) / term_w as u64) as u32;
+                        let fx: u32 = (((cx as u64 * (fb_w as u64)) << 16) / term_w as u64) as u32;
                         let fy_top: u32 =
-                            ((cy as u64 * 2 * (fb_h as u64) << 16) / (term_h as u64 * 2)) as u32;
-                        let fy_bot: u32 = (((cy as u64 * 2 + 1) * (fb_h as u64) << 16)
+                            (((cy as u64 * 2 * (fb_h as u64)) << 16) / (term_h as u64 * 2)) as u32;
+                        let fy_bot: u32 = ((((cy as u64 * 2 + 1) * (fb_h as u64)) << 16)
                             / (term_h as u64 * 2)) as u32;
 
                         let (tr, tg, tb) = sample_bilinear(data, self.lut, pal, fx, fy_top);

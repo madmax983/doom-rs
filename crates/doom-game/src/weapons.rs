@@ -504,7 +504,7 @@ fn a_light2(gs: &mut GameState) {
 }
 
 fn a_punch(gs: &mut GameState, _cmd: TicCmd, level: Option<&Level>) {
-    let _ = crate::weapon_fire::p_fire_fist(gs, level);
+    crate::weapon_fire::p_fire_fist(gs, level);
     queue_weapon_sound_and_noise(gs, WeaponType::Fist, level);
 }
 

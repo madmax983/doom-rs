@@ -66,7 +66,7 @@ pub fn classify_trigger(special: u16) -> Option<TriggerType> {
         1 | 26 | 27 | 28 => Some(SwitchRepeat),
 
         // --- D1: Door use once ---
-        31 | 32 | 33 | 34 => Some(SwitchOnce),
+        31..=34 => Some(SwitchOnce),
 
         // --- G1: Gun once ---
         24 | 46 | 47 => {
@@ -247,7 +247,7 @@ pub fn linedef_effect(special: u16) -> Option<LinedefEffect> {
 
         // Lifts
         10 | 21 | 62 | 88 | 120 => Some(LiftLowerWaitRaise),
-        121 | 122 | 123 => Some(LiftBlazeDown),
+        121..=123 => Some(LiftBlazeDown),
         53 | 87 => Some(PerpetualLiftStart),
         54 | 89 => Some(PerpetualLiftStop),
 

@@ -110,11 +110,13 @@ impl Bam {
     pub unsafe fn init_trig_tables() {
         use core::f64::consts::PI;
         // SAFETY: single-threaded init before any reads.
+        #[allow(clippy::needless_range_loop)]
         unsafe {
             for i in 0..FINE_TABLE_SIZE {
                 let angle = (i as f64) * (2.0 * PI) / (FINE_TABLE_SIZE as f64);
                 let sin_val = angle.sin();
-                SINE_TABLE[i] = Fixed16_16((sin_val * (1 << 16) as f64) as i32);
+                core::ptr::addr_of_mut!(SINE_TABLE[i])
+                    .write(Fixed16_16((sin_val * (1 << 16) as f64) as i32));
             }
         }
         FINESINE.store(true, core::sync::atomic::Ordering::Release);

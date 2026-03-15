@@ -144,7 +144,7 @@ mod tests {
     #[test]
     fn roundtrip_empty_demo() {
         let header = LmpHeader::new_singleplayer(3, 1, 1);
-        let rec = DemoRecorder::new(header.clone());
+        let rec = DemoRecorder::new(header);
         let lmp = rec.to_lmp();
 
         let player = DemoPlayer::from_lmp(&lmp).expect("should parse empty demo");

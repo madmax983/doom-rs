@@ -711,86 +711,86 @@ pub static STATES: &[MobjStateEntry] = &[
     // Projectile states (61..103)
     // ===================================================================
     // Imp fireball (BAL1) -- fly
-    st!(SPR_BAL1, 0 | FB, 4, NONE, ids::S_TBALL2), // 61
+    st!(SPR_BAL1, FB, 4, NONE, ids::S_TBALL2),     // 61
     st!(SPR_BAL1, 1 | FB, 4, NONE, ids::S_TBALL1), // 62
     // Imp fireball -- death
     st!(SPR_BAL1, 2 | FB, 6, NONE, ids::S_TBALLX2), // 63
     st!(SPR_BAL1, 3 | FB, 6, NONE, ids::S_TBALLX3), // 64
     st!(SPR_BAL1, 4 | FB, 6, NONE, ids::S_NULL),    // 65
     // Baron/HK fireball (BAL2) -- fly
-    st!(SPR_BAL2, 0 | FB, 4, NONE, ids::S_BRBALL2), // 66
+    st!(SPR_BAL2, FB, 4, NONE, ids::S_BRBALL2),     // 66
     st!(SPR_BAL2, 1 | FB, 4, NONE, ids::S_BRBALL1), // 67
     // Baron/HK fireball -- death
     st!(SPR_BAL2, 2 | FB, 6, NONE, ids::S_BRBALLX2), // 68
     st!(SPR_BAL2, 3 | FB, 6, NONE, ids::S_BRBALLX3), // 69
     st!(SPR_BAL2, 4 | FB, 6, NONE, ids::S_NULL),     // 70
     // Rocket (MISL) -- fly
-    st!(SPR_MISL, 0 | FB, 1, NONE, ids::S_ROCKET), // 71
+    st!(SPR_MISL, FB, 1, NONE, ids::S_ROCKET), // 71
     // Rocket -- death
     st!(SPR_MISL, 1 | FB, 8, NONE, ids::S_EXPLODE2), // 72
     st!(SPR_MISL, 2 | FB, 6, NONE, ids::S_EXPLODE3), // 73
     st!(SPR_MISL, 3 | FB, 4, NONE, ids::S_NULL),     // 74
     // Plasma ball (PLSS) -- fly
-    st!(SPR_PLSS, 0 | FB, 6, NONE, ids::S_PLASBALL2), // 75
+    st!(SPR_PLSS, FB, 6, NONE, ids::S_PLASBALL2), // 75
     st!(SPR_PLSS, 1 | FB, 6, NONE, ids::S_PLASBALL1), // 76
     // Plasma -- death (PLSE)
-    st!(SPR_PLSE, 0 | FB, 4, NONE, ids::S_PLASEXP2), // 77
+    st!(SPR_PLSE, FB, 4, NONE, ids::S_PLASEXP2),     // 77
     st!(SPR_PLSE, 1 | FB, 4, NONE, ids::S_PLASEXP3), // 78
     st!(SPR_PLSE, 2 | FB, 4, NONE, ids::S_PLASEXP4), // 79
     st!(SPR_PLSE, 3 | FB, 4, NONE, ids::S_NULL),     // 80
     // BFG ball (BFS1) -- fly
-    st!(SPR_BFS1, 0 | FB, 4, NONE, ids::S_BFGSHOT2), // 81
+    st!(SPR_BFS1, FB, 4, NONE, ids::S_BFGSHOT2),     // 81
     st!(SPR_BFS1, 1 | FB, 4, NONE, ids::S_BFGSHOT1), // 82
     // BFG -- explode (BFE1)
-    st!(SPR_BFE1, 0 | FB, 8, NONE, ids::S_BFGLAND2), // 83
+    st!(SPR_BFE1, FB, 8, NONE, ids::S_BFGLAND2),     // 83
     st!(SPR_BFE1, 1 | FB, 8, NONE, ids::S_BFGLAND3), // 84
     st!(SPR_BFE1, 2 | FB, 8, NONE, ids::S_BFGLAND4), // 85
     st!(SPR_BFE1, 3 | FB, 8, NONE, ids::S_BFGLAND5), // 86
     st!(SPR_BFE1, 4 | FB, 8, NONE, ids::S_BFGLAND6), // 87
     st!(SPR_BFE1, 5 | FB, 8, NONE, ids::S_NULL),     // 88
     // Revenant tracer (RSKE) -- fly
-    st!(SPR_RSKE, 0 | FB, 2, NONE, ids::S_TRACER2), // 89
+    st!(SPR_RSKE, FB, 2, NONE, ids::S_TRACER2),     // 89
     st!(SPR_RSKE, 1 | FB, 2, NONE, ids::S_TRACER1), // 90
     // Revenant tracer -- death
     st!(SPR_RSKE, 2 | FB, 6, NONE, ids::S_TRACEEXP2), // 91
     st!(SPR_RSKE, 3 | FB, 6, NONE, ids::S_TRACEEXP3), // 92
     st!(SPR_RSKE, 4 | FB, 6, NONE, ids::S_NULL),      // 93
     // Arachnotron plasma (APLS) -- fly
-    st!(SPR_APLS, 0 | FB, 5, NONE, ids::S_ARACH_PLAZ2), // 94
+    st!(SPR_APLS, FB, 5, NONE, ids::S_ARACH_PLAZ2), // 94
     st!(SPR_APLS, 1 | FB, 5, NONE, ids::S_ARACH_PLAZ1), // 95
     // Arachnotron plasma -- death (APBX)
-    st!(SPR_APBX, 0 | FB, 5, NONE, ids::S_ARACH_PLEX2), // 96
+    st!(SPR_APBX, FB, 5, NONE, ids::S_ARACH_PLEX2), // 96
     st!(SPR_APBX, 1 | FB, 5, NONE, ids::S_ARACH_PLEX3), // 97
-    st!(SPR_APBX, 2 | FB, 5, NONE, ids::S_NULL),        // 98
+    st!(SPR_APBX, 2 | FB, 5, NONE, ids::S_NULL),    // 98
     // Mancubus fireball (FATB) -- fly
-    st!(SPR_FATB, 0 | FB, 4, NONE, ids::S_FATSHOT2), // 99
+    st!(SPR_FATB, FB, 4, NONE, ids::S_FATSHOT2),     // 99
     st!(SPR_FATB, 1 | FB, 4, NONE, ids::S_FATSHOT1), // 100
     // Mancubus fireball -- death (MANF)
-    st!(SPR_MANF, 0 | FB, 8, NONE, ids::S_FATSHOTX2), // 101
+    st!(SPR_MANF, FB, 8, NONE, ids::S_FATSHOTX2), // 101
     st!(SPR_MANF, 1 | FB, 6, NONE, ids::S_FATSHOTX3), // 102
-    st!(SPR_MANF, 2 | FB, 4, NONE, ids::S_NULL),      // 103
+    st!(SPR_MANF, 2 | FB, 4, NONE, ids::S_NULL),  // 103
     // ===================================================================
     // Effect states (104..120)
     // ===================================================================
     // Bullet puff
-    st!(SPR_PUFF, 0 | FB, 4, NONE, ids::S_PUFF2), // 104
-    st!(SPR_PUFF, 1, 4, NONE, ids::S_PUFF3),      // 105
-    st!(SPR_PUFF, 2, 4, NONE, ids::S_PUFF4),      // 106
-    st!(SPR_PUFF, 3, 4, NONE, ids::S_NULL),       // 107
+    st!(SPR_PUFF, FB, 4, NONE, ids::S_PUFF2), // 104
+    st!(SPR_PUFF, 1, 4, NONE, ids::S_PUFF3),  // 105
+    st!(SPR_PUFF, 2, 4, NONE, ids::S_PUFF4),  // 106
+    st!(SPR_PUFF, 3, 4, NONE, ids::S_NULL),   // 107
     // Blood splat
     st!(SPR_BLUD, 2, 8, NONE, ids::S_BLOOD2), // 108
     st!(SPR_BLUD, 1, 8, NONE, ids::S_BLOOD3), // 109
     st!(SPR_BLUD, 0, 8, NONE, ids::S_NULL),   // 110
     // Teleport fog
-    st!(SPR_TFOG, 0 | FB, 6, NONE, ids::S_TFOG2), // 111
+    st!(SPR_TFOG, FB, 6, NONE, ids::S_TFOG2),     // 111
     st!(SPR_TFOG, 1 | FB, 6, NONE, ids::S_TFOG3), // 112
-    st!(SPR_TFOG, 0 | FB, 6, NONE, ids::S_TFOG4), // 113
+    st!(SPR_TFOG, FB, 6, NONE, ids::S_TFOG4),     // 113
     st!(SPR_TFOG, 1 | FB, 6, NONE, ids::S_TFOG5), // 114
     st!(SPR_TFOG, 2 | FB, 6, NONE, ids::S_NULL),  // 115
     // Item respawn fog
-    st!(SPR_IFOG, 0 | FB, 6, NONE, ids::S_IFOG2), // 116
+    st!(SPR_IFOG, FB, 6, NONE, ids::S_IFOG2),     // 116
     st!(SPR_IFOG, 1 | FB, 6, NONE, ids::S_IFOG3), // 117
-    st!(SPR_IFOG, 0 | FB, 6, NONE, ids::S_IFOG4), // 118
+    st!(SPR_IFOG, FB, 6, NONE, ids::S_IFOG4),     // 118
     st!(SPR_IFOG, 1 | FB, 6, NONE, ids::S_IFOG5), // 119
     st!(SPR_IFOG, 2 | FB, 6, NONE, ids::S_NULL),  // 120
     // ===================================================================
@@ -798,21 +798,21 @@ pub static STATES: &[MobjStateEntry] = &[
     // ===================================================================
 
     // --- Lost Soul (121..135) ---
-    st!(SPR_SKUL, 0 | FB, 10, LOOK, ids::S_SKULL_STND2), // 121
-    st!(SPR_SKUL, 1 | FB, 10, LOOK, ids::S_SKULL_STND),  // 122
-    st!(SPR_SKUL, 0 | FB, 6, CHASE, ids::S_SKULL_RUN2),  // 123
-    st!(SPR_SKUL, 1 | FB, 6, CHASE, ids::S_SKULL_RUN3),  // 124
-    st!(SPR_SKUL, 2 | FB, 6, CHASE, ids::S_SKULL_RUN4),  // 125
-    st!(SPR_SKUL, 3 | FB, 6, CHASE, ids::S_SKULL_RUN1),  // 126
-    st!(SPR_SKUL, 4 | FB, 4, NONE, ids::S_SKULL_ATK2),   // 127
+    st!(SPR_SKUL, FB, 10, LOOK, ids::S_SKULL_STND2), // 121
+    st!(SPR_SKUL, 1 | FB, 10, LOOK, ids::S_SKULL_STND), // 122
+    st!(SPR_SKUL, FB, 6, CHASE, ids::S_SKULL_RUN2),  // 123
+    st!(SPR_SKUL, 1 | FB, 6, CHASE, ids::S_SKULL_RUN3), // 124
+    st!(SPR_SKUL, 2 | FB, 6, CHASE, ids::S_SKULL_RUN4), // 125
+    st!(SPR_SKUL, 3 | FB, 6, CHASE, ids::S_SKULL_RUN1), // 126
+    st!(SPR_SKUL, 4 | FB, 4, NONE, ids::S_SKULL_ATK2), // 127
     st!(SPR_SKUL, 5 | FB, 4, SKULL_ATTACK, ids::S_SKULL_ATK3), // 128
-    st!(SPR_SKUL, 6 | FB, 4, NONE, ids::S_SKULL_RUN1),   // 129
-    st!(SPR_SKUL, 7, 3, NONE, ids::S_SKULL_RUN1),        // 130: pain
-    st!(SPR_SKUL, 8 | FB, 6, NONE, ids::S_SKULL_DIE2),   // 131: die1
-    st!(SPR_SKUL, 9 | FB, 6, FALL, ids::S_SKULL_DIE3),   // 132
-    st!(SPR_SKUL, 10 | FB, 6, NONE, ids::S_SKULL_DIE4),  // 133
-    st!(SPR_SKUL, 11 | FB, 6, NONE, ids::S_SKULL_DIE5),  // 134
-    st!(SPR_SKUL, 12, -1, NONE, ids::S_NULL),            // 135
+    st!(SPR_SKUL, 6 | FB, 4, NONE, ids::S_SKULL_RUN1), // 129
+    st!(SPR_SKUL, 7, 3, NONE, ids::S_SKULL_RUN1),    // 130: pain
+    st!(SPR_SKUL, 8 | FB, 6, NONE, ids::S_SKULL_DIE2), // 131: die1
+    st!(SPR_SKUL, 9 | FB, 6, FALL, ids::S_SKULL_DIE3), // 132
+    st!(SPR_SKUL, 10 | FB, 6, NONE, ids::S_SKULL_DIE4), // 133
+    st!(SPR_SKUL, 11 | FB, 6, NONE, ids::S_SKULL_DIE5), // 134
+    st!(SPR_SKUL, 12, -1, NONE, ids::S_NULL),        // 135
     // --- Arachnotron (136..150) ---
     st!(SPR_BSPI, 0, 10, LOOK, ids::S_BSPI_STND2), // 136
     st!(SPR_BSPI, 1, 10, LOOK, ids::S_BSPI_STND),  // 137
@@ -1005,7 +1005,7 @@ pub static STATES: &[MobjStateEntry] = &[
     // ===================================================================
     // Fire column states (305..308) — Arch-Vile fire effect
     // ===================================================================
-    st!(SPR_FIRE, 0 | FB, 2, FIRE, ids::S_FIRE2), // 305: FIRE1
+    st!(SPR_FIRE, FB, 2, FIRE, ids::S_FIRE2), // 305: FIRE1
     st!(SPR_FIRE, 1 | FB, 2, FIRE, ids::S_FIRE3), // 306: FIRE2
     st!(SPR_FIRE, 2 | FB, 2, FIRE, ids::S_FIRE4), // 307: FIRE3
     st!(SPR_FIRE, 3 | FB, 2, FIRE, ids::S_FIRE1), // 308: FIRE4 → loops
@@ -1074,7 +1074,7 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SARG, 1, 10, LOOK, ids::S_SARG_STND), // 351: idle B
     st!(SPR_SARG, 2, 4, CHASE, ids::S_SARG_RUN4), // 352: run3 (C)
     st!(SPR_SARG, 3, 4, CHASE, ids::S_SARG_RUN1), // 353: run4 (D)
-    st!(SPR_PLAS, 0 | FB, 4, LIGHT1, ids::S_LIGHTDONE), // 354: plasma flash1
+    st!(SPR_PLAS, FB, 4, LIGHT1, ids::S_LIGHTDONE), // 354: plasma flash1
     st!(SPR_PLAS, 1 | FB, 4, LIGHT1, ids::S_LIGHTDONE), // 355: plasma flash2
     // ===================================================================
     // Additional psprite parity states (356..365)
@@ -1082,7 +1082,7 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_PUNG, 0, 5, REFIRE, ids::S_PUNCH_READY), // 356: punch5
     st!(SPR_SHTG, 0, 1, WEAPON_READY, ids::S_SGUN_READY), // 357: sgun5
     st!(SPR_CHGG, 0, 0, REFIRE, ids::S_CHAIN_READY), // 358: chain3
-    st!(SPR_CHGG, 0 | FB, 4, NONE, ids::S_LIGHTDONE), // 359: chain flash3
+    st!(SPR_CHGG, FB, 4, NONE, ids::S_LIGHTDONE),    // 359: chain flash3
     st!(SPR_SHT2, 0, 5, REFIRE, ids::S_DSGUN9),      // 360: dsgun8
     st!(SPR_SHT2, 0, 1, WEAPON_READY, ids::S_DSGUN_READY), // 361: dsgun9
     st!(SPR_SHT2, 3 | FB, 5, NONE, ids::S_LIGHTDONE), // 362: dsgun flash3

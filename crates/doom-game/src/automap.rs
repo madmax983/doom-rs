@@ -837,7 +837,7 @@ mod tests {
         bm_bytes[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
         let blockmap = Blockmap::parse_lump(&bm_bytes).expect("blockmap parse");
 
-        let reject_size = (n_sectors * n_sectors + 7) / 8;
+        let reject_size = (n_sectors * n_sectors).div_ceil(8);
         let reject = Reject::parse_lump(&vec![0u8; reject_size], n_sectors).expect("reject parse");
 
         Level {

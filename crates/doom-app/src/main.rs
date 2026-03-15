@@ -476,11 +476,8 @@ impl DoomGame {
         use doom_game::SoundRequest;
 
         for ev in events {
-            match ev {
-                SoundRequest::PlayerUseLockedDoor(color) => {
-                    self.cheat_message = Some((locked_door_message(*color).to_string(), 105));
-                }
-                _ => {}
+            if let SoundRequest::PlayerUseLockedDoor(color) = ev {
+                self.cheat_message = Some((locked_door_message(*color).to_string(), 105));
             }
         }
 
@@ -1001,7 +998,7 @@ impl DoomApp for DoomGame {
             }
             if self.debug_log.is_some() {
                 // Log player snapshot every 35 tics (once per second of gametime).
-                if self.gs.tic_num % 35 == 0 {
+                if self.gs.tic_num.is_multiple_of(35) {
                     self.dlog_player_snapshot();
                     self.dlog_live_enemies();
                 }

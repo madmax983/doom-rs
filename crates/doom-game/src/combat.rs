@@ -211,9 +211,9 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
     let retaliation = if target != gs.player.handle && inflictor != MobjHandle::NULL {
         gs.mobjslab.get(target).map(|mo| {
             let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
-            let wake_state = (mo.state == info.spawn_state && info.see_state != StateNum::NULL)
-                .then_some(info.see_state);
-            wake_state
+
+            (mo.state == info.spawn_state && info.see_state != StateNum::NULL)
+                .then_some(info.see_state)
         })
     } else {
         None

@@ -147,7 +147,7 @@ fn opl_waveform(waveform: u8, phase: u32) -> f32 {
         }
         2 => angle.sin().abs(),
         3 => {
-            if t < 16384 || (t >= 32768 && t < 49152) {
+            if t < 16384 || (32768..49152).contains(&t) {
                 angle.sin().abs()
             } else {
                 0.0

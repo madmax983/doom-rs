@@ -213,8 +213,8 @@ mod tests {
             dy: 1,
             right_bbox: bbox,
             left_bbox: bbox,
-            right_child: 0x8000 | 0, // subsector 0
-            left_child: 0x8000 | 1,  // subsector 1
+            right_child: 0x8000,    // subsector 0
+            left_child: 0x8000 | 1, // subsector 1
         }];
         let ssectors = vec![
             Ssector {

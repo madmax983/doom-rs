@@ -472,7 +472,7 @@ mod tests {
         }
         // Column 0 should be untouched.
         for y in 0..height {
-            assert_eq!(fb[y * width + 0], 10, "row {y} col 0 untouched");
+            assert_eq!(fb[y * width], 10, "row {y} col 0 untouched");
         }
     }
 

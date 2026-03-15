@@ -34,7 +34,7 @@ fn bench_fixed_add_chain(c: &mut Criterion) {
         bencher.iter(|| {
             let mut acc = Fixed16_16::ZERO;
             for _ in 0..1000 {
-                acc = acc + black_box(step);
+                acc += black_box(step);
             }
             black_box(acc)
         })
