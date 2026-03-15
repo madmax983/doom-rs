@@ -264,11 +264,19 @@ impl DehPatch {
                     break;
                 }
 
-                let old_text = remaining[..old_len].to_owned();
-                let new_text = remaining[old_len..total].to_owned();
+                let old_text = remaining
+                    .get(..old_len)
+                    .ok_or_else(|| DehError::BadHeader("Invalid text byte boundary".to_owned()))?
+                    .to_owned();
+                let new_text = remaining
+                    .get(old_len..total)
+                    .ok_or_else(|| DehError::BadHeader("Invalid text byte boundary".to_owned()))?
+                    .to_owned();
                 patch.texts.push(TextReplacement { old_text, new_text });
                 // Skip the consumed bytes plus any trailing newline.
-                remaining = &remaining[total..];
+                remaining = remaining
+                    .get(total..)
+                    .ok_or_else(|| DehError::BadHeader("Invalid text byte boundary".to_owned()))?;
                 if remaining.starts_with('\n') {
                     remaining = &remaining[1..];
                 }
@@ -1408,5 +1416,20 @@ Death frame = 25
         assert_eq!(t.melee_state, Some(58));
         assert_eq!(t.missile_state, Some(49));
         assert_eq!(t.death_state, Some(25));
+    }
+}
+
+#[cfg(test)]
+mod tests_deh {
+    use super::*;
+
+    #[test]
+    fn test_dehacked_parse_panic() {
+        let _ = DehPatch::parse("Text 1 1\n\n");
+    }
+
+    #[test]
+    fn test_dehacked_parse_panic_byte_index() {
+        let _ = DehPatch::parse("Text 1 1\n😊");
     }
 }
