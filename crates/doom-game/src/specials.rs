@@ -2500,6 +2500,18 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             close_door(gs, level, sector_idx);
         }
 
+        // --- Types 16, 76: close door, wait 30s, reopen ---
+        16 | 76 => {
+            if left_sidedef == SIDEDEF_NONE {
+                return;
+            }
+            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
+                Some(sd) => sd.sector as usize,
+                None => return,
+            };
+            close_wait_open_door(gs, level, sector_idx);
+        }
+
         // --- Types 26/27/28: locked raise-and-close door ---
         26 => {
             // Blue card or skull required.
@@ -8360,6 +8372,43 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.active_doors.len(), 1);
         assert_eq!(gs.active_doors[0].speed, BLAZING_DOOR_SPEED);
+    }
+
+    // -----------------------------------------------------------------------
+    // Types 16, 76: close door, wait 30s, reopen
+    // -----------------------------------------------------------------------
+    #[test]
+    fn close_wait_open_door_triggers() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        // Floor=0, Ceil=128, special=16
+        let mut level = make_door_level_with_special(128, 16);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert_eq!(gs.active_doors.len(), 1);
+        let door = &gs.active_doors[0];
+        assert_eq!(door.speed, -DOOR_SPEED);
+        assert_eq!(door.target_height, 0); // floor height
+        assert!(door.is_ceiling);
+        // Wait is calculated internally; just verify it's a valid mover.
+    }
+
+    #[test]
+    fn close_wait_open_door_triggers_type_76() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let mut level = make_door_level_with_special(128, 76);
+
+        activate_linedef(&mut gs, &mut level, 0);
+
+        assert_eq!(gs.active_doors.len(), 1);
+        let door = &gs.active_doors[0];
+        assert_eq!(door.speed, -DOOR_SPEED);
+        assert_eq!(door.target_height, 0);
+        assert!(door.is_ceiling);
     }
 
     // -----------------------------------------------------------------------
