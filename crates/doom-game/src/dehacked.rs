@@ -251,7 +251,7 @@ impl DehPatch {
                 // Consume exactly old_len + new_len bytes from `remaining`.
                 // The bytes may span multiple lines; we treat newlines as part
                 // of the data only where they fall within the counts.
-                let total = old_len + new_len;
+                let total = old_len.saturating_add(new_len);
                 if remaining.len() < total {
                     // Not enough data -- store what we have and stop.
                     let old_text = remaining
