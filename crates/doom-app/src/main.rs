@@ -32,6 +32,7 @@ use doom_renderer::{
     render_level_with_view_height_and_extra_light, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
+use crossterm::style::Stylize;
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadFile;
 
@@ -1557,7 +1558,7 @@ fn main() -> Result<()> {
         let count = patch
             .apply(&mut mobjinfo_vec, &mut states_vec)
             .map_err(|e| anyhow::anyhow!("DeHackEd apply error: {e}"))?;
-        eprintln!("DeHackEd: applied {count} modification(s) from {deh_path}");
+        eprintln!("{}", format!("DeHackEd: applied {count} modification(s) from {deh_path}").green().bold());
     }
 
     // Load flat texture cache (floor/ceiling textures between F_START and F_END).
@@ -1596,7 +1597,7 @@ fn main() -> Result<()> {
         args.connect.is_some(),
     ];
     if exclusive_modes.iter().filter(|&&x| x).count() > 1 {
-        eprintln!("Error: --record, --playdemo, --server, and --connect are mutually exclusive");
+        eprintln!("{}", "Error: --record, --playdemo, --server, and --connect are mutually exclusive".red().bold());
         std::process::exit(1);
     }
 
@@ -1613,7 +1614,7 @@ fn main() -> Result<()> {
         .and_then(|p| match std::fs::File::create(p) {
             Ok(f) => Some(f),
             Err(e) => {
-                eprintln!("Warning: could not open debug log '{}': {e}", p.display());
+                eprintln!("{}", format!("Warning: could not open debug log '{}': {e}", p.display()).yellow());
                 None
             }
         });
@@ -1656,9 +1657,12 @@ fn main() -> Result<()> {
         write_bmp(capture_path, &fb, &blit_palette, app.active_palette())
             .with_context(|| format!("Failed to write capture: {}", capture_path.display()))?;
         eprintln!(
-            "Captured frame {} to {}",
-            args.capture_frames,
-            capture_path.display()
+            "{}",
+            format!(
+                "Captured frame {} to {}",
+                args.capture_frames,
+                capture_path.display()
+            ).green()
         );
         return Ok(());
     }

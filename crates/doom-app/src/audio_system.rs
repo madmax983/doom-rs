@@ -17,6 +17,7 @@ use std::sync::{Arc, Mutex};
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use crossterm::style::Stylize;
 use doom_audio::{
     AudioDriver, GenmidiBank, MAX_CHANNELS, MidiPlayer, MusScore, SfxCache, SfxMixer, SfxPriority,
     mixer::PcmSample,
@@ -76,7 +77,7 @@ impl AudioSystem {
         let driver = match AudioDriver::open(SAMPLE_RATE) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("[audio] INIT FAILED: {e} — running silently");
+                eprintln!("{} {}", "[audio]".cyan(), format!("INIT FAILED: {e} — running silently").red());
                 return None;
             }
         };
@@ -97,13 +98,14 @@ impl AudioSystem {
             .and_then(|data| match GenmidiBank::parse(data) {
                 Ok(bank) => {
                     eprintln!(
-                        "[audio] GENMIDI loaded: {} instruments",
-                        bank.instruments.len()
+                        "{} {}",
+                        "[audio]".cyan(),
+                        format!("GENMIDI loaded: {} instruments", bank.instruments.len()).green()
                     );
                     Some(bank)
                 }
                 Err(e) => {
-                    eprintln!("[audio] GENMIDI parse failed: {e} — using default sine instrument");
+                    eprintln!("{} {}", "[audio]".cyan(), format!("GENMIDI parse failed: {e} — using default sine instrument").yellow());
                     None
                 }
             });
@@ -123,8 +125,9 @@ impl AudioSystem {
         let on_music_start = || {};
 
         eprintln!(
-            "[audio] SfxCache: {} entries loaded; spawning thread",
-            sfx_cache.len()
+            "{} {}",
+            "[audio]".cyan(),
+            format!("SfxCache: {} entries loaded; spawning thread", sfx_cache.len()).dark_grey()
         );
 
         // Spawn the audio command thread.  It owns SfxCache and shared Arcs.
@@ -133,14 +136,14 @@ impl AudioSystem {
             if let Some(bank) = genmidi_bank {
                 if let Ok(mut mp) = midi_arc.lock() {
                     mp.load_genmidi(bank);
-                    eprintln!("[audio] GENMIDI applied to MidiPlayer");
+                    eprintln!("{} {}", "[audio]".cyan(), "GENMIDI applied to MidiPlayer".dark_grey());
                 }
             } else {
-                eprintln!("[audio] no GENMIDI — using default sine-wave instrument");
+                eprintln!("{} {}", "[audio]".cyan(), "no GENMIDI — using default sine-wave instrument".dark_grey());
             }
-            eprintln!("[audio] thread started");
+            eprintln!("{} {}", "[audio]".cyan(), "thread started".dark_grey());
             audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache, on_music_start);
-            eprintln!("[audio] thread exited");
+            eprintln!("{} {}", "[audio]".cyan(), "thread exited".dark_grey());
         });
 
         Some(Self {
@@ -307,23 +310,23 @@ fn audio_cmd_thread(
 
             AudioEvent::StartMusic(data) => {
                 on_music_start();
-                eprintln!("[music] StartMusic received, data_len={}", data.len());
+                eprintln!("{} {}", "[music]".cyan(), format!("StartMusic received, data_len={}", data.len()).dark_grey());
                 match MusScore::parse(&data) {
                     Ok(score) => {
                         eprintln!(
-                            "[music] score parsed: {} events, {} instruments",
-                            score.events.len(),
-                            score.instruments.len()
+                            "{} {}",
+                            "[music]".cyan(),
+                            format!("score parsed: {} events, {} instruments", score.events.len(), score.instruments.len()).dark_grey()
                         );
                         if let Ok(mut mp) = midi_arc.lock() {
-                            eprintln!("[music] genmidi={}", mp.genmidi.is_some());
+                            eprintln!("{} {}", "[music]".cyan(), format!("genmidi={}", mp.genmidi.is_some()).dark_grey());
                             mp.load_score(score);
-                            eprintln!("[music] score loaded — playback started");
+                            eprintln!("{} {}", "[music]".cyan(), "score loaded — playback started".dark_grey());
                         }
                     }
                     Err(e) => {
                         // Non-fatal: log and continue.
-                        eprintln!("[music] parse failed: {e}");
+                        eprintln!("{} {}", "[music]".cyan(), format!("parse failed: {e}").red());
                     }
                 }
             }

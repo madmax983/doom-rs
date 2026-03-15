@@ -8,6 +8,7 @@
 //!   into the game loop for client-side netplay.
 
 use anyhow::Result;
+use crossterm::style::Stylize;
 use doom_game::TicCmd;
 use doom_net::{MAX_PLAYERS, NetClient, NetConfig, RelayServer, TicPacket};
 use doom_renderer::Framebuffer;
@@ -76,8 +77,8 @@ pub(crate) fn run_server(port: u16) -> Result<()> {
     let mut server = RelayServer::new(config)
         .map_err(|e| anyhow::anyhow!("Failed to bind relay server on port {port}: {e}"))?;
 
-    eprintln!("doom-rs relay server listening on port {port}");
-    eprintln!("Press Ctrl+C to stop.");
+    eprintln!("{}", format!("doom-rs relay server listening on port {port}").cyan().bold());
+    eprintln!("{}", "Press Ctrl+C to stop.".dark_grey());
 
     let mut prev_count = 0usize;
     loop {
@@ -92,7 +93,7 @@ pub(crate) fn run_server(port: u16) -> Result<()> {
                 std::thread::sleep(std::time::Duration::from_millis(1));
             }
             Err(e) => {
-                eprintln!("Server poll error: {e}");
+                eprintln!("{}", format!("Server poll error: {e}").red());
             }
         }
 
@@ -102,7 +103,7 @@ pub(crate) fn run_server(port: u16) -> Result<()> {
         // Log connection count changes.
         let count = server.connected_count();
         if count != prev_count {
-            eprintln!("Connected players: {count}");
+            eprintln!("{}", format!("Connected players: {count}").green());
             prev_count = count;
         }
     }
