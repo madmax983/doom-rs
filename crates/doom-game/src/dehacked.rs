@@ -618,8 +618,8 @@ impl DehPatch {
     ///   tables in this function (would need the ammo table and string table).
     pub fn apply(
         &self,
-        mobjinfo: &mut Vec<MobjInfo>,
-        states: &mut Vec<MobjStateEntry>,
+        mobjinfo: &mut [MobjInfo],
+        states: &mut [MobjStateEntry],
     ) -> Result<usize, DehError> {
         let mut count = 0usize;
 

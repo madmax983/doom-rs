@@ -287,38 +287,36 @@ impl SfxMixer {
         // Clear output buffer.
         output.fill(0.0);
 
-        for slot in &mut self.channels {
-            if let Some(ch) = slot {
-                if !ch.active {
-                    continue;
+        for ch in self.channels.iter_mut().flatten() {
+            if !ch.active {
+                continue;
+            }
+
+            // Pan gains are constant for this channel across the whole buffer.
+            // pan = -1.0 => left_gain = 1.0, right_gain = 0.0
+            // pan =  0.0 => left_gain = 0.5, right_gain = 0.5
+            // pan =  1.0 => left_gain = 0.0, right_gain = 1.0
+            let left_gain = (1.0 - ch.pan) * 0.5;
+            let right_gain = (1.0 + ch.pan) * 0.5;
+
+            // Process stereo frame pairs.
+            for i in (0..output.len()).step_by(2) {
+                let src_idx = (ch.position_fp >> 16) as usize;
+                if src_idx >= ch.length {
+                    ch.active = false;
+                    break;
                 }
 
-                // Pan gains are constant for this channel across the whole buffer.
-                // pan = -1.0 => left_gain = 1.0, right_gain = 0.0
-                // pan =  0.0 => left_gain = 0.5, right_gain = 0.5
-                // pan =  1.0 => left_gain = 0.0, right_gain = 1.0
-                let left_gain = (1.0 - ch.pan) * 0.5;
-                let right_gain = (1.0 + ch.pan) * 0.5;
+                // Convert 8-bit unsigned PCM to f32 in [-1.0, 1.0].
+                let sample = (ch.data[src_idx] as f32 - 128.0) / 128.0;
+                let scaled = sample * ch.volume;
 
-                // Process stereo frame pairs.
-                for i in (0..output.len()).step_by(2) {
-                    let src_idx = (ch.position_fp >> 16) as usize;
-                    if src_idx >= ch.length {
-                        ch.active = false;
-                        break;
-                    }
-
-                    // Convert 8-bit unsigned PCM to f32 in [-1.0, 1.0].
-                    let sample = (ch.data[src_idx] as f32 - 128.0) / 128.0;
-                    let scaled = sample * ch.volume;
-
-                    output[i] += scaled * left_gain;
-                    if i + 1 < output.len() {
-                        output[i + 1] += scaled * right_gain;
-                    }
-
-                    ch.position_fp += step_fp;
+                output[i] += scaled * left_gain;
+                if i + 1 < output.len() {
+                    output[i + 1] += scaled * right_gain;
                 }
+
+                ch.position_fp += step_fp;
             }
         }
 

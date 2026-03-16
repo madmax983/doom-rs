@@ -426,7 +426,7 @@ pub fn tick_sector_lights(gs: &mut GameState, level: &mut Level) {
             }
             LightEffectType::FireFlicker => {
                 // Random light variation within a small range.
-                let variation = (gs.rng.next() & 3) as i16;
+                let variation = (gs.rng.next_byte() & 3) as i16;
                 sector.light_level = (effect.base_light - variation * 4).max(effect.min_light);
                 effect.timer = 4;
             }

@@ -16,7 +16,7 @@
 //! | LevelWarp  | `idclev`     | Level warp (caller reads digits)   |
 //! | MusicChange| `idmus`      | Change music (caller reads digits) |
 
-use doom_types::limits::{MAX_AMMO, NUM_AMMO};
+use doom_types::limits::MAX_AMMO;
 
 use crate::player::powers;
 use crate::state::GameState;
@@ -236,9 +236,9 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
                 *slot = true;
             }
             // Max ammo.
-            for i in 0..NUM_AMMO {
-                gs.player.max_ammo[i] = MAX_AMMO[i];
-                gs.player.give_ammo(i, MAX_AMMO[i]);
+            for (i, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
+                gs.player.max_ammo[i] = max_ammo;
+                gs.player.give_ammo(i, max_ammo);
             }
             // All 6 keys.
             gs.player.keys = 0x3F;
@@ -251,9 +251,9 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
                 *slot = true;
             }
             // Max ammo.
-            for i in 0..NUM_AMMO {
-                gs.player.max_ammo[i] = MAX_AMMO[i];
-                gs.player.give_ammo(i, MAX_AMMO[i]);
+            for (i, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
+                gs.player.max_ammo[i] = max_ammo;
+                gs.player.give_ammo(i, max_ammo);
             }
             // Explicitly do NOT give keys.
             true
@@ -354,7 +354,7 @@ pub fn cheat_message(code: CheatCode) -> &'static str {
 mod tests {
     use super::*;
     use crate::state::GameState;
-    use doom_types::limits::{MAX_AMMO, NUM_AMMO, NUM_WEAPONS};
+    use doom_types::limits::{MAX_AMMO, NUM_WEAPONS};
 
     // -- Helper: feed a string into a buffer ---
     fn feed(buf: &mut CheatBuffer, s: &[u8]) {
@@ -563,10 +563,10 @@ mod tests {
     fn apply_idkfa_maxes_all_ammo() {
         let mut gs = GameState::new("E1M1");
         apply_cheat(&mut gs, CheatCode::AllWeaponsAmmoKeys);
-        for i in 0..NUM_AMMO {
+        for (i, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
             assert_eq!(
                 gs.player.ammo(i),
-                MAX_AMMO[i],
+                max_ammo,
                 "ammo[{}] should be maxed after IDKFA",
                 i
             );
@@ -584,10 +584,10 @@ mod tests {
                 i
             );
         }
-        for i in 0..NUM_AMMO {
+        for (i, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
             assert_eq!(
                 gs.player.ammo(i),
-                MAX_AMMO[i],
+                max_ammo,
                 "ammo[{}] should be maxed after IDFA",
                 i
             );

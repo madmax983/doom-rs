@@ -65,6 +65,7 @@ impl SaveHeader {
     /// Return the description as a `&str`, trimmed at the first null byte.
     ///
     /// Returns `"?"` if the bytes are not valid UTF-8.
+    #[cfg(test)]
     pub fn description_str(&self) -> &str {
         let end = self.description.iter().position(|&b| b == 0).unwrap_or(24);
         std::str::from_utf8(&self.description[..end]).unwrap_or("?")
@@ -347,7 +348,7 @@ mod tests {
         gs.tic_num = 42;
         // Advance rng a few steps so index is non-zero.
         for _ in 0..17 {
-            gs.rng.next();
+            gs.rng.next_byte();
         }
         gs
     }
@@ -525,7 +526,7 @@ mod tests {
         let mut gs_new = make_gs();
         gs_new.tic_num = 999;
         for _ in 0..50 {
-            gs_new.rng.next();
+            gs_new.rng.next_byte();
         }
 
         apply_save(&mut gs_new, &payload).expect("apply must succeed");

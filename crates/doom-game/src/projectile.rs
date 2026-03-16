@@ -350,7 +350,7 @@ pub fn p_move_projectiles(gs: &mut GameState, level: Option<&Level>) {
         if let Some(target_h) = hit_target {
             // Compute damage: base_damage * random(1..=8) using the RNG.
             let base_damage = projectile_info(m_kind).map(|pi| pi.damage).unwrap_or(1);
-            let rng_val = (gs.rng.next() % 8) as i32 + 1;
+            let rng_val = (gs.rng.next_byte() % 8) as i32 + 1;
             let damage = base_damage * rng_val;
 
             combat::damage_mobj(gs, target_h, m_source, damage);

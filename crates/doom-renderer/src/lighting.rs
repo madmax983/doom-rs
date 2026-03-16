@@ -437,8 +437,8 @@ mod tests {
     #[test]
     fn shade_pixel_identity() {
         let mut map = [0u8; 256];
-        for i in 0..256 {
-            map[i] = i as u8;
+        for (i, value) in map.iter_mut().enumerate() {
+            *value = i as u8;
         }
         for i in 0..=255u8 {
             assert_eq!(shade_pixel(&map, i), i);
@@ -515,8 +515,8 @@ mod tests {
             assert_eq!(fb[2 * width + x], 88, "row 2 col {x}");
         }
         // Row 0 untouched.
-        for x in 0..width {
-            assert_eq!(fb[0 * width + x], 20, "row 0 col {x} untouched");
+        for (x, pixel) in fb.iter().take(width).copied().enumerate() {
+            assert_eq!(pixel, 20, "row 0 col {x} untouched");
         }
     }
 

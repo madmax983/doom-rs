@@ -433,7 +433,7 @@ pub struct ConveyorBelt {
 /// Doom's original 256-entry pseudo-random number table (from `m_random.c`).
 ///
 /// The sequence is deterministic and identical on all network peers, making
-/// it safe to use inside the game simulation.  `DoomRng::next()` returns
+/// it safe to use inside the game simulation.  `DoomRng::next_byte()` returns
 /// successive bytes from this table, wrapping at index 255.
 pub static RNG_TABLE: [u8; 256] = [
     0, 8, 109, 220, 222, 241, 149, 107, 75, 248, 254, 140, 16, 66, 74, 21, 211, 47, 80, 242, 154,
@@ -469,7 +469,7 @@ impl DoomRng {
 
     /// Return the next random byte and advance the index.
     #[inline]
-    pub fn next(&mut self) -> u8 {
+    pub fn next_byte(&mut self) -> u8 {
         let val = RNG_TABLE[(self.index & 255) as usize];
         self.index = (self.index + 1) & 255;
         val
@@ -695,7 +695,7 @@ impl GameState {
     /// Port of `P_Random()` from `m_random.c`.
     #[inline]
     pub fn p_random(&mut self) -> u8 {
-        self.rng.next()
+        self.rng.next_byte()
     }
 
     /// Return a random value in `[min, max]` using `p_random`.
@@ -768,7 +768,7 @@ mod tests {
     fn rng_wraps_at_256() {
         let mut rng = DoomRng::new();
         for _ in 0..256 {
-            rng.next();
+            rng.next_byte();
         }
         assert_eq!(rng.index(), 0, "RNG must wrap to index 0 after 256 calls");
     }
@@ -778,7 +778,7 @@ mod tests {
         let mut a = DoomRng::new();
         let mut b = DoomRng::new();
         for _ in 0..256 {
-            assert_eq!(a.next(), b.next());
+            assert_eq!(a.next_byte(), b.next_byte());
         }
     }
 
@@ -786,12 +786,12 @@ mod tests {
     fn rng_snapshot_restore() {
         let mut rng = DoomRng::new();
         for _ in 0..77 {
-            rng.next();
+            rng.next_byte();
         }
         let saved = rng.index();
-        let seq1: Vec<u8> = (0..10).map(|_| rng.next()).collect();
+        let seq1: Vec<u8> = (0..10).map(|_| rng.next_byte()).collect();
         rng.set_index(saved);
-        let seq2: Vec<u8> = (0..10).map(|_| rng.next()).collect();
+        let seq2: Vec<u8> = (0..10).map(|_| rng.next_byte()).collect();
         assert_eq!(
             seq1, seq2,
             "RNG must replay identical sequence after set_index"

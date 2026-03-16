@@ -12,6 +12,7 @@ mod savegame;
 use anyhow::{Context, Result};
 use clap::Parser;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+use doom_game::FaceState;
 use doom_game::LockedDoorColor;
 use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
@@ -23,19 +24,20 @@ use doom_game::{
 use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
-use doom_game::FaceState;
 use doom_renderer::{
     ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
     IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, PatchCache, RenderOut,
-    SpriteCache, SpriteClip, SwitchList, TextureCache, WadFont, WeaponAnimState, draw_automap_ex,
-    draw_finale_wad, draw_intermission, draw_intermission_wad, draw_menu, draw_menu_wad,
-    draw_status_bar, draw_status_bar_wad,
-    draw_title_screen, draw_title_screen_wad, draw_weapon_animated, render_actors_with_masked_ex,
+    SpriteCache, SpriteClip, TextureCache, WadFont, WeaponAnimState, draw_automap_ex,
+    draw_finale_wad, draw_intermission, draw_intermission_wad, draw_menu_wad, draw_status_bar_wad,
+    draw_title_screen_wad, draw_weapon_animated, render_actors_with_masked_ex,
     render_flag_from_state, render_level_with_view_height_and_extra_light, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::{WadFile, WadStack};
+
+#[cfg(test)]
+use doom_renderer::SwitchList;
 
 use audio_system::{AudioSystem, music_lump_for_map, sound_request_sfx};
 use doom_audio::{SfxEmitter, SfxPriority, compute_spatial};
@@ -145,6 +147,7 @@ pub(crate) struct DoomGame {
     /// Palette flash controller (pain/pickup/rad-suit full-screen tints).
     palette_flash: PaletteFlash,
     /// Switch texture pair lookup (SW1xxx <-> SW2xxx bidirectional).
+    #[cfg(test)]
     switch_list: SwitchList,
     /// Player health from the previous tic — used to detect damage for pain flash.
     prev_health: i32,
@@ -196,6 +199,7 @@ fn next_player_view_height(current: i32, player_dead: bool) -> i32 {
 }
 
 impl DoomGame {
+    #[allow(clippy::too_many_arguments)]
     fn new(
         mut gs: GameState,
         level: Level,
@@ -252,6 +256,7 @@ impl DoomGame {
             colormap_cache,
             anim_state: AnimState::new(),
             palette_flash: PaletteFlash::new(),
+            #[cfg(test)]
             switch_list: SwitchList::new(),
             prev_health: initial_health,
             player_view_height: PLAYER_HEIGHT,
@@ -954,8 +959,8 @@ impl DoomApp for DoomGame {
         // Pause the game simulation while the menu is open during gameplay.
         // Title screen and intermission handle their own timing; only Playing
         // needs the pause.
-        let paused = self.menu.is_active()
-            && matches!(self.phase_controller.phase(), GamePhase::Playing);
+        let paused =
+            self.menu.is_active() && matches!(self.phase_controller.phase(), GamePhase::Playing);
 
         // Snapshot kill/item counts before the tick to detect changes.
         let pre_kills = self.gs.player.kill_count;
@@ -1031,19 +1036,8 @@ impl DoomApp for DoomGame {
                 let is_firing = self.gs.player.attack_down;
                 let is_invulnerable =
                     self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
-                let player_angle = self
-                    .gs
-                    .mobjslab
-                    .get(self.gs.player.handle)
-                    .map(|mo| mo.angle)
-                    .unwrap_or(Bam::ZERO);
-                self.face_state.tick(
-                    cur_health,
-                    is_firing,
-                    is_invulnerable,
-                    None,
-                    player_angle,
-                );
+                self.face_state
+                    .tick(cur_health, is_firing, is_invulnerable, None);
             }
             if self.debug_log.is_some() {
                 // Log player snapshot every 35 tics (once per second of gametime).
@@ -1068,8 +1062,20 @@ impl DoomApp for DoomGame {
     fn render(&mut self, fb: &mut Framebuffer) {
         // Title screen mode: draw the title/credits screen + menu overlay.
         if let Some(ref ts) = self.title_screen {
-            draw_title_screen_wad(fb, ts, &mut self.patch_cache, &self.wad_stack, &self.bitmap_font);
-            draw_menu_wad(fb, &self.menu, &mut self.patch_cache, &self.wad_stack, &self.bitmap_font);
+            draw_title_screen_wad(
+                fb,
+                ts,
+                &mut self.patch_cache,
+                &self.wad_stack,
+                &self.bitmap_font,
+            );
+            draw_menu_wad(
+                fb,
+                &self.menu,
+                &mut self.patch_cache,
+                &self.wad_stack,
+                &self.bitmap_font,
+            );
             return;
         }
 
@@ -1133,7 +1139,13 @@ impl DoomApp for DoomGame {
             // Draw status bar over the bottom of the automap.
             {
                 let data = doom_renderer::StatusBarData::from_player(&self.gs.player);
-                draw_status_bar_wad(fb, &mut self.patch_cache, &self.wad_stack, &data, &self.face_state);
+                draw_status_bar_wad(
+                    fb,
+                    &mut self.patch_cache,
+                    &self.wad_stack,
+                    &data,
+                    &self.face_state,
+                );
             }
         } else {
             // Draw the first-person 3D view.
@@ -1234,7 +1246,13 @@ impl DoomApp for DoomGame {
             // Draw HUD status bar over the bottom 32 rows.
             {
                 let data = doom_renderer::StatusBarData::from_player(&self.gs.player);
-                draw_status_bar_wad(fb, &mut self.patch_cache, &self.wad_stack, &data, &self.face_state);
+                draw_status_bar_wad(
+                    fb,
+                    &mut self.patch_cache,
+                    &self.wad_stack,
+                    &data,
+                    &self.face_state,
+                );
             }
         }
 
@@ -1244,7 +1262,13 @@ impl DoomApp for DoomGame {
         }
 
         // Draw menu overlay on top of the game view (no-op when menu is not active).
-        draw_menu_wad(fb, &self.menu, &mut self.patch_cache, &self.wad_stack, &self.bitmap_font);
+        draw_menu_wad(
+            fb,
+            &self.menu,
+            &mut self.patch_cache,
+            &self.wad_stack,
+            &self.bitmap_font,
+        );
 
         // Draw console overlay on top of everything (highest priority).
         if self.console.visible {
@@ -2266,8 +2290,10 @@ mod tests {
         assert!(!game.automap.active, "automap must start inactive");
 
         // Simulate Tab press.
-        let mut input = TicInput::default();
-        input.tab_pressed = true;
+        let input = TicInput {
+            tab_pressed: true,
+            ..TicInput::default()
+        };
         game.tick(input);
         assert!(
             game.automap.active,
@@ -2275,8 +2301,10 @@ mod tests {
         );
 
         // Tab again.
-        let mut input2 = TicInput::default();
-        input2.tab_pressed = true;
+        let input2 = TicInput {
+            tab_pressed: true,
+            ..TicInput::default()
+        };
         game.tick(input2);
         assert!(
             !game.automap.active,
@@ -2293,8 +2321,10 @@ mod tests {
         let mut game = make_doom_game();
 
         // Open the automap.
-        let mut input = TicInput::default();
-        input.tab_pressed = true;
+        let input = TicInput {
+            tab_pressed: true,
+            ..TicInput::default()
+        };
         game.tick(input);
 
         // The player was spawned at (0, 0), so the automap center should track there.
@@ -2681,8 +2711,10 @@ mod tests {
 
         // Feed "iddqd" via chatchar one character per tic.
         for &ch in b"iddqd" {
-            let mut input = TicInput::default();
-            input.chatchar = ch;
+            let input = TicInput {
+                chatchar: ch,
+                ..TicInput::default()
+            };
             game.tick(input);
         }
 
@@ -2753,8 +2785,10 @@ mod tests {
         );
 
         for _ in 0..3 {
-            let mut input = TicInput::default();
-            input.menu_select = true;
+            let input = TicInput {
+                menu_select: true,
+                ..TicInput::default()
+            };
             game.tick(input);
         }
 

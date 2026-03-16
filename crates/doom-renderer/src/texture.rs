@@ -10,9 +10,9 @@
 //! # Binary layout references
 //! - PNAMES:   `u32 count`, then `count × 8-byte` null-padded patch names
 //! - TEXTURE1: `u32 num_textures`, `num_textures × u32 offsets`, then texture
-//!             descriptors at each offset
+//!   descriptors at each offset
 //! - Patch:    `u16 width/height`, `i16 leftoffset/topoffset`, `width × u32 col_offsets`,
-//!             then column posts (`topdelta`, `length`, pad, pixels, pad; 0xFF = end)
+//!   then column posts (`topdelta`, `length`, pad, pixels, pad; 0xFF = end)
 
 use doom_wad::WadFile;
 use std::collections::HashMap;
@@ -641,11 +641,9 @@ mod tests {
         let cache = TextureCache::load(&wad);
 
         let tex = cache.get(b"COLTEST\0").expect("texture must be present");
-        let h = tex.height as usize;
-
         // Column 0, rows 0..4 should all be 99.
         for row in 0..4 {
-            assert_eq!(tex.data[0 * h + row], 99, "column 0 row {row} should be 99");
+            assert_eq!(tex.data[row], 99, "column 0 row {row} should be 99");
         }
     }
 }

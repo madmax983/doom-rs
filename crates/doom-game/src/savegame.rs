@@ -503,11 +503,11 @@ fn write_player_state(w: &mut WriteCursor, p: &PlayerState) {
     w.write_i32(p.health());
     w.write_i32(p.armor());
     w.write_u8(p.armor_type);
-    for i in 0..NUM_AMMO {
+    for (i, _) in p.max_ammo.iter().enumerate() {
         w.write_u32(p.ammo(i));
     }
-    for i in 0..NUM_AMMO {
-        w.write_u32(p.max_ammo[i]);
+    for max_ammo in p.max_ammo.iter().copied() {
+        w.write_u32(max_ammo);
     }
     for i in 0..NUM_WEAPONS {
         w.write_bool(p.weapons[i]);
@@ -619,8 +619,8 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
         // Now give the exact saved amount (may exceed default max if backpack was collected).
     }
     ps.max_ammo = max_ammo;
-    for i in 0..NUM_AMMO {
-        ps.give_ammo(i, ammo[i]);
+    for (i, amount) in ammo.iter().copied().enumerate() {
+        ps.give_ammo(i, amount);
     }
 
     ps.weapons = weapons;
@@ -1409,7 +1409,7 @@ mod tests {
     fn roundtrip_rng_state() {
         let mut gs = test_game_state();
         for _ in 0..42 {
-            gs.rng.next();
+            gs.rng.next_byte();
         }
         let saved_index = gs.rng.index();
         let data = save_game(&gs, &test_level_name(), 2, "rng test");

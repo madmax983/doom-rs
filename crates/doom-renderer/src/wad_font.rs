@@ -40,7 +40,7 @@ impl WadFont {
 
     /// Return the glyph for ASCII character `ch`, or `None` for missing/space.
     fn glyph(&self, ch: u8) -> Option<&PatchImage> {
-        if ch < 33 || ch > 95 {
+        if !(33..=95).contains(&ch) {
             return None;
         }
         self.glyphs[(ch - 33) as usize].as_ref()

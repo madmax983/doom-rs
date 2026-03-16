@@ -307,7 +307,7 @@ impl OplChip {
 
                 // -- Process each operator ------------------------------------
                 let mut op_outputs = [0.0f32; 2];
-                for op_idx in 0..2usize {
+                for (op_idx, op_output) in op_outputs.iter_mut().enumerate() {
                     let op_reg = &ch.operators[op_idx];
                     let op_st = &mut st.ops[op_idx];
 
@@ -355,8 +355,7 @@ impl OplChip {
                     let phase_inc = (op_freq / sr * 4_294_967_296.0) as u32;
                     op_st.phase_acc = op_st.phase_acc.wrapping_add(phase_inc);
 
-                    op_outputs[op_idx] =
-                        opl_waveform(op_reg.waveform, op_st.phase_acc) * op_st.env_level;
+                    *op_output = opl_waveform(op_reg.waveform, op_st.phase_acc) * op_st.env_level;
                 }
 
                 // -- 2-operator FM: modulator → carrier phase modulation ------

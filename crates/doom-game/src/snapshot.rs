@@ -57,10 +57,10 @@ mod prop_tests {
     use super::*;
     use proptest::prelude::*;
 
-    /// Property: save → restore roundtrip preserves `tic_num`.
-    ///
-    /// `Snapshot` does not implement `PartialEq`, so we compare individual
-    /// observable fields rather than the struct itself.
+    // Property: save → restore roundtrip preserves `tic_num`.
+    //
+    // `Snapshot` does not implement `PartialEq`, so we compare individual
+    // observable fields rather than the struct itself.
     proptest! {
         #[test]
         fn snapshot_roundtrip_preserves_tic_num(tic in 0u32..=u32::MAX) {
@@ -73,18 +73,18 @@ mod prop_tests {
             prop_assert_eq!(gs.tic_num, tic, "tic_num must be restored exactly");
         }
 
-        /// Property: save → restore roundtrip preserves the RNG index.
+        // Property: save → restore roundtrip preserves the RNG index.
         #[test]
         fn snapshot_roundtrip_preserves_rng_index(advances in 0u32..=255u32) {
             let mut gs = GameState::new("E1M1");
             for _ in 0..advances {
-                gs.rng.next();
+                gs.rng.next_byte();
             }
             let saved_idx = gs.rng.index();
             let snap = gs.save_snapshot();
             // Advance RNG further after snapshot.
             for _ in 0..10 {
-                gs.rng.next();
+                gs.rng.next_byte();
             }
             gs.restore_snapshot(snap);
             prop_assert_eq!(
@@ -93,7 +93,7 @@ mod prop_tests {
             );
         }
 
-        /// Property: save → restore roundtrip preserves kill/item/secret counts.
+        // Property: save → restore roundtrip preserves kill/item/secret counts.
         #[test]
         fn snapshot_roundtrip_preserves_counters(
             kills in 0u32..=1000u32,
@@ -115,7 +115,7 @@ mod prop_tests {
             prop_assert_eq!(gs.secret_count, secrets, "secret_count mismatch");
         }
 
-        /// Property: snapshot tic_num accessor matches the tic at save time.
+        // Property: snapshot tic_num accessor matches the tic at save time.
         #[test]
         fn snapshot_tic_accessor_matches_save_time(tic in 0u32..=u32::MAX) {
             let mut gs = GameState::new("E1M1");
@@ -124,8 +124,8 @@ mod prop_tests {
             prop_assert_eq!(snap.tic_num(), tic);
         }
 
-        /// Property: two independent snapshots are truly independent — restoring
-        /// the first must not be affected by what snap2 captured.
+        // Property: two independent snapshots are truly independent — restoring
+        // the first must not be affected by what snap2 captured.
         #[test]
         fn two_snapshots_are_independent(tic1 in 0u32..=500u32, tic2 in 501u32..=1000u32) {
             let mut gs = GameState::new("E1M1");
@@ -194,12 +194,12 @@ mod tests {
     fn snapshot_captures_rng_index() {
         let mut gs = GameState::new("E1M1");
         for _ in 0..42 {
-            gs.rng.next();
+            gs.rng.next_byte();
         }
         let snap = gs.save_snapshot();
         // Advance rng further.
         for _ in 0..10 {
-            gs.rng.next();
+            gs.rng.next_byte();
         }
         gs.restore_snapshot(snap);
         assert_eq!(gs.rng.index(), 42);

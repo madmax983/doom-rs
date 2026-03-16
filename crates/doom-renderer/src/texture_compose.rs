@@ -436,7 +436,10 @@ mod tests {
     /// Build a TEXTURE1/TEXTURE2 lump from a list of texture specs.
     ///
     /// Each spec: `(name, width, height, &[(origin_x, origin_y, pname_index)])`.
-    fn make_texture_lump(specs: &[(&str, u16, u16, &[(i16, i16, u16)])]) -> Vec<u8> {
+    type PatchPlacement = (i16, i16, u16);
+    type TextureSpec<'a> = (&'a str, u16, u16, &'a [PatchPlacement]);
+
+    fn make_texture_lump(specs: &[TextureSpec<'_>]) -> Vec<u8> {
         let num = specs.len() as u32;
         // We'll build the offset table and texture data separately,
         // then concatenate.

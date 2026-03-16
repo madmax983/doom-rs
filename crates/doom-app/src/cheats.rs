@@ -154,8 +154,8 @@ pub fn apply_cheat(gs: &mut GameState, cheat_name: &str) -> &'static str {
             for slot in gs.player.weapons.iter_mut() {
                 *slot = true;
             }
-            for ammo_idx in 0..MAX_AMMO.len() {
-                gs.player.give_ammo(ammo_idx, MAX_AMMO[ammo_idx]);
+            for (ammo_idx, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
+                gs.player.give_ammo(ammo_idx, max_ammo);
             }
             gs.player.keys = 0x3F; // all 6 key bits
             "Very Happy Ammo Added"
@@ -166,8 +166,8 @@ pub fn apply_cheat(gs: &mut GameState, cheat_name: &str) -> &'static str {
             for slot in gs.player.weapons.iter_mut() {
                 *slot = true;
             }
-            for ammo_idx in 0..MAX_AMMO.len() {
-                gs.player.give_ammo(ammo_idx, MAX_AMMO[ammo_idx]);
+            for (ammo_idx, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
+                gs.player.give_ammo(ammo_idx, max_ammo);
             }
             "Ammo (no keys) Added"
         }

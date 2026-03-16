@@ -603,7 +603,7 @@ mod prop_tests {
             let a = a % n_sectors;
             let b = b % n_sectors;
             // All-zero reject: every bit is 0 → all pairs visible.
-            let size = (n_sectors * n_sectors + 7) / 8;
+            let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0u8; size];
             let reject = Reject::parse_lump(&data, n_sectors).unwrap();
             let vis_ab = reject.visible(a, b);
@@ -623,7 +623,7 @@ mod prop_tests {
             a in 0usize..16,
         ) {
             let a = a % n_sectors;
-            let size = (n_sectors * n_sectors + 7) / 8;
+            let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0u8; size];
             let reject = Reject::parse_lump(&data, n_sectors).unwrap();
             prop_assert!(
@@ -639,7 +639,7 @@ mod prop_tests {
             a in 100usize..=200,
             b in 100usize..=200,
         ) {
-            let size = (n_sectors * n_sectors + 7) / 8;
+            let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0u8; size];
             let reject = Reject::parse_lump(&data, n_sectors).unwrap();
             // a and b are deliberately far out of range.
@@ -656,7 +656,7 @@ mod prop_tests {
         ) {
             let a = a % n_sectors;
             let b = b % n_sectors;
-            let size = (n_sectors * n_sectors + 7) / 8;
+            let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0xFFu8; size];
             let reject = Reject::parse_lump(&data, n_sectors).unwrap();
             prop_assert!(
@@ -672,7 +672,7 @@ mod prop_tests {
             n_sectors in 1usize..=10,
             fill_byte in 0u8..=255u8,
         ) {
-            let size = (n_sectors * n_sectors + 7) / 8;
+            let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![fill_byte; size];
             prop_assert!(
                 Reject::parse_lump(&data, n_sectors).is_ok(),
@@ -689,7 +689,7 @@ mod prop_tests {
             offset in 1usize..=4,
             add_not_sub in any::<bool>(),
         ) {
-            let expected: usize = (n_sectors * n_sectors + 7) / 8;
+            let expected: usize = (n_sectors * n_sectors).div_ceil(8);
             let wrong_size = if add_not_sub {
                 expected + offset
             } else {
@@ -761,7 +761,7 @@ mod tests {
     #[test]
     fn reject_visible_symmetry() {
         // All-zero reject → everything visible.
-        let data = vec![0u8; (4 * 4 + 7) / 8]; // 4 sectors
+        let data = vec![0u8; (4usize * 4).div_ceil(8)]; // 4 sectors
         let reject = Reject::parse_lump(&data, 4).unwrap();
         for i in 0..4 {
             for j in 0..4 {

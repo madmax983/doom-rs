@@ -1939,12 +1939,12 @@ mod tests {
 
     #[test]
     fn sprite_names_no_duplicates() {
-        for i in 0..SPRITE_NAMES.len() {
-            for j in (i + 1)..SPRITE_NAMES.len() {
+        for (i, name_i) in SPRITE_NAMES.iter().enumerate() {
+            for (j, name_j) in SPRITE_NAMES.iter().enumerate().skip(i + 1) {
                 assert_ne!(
-                    SPRITE_NAMES[i], SPRITE_NAMES[j],
+                    name_i, name_j,
                     "duplicate sprite name at indices {i} and {j}: {}",
-                    SPRITE_NAMES[i]
+                    name_i
                 );
             }
         }

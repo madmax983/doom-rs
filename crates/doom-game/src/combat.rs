@@ -376,9 +376,7 @@ pub(crate) fn p_line_attack_target(
                     return None;
                 }
 
-                let Some((open_bottom, open_top)) = trace::line_opening(lv, linedef) else {
-                    return None;
-                };
+                let (open_bottom, open_top) = trace::line_opening(lv, linedef)?;
                 if open_top <= open_bottom {
                     return None;
                 }
