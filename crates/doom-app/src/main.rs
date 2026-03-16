@@ -25,9 +25,9 @@ use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
     ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
-    IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, RenderOut, SpriteCache,
-    SpriteClip, SwitchList, TextureCache, WeaponAnimState, draw_automap_ex, draw_intermission,
-    draw_menu, draw_status_bar, draw_title_screen, draw_weapon_animated,
+    HudMessageQueue, IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, RenderOut,
+    SpriteCache, SpriteClip, SwitchList, TextureCache, WeaponAnimState, draw_automap_ex,
+    draw_intermission, draw_menu, draw_status_bar, draw_title_screen, draw_weapon_animated,
     render_actors_with_masked_ex, render_flag_from_state,
     render_level_with_view_height_and_extra_light, thing_sprite_prefix,
 };
@@ -116,9 +116,8 @@ pub(crate) struct DoomGame {
     /// Chatchar-based cheat buffer (doom-game's ring-buffer cheat detector).
     /// Processes raw `chatchar` bytes from TicInput for classic Doom cheat entry.
     cheat_buffer: game_cheats::CheatBuffer,
-    /// Timed cheat message overlay: (message text, remaining tics).
-    /// Displayed at the top of the screen and ticks down each frame.
-    cheat_message: Option<(String, u32)>,
+    /// HUD message queue for timed text overlays (pickup notifications, cheats, etc.).
+    hud_messages: HudMessageQueue,
     console: console::Console,
     /// Path used for quick save (F5) and quick load (F9).
     save_path: std::path::PathBuf,
@@ -229,7 +228,7 @@ impl DoomGame {
             level,
             cheat_detector: cheats::CheatDetector::new(),
             cheat_buffer: game_cheats::CheatBuffer::new(),
-            cheat_message: None,
+            hud_messages: HudMessageQueue::new(4),
             console: console::Console::new(),
             save_path: std::path::PathBuf::from("doom_save.bin"),
             automap: AutomapState::new(),
@@ -478,7 +477,7 @@ impl DoomGame {
 
         for ev in events {
             if let SoundRequest::PlayerUseLockedDoor(color) = ev {
-                self.cheat_message = Some((locked_door_message(*color).to_string(), 105));
+                self.hud_messages.push(locked_door_message(*color).to_string(), 105);
             }
         }
 
@@ -869,7 +868,7 @@ impl DoomApp for DoomGame {
                         self.automap_full_reveal = !self.automap_full_reveal;
                     }
                     if !msg.is_empty() {
-                        self.cheat_message = Some((msg.to_string(), 105)); // 3 sec @ 35 tics/sec
+                        self.hud_messages.push(msg.to_string(), 105); // 3 sec @ 35 tics/sec
                         self.console.print(msg.to_string());
                     }
                 }
@@ -889,19 +888,13 @@ impl DoomApp for DoomGame {
             if let Some(code) = game_cheats::check_cheats(&self.cheat_buffer) {
                 game_cheats::apply_cheat(&mut self.gs, code);
                 let msg = game_cheats::cheat_message(code).to_string();
-                self.cheat_message = Some((msg, 105)); // 3 seconds at 35 tics/sec
+                self.hud_messages.push(msg, 105); // 3 seconds at 35 tics/sec
                 self.cheat_buffer.clear();
             }
         }
 
-        // Tick down cheat message timer.
-        if let Some((_, ref mut tics)) = self.cheat_message {
-            if *tics > 0 {
-                *tics -= 1;
-            } else {
-                self.cheat_message = None;
-            }
-        }
+        // Tick down HUD messages.
+        self.hud_messages.tick();
 
         // Quick save (F5).
         if input.f5_save {
@@ -1165,10 +1158,8 @@ impl DoomApp for DoomGame {
             draw_status_bar(fb, &self.gs.player, god_mode);
         }
 
-        // Draw cheat message overlay at the top of the screen (if active).
-        if let Some((ref msg, _)) = self.cheat_message {
-            draw_cheat_message_overlay(fb, msg);
-        }
+        // Draw HUD messages at the top of the screen (if active).
+        draw_hud_messages_overlay(fb, &self.hud_messages);
 
         // Draw menu overlay on top of the game view (no-op when menu is not active).
         draw_menu(fb, &self.menu, &self.bitmap_font);
@@ -1270,25 +1261,32 @@ fn draw_mini_string(fb: &mut Framebuffer, y: usize, text: &str, color: u8) {
 }
 
 // ---------------------------------------------------------------------------
-// Cheat message overlay
+// HUD message queue overlay
 // ---------------------------------------------------------------------------
 
-/// Draw a cheat message string at the top of the framebuffer.
+/// Draw the active HUD messages at the top of the framebuffer.
 ///
 /// Uses a minimal 4x6 bitmap font to render ASCII text. Each character cell
-/// is 5 pixels wide (4px glyph + 1px spacing). The message is rendered in
-/// yellow (palette index 231) on a black (palette index 0) background bar.
-fn draw_cheat_message_overlay(fb: &mut Framebuffer, msg: &str) {
+/// is 5 pixels wide (4px glyph + 1px spacing). The messages are rendered in
+/// yellow (palette index 231) on a black (palette index 0) background bar,
+/// stacked vertically starting from the top.
+fn draw_hud_messages_overlay(fb: &mut Framebuffer, queue: &HudMessageQueue) {
+    let messages = queue.active_messages();
+    if messages.is_empty() {
+        return;
+    }
+
     const FB_W: usize = 320;
     const CHAR_W: usize = 5; // 4px glyph + 1px gap
     const CHAR_H: usize = 7; // 6px glyph + 1px gap
-    const TOP_Y: usize = 2;
+    const MSG_GAP: usize = 2; // px between messages
     const COLOR_MSG: u8 = 231; // yellow
     const COLOR_MSG_BG: u8 = 0; // black
 
-    // Draw a background bar across the top of the screen.
-    let bar_h = CHAR_H + 2; // 1px padding top+bottom
-    for y in 0..bar_h {
+    let total_h = messages.len() * (CHAR_H + MSG_GAP) + 2; // 2px padding at the very top
+
+    // Draw a background bar across the top of the screen to fit all messages.
+    for y in 0..total_h {
         let row_start = y * FB_W;
         let row_end = row_start + FB_W;
         if row_end <= fb.data.len() {
@@ -1296,27 +1294,32 @@ fn draw_cheat_message_overlay(fb: &mut Framebuffer, msg: &str) {
         }
     }
 
-    // Center the message horizontally.
-    let msg_width_px = msg.len() * CHAR_W;
-    let start_x = if msg_width_px < FB_W {
-        (FB_W - msg_width_px) / 2
-    } else {
-        0
-    };
+    for (i, msg) in messages.iter().enumerate() {
+        let text = msg.text();
+        let top_y = 2 + i * (CHAR_H + MSG_GAP);
 
-    for (ci, ch) in msg.chars().enumerate() {
-        let glyph = mini_glyph(ch);
-        let cx = start_x + ci * CHAR_W;
-        for (row, &bits) in glyph.iter().enumerate() {
-            let sy = TOP_Y + row;
-            if sy >= 200 {
-                break;
-            }
-            for col in 0..4 {
-                if bits & (1 << (3 - col)) != 0 {
-                    let sx = cx + col;
-                    if sx < FB_W {
-                        fb.set_pixel(sx, sy, COLOR_MSG);
+        // Center the message horizontally.
+        let msg_width_px = text.len() * CHAR_W;
+        let start_x = if msg_width_px < FB_W {
+            (FB_W - msg_width_px) / 2
+        } else {
+            0
+        };
+
+        for (ci, ch) in text.chars().enumerate() {
+            let glyph = mini_glyph(ch);
+            let cx = start_x + ci * CHAR_W;
+            for (row, &bits) in glyph.iter().enumerate() {
+                let sy = top_y + row;
+                if sy >= 200 {
+                    break;
+                }
+                for col in 0..4 {
+                    if bits & (1 << (3 - col)) != 0 {
+                        let sx = cx + col;
+                        if sx < FB_W {
+                            fb.set_pixel(sx, sy, COLOR_MSG);
+                        }
                     }
                 }
             }
@@ -2286,25 +2289,22 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Test 6: Cheat message appears and expires
+    // Test 6: HUD message appears and expires
     // -----------------------------------------------------------------------
 
     #[test]
-    fn cheat_message_expires_after_ticking() {
+    fn hud_message_expires_after_ticking() {
         let mut game = make_doom_game();
-        // Manually set a cheat message.
-        game.cheat_message = Some(("Test message".to_string(), 3));
+        // Manually set a HUD message.
+        game.hud_messages.push("Test message".to_string(), 3);
 
         // Tick 3 times to expire the message.
         for _ in 0..3 {
             game.tick(TicInput::default());
         }
-        // After 3 ticks the tics should have reached 0 and on the next tick
-        // it should be cleared.
-        game.tick(TicInput::default());
         assert!(
-            game.cheat_message.is_none(),
-            "cheat message must be None after expiring"
+            game.hud_messages.is_empty(),
+            "HUD message must be empty after expiring"
         );
     }
 
@@ -2321,8 +2321,8 @@ mod tests {
             "automap_full_reveal must start false"
         );
         assert!(
-            game.cheat_message.is_none(),
-            "cheat_message must start None"
+            game.hud_messages.is_empty(),
+            "hud_messages must start empty"
         );
         assert_eq!(
             game.player_view_height, PLAYER_HEIGHT,
@@ -2538,30 +2538,33 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Test 8: draw_cheat_message_overlay does not panic
+    // Test 8: draw_hud_messages_overlay does not panic
     // -----------------------------------------------------------------------
 
     #[test]
-    fn draw_cheat_message_overlay_does_not_panic() {
+    fn draw_hud_messages_overlay_does_not_panic() {
         let mut fb = Framebuffer::new();
-        draw_cheat_message_overlay(&mut fb, "Degreelessness Mode On");
+        let mut queue = HudMessageQueue::new(4);
+        queue.push("Degreelessness Mode On".to_string(), 105);
+        draw_hud_messages_overlay(&mut fb, &queue);
         // Verify something was drawn (the background bar at minimum).
         let has_non_zero = fb.data[..320 * 9].iter().any(|&b| b != 0);
         assert!(
             has_non_zero,
-            "cheat overlay must draw visible pixels in the top rows"
+            "HUD overlay must draw visible pixels in the top rows"
         );
     }
 
     // -----------------------------------------------------------------------
-    // Test 9: draw_cheat_message_overlay with empty string
+    // Test 9: draw_hud_messages_overlay with empty queue
     // -----------------------------------------------------------------------
 
     #[test]
-    fn draw_cheat_message_overlay_empty_string_no_panic() {
+    fn draw_hud_messages_overlay_empty_queue_no_panic() {
         let mut fb = Framebuffer::new();
-        draw_cheat_message_overlay(&mut fb, "");
-        // Empty message: only background bar drawn (all black), no crash.
+        let queue = HudMessageQueue::new(4);
+        draw_hud_messages_overlay(&mut fb, &queue);
+        // Empty queue: no pixels modified.
     }
 
     // -----------------------------------------------------------------------
@@ -2612,8 +2615,8 @@ mod tests {
             "god_mode must be true after typing iddqd via chatchar"
         );
         assert!(
-            game.cheat_message.is_some(),
-            "cheat_message must be set after cheat activation"
+            !game.hud_messages.is_empty(),
+            "HUD messages must be set after cheat activation"
         );
     }
 
@@ -2626,7 +2629,7 @@ mod tests {
         )]);
 
         assert_eq!(
-            game.cheat_message.as_ref().map(|(msg, _)| msg.as_str()),
+            game.hud_messages.active_messages().first().map(|msg| msg.text()),
             Some("You need a blue key to open this door"),
             "locked door feedback should surface the classic Doom HUD message"
         );
