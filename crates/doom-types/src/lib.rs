@@ -4,6 +4,7 @@
 //! All types here are candidates for Verus formal verification.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(unexpected_cfgs)]
 
 pub mod angle;
 pub mod bbox;

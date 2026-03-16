@@ -111,6 +111,7 @@ impl Bam {
         use core::f64::consts::PI;
         // SAFETY: single-threaded init before any reads.
         unsafe {
+            #[allow(clippy::needless_range_loop)]
             for i in 0..FINE_TABLE_SIZE {
                 let angle = (i as f64) * (2.0 * PI) / (FINE_TABLE_SIZE as f64);
                 let sin_val = angle.sin();

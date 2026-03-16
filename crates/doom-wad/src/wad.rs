@@ -16,9 +16,9 @@
 //! All returned `WadFile` instances satisfy:
 //! - `∀ i: lump[i].offset + lump[i].size ≤ data.len()`
 //! - No zero-size lump start/end range escapes bounds
-//! (Overlap-freeness is a weaker property we log-warn on, not hard-error,
-//!  because some vanilla WADs technically have overlapping lumps via
-//!  lump aliasing tricks — a full Verus proof would quantify this.)
+//!   (Overlap-freeness is a weaker property we log-warn on, not hard-error,
+//!   because some vanilla WADs technically have overlapping lumps via
+//!   lump aliasing tricks — a full Verus proof would quantify this.)
 
 use crate::lump::{LumpDef, LumpName, RawLumpEntry};
 use thiserror::Error;
