@@ -452,9 +452,7 @@ mod tests {
 
     fn init_trig() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
     }
 
     fn spawn_shootable_target(

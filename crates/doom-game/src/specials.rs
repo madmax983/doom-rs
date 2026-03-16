@@ -3874,9 +3874,7 @@ mod tests {
     #[test]
     fn p_use_lines_uses_fractional_angle_without_east_fallback() {
         static INIT_TRIG: std::sync::Once = std::sync::Once::new();
-        INIT_TRIG.call_once(|| unsafe {
-            doom_types::Bam::init_trig_tables();
-        });
+        INIT_TRIG.call_once(|| { doom_types::Bam::init_trig_tables(); });
 
         let mut gs = GameState::new("TEST");
         let mut level = make_door_level(0);

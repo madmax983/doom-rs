@@ -28,8 +28,7 @@ use doom_renderer::{
     ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
     IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, PatchCache, RenderOut,
     SpriteCache, SpriteClip, SwitchList, TextureCache, WadFont, WeaponAnimState, draw_automap_ex,
-    draw_intermission, draw_menu, draw_menu_wad, draw_status_bar, draw_status_bar_wad,
-    draw_title_screen, draw_title_screen_wad, draw_weapon_animated, render_actors_with_masked_ex,
+    draw_intermission, draw_menu_wad, draw_status_bar_wad, draw_title_screen_wad, draw_weapon_animated, render_actors_with_masked_ex,
     render_flag_from_state, render_level_with_view_height_and_extra_light, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
@@ -1604,9 +1603,7 @@ fn main() -> Result<()> {
     // Initialize trig tables (required for sin/cos in the game simulation).
     // SAFETY: called exactly once at startup, single-threaded, before any
     // Bam::sin() or Bam::cos() calls.
-    unsafe {
-        doom_types::Bam::init_trig_tables();
-    }
+    doom_types::Bam::init_trig_tables();
 
     let args = Args::parse();
 

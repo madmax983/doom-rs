@@ -28,6 +28,12 @@ pub struct Bam(pub u32);
 const FINE_TABLE_SIZE: usize = 8192; // 2048 * 4 quadrants
 static FINESINE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
+#[cfg(all(loom, test))]
+static INIT_STATE: loom::sync::atomic::AtomicU8 = loom::sync::atomic::AtomicU8::new(0);
+
+#[cfg(not(all(loom, test)))]
+static INIT_STATE: core::sync::atomic::AtomicU8 = core::sync::atomic::AtomicU8::new(0);
+
 /// Lookup table populated at runtime.
 static mut SINE_TABLE: [Fixed16_16; FINE_TABLE_SIZE] = [Fixed16_16(0); FINE_TABLE_SIZE];
 
@@ -107,20 +113,52 @@ impl Bam {
     ///
     /// # Safety
     /// Must not be called concurrently or more than once.
-    pub unsafe fn init_trig_tables() {
+    /// Initialize sin/cos tables from a floating-point computation.
+    ///
+    /// Must be called exactly once at startup, before any `sin()`/`cos()` calls.
+    /// It is now thread-safe.
+    pub fn init_trig_tables() {
         use core::f64::consts::PI;
-        // SAFETY: single-threaded init before any reads.
-        #[allow(clippy::needless_range_loop)]
-        unsafe {
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..FINE_TABLE_SIZE {
-                let angle = (i as f64) * (2.0 * PI) / (FINE_TABLE_SIZE as f64);
-                let sin_val = angle.sin();
-                core::ptr::addr_of_mut!(SINE_TABLE[i])
-                    .write(Fixed16_16((sin_val * (1 << 16) as f64) as i32));
+
+        // State 0 = uninitialized
+        // State 1 = initializing
+        // State 2 = initialized
+
+        // Spinlock to ensure thread-safe one-time initialization.
+        // This makes `init_trig_tables` completely safe to call from multiple threads
+        // without panics or UB.
+        loop {
+            match INIT_STATE.compare_exchange(
+                0,
+                1,
+                core::sync::atomic::Ordering::Acquire,
+                core::sync::atomic::Ordering::Acquire
+            ) {
+                Ok(_) => {
+                    // We won the lock, initialize the table.
+                    unsafe {
+                        #[allow(clippy::needless_range_loop)]
+                        for i in 0..FINE_TABLE_SIZE {
+                            let angle = (i as f64) * (2.0 * PI) / (FINE_TABLE_SIZE as f64);
+                            let sin_val = angle.sin();
+                            core::ptr::addr_of_mut!(SINE_TABLE[i])
+                                .write(Fixed16_16((sin_val * (1 << 16) as f64) as i32));
+                        }
+                    }
+                    FINESINE.store(true, core::sync::atomic::Ordering::Release);
+                    INIT_STATE.store(2, core::sync::atomic::Ordering::Release);
+                    break;
+                }
+                Err(2) => {
+                    // Already initialized.
+                    break;
+                }
+                Err(_) => {
+                    // Someone else is initializing, spin until they finish.
+                    core::hint::spin_loop();
+                }
             }
         }
-        FINESINE.store(true, core::sync::atomic::Ordering::Release);
     }
 }
 
@@ -216,5 +254,33 @@ mod prop_tests {
             let idx = Bam(a).fine_angle();
             prop_assert!(idx < FINE_TABLE_SIZE);
         }
+    }
+}
+
+#[cfg(test)]
+mod havoc_loom_tests {
+
+
+    #[test]
+    fn havoc_init_trig_tables_loom() {
+        // Only run when loom is enabled
+        #[cfg(loom)]
+        loom::model(|| {
+            // Reset state
+            INIT_STATE.store(0, core::sync::atomic::Ordering::SeqCst);
+            FINESINE.store(false, core::sync::atomic::Ordering::SeqCst);
+
+            let t1 = loom::thread::spawn(|| {
+                Bam::init_trig_tables();
+            });
+            let t2 = loom::thread::spawn(|| {
+                Bam::init_trig_tables();
+            });
+
+            t1.join().unwrap();
+            t2.join().unwrap();
+
+            assert!(FINESINE.load(core::sync::atomic::Ordering::Acquire));
+        });
     }
 }
