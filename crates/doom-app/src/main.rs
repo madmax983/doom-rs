@@ -951,15 +951,23 @@ impl DoomApp for DoomGame {
 
         let cmd = ticinput_to_ticcmd(input);
 
+        // Pause the game simulation while the menu is open during gameplay.
+        // Title screen and intermission handle their own timing; only Playing
+        // needs the pause.
+        let paused = self.menu.is_active()
+            && matches!(self.phase_controller.phase(), GamePhase::Playing);
+
         // Snapshot kill/item counts before the tick to detect changes.
         let pre_kills = self.gs.player.kill_count;
         let pre_items = self.gs.player.item_count;
 
-        self.gs.tick(cmd, Some(&mut self.level));
-        self.player_view_height =
-            next_player_view_height(self.player_view_height, self.gs.player.is_dead());
-        self.tick_weapon_anim();
-        self.phase_controller.tick(&mut self.gs);
+        if !paused {
+            self.gs.tick(cmd, Some(&mut self.level));
+            self.player_view_height =
+                next_player_view_height(self.player_view_height, self.gs.player.is_dead());
+            self.tick_weapon_anim();
+            self.phase_controller.tick(&mut self.gs);
+        }
         self.update_intermission_renderer();
         if let Some(map_id) = self.phase_controller.should_load_map() {
             self.load_map_after_intermission(map_id, true);

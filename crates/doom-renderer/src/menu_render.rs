@@ -223,22 +223,25 @@ struct MenuLayout {
     item_ys: &'static [i32],
 }
 
+// Vanilla LINEHEIGHT = 16 for all menus except Load/Save slots.
+// Positions from m_menu.c: menu_t { x, y } + LINEHEIGHT*i.
+
 const MAIN_LAYOUT: MenuLayout = MenuLayout {
     title_patch: "M_DOOM",
     title_x: 94,
     title_y: 2,
     items_x: 97,
     item_patches: &["M_NGAME", "M_OPTION", "M_LOADG", "M_SAVEG", "M_QUITG"],
-    item_ys: &[72, 82, 92, 102, 112],
+    item_ys: &[64, 80, 96, 112, 128],
 };
 
 const EPISODE_LAYOUT: MenuLayout = MenuLayout {
     title_patch: "M_EPISOD",
     title_x: 54,
     title_y: 38,
-    items_x: 54,
+    items_x: 48,
     item_patches: &["M_EPI1", "M_EPI2", "M_EPI3", "M_EPI4"],
-    item_ys: &[58, 74, 90, 106],
+    item_ys: &[63, 79, 95, 111],
 };
 
 const SKILL_LAYOUT: MenuLayout = MenuLayout {
@@ -247,7 +250,7 @@ const SKILL_LAYOUT: MenuLayout = MenuLayout {
     title_y: 14,
     items_x: 48,
     item_patches: &["M_JKILL", "M_ROUGH", "M_HURT", "M_ULTRA", "M_NMARE"],
-    item_ys: &[38, 54, 70, 86, 102],
+    item_ys: &[63, 79, 95, 111, 127],
 };
 
 const OPTIONS_LAYOUT: MenuLayout = MenuLayout {
@@ -256,7 +259,7 @@ const OPTIONS_LAYOUT: MenuLayout = MenuLayout {
     title_y: 15,
     items_x: 60,
     item_patches: &["M_MESSG", "M_DETAIL", "M_SCRNSZ", "M_MSENS", "M_SVOL"],
-    item_ys: &[35, 51, 67, 83, 99],
+    item_ys: &[37, 53, 69, 85, 101],
 };
 
 const LOAD_LAYOUT: MenuLayout = MenuLayout {
@@ -265,7 +268,7 @@ const LOAD_LAYOUT: MenuLayout = MenuLayout {
     title_y: 28,
     items_x: 80,
     item_patches: &[],
-    item_ys: &[51, 60, 69, 78, 87, 96],
+    item_ys: &[34, 50, 66, 82, 98, 114],
 };
 
 const SAVE_LAYOUT: MenuLayout = MenuLayout {
@@ -274,7 +277,7 @@ const SAVE_LAYOUT: MenuLayout = MenuLayout {
     title_y: 28,
     items_x: 80,
     item_patches: &[],
-    item_ys: &[51, 60, 69, 78, 87, 96],
+    item_ys: &[34, 50, 66, 82, 98, 114],
 };
 
 fn page_layout(page: MenuPage) -> &'static MenuLayout {
