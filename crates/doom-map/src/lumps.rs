@@ -435,7 +435,7 @@ impl Reject {
     /// # Errors
     /// Returns `LumpParseError::BadRejectSize` if the lump size doesn't match.
     pub fn parse_lump(data: &[u8], n_sectors: usize) -> Result<Self, LumpParseError> {
-        let expected = (n_sectors * n_sectors + 7) / 8;
+        let expected = (n_sectors * n_sectors).div_ceil(8);
         if data.len() != expected {
             return Err(LumpParseError::BadRejectSize {
                 n_sectors,
@@ -567,6 +567,7 @@ fn parse_fixed_records<T, F>(
 where
     F: Fn(&[u8]) -> T,
 {
+    #[allow(clippy::manual_is_multiple_of)]
     if data.len() % entry_size != 0 {
         return Err(LumpParseError::BadLength {
             lump: lump_name,

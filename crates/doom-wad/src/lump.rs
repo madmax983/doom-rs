@@ -69,6 +69,7 @@ impl LumpName {
     }
 
     /// Construct from a string slice (must be ≤ 8 ASCII chars).
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         let mut buf = [0u8; 8];
         for (i, ch) in s.bytes().take(8).enumerate() {
