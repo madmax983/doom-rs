@@ -102,12 +102,22 @@ impl Framebuffer {
         }
     }
 
+    /// Draw a Doom picture-format patch using vanilla `V_DrawPatch` semantics.
+    ///
+    /// `x` and `y` are the **origin** coordinates as passed to vanilla's
+    /// `V_DrawPatch`.  The actual top-left pixel is `(x - left_offset, y - top_offset)`.
+    /// Use this for all WAD-coordinate draws (menus, status bar, overlays).
+    pub fn draw_patch_vanilla(&mut self, x: i32, y: i32, patch: &PatchImage) {
+        let ox = x - patch.left_offset as i32;
+        let oy = y - patch.top_offset as i32;
+        self.draw_patch(ox, oy, patch);
+    }
+
     /// Draw a Doom picture-format patch at screen position `(x, y)`.
     ///
-    /// `x` and `y` are the screen coordinates of the patch origin **after**
-    /// applying `left_offset` / `top_offset` (i.e. callers pass the adjusted
-    /// position).  Transparent pixels (gaps between posts) are skipped.
-    /// Pixels that land outside the 320×200 screen are silently clipped.
+    /// `x` and `y` are the screen coordinates of the patch's top-left pixel
+    /// (no offset adjustment).  Transparent pixels (gaps between posts) are
+    /// skipped.  Pixels that land outside the 320×200 screen are silently clipped.
     pub fn draw_patch(&mut self, x: i32, y: i32, patch: &PatchImage) {
         for (col, posts) in patch.columns.iter().enumerate() {
             let px = x + col as i32;
@@ -126,10 +136,11 @@ impl Framebuffer {
         }
     }
 
-    /// Draw a patch centered horizontally at the given `y` coordinate.
+    /// Draw a patch centered horizontally at the given `y` coordinate (vanilla origin).
     pub fn draw_patch_centered(&mut self, y: i32, patch: &PatchImage) {
-        let x = (FB_WIDTH as i32 - patch.width as i32) / 2;
-        self.draw_patch(x, y, patch);
+        // Center visually: origin x = center + left_offset so actual draw = center.
+        let x = (FB_WIDTH as i32 - patch.width as i32) / 2 + patch.left_offset as i32;
+        self.draw_patch_vanilla(x, y, patch);
     }
 
     /// Return an immutable view of the raw pixel data.

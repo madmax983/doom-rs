@@ -303,14 +303,15 @@ pub fn draw_menu_wad(
         return;
     }
 
-    darken_framebuffer(fb);
+    // Vanilla Doom's M_Drawer does NOT darken the background — patches
+    // are drawn directly on top of whatever is on screen.
 
     let layout = page_layout(menu.page());
 
     // Title patch.
     if let Some(patch) = cache.get(layout.title_patch, wad) {
         let p = patch.clone();
-        fb.draw_patch(layout.title_x, layout.title_y, &p);
+        fb.draw_patch_vanilla(layout.title_x, layout.title_y, &p);
     }
 
     let items = menu.items();
@@ -338,7 +339,7 @@ pub fn draw_menu_wad(
                     if let Some(&y) = layout.item_ys.get(i) {
                         if let Some(patch) = cache.get(patch_name, wad) {
                             let p = patch.clone();
-                            fb.draw_patch(layout.items_x, y, &p);
+                            fb.draw_patch_vanilla(layout.items_x, y, &p);
                         }
                     }
                 }
@@ -355,7 +356,7 @@ pub fn draw_menu_wad(
         .unwrap_or(layout.item_ys.first().copied().unwrap_or(60));
     if let Some(patch) = cache.get(skull_name, wad) {
         let p = patch.clone();
-        fb.draw_patch(layout.items_x - 32, cursor_y, &p);
+        fb.draw_patch_vanilla(layout.items_x - 32, cursor_y, &p);
     }
 }
 
@@ -375,7 +376,9 @@ pub fn draw_title_screen_wad(
         TitlePhase::Title => {
             if let Some(patch) = cache.get("TITLEPIC", wad) {
                 let p = patch.clone();
-                fb.draw_patch(0, 0, &p);
+                // Widescreen WADs ship TITLEPIC wider than 320px; center it.
+                let x = (320 - p.width as i32) / 2;
+                fb.draw_patch(x, 0, &p);
             } else {
                 draw_title_pic(fb, font);
             }
@@ -384,7 +387,8 @@ pub fn draw_title_screen_wad(
         TitlePhase::Credits => {
             if let Some(patch) = cache.get("CREDIT", wad) {
                 let p = patch.clone();
-                fb.draw_patch(0, 0, &p);
+                let x = (320 - p.width as i32) / 2;
+                fb.draw_patch(x, 0, &p);
             } else {
                 draw_credits_screen(fb, font);
             }

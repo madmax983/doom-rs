@@ -1016,8 +1016,9 @@ fn apply_god_mode_overlay(fb: &mut Framebuffer, health: i32) {
 
 /// Draw a right-aligned number using STTNUM (tall red) digit patches.
 ///
-/// `x` is the right edge of the number field.  `max_digits` is how many
-/// digit slots to fill (unused leading positions are blank).
+/// `right_x` is the right edge of the number field (matches vanilla `ST_AMMOX`,
+/// `ST_HEALTHX`, `ST_ARMORX`).  Digit width is read from the actual patch so
+/// any WAD variant works correctly.
 pub fn draw_stnum(
     fb: &mut Framebuffer,
     cache: &mut PatchCache,
@@ -1027,6 +1028,12 @@ pub fn draw_stnum(
     value: i32,
     max_digits: usize,
 ) {
+    // Resolve digit width from the "0" patch (all STTNUM digits share width).
+    let digit_w = cache
+        .get("STTNUM0", wad)
+        .map(|p| p.width as i32)
+        .unwrap_or(14);
+
     let v = value.max(0) as u32;
     let mut digits = [0u8; 6];
     let mut count = 0;
@@ -1042,8 +1049,7 @@ pub fn draw_stnum(
         }
     }
 
-    // Each STTNUM patch is 14px wide; draw right-to-left.
-    let digit_w = 14i32;
+    // Draw right-to-left: ones digit at right_x - digit_w, etc.
     let mut x = right_x;
     for i in 0..max_digits {
         x -= digit_w;
@@ -1051,7 +1057,7 @@ pub fn draw_stnum(
             let name = format!("STTNUM{}", digits[i]);
             if let Some(patch) = cache.get(&name, wad) {
                 let p = patch.clone();
-                fb.draw_patch(x, y, &p);
+                fb.draw_patch_vanilla(x, y, &p);
             }
         }
     }
@@ -1069,6 +1075,11 @@ pub fn draw_stysnum(
     value: u32,
     max_digits: usize,
 ) {
+    let digit_w = cache
+        .get("STYSNUM0", wad)
+        .map(|p| p.width as i32)
+        .unwrap_or(7);
+
     let mut digits = [0u8; 4];
     let mut count = 0;
     let mut n = value;
@@ -1083,8 +1094,6 @@ pub fn draw_stysnum(
         }
     }
 
-    // STYSNUM patches are ~7px wide.
-    let digit_w = 7i32;
     let mut x = right_x;
     for i in 0..max_digits {
         x -= digit_w;
@@ -1092,7 +1101,7 @@ pub fn draw_stysnum(
             let name = format!("STYSNUM{}", digits[i]);
             if let Some(patch) = cache.get(&name, wad) {
                 let p = patch.clone();
-                fb.draw_patch(x, y, &p);
+                fb.draw_patch_vanilla(x, y, &p);
             }
         }
     }
@@ -1100,10 +1109,14 @@ pub fn draw_stysnum(
 
 /// Draw the status bar using actual WAD patches.
 ///
-/// Falls back gracefully when a patch is missing (the STBAR background covers
-/// the area, so missing patches just leave that region blank).
-///
-/// Pixel positions match vanilla Doom's `ST_lib.c` layout.
+/// All positions are exact values from vanilla Doom's `st_stuff.h`:
+///   ST_AMMOX=44   ST_AMMOY=171
+///   ST_HEALTHX=90 ST_HEALTHY=171
+///   ST_ARMORX=221 ST_ARMORY=171
+///   ST_FACEX=143  ST_FACEY=168
+///   ST_ARMSBGX=104 ST_ARMSBGY=168
+///   ST_KEY0Y=171  ST_KEY1Y=181  ST_KEY2Y=191
+///   ST_AMMO0-3Y = 173,179,185,191  (bullets,shells,rockets,cells)
 pub fn draw_status_bar_wad(
     fb: &mut Framebuffer,
     cache: &mut PatchCache,
@@ -1111,32 +1124,37 @@ pub fn draw_status_bar_wad(
     data: &StatusBarData,
     face: &FaceState,
 ) {
-    let bar_y = STATUS_BAR_Y as i32;
+    // Absolute y coordinates (screen space, not relative to bar).
+    const AMY: i32 = 171;   // ammo / health / armor number y
+    const BAR: i32 = 168;   // bar top y
 
-    // 1. Background: STBAR at (0, 168).
+    // 1. Background: STBAR centered on the 320px framebuffer.
+    //    Widescreen WADs (Unity/KEX) ship a 576px-wide STBAR; vanilla is 320px.
+    //    Either way, center it so the content aligns with our vanilla-coordinate elements.
     if let Some(patch) = cache.get("STBAR", wad) {
         let p = patch.clone();
-        fb.draw_patch(0, bar_y, &p);
+        let bar_x = (320 - p.width as i32) / 2;
+        fb.draw_patch(bar_x, BAR, &p);
     }
 
-    // 2. Ammo count — right edge x=43, y=170, 3 digits.
-    draw_stnum(fb, cache, wad, 43, bar_y + 3, data.ammo_current as i32, 3);
+    // 2. Ammo — right edge x=44, y=171, 3 digits. (ST_AMMOX=44)
+    draw_stnum(fb, cache, wad, 44, AMY, data.ammo_current as i32, 3);
 
-    // 3. Health — right edge x=103, y=170 + percent sign.
-    draw_stnum(fb, cache, wad, 97, bar_y + 3, data.health, 3);
+    // 3. Health — right edge x=90, y=171, 3 digits + percent. (ST_HEALTHX=90)
+    draw_stnum(fb, cache, wad, 90, AMY, data.health, 3);
     if let Some(pct) = cache.get("STTPRCNT", wad) {
         let p = pct.clone();
-        fb.draw_patch(97, bar_y + 3, &p);
+        fb.draw_patch_vanilla(90, AMY, &p);
     }
 
-    // 4. Arms box — STARMS background then gray/bright weapon numbers.
+    // 4. Arms box — background at (104,168), weapon numbers in 3×2 grid.
+    //    ST_ARMSBGX=104, ST_ARMSX=111, ST_ARMSXSPACE=12, ST_ARMSYSPACE=10
     if let Some(arms) = cache.get("STARMS", wad) {
         let p = arms.clone();
-        fb.draw_patch(104, bar_y + 1, &p);
+        fb.draw_patch_vanilla(104, BAR, &p);
     }
-    // Weapons 2-7: positions in a 3x2 grid at x=111..138, y=172..182.
-    let arm_xs = [111, 123, 135, 111, 123, 135];
-    let arm_ys = [bar_y + 4, bar_y + 4, bar_y + 4, bar_y + 14, bar_y + 14, bar_y + 14];
+    let arm_xs = [111i32, 123, 135, 111, 123, 135];
+    let arm_ys = [172i32, 172, 172, 182, 182, 182];
     for slot in 0..6usize {
         let weapon_num = slot + 2; // weapons 2-7
         let owned = data.weapons.get(weapon_num).copied().unwrap_or(false);
@@ -1144,58 +1162,59 @@ pub fn draw_status_bar_wad(
             let name = format!("STGNUM{weapon_num}");
             if let Some(patch) = cache.get(&name, wad) {
                 let p = patch.clone();
-                fb.draw_patch(arm_xs[slot], arm_ys[slot], &p);
+                fb.draw_patch_vanilla(arm_xs[slot], arm_ys[slot], &p);
             }
         }
     }
 
-    // 5. Face mugshot at x=144, y=168.
+    // 5. Face mugshot — ST_FACEX=143, ST_FACEY=168.
     let face_name = face_patch_name(face.kind);
     if let Some(patch) = cache.get(&face_name, wad) {
         let p = patch.clone();
-        fb.draw_patch(144, bar_y, &p);
+        fb.draw_patch_vanilla(143, BAR, &p);
     }
 
-    // 6. Armor — right edge x=233, then percent sign.
-    draw_stnum(fb, cache, wad, 227, bar_y + 3, data.armor, 3);
+    // 6. Armor — right edge x=221, y=171, 3 digits + percent. (ST_ARMORX=221)
+    draw_stnum(fb, cache, wad, 221, AMY, data.armor, 3);
     if let Some(pct) = cache.get("STTPRCNT", wad) {
         let p = pct.clone();
-        fb.draw_patch(227, bar_y + 3, &p);
+        fb.draw_patch_vanilla(221, AMY, &p);
     }
 
-    // 7. Keys — stacked at x=239, y=168/178/188.
+    // 7. Keys — x=239, y=171/181/191. (ST_KEY0-2Y = 171,181,191)
     let key_bits = [
-        (KEY_BLUE_CARD, 0usize),
-        (KEY_YELLOW_CARD, 1),
-        (KEY_RED_CARD, 2),
-        (KEY_BLUE_SKULL, 3),
-        (KEY_YELLOW_SKULL, 4),
-        (KEY_RED_SKULL, 5),
+        (KEY_BLUE_CARD,   0usize, 171i32),
+        (KEY_YELLOW_CARD, 1,      181),
+        (KEY_RED_CARD,    2,      191),
+        (KEY_BLUE_SKULL,  3,      171),
+        (KEY_YELLOW_SKULL,4,      181),
+        (KEY_RED_SKULL,   5,      191),
     ];
-    let key_y_slots = [bar_y, bar_y + 10, bar_y + 20];
     let mut slot_used = [false; 3];
-    for (bit, idx) in &key_bits {
+    for (bit, idx, ky) in &key_bits {
         if data.keys & bit != 0 {
             let slot = idx % 3;
             if !slot_used[slot] {
                 let name = format!("STKEYS{idx}");
                 if let Some(patch) = cache.get(&name, wad) {
                     let p = patch.clone();
-                    fb.draw_patch(239, key_y_slots[slot], &p);
+                    fb.draw_patch_vanilla(239, *ky, &p);
                 }
                 slot_used[slot] = true;
             }
         }
     }
 
-    // 8. Ammo tally — four rows (bullets/shells/cells/rockets).
-    // current ammo right edge x=288, max ammo right edge x=314.
-    let tally_ys = [bar_y + 3, bar_y + 11, bar_y + 19, bar_y + 27];
-    for i in 0..4 {
-        let cur = data.ammo.get(i).copied().unwrap_or(0);
-        let max = data.max_ammo.get(i).copied().unwrap_or(0);
-        draw_stysnum(fb, cache, wad, 288, tally_ys[i], cur, 3);
-        draw_stysnum(fb, cache, wad, 314, tally_ys[i], max, 3);
+    // 8. Ammo tally — vanilla y order: bullets=173, shells=179, rockets=185, cells=191.
+    //    ST_AMMO0-3Y / ST_MAXAMMO0-3Y, right edges x=288 / x=314.
+    //    Ammo array indices: 0=bullets, 1=shells, 2=cells, 3=rockets.
+    //    Display order (Doom source): bullets, shells, rockets, cells.
+    let tally_display = [(0usize, 173i32), (1, 179), (3, 185), (2, 191)];
+    for (ammo_idx, ty) in &tally_display {
+        let cur = data.ammo.get(*ammo_idx).copied().unwrap_or(0);
+        let max = data.max_ammo.get(*ammo_idx).copied().unwrap_or(0);
+        draw_stysnum(fb, cache, wad, 288, *ty, cur, 3);
+        draw_stysnum(fb, cache, wad, 314, *ty, max, 3);
     }
 }
 
