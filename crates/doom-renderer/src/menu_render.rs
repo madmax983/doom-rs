@@ -223,22 +223,25 @@ struct MenuLayout {
     item_ys: &'static [i32],
 }
 
+// Vanilla LINEHEIGHT = 16 for all menus except Load/Save slots.
+// Positions from m_menu.c: menu_t { x, y } + LINEHEIGHT*i.
+
 const MAIN_LAYOUT: MenuLayout = MenuLayout {
     title_patch: "M_DOOM",
     title_x: 94,
     title_y: 2,
     items_x: 97,
     item_patches: &["M_NGAME", "M_OPTION", "M_LOADG", "M_SAVEG", "M_QUITG"],
-    item_ys: &[72, 82, 92, 102, 112],
+    item_ys: &[64, 80, 96, 112, 128],
 };
 
 const EPISODE_LAYOUT: MenuLayout = MenuLayout {
     title_patch: "M_EPISOD",
     title_x: 54,
     title_y: 38,
-    items_x: 54,
+    items_x: 48,
     item_patches: &["M_EPI1", "M_EPI2", "M_EPI3", "M_EPI4"],
-    item_ys: &[58, 74, 90, 106],
+    item_ys: &[63, 79, 95, 111],
 };
 
 const SKILL_LAYOUT: MenuLayout = MenuLayout {
@@ -247,7 +250,7 @@ const SKILL_LAYOUT: MenuLayout = MenuLayout {
     title_y: 14,
     items_x: 48,
     item_patches: &["M_JKILL", "M_ROUGH", "M_HURT", "M_ULTRA", "M_NMARE"],
-    item_ys: &[38, 54, 70, 86, 102],
+    item_ys: &[63, 79, 95, 111, 127],
 };
 
 const OPTIONS_LAYOUT: MenuLayout = MenuLayout {
@@ -256,7 +259,7 @@ const OPTIONS_LAYOUT: MenuLayout = MenuLayout {
     title_y: 15,
     items_x: 60,
     item_patches: &["M_MESSG", "M_DETAIL", "M_SCRNSZ", "M_MSENS", "M_SVOL"],
-    item_ys: &[35, 51, 67, 83, 99],
+    item_ys: &[37, 53, 69, 85, 101],
 };
 
 const LOAD_LAYOUT: MenuLayout = MenuLayout {
@@ -265,7 +268,7 @@ const LOAD_LAYOUT: MenuLayout = MenuLayout {
     title_y: 28,
     items_x: 80,
     item_patches: &[],
-    item_ys: &[51, 60, 69, 78, 87, 96],
+    item_ys: &[34, 50, 66, 82, 98, 114],
 };
 
 const SAVE_LAYOUT: MenuLayout = MenuLayout {
@@ -274,7 +277,7 @@ const SAVE_LAYOUT: MenuLayout = MenuLayout {
     title_y: 28,
     items_x: 80,
     item_patches: &[],
-    item_ys: &[51, 60, 69, 78, 87, 96],
+    item_ys: &[34, 50, 66, 82, 98, 114],
 };
 
 fn page_layout(page: MenuPage) -> &'static MenuLayout {
@@ -303,14 +306,15 @@ pub fn draw_menu_wad(
         return;
     }
 
-    darken_framebuffer(fb);
+    // Vanilla Doom's M_Drawer does NOT darken the background — patches
+    // are drawn directly on top of whatever is on screen.
 
     let layout = page_layout(menu.page());
 
     // Title patch.
     if let Some(patch) = cache.get(layout.title_patch, wad) {
         let p = patch.clone();
-        fb.draw_patch(layout.title_x, layout.title_y, &p);
+        fb.draw_patch_vanilla(layout.title_x, layout.title_y, &p);
     }
 
     let items = menu.items();
@@ -338,7 +342,7 @@ pub fn draw_menu_wad(
                     if let Some(&y) = layout.item_ys.get(i) {
                         if let Some(patch) = cache.get(patch_name, wad) {
                             let p = patch.clone();
-                            fb.draw_patch(layout.items_x, y, &p);
+                            fb.draw_patch_vanilla(layout.items_x, y, &p);
                         }
                     }
                 }
@@ -355,7 +359,7 @@ pub fn draw_menu_wad(
         .unwrap_or(layout.item_ys.first().copied().unwrap_or(60));
     if let Some(patch) = cache.get(skull_name, wad) {
         let p = patch.clone();
-        fb.draw_patch(layout.items_x - 32, cursor_y, &p);
+        fb.draw_patch_vanilla(layout.items_x - 32, cursor_y, &p);
     }
 }
 
@@ -375,7 +379,9 @@ pub fn draw_title_screen_wad(
         TitlePhase::Title => {
             if let Some(patch) = cache.get("TITLEPIC", wad) {
                 let p = patch.clone();
-                fb.draw_patch(0, 0, &p);
+                // Widescreen WADs ship TITLEPIC wider than 320px; center it.
+                let x = (320 - p.width as i32) / 2;
+                fb.draw_patch(x, 0, &p);
             } else {
                 draw_title_pic(fb, font);
             }
@@ -384,7 +390,8 @@ pub fn draw_title_screen_wad(
         TitlePhase::Credits => {
             if let Some(patch) = cache.get("CREDIT", wad) {
                 let p = patch.clone();
-                fb.draw_patch(0, 0, &p);
+                let x = (320 - p.width as i32) / 2;
+                fb.draw_patch(x, 0, &p);
             } else {
                 draw_credits_screen(fb, font);
             }
@@ -410,6 +417,187 @@ pub fn draw_overlay_patch(
     } else {
         false
     }
+}
+
+// ---------------------------------------------------------------------------
+// Finale renderer
+// ---------------------------------------------------------------------------
+
+/// Vanilla Doom episode-end text (from f_finale.c).
+const E1TEXT: &str = "\
+ Once you beat the big bad\n\
+ hell boss, you wonder what\n\
+ authority structure permits\n\
+ such carnage.  So you ask\n\
+ yourself: Is there someone\n\
+ else in charge of this?\n\
+ \n\
+ Yes, of course.  But now\n\
+ it's your job to find them.\n\
+ And now you'll know why the\n\
+ UAC was so anxious to remove\n\
+ Deimos Base from the face of\n\
+ the moon ... and you're about\n\
+ to find out the hard way.";
+
+const E2TEXT: &str = "\
+ You've done it!  The\n\
+ hideous cyber-diamond has\n\
+ been obliterated!  And the\n\
+ once-barren Deimos Base is\n\
+ secure.  You can almost hear\n\
+ the echo of victory.\n\
+ \n\
+ You've beaten the demon\n\
+ forces all the way back to\n\
+ hell.  And now, with the\n\
+ completion of your task,\n\
+ you realize that... wait.\n\
+ You're still alive?  Good.\n\
+ \n\
+ You're in hell... but why?\n\
+ It seems the demons have\n\
+ been using Deimos as a kind\n\
+ of hell outpost.  With\n\
+ demons pouring in and out,\n\
+ you face the fact that you\n\
+ can't turn back.  You must\n\
+ go in.";
+
+const E3TEXT: &str = "\
+ The loathsome spiderdemon\n\
+ that masterminded the\n\
+ Deimos infestation has been\n\
+ slain and UAC reports state\n\
+ it was destroyed with a\n\
+ single blast of unholy\n\
+ firepower...  Did that just\n\
+ happen?  Was it...  easy?\n\
+ \n\
+ Don't be fooled.  You've\n\
+ just begun your journey\n\
+ through hell.  The real\n\
+ monsters wait for you at\n\
+ the end of the next episode.";
+
+const E4TEXT: &str = "\
+ the spider mastermind must\n\
+ have sent forth its legions\n\
+ of hellspawn before your\n\
+ final confrontation with\n\
+ that terrible beast from\n\
+ hell.  but you have shown\n\
+ no mercy.  nor have you\n\
+ been shown any.\n\
+ \n\
+ you aggressively crushed all\n\
+ opposition throughout the\n\
+ galaxy and now the dread\n\
+ spider is gone.  the three\n\
+ hells await thy conquest.\n\
+ \n\
+ thy work was gory but just.";
+
+const D2TEXT: &str = "\
+ you did it!  by turning the\n\
+ only switch ever to work you\n\
+ have caused all 666 demons\n\
+ to disappear from the face\n\
+ of the earth.  all gone.\n\
+ \n\
+ now, in what could be a\n\
+ coincidence or a miracle,\n\
+ your life support has\n\
+ reconstituted itself.\n\
+ \n\
+ did you know that by\n\
+ activating that switch you\n\
+ also sent a signal to the\n\
+ distant demon hive mind?\n\
+ they now know of your\n\
+ existence.  they will be\n\
+ back.";
+
+/// Draw the finale screen using WAD patches.
+///
+/// - Episode 1-2, 4 and Doom 2: text crawl over flat background (INTERPIC for D2).
+/// - Episode 3: bunny scroll (PFUB1/PFUB2) — scroll offset derived from tic.
+///
+/// `episode` is the just-completed episode (1-4 for Doom 1, 0 for Doom 2).
+/// `text_index` is the number of characters revealed so far.
+/// `tic` is the raw finale tic count (used for PFUB2 scroll offset).
+pub fn draw_finale_wad(
+    fb: &mut Framebuffer,
+    cache: &mut PatchCache,
+    wad: &WadStack,
+    font: &BitmapFont,
+    episode: u8,
+    text_index: usize,
+    tic: u32,
+) {
+    let is_doom2 = episode == 0;
+
+    // --- Episode 3: bunny scroll ---
+    if episode == 3 {
+        // PFUB1: static left half; PFUB2: scrolling overlay.
+        if let Some(p) = cache.get("PFUB1", wad) {
+            let p = p.clone();
+            let x = (320 - p.width as i32) / 2;
+            fb.draw_patch(x, 0, &p);
+        } else {
+            fb.clear(0);
+        }
+        // PFUB2 scrolls right-to-left: vanilla scrolls 2px per 3 tics.
+        let scroll = ((tic / 3) * 2) as i32;
+        if let Some(p) = cache.get("PFUB2", wad) {
+            let p = p.clone();
+            let base_x = (320 - p.width as i32) / 2;
+            fb.draw_patch(base_x - scroll, 0, &p);
+        }
+        // After enough scrolling, show ENDPIC.
+        if tic > 220 {
+            if let Some(p) = cache.get("ENDPIC", wad) {
+                let p = p.clone();
+                let x = (320 - p.width as i32) / 2;
+                fb.draw_patch(x, 0, &p);
+            }
+        }
+        return;
+    }
+
+    // --- All other episodes: text crawl ---
+
+    // Background.
+    if is_doom2 {
+        if let Some(p) = cache.get("INTERPIC", wad) {
+            let p = p.clone();
+            let x = (320 - p.width as i32) / 2;
+            fb.draw_patch(x, 0, &p);
+        } else {
+            fb.clear(0);
+        }
+    } else {
+        fb.clear(0);
+    }
+
+    let text = match episode {
+        1 => E1TEXT,
+        2 => E2TEXT,
+        4 => E4TEXT,
+        _ => D2TEXT, // Doom 2 or fallback
+    };
+
+    // Reveal `text_index` characters of the text.
+    let visible: String = text.chars().take(text_index).collect();
+    let mut x = 10i32;
+    let mut y = 10i32;
+    for line in visible.lines() {
+        font.draw_string(fb, x, y, line, 4);
+        y += 11;
+        if y > 190 { break; }
+    }
+    // Keep x used — avoids unused variable warning.
+    let _ = x;
 }
 
 // ---------------------------------------------------------------------------

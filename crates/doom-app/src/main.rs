@@ -28,7 +28,8 @@ use doom_renderer::{
     ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
     IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, PatchCache, RenderOut,
     SpriteCache, SpriteClip, SwitchList, TextureCache, WadFont, WeaponAnimState, draw_automap_ex,
-    draw_intermission, draw_menu, draw_menu_wad, draw_status_bar, draw_status_bar_wad,
+    draw_finale_wad, draw_intermission, draw_intermission_wad, draw_menu, draw_menu_wad,
+    draw_status_bar, draw_status_bar_wad,
     draw_title_screen, draw_title_screen_wad, draw_weapon_animated, render_actors_with_masked_ex,
     render_flag_from_state, render_level_with_view_height_and_extra_light, thing_sprite_prefix,
 };
@@ -950,15 +951,23 @@ impl DoomApp for DoomGame {
 
         let cmd = ticinput_to_ticcmd(input);
 
+        // Pause the game simulation while the menu is open during gameplay.
+        // Title screen and intermission handle their own timing; only Playing
+        // needs the pause.
+        let paused = self.menu.is_active()
+            && matches!(self.phase_controller.phase(), GamePhase::Playing);
+
         // Snapshot kill/item counts before the tick to detect changes.
         let pre_kills = self.gs.player.kill_count;
         let pre_items = self.gs.player.item_count;
 
-        self.gs.tick(cmd, Some(&mut self.level));
-        self.player_view_height =
-            next_player_view_height(self.player_view_height, self.gs.player.is_dead());
-        self.tick_weapon_anim();
-        self.phase_controller.tick(&mut self.gs);
+        if !paused {
+            self.gs.tick(cmd, Some(&mut self.level));
+            self.player_view_height =
+                next_player_view_height(self.player_view_height, self.gs.player.is_dead());
+            self.tick_weapon_anim();
+            self.phase_controller.tick(&mut self.gs);
+        }
         self.update_intermission_renderer();
         if let Some(map_id) = self.phase_controller.should_load_map() {
             self.load_map_after_intermission(map_id, true);
@@ -1066,15 +1075,37 @@ impl DoomApp for DoomGame {
 
         match self.phase_controller.phase() {
             GamePhase::Intermission { .. } => {
-                fb.clear(0);
                 if let Some(renderer) = self.intermission_renderer.as_ref() {
-                    draw_intermission(fb, renderer);
+                    if self.wad_stack.lump_data("WIOSTK").is_some() {
+                        draw_intermission_wad(fb, &mut self.patch_cache, &self.wad_stack, renderer);
+                    } else {
+                        fb.clear(0);
+                        draw_intermission(fb, renderer);
+                    }
+                } else {
+                    fb.clear(0);
                 }
                 return;
             }
-            GamePhase::Finale { .. } => {
-                fb.clear(0);
-                draw_mini_string(fb, 96, "THE END", 176);
+            GamePhase::Finale { text_index, tic } => {
+                let map = self.phase_controller.current_map();
+                let episode = if map.is_doom2() { 0 } else { map.episode };
+                if self.wad_stack.lump_data("PFUB1").is_some()
+                    || self.wad_stack.lump_data("INTERPIC").is_some()
+                {
+                    draw_finale_wad(
+                        fb,
+                        &mut self.patch_cache,
+                        &self.wad_stack,
+                        &self.bitmap_font,
+                        episode,
+                        *text_index,
+                        *tic,
+                    );
+                } else {
+                    fb.clear(0);
+                    draw_mini_string(fb, 96, "THE END", 176);
+                }
                 return;
             }
             GamePhase::TitleScreen => {
