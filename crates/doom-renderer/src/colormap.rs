@@ -272,7 +272,7 @@ mod tests {
         // All mapped values should be in the bright gray range [4, 15].
         for (i, &val) in INVULN_COLORMAP.iter().enumerate() {
             assert!(
-                val >= 4 && val <= 15,
+                (4..=15).contains(&val),
                 "INVULN_COLORMAP[{i}] = {val}, expected [4, 15]"
             );
         }

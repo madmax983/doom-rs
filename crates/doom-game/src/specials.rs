@@ -3541,9 +3541,9 @@ pub fn tick_scrollers(gs: &mut GameState) {
 /// The sector affected is the one on the front side of the linedef (the
 /// sector referenced by the right sidedef).
 pub fn init_conveyors(gs: &mut GameState, level: &Level) {
-    for (_i, ld) in level.linedefs.iter().enumerate() {
+    for ld in level.linedefs.iter() {
         match ld.special {
-            253 | 254 | 255 => {}
+            253..=255 => {}
             _ => continue,
         }
 
@@ -3621,8 +3621,8 @@ pub fn tick_conveyors(gs: &mut GameState, level: Option<&Level>) {
             // Simple containment check: actor z matches sector floor.
             if mz == floor_h {
                 if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                    mo.x = mo.x + Fixed16_16::from_raw(px);
-                    mo.y = mo.y + Fixed16_16::from_raw(py);
+                    mo.x += Fixed16_16::from_raw(px);
+                    mo.y += Fixed16_16::from_raw(py);
                 }
                 break; // Only apply one conveyor per actor per tic.
             }
@@ -5323,7 +5323,7 @@ mod tests {
         let expected = doom_types::Bam(0x8000_0000);
         let diff = mo.angle.0.wrapping_sub(expected.0);
         assert!(
-            diff < 0x0100_0000 || diff > 0xFF00_0000,
+            !(0x0100_0000..=0xFF00_0000).contains(&diff),
             "angle must be approximately 180 degrees after teleport, got {:08X}",
             mo.angle.0
         );
@@ -5916,7 +5916,7 @@ mod tests {
     /// Sector i is connected to sector i+1 by a two-sided linedef.
     /// All sectors share the same floor flat (`FLAT1`) by default.
     fn make_stair_level(sector_count: usize, base_floor: i16, tag: u16) -> doom_map::Level {
-        let reject_bytes = vec![0u8; (sector_count * sector_count + 7) / 8];
+        let reject_bytes = vec![0u8; (sector_count * sector_count).div_ceil(8)];
         let reject = doom_map::Reject::parse_lump(&reject_bytes, sector_count).unwrap();
 
         let mut sectors = Vec::new();
@@ -6911,7 +6911,7 @@ mod tests {
         // Copy + Clone
         let a = CeilingType::CrushAndRaise;
         let b = a;
-        let c = a.clone();
+        let c = a;
         assert_eq!(a, b);
         assert_eq!(a, c);
     }
@@ -8435,7 +8435,7 @@ mod tests {
         use crate::state::LiftStatus;
         let a = LiftStatus::Lowering;
         let b = a; // Copy
-        let c = a.clone(); // Clone
+        let c = a; // Clone
         assert_eq!(a, b);
         assert_eq!(a, c);
         assert_ne!(LiftStatus::Lowering, LiftStatus::Raising);

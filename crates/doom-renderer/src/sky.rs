@@ -115,11 +115,11 @@ impl Default for SkyCoverage {
 /// Compares the first 6 bytes case-insensitively; any trailing bytes
 /// (null padding) are ignored.
 pub fn is_sky_flat(name: &[u8; 8]) -> bool {
-    name[0].to_ascii_uppercase() == b'F'
+    name[0].eq_ignore_ascii_case(&b'F')
         && name[1] == b'_'
-        && name[2].to_ascii_uppercase() == b'S'
-        && name[3].to_ascii_uppercase() == b'K'
-        && name[4].to_ascii_uppercase() == b'Y'
+        && name[2].eq_ignore_ascii_case(&b'S')
+        && name[3].eq_ignore_ascii_case(&b'K')
+        && name[4].eq_ignore_ascii_case(&b'Y')
         && name[5] == b'1'
 }
 
@@ -436,11 +436,7 @@ mod tests {
         let angle = column_to_angle(0);
         // In BAM, 45 degrees = 0x2000_0000. Allow generous tolerance.
         let expected = 0x2000_0000u32;
-        let diff = if angle.0 > expected {
-            angle.0 - expected
-        } else {
-            expected - angle.0
-        };
+        let diff = angle.0.abs_diff(expected);
         assert!(
             diff < 0x0200_0000, // ~2.8 degrees tolerance
             "left edge angle {} should be near 45 degrees ({}), diff={}",
@@ -456,11 +452,7 @@ mod tests {
         // In wrapping BAM, -45 degrees = 0xE000_0000.
         let angle = column_to_angle(319);
         let expected = 0xE000_0000u32; // -45 degrees
-        let diff = if angle.0 > expected {
-            angle.0 - expected
-        } else {
-            expected - angle.0
-        };
+        let diff = angle.0.abs_diff(expected);
         assert!(
             diff < 0x0200_0000, // ~2.8 degrees tolerance
             "right edge angle {} should be near -45 degrees ({}), diff={}",

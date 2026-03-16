@@ -125,13 +125,13 @@ impl<'a> RendererAutomapCanvas<'a> {
 
 impl AutomapCanvas for RendererAutomapCanvas<'_> {
     fn set_pixel(&mut self, x: i32, y: i32, color: u8) {
-        if x >= 0 && x < SCREEN_W && y >= 0 && y < SCREEN_H {
+        if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
             self.fb.set_pixel(x as usize, y as usize, color);
         }
     }
 
     fn get_pixel(&self, x: i32, y: i32) -> Option<u8> {
-        if x >= 0 && x < SCREEN_W && y >= 0 && y < SCREEN_H {
+        if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
             self.fb.get_pixel(x as usize, y as usize)
         } else {
             None
@@ -668,7 +668,7 @@ pub fn draw_line_fb(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, co
 
     loop {
         // Only plot pixels within screen bounds.
-        if x >= 0 && x < SCREEN_W && y >= 0 && y < SCREEN_H {
+        if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
             fb.set_pixel(x as usize, y as usize, color);
         }
 
@@ -781,7 +781,7 @@ mod tests {
         bm_bytes[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
         let blockmap = Blockmap::parse_lump(&bm_bytes).expect("blockmap parse");
 
-        let reject_size = (n_sectors * n_sectors + 7) / 8;
+        let reject_size = (n_sectors * n_sectors).div_ceil(8);
         let reject = Reject::parse_lump(&vec![0u8; reject_size], n_sectors).expect("reject parse");
 
         Level {

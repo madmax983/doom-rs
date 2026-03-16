@@ -104,10 +104,11 @@ pub fn adjacent_sectors(level: &Level, sector_index: usize) -> Vec<usize> {
             if !result.contains(&left_sector) {
                 result.push(left_sector);
             }
-        } else if left_sector == sector_index && right_sector != sector_index {
-            if !result.contains(&right_sector) {
-                result.push(right_sector);
-            }
+        } else if left_sector == sector_index
+            && right_sector != sector_index
+            && !result.contains(&right_sector)
+        {
+            result.push(right_sector);
         }
     }
 
@@ -376,7 +377,7 @@ mod tests {
             first_seg: 0,
         }];
 
-        let reject_size = (n_sectors * n_sectors + 7) / 8;
+        let reject_size = (n_sectors * n_sectors).div_ceil(8);
         let reject_data = vec![0u8; reject_size]; // all visible
         let reject = Reject::parse_lump(&reject_data, n_sectors).unwrap();
 

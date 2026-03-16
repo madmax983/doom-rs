@@ -19,5 +19,6 @@ pub use fixed::{FIXED_ONE, FRAC_BITS, Fixed16_16};
 pub use vec2::Vec2Fixed;
 
 // Verus spine proofs (only processed by verus, not rustc).
+#[allow(unexpected_cfgs)]
 #[cfg(verus_keep_ghost)]
 mod proofs;

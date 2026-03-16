@@ -30,6 +30,11 @@ pub struct NetClient {
 impl NetClient {
     /// Connect to a relay server at `server_addr` (e.g. `"127.0.0.1:5029"`),
     /// binding the local socket to `local_port` (use 0 for OS-assigned).
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if binding to the local port fails, or if
+    /// connecting to the server address fails.
     pub fn connect(server_addr: &str, local_port: u16) -> io::Result<Self> {
         let local_bind = format!("127.0.0.1:{local_port}");
         let mut transport = NetTransport::bind(&local_bind)?;
@@ -50,7 +55,12 @@ impl NetClient {
 
     /// Create a `NetClient` from an already-bound transport and a known
     /// server address + slot (used after handshake completion).
-    pub fn from_parts(transport: NetTransport, server_addr: SocketAddr, player_slot: u8) -> Self {
+    #[must_use]
+    pub const fn from_parts(
+        transport: NetTransport,
+        server_addr: SocketAddr,
+        player_slot: u8,
+    ) -> Self {
         Self {
             transport,
             player_slot,
@@ -60,6 +70,10 @@ impl NetClient {
     }
 
     /// Send a tic input packet to the server.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if the underlying socket fails to send the packet.
     pub fn send_input(&mut self, packet: &TicPacket) -> io::Result<()> {
         let data = packet.to_bytes();
         self.transport.send_raw(&data, &self.server_addr)?;
@@ -69,6 +83,10 @@ impl NetClient {
     /// Non-blocking receive of a [`TicPacket`] from the server.
     ///
     /// Returns `Ok(None)` if no data is available.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if there is an issue reading from the socket.
     pub fn recv_packet(&mut self) -> io::Result<Option<TicPacket>> {
         match self.transport.recv_packet()? {
             Some((pkt, _addr)) => Ok(Some(pkt)),
@@ -77,25 +95,25 @@ impl NetClient {
     }
 
     /// Mark the client as disconnected.
-    pub fn disconnect(&mut self) {
+    pub const fn disconnect(&mut self) {
         self.connected = false;
         self.transport.set_state(ConnectionState::Disconnected);
     }
 
     /// Returns `true` if the client considers itself connected.
     #[must_use]
-    pub fn is_connected(&self) -> bool {
+    pub const fn is_connected(&self) -> bool {
         self.connected
     }
 
     /// The player slot assigned by the server.
     #[must_use]
-    pub fn player_slot(&self) -> u8 {
+    pub const fn player_slot(&self) -> u8 {
         self.player_slot
     }
 
     /// Set the player slot (called after receiving a handshake response).
-    pub fn set_player_slot(&mut self, slot: u8) {
+    pub const fn set_player_slot(&mut self, slot: u8) {
         self.player_slot = slot;
         self.connected = true;
         self.transport.set_state(ConnectionState::Connected {
@@ -106,18 +124,22 @@ impl NetClient {
 
     /// Return a snapshot of the traffic statistics.
     #[must_use]
-    pub fn stats(&self) -> NetStats {
+    pub const fn stats(&self) -> NetStats {
         self.transport.stats()
     }
 
     /// The local address the client socket is bound to.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if the socket address cannot be retrieved.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.transport.local_addr()
     }
 
     /// The server address this client is connected to.
     #[must_use]
-    pub fn server_addr(&self) -> SocketAddr {
+    pub const fn server_addr(&self) -> SocketAddr {
         self.server_addr
     }
 }

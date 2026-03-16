@@ -253,11 +253,9 @@ pub fn p_check_pickups(gs: &mut GameState) {
         let dx = (px - ix).abs();
         let dy = (py - iy).abs();
 
-        if dx < combined_radius && dy < combined_radius {
-            if p_touch_special_thing(gs, handle) {
-                // Item was picked up: free (consume) the actor.
-                gs.mobjslab.free(handle);
-            }
+        if dx < combined_radius && dy < combined_radius && p_touch_special_thing(gs, handle) {
+            // Item was picked up: free (consume) the actor.
+            gs.mobjslab.free(handle);
         }
     }
 }

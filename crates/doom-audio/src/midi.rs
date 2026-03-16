@@ -907,7 +907,7 @@ mod tests {
     fn make_genmidi_buf() -> Vec<u8> {
         let mut buf = Vec::with_capacity(5608);
         buf.extend_from_slice(b"#OPL_II#");
-        buf.extend(std::iter::repeat(0u8).take(175 * 32));
+        buf.extend(std::iter::repeat_n(0u8, 175 * 32));
         buf
     }
 
@@ -964,7 +964,7 @@ mod tests {
         // Voice layout (14 bytes): [mod_tv, mod_ad, mod_sr, mod_ws, mod_ksl,
         //                           feedback, car_tv, car_ad, car_sr, car_ws,
         //                           car_ksl, _unused, base_lo, base_hi]
-        let v_offset = 8 + 0 * 32 + 4; // = 12
+        let v_offset = 8 + 4; // = 12
         buf[v_offset] = 0x01; // mod_trem_vibrato
         buf[v_offset + 1] = 0xF0; // mod_attack_decay
         buf[v_offset + 2] = 0x0F; // mod_sustain_release
@@ -1058,7 +1058,7 @@ mod tests {
         // Build a bank where instrument 1 voice[0] has a distinctive feedback value.
         let mut buf = make_genmidi_buf();
         // Instrument 1, voice[0] starts at: 8 + 1*32 + 4 = 44
-        let v_offset = 8 + 1 * 32 + 4;
+        let v_offset = 8 + 32 + 4;
         buf[v_offset + 5] = 0x3E; // feedback = 0x3E (distinctive)
 
         let bank = GenmidiBank::parse(&buf).expect("valid GENMIDI must parse");

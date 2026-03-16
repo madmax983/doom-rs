@@ -14,10 +14,11 @@
 /// Rendering mode for a thing's sprite.
 ///
 /// Determines which drawing path the renderer uses for this thing.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub enum RenderFlag {
     /// Standard sprite rendering: textured columns through the sector's
     /// light-level colormap.
+    #[default]
     Normal,
 
     /// Partial invisibility (fuzz) effect: reads existing framebuffer
@@ -34,12 +35,6 @@ pub enum RenderFlag {
     /// Used for things that glow or emit light (e.g. fireballs, certain
     /// powerup items).
     FullBright,
-}
-
-impl Default for RenderFlag {
-    fn default() -> Self {
-        Self::Normal
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +73,7 @@ mod tests {
     #[test]
     fn render_flag_clone() {
         let flag = RenderFlag::FullBright;
-        let cloned = flag.clone();
+        let cloned = flag;
         assert_eq!(flag, cloned);
     }
 

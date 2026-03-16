@@ -54,6 +54,10 @@ pub struct RelayServer {
 
 impl RelayServer {
     /// Create a new relay server, binding on `0.0.0.0:{config.port}`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if binding to the port fails.
     pub fn new(config: NetConfig) -> io::Result<Self> {
         let addr = format!("0.0.0.0:{}", config.port);
         let transport = NetTransport::bind(&addr)?;
@@ -66,6 +70,10 @@ impl RelayServer {
 
     /// Create a relay server bound to a specific address (useful for tests
     /// with `"127.0.0.1:0"`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if binding to the specific address fails.
     pub fn bind(addr: &str, config: NetConfig) -> io::Result<Self> {
         let transport = NetTransport::bind(addr)?;
         Ok(Self {
@@ -81,11 +89,9 @@ impl RelayServer {
     /// If the address is already connected, returns the existing slot.
     pub fn accept_connection(&mut self, addr: SocketAddr) -> Option<u8> {
         // Check if this address is already connected.
-        for slot in &self.slots {
-            if let Some(s) = slot {
-                if s.addr == addr && s.connected {
-                    return Some(s.player_num);
-                }
+        for s in self.slots.iter().flatten() {
+            if s.addr == addr && s.connected {
+                return Some(s.player_num);
             }
         }
 
@@ -108,7 +114,7 @@ impl RelayServer {
     }
 
     /// Disconnect a player by slot number.
-    pub fn disconnect_player(&mut self, slot: u8) {
+    pub const fn disconnect_player(&mut self, slot: u8) {
         let idx = slot as usize;
         if idx < MAX_PLAYERS {
             self.slots[idx] = None;
@@ -117,22 +123,25 @@ impl RelayServer {
 
     /// Broadcast a packet to all connected slots, optionally excluding the
     /// sender's slot.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if sending the packet via the underlying transport fails.
     pub fn broadcast_packet(
         &mut self,
         packet: &TicPacket,
         exclude_sender: Option<u8>,
     ) -> io::Result<()> {
         let data = packet.to_bytes();
-        for slot in &self.slots {
-            if let Some(s) = slot {
-                if s.connected {
-                    // Skip the sender if requested.
-                    if exclude_sender == Some(s.player_num) {
-                        continue;
-                    }
-                    // Best-effort send -- UDP may silently drop.
-                    let _ = self.transport.send_raw(&data, &s.addr);
+        #[allow(clippy::manual_flatten)]
+        for s in self.slots.iter().flatten() {
+            if s.connected {
+                // Skip the sender if requested.
+                if exclude_sender == Some(s.player_num) {
+                    continue;
                 }
+                // Best-effort send -- UDP may silently drop.
+                let _ = self.transport.send_raw(&data, &s.addr);
             }
         }
         Ok(())
@@ -156,6 +165,10 @@ impl RelayServer {
     /// Returns `Ok(Some((packet, slot)))` for a gameplay packet, or
     /// `Ok(None)` if nothing was received (or a handshake was handled
     /// internally).
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if reading from the socket fails.
     pub fn poll_once(&mut self) -> io::Result<Option<(TicPacket, u8)>> {
         let recv = self.transport.recv_packet()?;
         let Some((pkt, addr)) = recv else {
@@ -205,29 +218,31 @@ impl RelayServer {
 
     /// Look up which slot number owns `addr`, if any.
     fn slot_for_addr(&self, addr: &SocketAddr) -> Option<u8> {
-        for slot in &self.slots {
-            if let Some(s) = slot {
-                if s.addr == *addr && s.connected {
-                    return Some(s.player_num);
-                }
+        for s in self.slots.iter().flatten() {
+            if s.addr == *addr && s.connected {
+                return Some(s.player_num);
             }
         }
         None
     }
 
     /// The local address the server is bound to (useful for tests).
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if the socket address cannot be retrieved.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.transport.local_addr()
     }
 
     /// Borrow the transport (for stats, etc.).
     #[must_use]
-    pub fn transport(&self) -> &NetTransport {
+    pub const fn transport(&self) -> &NetTransport {
         &self.transport
     }
 
     /// Set the connection state on the inner transport.
-    pub fn set_transport_state(&mut self, state: ConnectionState) {
+    pub const fn set_transport_state(&mut self, state: ConnectionState) {
         self.transport.set_state(state);
     }
 }

@@ -96,7 +96,7 @@ pub fn ray_linedef_intersection(
     // u = parametric distance along the segment (must be in [0, 1]).
     let u = (dx * rdy - dy * rdx) / denom;
 
-    if t >= 0.0 && u >= 0.0 && u <= 1.0 {
+    if t >= 0.0 && (0.0..=1.0).contains(&u) {
         Some(t)
     } else {
         None
@@ -394,7 +394,7 @@ pub fn trace_ray(
 
                 if let Some(t_val) = t {
                     // t_val is in parametric units where 1.0 = max_range.
-                    if t_val >= 0.0 && t_val <= 1.0 && t_val < best_frac {
+                    if (0.0..=1.0).contains(&t_val) && t_val < best_frac {
                         // Check if this line blocks the ray.
                         let blocks = if !ld.is_two_sided() {
                             // One-sided: always blocks.
@@ -450,7 +450,7 @@ pub fn trace_ray(
                         ay as f32,
                         radius as f32,
                     ) {
-                        if t_val >= 0.0 && t_val <= 1.0 && t_val < best_frac {
+                        if (0.0..=1.0).contains(&t_val) && t_val < best_frac {
                             let hit_x = (fx1 + rdx * t_val) as i32;
                             let hit_y = (fy1 + rdy * t_val) as i32;
                             best_frac = t_val;
@@ -577,7 +577,7 @@ mod tests {
 
         // Minimal reject (all visible).
         let n_sectors = sectors.len().max(1);
-        let reject_size = (n_sectors * n_sectors + 7) / 8;
+        let reject_size = (n_sectors * n_sectors).div_ceil(8);
         let reject_data = vec![0u8; reject_size];
         let reject = doom_map::Reject::parse_lump(&reject_data, n_sectors).expect("reject parse");
 

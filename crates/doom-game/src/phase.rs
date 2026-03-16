@@ -130,7 +130,7 @@ impl MapId {
         }
 
         // Normal linear progression: ExMn -> ExM(n+1)
-        if map >= 1 && map <= 7 {
+        if (1..=7).contains(&map) {
             return Some(MapId::new(ep, map + 1));
         }
 
@@ -167,7 +167,7 @@ impl MapId {
         }
 
         // Normal linear progression
-        if map >= 1 && map <= 29 {
+        if (1..=29).contains(&map) {
             return Some(MapId::doom2(map + 1));
         }
 

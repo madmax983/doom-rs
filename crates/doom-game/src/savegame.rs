@@ -1562,8 +1562,8 @@ mod tests {
         assert_eq!(r.read_u16().unwrap(), 0xBEEF);
         assert_eq!(r.read_i32().unwrap(), -100_000);
         assert_eq!(r.read_u32().unwrap(), 0xDEAD_BEEF);
-        assert_eq!(r.read_bool().unwrap(), true);
-        assert_eq!(r.read_bool().unwrap(), false);
+        assert!(r.read_bool().unwrap());
+        assert!(!r.read_bool().unwrap());
     }
 
     // --- Test 21: Roundtrip preserves mobj data ---
@@ -1598,7 +1598,7 @@ mod tests {
                 .state
                 .mobjslab
                 .get(**h)
-                .map_or(false, |m| m.kind == MobjKind::Imp)
+                .is_some_and(|m| m.kind == MobjKind::Imp)
         });
         assert!(imp_handle.is_some(), "imp must be present after load");
         let imp_loaded = loaded.state.mobjslab.get(*imp_handle.unwrap()).unwrap();

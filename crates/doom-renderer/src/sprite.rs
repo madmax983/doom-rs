@@ -509,11 +509,11 @@ pub fn render_flag_for_thing(kind: u16) -> RenderFlag {
         2045 => RenderFlag::FullBright, // Light amplification visor
 
         // Firestick / torch decorations (glow)
-        44 | 45 | 46 => RenderFlag::FullBright, // Tall firesticks (blue/green/red)
-        55 | 56 | 57 => RenderFlag::FullBright, // Short firesticks (blue/green/red)
-        70 => RenderFlag::FullBright,           // Burning barrel
-        34 => RenderFlag::FullBright,           // Candle
-        35 => RenderFlag::FullBright,           // Candelabra
+        44..=46 => RenderFlag::FullBright, // Tall firesticks (blue/green/red)
+        55..=57 => RenderFlag::FullBright, // Short firesticks (blue/green/red)
+        70 => RenderFlag::FullBright,      // Burning barrel
+        34 => RenderFlag::FullBright,      // Candle
+        35 => RenderFlag::FullBright,      // Candelabra
 
         // Lamps and light sources
         2028 => RenderFlag::FullBright, // Floor lamp
@@ -2254,7 +2254,7 @@ mod tests {
         );
         // The imp should be drawn (pixel 77 somewhere on screen).
         assert!(
-            fb.data.iter().any(|&b| b == 77),
+            fb.data.contains(&77),
             "rotated sprite (TROOA5) should be rendered"
         );
     }
@@ -2291,7 +2291,7 @@ mod tests {
             None,
         );
         assert!(
-            fb.data.iter().any(|&b| b == 88),
+            fb.data.contains(&88),
             "non-directional barrel (BAR1A0) should be rendered"
         );
     }
@@ -2330,7 +2330,7 @@ mod tests {
             None,
         );
         assert!(
-            fb.data.iter().any(|&b| b == 55),
+            fb.data.contains(&55),
             "should fall back to TROOA0 when TROOA1 is missing"
         );
     }
@@ -2382,7 +2382,7 @@ mod tests {
         );
         // The mirror fallback should have drawn the sprite using TROOA4 (flipped).
         assert!(
-            fb.data.iter().any(|&b| b == 33),
+            fb.data.contains(&33),
             "mirror fallback should render the imp via TROOA4 (mirror of rot 6)"
         );
     }
@@ -2860,7 +2860,7 @@ mod tests {
         );
 
         assert!(
-            fb.data.iter().any(|&b| b == 88),
+            fb.data.contains(&88),
             "sprite in front of wall must be drawn"
         );
     }
@@ -2906,7 +2906,7 @@ mod tests {
         // Sprite is at screen center (x ~ 160) which is in the right half.
         // Some pixels should be drawn (right half is unoccluded).
         assert!(
-            fb.data.iter().any(|&b| b == 66),
+            fb.data.contains(&66),
             "partially occluded sprite should draw some pixels in unblocked columns"
         );
 
@@ -3024,7 +3024,7 @@ mod tests {
 
         // Near barrel (depth ~100 < 150) should be drawn.
         assert!(
-            fb.data.iter().any(|&b| b == 99),
+            fb.data.contains(&99),
             "near sprite (depth 100 < z_buffer 150) should be visible"
         );
     }
@@ -3092,7 +3092,7 @@ mod tests {
         );
 
         assert!(
-            fb.data.iter().any(|&b| b == 111),
+            fb.data.contains(&111),
             "with z_buffer=MAX (no walls), sprite must be visible"
         );
     }
@@ -3136,7 +3136,7 @@ mod tests {
         // blocked, but other sprite columns should still be drawn.
         // Verify at least some pixels were drawn.
         assert!(
-            fb.data.iter().any(|&b| b == 22),
+            fb.data.contains(&22),
             "sprite columns outside the blocked band should still be drawn"
         );
 
@@ -3212,7 +3212,7 @@ mod tests {
         );
 
         assert!(
-            fb.data.iter().any(|&b| b == 200),
+            fb.data.contains(&200),
             "with z_buffer=None, all sprites should be drawn (backward compat)"
         );
     }
@@ -3723,7 +3723,7 @@ mod tests {
         // The raw palette index 200 should NOT appear because the
         // sector light is 128 (not fullbright), meaning some colormap
         // row > 0 was used, mapping index 200 to the row number.
-        let has_raw = fb.data.iter().any(|&b| b == 200);
+        let has_raw = fb.data.contains(&200);
         assert!(
             !has_raw,
             "raw palette index should not appear when colormap is applied \
@@ -3762,7 +3762,7 @@ mod tests {
         // Row 0 maps all indices to 0. So all drawn pixels should be 0.
         // Actually, in our test_colormap_cache, row 0 maps everything to 0.
         // For fullbright things, colormap row 0 is used.
-        let has_drawn = fb.data.iter().any(|&b| b != 0);
+        let _has_drawn = fb.data.iter().any(|&b| b != 0);
         // Row 0 maps everything to 0, so drawn pixels should also be 0.
         // Since the fb was already 0, let's verify via a different approach:
         // use an identity cache instead.
@@ -3782,7 +3782,7 @@ mod tests {
         // With identity cache, fullbright uses row 0 which is identity.
         // So the raw palette index 123 should appear.
         assert!(
-            fb2.data.iter().any(|&b| b == 123),
+            fb2.data.contains(&123),
             "fullbright lamp should render at raw palette index with identity colormap"
         );
     }
@@ -3820,7 +3820,7 @@ mod tests {
         // compute_wall_light at distance ~100 with base 31 will produce a
         // high row index. Whatever the resulting row, it should NOT be
         // the raw palette index 150.
-        let has_raw = fb.data.iter().any(|&b| b == 150);
+        let has_raw = fb.data.contains(&150);
         assert!(
             !has_raw,
             "dark sector (light=0) should shade sprites away from raw palette index"
@@ -3856,7 +3856,7 @@ mod tests {
         );
 
         assert!(
-            fb.data.iter().any(|&b| b == 77),
+            fb.data.contains(&77),
             "bright sector (255) should render sprites at raw palette index"
         );
     }
@@ -3887,7 +3887,7 @@ mod tests {
 
         // Without colormap, sprites render at raw palette index.
         assert!(
-            fb.data.iter().any(|&b| b == 55),
+            fb.data.contains(&55),
             "None colormap should render sprites unshaded (backward compat)"
         );
     }
@@ -3924,7 +3924,7 @@ mod tests {
         );
 
         // The spectre's raw palette index 222 should NOT appear.
-        let has_222 = fb.data.iter().any(|&b| b == 222);
+        let has_222 = fb.data.contains(&222);
         assert!(
             !has_222,
             "spectre should use fuzz effect, not draw sprite texture"
@@ -3973,7 +3973,7 @@ mod tests {
 
         // Fuzz with colormap row 6 should produce pixel value 42.
         assert!(
-            fb.data.iter().any(|&b| b == 42),
+            fb.data.contains(&42),
             "spectre with colormap should use colormap row 6 for darkening"
         );
     }
@@ -4076,7 +4076,7 @@ mod tests {
         assert!(has_drawn, "sprite in front of wall should be drawn");
 
         // Raw palette index 150 should not appear (dark sector shading).
-        let has_raw = fb.data.iter().any(|&b| b == 150);
+        let has_raw = fb.data.contains(&150);
         assert!(!has_raw, "dark sector colormap should shade the sprite");
     }
 
@@ -4168,7 +4168,7 @@ mod tests {
 
         // Identity cache maps every index to itself, regardless of row.
         assert!(
-            fb.data.iter().any(|&b| b == 77),
+            fb.data.contains(&77),
             "identity colormap should preserve raw palette index"
         );
     }

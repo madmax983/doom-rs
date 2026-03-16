@@ -567,8 +567,7 @@ fn parse_fixed_records<T, F>(
 where
     F: Fn(&[u8]) -> T,
 {
-    #[allow(clippy::manual_is_multiple_of)]
-    if data.len() % entry_size != 0 {
+    if !data.len().is_multiple_of(entry_size) {
         return Err(LumpParseError::BadLength {
             lump: lump_name,
             entry_size,

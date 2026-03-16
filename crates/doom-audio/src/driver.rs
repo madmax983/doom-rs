@@ -1,12 +1,23 @@
 //! cpal audio output driver.
 //!
-//! Wraps a `cpal` output stream and routes its callback through a shared
-//! [`SfxMixer`] (PCM SFX, priority-based) and [`MidiPlayer`] (OPL2 FM music).
-//! Both outputs are mixed in the callback and written to the cpal buffer.
-//! Music and SFX share no channels — they are independent paths.
+//! Welcome, weary traveler, to the final stage of our auditory pipeline.
+//! Here we speak to the machine itself using the `cpal` library.
 //!
-//! For environments without a real audio device (CI, tests) use
-//! [`AudioDriver::null`] which bypasses cpal entirely.
+//! The `AudioDriver` acts as the conductor of our metallic orchestra. It
+//! wraps the OS-level stream, spinning up a high-priority background thread
+//! that relentlessly demands audio data.
+//!
+//! To feed this beast, the driver holds shared references to our two distinct
+//! ensembles:
+//! - The [`SfxMixer`], which handles all PCM sound effects (demon roars, shotgun blasts)
+//! - The [`MidiPlayer`], which synthesizes FM OPL2 music (the heavy metal soundtrack)
+//!
+//! In the `cpal` callback, these two streams are mixed together and blasted into
+//! the buffer. They remain totally independent until the very last millisecond
+//! before hitting the speakers.
+//!
+//! For environments without a real audio device (like a lonely CI server), use
+//! [`AudioDriver::null`] to skip the hardware entirely.
 
 use std::sync::{Arc, Mutex};
 
@@ -51,13 +62,22 @@ pub struct AudioDriver {
 impl AudioDriver {
     /// Attempt to open the system default audio output at `sample_rate` Hz.
     ///
-    /// The cpal callback mixes PCM SFX from [`Mixer`] and OPL2 FM audio from
+    /// The cpal callback mixes PCM SFX from [`SfxMixer`] and OPL2 FM audio from
     /// [`MidiPlayer`] into each output buffer frame.
     ///
     /// # Errors
     /// - [`AudioError::NoDevice`] — no default output device.
     /// - [`AudioError::Stream`] — cpal could not create or start the stream.
-    pub fn open(sample_rate: u32) -> Result<Self, AudioError> {
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use doom_audio::driver::AudioDriver;
+    ///
+    /// // Open the driver at a requested 44.1kHz (though the OS might give us
+    /// // something else, which the driver handles gracefully!)
+    /// let driver = AudioDriver::open(44100).expect("Failed to open audio device");
+    /// ```
+    pub fn open(_sample_rate: u32) -> Result<Self, AudioError> {
         use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
         let host = cpal::default_host();

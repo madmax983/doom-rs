@@ -753,22 +753,20 @@ pub fn render_level_with_view_height_and_extra_light(
                     // Floor strip: from w_bot + 1 to open_bot[x].
                     let floor_strip_top = (w_bot + 1).max(0);
                     let floor_strip_bot = open_bot[x];
-                    if floor_strip_top <= floor_strip_bot {
-                        if !is_sky_flat(&sector.floor_flat) {
-                            let idx = visplanes.r_find_plane(
-                                PlaneKind::Floor,
-                                floor_h,
-                                sector.floor_flat,
-                                sector_light,
-                            );
-                            visplanes.r_check_plane(
-                                idx,
-                                x,
-                                x,
-                                floor_strip_top as i16,
-                                floor_strip_bot as i16,
-                            );
-                        }
+                    if floor_strip_top <= floor_strip_bot && !is_sky_flat(&sector.floor_flat) {
+                        let idx = visplanes.r_find_plane(
+                            PlaneKind::Floor,
+                            floor_h,
+                            sector.floor_flat,
+                            sector_light,
+                        );
+                        visplanes.r_check_plane(
+                            idx,
+                            x,
+                            x,
+                            floor_strip_top as i16,
+                            floor_strip_bot as i16,
+                        );
                     }
                     // Advance trackers past the wall / upper-lower bands.
                     if !has_portal_opening {
@@ -819,7 +817,7 @@ pub fn render_level_with_view_height_and_extra_light(
                         });
                         if let Some(tex) = cache.get(&upper_name) {
                             let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
-                            let tex_h = tex.height as u32;
+                            let tex_h = tex.height;
                             let fracstep = wall_fracstep(scale);
                             let texturemid = if linedef.flags & FLAG_DONTPEGTOP != 0 {
                                 ceil_h + i32::from(sidedef.y_offset) - view_z
@@ -886,7 +884,7 @@ pub fn render_level_with_view_height_and_extra_light(
                         });
                         if let Some(tex) = cache.get(&lower_name) {
                             let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
-                            let tex_h = tex.height as u32;
+                            let tex_h = tex.height;
                             let fracstep = wall_fracstep(scale);
                             let texturemid = if linedef.flags & FLAG_DONTPEGBOTTOM != 0 {
                                 ceil_h + i32::from(sidedef.y_offset) - view_z
@@ -946,7 +944,7 @@ pub fn render_level_with_view_height_and_extra_light(
                         && let Some(tex) = cache.get(&mid_name)
                     {
                         let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
-                        let tex_h = tex.height as u32;
+                        let tex_h = tex.height;
                         let fracstep = wall_fracstep(scale);
                         let texturemid = if linedef.flags & FLAG_DONTPEGBOTTOM != 0 {
                             floor_h.max(back_sector.map_or(floor_h, |bs| bs.floor_height as i32))
@@ -1038,22 +1036,20 @@ pub fn render_level_with_view_height_and_extra_light(
                     // Floor strip: from draw_bot + 1 to open_bot[x].
                     let floor_strip_top = (draw_bot + 1).max(0);
                     let floor_strip_bot = open_bot[x];
-                    if floor_strip_top <= floor_strip_bot {
-                        if !is_sky_flat(&sector.floor_flat) {
-                            let idx = visplanes.r_find_plane(
-                                PlaneKind::Floor,
-                                floor_h,
-                                sector.floor_flat,
-                                sector_light,
-                            );
-                            visplanes.r_check_plane(
-                                idx,
-                                x,
-                                x,
-                                floor_strip_top as i16,
-                                floor_strip_bot as i16,
-                            );
-                        }
+                    if floor_strip_top <= floor_strip_bot && !is_sky_flat(&sector.floor_flat) {
+                        let idx = visplanes.r_find_plane(
+                            PlaneKind::Floor,
+                            floor_h,
+                            sector.floor_flat,
+                            sector_light,
+                        );
+                        visplanes.r_check_plane(
+                            idx,
+                            x,
+                            x,
+                            floor_strip_top as i16,
+                            floor_strip_bot as i16,
+                        );
                     }
                     // One-sided wall fully closes the column — no farther
                     // ceiling/floor can draw here.
@@ -1074,7 +1070,7 @@ pub fn render_level_with_view_height_and_extra_light(
                         let u_tex = (u_world as i32).rem_euclid(tex.width as i32) as usize;
 
                         // Vertical texture coordinate (V).
-                        let tex_h = tex.height as u32;
+                        let tex_h = tex.height;
                         let fracstep = wall_fracstep(scale);
                         let texturemid = if linedef.flags & FLAG_DONTPEGBOTTOM != 0 {
                             floor_h + tex.logical_height as i32 + i32::from(sidedef.y_offset)
@@ -1139,16 +1135,14 @@ pub fn render_level_with_view_height_and_extra_light(
             }
             // Floor: rows HALF_H..open_bot[x] (below horizon)
             let floor_top = HALF_H.max(open_top[x]);
-            if floor_top <= open_bot[x] {
-                if !is_sky_flat(&player_floor_flat) {
-                    let idx = visplanes.r_find_plane(
-                        PlaneKind::Floor,
-                        player_floor_h,
-                        player_floor_flat,
-                        player_light,
-                    );
-                    visplanes.r_check_plane(idx, x, x, floor_top as i16, open_bot[x] as i16);
-                }
+            if floor_top <= open_bot[x] && !is_sky_flat(&player_floor_flat) {
+                let idx = visplanes.r_find_plane(
+                    PlaneKind::Floor,
+                    player_floor_h,
+                    player_floor_flat,
+                    player_light,
+                );
+                visplanes.r_check_plane(idx, x, x, floor_top as i16, open_bot[x] as i16);
             }
         }
     }
@@ -1590,7 +1584,7 @@ mod tests {
             dy: 1,
             right_bbox: bbox,
             left_bbox: bbox,
-            right_child: 0x8000 | 0,
+            right_child: 0x8000,
             left_child: 0x8000 | 1,
         }];
         let things = vec![Thing {
@@ -3260,7 +3254,7 @@ mod tests {
         let has_wall = (0..SCREEN_H).any(|y| {
             let px = fb.get_pixel(center_x, y).unwrap_or(0);
             // flat-shade wall color is 32..=63 range, distinct from ceiling=25, floor=119
-            px >= 32 && px < 64
+            (32..64).contains(&px)
         });
         assert!(
             has_wall,
@@ -3321,7 +3315,7 @@ mod tests {
 
         // These pixels should be background (ceiling=25 or floor=119), NOT wall (32-63).
         // The portal is transparent so the background fill shows through.
-        let is_wall_color = |px: u8| px >= 32 && px < 64;
+        let is_wall_color = |px: u8| (32..64).contains(&px);
         assert!(
             !is_wall_color(px_above),
             "pixel at ({center_x}, {row_above_center}) = {px_above} should NOT be wall-colored (portal opening)"
@@ -4325,7 +4319,7 @@ mod tests {
             .any(|(y, row)| {
                 let px = row[center_x];
                 let _ = y;
-                px >= 32 && px < 64
+                (32..64).contains(&px)
             });
         assert!(
             has_wall,

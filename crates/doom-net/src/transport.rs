@@ -113,6 +113,10 @@ impl NetTransport {
     /// `"0.0.0.0:0"` for OS-assigned port).
     ///
     /// The socket is set to non-blocking mode immediately.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if binding to the address fails.
     pub fn bind(addr: &str) -> io::Result<Self> {
         let socket = UdpSocket::bind(addr)?;
         socket.set_nonblocking(true)?;
@@ -132,6 +136,10 @@ impl NetTransport {
 
     /// Create a new transport with a custom [`NetConfig`], bound to
     /// `0.0.0.0:{config.port}`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if binding to the address fails.
     pub fn bind_with_config(config: NetConfig) -> io::Result<Self> {
         let addr = format!("0.0.0.0:{}", config.port);
         let socket = UdpSocket::bind(addr)?;
@@ -153,6 +161,10 @@ impl NetTransport {
     /// Set the remote address for client-mode "connected" UDP.
     ///
     /// After this call, `send_packet` uses the connected address.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if the address cannot be parsed or if the socket cannot connect.
     pub fn connect_to(&mut self, addr: &str) -> io::Result<()> {
         let remote: SocketAddr = addr
             .parse()
@@ -166,6 +178,10 @@ impl NetTransport {
     ///
     /// The socket must have been connected via [`Self::connect_to`] or the OS
     /// must have a default destination set.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if the socket fails to send the data.
     pub fn send_packet(&mut self, packet: &TicPacket) -> io::Result<usize> {
         let data = packet.to_bytes();
         let n = self.socket.send(&data)?;
@@ -178,6 +194,11 @@ impl NetTransport {
     /// Non-blocking receive of a [`TicPacket`] and the sender's address.
     ///
     /// Returns `Ok(None)` if no data is available (`WouldBlock`).
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if there is an issue reading from the socket.
+    #[allow(clippy::option_if_let_else)]
     pub fn recv_packet(&mut self) -> io::Result<Option<(TicPacket, SocketAddr)>> {
         let mut buf = [0u8; TIC_PACKET_SIZE + 64]; // extra headroom
         match self.socket.recv_from(&mut buf) {
@@ -198,6 +219,10 @@ impl NetTransport {
     }
 
     /// Send raw bytes to a specific address.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if the socket fails to send the data.
     pub fn send_raw(&mut self, data: &[u8], addr: &SocketAddr) -> io::Result<usize> {
         let n = self.socket.send_to(data, addr)?;
         self.packets_sent += 1;
@@ -209,6 +234,10 @@ impl NetTransport {
     /// Non-blocking receive of raw bytes.
     ///
     /// Returns `Ok(None)` on `WouldBlock`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if reading from the socket fails.
     pub fn recv_raw(&mut self, buf: &mut [u8]) -> io::Result<Option<(usize, SocketAddr)>> {
         match self.socket.recv_from(buf) {
             Ok((n, addr)) => {
@@ -224,7 +253,7 @@ impl NetTransport {
 
     /// Returns `true` if the connection state is [`ConnectionState::Connected`].
     #[must_use]
-    pub fn is_connected(&self) -> bool {
+    pub const fn is_connected(&self) -> bool {
         matches!(self.state, ConnectionState::Connected { .. })
     }
 
@@ -245,7 +274,7 @@ impl NetTransport {
 
     /// Return a snapshot of the traffic statistics.
     #[must_use]
-    pub fn stats(&self) -> NetStats {
+    pub const fn stats(&self) -> NetStats {
         NetStats {
             packets_sent: self.packets_sent,
             packets_received: self.packets_received,
@@ -255,29 +284,37 @@ impl NetTransport {
     }
 
     /// Toggle non-blocking mode on the underlying socket.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if setting the non-blocking mode fails.
     pub fn set_nonblocking(&self, nonblocking: bool) -> io::Result<()> {
         self.socket.set_nonblocking(nonblocking)
     }
 
     /// The local address the socket is bound to.
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`io::Error`] if the socket address cannot be retrieved.
     pub fn local_addr(&self) -> io::Result<SocketAddr> {
         self.socket.local_addr()
     }
 
     /// Borrow the current connection state.
     #[must_use]
-    pub fn state(&self) -> &ConnectionState {
+    pub const fn state(&self) -> &ConnectionState {
         &self.state
     }
 
     /// Mutably set the connection state (used by server/client layers).
-    pub fn set_state(&mut self, state: ConnectionState) {
+    pub const fn set_state(&mut self, state: ConnectionState) {
         self.state = state;
     }
 
     /// Borrow the current config.
     #[must_use]
-    pub fn config(&self) -> &NetConfig {
+    pub const fn config(&self) -> &NetConfig {
         &self.config
     }
 }
@@ -319,13 +356,13 @@ pub fn make_join_response(slot: u8) -> TicPacket {
 
 /// Returns `true` if `packet` looks like a join request (handshake).
 #[must_use]
-pub fn is_join_request(packet: &TicPacket) -> bool {
+pub const fn is_join_request(packet: &TicPacket) -> bool {
     packet.tic == HANDSHAKE_TIC && packet.sender == HANDSHAKE_JOIN_SENDER
 }
 
 /// Returns `true` if `packet` looks like a join response from the server.
 #[must_use]
-pub fn is_join_response(packet: &TicPacket) -> bool {
+pub const fn is_join_response(packet: &TicPacket) -> bool {
     packet.tic == HANDSHAKE_TIC && packet.sender != HANDSHAKE_JOIN_SENDER
 }
 

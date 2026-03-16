@@ -1,7 +1,12 @@
 //! Priority-based SFX channel mixer with stereo panning.
 //!
-//! Provides [`SfxMixer`] which manages up to [`MAX_CHANNELS`] simultaneous
-//! sound effects with priority-based channel allocation, per-channel volume
+//! Welcome to the heart of the engine's auditory experience! This module
+//! provides the [`SfxMixer`], which manages up to [`MAX_CHANNELS`] simultaneous
+//! sound effects. It ensures that when the chaotic symphony of a demon horde
+//! overwhelms the hardware, the most crucial sounds (like your own weapon firing!)
+//! are never silenced.
+//!
+//! It achieves this through priority-based channel allocation, per-channel volume
 //! and stereo panning, and 8-bit unsigned PCM to stereo f32 mixing.
 
 // ---------------------------------------------------------------------------
@@ -123,6 +128,19 @@ impl SfxMixer {
     /// 2. First inactive channel is reused.
     /// 3. If all channels are active, the lowest-priority channel is stolen
     ///    (provided the new sound has >= that priority).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_audio::{SfxMixer, SfxPriority};
+    ///
+    /// let mut mixer = SfxMixer::new();
+    /// let sfx_data = vec![128; 1024]; // dummy silent PCM data
+    ///
+    /// // Play a high-priority weapon sound
+    /// let channel = mixer.play(1, sfx_data, 1.0, 0.0, SfxPriority::Weapon);
+    /// assert!(channel.is_some());
+    /// ```
     pub fn play(
         &mut self,
         sfx_id: u16,
@@ -168,12 +186,29 @@ impl SfxMixer {
     /// Replace a specific channel with a newly started sound effect.
     ///
     /// This preserves Doom's "one live channel per origin" rule: if the same
-    /// actor starts another sound, the old one is restarted in place instead of
-    /// allocating a second channel.
+    /// actor starts another sound (like a chaingun rapidly firing), the old one
+    /// is restarted in place instead of allocating a second channel, preventing
+    /// audio clutter.
     ///
-    /// # Panics (debug only)
-    /// Asserts `channel < MAX_CHANNELS` in debug builds. Callers must only pass
-    /// indices returned by [`SfxMixer::play`].
+    /// # Panics
+    ///
+    /// Panics if `channel` is greater than or equal to [`MAX_CHANNELS`] in debug builds.
+    /// Callers must ensure they only pass indices returned by [`SfxMixer::play`].
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_audio::{SfxMixer, SfxPriority};
+    ///
+    /// let mut mixer = SfxMixer::new();
+    /// let sfx_data = vec![128; 1024]; // dummy silent PCM data
+    ///
+    /// // Play a sound, which gives us a channel index.
+    /// if let Some(channel) = mixer.play(42, sfx_data.clone(), 1.0, 0.0, SfxPriority::Weapon) {
+    ///     // The same entity makes another sound immediately. We restart it on the same channel!
+    ///     mixer.play_on_channel(channel, 43, sfx_data, 1.0, 0.0, SfxPriority::Weapon);
+    /// }
+    /// ```
     pub fn play_on_channel(
         &mut self,
         channel: usize,
@@ -195,6 +230,20 @@ impl SfxMixer {
     ///
     /// Called each tic with updated listener position to keep sounds
     /// spatially accurate as the listener moves.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_audio::{SfxMixer, SfxPriority};
+    ///
+    /// let mut mixer = SfxMixer::new();
+    /// let sfx_data = vec![128; 1024];
+    ///
+    /// if let Some(channel) = mixer.play(42, sfx_data, 1.0, 0.0, SfxPriority::Medium) {
+    ///     // Move the sound to the far left speaker
+    ///     mixer.update_spatial(channel, 1.0, -1.0);
+    /// }
+    /// ```
     pub fn update_spatial(&mut self, channel: usize, volume: f32, pan: f32) {
         if channel < MAX_CHANNELS {
             if let Some(ch) = &mut self.channels[channel] {
@@ -214,6 +263,21 @@ impl SfxMixer {
     /// sounds play at the correct pitch and duration regardless of device rate.
     ///
     /// After mixing, channels whose data is exhausted are marked inactive.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_audio::{SfxMixer, SfxPriority};
+    ///
+    /// let mut mixer = SfxMixer::new();
+    /// mixer.play(42, vec![200; 1024], 1.0, 0.0, SfxPriority::Weapon);
+    ///
+    /// // Interleaved stereo f32 buffer
+    /// let mut output = vec![0.0; 256];
+    ///
+    /// // Mix the sound into the output buffer at 44.1kHz
+    /// mixer.mix(&mut output, 44100);
+    /// ```
     #[allow(clippy::cast_precision_loss)]
     pub fn mix(&mut self, output: &mut [f32], output_rate: u32) {
         // Fixed-point 16.16 step: how many source samples to advance per output frame.
@@ -594,7 +658,7 @@ mod tests {
         let mut output = vec![0.0f32; 200];
         mixer.mix(&mut output, 11025);
         assert!(
-            output.iter().all(|&s| s >= -1.0 && s <= 1.0),
+            output.iter().all(|&s| (-1.0..=1.0).contains(&s)),
             "output should be clamped to [-1.0, 1.0]"
         );
     }
