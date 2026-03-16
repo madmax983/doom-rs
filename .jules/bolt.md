@@ -1,0 +1,4 @@
+
+**Refactoring `iter_handles().collect::<Vec<_>>()` to use `.extend()`**
+**Learning:** Calling `.collect::<Vec<_>>()` on iterators creates a completely new, un-sized allocation. By instead using `Vec::with_capacity(...)` with the known capacity (such as the length of the slab), then calling `.extend()`, we can guarantee that the `Vec` will only be allocated once and won't undergo costly `realloc` operations while being populated in hot paths like the main game loop per-tic updates. Furthermore, some `collect()` calls inside game tick operations can often be entirely eliminated if the iterator can just be iterated over directly!
+**Action:** When working on methods running each tic (like `a_vile_chase` or `tick_all_mobjs`), analyze any `Vec::new()` or `.collect::<Vec<_>>()` for opportunities to eliminate the allocation or pre-allocate memory using `with_capacity()`.
