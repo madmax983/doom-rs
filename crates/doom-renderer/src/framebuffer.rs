@@ -4,6 +4,7 @@
 //! RGB conversion happens at blit time in `doom-tui`, never during rendering.
 //! This keeps the game sim and renderer free of any color-space concerns.
 
+use crate::texture_compose::PatchImage;
 use doom_types::limits::{FB_HEIGHT, FB_SIZE, FB_WIDTH};
 
 /// The primary render target: 320×200 palette-indexed pixels.
@@ -99,6 +100,36 @@ impl Framebuffer {
         if start < end {
             self.data[start..end].fill(index);
         }
+    }
+
+    /// Draw a Doom picture-format patch at screen position `(x, y)`.
+    ///
+    /// `x` and `y` are the screen coordinates of the patch origin **after**
+    /// applying `left_offset` / `top_offset` (i.e. callers pass the adjusted
+    /// position).  Transparent pixels (gaps between posts) are skipped.
+    /// Pixels that land outside the 320×200 screen are silently clipped.
+    pub fn draw_patch(&mut self, x: i32, y: i32, patch: &PatchImage) {
+        for (col, posts) in patch.columns.iter().enumerate() {
+            let px = x + col as i32;
+            if px < 0 || px >= FB_WIDTH as i32 {
+                continue;
+            }
+            let px = px as usize;
+            for post in posts {
+                for (row, &color) in post.pixels.iter().enumerate() {
+                    let py = y + post.y_offset as i32 + row as i32;
+                    if py >= 0 && py < FB_HEIGHT as i32 {
+                        self.data[py as usize * FB_WIDTH + px] = color;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Draw a patch centered horizontally at the given `y` coordinate.
+    pub fn draw_patch_centered(&mut self, y: i32, patch: &PatchImage) {
+        let x = (FB_WIDTH as i32 - patch.width as i32) / 2;
+        self.draw_patch(x, y, patch);
     }
 
     /// Return an immutable view of the raw pixel data.
@@ -210,5 +241,94 @@ mod tests {
     fn framebuffer_size_matches_constants() {
         assert_eq!(FB_SIZE, FB_WIDTH * FB_HEIGHT);
         assert_eq!(FB_SIZE, 64_000);
+    }
+
+    // -----------------------------------------------------------------------
+    // draw_patch
+    // -----------------------------------------------------------------------
+
+    fn make_patch(width: u16, height: u16, color: u8) -> PatchImage {
+        use crate::texture_compose::PatchPost;
+        // One solid post per column covering the full height.
+        let columns = (0..width)
+            .map(|_| {
+                vec![PatchPost {
+                    y_offset: 0,
+                    pixels: vec![color; height as usize],
+                }]
+            })
+            .collect();
+        PatchImage {
+            width,
+            height,
+            left_offset: 0,
+            top_offset: 0,
+            columns,
+        }
+    }
+
+    #[test]
+    fn draw_patch_solid_rect() {
+        let mut fb = Framebuffer::new();
+        let patch = make_patch(10, 8, 42);
+        fb.draw_patch(5, 10, &patch);
+        for y in 10..18usize {
+            for x in 5..15usize {
+                assert_eq!(fb.get_pixel(x, y), Some(42), "({x},{y}) should be 42");
+            }
+        }
+        // Outside left edge
+        assert_eq!(fb.get_pixel(4, 10), Some(0));
+    }
+
+    #[test]
+    fn draw_patch_clips_negative_x() {
+        let mut fb = Framebuffer::new();
+        let patch = make_patch(4, 4, 7);
+        // Draw at x=-2: only columns 2 and 3 should appear (screen x=0,1).
+        fb.draw_patch(-2, 0, &patch);
+        assert_eq!(fb.get_pixel(0, 0), Some(7));
+        assert_eq!(fb.get_pixel(1, 0), Some(7));
+        assert_eq!(fb.get_pixel(2, 0), Some(0)); // column 4 would be x=2, out of original width
+    }
+
+    #[test]
+    fn draw_patch_clips_negative_y() {
+        let mut fb = Framebuffer::new();
+        let patch = make_patch(2, 4, 9);
+        // y=-2: rows 0,1 off screen, rows 2,3 land at y=0,1.
+        fb.draw_patch(0, -2, &patch);
+        assert_eq!(fb.get_pixel(0, 0), Some(9));
+        assert_eq!(fb.get_pixel(0, 1), Some(9));
+    }
+
+    #[test]
+    fn draw_patch_transparent_gap() {
+        use crate::texture_compose::PatchPost;
+        // A patch with a gap: post at y=0 (2px), then post at y=4 (2px).
+        let patch = PatchImage {
+            width: 1,
+            height: 6,
+            left_offset: 0,
+            top_offset: 0,
+            columns: vec![vec![
+                PatchPost {
+                    y_offset: 0,
+                    pixels: vec![11, 11],
+                },
+                PatchPost {
+                    y_offset: 4,
+                    pixels: vec![22, 22],
+                },
+            ]],
+        };
+        let mut fb = Framebuffer::new();
+        fb.draw_patch(0, 0, &patch);
+        assert_eq!(fb.get_pixel(0, 0), Some(11));
+        assert_eq!(fb.get_pixel(0, 1), Some(11));
+        assert_eq!(fb.get_pixel(0, 2), Some(0)); // transparent gap
+        assert_eq!(fb.get_pixel(0, 3), Some(0)); // transparent gap
+        assert_eq!(fb.get_pixel(0, 4), Some(22));
+        assert_eq!(fb.get_pixel(0, 5), Some(22));
     }
 }

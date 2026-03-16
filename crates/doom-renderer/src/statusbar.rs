@@ -17,10 +17,13 @@
 //! | Ammo tally | 272..319  | 4 rows: ammo/maxammo per type        |
 
 use crate::framebuffer::Framebuffer;
+use crate::patch_cache::PatchCache;
+use doom_game::face::{FaceState, face_patch_name};
 use doom_game::player::{
     AmmoType, KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD,
     KEY_YELLOW_SKULL, PlayerState, WEAPON_AMMO,
 };
+use doom_wad::WadStack;
 
 // ---------------------------------------------------------------------------
 // Layout constants
@@ -1004,6 +1007,195 @@ fn apply_god_mode_overlay(fb: &mut Framebuffer, health: i32) {
     for dy in 1..face_h - 1 {
         put_pixel(fb, face_x, face_y + dy, COLOR_YELLOW);
         put_pixel(fb, face_x + face_w - 1, face_y + dy, COLOR_YELLOW);
+    }
+}
+
+// ===========================================================================
+// WAD patch-based status bar (parity renderer)
+// ===========================================================================
+
+/// Draw a right-aligned number using STTNUM (tall red) digit patches.
+///
+/// `x` is the right edge of the number field.  `max_digits` is how many
+/// digit slots to fill (unused leading positions are blank).
+pub fn draw_stnum(
+    fb: &mut Framebuffer,
+    cache: &mut PatchCache,
+    wad: &WadStack,
+    right_x: i32,
+    y: i32,
+    value: i32,
+    max_digits: usize,
+) {
+    let v = value.max(0) as u32;
+    let mut digits = [0u8; 6];
+    let mut count = 0;
+    let mut n = v;
+    if n == 0 {
+        digits[0] = 0;
+        count = 1;
+    } else {
+        while n > 0 && count < 6 {
+            digits[count] = (n % 10) as u8;
+            n /= 10;
+            count += 1;
+        }
+    }
+
+    // Each STTNUM patch is 14px wide; draw right-to-left.
+    let digit_w = 14i32;
+    let mut x = right_x;
+    for i in 0..max_digits {
+        x -= digit_w;
+        if i < count {
+            let name = format!("STTNUM{}", digits[i]);
+            if let Some(patch) = cache.get(&name, wad) {
+                let p = patch.clone();
+                fb.draw_patch(x, y, &p);
+            }
+        }
+    }
+}
+
+/// Draw a right-aligned number using STYSNUM (small yellow) digit patches.
+///
+/// Used for the ammo tally columns (current/max ammo per type).
+pub fn draw_stysnum(
+    fb: &mut Framebuffer,
+    cache: &mut PatchCache,
+    wad: &WadStack,
+    right_x: i32,
+    y: i32,
+    value: u32,
+    max_digits: usize,
+) {
+    let mut digits = [0u8; 4];
+    let mut count = 0;
+    let mut n = value;
+    if n == 0 {
+        digits[0] = 0;
+        count = 1;
+    } else {
+        while n > 0 && count < 4 {
+            digits[count] = (n % 10) as u8;
+            n /= 10;
+            count += 1;
+        }
+    }
+
+    // STYSNUM patches are ~7px wide.
+    let digit_w = 7i32;
+    let mut x = right_x;
+    for i in 0..max_digits {
+        x -= digit_w;
+        if i < count {
+            let name = format!("STYSNUM{}", digits[i]);
+            if let Some(patch) = cache.get(&name, wad) {
+                let p = patch.clone();
+                fb.draw_patch(x, y, &p);
+            }
+        }
+    }
+}
+
+/// Draw the status bar using actual WAD patches.
+///
+/// Falls back gracefully when a patch is missing (the STBAR background covers
+/// the area, so missing patches just leave that region blank).
+///
+/// Pixel positions match vanilla Doom's `ST_lib.c` layout.
+pub fn draw_status_bar_wad(
+    fb: &mut Framebuffer,
+    cache: &mut PatchCache,
+    wad: &WadStack,
+    data: &StatusBarData,
+    face: &FaceState,
+) {
+    let bar_y = STATUS_BAR_Y as i32;
+
+    // 1. Background: STBAR at (0, 168).
+    if let Some(patch) = cache.get("STBAR", wad) {
+        let p = patch.clone();
+        fb.draw_patch(0, bar_y, &p);
+    }
+
+    // 2. Ammo count — right edge x=43, y=170, 3 digits.
+    draw_stnum(fb, cache, wad, 43, bar_y + 3, data.ammo_current as i32, 3);
+
+    // 3. Health — right edge x=103, y=170 + percent sign.
+    draw_stnum(fb, cache, wad, 97, bar_y + 3, data.health, 3);
+    if let Some(pct) = cache.get("STTPRCNT", wad) {
+        let p = pct.clone();
+        fb.draw_patch(97, bar_y + 3, &p);
+    }
+
+    // 4. Arms box — STARMS background then gray/bright weapon numbers.
+    if let Some(arms) = cache.get("STARMS", wad) {
+        let p = arms.clone();
+        fb.draw_patch(104, bar_y + 1, &p);
+    }
+    // Weapons 2-7: positions in a 3x2 grid at x=111..138, y=172..182.
+    let arm_xs = [111, 123, 135, 111, 123, 135];
+    let arm_ys = [bar_y + 4, bar_y + 4, bar_y + 4, bar_y + 14, bar_y + 14, bar_y + 14];
+    for slot in 0..6usize {
+        let weapon_num = slot + 2; // weapons 2-7
+        let owned = data.weapons.get(weapon_num).copied().unwrap_or(false);
+        if owned {
+            let name = format!("STGNUM{weapon_num}");
+            if let Some(patch) = cache.get(&name, wad) {
+                let p = patch.clone();
+                fb.draw_patch(arm_xs[slot], arm_ys[slot], &p);
+            }
+        }
+    }
+
+    // 5. Face mugshot at x=144, y=168.
+    let face_name = face_patch_name(face.kind);
+    if let Some(patch) = cache.get(&face_name, wad) {
+        let p = patch.clone();
+        fb.draw_patch(144, bar_y, &p);
+    }
+
+    // 6. Armor — right edge x=233, then percent sign.
+    draw_stnum(fb, cache, wad, 227, bar_y + 3, data.armor, 3);
+    if let Some(pct) = cache.get("STTPRCNT", wad) {
+        let p = pct.clone();
+        fb.draw_patch(227, bar_y + 3, &p);
+    }
+
+    // 7. Keys — stacked at x=239, y=168/178/188.
+    let key_bits = [
+        (KEY_BLUE_CARD, 0usize),
+        (KEY_YELLOW_CARD, 1),
+        (KEY_RED_CARD, 2),
+        (KEY_BLUE_SKULL, 3),
+        (KEY_YELLOW_SKULL, 4),
+        (KEY_RED_SKULL, 5),
+    ];
+    let key_y_slots = [bar_y, bar_y + 10, bar_y + 20];
+    let mut slot_used = [false; 3];
+    for (bit, idx) in &key_bits {
+        if data.keys & bit != 0 {
+            let slot = idx % 3;
+            if !slot_used[slot] {
+                let name = format!("STKEYS{idx}");
+                if let Some(patch) = cache.get(&name, wad) {
+                    let p = patch.clone();
+                    fb.draw_patch(239, key_y_slots[slot], &p);
+                }
+                slot_used[slot] = true;
+            }
+        }
+    }
+
+    // 8. Ammo tally — four rows (bullets/shells/cells/rockets).
+    // current ammo right edge x=288, max ammo right edge x=314.
+    let tally_ys = [bar_y + 3, bar_y + 11, bar_y + 19, bar_y + 27];
+    for i in 0..4 {
+        let cur = data.ammo.get(i).copied().unwrap_or(0);
+        let max = data.max_ammo.get(i).copied().unwrap_or(0);
+        draw_stysnum(fb, cache, wad, 288, tally_ys[i], cur, 3);
+        draw_stysnum(fb, cache, wad, 314, tally_ys[i], max, 3);
     }
 }
 

@@ -5,6 +5,8 @@
 //! `Framebuffer` and `PaletteLut` are the primary types consumed by `doom-tui`.
 
 pub mod anim;
+pub mod patch_cache;
+pub mod wad_font;
 pub mod automap;
 pub mod clip;
 pub mod colormap;
@@ -55,7 +57,8 @@ pub use lighting::{
     light_to_colormap_index, shade_column, shade_pixel, shade_span,
 };
 pub use menu_render::{
-    darken_framebuffer, draw_large_text, draw_menu, draw_title_screen, menu_colors,
+    darken_framebuffer, draw_large_text, draw_menu, draw_menu_wad, draw_overlay_patch,
+    draw_title_screen, draw_title_screen_wad, menu_colors,
 };
 pub use palette::{PaletteLut, Rgb};
 pub use palette_flash::{PaletteFlash, PaletteFlashState};
@@ -79,7 +82,7 @@ pub use sprite_lookup::{
     ActorRenderInfo, ResolvedSprite, compute_rotation, render_flag_from_state, resolve_sprite,
     sprite_lump_name_str, sprite_lump_name_with_mirror,
 };
-pub use statusbar::{StatusBarData, draw_status_bar, draw_status_bar_data};
+pub use statusbar::{StatusBarData, draw_status_bar, draw_status_bar_data, draw_status_bar_wad, draw_stnum, draw_stysnum};
 pub use texture::TextureCache;
 pub use texture_compose::{
     ComposedTexture, PatchDef, PatchImage, PatchPost, TextureDef, TextureDirectory,
@@ -90,4 +93,6 @@ pub use weapon_anim::{
     WEAPON_TOP, WeaponAnimState, WeaponBob, WeaponSprite, draw_weapon_animated, draw_weapon_shaded,
     get_weapon_light_params, weapon_light_bonus, weapon_sprite_name,
 };
+pub use patch_cache::PatchCache;
+pub use wad_font::{GLYPH_GAP, SPACE_WIDTH, WadFont};
 pub use wipe::ScreenWipe;

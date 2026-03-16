@@ -7,8 +7,10 @@
 
 use crate::font::BitmapFont;
 use crate::framebuffer::Framebuffer;
+use crate::patch_cache::PatchCache;
 use doom_game::menu::{GameMenu, MenuPage, TitlePhase, TitleScreen};
 use doom_types::limits::{FB_SIZE, FB_WIDTH};
+use doom_wad::WadStack;
 
 // ---------------------------------------------------------------------------
 // Color constants
@@ -202,6 +204,211 @@ fn draw_large_char(fb: &mut Framebuffer, font: &BitmapFont, x: i32, y: i32, ch: 
                 }
             }
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// WAD patch-based menu renderer
+// ---------------------------------------------------------------------------
+
+/// Per-page layout: title patch name + item patch names + item y positions.
+///
+/// Positions match vanilla Doom's `M_Init` / `DrawMenu` layout.
+struct MenuLayout {
+    title_patch: &'static str,
+    title_x: i32,
+    title_y: i32,
+    items_x: i32,
+    item_patches: &'static [&'static str],
+    item_ys: &'static [i32],
+}
+
+const MAIN_LAYOUT: MenuLayout = MenuLayout {
+    title_patch: "M_DOOM",
+    title_x: 94,
+    title_y: 2,
+    items_x: 97,
+    item_patches: &["M_NGAME", "M_OPTION", "M_LOADG", "M_SAVEG", "M_QUITG"],
+    item_ys: &[72, 82, 92, 102, 112],
+};
+
+const EPISODE_LAYOUT: MenuLayout = MenuLayout {
+    title_patch: "M_EPISOD",
+    title_x: 54,
+    title_y: 38,
+    items_x: 54,
+    item_patches: &["M_EPI1", "M_EPI2", "M_EPI3", "M_EPI4"],
+    item_ys: &[58, 74, 90, 106],
+};
+
+const SKILL_LAYOUT: MenuLayout = MenuLayout {
+    title_patch: "M_NEWG",
+    title_x: 96,
+    title_y: 14,
+    items_x: 48,
+    item_patches: &["M_JKILL", "M_ROUGH", "M_HURT", "M_ULTRA", "M_NMARE"],
+    item_ys: &[38, 54, 70, 86, 102],
+};
+
+const OPTIONS_LAYOUT: MenuLayout = MenuLayout {
+    title_patch: "M_OPTTTL",
+    title_x: 108,
+    title_y: 15,
+    items_x: 60,
+    item_patches: &["M_MESSG", "M_DETAIL", "M_SCRNSZ", "M_MSENS", "M_SVOL"],
+    item_ys: &[35, 51, 67, 83, 99],
+};
+
+const LOAD_LAYOUT: MenuLayout = MenuLayout {
+    title_patch: "M_LOADG",
+    title_x: 72,
+    title_y: 28,
+    items_x: 80,
+    item_patches: &[],
+    item_ys: &[51, 60, 69, 78, 87, 96],
+};
+
+const SAVE_LAYOUT: MenuLayout = MenuLayout {
+    title_patch: "M_SAVEG",
+    title_x: 72,
+    title_y: 28,
+    items_x: 80,
+    item_patches: &[],
+    item_ys: &[51, 60, 69, 78, 87, 96],
+};
+
+fn page_layout(page: MenuPage) -> &'static MenuLayout {
+    match page {
+        MenuPage::Main => &MAIN_LAYOUT,
+        MenuPage::Episode => &EPISODE_LAYOUT,
+        MenuPage::Skill => &SKILL_LAYOUT,
+        MenuPage::Options => &OPTIONS_LAYOUT,
+        MenuPage::Load => &LOAD_LAYOUT,
+        MenuPage::Save => &SAVE_LAYOUT,
+    }
+}
+
+/// Draw the menu using WAD patches.
+///
+/// Falls back gracefully when patches are missing (draws nothing for that element).
+/// The darken overlay is still applied for the semi-transparent effect.
+pub fn draw_menu_wad(
+    fb: &mut Framebuffer,
+    menu: &GameMenu,
+    cache: &mut PatchCache,
+    wad: &WadStack,
+    font: &BitmapFont,
+) {
+    if !menu.is_active() {
+        return;
+    }
+
+    darken_framebuffer(fb);
+
+    let layout = page_layout(menu.page());
+
+    // Title patch.
+    if let Some(patch) = cache.get(layout.title_patch, wad) {
+        let p = patch.clone();
+        fb.draw_patch(layout.title_x, layout.title_y, &p);
+    }
+
+    let items = menu.items();
+
+    // Item patches (Load/Save use text slots instead).
+    match menu.page() {
+        MenuPage::Load | MenuPage::Save => {
+            // Draw save slot borders + text labels using bitmap font.
+            for (i, item) in items.iter().enumerate() {
+                if let Some(&y) = layout.item_ys.get(i) {
+                    let color = if i == menu.cursor() {
+                        menu_colors::MENU_HIGHLIGHT
+                    } else {
+                        menu_colors::MENU_TEXT
+                    };
+                    // Slot border (small rectangle).
+                    fb.fill_rect(layout.items_x as usize, y as usize, 160, 8, 0);
+                    font.draw_string(fb, layout.items_x, y, item.label, color);
+                }
+            }
+        }
+        _ => {
+            for (i, _item) in items.iter().enumerate() {
+                if let Some(&patch_name) = layout.item_patches.get(i) {
+                    if let Some(&y) = layout.item_ys.get(i) {
+                        if let Some(patch) = cache.get(patch_name, wad) {
+                            let p = patch.clone();
+                            fb.draw_patch(layout.items_x, y, &p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Skull cursor — M_SKULL1 / M_SKULL2 at (item_x - 32, item_y).
+    let skull_name = if menu.skull_frame() == 0 { "M_SKULL1" } else { "M_SKULL2" };
+    let cursor_y = layout
+        .item_ys
+        .get(menu.cursor())
+        .copied()
+        .unwrap_or(layout.item_ys.first().copied().unwrap_or(60));
+    if let Some(patch) = cache.get(skull_name, wad) {
+        let p = patch.clone();
+        fb.draw_patch(layout.items_x - 32, cursor_y, &p);
+    }
+}
+
+/// Draw the title/credits screen using WAD patches.
+///
+/// - Title phase: TITLEPIC full-screen patch.
+/// - Credits phase: CREDIT full-screen patch.
+/// - Demo phase: no-op.
+pub fn draw_title_screen_wad(
+    fb: &mut Framebuffer,
+    title_screen: &TitleScreen,
+    cache: &mut PatchCache,
+    wad: &WadStack,
+    font: &BitmapFont,
+) {
+    match title_screen.phase() {
+        TitlePhase::Title => {
+            if let Some(patch) = cache.get("TITLEPIC", wad) {
+                let p = patch.clone();
+                fb.draw_patch(0, 0, &p);
+            } else {
+                draw_title_pic(fb, font);
+            }
+        }
+        TitlePhase::Demo(_) => {}
+        TitlePhase::Credits => {
+            if let Some(patch) = cache.get("CREDIT", wad) {
+                let p = patch.clone();
+                fb.draw_patch(0, 0, &p);
+            } else {
+                draw_credits_screen(fb, font);
+            }
+        }
+    }
+}
+
+/// Draw a help/pause overlay patch by name (e.g. "M_PAUSE", "HELP1", "HELP2").
+///
+/// The patch is drawn centered horizontally; `y` is the top of the patch.
+/// Returns `true` if the patch was found and drawn.
+pub fn draw_overlay_patch(
+    fb: &mut Framebuffer,
+    cache: &mut PatchCache,
+    wad: &WadStack,
+    name: &str,
+    y: i32,
+) -> bool {
+    if let Some(patch) = cache.get(name, wad) {
+        let p = patch.clone();
+        fb.draw_patch_centered(y, &p);
+        true
+    } else {
+        false
     }
 }
 
