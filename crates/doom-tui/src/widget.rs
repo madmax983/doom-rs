@@ -34,6 +34,8 @@ pub struct DoomFramebufferWidget<'a> {
     pub active_palette: usize,
     /// Scaling algorithm to use when blitting to the terminal.
     pub scaling_mode: ScalingMode,
+    /// ASCII rendering mode: true to render as colored ASCII art.
+    pub ascii_mode: bool,
 }
 
 impl<'a> DoomFramebufferWidget<'a> {
@@ -44,6 +46,7 @@ impl<'a> DoomFramebufferWidget<'a> {
             lut,
             active_palette,
             scaling_mode: ScalingMode::Nearest,
+            ascii_mode: false,
         }
     }
 
@@ -51,6 +54,13 @@ impl<'a> DoomFramebufferWidget<'a> {
     #[must_use]
     pub fn with_scaling(mut self, mode: ScalingMode) -> Self {
         self.scaling_mode = mode;
+        self
+    }
+
+    /// Set the ascii mode, returning `self` for chaining.
+    #[must_use]
+    pub fn with_ascii_mode(mut self, ascii_mode: bool) -> Self {
+        self.ascii_mode = ascii_mode;
         self
     }
 }
@@ -112,9 +122,19 @@ impl Widget for DoomFramebufferWidget<'_> {
                 };
 
                 if let Some(cell) = buf.cell_mut((area.x + cx as u16, area.y + cy as u16)) {
-                    cell.set_char('▀')
-                        .set_fg(Color::Rgb(top_r, top_g, top_b))
-                        .set_bg(Color::Rgb(bot_r, bot_g, bot_b));
+                    if self.ascii_mode {
+                        let luma = (top_r as u32 * 2126 + top_g as u32 * 7152 + top_b as u32 * 722) / 10000;
+                        let chars = b" .:-=+*#%@";
+                        let char_idx = (luma * (chars.len() as u32 - 1)) / 255;
+                        let c = chars[char_idx as usize] as char;
+                        cell.set_char(c)
+                            .set_fg(Color::Rgb(top_r, top_g, top_b))
+                            .set_bg(Color::Rgb(0, 0, 0));
+                    } else {
+                        cell.set_char('▀')
+                            .set_fg(Color::Rgb(top_r, top_g, top_b))
+                            .set_bg(Color::Rgb(bot_r, bot_g, bot_b));
+                    }
                 }
             }
         }
@@ -185,6 +205,7 @@ mod tests {
             lut: &lut,
             active_palette: 0,
             scaling_mode: ScalingMode::Nearest,
+            ascii_mode: false,
         }
         .render(area, &mut buf);
         // No panic; buffer remains empty/default.
@@ -251,5 +272,33 @@ mod tests {
         let lut = PaletteLut::grayscale();
         let w = DoomFramebufferWidget::new(&fb, &lut, 0).with_scaling(ScalingMode::Bilinear);
         assert_eq!(w.scaling_mode, ScalingMode::Bilinear);
+    }
+
+    #[test]
+    fn with_ascii_mode_builder_sets_mode() {
+        let fb = make_fb_with(0);
+        let lut = PaletteLut::grayscale();
+        let w = DoomFramebufferWidget::new(&fb, &lut, 0).with_ascii_mode(true);
+        assert!(w.ascii_mode);
+    }
+
+    #[test]
+    fn ascii_mode_renders_correct_character() {
+        let mut fb = Framebuffer::new();
+        // Palette index 1 = red in the test_primary LUT.
+        fb.clear(1);
+        let lut = PaletteLut::test_primary();
+        let area = Rect::new(0, 0, 1, 1);
+        let mut buf = Buffer::empty(area);
+        DoomFramebufferWidget::new(&fb, &lut, 0)
+            .with_ascii_mode(true)
+            .render(area, &mut buf);
+        let cell = buf.cell((0, 0)).unwrap();
+        // top_r = 255, top_g = 0, top_b = 0 -> luma = (255 * 2126) / 10000 = 54
+        // char_idx = (54 * 9) / 255 = 486 / 255 = 1
+        // b" .:-=+*#%@"[1] = '.'
+        assert_eq!(cell.symbol(), ".");
+        assert_eq!(cell.fg, Color::Rgb(255, 0, 0));
+        assert_eq!(cell.bg, Color::Rgb(0, 0, 0));
     }
 }
