@@ -71,12 +71,12 @@ struct Args {
 
     /// Run as a relay server on this port (e.g. --server 5029).
     /// Players connect to this address.  Mutually exclusive with --connect,
-    /// --record, and --playdemo.
+    /// --record, --playdemo, and --capture.
     #[arg(long)]
     server: Option<u16>,
 
     /// Connect to a relay server for netplay (e.g. --connect 127.0.0.1:5029).
-    /// Mutually exclusive with --server, --record, and --playdemo.
+    /// Mutually exclusive with --server, --record, --playdemo, and --capture.
     #[arg(long)]
     connect: Option<String>,
 
@@ -88,12 +88,13 @@ struct Args {
     #[arg(long, default_value = "2")]
     num_players: u8,
 
-    /// Headless capture: render N frames and save a BMP screenshot, then exit.
-    /// Example: --capture screenshot.bmp
+    /// Headless capture: advance N game tics, render once, save a BMP, then exit.
+    /// May be combined with --playdemo to capture deterministic replay frames.
+    /// Example: --playdemo repro.lmp --capture screenshot.bmp
     #[arg(long)]
     capture: Option<std::path::PathBuf>,
 
-    /// Number of frames to tick before capturing (default: 1).
+    /// Number of game tics to advance before capturing (default: 1).
     #[arg(long, default_value = "1")]
     capture_frames: u32,
 
@@ -1497,6 +1498,62 @@ fn load_music_library(wad: &WadFile) -> std::collections::HashMap<String, Vec<u8
     music_library
 }
 
+fn validate_mode_args(args: &Args) -> std::result::Result<(), &'static str> {
+    if args.server.is_some() && args.connect.is_some() {
+        return Err("--server and --connect are mutually exclusive");
+    }
+    if args.record.is_some() && args.playdemo.is_some() {
+        return Err("--record and --playdemo are mutually exclusive");
+    }
+    if args.capture.is_some() && args.record.is_some() {
+        return Err("--capture cannot be combined with --record");
+    }
+    if args.capture.is_some() && args.server.is_some() {
+        return Err("--capture cannot be combined with --server");
+    }
+    if args.capture.is_some() && args.connect.is_some() {
+        return Err("--capture cannot be combined with --connect");
+    }
+    if args.server.is_some() && args.record.is_some() {
+        return Err("--server and --record are mutually exclusive");
+    }
+    if args.server.is_some() && args.playdemo.is_some() {
+        return Err("--server and --playdemo are mutually exclusive");
+    }
+    if args.connect.is_some() && args.record.is_some() {
+        return Err("--connect and --record are mutually exclusive");
+    }
+    if args.connect.is_some() && args.playdemo.is_some() {
+        return Err("--connect and --playdemo are mutually exclusive");
+    }
+
+    Ok(())
+}
+
+struct HeadlessCapture {
+    framebuffer: Framebuffer,
+    active_palette: usize,
+}
+
+fn capture_headless_frame(app: &mut impl DoomApp, capture_frames: u32) -> HeadlessCapture {
+    let mut framebuffer = Framebuffer::new();
+    for _ in 0..capture_frames {
+        app.tick(TicInput::default());
+    }
+    app.render(&mut framebuffer);
+
+    HeadlessCapture {
+        framebuffer,
+        active_palette: app.active_palette(),
+    }
+}
+
+fn load_demo_player(path: &std::path::Path) -> Result<DemoPlayer> {
+    let demo_bytes =
+        std::fs::read(path).with_context(|| format!("Failed to read demo: {}", path.display()))?;
+    DemoPlayer::parse(&demo_bytes).with_context(|| "Failed to parse demo")
+}
+
 // ---------------------------------------------------------------------------
 // main
 // ---------------------------------------------------------------------------
@@ -1585,15 +1642,8 @@ fn main() -> Result<()> {
 
     let music_library = load_music_library(&wad);
 
-    // Validate mutually exclusive mode args: at most one of the four modes.
-    let exclusive_modes = [
-        args.record.is_some(),
-        args.playdemo.is_some(),
-        args.server.is_some(),
-        args.connect.is_some(),
-    ];
-    if exclusive_modes.iter().filter(|&&x| x).count() > 1 {
-        eprintln!("Error: --record, --playdemo, --server, and --connect are mutually exclusive");
+    if let Err(message) = validate_mode_args(&args) {
+        eprintln!("Error: {message}");
         std::process::exit(1);
     }
 
@@ -1640,18 +1690,23 @@ fn main() -> Result<()> {
 
     // Headless capture mode: tick N frames, render, save BMP, exit.
     if let Some(ref capture_path) = args.capture {
-        let mut app = app;
-        let mut fb = Framebuffer::new();
-
-        // Tick the game for the requested number of frames.
-        for _ in 0..args.capture_frames {
-            app.tick(TicInput::default());
-        }
-        app.render(&mut fb);
+        let capture = if let Some(ref demo_path) = args.playdemo {
+            let player = load_demo_player(demo_path)?;
+            let mut playback_app = demo_mode::DemoPlaybackApp::new(app, player);
+            capture_headless_frame(&mut playback_app, args.capture_frames)
+        } else {
+            let mut app = app;
+            capture_headless_frame(&mut app, args.capture_frames)
+        };
 
         // Write the framebuffer as a 24-bit BMP file.
-        write_bmp(capture_path, &fb, &blit_palette, app.active_palette())
-            .with_context(|| format!("Failed to write capture: {}", capture_path.display()))?;
+        write_bmp(
+            capture_path,
+            &capture.framebuffer,
+            &blit_palette,
+            capture.active_palette,
+        )
+        .with_context(|| format!("Failed to write capture: {}", capture_path.display()))?;
         eprintln!(
             "Captured frame {} to {}",
             args.capture_frames,
@@ -1684,9 +1739,7 @@ fn main() -> Result<()> {
 
     if let Some(demo_path) = args.playdemo {
         // Load and parse the demo file.
-        let demo_bytes = std::fs::read(&demo_path)
-            .with_context(|| format!("Failed to read demo: {}", demo_path.display()))?;
-        let player = DemoPlayer::parse(&demo_bytes).with_context(|| "Failed to parse demo")?;
+        let player = load_demo_player(&demo_path)?;
         let mut playback_app = demo_mode::DemoPlaybackApp::new(app, player);
         event_loop
             .run(&mut playback_app, &blit_palette)
@@ -1810,6 +1863,30 @@ mod tests {
     use doom_game::cheats as game_cheats;
     use doom_game::{GameState, Mobj, MobjKind, PlayerState, flags};
     use doom_map::{Blockmap, Level, Reject, Sector};
+
+    #[derive(Default)]
+    struct FakeCaptureApp {
+        ticks: u32,
+        renders: u32,
+        active_palette: usize,
+        fill_color: u8,
+    }
+
+    impl DoomApp for FakeCaptureApp {
+        fn tick(&mut self, _input: TicInput) {
+            self.ticks += 1;
+            self.fill_color = self.fill_color.wrapping_add(1);
+        }
+
+        fn render(&mut self, fb: &mut Framebuffer) {
+            self.renders += 1;
+            fb.clear(self.fill_color);
+        }
+
+        fn active_palette(&self) -> usize {
+            self.active_palette
+        }
+    }
     use doom_renderer::{Framebuffer, StatusBarData};
     use doom_types::{Bam, Fixed16_16};
     use std::path::PathBuf;
@@ -3247,5 +3324,103 @@ mod tests {
         assert!(args.is_ok());
         let args = args.unwrap();
         assert!(args.connect.is_none(), "--connect must default to None");
+    }
+
+    #[test]
+    fn mode_validation_allows_playdemo_capture() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--playdemo",
+            "repro.lmp",
+            "--capture",
+            "frame.bmp",
+        ])
+        .expect("args with playdemo capture should parse");
+
+        assert!(
+            validate_mode_args(&args).is_ok(),
+            "--capture should be allowed with --playdemo"
+        );
+    }
+
+    #[test]
+    fn mode_validation_rejects_record_capture() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--record",
+            "repro.lmp",
+            "--capture",
+            "frame.bmp",
+        ])
+        .expect("args with record capture should parse");
+
+        assert_eq!(
+            validate_mode_args(&args).unwrap_err(),
+            "--capture cannot be combined with --record"
+        );
+    }
+
+    #[test]
+    fn mode_validation_rejects_server_capture() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--server",
+            "5029",
+            "--capture",
+            "frame.bmp",
+        ])
+        .expect("args with server capture should parse");
+
+        assert_eq!(
+            validate_mode_args(&args).unwrap_err(),
+            "--capture cannot be combined with --server"
+        );
+    }
+
+    #[test]
+    fn mode_validation_rejects_connect_capture() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--connect",
+            "127.0.0.1:5029",
+            "--capture",
+            "frame.bmp",
+        ])
+        .expect("args with connect capture should parse");
+
+        assert_eq!(
+            validate_mode_args(&args).unwrap_err(),
+            "--capture cannot be combined with --connect"
+        );
+    }
+
+    #[test]
+    fn headless_capture_ticks_then_renders_once() {
+        let mut app = FakeCaptureApp {
+            active_palette: 3,
+            ..Default::default()
+        };
+
+        let capture = capture_headless_frame(&mut app, 4);
+
+        assert_eq!(app.ticks, 4, "capture must tick the app requested times");
+        assert_eq!(app.renders, 1, "capture must render exactly one frame");
+        assert_eq!(
+            capture.active_palette, 3,
+            "capture must preserve the app's active palette"
+        );
+        assert_eq!(
+            capture.framebuffer.get_pixel(0, 0),
+            Some(4),
+            "rendered framebuffer should contain the app's last rendered content"
+        );
     }
 }

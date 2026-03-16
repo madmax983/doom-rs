@@ -149,4 +149,46 @@ mod tests {
         assert_eq!(u.ymax, int(10));
         assert_eq!(u.xmax, int(8));
     }
+
+    #[test]
+    fn overlaps_detects_intersection() {
+        let a = BBox::new(int(5), int(0), int(0), int(5));
+
+        // Touching (overlaps)
+        let b = BBox::new(int(10), int(5), int(5), int(10));
+        assert!(a.overlaps(b));
+        assert!(b.overlaps(a));
+
+        // Inside (overlaps)
+        let c = BBox::new(int(4), int(1), int(1), int(4));
+        assert!(a.overlaps(c));
+        assert!(c.overlaps(a));
+
+        // Outside (does not overlap)
+        let d = BBox::new(int(15), int(10), int(10), int(15));
+        assert!(!a.overlaps(d));
+        assert!(!d.overlaps(a));
+    }
+
+    #[test]
+    fn is_valid_checks_bounds() {
+        let valid = BBox::new(int(10), int(0), int(0), int(10));
+        assert!(valid.is_valid());
+
+        let invalid_y = BBox::new(int(0), int(10), int(0), int(10));
+        assert!(!invalid_y.is_valid());
+
+        let invalid_x = BBox::new(int(10), int(0), int(10), int(0));
+        assert!(!invalid_x.is_valid());
+
+        let invalid_both = BBox::new(int(0), int(10), int(10), int(0));
+        assert!(!invalid_both.is_valid());
+    }
+
+    #[test]
+    fn width_and_height() {
+        let bb = BBox::new(int(20), int(5), int(2), int(10));
+        assert_eq!(bb.width(), int(8));
+        assert_eq!(bb.height(), int(15));
+    }
 }

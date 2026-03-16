@@ -112,4 +112,14 @@ mod tests {
         let v = Vec2Fixed::from_ints(100, 200);
         assert_eq!(v.scale(Fixed16_16::ZERO), Vec2Fixed::ZERO);
     }
+
+    #[test]
+    fn length_sq_calculation() {
+        // 3-4-5 triangle: 3^2 + 4^2 = 9 + 16 = 25
+        let v = Vec2Fixed::from_ints(3, 4);
+        assert_eq!(v.length_sq(), Fixed16_16::from_int(25));
+
+        let zero = Vec2Fixed::ZERO;
+        assert_eq!(zero.length_sq(), Fixed16_16::ZERO);
+    }
 }

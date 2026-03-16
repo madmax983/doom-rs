@@ -53,6 +53,14 @@ impl Fixed16_16 {
     /// Compute `self * rhs` using a 64-bit intermediate to avoid overflow.
     ///
     /// Equivalent to the C macro `FixedMul(a, b)`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::Fixed16_16;
+    /// let a = Fixed16_16::from_int(3);
+    /// let b = Fixed16_16::from_int(4);
+    /// assert_eq!(a.fixed_mul(b), Fixed16_16::from_int(12));
+    /// ```
     #[inline]
     pub fn fixed_mul(self, rhs: Self) -> Self {
         let product = (self.0 as i64) * (rhs.0 as i64);
@@ -65,6 +73,14 @@ impl Fixed16_16 {
     ///
     /// # Panics
     /// Panics (debug) if `rhs == 0`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::Fixed16_16;
+    /// let a = Fixed16_16::from_int(10);
+    /// let b = Fixed16_16::from_int(2);
+    /// assert_eq!(a.fixed_div(b), Fixed16_16::from_int(5));
+    /// ```
     #[inline]
     pub fn fixed_div(self, rhs: Self) -> Self {
         debug_assert!(rhs.0 != 0, "FixedDiv: division by zero");
@@ -219,6 +235,30 @@ mod tests {
     fn abs_negative_negated() {
         let a = Fixed16_16::from_int(-5);
         assert_eq!(a.abs(), Fixed16_16::from_int(5));
+    }
+
+    #[test]
+    #[should_panic]
+    fn fixed_div_by_zero_panics() {
+        let a = Fixed16_16::from_int(10);
+        let b = Fixed16_16::ZERO;
+        let _ = a.fixed_div(b);
+    }
+
+    #[test]
+    fn lerp_interpolates_correctly() {
+        let a = Fixed16_16::from_int(10);
+        let b = Fixed16_16::from_int(20);
+
+        let t_zero = Fixed16_16::ZERO;
+        assert_eq!(a.lerp(b, t_zero), a);
+
+        let t_one = FIXED_ONE;
+        assert_eq!(a.lerp(b, t_one), b);
+
+        // 0.5 in fixed point (1 << 15)
+        let t_half = Fixed16_16(1 << 15);
+        assert_eq!(a.lerp(b, t_half), Fixed16_16::from_int(15));
     }
 }
 
