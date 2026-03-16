@@ -1754,7 +1754,7 @@ fn a_vile_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     // Scan for raisable corpses.
     let mut corpse_handle: Option<MobjHandle> = None;
-    for h in gs.mobjslab.iter_handles().collect::<Vec<_>>() {
+    for h in gs.mobjslab.iter_handles() {
         let raisable = {
             let Some(mo) = gs.mobjslab.get(h) else {
                 continue;

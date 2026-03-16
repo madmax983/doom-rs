@@ -223,7 +223,8 @@ fn tick_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> T
 /// by `tick_player`).
 pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
     // Collect handles first to avoid borrow conflicts during iteration.
-    let handles: Vec<MobjHandle> = gs.mobjslab.iter_handles().collect();
+    let mut handles = Vec::with_capacity(gs.mobjslab.len());
+    handles.extend(gs.mobjslab.iter_handles());
     let player_handle = gs.player.handle;
     let is_nightmare = gs.skill == crate::spawn::Skill::Nightmare;
 
@@ -427,7 +428,8 @@ impl GameState {
     #[doc(hidden)]
     pub fn run_thinkers(&mut self, level: Option<&Level>) {
         // Collect handles first to avoid borrow conflicts during iteration.
-        let handles: Vec<MobjHandle> = self.mobjslab.iter_handles().collect();
+        let mut handles = Vec::with_capacity(self.mobjslab.len());
+        handles.extend(self.mobjslab.iter_handles());
 
         for handle in handles {
             self.advance_mobj_state(handle, level);
