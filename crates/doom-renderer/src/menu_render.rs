@@ -417,6 +417,187 @@ pub fn draw_overlay_patch(
 }
 
 // ---------------------------------------------------------------------------
+// Finale renderer
+// ---------------------------------------------------------------------------
+
+/// Vanilla Doom episode-end text (from f_finale.c).
+const E1TEXT: &str = "\
+ Once you beat the big bad\n\
+ hell boss, you wonder what\n\
+ authority structure permits\n\
+ such carnage.  So you ask\n\
+ yourself: Is there someone\n\
+ else in charge of this?\n\
+ \n\
+ Yes, of course.  But now\n\
+ it's your job to find them.\n\
+ And now you'll know why the\n\
+ UAC was so anxious to remove\n\
+ Deimos Base from the face of\n\
+ the moon ... and you're about\n\
+ to find out the hard way.";
+
+const E2TEXT: &str = "\
+ You've done it!  The\n\
+ hideous cyber-diamond has\n\
+ been obliterated!  And the\n\
+ once-barren Deimos Base is\n\
+ secure.  You can almost hear\n\
+ the echo of victory.\n\
+ \n\
+ You've beaten the demon\n\
+ forces all the way back to\n\
+ hell.  And now, with the\n\
+ completion of your task,\n\
+ you realize that... wait.\n\
+ You're still alive?  Good.\n\
+ \n\
+ You're in hell... but why?\n\
+ It seems the demons have\n\
+ been using Deimos as a kind\n\
+ of hell outpost.  With\n\
+ demons pouring in and out,\n\
+ you face the fact that you\n\
+ can't turn back.  You must\n\
+ go in.";
+
+const E3TEXT: &str = "\
+ The loathsome spiderdemon\n\
+ that masterminded the\n\
+ Deimos infestation has been\n\
+ slain and UAC reports state\n\
+ it was destroyed with a\n\
+ single blast of unholy\n\
+ firepower...  Did that just\n\
+ happen?  Was it...  easy?\n\
+ \n\
+ Don't be fooled.  You've\n\
+ just begun your journey\n\
+ through hell.  The real\n\
+ monsters wait for you at\n\
+ the end of the next episode.";
+
+const E4TEXT: &str = "\
+ the spider mastermind must\n\
+ have sent forth its legions\n\
+ of hellspawn before your\n\
+ final confrontation with\n\
+ that terrible beast from\n\
+ hell.  but you have shown\n\
+ no mercy.  nor have you\n\
+ been shown any.\n\
+ \n\
+ you aggressively crushed all\n\
+ opposition throughout the\n\
+ galaxy and now the dread\n\
+ spider is gone.  the three\n\
+ hells await thy conquest.\n\
+ \n\
+ thy work was gory but just.";
+
+const D2TEXT: &str = "\
+ you did it!  by turning the\n\
+ only switch ever to work you\n\
+ have caused all 666 demons\n\
+ to disappear from the face\n\
+ of the earth.  all gone.\n\
+ \n\
+ now, in what could be a\n\
+ coincidence or a miracle,\n\
+ your life support has\n\
+ reconstituted itself.\n\
+ \n\
+ did you know that by\n\
+ activating that switch you\n\
+ also sent a signal to the\n\
+ distant demon hive mind?\n\
+ they now know of your\n\
+ existence.  they will be\n\
+ back.";
+
+/// Draw the finale screen using WAD patches.
+///
+/// - Episode 1-2, 4 and Doom 2: text crawl over flat background (INTERPIC for D2).
+/// - Episode 3: bunny scroll (PFUB1/PFUB2) — scroll offset derived from tic.
+///
+/// `episode` is the just-completed episode (1-4 for Doom 1, 0 for Doom 2).
+/// `text_index` is the number of characters revealed so far.
+/// `tic` is the raw finale tic count (used for PFUB2 scroll offset).
+pub fn draw_finale_wad(
+    fb: &mut Framebuffer,
+    cache: &mut PatchCache,
+    wad: &WadStack,
+    font: &BitmapFont,
+    episode: u8,
+    text_index: usize,
+    tic: u32,
+) {
+    let is_doom2 = episode == 0;
+
+    // --- Episode 3: bunny scroll ---
+    if episode == 3 {
+        // PFUB1: static left half; PFUB2: scrolling overlay.
+        if let Some(p) = cache.get("PFUB1", wad) {
+            let p = p.clone();
+            let x = (320 - p.width as i32) / 2;
+            fb.draw_patch(x, 0, &p);
+        } else {
+            fb.clear(0);
+        }
+        // PFUB2 scrolls right-to-left: vanilla scrolls 2px per 3 tics.
+        let scroll = ((tic / 3) * 2) as i32;
+        if let Some(p) = cache.get("PFUB2", wad) {
+            let p = p.clone();
+            let base_x = (320 - p.width as i32) / 2;
+            fb.draw_patch(base_x - scroll, 0, &p);
+        }
+        // After enough scrolling, show ENDPIC.
+        if tic > 220 {
+            if let Some(p) = cache.get("ENDPIC", wad) {
+                let p = p.clone();
+                let x = (320 - p.width as i32) / 2;
+                fb.draw_patch(x, 0, &p);
+            }
+        }
+        return;
+    }
+
+    // --- All other episodes: text crawl ---
+
+    // Background.
+    if is_doom2 {
+        if let Some(p) = cache.get("INTERPIC", wad) {
+            let p = p.clone();
+            let x = (320 - p.width as i32) / 2;
+            fb.draw_patch(x, 0, &p);
+        } else {
+            fb.clear(0);
+        }
+    } else {
+        fb.clear(0);
+    }
+
+    let text = match episode {
+        1 => E1TEXT,
+        2 => E2TEXT,
+        4 => E4TEXT,
+        _ => D2TEXT, // Doom 2 or fallback
+    };
+
+    // Reveal `text_index` characters of the text.
+    let visible: String = text.chars().take(text_index).collect();
+    let mut x = 10i32;
+    let mut y = 10i32;
+    for line in visible.lines() {
+        font.draw_string(fb, x, y, line, 4);
+        y += 11;
+        if y > 190 { break; }
+    }
+    // Keep x used — avoids unused variable warning.
+    let _ = x;
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 

@@ -50,15 +50,15 @@ pub use fuzz::{FUZZ_TABLE, draw_fuzz_column};
 pub use hud_messages::{HudMessage, HudMessageQueue};
 pub use intermission::{
     IntermissionPhase, IntermissionRenderer, draw_intermission, draw_intermission_text,
-    draw_percentage, draw_time, format_map_name,
+    draw_intermission_wad, draw_percentage, draw_time, format_map_name,
 };
 pub use lighting::{
     LightParams, compute_flat_light, compute_wall_light, compute_wall_light_with_falloff,
     light_to_colormap_index, shade_column, shade_pixel, shade_span,
 };
 pub use menu_render::{
-    darken_framebuffer, draw_large_text, draw_menu, draw_menu_wad, draw_overlay_patch,
-    draw_title_screen, draw_title_screen_wad, menu_colors,
+    darken_framebuffer, draw_finale_wad, draw_large_text, draw_menu, draw_menu_wad,
+    draw_overlay_patch, draw_title_screen, draw_title_screen_wad, menu_colors,
 };
 pub use palette::{PaletteLut, Rgb};
 pub use palette_flash::{PaletteFlash, PaletteFlashState};
