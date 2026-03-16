@@ -23,17 +23,18 @@ use doom_game::{
 use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
+use doom_game::FaceState;
 use doom_renderer::{
     ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
-    IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, RenderOut, SpriteCache,
-    SpriteClip, SwitchList, TextureCache, WeaponAnimState, draw_automap_ex, draw_intermission,
-    draw_menu, draw_status_bar, draw_title_screen, draw_weapon_animated,
-    render_actors_with_masked_ex, render_flag_from_state,
-    render_level_with_view_height_and_extra_light, thing_sprite_prefix,
+    IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, PatchCache, RenderOut,
+    SpriteCache, SpriteClip, SwitchList, TextureCache, WadFont, WeaponAnimState, draw_automap_ex,
+    draw_intermission, draw_menu, draw_menu_wad, draw_status_bar, draw_status_bar_wad,
+    draw_title_screen, draw_title_screen_wad, draw_weapon_animated, render_actors_with_masked_ex,
+    render_flag_from_state, render_level_with_view_height_and_extra_light, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
-use doom_wad::WadFile;
+use doom_wad::{WadFile, WadStack};
 
 use audio_system::{AudioSystem, music_lump_for_map, sound_request_sfx};
 use doom_audio::{SfxEmitter, SfxPriority, compute_spatial};
@@ -152,6 +153,14 @@ pub(crate) struct DoomGame {
     menu: doom_game::menu::GameMenu,
     /// Bitmap font for menu/console text rendering.
     bitmap_font: BitmapFont,
+    /// WAD patch cache for menu/HUD graphics.
+    patch_cache: PatchCache,
+    /// WAD-based HU font (STCFN patches). `None` until WAD is attached.
+    wad_font: Option<WadFont>,
+    /// WAD stack for patch lookups (same data as `wad`, kept as a stack).
+    wad_stack: WadStack,
+    /// Mugshot face animation FSM.
+    face_state: FaceState,
     /// Title screen state. `Some` = still on title screen, `None` = in gameplay.
     title_screen: Option<TitleScreen>,
     /// Optional plain-text debug event log (opened with --debug-log).
@@ -247,6 +256,10 @@ impl DoomGame {
             player_view_height: PLAYER_HEIGHT,
             menu,
             bitmap_font: BitmapFont::new(),
+            patch_cache: PatchCache::new(),
+            wad_font: None,
+            wad_stack: WadStack::new(),
+            face_state: FaceState::new(),
             title_screen,
             debug_log,
             pain_sfx_id,
@@ -311,9 +324,14 @@ impl DoomGame {
         doom_game::MapId::from_name(level_name).unwrap_or(doom_game::MapId::new(1, 1))
     }
 
-    fn attach_wad_for_transitions(&mut self, wad: WadFile, skill: Skill) {
+    fn attach_wad_for_transitions(&mut self, wad: WadFile, skill: Skill, wad_stack: WadStack) {
         self.wad = Some(wad);
         self.skill = skill;
+        self.wad_stack = wad_stack;
+        // Preload menu and status bar patches now that we have a WAD stack.
+        self.patch_cache.preload_menu_patches(&self.wad_stack);
+        self.patch_cache.preload_statusbar_patches(&self.wad_stack);
+        self.wad_font = Some(WadFont::load(&mut self.patch_cache, &self.wad_stack));
     }
 
     fn enter_title_screen(&mut self) {
@@ -982,6 +1000,8 @@ impl DoomApp for DoomGame {
                 // Simple formula: one palette step per 8 HP lost, clamped.
                 let palette = ((damage / 8) as usize).clamp(1, 8);
                 self.palette_flash.trigger(palette, 12);
+                // Signal face FSM about damage.
+                self.face_state.on_damage(damage, Bam::ZERO);
                 // Play DSPLPAIN on any damage taken.
                 if let (Some(audio), Some(sfx_id)) = (&self.audio, self.pain_sfx_id) {
                     audio.play_sfx(
@@ -996,6 +1016,25 @@ impl DoomApp for DoomGame {
                     let msg = format!("damage -{} health={}", damage, cur_health);
                     self.dlog(&msg);
                 }
+            }
+            // Tick face FSM every tic.
+            {
+                let is_firing = self.gs.player.attack_down;
+                let is_invulnerable =
+                    self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+                let player_angle = self
+                    .gs
+                    .mobjslab
+                    .get(self.gs.player.handle)
+                    .map(|mo| mo.angle)
+                    .unwrap_or(Bam::ZERO);
+                self.face_state.tick(
+                    cur_health,
+                    is_firing,
+                    is_invulnerable,
+                    None,
+                    player_angle,
+                );
             }
             if self.debug_log.is_some() {
                 // Log player snapshot every 35 tics (once per second of gametime).
@@ -1020,8 +1059,8 @@ impl DoomApp for DoomGame {
     fn render(&mut self, fb: &mut Framebuffer) {
         // Title screen mode: draw the title/credits screen + menu overlay.
         if let Some(ref ts) = self.title_screen {
-            draw_title_screen(fb, ts, &self.bitmap_font);
-            draw_menu(fb, &self.menu, &self.bitmap_font);
+            draw_title_screen_wad(fb, ts, &mut self.patch_cache, &self.wad_stack, &self.bitmap_font);
+            draw_menu_wad(fb, &self.menu, &mut self.patch_cache, &self.wad_stack, &self.bitmap_font);
             return;
         }
 
@@ -1060,10 +1099,11 @@ impl DoomApp for DoomGame {
             // implementation already shows all linedefs.
             draw_automap_ex(fb, &self.level, &self.automap, px, py, angle);
 
-            // Draw status bar over the bottom of the automap so it is
-            // always visible (matching original Doom behaviour).
-            let god_mode = self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
-            draw_status_bar(fb, &self.gs.player, god_mode);
+            // Draw status bar over the bottom of the automap.
+            {
+                let data = doom_renderer::StatusBarData::from_player(&self.gs.player);
+                draw_status_bar_wad(fb, &mut self.patch_cache, &self.wad_stack, &data, &self.face_state);
+            }
         } else {
             // Draw the first-person 3D view.
             // We pass a grayscale palette; render_level currently ignores it
@@ -1161,8 +1201,10 @@ impl DoomApp for DoomGame {
             }
 
             // Draw HUD status bar over the bottom 32 rows.
-            let god_mode = self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
-            draw_status_bar(fb, &self.gs.player, god_mode);
+            {
+                let data = doom_renderer::StatusBarData::from_player(&self.gs.player);
+                draw_status_bar_wad(fb, &mut self.patch_cache, &self.wad_stack, &data, &self.face_state);
+            }
         }
 
         // Draw cheat message overlay at the top of the screen (if active).
@@ -1171,7 +1213,7 @@ impl DoomApp for DoomGame {
         }
 
         // Draw menu overlay on top of the game view (no-op when menu is not active).
-        draw_menu(fb, &self.menu, &self.bitmap_font);
+        draw_menu_wad(fb, &self.menu, &mut self.patch_cache, &self.wad_stack, &self.bitmap_font);
 
         // Draw console overlay on top of everything (highest priority).
         if self.console.visible {
@@ -1572,6 +1614,12 @@ fn main() -> Result<()> {
     let wad_bytes = std::fs::read(&args.wad)
         .with_context(|| format!("Failed to read WAD file: {}", args.wad.display()))?;
 
+    // Build a WadStack for patch/lump lookups (menu graphics, HUD sprites).
+    let mut wad_stack = WadStack::new();
+    wad_stack
+        .push_iwad(wad_bytes.clone())
+        .with_context(|| format!("Failed to build WadStack: {}", args.wad.display()))?;
+
     let wad = WadFile::parse(wad_bytes)
         .with_context(|| format!("Failed to parse WAD: {}", args.wad.display()))?;
 
@@ -1686,7 +1734,7 @@ fn main() -> Result<()> {
         pain_sfx_id,
         sfx_lookup,
     );
-    app.attach_wad_for_transitions(wad, skill);
+    app.attach_wad_for_transitions(wad, skill, wad_stack);
 
     // Headless capture mode: tick N frames, render, save BMP, exit.
     if let Some(ref capture_path) = args.capture {
@@ -2796,6 +2844,7 @@ mod tests {
         game.attach_wad_for_transitions(
             build_minimal_wad_for_maps(&["E1M1", "E1M2"]),
             Skill::Medium,
+            WadStack::new(),
         );
         game.gs
             .mobjslab
@@ -2883,6 +2932,7 @@ mod tests {
         game.attach_wad_for_transitions(
             build_minimal_wad_for_maps(&["E1M1", "E1M2"]),
             Skill::Medium,
+            WadStack::new(),
         );
         game.gs
             .mobjslab
@@ -2920,6 +2970,7 @@ mod tests {
         game.attach_wad_for_transitions(
             build_minimal_wad_for_maps(&["MAP01", "MAP02"]),
             Skill::Medium,
+            WadStack::new(),
         );
         game.gs
             .mobjslab
