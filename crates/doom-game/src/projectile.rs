@@ -315,15 +315,14 @@ pub fn p_move_projectiles(gs: &mut GameState, level: Option<&Level>) {
         }
 
         // --- Actor collision (O(n^2) distance check) ---
-        let targets: Vec<MobjHandle> = gs.mobjslab.iter_handles().collect();
         let mut hit_target: Option<MobjHandle> = None;
 
-        for target_h in &targets {
+        for target_h in gs.mobjslab.iter_handles() {
             // Skip self and the source actor.
-            if *target_h == missile_handle || *target_h == m_source {
+            if target_h == missile_handle || target_h == m_source {
                 continue;
             }
-            let (tx, ty, t_radius, t_alive, t_shootable) = match gs.mobjslab.get(*target_h) {
+            let (tx, ty, t_radius, t_alive, t_shootable) = match gs.mobjslab.get(target_h) {
                 Some(t) => (
                     t.x,
                     t.y,
@@ -342,7 +341,7 @@ pub fn p_move_projectiles(gs: &mut GameState, level: Option<&Level>) {
             let dx = (new_x - tx).abs();
             let dy = (new_y - ty).abs();
             if dx < combined_radius && dy < combined_radius {
-                hit_target = Some(*target_h);
+                hit_target = Some(target_h);
                 break;
             }
         }

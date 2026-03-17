@@ -602,6 +602,7 @@ pub fn draw_line_fb(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, co
 
 // Backward-compat alias used in old tests.
 #[cfg(test)]
+#[allow(dead_code)]
 fn draw_line(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: u8) {
     draw_line_fb(fb, x0, y0, x1, y1, color);
 }
@@ -631,6 +632,7 @@ pub fn map_to_screen(
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use super::*;
     use doom_game::AutomapState;
@@ -646,6 +648,7 @@ mod tests {
 
     /// Build a `Level` with caller-supplied vertexes, linedefs, sidedefs, and
     /// sectors.  Provides sensible defaults for BSP data.
+    #[allow(dead_code)]
     fn make_level_full(
         vertexes: Vec<VxRaw>,
         linedefs: Vec<LdRaw>,
@@ -655,6 +658,7 @@ mod tests {
         make_level_full_with_things(vertexes, linedefs, sidedefs, sectors, vec![])
     }
 
+    #[allow(dead_code)]
     fn make_level_full_with_things(
         vertexes: Vec<VxRaw>,
         linedefs: Vec<LdRaw>,
@@ -713,11 +717,13 @@ mod tests {
     }
 
     /// Build a simple level with only vertexes and linedefs (no sidedefs/sectors).
+    #[allow(dead_code)]
     fn make_level(vertexes: Vec<VxRaw>, linedefs: Vec<LdRaw>) -> Level {
         make_level_full(vertexes, linedefs, vec![], vec![])
     }
 
     /// Helper to create a sidedef pointing at a given sector.
+    #[allow(dead_code)]
     fn make_sidedef(sector: u16) -> SdRaw {
         SdRaw {
             x_offset: 0,
@@ -729,6 +735,7 @@ mod tests {
         }
     }
 
+    #[allow(dead_code)]
     fn make_thing(x: i16, y: i16, kind: u16) -> ThingRaw {
         ThingRaw {
             x,
@@ -1239,6 +1246,7 @@ mod tests {
 
     // Backward-compat alias used in old tests.
     #[cfg(test)]
+    #[allow(dead_code)]
     fn draw_line(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: u8) {
         draw_line_fb(fb, x0, y0, x1, y1, color);
     }
@@ -1268,6 +1276,7 @@ mod tests {
     // ---------------------------------------------------------------------------
 
     #[cfg(test)]
+    #[allow(clippy::module_inception)]
     mod tests {
         use super::*;
         use doom_game::AutomapState;
@@ -1283,6 +1292,7 @@ mod tests {
 
         /// Build a `Level` with caller-supplied vertexes, linedefs, sidedefs, and
         /// sectors.  Provides sensible defaults for BSP data.
+        #[allow(dead_code)]
         fn make_level_full(
             vertexes: Vec<VxRaw>,
             linedefs: Vec<LdRaw>,
@@ -1292,6 +1302,7 @@ mod tests {
             make_level_full_with_things(vertexes, linedefs, sidedefs, sectors, vec![])
         }
 
+        #[allow(dead_code)]
         fn make_level_full_with_things(
             vertexes: Vec<VxRaw>,
             linedefs: Vec<LdRaw>,
@@ -1351,11 +1362,13 @@ mod tests {
         }
 
         /// Build a simple level with only vertexes and linedefs (no sidedefs/sectors).
+        #[allow(dead_code)]
         fn make_level(vertexes: Vec<VxRaw>, linedefs: Vec<LdRaw>) -> Level {
             make_level_full(vertexes, linedefs, vec![], vec![])
         }
 
         /// Helper to create a sidedef pointing at a given sector.
+        #[allow(dead_code)]
         fn make_sidedef(sector: u16) -> SdRaw {
             SdRaw {
                 x_offset: 0,
@@ -1367,6 +1380,7 @@ mod tests {
             }
         }
 
+        #[allow(dead_code)]
         fn make_thing(x: i16, y: i16, kind: u16) -> ThingRaw {
             ThingRaw {
                 x,
