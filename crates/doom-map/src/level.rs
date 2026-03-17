@@ -1,7 +1,8 @@
 //! The `Level` struct: a fully parsed and validated Doom map.
 //!
-//! Loaded from a `WadFile` by name (e.g. "E1M1") using the 10-lump
-//! standard format.  UDMF support lives in `udmf.rs`.
+//! Loaded from a `WadFile` by name (e.g. "E1M1" or "MAP01") using either the
+//! classic 10-lump binary format or Doom-namespace UDMF `TEXTMAP` plus
+//! auxiliary BSP/collision lumps.
 //!
 //! # Validation performed at load time
 //! All Verus-targeted invariants are runtime-checked here:
@@ -23,7 +24,8 @@ use crate::lumps::{
     Blockmap, Linedef, LumpParseError, Node, Reject, SIDEDEF_NONE, Sector, Seg, Sidedef, Ssector,
     Thing, Vertex,
 };
-use doom_wad::WadFile;
+use crate::udmf::{UdmfError, UdmfMap};
+use doom_wad::{MapLumpGroup, WadFile, WadStack};
 use thiserror::Error;
 
 /// Errors from level loading.
@@ -44,6 +46,18 @@ pub enum LevelError {
     /// BSP structural validation failed.
     #[error("map '{map}': BSP validation failed: {source}")]
     BspInvalid { map: String, source: BspError },
+
+    /// UDMF parsing or conversion failed.
+    #[error("map '{map}': UDMF error: {source}")]
+    Udmf { map: String, source: UdmfError },
+
+    /// The UDMF namespace requires features this engine does not support yet.
+    #[error("map '{map}': unsupported UDMF namespace '{namespace}': {detail}")]
+    UnsupportedUdmfNamespace {
+        map: String,
+        namespace: String,
+        detail: String,
+    },
 
     /// A linedef references a vertex index that's out of range.
     #[error("map '{map}': linedef {idx} references vertex {v} >= N_VERTEXES ({n})")]
@@ -119,63 +133,209 @@ impl Level {
             .map_lump_group(map_name)
             .ok_or_else(|| LevelError::NotFound(map_name.to_owned()))?;
 
+        Self::from_group(wad, group, map_name)
+    }
+
+    /// Load and validate a level from a stacked IWAD/PWAD view.
+    ///
+    /// # Errors
+    /// Returns `LevelError` for any structural or bounds violation.
+    pub fn from_wad_stack(wad_stack: &WadStack, map_name: &str) -> Result<Self, LevelError> {
+        let (wad, group) = wad_stack
+            .find_map_lump_group(map_name)
+            .ok_or_else(|| LevelError::NotFound(map_name.to_owned()))?;
+
+        Self::from_group(wad, group, map_name)
+    }
+
+    fn from_group(
+        wad: &WadFile,
+        group: MapLumpGroup<'_>,
+        map_name: &str,
+    ) -> Result<Self, LevelError> {
         let name = map_name.to_uppercase();
 
-        macro_rules! lump_data {
-            ($i:expr, $lump_name:literal) => {
-                wad.lump_data(group.lumps[$i])
-            };
-        }
+        match group {
+            MapLumpGroup::Classic(group) => {
+                let things = Thing::parse_lump(wad.lump_data(group.lumps[0])).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let linedefs = Linedef::parse_lump(wad.lump_data(group.lumps[1])).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let sidedefs = Sidedef::parse_lump(wad.lump_data(group.lumps[2])).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let vertexes = Vertex::parse_lump(wad.lump_data(group.lumps[3])).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let segs = Seg::parse_lump(wad.lump_data(group.lumps[4])).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let ssectors = Ssector::parse_lump(wad.lump_data(group.lumps[5])).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let nodes = Node::parse_lump(wad.lump_data(group.lumps[6])).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let sectors = Sector::parse_lump(wad.lump_data(group.lumps[7])).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let reject = Reject::parse_lump(wad.lump_data(group.lumps[8]), sectors.len())
+                    .map_err(|e| LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    })?;
+                let blockmap =
+                    Blockmap::parse_lump(wad.lump_data(group.lumps[9])).map_err(|e| {
+                        LevelError::ParseError {
+                            map: name.clone(),
+                            source: e,
+                        }
+                    })?;
 
-        macro_rules! parse {
-            ($i:expr, $lump_name:literal, $parse_fn:expr) => {
-                $parse_fn(lump_data!($i, $lump_name)).map_err(|e| LevelError::ParseError {
+                Self::build_validated(
+                    map_name, name, things, linedefs, sidedefs, vertexes, segs, ssectors, nodes,
+                    sectors, reject, blockmap,
+                )
+            }
+            MapLumpGroup::Udmf(group) => {
+                let udmf =
+                    UdmfMap::parse(wad.lump_data(group.textmap)).map_err(|e| LevelError::Udmf {
+                        map: name.clone(),
+                        source: e,
+                    })?;
+                if udmf.namespace != "doom" {
+                    return Err(LevelError::UnsupportedUdmfNamespace {
+                        map: name.clone(),
+                        namespace: udmf.namespace.clone(),
+                        detail: unsupported_udmf_namespace_detail(&group),
+                    });
+                }
+                let geometry = udmf.into_level_data().map_err(|e| LevelError::Udmf {
                     map: name.clone(),
                     source: e,
-                })?
-            };
+                })?;
+
+                let seg_lump = group.find_lump("SEGS").ok_or(LevelError::MissingLump {
+                    map: name.clone(),
+                    lump: "SEGS",
+                })?;
+                let ssector_lump = group.find_lump("SSECTORS").ok_or(LevelError::MissingLump {
+                    map: name.clone(),
+                    lump: "SSECTORS",
+                })?;
+                let node_lump = group.find_lump("NODES").ok_or(LevelError::MissingLump {
+                    map: name.clone(),
+                    lump: "NODES",
+                })?;
+                let reject_lump = group.find_lump("REJECT").ok_or(LevelError::MissingLump {
+                    map: name.clone(),
+                    lump: "REJECT",
+                })?;
+                let blockmap_lump = group.find_lump("BLOCKMAP").ok_or(LevelError::MissingLump {
+                    map: name.clone(),
+                    lump: "BLOCKMAP",
+                })?;
+
+                let segs = Seg::parse_lump(wad.lump_data(seg_lump)).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let ssectors = Ssector::parse_lump(wad.lump_data(ssector_lump)).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let nodes = Node::parse_lump(wad.lump_data(node_lump)).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+                let reject = Reject::parse_lump(wad.lump_data(reject_lump), geometry.sectors.len())
+                    .map_err(|e| LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    })?;
+                let blockmap = Blockmap::parse_lump(wad.lump_data(blockmap_lump)).map_err(|e| {
+                    LevelError::ParseError {
+                        map: name.clone(),
+                        source: e,
+                    }
+                })?;
+
+                Self::build_validated(
+                    map_name,
+                    name,
+                    geometry.things,
+                    geometry.linedefs,
+                    geometry.sidedefs,
+                    geometry.vertexes,
+                    segs,
+                    ssectors,
+                    nodes,
+                    geometry.sectors,
+                    reject,
+                    blockmap,
+                )
+            }
         }
+    }
 
-        // Parse all 10 lumps in spec order.
-        // REQUIRED_MAP_LUMPS: THINGS LINEDEFS SIDEDEFS VERTEXES SEGS SSECTORS NODES SECTORS REJECT BLOCKMAP
-        let things = parse!(0, "THINGS", Thing::parse_lump);
-        let linedefs = parse!(1, "LINEDEFS", Linedef::parse_lump);
-        let sidedefs = parse!(2, "SIDEDEFS", Sidedef::parse_lump);
-        let vertexes = parse!(3, "VERTEXES", Vertex::parse_lump);
-        let segs = parse!(4, "SEGS", Seg::parse_lump);
-        let ssectors = parse!(5, "SSECTORS", Ssector::parse_lump);
-        let nodes = parse!(6, "NODES", Node::parse_lump);
-        let sectors = parse!(7, "SECTORS", Sector::parse_lump);
-
-        let reject = Reject::parse_lump(lump_data!(8, "REJECT"), sectors.len()).map_err(|e| {
-            LevelError::ParseError {
-                map: name.clone(),
-                source: e,
-            }
-        })?;
-
-        let blockmap = Blockmap::parse_lump(lump_data!(9, "BLOCKMAP")).map_err(|e| {
-            LevelError::ParseError {
-                map: name.clone(),
-                source: e,
-            }
-        })?;
-
-        // -- Structural validation ------------------------------------------
-
-        // BSP invariants (crown jewel: N_SSECTORS == N_NODES + 1)
+    #[allow(clippy::too_many_arguments)]
+    fn build_validated(
+        map_name: &str,
+        name: String,
+        things: Vec<Thing>,
+        linedefs: Vec<Linedef>,
+        sidedefs: Vec<Sidedef>,
+        vertexes: Vec<Vertex>,
+        segs: Vec<Seg>,
+        ssectors: Vec<Ssector>,
+        nodes: Vec<Node>,
+        sectors: Vec<Sector>,
+        reject: Reject,
+        blockmap: Blockmap,
+    ) -> Result<Self, LevelError> {
         BspTree::validate(&nodes, &ssectors, segs.len()).map_err(|e| LevelError::BspInvalid {
             map: name.clone(),
             source: e,
         })?;
 
-        // Linedef vertex refs in bounds.
         let n_verts = vertexes.len();
         for (i, ld) in linedefs.iter().enumerate() {
             for v in [ld.from_vertex as usize, ld.to_vertex as usize] {
                 if v >= n_verts {
                     return Err(LevelError::LindefVertexOutOfBounds {
-                        map: name,
+                        map: name.clone(),
                         idx: i,
                         v,
                         n: n_verts,
@@ -184,19 +344,20 @@ impl Level {
             }
         }
 
-        // Two-sided ↔ both sidedefs valid.
         for (i, ld) in linedefs.iter().enumerate() {
             if ld.is_two_sided() && ld.left_sidedef == SIDEDEF_NONE {
-                return Err(LevelError::TwoSidedMissingLeft { map: name, idx: i });
+                return Err(LevelError::TwoSidedMissingLeft {
+                    map: name.clone(),
+                    idx: i,
+                });
             }
         }
 
-        // Sidedef sector refs in bounds.
         let n_sectors = sectors.len();
         for (i, sd) in sidedefs.iter().enumerate() {
             if sd.sector as usize >= n_sectors {
                 return Err(LevelError::SidedefSectorOutOfBounds {
-                    map: name,
+                    map: name.clone(),
                     idx: i,
                     s: sd.sector as usize,
                     n: n_sectors,
@@ -273,6 +434,25 @@ impl Level {
             self.nodes.len(),
             bsp.max_depth(),
         );
+    }
+}
+
+fn unsupported_udmf_namespace_detail(group: &doom_wad::UdmfMapLumpGroup<'_>) -> String {
+    let mut markers = Vec::new();
+    for lump_name in ["ZNODES", "BEHAVIOR", "SCRIPTS"] {
+        if group.find_lump(lump_name).is_some() {
+            markers.push(lump_name);
+        }
+    }
+
+    if markers.is_empty() {
+        "only Doom-namespace UDMF with classic SEGS/SSECTORS/NODES/REJECT/BLOCKMAP is currently supported"
+            .to_string()
+    } else {
+        format!(
+            "found {}; this map targets GZDoom/ZDoom features beyond the currently supported Doom-namespace UDMF + classic SEGS/SSECTORS/NODES/REJECT/BLOCKMAP subset",
+            markers.join(", ")
+        )
     }
 }
 
@@ -414,6 +594,239 @@ mod tests {
 
         let _ = REQUIRED_MAP_LUMPS; // ensure import used
         let _ = WadKind::Iwad;
+        data
+    }
+
+    fn build_minimal_udmf_wad_bytes() -> Vec<u8> {
+        let marker_name = b"MAP01\0\0\0";
+        let textmap = br#"
+namespace = "doom";
+
+vertex { x = 0; y = 0; }
+vertex { x = 64; y = 0; }
+vertex { x = 64; y = 64; }
+vertex { x = 0; y = 64; }
+
+sector {
+    heightfloor = 0;
+    heightceiling = 128;
+    texturefloor = "FLAT1";
+    textureceiling = "FLAT2";
+    lightlevel = 192;
+    special = 0;
+    id = 0;
+}
+
+sidedef { sector = 0; texturemiddle = "WALL1"; offsetx = 0; offsety = 0; }
+sidedef { sector = 0; texturemiddle = "WALL1"; offsetx = 0; offsety = 0; }
+sidedef { sector = 0; texturemiddle = "WALL1"; offsetx = 0; offsety = 0; }
+sidedef { sector = 0; texturemiddle = "WALL1"; offsetx = 0; offsety = 0; }
+
+linedef { v1 = 0; v2 = 1; sidefront = 0; special = 0; arg0 = 0; }
+linedef { v1 = 1; v2 = 2; sidefront = 1; special = 0; arg0 = 0; }
+linedef { v1 = 2; v2 = 3; sidefront = 2; special = 0; arg0 = 0; }
+linedef { v1 = 3; v2 = 0; sidefront = 3; special = 0; arg0 = 0; }
+
+thing {
+    x = 0;
+    y = 0;
+    angle = 0;
+    type = 1;
+    skill1 = true;
+    skill2 = true;
+    skill3 = true;
+    skill4 = true;
+    skill5 = true;
+    ambush = false;
+    single = true;
+    coop = true;
+    dm = true;
+}
+"#;
+
+        let mut sector_data = vec![0u8; 26];
+        sector_data[0..2].copy_from_slice(&0i16.to_le_bytes());
+        sector_data[2..4].copy_from_slice(&128i16.to_le_bytes());
+        sector_data[4..12].copy_from_slice(b"FLAT1\0\0\0");
+        sector_data[12..20].copy_from_slice(b"FLAT2\0\0\0");
+        sector_data[20..22].copy_from_slice(&192i16.to_le_bytes());
+        sector_data[22..24].copy_from_slice(&0u16.to_le_bytes());
+        sector_data[24..26].copy_from_slice(&0u16.to_le_bytes());
+
+        let mut seg_data = vec![0u8; 12];
+        seg_data[0..2].copy_from_slice(&0u16.to_le_bytes());
+        seg_data[2..4].copy_from_slice(&1u16.to_le_bytes());
+        seg_data[4..6].copy_from_slice(&0u16.to_le_bytes());
+        seg_data[6..8].copy_from_slice(&0u16.to_le_bytes());
+        seg_data[8..10].copy_from_slice(&0u16.to_le_bytes());
+        seg_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+
+        let mut ss_data = vec![0u8; 4];
+        ss_data[0..2].copy_from_slice(&1u16.to_le_bytes());
+        ss_data[2..4].copy_from_slice(&0u16.to_le_bytes());
+
+        let node_data: Vec<u8> = vec![];
+        let reject_data = vec![0u8; 1];
+
+        let mut bm_data = vec![0u8; 8 + 2 + 4];
+        bm_data[0..2].copy_from_slice(&0i16.to_le_bytes());
+        bm_data[2..4].copy_from_slice(&0i16.to_le_bytes());
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+
+        let lump_payloads: &[(&[u8; 8], &[u8])] = &[
+            (marker_name, &[]),
+            (b"TEXTMAP\0", textmap),
+            (b"SEGS\0\0\0\0", &seg_data),
+            (b"SSECTORS", &ss_data),
+            (b"NODES\0\0\0", &node_data),
+            (b"SECTORS\0", &sector_data),
+            (b"REJECT\0\0", &reject_data),
+            (b"BLOCKMAP", &bm_data),
+            (b"ENDMAP\0\0", &[]),
+        ];
+
+        let mut data: Vec<u8> = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
+        data.extend_from_slice(&0i32.to_le_bytes());
+
+        let mut offsets: Vec<(usize, usize)> = Vec::new();
+        for (_, payload) in lump_payloads {
+            let pos = data.len();
+            data.extend_from_slice(payload);
+            offsets.push((pos, payload.len()));
+        }
+
+        let dir_offset = data.len() as i32;
+        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+        for (i, (name_bytes, _)) in lump_payloads.iter().enumerate() {
+            let (filepos, size) = offsets[i];
+            data.extend_from_slice(&(filepos as i32).to_le_bytes());
+            data.extend_from_slice(&(size as i32).to_le_bytes());
+            data.extend_from_slice(*name_bytes);
+        }
+
+        data
+    }
+
+    fn build_udmf_wad_missing_blockmap_bytes() -> Vec<u8> {
+        let marker_name = b"MAP01\0\0\0";
+        let textmap = br#"
+namespace = "doom";
+vertex { x = 0; y = 0; }
+sector {
+    heightfloor = 0;
+    heightceiling = 128;
+    texturefloor = "FLAT1";
+    textureceiling = "FLAT2";
+    lightlevel = 192;
+}
+sidedef { sector = 0; texturemiddle = "WALL1"; }
+linedef { v1 = 0; v2 = 0; sidefront = 0; }
+"#;
+
+        let mut seg_data = vec![0u8; 12];
+        seg_data[0..2].copy_from_slice(&0u16.to_le_bytes());
+        seg_data[2..4].copy_from_slice(&0u16.to_le_bytes());
+
+        let mut ss_data = vec![0u8; 4];
+        ss_data[0..2].copy_from_slice(&1u16.to_le_bytes());
+        ss_data[2..4].copy_from_slice(&0u16.to_le_bytes());
+
+        let node_data: Vec<u8> = vec![];
+        let reject_data = vec![0u8; 1];
+
+        let lump_payloads: &[(&[u8; 8], &[u8])] = &[
+            (marker_name, &[]),
+            (b"TEXTMAP\0", textmap),
+            (b"SEGS\0\0\0\0", &seg_data),
+            (b"SSECTORS", &ss_data),
+            (b"NODES\0\0\0", &node_data),
+            (b"REJECT\0\0", &reject_data),
+            (b"ENDMAP\0\0", &[]),
+        ];
+
+        let mut data = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
+        data.extend_from_slice(&0i32.to_le_bytes());
+
+        let mut offsets = Vec::new();
+        for (_, payload) in lump_payloads {
+            let pos = data.len();
+            data.extend_from_slice(payload);
+            offsets.push((pos, payload.len()));
+        }
+
+        let dir_offset = data.len() as i32;
+        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+        for (i, (name_bytes, _)) in lump_payloads.iter().enumerate() {
+            let (filepos, size) = offsets[i];
+            data.extend_from_slice(&(filepos as i32).to_le_bytes());
+            data.extend_from_slice(&(size as i32).to_le_bytes());
+            data.extend_from_slice(*name_bytes);
+        }
+
+        data
+    }
+
+    fn build_zdoom_targeted_udmf_wad_bytes() -> Vec<u8> {
+        let marker_name = b"MAP01\0\0\0";
+        let textmap = br#"
+namespace = "zdoom";
+
+vertex { x = 0; y = 0; }
+vertex { x = 64; y = 0; }
+vertex { x = 64; y = 64; }
+vertex { x = 0; y = 64; }
+
+sector {
+    heightfloor = 0;
+    heightceiling = 128;
+    texturefloor = "FLAT1";
+    textureceiling = "FLAT2";
+    lightlevel = 192;
+}
+
+sidedef { sector = 0; texturemiddle = "WALL1"; }
+linedef { v1 = 0; v2 = 1; sidefront = 0; special = 80; arg0 = 1; }
+thing { x = 0; y = 0; angle = 0; type = 1; special = 80; arg0str = "lift_down"; }
+"#;
+
+        let lump_payloads: &[(&[u8; 8], &[u8])] = &[
+            (marker_name, &[]),
+            (b"TEXTMAP\0", textmap),
+            (b"BEHAVIOR", b"acs bytecode"),
+            (b"ZNODES\0\0", b"XGL3placeholder"),
+            (b"SCRIPTS\0", b"script 1 (void) {}"),
+            (b"ENDMAP\0\0", &[]),
+        ];
+
+        let mut data = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
+        data.extend_from_slice(&0i32.to_le_bytes());
+
+        let mut offsets: Vec<(usize, usize)> = Vec::new();
+        for (_, payload) in lump_payloads {
+            let pos = data.len();
+            data.extend_from_slice(payload);
+            offsets.push((pos, payload.len()));
+        }
+
+        let dir_offset = data.len() as i32;
+        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+        for (i, (name_bytes, _)) in lump_payloads.iter().enumerate() {
+            let (filepos, size) = offsets[i];
+            data.extend_from_slice(&(filepos as i32).to_le_bytes());
+            data.extend_from_slice(&(size as i32).to_le_bytes());
+            data.extend_from_slice(*name_bytes);
+        }
+
         data
     }
 
@@ -586,5 +999,54 @@ mod tests {
 
         assert_eq!(level.sector_index_at(10, 10), Some(0));
         assert_eq!(level.floor_at(10, 10), Some(0));
+    }
+
+    #[test]
+    fn load_minimal_udmf_level() {
+        let wad_bytes = build_minimal_udmf_wad_bytes();
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("WAD parse failed");
+        let level = Level::from_wad(&wad, "MAP01").expect("UDMF level load failed");
+
+        assert_eq!(level.name, "MAP01");
+        assert_eq!(level.sectors.len(), 1);
+        assert_eq!(level.vertexes.len(), 4);
+        assert_eq!(level.linedefs.len(), 4);
+        assert_eq!(level.sidedefs.len(), 4);
+        assert_eq!(level.things.len(), 1);
+        assert_eq!(level.segs.len(), 1);
+        assert_eq!(level.ssectors.len(), 1);
+        assert_eq!(level.nodes.len(), 0);
+    }
+
+    #[test]
+    fn udmf_missing_blockmap_lump_errors() {
+        let wad_bytes = build_udmf_wad_missing_blockmap_bytes();
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("WAD parse failed");
+
+        assert!(matches!(
+            Level::from_wad(&wad, "MAP01"),
+            Err(LevelError::MissingLump {
+                lump: "BLOCKMAP",
+                ..
+            })
+        ));
+    }
+
+    #[test]
+    fn zdoom_targeted_udmf_reports_gzdoom_specific_requirements() {
+        let wad_bytes = build_zdoom_targeted_udmf_wad_bytes();
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("WAD parse failed");
+
+        assert!(matches!(
+            Level::from_wad(&wad, "MAP01"),
+            Err(LevelError::UnsupportedUdmfNamespace {
+                namespace,
+                detail,
+                ..
+            }) if namespace == "zdoom"
+                && detail.contains("ZNODES")
+                && detail.contains("BEHAVIOR")
+                && detail.contains("SCRIPTS")
+        ));
     }
 }

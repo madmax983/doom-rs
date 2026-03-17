@@ -10,7 +10,7 @@
 //! ```
 
 use doom_types::limits::FLAT_SIZE;
-use doom_wad::WadFile;
+use doom_wad::{LumpDef, WadFile, WadStack};
 use std::collections::HashMap;
 
 /// Cache of 64×64 flat textures loaded from a WAD file.
@@ -34,24 +34,61 @@ impl FlatCache {
         let mut flats: HashMap<String, Box<[u8; FLAT_SIZE]>> = HashMap::new();
 
         for lump in wad.lumps_between("F_START", "F_END") {
-            // Skip marker lumps and any lump that is not exactly 4096 bytes.
-            if lump.size != FLAT_SIZE {
-                continue;
-            }
-
-            let name = lump.name.as_str().to_uppercase();
-            let data = wad.lump_data(lump);
-
-            // Exactly FLAT_SIZE bytes — copy into a boxed fixed-size array.
-            let mut texels = Box::new([0u8; FLAT_SIZE]);
-            texels.copy_from_slice(data);
-            flats.insert(name, texels);
+            Self::insert_flat(&mut flats, wad, lump);
         }
 
         Self {
             flats,
             default_flat: Box::new([0u8; FLAT_SIZE]),
         }
+    }
+
+    /// Load all flat textures from a WAD stack using last-loaded override semantics.
+    pub fn load_from_stack(wad_stack: &WadStack) -> Self {
+        let mut flats: HashMap<String, Box<[u8; FLAT_SIZE]>> = HashMap::new();
+        let mut in_flat_section = false;
+
+        for (wad, lump) in wad_stack.all_lumps() {
+            match lump.name.as_str() {
+                "F_START" | "FF_START" => {
+                    in_flat_section = true;
+                    continue;
+                }
+                "F_END" | "FF_END" => {
+                    in_flat_section = false;
+                    continue;
+                }
+                _ => {}
+            }
+
+            if !in_flat_section {
+                continue;
+            }
+
+            Self::insert_flat(&mut flats, wad, lump);
+        }
+
+        Self {
+            flats,
+            default_flat: Box::new([0u8; FLAT_SIZE]),
+        }
+    }
+
+    fn insert_flat(
+        flats: &mut HashMap<String, Box<[u8; FLAT_SIZE]>>,
+        wad: &WadFile,
+        lump: &LumpDef,
+    ) {
+        if lump.size != FLAT_SIZE {
+            return;
+        }
+
+        let name = lump.name.as_str().to_uppercase();
+        let data = wad.lump_data(lump);
+
+        let mut texels = Box::new([0u8; FLAT_SIZE]);
+        texels.copy_from_slice(data);
+        flats.insert(name, texels);
     }
 
     /// Get the flat texture data for a given 8-byte lump name.
@@ -97,10 +134,9 @@ impl core::fmt::Debug for FlatCache {
 mod tests {
     use super::*;
 
-    /// Build a minimal IWAD in memory with the given lumps.
-    fn make_iwad(lumps: &[(&str, &[u8])]) -> Vec<u8> {
+    fn make_wad(kind: &[u8; 4], lumps: &[(&str, &[u8])]) -> Vec<u8> {
         let mut data: Vec<u8> = Vec::new();
-        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(kind);
         data.extend_from_slice(&(lumps.len() as i32).to_le_bytes());
         data.extend_from_slice(&0i32.to_le_bytes()); // dir offset placeholder
 
@@ -126,6 +162,11 @@ mod tests {
         }
 
         data
+    }
+
+    /// Build a minimal IWAD in memory with the given lumps.
+    fn make_iwad(lumps: &[(&str, &[u8])]) -> Vec<u8> {
+        make_wad(b"IWAD", lumps)
     }
 
     /// A freshly constructed `FlatCache` with no WAD data has a 4096-byte
@@ -238,5 +279,29 @@ mod tests {
 
         assert_eq!(cache.len(), 1, "only one valid flat loaded");
         assert_eq!(cache.get(b"MYFLAT\0\0")[0], 7);
+    }
+
+    #[test]
+    fn test_flat_cache_stack_prefers_pwad_flat() {
+        let iwad_bytes = make_iwad(&[
+            ("F_START", b""),
+            ("NUKAGE1", &vec![1u8; FLAT_SIZE]),
+            ("F_END", b""),
+        ]);
+        let pwad_bytes = make_wad(
+            b"PWAD",
+            &[
+                ("F_START", b""),
+                ("NUKAGE1", &vec![9u8; FLAT_SIZE]),
+                ("F_END", b""),
+            ],
+        );
+
+        let mut stack = WadStack::new();
+        stack.push_iwad(iwad_bytes).expect("IWAD push must succeed");
+        stack.push_pwad(pwad_bytes).expect("PWAD push must succeed");
+
+        let cache = FlatCache::load_from_stack(&stack);
+        assert_eq!(cache.get(b"NUKAGE1\0")[0], 9);
     }
 }

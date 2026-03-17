@@ -36,12 +36,11 @@ impl WadStack {
     /// Push the IWAD.  Must be called exactly once before any `push_pwad()`.
     ///
     /// # Errors
-    /// `WadError::InvalidMagic` if the file is not an IWAD.
+    /// `WadError::ExpectedIwad` if the file is a PWAD.
     pub fn push_iwad(&mut self, data: Vec<u8>) -> Result<(), WadError> {
         let wad = WadFile::parse(data)?;
         if wad.kind() != WadKind::Iwad {
-            // Treat PWAD-as-first as an error: the user probably mixed up args.
-            return Err(WadError::InvalidMagic(*b"PWAD"));
+            return Err(WadError::ExpectedIwad);
         }
         self.wads.insert(0, wad);
         Ok(())
@@ -108,9 +107,19 @@ impl WadStack {
     ///
     /// Returns `None` if the map is not present in any loaded WAD.
     pub fn map_lump_group<'a>(&'a self, map_name: &str) -> Option<crate::wad::MapLumpGroup<'a>> {
+        self.find_map_lump_group(map_name).map(|(_, group)| group)
+    }
+
+    /// Find a map's lump group and the WAD that owns it, searching PWADs first.
+    ///
+    /// Returns `None` if the map is not present in any loaded WAD.
+    pub fn find_map_lump_group<'a>(
+        &'a self,
+        map_name: &str,
+    ) -> Option<(&'a WadFile, crate::wad::MapLumpGroup<'a>)> {
         for wad in self.wads.iter().rev() {
             if let Some(group) = wad.map_lump_group(map_name) {
-                return Some(group);
+                return Some((wad, group));
             }
         }
         None
@@ -200,7 +209,10 @@ mod tests {
         let pwad_bytes = make_wad(b"PWAD", &[("X", b"x")]);
         let mut stack = WadStack::new();
         // Passing a PWAD as IWAD must fail
-        assert!(stack.push_iwad(pwad_bytes).is_err());
+        assert!(matches!(
+            stack.push_iwad(pwad_bytes),
+            Err(WadError::ExpectedIwad)
+        ));
     }
 
     #[test]

@@ -25,7 +25,7 @@
 
 use std::collections::HashMap;
 
-use doom_wad::WadFile;
+use doom_wad::{LumpDef, WadFile, WadStack};
 
 use crate::colormap::ColormapCache;
 use crate::framebuffer::Framebuffer;
@@ -72,15 +72,35 @@ impl SpriteCache {
         let mut frames = HashMap::new();
 
         for lump in wad.lumps_between("S_START", "S_END") {
-            // Skip marker lumps (size == 0).
-            if lump.size == 0 {
+            Self::insert_frame(&mut frames, wad, lump);
+        }
+
+        Self { frames }
+    }
+
+    /// Load all sprite lumps between sprite markers from a WAD stack.
+    pub fn load_from_stack(wad_stack: &WadStack) -> Self {
+        let mut frames = HashMap::new();
+        let mut in_sprite_section = false;
+
+        for (wad, lump) in wad_stack.all_lumps() {
+            match lump.name.as_str() {
+                "S_START" | "SS_START" => {
+                    in_sprite_section = true;
+                    continue;
+                }
+                "S_END" | "SS_END" => {
+                    in_sprite_section = false;
+                    continue;
+                }
+                _ => {}
+            }
+
+            if !in_sprite_section {
                 continue;
             }
-            let data = wad.lump_data(lump);
-            if let Some(frame) = parse_picture(data) {
-                let name = lump.name.as_str().to_uppercase();
-                frames.insert(name, frame);
-            }
+
+            Self::insert_frame(&mut frames, wad, lump);
         }
 
         Self { frames }
@@ -118,6 +138,17 @@ impl SpriteCache {
     pub fn empty() -> Self {
         Self {
             frames: HashMap::new(),
+        }
+    }
+
+    fn insert_frame(frames: &mut HashMap<String, SpriteFrame>, wad: &WadFile, lump: &LumpDef) {
+        if lump.size == 0 {
+            return;
+        }
+        let data = wad.lump_data(lump);
+        if let Some(frame) = parse_picture(data) {
+            let name = lump.name.as_str().to_uppercase();
+            frames.insert(name, frame);
         }
     }
 }
