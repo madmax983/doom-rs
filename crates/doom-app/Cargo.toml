@@ -22,3 +22,10 @@ anyhow        = { workspace = true }
 tokio         = { workspace = true }
 bincode       = { workspace = true }
 thiserror     = { workspace = true }
+loom          = { version = "0.7", optional = true }
+
+[dev-dependencies]
+loom = "0.7"
+
+[features]
+loom = ["dep:loom", "doom-audio/loom"]

@@ -2259,6 +2259,7 @@ mod tests {
         path
     }
 
+    #[allow(dead_code)]
     fn music_library_for(
         level_name: &str,
         data: Vec<u8>,
@@ -2270,6 +2271,7 @@ mod tests {
         library
     }
 
+    #[allow(dead_code)]
     fn wait_for_music_requests(audio: &AudioSystem, expected: usize) {
         let deadline = std::time::Instant::now() + std::time::Duration::from_millis(100);
         while std::time::Instant::now() < deadline {
@@ -2744,6 +2746,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn game_without_title_starts_level_music_immediately() {
         let audio = AudioSystem::try_open_null().expect("null audio must succeed");
         let game = DoomGame::new(
@@ -2767,6 +2770,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn starting_game_from_title_starts_level_music() {
         let audio = AudioSystem::try_open_null().expect("null audio must succeed");
         let mut game = DoomGame::new(
@@ -2802,6 +2806,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn start_level_music_resolves_from_current_level_name() {
         let audio = AudioSystem::try_open_null().expect("null audio must succeed");
         let mut music_library = music_library_for("E1M1", vec![1, 2, 3, 4]);
@@ -2887,6 +2892,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn level_exit_starts_intermission_music_then_next_level_music() {
         let audio = AudioSystem::try_open_null().expect("null audio must succeed");
         let mut music_library = music_library_for("E1M1", vec![1, 2, 3, 4]);
