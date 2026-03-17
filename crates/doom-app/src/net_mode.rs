@@ -12,6 +12,7 @@ use doom_game::TicCmd;
 use doom_net::{MAX_PLAYERS, NetClient, NetConfig, RelayServer, TicPacket};
 use doom_renderer::Framebuffer;
 use doom_tui::{DoomApp, TicInput};
+use std::time::{Duration, Instant};
 
 use crate::DoomGame;
 
@@ -70,6 +71,21 @@ pub(crate) fn wire_to_ticcmd(w: doom_net::TicCmd) -> TicCmd {
 ///
 /// No WAD file or game simulation is needed server-side.
 pub(crate) fn run_server(port: u16) -> Result<()> {
+    use crossterm::{
+        event::{self, Event, KeyCode, KeyModifiers},
+        execute,
+        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    };
+    use ratatui::{
+        Terminal,
+        backend::CrosstermBackend,
+        layout::{Constraint, Direction, Layout},
+        style::{Color, Modifier, Style},
+        text::Span,
+        widgets::{Block, Borders, Gauge, List, ListItem, Paragraph},
+    };
+    use std::io::stdout;
+
     let config = NetConfig {
         port,
         ..NetConfig::default()
@@ -77,36 +93,125 @@ pub(crate) fn run_server(port: u16) -> Result<()> {
     let mut server = RelayServer::new(config)
         .map_err(|e| anyhow::anyhow!("Failed to bind relay server on port {port}: {e}"))?;
 
-    eprintln!("doom-rs relay server listening on port {port}");
-    eprintln!("Press Ctrl+C to stop.");
+    enable_raw_mode()?;
+    let mut stdout_handle = stdout();
+    execute!(stdout_handle, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout_handle);
+    let mut terminal = Terminal::new(backend)?;
 
+    let mut logs: Vec<String> = vec![
+        format!("doom-rs relay server listening on port {port}"),
+        "Press 'q' or Ctrl+C to stop.".to_string(),
+    ];
     let mut prev_count = 0usize;
-    loop {
-        // Poll for one packet (handles join handshakes internally).
-        match server.poll_once() {
-            Ok(Some((packet, sender_slot))) => {
-                // Relay the packet to all other connected clients.
-                let _ = server.broadcast_packet(&packet, Some(sender_slot));
+    let mut last_draw = Instant::now();
+    let mut needs_draw = true;
+
+    let res = (|| -> Result<()> {
+        loop {
+            // Check for exit
+            if event::poll(Duration::from_millis(1))? {
+                if let Event::Key(key) = event::read()? {
+                    if key.code == KeyCode::Char('q')
+                        || (key.code == KeyCode::Char('c')
+                            && key.modifiers.contains(KeyModifiers::CONTROL))
+                    {
+                        break;
+                    }
+                }
             }
-            Ok(None) => {
-                // No data this iteration — yield to avoid busy-spinning.
-                std::thread::sleep(std::time::Duration::from_millis(1));
+
+            // Poll for one packet (handles join handshakes internally).
+            match server.poll_once() {
+                Ok(Some((packet, sender_slot))) => {
+                    // Relay the packet to all other connected clients.
+                    let _ = server.broadcast_packet(&packet, Some(sender_slot));
+                }
+                Ok(None) => {
+                    // No data this iteration — yield to avoid busy-spinning.
+                    // (The terminal poll already yielded, so no need for explicit sleep here)
+                }
+                Err(e) => {
+                    logs.push(format!("Server poll error: {e}"));
+                    if logs.len() > 100 {
+                        logs.remove(0);
+                    }
+                    needs_draw = true;
+                }
             }
-            Err(e) => {
-                eprintln!("Server poll error: {e}");
+
+            // Periodically check for stale connections.
+            server.check_timeouts();
+
+            // Log connection count changes.
+            let count = server.connected_count();
+            if count != prev_count {
+                logs.push(format!("Connected players: {count}"));
+                if logs.len() > 100 {
+                    logs.remove(0);
+                }
+                prev_count = count;
+                needs_draw = true;
+            }
+
+            // Limit draw rate to ~30 FPS (33ms) or state changes to avoid CPU spiking.
+            if needs_draw || last_draw.elapsed() >= Duration::from_millis(33) {
+                terminal.draw(|f| {
+                    let size = f.area();
+                    let chunks = Layout::default()
+                        .direction(Direction::Vertical)
+                        .margin(1)
+                        .constraints([
+                            Constraint::Length(3),
+                            Constraint::Length(3),
+                            Constraint::Min(5),
+                        ])
+                        .split(size);
+
+                    let header = Paragraph::new(Span::styled(
+                        format!("doom-rs Relay Server - Port {}", port),
+                        Style::default()
+                            .fg(Color::Green)
+                            .add_modifier(Modifier::BOLD),
+                    ))
+                    .block(Block::default().borders(Borders::ALL));
+                    f.render_widget(header, chunks[0]);
+
+                    let ratio = count as f64 / MAX_PLAYERS as f64;
+                    let gauge = Gauge::default()
+                        .block(
+                            Block::default()
+                                .title("Connected Players")
+                                .borders(Borders::ALL),
+                        )
+                        .gauge_style(Style::default().fg(Color::Yellow))
+                        .ratio(ratio.clamp(0.0, 1.0))
+                        .label(format!("{} / {}", count, MAX_PLAYERS));
+                    f.render_widget(gauge, chunks[1]);
+
+                    let items: Vec<ListItem> = logs
+                        .iter()
+                        .rev()
+                        .map(|msg| ListItem::new(Span::raw(msg)))
+                        .collect();
+                    let list = List::new(items).block(
+                        Block::default()
+                            .title("Recent Events")
+                            .borders(Borders::ALL),
+                    );
+                    f.render_widget(list, chunks[2]);
+                })?;
+                needs_draw = false;
+                last_draw = Instant::now();
             }
         }
+        Ok(())
+    })();
 
-        // Periodically check for stale connections.
-        server.check_timeouts();
-
-        // Log connection count changes.
-        let count = server.connected_count();
-        if count != prev_count {
-            eprintln!("Connected players: {count}");
-            prev_count = count;
-        }
-    }
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+    res
 }
 
 // ---------------------------------------------------------------------------
