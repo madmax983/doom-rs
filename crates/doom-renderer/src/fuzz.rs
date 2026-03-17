@@ -49,7 +49,7 @@ const FUZZ_DARK_COLORMAP: u8 = 6;
 /// - `y_bot`     — bottom of the fuzz column (inclusive, clamped internally).
 /// - `fuzz_pos`  — mutable cursor into `FUZZ_TABLE`; wraps automatically.
 /// - `colormap`  — optional colormap cache for looking up darkening map.
-///                  When `None`, a simple fallback darkening is applied.
+///   When `None`, a simple fallback darkening is applied.
 pub fn draw_fuzz_column(
     fb: &mut Framebuffer,
     x: usize,

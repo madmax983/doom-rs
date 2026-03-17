@@ -557,17 +557,17 @@ fn thing_sprite(kind: u16) -> Option<[u8; 8]> {
 /// - `fb`           — framebuffer to draw into.
 /// - `cache`        — sprite frame cache (loaded from S_START..S_END).
 /// - `z_buffer`     — optional per-column depth buffer from `render_level`.
-///                     When provided, sprite columns whose depth exceeds
-///                     the wall depth at that screen column are clipped
-///                     (not drawn).  Pass `None` to disable wall clipping
-///                     (backward-compatible behaviour).
+///   When provided, sprite columns whose depth exceeds
+///   the wall depth at that screen column are clipped
+///   (not drawn). Pass `None` to disable wall clipping
+///   (backward-compatible behaviour).
 /// - `colormap`     — optional colormap cache for distance-attenuated lighting.
-///                     When provided, each sprite column is shaded based on
-///                     the thing's sector light level and distance from the
-///                     player.  Fullbright things (projectiles, lamps) and
-///                     fuzz-effect things (spectres) are handled specially.
-///                     Pass `None` to render all sprites at full brightness
-///                     (backward-compatible behaviour).
+///   When provided, each sprite column is shaded based on
+///   the thing's sector light level and distance from the
+///   player. Fullbright things (projectiles, lamps) and
+///   fuzz-effect things (spectres) are handled specially.
+///   Pass `None` to render all sprites at full brightness
+///   (backward-compatible behaviour).
 ///
 /// # Projection model
 /// View space is computed with a standard rotation: `vx` is depth (forward
@@ -607,6 +607,7 @@ pub fn render_actors_ex(
     );
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_actors_with_masked_ex(
     actors: &[crate::sprite_lookup::ActorRenderInfo],
     level: &doom_map::Level,
@@ -2883,11 +2884,11 @@ mod tests {
 
         let mut fb = Framebuffer::new();
         let mut zbuf = [0.0f32; SCREEN_W];
-        for x in 0..SCREEN_W {
+        for (x, depth) in zbuf.iter_mut().enumerate() {
             if x < SCREEN_W / 2 {
-                zbuf[x] = 50.0; // blocks sprite
+                *depth = 50.0; // blocks sprite
             } else {
-                zbuf[x] = 200.0; // sprite visible
+                *depth = 200.0; // sprite visible
             }
         }
 
@@ -3116,8 +3117,8 @@ mod tests {
         let mut zbuf = make_zbuf(f32::MAX);
 
         // Block only the narrow band around center.
-        for x in 155..165 {
-            zbuf[x] = 10.0; // nearer than sprite
+        for depth in zbuf.iter_mut().take(165).skip(155) {
+            *depth = 10.0; // nearer than sprite
         }
 
         render_things(

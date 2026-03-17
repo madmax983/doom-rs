@@ -428,11 +428,11 @@ mod prop_tests {
     use doom_types::limits::{MAX_AMMO, NUM_AMMO};
     use proptest::prelude::*;
 
-    /// Property: `ammo[i] ≤ MAX_AMMO[i]` holds after any `give_ammo` call.
-    ///
-    /// This is the core Verus invariant translated into a proptest property.
-    /// We cap the `amount` at `MAX_AMMO[i]` (300 max across all types) to avoid
-    /// u32 addition overflow in the underlying implementation's `cur + amount`.
+    // Property: `ammo[i] ≤ MAX_AMMO[i]` holds after any `give_ammo` call.
+    //
+    // This is the core Verus invariant translated into a proptest property.
+    // We cap the `amount` at `MAX_AMMO[i]` (300 max across all types) to avoid
+    // u32 addition overflow in the underlying implementation's `cur + amount`.
     proptest! {
         #[test]
         fn ammo_never_exceeds_max_after_give(
@@ -451,7 +451,7 @@ mod prop_tests {
             );
         }
 
-        /// Property: giving ammo multiple times never pushes past the cap.
+        // Property: giving ammo multiple times never pushes past the cap.
         #[test]
         fn ammo_cap_survives_repeated_give(
             ammo_type_idx in 0usize..NUM_AMMO,
@@ -472,8 +472,8 @@ mod prop_tests {
             );
         }
 
-        /// Property: `health()` is always ≤ MAX_HEALTH immediately after
-        /// `pistol_start` (no mutation), because pistol start sets it exactly.
+        // Property: `health()` is always ≤ MAX_HEALTH immediately after
+        // `pistol_start` (no mutation), because pistol start sets it exactly.
         #[test]
         fn pistol_start_health_within_bounds(_seed in 0u32..256u32) {
             // _seed is unused — proptest needs at least one argument.
@@ -489,8 +489,8 @@ mod prop_tests {
             );
         }
 
-        /// Property: after any sequence of `apply_damage(n)`, health is always
-        /// within `[-32768, MAX_HEALTH]`.
+        // Property: after any sequence of `apply_damage(n)`, health is always
+        // within `[-32768, MAX_HEALTH]`.
         #[test]
         fn health_clamped_after_apply_damage(
             damage in i32::MIN..=i32::MAX,
@@ -508,7 +508,7 @@ mod prop_tests {
             );
         }
 
-        /// Property: `heal(n)` never pushes health above MAX_HEALTH.
+        // Property: `heal(n)` never pushes health above MAX_HEALTH.
         #[test]
         fn heal_never_exceeds_max(
             initial_damage in 0i32..=100i32,
@@ -524,8 +524,8 @@ mod prop_tests {
             );
         }
 
-        /// Property: key bitmask operations are idempotent — giving the same
-        /// key twice is the same as giving it once.
+        // Property: key bitmask operations are idempotent — giving the same
+        // key twice is the same as giving it once.
         #[test]
         fn give_key_is_idempotent(key_bit in 0u8..8u8) {
             let mut p1 = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
@@ -540,7 +540,7 @@ mod prop_tests {
             );
         }
 
-        /// Property: `has_key(k)` returns `true` iff `give_key(k)` was called.
+        // Property: `has_key(k)` returns `true` iff `give_key(k)` was called.
         #[test]
         fn has_key_reflects_give_key(
             key_bit in 0u8..8u8,
@@ -552,7 +552,7 @@ mod prop_tests {
             prop_assert!(player.has_key(key), "player should have key after give");
         }
 
-        /// Property: `use_ammo` always preserves the `ammo ≤ MAX_AMMO` invariant.
+        // Property: `use_ammo` always preserves the `ammo ≤ MAX_AMMO` invariant.
         #[test]
         fn use_ammo_preserves_invariant(
             ammo_type_idx in 0usize..NUM_AMMO,

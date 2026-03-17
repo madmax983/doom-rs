@@ -116,15 +116,13 @@ impl FaceState {
     /// `health` — current player HP (can be ≤ 0 when dead).
     /// `is_firing` — true if the player fired a weapon this tic.
     /// `is_invulnerable` — true if the invulnerability sphere is active.
-    /// `attacker_angle` — angle from player to last attacker (for turn dir).
-    /// `player_angle` — player's facing angle (for turn dir calculation).
+    /// `attacker_angle` — angle from player to last attacker.
     pub fn tick(
         &mut self,
         health: i32,
         is_firing: bool,
         is_invulnerable: bool,
         attacker_angle: Option<Bam>,
-        player_angle: Bam,
     ) {
         let tier = health_tier(health);
 
@@ -169,7 +167,6 @@ impl FaceState {
 
         // 3. Ouch (20+ damage in one tic)
         if self.damage_this_tic >= 20 {
-            let dir = damage_dir(attacker_angle, player_angle);
             let kind = FaceKind::Ouch { tier };
             // Ouch is based on direction but uses the pain patches — just
             // store direction in Normal after ouch expires; for now use Ouch.
@@ -217,7 +214,11 @@ impl FaceState {
                 static GLANCE_TOGGLE: std::sync::atomic::AtomicBool =
                     std::sync::atomic::AtomicBool::new(false);
                 let toggle = GLANCE_TOGGLE.fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
-                if toggle { FaceDir::Right } else { FaceDir::Left }
+                if toggle {
+                    FaceDir::Right
+                } else {
+                    FaceDir::Left
+                }
             } else {
                 FaceDir::Forward
             };
@@ -262,10 +263,6 @@ impl Default for FaceState {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 /// Map health to tier: 0 (80-100%) … 4 (0-19%).
 pub fn health_tier(health: i32) -> u8 {
     if health > 80 {
@@ -278,22 +275,6 @@ pub fn health_tier(health: i32) -> u8 {
         3
     } else {
         4
-    }
-}
-
-/// Determine face direction based on attacker angle relative to player facing.
-fn damage_dir(attacker_angle: Option<Bam>, player_angle: Bam) -> FaceDir {
-    let Some(att) = attacker_angle else {
-        return FaceDir::Forward;
-    };
-    // Difference: positive = attacker is to the left of player's facing.
-    let diff = att.0.wrapping_sub(player_angle.0);
-    if diff < 0x4000_0000 || diff > 0xC000_0000 {
-        FaceDir::Forward
-    } else if diff < 0x8000_0000 {
-        FaceDir::Right
-    } else {
-        FaceDir::Left
     }
 }
 
@@ -360,7 +341,7 @@ mod tests {
     }
 
     fn tick_simple(face: &mut FaceState, health: i32) {
-        face.tick(health, false, false, None, Bam(0));
+        face.tick(health, false, false, None);
     }
 
     #[test]
@@ -379,14 +360,14 @@ mod tests {
     fn death_takes_highest_priority() {
         let mut face = make_face();
         // Simulate god mode + death simultaneously — dead wins.
-        face.tick(0, false, true, None, Bam(0));
+        face.tick(0, false, true, None);
         assert_eq!(face.kind, FaceKind::Dead);
     }
 
     #[test]
     fn god_mode_overrides_normal() {
         let mut face = make_face();
-        face.tick(100, false, true, None, Bam(0));
+        face.tick(100, false, true, None);
         assert_eq!(face.kind, FaceKind::GodMode);
     }
 
@@ -394,7 +375,7 @@ mod tests {
     fn ouch_on_20_damage() {
         let mut face = make_face();
         face.on_damage(20, Bam(0));
-        face.tick(80, false, false, Some(Bam(0)), Bam(0));
+        face.tick(80, false, false, Some(Bam(0)));
         assert!(matches!(face.kind, FaceKind::Ouch { .. }));
     }
 
@@ -402,7 +383,7 @@ mod tests {
     fn pain_on_small_damage() {
         let mut face = make_face();
         face.on_damage(5, Bam(0));
-        face.tick(95, false, false, Some(Bam(0)), Bam(0));
+        face.tick(95, false, false, Some(Bam(0)));
         assert!(matches!(face.kind, FaceKind::Pain { .. }));
     }
 
@@ -419,7 +400,7 @@ mod tests {
         let mut face = make_face();
         // Fire for RAMPAGE_THRESHOLD tics.
         for _ in 0..RAMPAGE_THRESHOLD {
-            face.tick(100, true, false, None, Bam(0));
+            face.tick(100, true, false, None);
         }
         assert!(matches!(face.kind, FaceKind::Rampage { .. }));
     }
@@ -459,9 +440,27 @@ mod tests {
 
     #[test]
     fn patch_names_match_vanilla() {
-        assert_eq!(face_patch_name(FaceKind::Normal { tier: 0, dir: FaceDir::Forward }), "STFST00");
-        assert_eq!(face_patch_name(FaceKind::Normal { tier: 2, dir: FaceDir::Left }), "STFTL20");
-        assert_eq!(face_patch_name(FaceKind::Normal { tier: 4, dir: FaceDir::Right }), "STFTR40");
+        assert_eq!(
+            face_patch_name(FaceKind::Normal {
+                tier: 0,
+                dir: FaceDir::Forward
+            }),
+            "STFST00"
+        );
+        assert_eq!(
+            face_patch_name(FaceKind::Normal {
+                tier: 2,
+                dir: FaceDir::Left
+            }),
+            "STFTL20"
+        );
+        assert_eq!(
+            face_patch_name(FaceKind::Normal {
+                tier: 4,
+                dir: FaceDir::Right
+            }),
+            "STFTR40"
+        );
         assert_eq!(face_patch_name(FaceKind::Ouch { tier: 3 }), "STFOUCH3");
         assert_eq!(face_patch_name(FaceKind::EvilGrin), "STFEVL0");
         assert_eq!(face_patch_name(FaceKind::Rampage { tier: 1 }), "STFKLL10");

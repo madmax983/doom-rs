@@ -738,7 +738,7 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
         }
         if try_move_in_dir(gs, handle, cand, speed, level) {
             // Reset movecount so monster won't re-evaluate direction for a while.
-            let rng_val = gs.rng.next() as i32;
+            let rng_val = gs.rng.next_byte() as i32;
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
                 mo.movecount = 8 + (rng_val & 7);
             }
@@ -748,11 +748,11 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
 
     // All preferred directions blocked: try any direction round-robin.
     // Cycle through all 8 directions starting from a random offset.
-    let start_dir = gs.rng.next() % 8;
+    let start_dir = gs.rng.next_byte() % 8;
     for i in 0u8..8 {
         let dir = (start_dir + i) % 8;
         if try_move_in_dir(gs, handle, dir, speed, level) {
-            let rng_val = gs.rng.next() as i32;
+            let rng_val = gs.rng.next_byte() as i32;
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
                 mo.movecount = 4 + (rng_val & 3);
             }

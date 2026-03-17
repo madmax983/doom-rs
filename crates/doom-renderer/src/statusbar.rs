@@ -1051,10 +1051,10 @@ pub fn draw_stnum(
 
     // Draw right-to-left: ones digit at right_x - digit_w, etc.
     let mut x = right_x;
-    for i in 0..max_digits {
+    for (i, digit) in digits.iter().copied().enumerate().take(max_digits) {
         x -= digit_w;
         if i < count {
-            let name = format!("STTNUM{}", digits[i]);
+            let name = format!("STTNUM{digit}");
             if let Some(patch) = cache.get(&name, wad) {
                 let p = patch.clone();
                 fb.draw_patch_vanilla(x, y, &p);
@@ -1095,10 +1095,10 @@ pub fn draw_stysnum(
     }
 
     let mut x = right_x;
-    for i in 0..max_digits {
+    for (i, digit) in digits.iter().copied().enumerate().take(max_digits) {
         x -= digit_w;
         if i < count {
-            let name = format!("STYSNUM{}", digits[i]);
+            let name = format!("STYSNUM{digit}");
             if let Some(patch) = cache.get(&name, wad) {
                 let p = patch.clone();
                 fb.draw_patch_vanilla(x, y, &p);
@@ -1125,8 +1125,8 @@ pub fn draw_status_bar_wad(
     face: &FaceState,
 ) {
     // Absolute y coordinates (screen space, not relative to bar).
-    const AMY: i32 = 171;   // ammo / health / armor number y
-    const BAR: i32 = 168;   // bar top y
+    const AMY: i32 = 171; // ammo / health / armor number y
+    const BAR: i32 = 168; // bar top y
 
     // 1. Background: STBAR centered on the 320px framebuffer.
     //    Widescreen WADs (Unity/KEX) ship a 576px-wide STBAR; vanilla is 320px.
@@ -1183,12 +1183,12 @@ pub fn draw_status_bar_wad(
 
     // 7. Keys — x=239, y=171/181/191. (ST_KEY0-2Y = 171,181,191)
     let key_bits = [
-        (KEY_BLUE_CARD,   0usize, 171i32),
-        (KEY_YELLOW_CARD, 1,      181),
-        (KEY_RED_CARD,    2,      191),
-        (KEY_BLUE_SKULL,  3,      171),
-        (KEY_YELLOW_SKULL,4,      181),
-        (KEY_RED_SKULL,   5,      191),
+        (KEY_BLUE_CARD, 0usize, 171i32),
+        (KEY_YELLOW_CARD, 1, 181),
+        (KEY_RED_CARD, 2, 191),
+        (KEY_BLUE_SKULL, 3, 171),
+        (KEY_YELLOW_SKULL, 4, 181),
+        (KEY_RED_SKULL, 5, 191),
     ];
     let mut slot_used = [false; 3];
     for (bit, idx, ky) in &key_bits {
@@ -1404,13 +1404,15 @@ mod tests {
     #[test]
     fn draw_status_bar_fills_bottom_rows() {
         let mut fb = Framebuffer::new();
-        let mut data = StatusBarData::default();
-        data.health = 100;
-        data.armor = 50;
-        data.ammo_current = 42;
-        data.ammo = [200, 50, 300, 50];
-        data.max_ammo = [200, 50, 300, 50];
-        data.weapons = [true, true, true, false, false, false, false, false, false];
+        let data = StatusBarData {
+            health: 100,
+            armor: 50,
+            ammo_current: 42,
+            ammo: [200, 50, 300, 50],
+            max_ammo: [200, 50, 300, 50],
+            weapons: [true, true, true, false, false, false, false, false, false],
+            ..StatusBarData::default()
+        };
         draw_status_bar_data(&mut fb, &data);
 
         // The status bar region should have some non-zero pixels (from text, numbers, etc.)
@@ -1597,8 +1599,10 @@ mod tests {
         let mut fb_god = Framebuffer::new();
         let mut fb_normal = Framebuffer::new();
 
-        let mut data = StatusBarData::default();
-        data.health = 100;
+        let data = StatusBarData {
+            health: 100,
+            ..StatusBarData::default()
+        };
 
         // Draw normal bar, then apply the overlay manually for god mode.
         draw_status_bar_data(&mut fb_normal, &data);
@@ -1677,8 +1681,10 @@ mod tests {
     #[test]
     fn god_mode_true_face_border_is_yellow() {
         let mut fb = Framebuffer::new();
-        let mut data = StatusBarData::default();
-        data.health = 100;
+        let data = StatusBarData {
+            health: 100,
+            ..StatusBarData::default()
+        };
         draw_status_bar_data(&mut fb, &data);
         apply_god_mode_overlay(&mut fb, data.health);
 

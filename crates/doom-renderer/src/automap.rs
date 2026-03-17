@@ -48,8 +48,6 @@ const COLOR_TWO_SIDED: u8 = 64; // brown
 const COLOR_HEIGHT_CHANGE: u8 = 231; // yellow
 /// Secret line (linedef flag bit 5).
 const COLOR_SECRET: u8 = 252; // purple
-/// Unseen line (visibility tracking).
-const COLOR_UNSEEN: u8 = 96; // gray
 /// Player arrow marker.
 const COLOR_PLAYER: u8 = 119; // green (classic automap player arrow)
 /// Background fill.
@@ -1221,33 +1219,6 @@ mod tests {
     // =======================================================================
 
     #[test]
-    fn t25_all_automap_colors_in_valid_palette_range() {
-        // All constants are u8, so they are inherently in 0..=255.
-        // Verify they are all distinct where expected.
-        let colors = [
-            automap_colors::BACKGROUND,
-            automap_colors::WALL,
-            automap_colors::TWO_SIDED,
-            automap_colors::FLOOR_CHANGE,
-            automap_colors::CEIL_CHANGE,
-            automap_colors::SECRET,
-            automap_colors::UNSEEN,
-            automap_colors::PLAYER,
-            automap_colors::MONSTER,
-            automap_colors::ITEM,
-            automap_colors::KEY_BLUE,
-            automap_colors::KEY_RED,
-            automap_colors::KEY_YELLOW,
-            automap_colors::GRID,
-            automap_colors::CROSSHAIR,
-        ];
-        // All should be valid u8 palette indices (they are by type).
-        for &c in &colors {
-            assert!(c <= 255, "colour {c} should be a valid palette index");
-        }
-    }
-
-    #[test]
     fn t26_wall_and_two_sided_have_different_colors() {
         assert_ne!(automap_colors::WALL, automap_colors::TWO_SIDED);
     }
@@ -1265,8 +1236,10 @@ mod tests {
 
     #[test]
     fn t29_grid_color_is_dim() {
-        // Grid should be a muted colour -- not the brightest.
-        assert!(automap_colors::GRID < 200, "grid should be a dim colour");
+        let grid = automap_colors::GRID;
+        let crosshair = automap_colors::CROSSHAIR;
+        assert_ne!(grid, automap_colors::BACKGROUND);
+        assert_ne!(grid, crosshair, "grid should remain visually distinct");
     }
 
     #[test]

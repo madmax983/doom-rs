@@ -65,6 +65,7 @@ pub enum TraceHit {
 /// Uses the standard 2D ray-segment intersection formula:
 /// - `t = ((v1 - r) x d2) / (d1 x d2)` (parametric along ray)
 /// - `u = ((v1 - r) x d1) / (d1 x d2)` (parametric along segment, must be in [0, 1])
+///
 /// where `x` is the 2D cross product.
 pub fn ray_linedef_intersection(
     rx: f32,

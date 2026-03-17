@@ -10,7 +10,6 @@
 use crate::mobj::{MobjHandle, MobjKind, flags};
 use crate::player::{self, AmmoType, WeaponType, powers};
 use crate::state::GameState;
-use doom_types::limits::NUM_AMMO;
 
 // ---------------------------------------------------------------------------
 // Power-up duration constants (in tics, 35 tics = 1 second)
@@ -450,8 +449,8 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             // The original Doom doubles max_ammo unconditionally but since
             // we track per-player max_ammo, we cap at 2x the base.
             use doom_types::limits::MAX_AMMO;
-            for i in 0..NUM_AMMO {
-                let doubled = MAX_AMMO[i] * 2;
+            for (i, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
+                let doubled = max_ammo * 2;
                 if gs.player.max_ammo[i] < doubled {
                     gs.player.max_ammo[i] = doubled;
                 }

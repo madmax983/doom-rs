@@ -119,10 +119,10 @@ pub fn encode_doom_sixel(
     // col_ranges[src_col] = (dst_start, dst_end): which dst columns this
     // source column maps to.  Computed once; used in every band's accumulation.
     let mut col_ranges = vec![(0usize, 0usize); src_w];
-    for src_col in 0..src_w {
+    for (src_col, range) in col_ranges.iter_mut().enumerate() {
         let start = (src_col * dst_w) / src_w;
         let end = ((src_col + 1) * dst_w) / src_w;
-        col_ranges[src_col] = (start, end);
+        *range = (start, end);
     }
 
     // ── Precompute source row for each dst row ────────────────────────────
@@ -144,8 +144,8 @@ pub fn encode_doom_sixel(
     write!(out, "\x1bP7;0;{}q", area_w).unwrap();
 
     // Color register definitions: #n;2;R;G;B (values 0-100).
-    for i in 0..256usize {
-        if !used[i] {
+    for (i, is_used) in used.iter().enumerate() {
+        if !*is_used {
             continue;
         }
         let rgb = lut.get(pal, i as u8);
@@ -175,14 +175,13 @@ pub fn encode_doom_sixel(
         let mut src_bands = [(0usize, 0u8); 3];
         let mut n_src = 0usize;
 
-        for dst_row in row_start..row_end {
-            let src_row = row_src[dst_row];
+        for (dst_row, &src_row) in row_src.iter().enumerate().take(row_end).skip(row_start) {
             let bit = 1u8 << (dst_row - row_start);
             // Linear search over at most 3 entries — faster than a HashMap.
             let mut found = false;
-            for k in 0..n_src {
-                if src_bands[k].0 == src_row {
-                    src_bands[k].1 |= bit;
+            for src_band in src_bands.iter_mut().take(n_src) {
+                if src_band.0 == src_row {
+                    src_band.1 |= bit;
                     found = true;
                     break;
                 }
@@ -196,8 +195,7 @@ pub fn encode_doom_sixel(
         // Accumulate in source-pixel coordinates: iterate src_w (320) columns
         // and fill contiguous dst-column runs, instead of iterating dst_w
         // (1760+) columns with a scatter-write per pixel.
-        for k in 0..n_src {
-            let (src_row, bit) = src_bands[k];
+        for &(src_row, bit) in src_bands.iter().take(n_src) {
             let src_row_data = &data[src_row * src_w..(src_row + 1) * src_w];
 
             for (src_col, &color) in src_row_data.iter().enumerate() {
@@ -323,14 +321,14 @@ mod tests {
         let src_w = 320usize;
         let dst_w = 1760usize;
         let mut ranges = vec![(0usize, 0usize); src_w];
-        for src_col in 0..src_w {
-            ranges[src_col] = ((src_col * dst_w) / src_w, ((src_col + 1) * dst_w) / src_w);
+        for (src_col, range) in ranges.iter_mut().enumerate() {
+            *range = ((src_col * dst_w) / src_w, ((src_col + 1) * dst_w) / src_w);
         }
         assert_eq!(ranges[0].0, 0);
         assert_eq!(ranges[src_w - 1].1, dst_w);
         // No gaps: each range end == next range start.
-        for i in 0..src_w - 1 {
-            assert_eq!(ranges[i].1, ranges[i + 1].0, "gap at src col {i}");
+        for (i, pair) in ranges.windows(2).enumerate() {
+            assert_eq!(pair[0].1, pair[1].0, "gap at src col {i}");
         }
     }
 }

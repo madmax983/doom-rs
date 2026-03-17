@@ -16,6 +16,7 @@ use doom_tui::{DoomApp, TicInput};
 use crate::DoomGame;
 
 /// Default UDP port for the doom-rs relay server.
+#[cfg(test)]
 pub(crate) const DEFAULT_PORT: u16 = 5029;
 
 // ---------------------------------------------------------------------------

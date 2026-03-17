@@ -754,8 +754,7 @@ mod tests {
     fn all_monster_see_states_in_bounds() {
         // For monsters with see_state != S_NULL, it must be within STATES table.
         use crate::states::STATES;
-        for kind_idx in 0..=17usize {
-            let info = &MOBJINFO[kind_idx];
+        for (kind_idx, info) in MOBJINFO.iter().enumerate().take(18) {
             let see = info.see_state.0 as usize;
             assert!(
                 see < STATES.len(),

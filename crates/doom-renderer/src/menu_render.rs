@@ -351,7 +351,11 @@ pub fn draw_menu_wad(
     }
 
     // Skull cursor — M_SKULL1 / M_SKULL2 at (item_x - 32, item_y).
-    let skull_name = if menu.skull_frame() == 0 { "M_SKULL1" } else { "M_SKULL2" };
+    let skull_name = if menu.skull_frame() == 0 {
+        "M_SKULL1"
+    } else {
+        "M_SKULL2"
+    };
     let cursor_y = layout
         .item_ys
         .get(menu.cursor())
@@ -583,18 +587,21 @@ pub fn draw_finale_wad(
     let text = match episode {
         1 => E1TEXT,
         2 => E2TEXT,
+        3 => E3TEXT,
         4 => E4TEXT,
         _ => D2TEXT, // Doom 2 or fallback
     };
 
     // Reveal `text_index` characters of the text.
     let visible: String = text.chars().take(text_index).collect();
-    let mut x = 10i32;
+    let x = 10i32;
     let mut y = 10i32;
     for line in visible.lines() {
         font.draw_string(fb, x, y, line, 4);
         y += 11;
-        if y > 190 { break; }
+        if y > 190 {
+            break;
+        }
     }
     // Keep x used — avoids unused variable warning.
     let _ = x;
@@ -1003,25 +1010,6 @@ mod tests {
     // -----------------------------------------------------------------------
     // menu_colors validity
     // -----------------------------------------------------------------------
-
-    #[test]
-    fn all_color_values_in_valid_range() {
-        // All u8 values are 0-255 by definition, but verify they are
-        // different enough to be visually distinct.
-        let colors = [
-            menu_colors::TITLE_BG,
-            menu_colors::MENU_TEXT,
-            menu_colors::MENU_HIGHLIGHT,
-            menu_colors::MENU_DISABLED,
-            menu_colors::SKULL_COLOR,
-            menu_colors::CREDITS_TEXT,
-            menu_colors::VERSION_TEXT,
-        ];
-        // All within range (trivially true for u8, but let's be explicit).
-        for &c in &colors {
-            assert!(c <= 255, "Color {c} should be in 0-255 range");
-        }
-    }
 
     #[test]
     fn highlight_differs_from_normal_text() {

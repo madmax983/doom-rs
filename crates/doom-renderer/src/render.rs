@@ -290,6 +290,7 @@ pub struct RenderOut {
 /// The z-buffer entry for each column holds the perpendicular depth of the
 /// nearest *one-sided* wall.  Two-sided segs (portals) do **not** write to the
 /// z-buffer.  Pass `render_out.z_buf` and the clip arrays to sprite renderers.
+#[allow(clippy::too_many_arguments)]
 pub fn render_level(
     level: &Level,
     player_x: i32,
@@ -320,6 +321,7 @@ pub fn render_level(
 }
 
 /// Render a Doom level using an explicit player view height above the floor.
+#[allow(clippy::too_many_arguments)]
 pub fn render_level_with_view_height(
     level: &Level,
     player_x: i32,
@@ -352,6 +354,7 @@ pub fn render_level_with_view_height(
 }
 
 /// Render a Doom level using an explicit player view height and player extra-light bonus.
+#[allow(clippy::too_many_arguments)]
 pub fn render_level_with_view_height_and_extra_light(
     level: &Level,
     player_x: i32,
@@ -686,9 +689,7 @@ pub fn render_level_with_view_height_and_extra_light(
                 let has_lower = lower_top < w_bot;
                 let has_portal_opening = screen_back_ceil < screen_back_floor;
                 let portal_top = screen_back_ceil.clamp(0, SCREEN_H as i32 - 1);
-                let portal_bot = if !has_portal_opening {
-                    (screen_back_floor - 1).clamp(-1, SCREEN_H as i32 - 1)
-                } else if has_lower {
+                let portal_bot = if !has_portal_opening || has_lower {
                     (screen_back_floor - 1).clamp(-1, SCREEN_H as i32 - 1)
                 } else {
                     screen_back_floor.clamp(-1, SCREEN_H as i32 - 1)
