@@ -8,6 +8,8 @@ name = "doom-app"
 path = "src/main.rs"
 
 [dependencies]
+ratatui = { workspace = true }
+crossterm = { workspace = true }
 doom-types    = { workspace = true }
 doom-wad      = { workspace = true }
 doom-map      = { workspace = true }
