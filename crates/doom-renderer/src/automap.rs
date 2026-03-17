@@ -614,12 +614,6 @@ pub fn draw_line_fb(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, co
     }
 }
 
-// Backward-compat alias used in old tests.
-#[cfg(test)]
-fn draw_line(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: u8) {
-    draw_line_fb(fb, x0, y0, x1, y1, color);
-}
-
 // ---------------------------------------------------------------------------
 // Coordinate transform helpers (public, for external use)
 // ---------------------------------------------------------------------------
@@ -650,7 +644,7 @@ mod tests {
     use doom_game::AutomapState;
 use doom_map::Level;
     use doom_map::lumps::{
-        Blockmap, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector,
+        Blockmap, FLAG_TWO_SIDED, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector,
         Thing as ThingRaw, Vertex as VxRaw,
     };
 
@@ -1290,119 +1284,6 @@ pub fn map_to_screen(
     let sy = HALF_H - ((map_y - center_y) * zoom) as i32;
     (sx, sy)
 }
-
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use doom_game::AutomapState;
-use doom_map::Level;
-    use doom_map::lumps::{
-        Blockmap, FLAG_TWO_SIDED, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector,
-        Thing as ThingRaw, Vertex as VxRaw,
-    };
-
-    // -----------------------------------------------------------------------
-    // Minimal Level builder
-    // -----------------------------------------------------------------------
-
-    /// Build a `Level` with caller-supplied vertexes, linedefs, sidedefs, and
-    /// sectors.  Provides sensible defaults for BSP data.
-    fn make_level_full(
-        vertexes: Vec<VxRaw>,
-        linedefs: Vec<LdRaw>,
-        sidedefs: Vec<SdRaw>,
-        sectors: Vec<Sector>,
-    ) -> Level {
-        make_level_full_with_things(vertexes, linedefs, sidedefs, sectors, vec![])
-    }
-
-    fn make_level_full_with_things(
-        vertexes: Vec<VxRaw>,
-        linedefs: Vec<LdRaw>,
-        sidedefs: Vec<SdRaw>,
-        sectors: Vec<Sector>,
-        things: Vec<ThingRaw>,
-    ) -> Level {
-        let n_sectors = sectors.len().max(1);
-
-        // Ensure at least one sector for reject table sizing.
-        let final_sectors = if sectors.is_empty() {
-            vec![Sector {
-                floor_height: 0,
-                ceil_height: 128,
-                floor_flat: *b"FLAT1\0\0\0",
-                ceil_flat: *b"FLAT2\0\0\0",
-                light_level: 192,
-                special: 0,
-                tag: 0,
-            }]
-        } else {
-            sectors
-        };
-
-        let ssector = Ssector {
-            seg_count: 0,
-            first_seg: 0,
-        };
-
-        let mut bm_bytes = vec![0u8; 8 + 2 + 4];
-        bm_bytes[0..2].copy_from_slice(&0i16.to_le_bytes());
-        bm_bytes[2..4].copy_from_slice(&0i16.to_le_bytes());
-        bm_bytes[4..6].copy_from_slice(&1u16.to_le_bytes());
-        bm_bytes[6..8].copy_from_slice(&1u16.to_le_bytes());
-        bm_bytes[8..10].copy_from_slice(&5u16.to_le_bytes());
-        bm_bytes[10..12].copy_from_slice(&0u16.to_le_bytes());
-        bm_bytes[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = Blockmap::parse_lump(&bm_bytes).expect("blockmap parse");
-
-        let reject_size = (n_sectors * n_sectors).div_ceil(8);
-        let reject = Reject::parse_lump(&vec![0u8; reject_size], n_sectors).expect("reject parse");
-
-        Level {
-            name: "TEST".to_owned(),
-            things,
-            linedefs,
-            sidedefs,
-            vertexes,
-            segs: vec![],
-            ssectors: vec![ssector],
-            nodes: vec![],
-            sectors: final_sectors,
-            reject,
-            blockmap,
-        }
-    }
-
-    /// Build a simple level with only vertexes and linedefs (no sidedefs/sectors).
-    fn make_level(vertexes: Vec<VxRaw>, linedefs: Vec<LdRaw>) -> Level {
-        make_level_full(vertexes, linedefs, vec![], vec![])
-    }
-
-    /// Helper to create a sidedef pointing at a given sector.
-    fn make_sidedef(sector: u16) -> SdRaw {
-        SdRaw {
-            x_offset: 0,
-            y_offset: 0,
-            upper_texture: *b"--------",
-            lower_texture: *b"--------",
-            middle_texture: *b"--------",
-            sector,
-        }
-    }
-
-    fn make_thing(x: i16, y: i16, kind: u16) -> ThingRaw {
-        ThingRaw {
-            x,
-            y,
-            angle: 0,
-            kind,
-            flags: 0,
-        }
-    }
 
     // =======================================================================
     // Tests 1-8: AutomapState (renderer-side)
@@ -2358,5 +2239,4 @@ use doom_map::Level;
             .count();
         assert!(grid_count > 0, "render_automap should draw grid lines");
     }
-}
 }

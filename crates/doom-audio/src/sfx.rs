@@ -4,6 +4,9 @@
 //! their Doom SFX ID, and [`play_sfx`] for dispatching a sound effect onto
 //! the nearest available [`Mixer`] channel.
 
+#[cfg(feature = "loom")]
+use loom::sync::Arc;
+#[cfg(not(feature = "loom"))]
 use std::sync::Arc;
 
 use crate::mixer::{Mixer, PcmSample};
@@ -116,6 +119,7 @@ mod tests {
         })
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn sfx_cache_insert_and_get() {
         let mut cache = SfxCache::new();
@@ -135,6 +139,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn play_sfx_starts_channel() {
         let mut mixer = Mixer::new(22_050);

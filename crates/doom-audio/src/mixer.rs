@@ -3,6 +3,9 @@
 //! Decodes Doom SFX lumps (8-bit unsigned PCM with an 8-byte header) and
 //! mixes up to 8 simultaneous voices into a stereo `i16` output buffer.
 
+#[cfg(feature = "loom")]
+use loom::sync::Arc;
+#[cfg(not(feature = "loom"))]
 use std::sync::Arc;
 
 use crate::AudioError;
@@ -197,6 +200,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn mixer_plays_sample() {
         let mut mixer = Mixer::new(22_050);
@@ -215,6 +219,7 @@ mod tests {
         assert_ne!(buf[1], 0, "first sample right channel should be non-zero");
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn mixer_channel_stops_at_end() {
         let mut mixer = Mixer::new(22_050);

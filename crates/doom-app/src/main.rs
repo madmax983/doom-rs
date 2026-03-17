@@ -2743,6 +2743,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn game_without_title_starts_level_music_immediately() {
         let audio = AudioSystem::try_open_null().expect("null audio must succeed");
@@ -2766,6 +2767,7 @@ mod tests {
         assert_eq!(audio.debug_music_start_count(), 1);
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn starting_game_from_title_starts_level_music() {
         let audio = AudioSystem::try_open_null().expect("null audio must succeed");
@@ -2801,6 +2803,7 @@ mod tests {
         assert_eq!(audio.debug_music_start_count(), 1);
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn start_level_music_resolves_from_current_level_name() {
         let audio = AudioSystem::try_open_null().expect("null audio must succeed");
@@ -2886,6 +2889,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn level_exit_starts_intermission_music_then_next_level_music() {
         let audio = AudioSystem::try_open_null().expect("null audio must succeed");

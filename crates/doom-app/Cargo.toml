@@ -7,7 +7,11 @@ edition.workspace = true
 name = "doom-app"
 path = "src/main.rs"
 
+[features]
+loom = ["doom-audio/loom", "dep:loom"]
+
 [dependencies]
+loom = { version = "0.7", optional = true }
 doom-types    = { workspace = true }
 doom-wad      = { workspace = true }
 doom-map      = { workspace = true }

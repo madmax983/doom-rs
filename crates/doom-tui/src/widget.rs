@@ -123,7 +123,8 @@ impl Widget for DoomFramebufferWidget<'_> {
 
                 if let Some(cell) = buf.cell_mut((area.x + cx as u16, area.y + cy as u16)) {
                     if self.ascii_mode {
-                        let luma = (top_r as u32 * 2126 + top_g as u32 * 7152 + top_b as u32 * 722) / 10000;
+                        let luma = (top_r as u32 * 2126 + top_g as u32 * 7152 + top_b as u32 * 722)
+                            / 10000;
                         let chars = b" .:-=+*#%@";
                         let char_idx = (luma * (chars.len() as u32 - 1)) / 255;
                         let c = chars[char_idx as usize] as char;

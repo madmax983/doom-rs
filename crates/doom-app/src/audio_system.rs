@@ -12,6 +12,9 @@
 //! If audio initialisation fails (no device, CI, headless) `try_open` returns
 //! `None` and the game runs silently — no panics, no unwraps in hot paths.
 
+#[cfg(feature = "loom")]
+use loom::sync::{Arc, Mutex};
+#[cfg(not(feature = "loom"))]
 use std::sync::{Arc, Mutex};
 
 #[cfg(test)]
@@ -548,13 +551,16 @@ mod tests {
         data
     }
 
-    fn test_pcm_sample() -> Arc<PcmSample> {
-        Arc::new(PcmSample {
+    #[cfg(not(feature = "loom"))]
+    fn test_pcm_sample() -> std::sync::Arc<PcmSample> {
+        std::sync::Arc::new(PcmSample {
             sample_rate: 11_025,
             data: vec![200u8; 512],
         })
     }
 
+
+    #[cfg(not(feature = "loom"))]
     fn run_audio_events(events: Vec<AudioEvent>) -> SfxMixer {
         let mixer = Arc::new(Mutex::new(SfxMixer::new()));
         let midi = Arc::new(Mutex::new(MidiPlayer::new()));
@@ -576,6 +582,7 @@ mod tests {
             .expect("test mixer mutex should not be poisoned")
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn audio_system_try_open_null_does_not_panic() {
         // Verifies that try_open_null() succeeds regardless of audio device
@@ -584,6 +591,7 @@ mod tests {
         assert!(system.is_some(), "try_open_null must always succeed");
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn send_events_to_null_system_does_not_panic() {
         let system = AudioSystem::try_open_null().expect("null audio must succeed");
@@ -593,6 +601,7 @@ mod tests {
         system.stop_music();
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn audio_cmd_thread_reuses_channel_for_same_origin() {
         let origin = doom_game::MobjHandle {
@@ -611,6 +620,7 @@ mod tests {
         );
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn audio_cmd_thread_keeps_distinct_origins_on_distinct_channels() {
         let mixer = run_audio_events(vec![
@@ -748,6 +758,7 @@ mod tests {
         assert!(cache.get(1).is_none());
     }
 
+    #[cfg(not(feature = "loom"))]
     #[test]
     fn sfx_cache_without_ds_markers_falls_back_to_ds_prefix_scan() {
         let sfx = valid_sfx_lump_1_sample();
