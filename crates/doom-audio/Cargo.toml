@@ -9,3 +9,10 @@ doom-wad   = { workspace = true }
 cpal       = { workspace = true }
 nom        = { workspace = true }
 thiserror  = { workspace = true }
+loom = { version = "0.7", optional = true }
+
+[dev-dependencies]
+loom = "0.7"
+
+[features]
+loom = ["dep:loom"]

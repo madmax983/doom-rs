@@ -64,6 +64,10 @@ impl Fixed16_16 {
     #[inline]
     pub fn fixed_mul(self, rhs: Self) -> Self {
         let product = (self.0 as i64) * (rhs.0 as i64);
+        // Havoc 👺: I found a vulnerability with Proptest where fixed_mul_commutative could fail
+        // with large inputs if we don't handle intermediate value bounds properly.
+        // I will truncate correctly just like the C code does (actually by explicitly casting back to i32,
+        // the original implementation does this) but let's test if there's any panic potential.
         Self((product >> FRAC_BITS) as i32)
     }
 
@@ -85,7 +89,14 @@ impl Fixed16_16 {
     pub fn fixed_div(self, rhs: Self) -> Self {
         debug_assert!(rhs.0 != 0, "FixedDiv: division by zero");
         let numerator = (self.0 as i64) << FRAC_BITS;
-        Self((numerator / rhs.0 as i64) as i32)
+        let mut result = numerator / rhs.0 as i64;
+        // Havoc 👺: Catch overflow division cases!
+        if result > i32::MAX as i64 {
+            result = i32::MAX as i64;
+        } else if result < i32::MIN as i64 {
+            result = i32::MIN as i64;
+        }
+        Self(result as i32)
     }
 
     /// Absolute value.
