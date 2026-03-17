@@ -12,14 +12,13 @@
 //! If audio initialisation fails (no device, CI, headless) `try_open` returns
 //! `None` and the game runs silently — no panics, no unwraps in hot paths.
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[cfg(test)]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use doom_audio::{
-    AudioDriver, GenmidiBank, MAX_CHANNELS, MidiPlayer, MusScore, SfxCache, SfxMixer, SfxPriority,
-    mixer::PcmSample,
+    AudioDriver, GenmidiBank, MAX_CHANNELS, MusScore, SfxCache, SfxPriority, mixer::PcmSample,
 };
 use doom_wad::WadFile;
 
@@ -82,9 +81,9 @@ impl AudioSystem {
         };
 
         // Clone the Arc<Mutex<SfxMixer>> so the background thread can post samples.
-        let mixer_arc: Arc<Mutex<SfxMixer>> = Arc::clone(&driver.mixer);
+        let mixer_arc = driver.mixer.clone();
         // Clone the Arc<Mutex<MidiPlayer>> so the background thread can load/stop scores.
-        let midi_arc: Arc<Mutex<MidiPlayer>> = Arc::clone(&driver.midi);
+        let midi_arc = driver.midi.clone();
 
         // Pre-populate SfxCache from WAD lumps whose names start with "DS".
         let mut sfx_cache = SfxCache::new();
@@ -157,8 +156,8 @@ impl AudioSystem {
     #[must_use]
     pub fn try_open_null() -> Option<Self> {
         let driver = AudioDriver::null();
-        let mixer_arc: Arc<Mutex<SfxMixer>> = Arc::clone(&driver.mixer);
-        let midi_arc: Arc<Mutex<MidiPlayer>> = Arc::clone(&driver.midi);
+        let mixer_arc = driver.mixer.clone();
+        let midi_arc = driver.midi.clone();
         let sfx_cache = SfxCache::new();
 
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
@@ -261,8 +260,8 @@ fn populate_sfx_cache(wad: &WadFile, cache: &mut SfxCache) {
 /// Exits when the sender side of the channel is dropped (game shutdown).
 fn audio_cmd_thread(
     rx: std::sync::mpsc::Receiver<AudioEvent>,
-    mixer_arc: &Arc<Mutex<SfxMixer>>,
-    midi_arc: &Arc<Mutex<MidiPlayer>>,
+    mixer_arc: &doom_audio::driver::SharedSfxMixer,
+    midi_arc: &doom_audio::driver::SharedMidiPlayer,
     sfx_cache: &SfxCache,
     on_music_start: impl Fn(),
 ) {
@@ -555,9 +554,10 @@ mod tests {
         })
     }
 
-    fn run_audio_events(events: Vec<AudioEvent>) -> SfxMixer {
-        let mixer = Arc::new(Mutex::new(SfxMixer::new()));
-        let midi = Arc::new(Mutex::new(MidiPlayer::new()));
+    fn run_audio_events(events: Vec<AudioEvent>) -> usize {
+        let driver = AudioDriver::null();
+        let mixer = driver.mixer.clone();
+        let midi = driver.midi.clone();
         let mut cache = SfxCache::new();
         cache.insert(1, test_pcm_sample());
         cache.insert(2, test_pcm_sample());
@@ -570,10 +570,11 @@ mod tests {
 
         audio_cmd_thread(rx, &mixer, &midi, &cache, || {});
 
-        Arc::try_unwrap(mixer)
-            .expect("test mixer Arc should be unique")
-            .into_inner()
-            .expect("test mixer mutex should not be poisoned")
+        // Since we can't `try_unwrap` easily when the underlying type might
+        // be `loom::sync::Arc`, we just lock it and extract the data we need for the tests
+        let count = mixer.lock().unwrap().active_count();
+        drop(driver); // make sure driver lives long enough
+        count
     }
 
     #[test]
@@ -599,21 +600,20 @@ mod tests {
             index: 7,
             generation: 3,
         };
-        let mixer = run_audio_events(vec![
+        let active_count = run_audio_events(vec![
             AudioEvent::PlaySfx(1, SfxPriority::High, 1.0, 0.0, Some(origin)),
             AudioEvent::PlaySfx(2, SfxPriority::Medium, 0.6, -0.3, Some(origin)),
         ]);
 
         assert_eq!(
-            mixer.active_count(),
-            1,
+            active_count, 1,
             "same-origin sound retriggers should restart one live channel, not allocate two"
         );
     }
 
     #[test]
     fn audio_cmd_thread_keeps_distinct_origins_on_distinct_channels() {
-        let mixer = run_audio_events(vec![
+        let active_count = run_audio_events(vec![
             AudioEvent::PlaySfx(
                 1,
                 SfxPriority::High,
@@ -637,8 +637,7 @@ mod tests {
         ]);
 
         assert_eq!(
-            mixer.active_count(),
-            2,
+            active_count, 2,
             "different origins should still occupy distinct channels"
         );
     }
