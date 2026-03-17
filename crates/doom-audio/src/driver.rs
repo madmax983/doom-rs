@@ -19,10 +19,10 @@
 //! For environments without a real audio device (like a lonely CI server), use
 //! [`AudioDriver::null`] to skip the hardware entirely.
 
-#[cfg(not(feature = "loom"))]
-use std::sync::{Arc, Mutex};
 #[cfg(feature = "loom")]
 use loom::sync::{Arc, Mutex};
+#[cfg(not(feature = "loom"))]
+use std::sync::{Arc, Mutex};
 
 use crate::{AudioError, midi::MidiPlayer, sfx_mixer::SfxMixer};
 
@@ -51,15 +51,18 @@ unsafe impl Send for SendStream {}
 ///
 /// Drop the driver to stop audio output.  The internal cpal stream is kept
 /// alive for as long as this struct is alive.
+pub type SharedSfxMixer = Arc<Mutex<SfxMixer>>;
+pub type SharedMidiPlayer = Arc<Mutex<MidiPlayer>>;
+
 pub struct AudioDriver {
     /// Held solely to keep the cpal stream alive.
     _stream: Option<Box<SendStream>>,
     /// The shared PCM SFX mixer (priority-based, 8 channels).
     /// The cpal callback calls `mix()` on each buffer fill.
-    pub mixer: Arc<Mutex<SfxMixer>>,
+    pub mixer: SharedSfxMixer,
     /// The shared MIDI/OPL2 player.  The cpal callback calls
     /// `advance_samples` on each buffer fill to generate FM music output.
-    pub midi: Arc<Mutex<MidiPlayer>>,
+    pub midi: SharedMidiPlayer,
 }
 
 impl AudioDriver {
