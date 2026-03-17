@@ -21,6 +21,7 @@
 //! as public constants.
 
 use doom_game::AutomapCanvas;
+use doom_game::AutomapState;
 use doom_map::Level;
 use doom_types::Bam;
 
@@ -277,79 +278,7 @@ pub fn draw_player_arrow_on_fb(fb: &mut Framebuffer, sx: i32, sy: i32, player_an
 }
 
 // ---------------------------------------------------------------------------
-// AutomapState
 // ---------------------------------------------------------------------------
-
-/// Interactive state for the automap overlay.
-///
-/// Controls zoom level, center position, and whether the map follows the
-/// player automatically.
-#[derive(Debug, Clone)]
-pub struct AutomapState {
-    /// Whether the automap is currently visible.
-    pub active: bool,
-    /// Zoom level: pixels per map unit (higher = more zoomed in).
-    pub zoom: f32,
-    /// Center X in map-space coordinates.
-    pub center_x: f32,
-    /// Center Y in map-space coordinates.
-    pub center_y: f32,
-    /// When true, center tracks the player position each frame.
-    pub follow_player: bool,
-}
-
-/// Maximum zoom (pixels per map unit).
-const ZOOM_MAX: f32 = 4.0;
-/// Minimum zoom (pixels per map unit).
-const ZOOM_MIN: f32 = 0.1;
-/// Zoom multiplier for each zoom-in step.
-const ZOOM_FACTOR: f32 = 1.2;
-
-impl AutomapState {
-    /// Create a new `AutomapState` with sensible defaults.
-    ///
-    /// Starts inactive, zoom 0.5, follow-player enabled, center at origin.
-    pub fn new() -> Self {
-        Self {
-            active: false,
-            zoom: 0.5,
-            center_x: 0.0,
-            center_y: 0.0,
-            follow_player: true,
-        }
-    }
-
-    /// Toggle the automap on/off.
-    pub fn toggle(&mut self) {
-        self.active = !self.active;
-    }
-
-    /// Zoom in by multiplying zoom by [`ZOOM_FACTOR`], capped at [`ZOOM_MAX`].
-    pub fn zoom_in(&mut self) {
-        self.zoom = (self.zoom * ZOOM_FACTOR).min(ZOOM_MAX);
-    }
-
-    /// Zoom out by dividing zoom by [`ZOOM_FACTOR`], floored at [`ZOOM_MIN`].
-    pub fn zoom_out(&mut self) {
-        self.zoom = (self.zoom / ZOOM_FACTOR).max(ZOOM_MIN);
-    }
-
-    /// Update the center to follow the player position (if `follow_player` is enabled).
-    ///
-    /// `player_x` and `player_y` are in map units (not fixed-point).
-    pub fn update_center(&mut self, player_x: i32, player_y: i32) {
-        if self.follow_player {
-            self.center_x = player_x as f32;
-            self.center_y = player_y as f32;
-        }
-    }
-}
-
-impl Default for AutomapState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Public API -- legacy (auto-fit) entry point
@@ -392,16 +321,16 @@ pub fn draw_automap(
     let scale = (SCREEN_W as f32 / padded_w).min(SCREEN_H as f32 / padded_h);
 
     // Build an ephemeral AutomapState centered on the map.
-    let center_x = (min_x as f32 + max_x as f32) / 2.0;
-    let center_y = (min_y as f32 + max_y as f32) / 2.0;
+    let mut state = AutomapState::new();
+    state.center_x = (min_x as f32 + max_x as f32) / 2.0;
+    state.center_y = (min_y as f32 + max_y as f32) / 2.0;
+    state.zoom = scale;
 
     // Use the internal draw with this computed scale/center.
     draw_automap_internal(
         fb,
         level,
-        center_x,
-        center_y,
-        scale,
+        &state,
         player_x,
         player_y,
         player_angle,
@@ -432,9 +361,7 @@ pub fn draw_automap_ex(
     draw_automap_internal(
         fb,
         level,
-        state.center_x,
-        state.center_y,
-        state.zoom,
+        state,
         player_x,
         player_y,
         player_angle,
@@ -449,9 +376,7 @@ pub fn draw_automap_ex(
 fn draw_automap_internal(
     fb: &mut Framebuffer,
     level: &Level,
-    center_x: f32,
-    center_y: f32,
-    zoom: f32,
+    state: &AutomapState,
     player_x: i32,
     player_y: i32,
     player_angle: Bam,
@@ -460,6 +385,9 @@ fn draw_automap_internal(
         return;
     }
 
+    let center_x = state.center_x;
+    let center_y = state.center_y;
+    let zoom = state.zoom;
     // World -> screen coordinate transform.
     let world_to_screen = |wx: f32, wy: f32| -> (i32, i32) {
         let sx = HALF_W + ((wx - center_x) * zoom) as i32;
@@ -721,7 +649,659 @@ pub fn map_to_screen(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_map::Level;
+    use doom_game::AutomapState;
+use doom_map::Level;
+    use doom_map::lumps::{
+        Blockmap, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector,
+        Thing as ThingRaw, Vertex as VxRaw,
+    };
+
+    // -----------------------------------------------------------------------
+    // Minimal Level builder
+    // -----------------------------------------------------------------------
+
+    /// Build a `Level` with caller-supplied vertexes, linedefs, sidedefs, and
+    /// sectors.  Provides sensible defaults for BSP data.
+    fn make_level_full(
+        vertexes: Vec<VxRaw>,
+        linedefs: Vec<LdRaw>,
+        sidedefs: Vec<SdRaw>,
+        sectors: Vec<Sector>,
+    ) -> Level {
+        make_level_full_with_things(vertexes, linedefs, sidedefs, sectors, vec![])
+    }
+
+    fn make_level_full_with_things(
+        vertexes: Vec<VxRaw>,
+        linedefs: Vec<LdRaw>,
+        sidedefs: Vec<SdRaw>,
+        sectors: Vec<Sector>,
+        things: Vec<ThingRaw>,
+    ) -> Level {
+        let n_sectors = sectors.len().max(1);
+
+        // Ensure at least one sector for reject table sizing.
+        let final_sectors = if sectors.is_empty() {
+            vec![Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            }]
+        } else {
+            sectors
+        };
+
+        let ssector = Ssector {
+            seg_count: 0,
+            first_seg: 0,
+        };
+
+        let mut bm_bytes = vec![0u8; 8 + 2 + 4];
+        bm_bytes[0..2].copy_from_slice(&0i16.to_le_bytes());
+        bm_bytes[2..4].copy_from_slice(&0i16.to_le_bytes());
+        bm_bytes[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_bytes[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_bytes[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_bytes[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_bytes[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_bytes).expect("blockmap parse");
+
+        let reject_size = (n_sectors * n_sectors).div_ceil(8);
+        let reject = Reject::parse_lump(&vec![0u8; reject_size], n_sectors).expect("reject parse");
+
+        Level {
+            name: "TEST".to_owned(),
+            things,
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs: vec![],
+            ssectors: vec![ssector],
+            nodes: vec![],
+            sectors: final_sectors,
+            reject,
+            blockmap,
+        }
+    }
+
+    /// Build a simple level with only vertexes and linedefs (no sidedefs/sectors).
+    fn make_level(vertexes: Vec<VxRaw>, linedefs: Vec<LdRaw>) -> Level {
+        make_level_full(vertexes, linedefs, vec![], vec![])
+    }
+
+    /// Helper to create a sidedef pointing at a given sector.
+    fn make_sidedef(sector: u16) -> SdRaw {
+        SdRaw {
+            x_offset: 0,
+            y_offset: 0,
+            upper_texture: *b"--------",
+            lower_texture: *b"--------",
+            middle_texture: *b"--------",
+            sector,
+        }
+    }
+
+    fn make_thing(x: i16, y: i16, kind: u16) -> ThingRaw {
+        ThingRaw {
+            x,
+            y,
+            angle: 0,
+            kind,
+            flags: 0,
+        }
+    }
+
+    // =======================================================================
+    // ---------------------------------------------------------------------------
+
+/// Automap canvas implementation that draws onto a [`Framebuffer`].
+///
+/// Implements [`doom_game::AutomapCanvas`] so that `doom_game::draw_automap_full`
+/// can render directly into the renderer's framebuffer without the game crate
+/// knowing about `Framebuffer`.
+pub struct RendererAutomapCanvas<'a> {
+    /// Mutable reference to the target framebuffer.
+    fb: &'a mut Framebuffer,
+}
+
+impl<'a> RendererAutomapCanvas<'a> {
+    /// Wrap a mutable `Framebuffer` reference as an `AutomapCanvas`.
+    pub fn new(fb: &'a mut Framebuffer) -> Self {
+        Self { fb }
+    }
+}
+
+impl AutomapCanvas for RendererAutomapCanvas<'_> {
+    fn set_pixel(&mut self, x: i32, y: i32, color: u8) {
+        if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
+            self.fb.set_pixel(x as usize, y as usize, color);
+        }
+    }
+
+    fn get_pixel(&self, x: i32, y: i32) -> Option<u8> {
+        if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
+            self.fb.get_pixel(x as usize, y as usize)
+        } else {
+            None
+        }
+    }
+
+    fn clear(&mut self, color: u8) {
+        self.fb.clear(color);
+    }
+
+    fn width(&self) -> i32 {
+        SCREEN_W
+    }
+
+    fn height(&self) -> i32 {
+        SCREEN_H
+    }
+}
+
+// ---------------------------------------------------------------------------
+// render_automap -- full integration entry point
+// ---------------------------------------------------------------------------
+
+/// Render the automap overlay onto the framebuffer using the full game-side
+/// automap logic (visibility tracking, grid, thing markers, cheat flags).
+///
+/// This delegates to [`doom_game::draw_automap_full`] through the
+/// [`RendererAutomapCanvas`] bridge.
+///
+/// # Parameters
+/// - `fb`: target framebuffer (320x200).
+/// - `level`: current level geometry.
+/// - `player_x`, `player_y`: player position in map units.
+/// - `player_angle`: player facing angle (BAM).
+/// - `zoom`: pixels per map unit.
+/// - `show_all_lines`: IDDT cheat flag for revealing all linedefs.
+/// - `show_all_things`: IDDT cheat flag for revealing all things.
+/// - `seen_lines`: per-linedef visibility (from `GameState`).
+pub fn render_automap(
+    fb: &mut Framebuffer,
+    level: &Level,
+    player_x: i32,
+    player_y: i32,
+    player_angle: Bam,
+    zoom: f32,
+    show_all_lines: bool,
+    show_all_things: bool,
+    seen_lines: &[bool],
+) {
+    // Build automap state from parameters.
+    let state = doom_game::AutomapState {
+        active: true,
+        zoom,
+        center_x: player_x as f32,
+        center_y: player_y as f32,
+        follow_player: true,
+        show_all_lines,
+        show_all_things,
+    };
+
+    // Convert BAM angle to radians.
+    let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
+
+    let mut canvas = RendererAutomapCanvas::new(fb);
+    doom_game::draw_automap_full(
+        &mut canvas,
+        level,
+        &state,
+        seen_lines,
+        player_x,
+        player_y,
+        angle_rad,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Grid drawing (renderer-side, for standalone use)
+// ---------------------------------------------------------------------------
+
+/// Draw a grid overlay onto the framebuffer at the given map center and zoom.
+///
+/// Grid lines are spaced at 128 map-unit intervals (the classic Doom grid).
+/// Uses [`automap_colors::GRID`] colour.
+///
+/// This is a standalone renderer-side helper; [`render_automap`] already draws
+/// a grid via the game-side logic.
+pub fn draw_grid_on_fb(fb: &mut Framebuffer, center_x: f32, center_y: f32, zoom: f32) {
+    let mut canvas = RendererAutomapCanvas::new(fb);
+    doom_game::draw_grid(&mut canvas, center_x, center_y, zoom);
+}
+
+/// Draw a directional player arrow onto the framebuffer at a screen position.
+///
+/// The arrow is approximately 8 pixels long, pointing in `player_angle`.
+/// Uses [`automap_colors::PLAYER`] colour.
+pub fn draw_player_arrow_on_fb(fb: &mut Framebuffer, sx: i32, sy: i32, player_angle: Bam) {
+    let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
+
+    let cos_a = angle_rad.cos() as f32;
+    let sin_a = angle_rad.sin() as f32;
+
+    let shaft_len: f32 = 8.0;
+    let barb_len: f32 = 4.0;
+
+    let tip_x = sx as f32 + cos_a * shaft_len;
+    let tip_y = sy as f32 - sin_a * shaft_len;
+    let tail_x = sx as f32 - cos_a * shaft_len;
+    let tail_y = sy as f32 + sin_a * shaft_len;
+
+    let barb_angle_offset = core::f64::consts::FRAC_PI_4 * 3.0;
+    let left_barb_angle = angle_rad + barb_angle_offset;
+    let right_barb_angle = angle_rad - barb_angle_offset;
+
+    let left_x = tip_x + (left_barb_angle.cos() as f32) * barb_len;
+    let left_y = tip_y - (left_barb_angle.sin() as f32) * barb_len;
+    let right_x = tip_x + (right_barb_angle.cos() as f32) * barb_len;
+    let right_y = tip_y - (right_barb_angle.sin() as f32) * barb_len;
+
+    draw_line_fb(
+        fb,
+        tail_x as i32,
+        tail_y as i32,
+        tip_x as i32,
+        tip_y as i32,
+        COLOR_PLAYER,
+    );
+    draw_line_fb(
+        fb,
+        tip_x as i32,
+        tip_y as i32,
+        left_x as i32,
+        left_y as i32,
+        COLOR_PLAYER,
+    );
+    draw_line_fb(
+        fb,
+        tip_x as i32,
+        tip_y as i32,
+        right_x as i32,
+        right_y as i32,
+        COLOR_PLAYER,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Public API -- legacy (auto-fit) entry point
+// ---------------------------------------------------------------------------
+
+/// Render a 2D overhead automap of `level` into `fb` (legacy auto-fit mode).
+///
+/// This is the backward-compatible entry point that auto-computes zoom and
+/// center from the level bounds.
+///
+/// * `player_x`, `player_y` -- player position in Doom map units.
+/// * `player_angle` -- player facing angle (used for the directional arrow).
+/// * `_palette` -- unused for now (automap uses fixed palette indices).
+pub fn draw_automap(
+    level: &Level,
+    player_x: i32,
+    player_y: i32,
+    player_angle: Bam,
+    fb: &mut Framebuffer,
+    _palette: &PaletteLut,
+) {
+    // Fill background.
+    fb.clear(COLOR_BACKGROUND);
+
+    // Compute map bounds from vertexes.
+    let Some((min_x, max_x, min_y, max_y)) = map_bounds(level) else {
+        return;
+    };
+
+    let map_w = (max_x - min_x) as f32;
+    let map_h = (max_y - min_y) as f32;
+
+    if map_w < 1.0 || map_h < 1.0 {
+        return;
+    }
+
+    let padded_w = map_w * (1.0 + 2.0 * PADDING_FRAC);
+    let padded_h = map_h * (1.0 + 2.0 * PADDING_FRAC);
+
+    let scale = (SCREEN_W as f32 / padded_w).min(SCREEN_H as f32 / padded_h);
+
+    // Build an ephemeral AutomapState centered on the map.
+    let mut state = AutomapState::new();
+    state.center_x = (min_x as f32 + max_x as f32) / 2.0;
+    state.center_y = (min_y as f32 + max_y as f32) / 2.0;
+    state.zoom = scale;
+
+    // Use the internal draw with this computed scale/center.
+    draw_automap_internal(
+        fb,
+        level,
+        &state,
+        player_x,
+        player_y,
+        player_angle,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Public API -- stateful entry point
+// ---------------------------------------------------------------------------
+
+/// Render a 2D overhead automap using the interactive [`AutomapState`].
+///
+/// This is the preferred entry point for interactive automap usage with
+/// zoom/pan controls.
+///
+/// * `player_x`, `player_y` -- player position in Doom map units.
+/// * `player_angle` -- player facing angle (used for the directional arrow).
+pub fn draw_automap_ex(
+    fb: &mut Framebuffer,
+    level: &Level,
+    state: &AutomapState,
+    player_x: i32,
+    player_y: i32,
+    player_angle: Bam,
+) {
+    fb.clear(COLOR_BACKGROUND);
+
+    draw_automap_internal(
+        fb,
+        level,
+        state,
+        player_x,
+        player_y,
+        player_angle,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Internal rendering
+// ---------------------------------------------------------------------------
+
+/// Core automap rendering: draws linedefs + player arrow.
+fn draw_automap_internal(
+    fb: &mut Framebuffer,
+    level: &Level,
+    state: &AutomapState,
+    player_x: i32,
+    player_y: i32,
+    player_angle: Bam,
+) {
+    if level.vertexes.is_empty() {
+        return;
+    }
+
+    let center_x = state.center_x;
+    let center_y = state.center_y;
+    let zoom = state.zoom;
+    // World -> screen coordinate transform.
+    let world_to_screen = |wx: f32, wy: f32| -> (i32, i32) {
+        let sx = HALF_W + ((wx - center_x) * zoom) as i32;
+        let sy = HALF_H - ((wy - center_y) * zoom) as i32;
+        (sx, sy)
+    };
+
+    // Draw all linedefs.
+    for ld in &level.linedefs {
+        let color = line_color(ld, level);
+
+        let Some(v1) = level.vertexes.get(ld.from_vertex as usize) else {
+            continue;
+        };
+        let Some(v2) = level.vertexes.get(ld.to_vertex as usize) else {
+            continue;
+        };
+
+        let (x0, y0) = world_to_screen(v1.x as f32, v1.y as f32);
+        let (x1, y1) = world_to_screen(v2.x as f32, v2.y as f32);
+
+        draw_line_fb(fb, x0, y0, x1, y1, color);
+    }
+
+    // Draw player arrow.
+    let (px, py) = world_to_screen(player_x as f32, player_y as f32);
+    draw_player_arrow_internal(fb, px, py, player_angle);
+}
+
+// ---------------------------------------------------------------------------
+// Line colour classification
+// ---------------------------------------------------------------------------
+
+/// Choose an automap colour for a linedef based on its properties.
+///
+/// Colour priority:
+/// 1. **Secret** (flag bit 5): purple
+/// 2. **One-sided** (no left sidedef): red
+/// 3. **Two-sided with height change** (floor or ceiling differs): yellow
+/// 4. **Two-sided normal**: brown
+pub fn line_color(ld: &doom_map::Linedef, level: &Level) -> u8 {
+    // Secret lines get a distinct colour.
+    if ld.flags & FLAG_SECRET != 0 {
+        return COLOR_SECRET;
+    }
+
+    if !ld.is_two_sided() {
+        return COLOR_ONE_SIDED;
+    }
+
+    // Two-sided: check for height differences between front/back sectors.
+    if has_height_change(ld, level) {
+        COLOR_HEIGHT_CHANGE
+    } else {
+        COLOR_TWO_SIDED
+    }
+}
+
+/// Returns `true` if the front and back sectors of a two-sided linedef have
+/// different floor or ceiling heights.
+fn has_height_change(ld: &doom_map::Linedef, level: &Level) -> bool {
+    let right_sd = match level.sidedefs.get(ld.right_sidedef as usize) {
+        Some(sd) => sd,
+        None => return false,
+    };
+    let left_sd = match level.sidedefs.get(ld.left_sidedef as usize) {
+        Some(sd) => sd,
+        None => return false,
+    };
+
+    let right_sector = match level.sectors.get(right_sd.sector as usize) {
+        Some(s) => s,
+        None => return false,
+    };
+    let left_sector = match level.sectors.get(left_sd.sector as usize) {
+        Some(s) => s,
+        None => return false,
+    };
+
+    right_sector.floor_height != left_sector.floor_height
+        || right_sector.ceil_height != left_sector.ceil_height
+}
+
+// ---------------------------------------------------------------------------
+// Player arrow (internal, for legacy API)
+// ---------------------------------------------------------------------------
+
+/// Draw a directional arrow at the player's screen position.
+///
+/// The arrow is approximately 8 pixels long, pointing in `player_angle`.
+/// Three lines form the arrowhead shape:
+///   - A shaft from tail to tip
+///   - Two barbs angled 135 degrees from the shaft
+fn draw_player_arrow_internal(fb: &mut Framebuffer, px: i32, py: i32, player_angle: Bam) {
+    // Convert BAM angle to radians (f32 is fine for renderer-only math).
+    let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
+    let cos_a = angle_rad.cos() as f32;
+    let sin_a = angle_rad.sin() as f32;
+
+    // Arrow dimensions (in screen pixels).
+    let shaft_len: f32 = 8.0;
+    let barb_len: f32 = 4.0;
+
+    // Tip of the arrow (ahead of the player position).
+    // Note: screen Y is flipped, so sin component is subtracted.
+    let tip_x = px as f32 + cos_a * shaft_len;
+    let tip_y = py as f32 - sin_a * shaft_len;
+
+    // Tail of the arrow (behind the player position).
+    let tail_x = px as f32 - cos_a * shaft_len;
+    let tail_y = py as f32 + sin_a * shaft_len;
+
+    // Barb angles: 135 degrees from the forward direction (each side).
+    let barb_angle_offset = core::f64::consts::FRAC_PI_4 * 3.0; // 135 degrees
+
+    let left_barb_angle = angle_rad + barb_angle_offset;
+    let right_barb_angle = angle_rad - barb_angle_offset;
+
+    let left_x = tip_x + (left_barb_angle.cos() as f32) * barb_len;
+    let left_y = tip_y - (left_barb_angle.sin() as f32) * barb_len;
+
+    let right_x = tip_x + (right_barb_angle.cos() as f32) * barb_len;
+    let right_y = tip_y - (right_barb_angle.sin() as f32) * barb_len;
+
+    // Draw shaft: tail -> tip
+    draw_line_fb(
+        fb,
+        tail_x as i32,
+        tail_y as i32,
+        tip_x as i32,
+        tip_y as i32,
+        COLOR_PLAYER,
+    );
+    // Draw left barb: tip -> left
+    draw_line_fb(
+        fb,
+        tip_x as i32,
+        tip_y as i32,
+        left_x as i32,
+        left_y as i32,
+        COLOR_PLAYER,
+    );
+    // Draw right barb: tip -> right
+    draw_line_fb(
+        fb,
+        tip_x as i32,
+        tip_y as i32,
+        right_x as i32,
+        right_y as i32,
+        COLOR_PLAYER,
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Map bounds
+// ---------------------------------------------------------------------------
+
+/// Compute min/max world-coordinate bounds of all vertexes.
+///
+/// Returns `None` if the level has no vertexes.
+fn map_bounds(level: &Level) -> Option<(i32, i32, i32, i32)> {
+    let mut iter = level.vertexes.iter();
+    let first = iter.next()?;
+
+    let mut min_x = i32::from(first.x);
+    let mut max_x = i32::from(first.x);
+    let mut min_y = i32::from(first.y);
+    let mut max_y = i32::from(first.y);
+
+    for v in iter {
+        let vx = i32::from(v.x);
+        let vy = i32::from(v.y);
+        if vx < min_x {
+            min_x = vx;
+        }
+        if vx > max_x {
+            max_x = vx;
+        }
+        if vy < min_y {
+            min_y = vy;
+        }
+        if vy > max_y {
+            max_y = vy;
+        }
+    }
+
+    Some((min_x, max_x, min_y, max_y))
+}
+
+// ---------------------------------------------------------------------------
+// Bresenham line rasteriser (framebuffer-direct)
+// ---------------------------------------------------------------------------
+
+/// Integer Bresenham line drawing directly onto a `Framebuffer`.
+///
+/// Pixels outside `[0, 319] x [0, 199]` are silently skipped (no panic).
+pub fn draw_line_fb(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: u8) {
+    let dx = (x1 - x0).abs();
+    let dy = (y1 - y0).abs();
+    let sx: i32 = if x0 < x1 { 1 } else { -1 };
+    let sy: i32 = if y0 < y1 { 1 } else { -1 };
+
+    let mut x = x0;
+    let mut y = y0;
+    let mut err = dx - dy;
+
+    loop {
+        // Only plot pixels within screen bounds.
+        if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
+            fb.set_pixel(x as usize, y as usize, color);
+        }
+
+        if x == x1 && y == y1 {
+            break;
+        }
+
+        let e2 = 2 * err;
+        if e2 > -dy {
+            err -= dy;
+            x += sx;
+        }
+        if e2 < dx {
+            err += dx;
+            y += sy;
+        }
+    }
+}
+
+// Backward-compat alias used in old tests.
+#[cfg(test)]
+fn draw_line(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: u8) {
+    draw_line_fb(fb, x0, y0, x1, y1, color);
+}
+
+// ---------------------------------------------------------------------------
+// Coordinate transform helpers (public, for external use)
+// ---------------------------------------------------------------------------
+
+/// Convert map coordinates to screen coordinates using the given center and zoom.
+///
+/// Doom Y increases upward; screen Y increases downward. The transform
+/// flips Y so north remains up on the automap.
+pub fn map_to_screen(
+    map_x: f32,
+    map_y: f32,
+    center_x: f32,
+    center_y: f32,
+    zoom: f32,
+) -> (i32, i32) {
+    let sx = HALF_W + ((map_x - center_x) * zoom) as i32;
+    let sy = HALF_H - ((map_y - center_y) * zoom) as i32;
+    (sx, sy)
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use doom_game::AutomapState;
+use doom_map::Level;
     use doom_map::lumps::{
         Blockmap, FLAG_TWO_SIDED, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector,
         Thing as ThingRaw, Vertex as VxRaw,
@@ -866,27 +1446,7 @@ mod tests {
         assert!(state.zoom < initial);
     }
 
-    #[test]
-    fn t05_zoom_in_caps_at_max() {
-        let mut state = AutomapState::new();
-        for _ in 0..100 {
-            state.zoom_in();
-        }
-        assert!(state.zoom <= ZOOM_MAX);
-        assert!((state.zoom - ZOOM_MAX).abs() < f32::EPSILON);
-    }
-
-    #[test]
-    fn t06_zoom_out_floors_at_min() {
-        let mut state = AutomapState::new();
-        for _ in 0..100 {
-            state.zoom_out();
-        }
-        assert!(state.zoom >= ZOOM_MIN);
-        assert!((state.zoom - ZOOM_MIN).abs() < f32::EPSILON);
-    }
-
-    #[test]
+            #[test]
     fn t07_update_center_follows_player() {
         let mut state = AutomapState::new();
         state.follow_player = true;
@@ -1825,4 +2385,5 @@ mod tests {
             .count();
         assert!(grid_count > 0, "render_automap should draw grid lines");
     }
+}
 }

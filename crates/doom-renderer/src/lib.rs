@@ -36,8 +36,9 @@ pub mod weapon_anim;
 pub mod wipe;
 
 pub use anim::{AnimSequence, AnimState, AnimType, SwitchList};
+pub use doom_game::AutomapState;
 pub use automap::{
-    AutomapState, RendererAutomapCanvas, automap_colors, draw_automap, draw_automap_ex,
+    RendererAutomapCanvas, automap_colors, draw_automap, draw_automap_ex,
     draw_grid_on_fb, draw_line_fb, draw_player_arrow_on_fb, line_color, map_to_screen,
     render_automap,
 };

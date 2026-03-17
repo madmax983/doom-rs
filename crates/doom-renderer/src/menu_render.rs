@@ -589,7 +589,7 @@ pub fn draw_finale_wad(
 
     // Reveal `text_index` characters of the text.
     let visible: String = text.chars().take(text_index).collect();
-    let mut x = 10i32;
+    let x = 10i32;
     let mut y = 10i32;
     for line in visible.lines() {
         font.draw_string(fb, x, y, line, 4);
