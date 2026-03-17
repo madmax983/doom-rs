@@ -19,7 +19,10 @@
 //! For environments without a real audio device (like a lonely CI server), use
 //! [`AudioDriver::null`] to skip the hardware entirely.
 
+#[cfg(not(feature = "loom"))]
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "loom")]
+use loom::sync::{Arc, Mutex};
 
 use crate::{AudioError, midi::MidiPlayer, sfx_mixer::SfxMixer};
 
@@ -173,7 +176,7 @@ impl AudioDriver {
 // Tests
 // ---------------------------------------------------------------------------
 
-#[cfg(test)]
+#[cfg(all(test, not(feature = "loom")))]
 mod tests {
     use super::*;
     use crate::mus::{MusEvent, MusHeader, MusScore};
@@ -235,5 +238,34 @@ mod tests {
             "score must be loaded after load_score"
         );
         assert_eq!(mp.event_cursor, 0);
+    }
+}
+
+#[cfg(all(test, feature = "loom"))]
+mod loom_tests {
+    use super::*;
+    use loom::thread;
+
+    #[test]
+    fn havoc_loom_deadlock_test() {
+        loom::model(|| {
+            let driver = AudioDriver::null();
+            let mixer1 = driver.mixer.clone();
+            let mixer2 = driver.mixer.clone();
+
+            let t1 = thread::spawn(move || {
+                let mut m = mixer1.lock().unwrap();
+                m.stop_all();
+            });
+
+            let t2 = thread::spawn(move || {
+                let mut m = mixer2.lock().unwrap();
+                let mut buf = [0.0; 2];
+                m.mix(&mut buf, 44100);
+            });
+
+            t1.join().unwrap();
+            t2.join().unwrap();
+        });
     }
 }
