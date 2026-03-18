@@ -29,6 +29,7 @@ pub mod player;
 pub mod projectile;
 pub mod random;
 pub mod savegame;
+pub mod scoring;
 pub mod sight;
 pub mod snapshot;
 pub mod sound;
