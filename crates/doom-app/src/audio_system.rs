@@ -12,9 +12,14 @@
 //! If audio initialisation fails (no device, CI, headless) `try_open` returns
 //! `None` and the game runs silently — no panics, no unwraps in hot paths.
 
+#[cfg(feature = "loom")]
+use loom::sync::Arc;
+#[cfg(not(feature = "loom"))]
 use std::sync::Arc;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "loom"))]
+use loom::sync::atomic::{AtomicUsize, Ordering};
+#[cfg(all(test, not(feature = "loom")))]
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use doom_audio::{
@@ -547,6 +552,7 @@ mod tests {
         data
     }
 
+    #[allow(dead_code)]
     fn valid_sfx_lump_1_sample() -> Vec<u8> {
         let mut data = Vec::new();
         data.extend_from_slice(&3u16.to_le_bytes()); // format
@@ -556,6 +562,7 @@ mod tests {
         data
     }
 
+    #[allow(dead_code)]
     fn test_pcm_sample() -> Arc<PcmSample> {
         Arc::new(PcmSample {
             sample_rate: 11_025,
@@ -563,6 +570,7 @@ mod tests {
         })
     }
 
+    #[allow(dead_code)]
     fn run_audio_events(events: Vec<AudioEvent>) -> usize {
         let driver = AudioDriver::null();
         let mixer = driver.mixer.clone();
@@ -587,6 +595,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn audio_system_try_open_null_does_not_panic() {
         // Verifies that try_open_null() succeeds regardless of audio device
         // availability (it bypasses cpal entirely).
@@ -595,6 +604,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn send_events_to_null_system_does_not_panic() {
         let system = AudioSystem::try_open_null().expect("null audio must succeed");
         // Fire-and-forget: none of these should panic.
@@ -604,6 +614,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn audio_cmd_thread_reuses_channel_for_same_origin() {
         let origin = doom_game::MobjHandle {
             index: 7,
@@ -621,6 +632,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn audio_cmd_thread_keeps_distinct_origins_on_distinct_channels() {
         let active_count = run_audio_events(vec![
             AudioEvent::PlaySfx(
@@ -667,6 +679,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn music_lump_for_map_rejects_malformed_e_format() {
         assert_eq!(music_lump_for_map("E1MX"), None);
     }
@@ -724,6 +737,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn sound_request_sfx_maps_player_use_fail_to_noway() {
         assert_eq!(
             sound_request_sfx(doom_game::SoundRequest::PlayerUseFail),
@@ -732,6 +746,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn sound_request_sfx_maps_locked_door_feedback_to_oof() {
         assert_eq!(
             sound_request_sfx(doom_game::SoundRequest::PlayerUseLockedDoor(
@@ -742,6 +757,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn sfx_cache_empty_on_empty_wad_does_not_panic() {
         // Build a minimal IWAD with no lumps and verify populate_sfx_cache
         // completes without panicking.
@@ -757,6 +773,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn sfx_cache_without_ds_markers_falls_back_to_ds_prefix_scan() {
         let sfx = valid_sfx_lump_1_sample();
         let wad_bytes = make_iwad(&[("THINGS", b"not_sfx"), ("DSPISTOL", sfx.as_slice())]);

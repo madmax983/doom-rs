@@ -4,6 +4,9 @@
 //! their Doom SFX ID, and [`play_sfx`] for dispatching a sound effect onto
 //! the nearest available [`Mixer`] channel.
 
+#[cfg(feature = "loom")]
+use loom::sync::Arc;
+#[cfg(not(feature = "loom"))]
 use std::sync::Arc;
 
 use crate::mixer::{Mixer, PcmSample};
@@ -109,6 +112,7 @@ mod tests {
     use crate::mixer::Mixer;
 
     /// Build a trivial, non-silent [`PcmSample`] (a single byte at silence+1).
+    #[allow(dead_code)]
     fn make_sample() -> Arc<PcmSample> {
         Arc::new(PcmSample {
             sample_rate: 11_025,
@@ -117,6 +121,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn sfx_cache_insert_and_get() {
         let mut cache = SfxCache::new();
         cache.insert(42, make_sample());
@@ -136,6 +141,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "loom"))]
     fn play_sfx_starts_channel() {
         let mut mixer = Mixer::new(22_050);
         let mut cache = SfxCache::new();

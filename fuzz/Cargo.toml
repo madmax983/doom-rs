@@ -13,9 +13,19 @@ libfuzzer-sys = "0.4"
 [dependencies.doom-types]
 path = "../crates/doom-types"
 
+[dependencies.doom-wad]
+path = "../crates/doom-wad"
+
 [[bin]]
 name = "fuzz_target_1"
 path = "fuzz_targets/fuzz_target_1.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_target_3"
+path = "fuzz_targets/fuzz_target_3.rs"
 test = false
 doc = false
 bench = false
