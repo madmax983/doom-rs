@@ -209,9 +209,9 @@ impl IntermissionRenderer {
     /// Advance the intermission animation by one game tic (1/35 sec).
     ///
     /// During counting phases the displayed percentage increments by
-    /// [`COUNT_SPEED`] per tic until it reaches the target, then the phase
+    /// `COUNT_SPEED` per tic until it reaches the target, then the phase
     /// advances. After all counting phases, the time display is held for
-    /// [`TIME_DISPLAY_TICS`] tics before transitioning to `Done`.
+    /// `TIME_DISPLAY_TICS` tics before transitioning to `Done`.
     pub fn tick(&mut self) {
         self.tic += 1;
 
@@ -291,7 +291,7 @@ pub fn draw_intermission_text(fb: &mut Framebuffer, x: usize, y: usize, text: &s
 /// 7x9 digit font.
 ///
 /// The digits are drawn left-to-right at `(x, y)`, followed by a `%` glyph
-/// rendered via [`draw_char`].
+/// rendered via `draw_char`.
 pub fn draw_percentage(fb: &mut Framebuffer, x: usize, y: usize, value: u8, color: u8) {
     let val = value as u32;
     let ix = x as i32;

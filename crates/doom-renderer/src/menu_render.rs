@@ -347,7 +347,11 @@ pub fn draw_menu_wad(
     }
 
     // Skull cursor — M_SKULL1 / M_SKULL2 at (item_x - 32, item_y).
-    let skull_name = if menu.skull_frame() == 0 { "M_SKULL1" } else { "M_SKULL2" };
+    let skull_name = if menu.skull_frame() == 0 {
+        "M_SKULL1"
+    } else {
+        "M_SKULL2"
+    };
     let cursor_y = layout
         .item_ys
         .get(menu.cursor())

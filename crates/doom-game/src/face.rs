@@ -169,7 +169,7 @@ impl FaceState {
 
         // 3. Ouch (20+ damage in one tic)
         if self.damage_this_tic >= 20 {
-            let dir = damage_dir(attacker_angle, player_angle);
+            let _dir = damage_dir(attacker_angle, player_angle);
             let kind = FaceKind::Ouch { tier };
             // Ouch is based on direction but uses the pain patches — just
             // store direction in Normal after ouch expires; for now use Ouch.
@@ -217,7 +217,11 @@ impl FaceState {
                 static GLANCE_TOGGLE: std::sync::atomic::AtomicBool =
                     std::sync::atomic::AtomicBool::new(false);
                 let toggle = GLANCE_TOGGLE.fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
-                if toggle { FaceDir::Right } else { FaceDir::Left }
+                if toggle {
+                    FaceDir::Right
+                } else {
+                    FaceDir::Left
+                }
             } else {
                 FaceDir::Forward
             };
@@ -459,9 +463,27 @@ mod tests {
 
     #[test]
     fn patch_names_match_vanilla() {
-        assert_eq!(face_patch_name(FaceKind::Normal { tier: 0, dir: FaceDir::Forward }), "STFST00");
-        assert_eq!(face_patch_name(FaceKind::Normal { tier: 2, dir: FaceDir::Left }), "STFTL20");
-        assert_eq!(face_patch_name(FaceKind::Normal { tier: 4, dir: FaceDir::Right }), "STFTR40");
+        assert_eq!(
+            face_patch_name(FaceKind::Normal {
+                tier: 0,
+                dir: FaceDir::Forward
+            }),
+            "STFST00"
+        );
+        assert_eq!(
+            face_patch_name(FaceKind::Normal {
+                tier: 2,
+                dir: FaceDir::Left
+            }),
+            "STFTL20"
+        );
+        assert_eq!(
+            face_patch_name(FaceKind::Normal {
+                tier: 4,
+                dir: FaceDir::Right
+            }),
+            "STFTR40"
+        );
         assert_eq!(face_patch_name(FaceKind::Ouch { tier: 3 }), "STFOUCH3");
         assert_eq!(face_patch_name(FaceKind::EvilGrin), "STFEVL0");
         assert_eq!(face_patch_name(FaceKind::Rampage { tier: 1 }), "STFKLL10");

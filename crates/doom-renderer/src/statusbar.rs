@@ -1136,7 +1136,14 @@ pub fn draw_status_bar_wad(
     }
     // Weapons 2-7: positions in a 3x2 grid at x=111..138, y=172..182.
     let arm_xs = [111, 123, 135, 111, 123, 135];
-    let arm_ys = [bar_y + 4, bar_y + 4, bar_y + 4, bar_y + 14, bar_y + 14, bar_y + 14];
+    let arm_ys = [
+        bar_y + 4,
+        bar_y + 4,
+        bar_y + 4,
+        bar_y + 14,
+        bar_y + 14,
+        bar_y + 14,
+    ];
     for slot in 0..6usize {
         let weapon_num = slot + 2; // weapons 2-7
         let owned = data.weapons.get(weapon_num).copied().unwrap_or(false);

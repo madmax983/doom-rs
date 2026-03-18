@@ -204,7 +204,7 @@ impl crate::sprite::SpriteCache {
     /// Look up a sprite frame by its string name.
     ///
     /// The name should be uppercase (e.g., `"TROOA1"`). This is the
-    /// string-based counterpart to [`SpriteCache::get`] which takes
+    /// string-based counterpart to [`crate::sprite::SpriteCache::get`] which takes
     /// `&[u8; 8]`.
     pub fn get_by_name(&self, name: &str) -> Option<&crate::sprite::SpriteFrame> {
         // Convert to 8-byte array for the existing lookup.

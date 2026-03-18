@@ -119,12 +119,12 @@ impl AutomapState {
         self.active = !self.active;
     }
 
-    /// Zoom in by multiplying zoom by [`ZOOM_FACTOR`], capped at [`ZOOM_MAX`].
+    /// Zoom in by multiplying zoom by `ZOOM_FACTOR`, capped at `ZOOM_MAX`.
     pub fn zoom_in(&mut self) {
         self.zoom = (self.zoom * ZOOM_FACTOR).min(ZOOM_MAX);
     }
 
-    /// Zoom out by dividing zoom by [`ZOOM_FACTOR`], floored at [`ZOOM_MIN`].
+    /// Zoom out by dividing zoom by `ZOOM_FACTOR`, floored at `ZOOM_MIN`.
     pub fn zoom_out(&mut self) {
         self.zoom = (self.zoom / ZOOM_FACTOR).max(ZOOM_MIN);
     }

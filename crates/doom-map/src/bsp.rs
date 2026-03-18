@@ -10,7 +10,7 @@
 //! - Inductive step: adding a node converts one leaf into a node + 2 leaves,
 //!   net change = +1 node, +1 leaf → invariant preserved ✓
 //!
-//! The runtime check in [`BspTree::validate_leaf_count`] enforces this.
+//! The runtime check in `BspTree::validate_leaf_count` enforces this.
 //! A Verus formal proof would encode this by structural induction on
 //! `bsp_depth(node_id, nodes)` (a `spec fn` that is finite because
 //! `N_NODES < u16::MAX`).
