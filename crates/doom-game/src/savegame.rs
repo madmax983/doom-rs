@@ -1566,6 +1566,30 @@ mod tests {
         assert!(!r.read_bool().unwrap());
     }
 
+    #[test]
+    fn cursor_read_truncated() {
+        let empty: [u8; 0] = [];
+        let mut r = ReadCursor::new(&empty);
+        assert_eq!(r.read_u8().unwrap_err(), SaveError::Truncated);
+        assert_eq!(r.read_i16().unwrap_err(), SaveError::Truncated);
+        assert_eq!(r.read_u16().unwrap_err(), SaveError::Truncated);
+        assert_eq!(r.read_i32().unwrap_err(), SaveError::Truncated);
+        assert_eq!(r.read_u32().unwrap_err(), SaveError::Truncated);
+        assert_eq!(r.read_bool().unwrap_err(), SaveError::Truncated);
+
+        let one_byte: [u8; 1] = [0xAB];
+        let mut r2 = ReadCursor::new(&one_byte);
+        assert_eq!(r2.read_i16().unwrap_err(), SaveError::Truncated);
+        assert_eq!(r2.read_u16().unwrap_err(), SaveError::Truncated);
+        assert_eq!(r2.read_i32().unwrap_err(), SaveError::Truncated);
+        assert_eq!(r2.read_u32().unwrap_err(), SaveError::Truncated);
+
+        let three_bytes: [u8; 3] = [0xAB, 0xCD, 0xEF];
+        let mut r3 = ReadCursor::new(&three_bytes);
+        assert_eq!(r3.read_i32().unwrap_err(), SaveError::Truncated);
+        assert_eq!(r3.read_u32().unwrap_err(), SaveError::Truncated);
+    }
+
     // --- Test 21: Roundtrip preserves mobj data ---
     #[test]
     fn roundtrip_mobj_data() {
