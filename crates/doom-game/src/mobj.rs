@@ -641,4 +641,20 @@ mod tests {
         slab.get_mut(handle).unwrap().health = 42;
         assert_eq!(slab.get(handle).unwrap().health, 42);
     }
+
+    #[test]
+    #[should_panic(expected = "free list points to occupied slot")]
+    fn alloc_unreachable_panic() {
+        let mut slab = MobjSlab::new();
+        let handle1 = slab.alloc(make_player_mobj());
+        slab.free(handle1);
+
+        // Artificially corrupt the slab to hit the unreachable arm
+        slab.slots[0] = Slot::Occupied {
+            mobj: make_player_mobj(),
+            generation: 1,
+        };
+
+        let _handle2 = slab.alloc(make_player_mobj());
+    }
 }

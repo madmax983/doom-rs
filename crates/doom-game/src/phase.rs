@@ -1195,4 +1195,16 @@ mod tests {
         assert_eq!(MapId::from_name("MAP01"), Some(MapId::doom2(1)));
         assert_eq!(MapId::from_name("map09"), Some(MapId::doom2(9)));
     }
+
+    #[test]
+    #[should_panic(expected = "internal error: entered unreachable code")]
+    fn tick_intermission_unreachable_panic() {
+        let mut ctrl = GamePhaseController::new(MapId::new(1, 1));
+
+        // Force state into Playing while skip is requested.
+        // This triggers the first branch of tick_intermission but fails the match
+        ctrl.phase = GamePhase::Playing;
+        ctrl.skip_requested = true;
+        ctrl.tick_intermission();
+    }
 }
