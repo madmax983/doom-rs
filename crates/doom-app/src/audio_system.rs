@@ -499,6 +499,16 @@ pub fn monster_death_lump(kind: doom_game::MobjKind) -> &'static str {
 /// - `"MAP1"` → `"D_MAP01"`
 /// - `"MAP01"` → `"D_MAP01"`
 /// - Unknown format → `None`
+///
+/// ## Examples
+///
+/// ```rust
+/// use doom_app::audio_system::music_lump_for_map;
+///
+/// assert_eq!(music_lump_for_map("E1M1"), Some("D_E1M1".to_string()));
+/// assert_eq!(music_lump_for_map("MAP01"), Some("D_MAP01".to_string()));
+/// assert_eq!(music_lump_for_map("INVALID"), None);
+/// ```
 pub fn music_lump_for_map(map: &str) -> Option<String> {
     Some(format!(
         "D_{}",
@@ -514,6 +524,7 @@ pub fn music_lump_for_map(map: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     fn stack_with_iwad_bytes(wad_bytes: Vec<u8>) -> WadStack {
         let mut stack = WadStack::new();
         stack
@@ -522,6 +533,7 @@ mod tests {
         stack
     }
 
+    #[allow(dead_code)]
     fn make_iwad(lumps: &[(&str, &[u8])]) -> Vec<u8> {
         let mut data: Vec<u8> = Vec::new();
         data.extend_from_slice(b"IWAD");

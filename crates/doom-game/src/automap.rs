@@ -91,11 +91,11 @@ pub struct AutomapState {
 }
 
 /// Maximum zoom (pixels per map unit).
-const ZOOM_MAX: f32 = 4.0;
+pub const ZOOM_MAX: f32 = 4.0;
 /// Minimum zoom (pixels per map unit).
-const ZOOM_MIN: f32 = 0.1;
+pub const ZOOM_MIN: f32 = 0.1;
 /// Zoom multiplier for each zoom-in step.
-const ZOOM_FACTOR: f32 = 1.2;
+pub const ZOOM_FACTOR: f32 = 1.2;
 
 impl AutomapState {
     /// Create a new `AutomapState` with sensible defaults.
@@ -120,11 +120,33 @@ impl AutomapState {
     }
 
     /// Zoom in by multiplying zoom by [`ZOOM_FACTOR`], capped at [`ZOOM_MAX`].
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use doom_game::AutomapState;
+    ///
+    /// let mut automap = AutomapState::new();
+    /// let initial_zoom = automap.zoom;
+    /// automap.zoom_in();
+    /// assert!(automap.zoom > initial_zoom);
+    /// ```
     pub fn zoom_in(&mut self) {
         self.zoom = (self.zoom * ZOOM_FACTOR).min(ZOOM_MAX);
     }
 
     /// Zoom out by dividing zoom by [`ZOOM_FACTOR`], floored at [`ZOOM_MIN`].
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use doom_game::AutomapState;
+    ///
+    /// let mut automap = AutomapState::new();
+    /// let initial_zoom = automap.zoom;
+    /// automap.zoom_out();
+    /// assert!(automap.zoom < initial_zoom);
+    /// ```
     pub fn zoom_out(&mut self) {
         self.zoom = (self.zoom / ZOOM_FACTOR).max(ZOOM_MIN);
     }
