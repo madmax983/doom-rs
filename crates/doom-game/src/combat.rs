@@ -468,7 +468,8 @@ pub fn p_radius_attack(
     };
 
     // Collect handles up front.
-    let handles: Vec<MobjHandle> = gs.mobjslab.iter_handles().collect();
+    let mut handles = Vec::with_capacity(gs.mobjslab.len());
+    handles.extend(gs.mobjslab.iter_handles());
 
     for handle in handles {
         if handle == source {
