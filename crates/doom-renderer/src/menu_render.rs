@@ -17,7 +17,8 @@ use doom_wad::WadStack;
 // ---------------------------------------------------------------------------
 
 /// Palette indices for menu rendering.
-pub mod menu_colors {
+#[allow(dead_code)]
+pub(crate) mod menu_colors {
     /// Black background.
     pub const TITLE_BG: u8 = 0;
     /// Red — main menu text color.
