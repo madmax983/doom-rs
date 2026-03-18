@@ -514,6 +514,7 @@ pub fn music_lump_for_map(map: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    #[allow(dead_code)]
     fn stack_with_iwad_bytes(wad_bytes: Vec<u8>) -> WadStack {
         let mut stack = WadStack::new();
         stack
@@ -522,6 +523,7 @@ mod tests {
         stack
     }
 
+    #[allow(dead_code)]
     fn make_iwad(lumps: &[(&str, &[u8])]) -> Vec<u8> {
         let mut data: Vec<u8> = Vec::new();
         data.extend_from_slice(b"IWAD");
