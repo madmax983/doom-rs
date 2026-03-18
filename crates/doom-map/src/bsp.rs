@@ -118,7 +118,7 @@ impl<'a> BspTree<'a> {
     // -- individual checks ---------------------------------------------------
 
     /// Verifies `N_SSECTORS == N_NODES + 1`.
-    fn validate_leaf_count(&self) -> Result<(), BspError> {
+    pub fn validate_leaf_count(&self) -> Result<(), BspError> {
         let n = self.nodes.len();
         let s = self.ssectors.len();
         // Special case: a map with no nodes has exactly one subsector.

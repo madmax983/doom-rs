@@ -346,7 +346,7 @@ pub const WEAPON_FLASH_LIGHT_BONUS: u8 = 128;
 /// We use 1.0 (the minimum clamped distance in `LightParams`) to get the
 /// brightest possible result for the given sector light, without any
 /// distance-based darkening.
-const WEAPON_LIGHT_DISTANCE: f32 = 1.0;
+pub const WEAPON_LIGHT_DISTANCE: f32 = 1.0;
 
 /// Draw the weapon overlay with sector-based lighting and muzzle flash support.
 ///

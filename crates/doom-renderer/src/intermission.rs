@@ -53,9 +53,9 @@ const LABEL_X: usize = 50;
 const VALUE_X: usize = 200;
 
 /// How many tics to show the time phase before advancing to Done.
-const TIME_DISPLAY_TICS: u32 = 35;
+pub const TIME_DISPLAY_TICS: u32 = 35;
 /// Increment per tic for percentage counters.
-const COUNT_SPEED: u8 = 2;
+pub const COUNT_SPEED: u8 = 2;
 
 // ---------------------------------------------------------------------------
 // IntermissionPhase
@@ -291,7 +291,7 @@ pub fn draw_intermission_text(fb: &mut Framebuffer, x: usize, y: usize, text: &s
 /// 7x9 digit font.
 ///
 /// The digits are drawn left-to-right at `(x, y)`, followed by a `%` glyph
-/// rendered via [`draw_char`].
+/// rendered via [`crate::statusbar::draw_char`].
 pub fn draw_percentage(fb: &mut Framebuffer, x: usize, y: usize, value: u8, color: u8) {
     let val = value as u32;
     let ix = x as i32;
