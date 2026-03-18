@@ -725,7 +725,7 @@ impl DoomApp for DoomGame {
                                 _ => Skill::Medium,
                             };
                             // Re-spawn the level with the chosen skill.
-                            self.gs = GameState::new(&self.gs.level_name.clone());
+                            self.gs = GameState::new(&self.gs.level_name);
                             spawn_level_things(&mut self.gs, &self.level, sk, false);
                             init_scrolling_walls(&mut self.gs, &self.level);
                             init_conveyors(&mut self.gs, &self.level);

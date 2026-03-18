@@ -169,7 +169,7 @@ impl FaceState {
 
         // 3. Ouch (20+ damage in one tic)
         if self.damage_this_tic >= 20 {
-            let dir = damage_dir(attacker_angle, player_angle);
+            let _dir = damage_dir(attacker_angle, player_angle);
             let kind = FaceKind::Ouch { tier };
             // Ouch is based on direction but uses the pain patches — just
             // store direction in Normal after ouch expires; for now use Ouch.
