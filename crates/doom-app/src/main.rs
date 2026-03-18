@@ -878,9 +878,9 @@ impl DoomApp for DoomGame {
                         let upper = line.to_uppercase();
                         let msg = cheats::apply_cheat(&mut self.gs, &upper);
                         let display = if msg.is_empty() {
-                            format!("Unknown command: {line}")
+                            format!("(ERR) UNKNOWN COMMAND {}", line)
                         } else {
-                            msg.to_string()
+                            format!("(OK) {}", msg)
                         };
                         self.console.print(display);
                     }
