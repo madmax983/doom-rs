@@ -268,7 +268,7 @@ impl PlayerState {
     /// Health is clamped to `[-32768, MAX_HEALTH]` after the operation.
     /// Note: negative `amount` heals, but `heal()` is the preferred API.
     pub fn apply_damage(&mut self, amount: i32) {
-        self.health = (self.health - amount).clamp(-32768, MAX_HEALTH);
+        self.health = self.health.saturating_sub(amount).clamp(-32768, MAX_HEALTH);
     }
 
     /// Heal the player by `amount`, capped at `MAX_HEALTH`.
@@ -627,6 +627,14 @@ mod tests {
     fn heal_no_effect_when_full() {
         let mut p = PlayerState::pistol_start(MobjHandle::NULL);
         p.heal(50);
+        assert_eq!(p.health(), MAX_HEALTH);
+    }
+
+    #[test]
+    fn havoc_apply_damage_underflow_panic() {
+        // Havoc 👺: test arithmetic overflow!
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        p.apply_damage(i32::MIN);
         assert_eq!(p.health(), MAX_HEALTH);
     }
 
