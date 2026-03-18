@@ -112,7 +112,7 @@ mod tests {
     fn make_sample() -> Arc<PcmSample> {
         Arc::new(PcmSample {
             sample_rate: 11_025,
-            data: vec![200u8; 16],
+            data: vec![200u8; 16].into(),
         })
     }
 

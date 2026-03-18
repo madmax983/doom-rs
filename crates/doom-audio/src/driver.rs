@@ -19,10 +19,10 @@
 //! For environments without a real audio device (like a lonely CI server), use
 //! [`AudioDriver::null`] to skip the hardware entirely.
 
-#[cfg(not(feature = "loom"))]
-use std::sync::{Arc, Mutex};
 #[cfg(feature = "loom")]
 use loom::sync::{Arc, Mutex};
+#[cfg(not(feature = "loom"))]
+use std::sync::{Arc, Mutex};
 
 use crate::{AudioError, midi::MidiPlayer, sfx_mixer::SfxMixer};
 

@@ -315,7 +315,8 @@ pub fn p_move_projectiles(gs: &mut GameState, level: Option<&Level>) {
         }
 
         // --- Actor collision (O(n^2) distance check) ---
-        let targets: Vec<MobjHandle> = gs.mobjslab.iter_handles().collect();
+        let mut targets = Vec::with_capacity(gs.mobjslab.len());
+        targets.extend(gs.mobjslab.iter_handles());
         let mut hit_target: Option<MobjHandle> = None;
 
         for target_h in &targets {

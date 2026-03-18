@@ -16,7 +16,7 @@ pub struct PcmSample {
     /// Sample rate in Hz as recorded in the SFX lump header.
     pub sample_rate: u32,
     /// Raw 8-bit unsigned PCM data (128 = silence).
-    pub data: Vec<u8>,
+    pub data: std::sync::Arc<[u8]>,
 }
 
 impl PcmSample {
@@ -55,7 +55,7 @@ impl PcmSample {
 
         Ok(Self {
             sample_rate,
-            data: data[8..end].to_vec(),
+            data: data[8..end].to_vec().into(),
         })
     }
 
@@ -66,7 +66,7 @@ impl PcmSample {
     pub fn silence(sample_rate: u32, num_samples: usize) -> Self {
         Self {
             sample_rate,
-            data: vec![128u8; num_samples],
+            data: vec![128u8; num_samples].into(),
         }
     }
 }
@@ -202,7 +202,7 @@ mod tests {
         let mut mixer = Mixer::new(22_050);
         let sample = Arc::new(PcmSample {
             sample_rate: 11_025,
-            data: vec![255u8; 100],
+            data: vec![255u8; 100].into(),
         });
         mixer.play(0, sample, 127);
 
@@ -220,7 +220,7 @@ mod tests {
         let mut mixer = Mixer::new(22_050);
         let sample = Arc::new(PcmSample {
             sample_rate: 22_050,
-            data: vec![200u8; 10],
+            data: vec![200u8; 10].into(),
         });
         mixer.play(0, sample, 127);
 

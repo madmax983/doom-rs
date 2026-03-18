@@ -279,7 +279,7 @@ fn audio_cmd_thread(
                                 mixer.play_on_channel(
                                     channel,
                                     sfx_id,
-                                    sample.data.clone(),
+                                    std::sync::Arc::clone(&sample.data),
                                     volume,
                                     pan,
                                     priority,
@@ -290,7 +290,7 @@ fn audio_cmd_thread(
                         }
 
                         if let Some(channel) =
-                            mixer.play(sfx_id, sample.data.clone(), volume, pan, priority)
+                            mixer.play(sfx_id, std::sync::Arc::clone(&sample.data), volume, pan, priority)
                         {
                             if let Some(previous_origin) = channel_origins[channel].take() {
                                 origin_channels.remove(&previous_origin);
@@ -551,7 +551,7 @@ mod tests {
     fn test_pcm_sample() -> Arc<PcmSample> {
         Arc::new(PcmSample {
             sample_rate: 11_025,
-            data: vec![200u8; 512],
+            data: vec![200u8; 512].into(),
         })
     }
 

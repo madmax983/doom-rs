@@ -1042,7 +1042,8 @@ pub fn save_game(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &
 
     // --- Mobjs ---
     // Collect all live mobjs with their handles.
-    let handles: Vec<MobjHandle> = gs.mobjslab.iter_handles().collect();
+    let mut handles = Vec::with_capacity(gs.mobjslab.len());
+    handles.extend(gs.mobjslab.iter_handles());
     w.write_u32(handles.len() as u32);
     for &h in &handles {
         // Write the handle itself so we can reconstruct the slab.
@@ -1591,7 +1592,8 @@ mod tests {
         assert_eq!(loaded.state.mobjslab.len(), 2);
 
         // Check that the imp's data survived.
-        let handles: Vec<MobjHandle> = loaded.state.mobjslab.iter_handles().collect();
+        let mut handles = Vec::with_capacity(loaded.state.mobjslab.len());
+        handles.extend(loaded.state.mobjslab.iter_handles());
         // Find the imp (index 1 since player was allocated first).
         let imp_handle = handles.iter().find(|h| {
             loaded
