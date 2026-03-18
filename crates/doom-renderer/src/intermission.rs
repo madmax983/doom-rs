@@ -209,9 +209,9 @@ impl IntermissionRenderer {
     /// Advance the intermission animation by one game tic (1/35 sec).
     ///
     /// During counting phases the displayed percentage increments by
-    /// [`COUNT_SPEED`] per tic until it reaches the target, then the phase
+    /// `COUNT_SPEED` per tic until it reaches the target, then the phase
     /// advances. After all counting phases, the time display is held for
-    /// [`TIME_DISPLAY_TICS`] tics before transitioning to `Done`.
+    /// `TIME_DISPLAY_TICS` tics before transitioning to `Done`.
     pub fn tick(&mut self) {
         self.tic += 1;
 
@@ -291,7 +291,7 @@ pub fn draw_intermission_text(fb: &mut Framebuffer, x: usize, y: usize, text: &s
 /// 7x9 digit font.
 ///
 /// The digits are drawn left-to-right at `(x, y)`, followed by a `%` glyph
-/// rendered via [`draw_char`].
+/// rendered via `draw_percent_sign`.
 pub fn draw_percentage(fb: &mut Framebuffer, x: usize, y: usize, value: u8, color: u8) {
     let val = value as u32;
     let ix = x as i32;
@@ -493,8 +493,15 @@ pub fn draw_intermission(fb: &mut Framebuffer, renderer: &IntermissionRenderer) 
 use crate::patch_cache::PatchCache;
 use doom_wad::WadStack;
 
-/// Draw `value` using WINUM digit patches, left-to-right starting at `x`.
-/// Returns the x position after the last digit drawn.
+/// Draws an integer value using the classic `WINUM` digit patches.
+///
+/// Vanilla Doom did not use a standard font for intermission statistics;
+/// instead, it drew individual graphic patches for numbers (`WINUM0` through `WINUM9`).
+/// Because these patches have variable widths, this function tracks the `x` offset
+/// after rendering each digit and returns the final x-coordinate.
+///
+/// # Returns
+/// The x-coordinate immediately following the last drawn digit.
 fn wi_draw_number(
     fb: &mut Framebuffer,
     cache: &mut PatchCache,
@@ -516,7 +523,11 @@ fn wi_draw_number(
     x
 }
 
-/// Draw a percentage using WINUM digits + WIPCNT, starting at `x`.
+/// Draws a percentage value using `WINUM` digits followed by the `WIPCNT` patch.
+///
+/// This chains [`wi_draw_number`] to render the numeric portion and appends
+/// the authentic Doom percent sign (`WIPCNT`), handling the variable width
+/// spacing automatically.
 fn wi_draw_percent(
     fb: &mut Framebuffer,
     cache: &mut PatchCache,
@@ -532,7 +543,11 @@ fn wi_draw_percent(
     }
 }
 
-/// Draw a time in MM:SS format using WINUM digits + WICOLON.
+/// Draws an elapsed time in `MM:SS` format using `WINUM` and `WICOLON` patches.
+///
+/// Converts a raw second count into minutes and seconds, taking care to
+/// pad the seconds column with a leading `WINUM0` if the value is less than 10,
+/// ensuring times like "1:05" align perfectly with classic rendering rules.
 fn wi_draw_time(
     fb: &mut Framebuffer,
     cache: &mut PatchCache,
@@ -562,20 +577,50 @@ fn wi_draw_time(
     wi_draw_number(fb, cache, wad, cx, y, seconds);
 }
 
-/// Draw the intermission screen using WAD patches — matching vanilla Doom's
-/// single-player intermission layout from `wi_stuff.c`.
+/// Draws the intermission (tally) screen using authentic WAD graphic patches.
 ///
-/// Vanilla pixel positions (from wi_stuff.c / wi_stuff.h):
-/// - Background:    WIMAP{ep} or INTERPIC, centered
-/// - "Finished":    WIF  at (84, 16)
-/// - Level leaving: WILV{ep}{map} at (160, 16)
-/// - "Entering":    WIENTER at (84, 84)
-/// - Level entering: WILV patch at (160, 84)   (when Done)
-/// - Kills label:   WIOSTK at (50, 114),  value at (200, 114)
-/// - Items label:   WIOSTI at (50, 134),  value at (200, 134)
-/// - Secrets label: WISCRT2 at (50, 154), value at (200, 154)
-/// - Time label:    WITIME at (16, 180),  value at (96, 180)
-/// - Par label:     WIPAR  at (232, 180), value at (296, 180)
+/// This function meticulously recreates the vanilla Doom single-player intermission
+/// layout directly from the logic in `wi_stuff.c`. Rather than drawing static text,
+/// it composites the scene using original graphic assets (e.g., `WIF` for "Finished",
+/// `WIOSTK` for "Kills", and `WILV` patches for map names).
+///
+/// # The Layout Story
+/// Vanilla Doom positioned these elements using hardcoded pixel coordinates:
+/// - **Background:** `WIMAP{ep}` (Doom 1) or `INTERPIC` (Doom 2), perfectly centered.
+/// - **Headers:** "Finished" (`WIF`) at `(84, 16)` and the departing level name (`WILV{ep}{map}`) at `(160, 16)`.
+/// - **Statistics:** Kills (`WIOSTK`), Items (`WIOSTI`), and Secrets (`WISCRT2`) labels align at `x=50`, with their animated values anchored at `x=200`.
+/// - **Timers:** Time (`WITIME`) and Par (`WIPAR`) labels hug the bottom of the screen.
+/// - **Transition:** When all counters finish (the `Done` phase), the "Entering" graphic (`WIENTER`) and the next level's name appear.
+///
+/// # Examples
+/// ```no_run
+/// use doom_renderer::framebuffer::Framebuffer;
+/// use doom_renderer::patch_cache::PatchCache;
+/// use doom_wad::WadStack;
+/// use doom_renderer::intermission::{IntermissionRenderer, draw_intermission_wad};
+/// use doom_game::IntermissionStats;
+///
+/// let mut fb = Framebuffer::new();
+/// let mut cache = PatchCache::new();
+/// let wad = WadStack::new(); // In a real app, this contains loaded WAD data
+///
+/// // Create a tally screen for a player who found 100% of the secrets on E1M1
+/// let stats = IntermissionStats {
+///     kills: 25, total_kills: 25,
+///     items: 10, total_items: 10,
+///     secrets: 3, total_secrets: 3,
+///     time_tics: 1050, // 30 seconds
+///     par_time_tics: 1050,
+/// };
+///
+/// let mut renderer = IntermissionRenderer::new(&stats, "E1M1");
+///
+/// // Skip the counting animation to show the final state
+/// renderer.skip();
+///
+/// // Render the authentic screen using WAD patches
+/// draw_intermission_wad(&mut fb, &mut cache, &wad, &renderer);
+/// ```
 pub fn draw_intermission_wad(
     fb: &mut Framebuffer,
     cache: &mut PatchCache,
@@ -621,10 +666,19 @@ pub fn draw_intermission_wad(
 
     // 3. Stats (shown as counting progresses).
     let phase = renderer.phase;
-    let show_kills   = !matches!(phase, IntermissionPhase::CountingKills);
-    let show_items   = !matches!(phase, IntermissionPhase::CountingKills | IntermissionPhase::CountingItems);
-    let show_secrets = matches!(phase, IntermissionPhase::ShowingTime | IntermissionPhase::Done);
-    let show_time    = matches!(phase, IntermissionPhase::ShowingTime | IntermissionPhase::Done);
+    let show_kills = !matches!(phase, IntermissionPhase::CountingKills);
+    let show_items = !matches!(
+        phase,
+        IntermissionPhase::CountingKills | IntermissionPhase::CountingItems
+    );
+    let show_secrets = matches!(
+        phase,
+        IntermissionPhase::ShowingTime | IntermissionPhase::Done
+    );
+    let show_time = matches!(
+        phase,
+        IntermissionPhase::ShowingTime | IntermissionPhase::Done
+    );
 
     if let Some(p) = cache.get("WIOSTK", wad) {
         let p = p.clone();

@@ -418,7 +418,7 @@ pub fn weapon_light_bonus(anim_state: &WeaponAnimState) -> u8 {
 /// - If `is_flash` is `true`, returns the identity (full-bright) colormap
 ///   from the cache (index 0) so the weapon renders at maximum brightness.
 /// - Otherwise, computes the colormap from `sector_light` at the standard
-///   weapon distance ([`WEAPON_LIGHT_DISTANCE`]).
+///   weapon distance (`WEAPON_LIGHT_DISTANCE`).
 /// - If `colormap` is `None`, returns `None` (caller should fall back to
 ///   the static `IDENTITY_COLORMAP`).
 pub fn get_weapon_light_params(

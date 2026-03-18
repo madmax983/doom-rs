@@ -12,11 +12,11 @@
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
 pub mod actions;
-pub mod face;
 pub mod automap;
 pub mod cheats;
 pub mod combat;
 pub mod dehacked;
+pub mod face;
 pub mod intermission;
 pub mod linedef_dispatch;
 pub mod menu;

@@ -1125,8 +1125,8 @@ pub fn draw_status_bar_wad(
     face: &FaceState,
 ) {
     // Absolute y coordinates (screen space, not relative to bar).
-    const AMY: i32 = 171;   // ammo / health / armor number y
-    const BAR: i32 = 168;   // bar top y
+    const AMY: i32 = 171; // ammo / health / armor number y
+    const BAR: i32 = 168; // bar top y
 
     // 1. Background: STBAR centered on the 320px framebuffer.
     //    Widescreen WADs (Unity/KEX) ship a 576px-wide STBAR; vanilla is 320px.
@@ -1183,12 +1183,12 @@ pub fn draw_status_bar_wad(
 
     // 7. Keys — x=239, y=171/181/191. (ST_KEY0-2Y = 171,181,191)
     let key_bits = [
-        (KEY_BLUE_CARD,   0usize, 171i32),
-        (KEY_YELLOW_CARD, 1,      181),
-        (KEY_RED_CARD,    2,      191),
-        (KEY_BLUE_SKULL,  3,      171),
-        (KEY_YELLOW_SKULL,4,      181),
-        (KEY_RED_SKULL,   5,      191),
+        (KEY_BLUE_CARD, 0usize, 171i32),
+        (KEY_YELLOW_CARD, 1, 181),
+        (KEY_RED_CARD, 2, 191),
+        (KEY_BLUE_SKULL, 3, 171),
+        (KEY_YELLOW_SKULL, 4, 181),
+        (KEY_RED_SKULL, 5, 191),
     ];
     let mut slot_used = [false; 3];
     for (bit, idx, ky) in &key_bits {

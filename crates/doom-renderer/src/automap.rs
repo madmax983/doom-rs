@@ -48,8 +48,6 @@ const COLOR_TWO_SIDED: u8 = 64; // brown
 const COLOR_HEIGHT_CHANGE: u8 = 231; // yellow
 /// Secret line (linedef flag bit 5).
 const COLOR_SECRET: u8 = 252; // purple
-/// Unseen line (visibility tracking).
-const COLOR_UNSEEN: u8 = 96; // gray
 /// Player arrow marker.
 const COLOR_PLAYER: u8 = 119; // green (classic automap player arrow)
 /// Background fill.
@@ -324,12 +322,12 @@ impl AutomapState {
         self.active = !self.active;
     }
 
-    /// Zoom in by multiplying zoom by [`ZOOM_FACTOR`], capped at [`ZOOM_MAX`].
+    /// Zoom in by multiplying zoom by `ZOOM_FACTOR`, capped at `ZOOM_MAX`.
     pub fn zoom_in(&mut self) {
         self.zoom = (self.zoom * ZOOM_FACTOR).min(ZOOM_MAX);
     }
 
-    /// Zoom out by dividing zoom by [`ZOOM_FACTOR`], floored at [`ZOOM_MIN`].
+    /// Zoom out by dividing zoom by `ZOOM_FACTOR`, floored at `ZOOM_MIN`.
     pub fn zoom_out(&mut self) {
         self.zoom = (self.zoom / ZOOM_FACTOR).max(ZOOM_MIN);
     }

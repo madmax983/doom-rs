@@ -1164,7 +1164,7 @@ fn render_things_impl(
 ///
 /// Transparent pixels (stored as `None`) are skipped.
 /// The `colormap` slice translates palette indices through light diminishment.
-/// Pass [`IDENTITY_COLORMAP`] for full-brightness rendering.
+/// Pass [`crate::column::IDENTITY_COLORMAP`] for full-brightness rendering.
 pub fn draw_sprite(
     fb: &mut Framebuffer,
     frame: &SpriteFrame,

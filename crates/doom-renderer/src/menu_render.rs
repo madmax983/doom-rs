@@ -351,7 +351,11 @@ pub fn draw_menu_wad(
     }
 
     // Skull cursor — M_SKULL1 / M_SKULL2 at (item_x - 32, item_y).
-    let skull_name = if menu.skull_frame() == 0 { "M_SKULL1" } else { "M_SKULL2" };
+    let skull_name = if menu.skull_frame() == 0 {
+        "M_SKULL1"
+    } else {
+        "M_SKULL2"
+    };
     let cursor_y = layout
         .item_ys
         .get(menu.cursor())
@@ -463,22 +467,6 @@ const E2TEXT: &str = "\
  you face the fact that you\n\
  can't turn back.  You must\n\
  go in.";
-
-const E3TEXT: &str = "\
- The loathsome spiderdemon\n\
- that masterminded the\n\
- Deimos infestation has been\n\
- slain and UAC reports state\n\
- it was destroyed with a\n\
- single blast of unholy\n\
- firepower...  Did that just\n\
- happen?  Was it...  easy?\n\
- \n\
- Don't be fooled.  You've\n\
- just begun your journey\n\
- through hell.  The real\n\
- monsters wait for you at\n\
- the end of the next episode.";
 
 const E4TEXT: &str = "\
  the spider mastermind must\n\
@@ -594,7 +582,9 @@ pub fn draw_finale_wad(
     for line in visible.lines() {
         font.draw_string(fb, x, y, line, 4);
         y += 11;
-        if y > 190 { break; }
+        if y > 190 {
+            break;
+        }
     }
     // Keep x used — avoids unused variable warning.
     let _ = x;

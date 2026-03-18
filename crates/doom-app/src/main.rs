@@ -12,6 +12,7 @@ mod savegame;
 use anyhow::{Context, Result};
 use clap::Parser;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+use doom_game::FaceState;
 use doom_game::LockedDoorColor;
 use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
@@ -23,15 +24,14 @@ use doom_game::{
 use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
-use doom_game::FaceState;
 use doom_renderer::{
     ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
     IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, PatchCache, RenderOut,
     SpriteCache, SpriteClip, SwitchList, TextureCache, WadFont, WeaponAnimState, draw_automap_ex,
     draw_finale_wad, draw_intermission, draw_intermission_wad, draw_menu, draw_menu_wad,
-    draw_status_bar, draw_status_bar_wad,
-    draw_title_screen, draw_title_screen_wad, draw_weapon_animated, render_actors_with_masked_ex,
-    render_flag_from_state, render_level_with_view_height_and_extra_light, thing_sprite_prefix,
+    draw_status_bar, draw_status_bar_wad, draw_title_screen, draw_title_screen_wad,
+    draw_weapon_animated, render_actors_with_masked_ex, render_flag_from_state,
+    render_level_with_view_height_and_extra_light, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
@@ -954,8 +954,8 @@ impl DoomApp for DoomGame {
         // Pause the game simulation while the menu is open during gameplay.
         // Title screen and intermission handle their own timing; only Playing
         // needs the pause.
-        let paused = self.menu.is_active()
-            && matches!(self.phase_controller.phase(), GamePhase::Playing);
+        let paused =
+            self.menu.is_active() && matches!(self.phase_controller.phase(), GamePhase::Playing);
 
         // Snapshot kill/item counts before the tick to detect changes.
         let pre_kills = self.gs.player.kill_count;
@@ -1037,13 +1037,8 @@ impl DoomApp for DoomGame {
                     .get(self.gs.player.handle)
                     .map(|mo| mo.angle)
                     .unwrap_or(Bam::ZERO);
-                self.face_state.tick(
-                    cur_health,
-                    is_firing,
-                    is_invulnerable,
-                    None,
-                    player_angle,
-                );
+                self.face_state
+                    .tick(cur_health, is_firing, is_invulnerable, None, player_angle);
             }
             if self.debug_log.is_some() {
                 // Log player snapshot every 35 tics (once per second of gametime).
@@ -1068,8 +1063,20 @@ impl DoomApp for DoomGame {
     fn render(&mut self, fb: &mut Framebuffer) {
         // Title screen mode: draw the title/credits screen + menu overlay.
         if let Some(ref ts) = self.title_screen {
-            draw_title_screen_wad(fb, ts, &mut self.patch_cache, &self.wad_stack, &self.bitmap_font);
-            draw_menu_wad(fb, &self.menu, &mut self.patch_cache, &self.wad_stack, &self.bitmap_font);
+            draw_title_screen_wad(
+                fb,
+                ts,
+                &mut self.patch_cache,
+                &self.wad_stack,
+                &self.bitmap_font,
+            );
+            draw_menu_wad(
+                fb,
+                &self.menu,
+                &mut self.patch_cache,
+                &self.wad_stack,
+                &self.bitmap_font,
+            );
             return;
         }
 
@@ -1133,7 +1140,13 @@ impl DoomApp for DoomGame {
             // Draw status bar over the bottom of the automap.
             {
                 let data = doom_renderer::StatusBarData::from_player(&self.gs.player);
-                draw_status_bar_wad(fb, &mut self.patch_cache, &self.wad_stack, &data, &self.face_state);
+                draw_status_bar_wad(
+                    fb,
+                    &mut self.patch_cache,
+                    &self.wad_stack,
+                    &data,
+                    &self.face_state,
+                );
             }
         } else {
             // Draw the first-person 3D view.
@@ -1234,7 +1247,13 @@ impl DoomApp for DoomGame {
             // Draw HUD status bar over the bottom 32 rows.
             {
                 let data = doom_renderer::StatusBarData::from_player(&self.gs.player);
-                draw_status_bar_wad(fb, &mut self.patch_cache, &self.wad_stack, &data, &self.face_state);
+                draw_status_bar_wad(
+                    fb,
+                    &mut self.patch_cache,
+                    &self.wad_stack,
+                    &data,
+                    &self.face_state,
+                );
             }
         }
 
@@ -1244,7 +1263,13 @@ impl DoomApp for DoomGame {
         }
 
         // Draw menu overlay on top of the game view (no-op when menu is not active).
-        draw_menu_wad(fb, &self.menu, &mut self.patch_cache, &self.wad_stack, &self.bitmap_font);
+        draw_menu_wad(
+            fb,
+            &self.menu,
+            &mut self.patch_cache,
+            &self.wad_stack,
+            &self.bitmap_font,
+        );
 
         // Draw console overlay on top of everything (highest priority).
         if self.console.visible {
