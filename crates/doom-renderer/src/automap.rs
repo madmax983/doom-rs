@@ -69,7 +69,7 @@ const PADDING_FRAC: f32 = 0.05;
 /// These constants map to the original Doom automap colours and can be used
 /// by external code that needs to query or override automap drawing colours.
 #[allow(dead_code)]
-pub(crate) mod automap_colors {
+pub mod automap_colors {
     /// Background: black.
     pub const BACKGROUND: u8 = 0;
     /// One-sided (solid) wall: red.
