@@ -1,12 +1,39 @@
 //! Domain-constrained primitive newtypes from the Unofficial Doom Specs.
 //!
-//! Each newtype has:
-//! - A `const fn new(v) -> Option<Self>` constructor that enforces spec bounds.
-//! - A `const fn raw(self) -> T` accessor.
+//! # The Story of Tamed Primitives
+//!
+//! In the original C implementation of Doom, variables like player numbers, skill levels,
+//! and sector specials were often passed around as raw `int`s or `short`s. This made it
+//! easy to accidentally pass a brightness level (0-255) to a function expecting a
+//! skill level (0-4), resulting in silent logic bugs.
+//!
+//! This module uses Rust's **Newtype Pattern** to encapsulate raw numbers into
+//! strictly validated, distinct types. By doing so, we shift the responsibility of
+//! validation from the *callee* (checking bounds on every function call) to the
+//! *caller* (constructing the type once). Once you have a `SkillLevel`, the compiler
+//! guarantees it is valid, and you can never accidentally mix it up with a `PlayerNum`.
+//!
+//! Each newtype provides:
+//! - A `const fn new(v) -> Option<Self>` constructor that strictly enforces spec bounds.
+//! - A `const fn raw(self) -> T` accessor to retrieve the underlying primitive.
 //!
 //! These are candidates for Verus `#[invariant]` annotations.
 
 /// Light level 0..=255.
+///
+/// Doom's software renderer processes lighting in bands, but the map format
+/// defines brightness as a value from 0 (pitch black) to 255 (full bright).
+///
+/// # Examples
+/// ```
+/// use doom_types::primitives::Brightness;
+///
+/// let dark = Brightness::new(0).unwrap();
+/// assert_eq!(dark.raw(), 0);
+///
+/// let bright = Brightness::MAX;
+/// assert_eq!(bright.raw(), 255);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Brightness(u8);
 
@@ -29,6 +56,25 @@ impl Brightness {
 }
 
 /// Sector special type 0..=16 (standard Doom).
+///
+/// Defines special behaviors for a sector (e.g., blinking lights, damage floors).
+/// Standard vanilla Doom expects this to be in the 0 to 16 range.
+///
+/// # Examples
+/// ```
+/// use doom_types::primitives::SectorSpecial;
+///
+/// // A normal, non-special sector.
+/// let normal = SectorSpecial::NORMAL;
+/// assert_eq!(normal.raw(), 0);
+///
+/// // Constructing a valid special (e.g., 9 = Secret).
+/// let secret = SectorSpecial::new(9).unwrap();
+/// assert_eq!(secret.raw(), 9);
+///
+/// // Invalid specials are rejected at construction.
+/// assert!(SectorSpecial::new(20).is_none());
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SectorSpecial(u8);
 
@@ -49,6 +95,22 @@ impl SectorSpecial {
 }
 
 /// Skill level 0..=4.
+///
+/// Represents the five classic Doom difficulty levels.
+/// Constraining this to 0-4 prevents out-of-bounds array access when spawning
+/// entities (which often have `skill` bit flags).
+///
+/// # Examples
+/// ```
+/// use doom_types::primitives::SkillLevel;
+///
+/// // "Hurt Me Plenty"
+/// let hmp = SkillLevel::HMP;
+/// assert_eq!(hmp.raw(), 2);
+///
+/// // Invalid skill level.
+/// assert!(SkillLevel::new(5).is_none());
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct SkillLevel(u8);
 
@@ -71,6 +133,20 @@ impl SkillLevel {
 }
 
 /// Player number 0..=3.
+///
+/// Doom supports a maximum of 4 players (0-3). This newtype prevents targeting
+/// a non-existent player in multiplayer routines.
+///
+/// # Examples
+/// ```
+/// use doom_types::primitives::PlayerNum;
+///
+/// let p1 = PlayerNum::new(0).unwrap();
+/// assert_eq!(p1.raw(), 0);
+///
+/// // Player 5 does not exist.
+/// assert!(PlayerNum::new(4).is_none());
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PlayerNum(u8);
 
@@ -87,6 +163,17 @@ impl PlayerNum {
 }
 
 /// Map vertex coordinate — spec range [-32768, 32767] = `i16`.
+///
+/// Doom maps are constructed using a 16-bit grid. This strictly enforces the
+/// coordinate space for map geometry.
+///
+/// # Examples
+/// ```
+/// use doom_types::primitives::Coord;
+///
+/// let x = Coord::new(-1024);
+/// assert_eq!(x.raw(), -1024);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Coord(pub i16);
 

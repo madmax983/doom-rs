@@ -22,6 +22,19 @@ pub struct BBox {
 
 impl BBox {
     /// Construct from corner points, normalizing so invariants hold.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{BBox, Vec2Fixed, Fixed16_16};
+    ///
+    /// let p1 = Vec2Fixed::from_ints(5, 10);
+    /// let p2 = Vec2Fixed::from_ints(1, 2);
+    /// let bbox = BBox::from_corners(p1, p2);
+    ///
+    /// assert_eq!(bbox.xmin, Fixed16_16::from_int(1));
+    /// assert_eq!(bbox.xmax, Fixed16_16::from_int(5));
+    /// assert!(bbox.is_valid());
+    /// ```
     #[inline]
     pub fn from_corners(a: Vec2Fixed, b: Vec2Fixed) -> Self {
         Self {
@@ -35,6 +48,15 @@ impl BBox {
     /// Construct directly from (ymax, ymin, xmin, xmax).
     ///
     /// Caller must ensure `ymax >= ymin` and `xmax >= xmin`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{BBox, Fixed16_16};
+    ///
+    /// let int = Fixed16_16::from_int;
+    /// let bbox = BBox::new(int(10), int(0), int(0), int(10));
+    /// assert!(bbox.is_valid());
+    /// ```
     #[inline]
     pub const fn new(
         ymax: Fixed16_16,
@@ -51,18 +73,53 @@ impl BBox {
     }
 
     /// Returns `true` if the invariant holds (non-degenerate box).
+    ///
+    /// A box is valid if its top edge is above or equal to its bottom edge,
+    /// and its right edge is at or to the right of its left edge.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{BBox, Fixed16_16};
+    ///
+    /// let int = Fixed16_16::from_int;
+    /// // Invalid: min > max
+    /// let bbox = BBox::new(int(0), int(10), int(0), int(10));
+    /// assert!(!bbox.is_valid());
+    /// ```
     #[inline]
     pub fn is_valid(self) -> bool {
         self.ymax >= self.ymin && self.xmax >= self.xmin
     }
 
     /// Returns `true` if `point` is inside or on the boundary of the box.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{BBox, Vec2Fixed, Fixed16_16};
+    ///
+    /// let int = Fixed16_16::from_int;
+    /// let bbox = BBox::new(int(10), int(0), int(0), int(10));
+    ///
+    /// assert!(bbox.contains(Vec2Fixed::from_ints(5, 5)));
+    /// assert!(!bbox.contains(Vec2Fixed::from_ints(15, 5)));
+    /// ```
     #[inline]
     pub fn contains(self, point: Vec2Fixed) -> bool {
         point.x >= self.xmin && point.x <= self.xmax && point.y >= self.ymin && point.y <= self.ymax
     }
 
     /// Returns `true` if this box overlaps `other` (touching counts as overlap).
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{BBox, Fixed16_16};
+    ///
+    /// let int = Fixed16_16::from_int;
+    /// let a = BBox::new(int(10), int(0), int(0), int(10));
+    /// let b = BBox::new(int(15), int(5), int(5), int(15));
+    ///
+    /// assert!(a.overlaps(b));
+    /// ```
     #[inline]
     pub fn overlaps(self, other: Self) -> bool {
         self.xmin <= other.xmax
@@ -72,18 +129,49 @@ impl BBox {
     }
 
     /// Width of the box in fixed-point units.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{BBox, Fixed16_16};
+    ///
+    /// let int = Fixed16_16::from_int;
+    /// let bbox = BBox::new(int(10), int(0), int(2), int(8));
+    /// assert_eq!(bbox.width(), int(6));
+    /// ```
     #[inline]
     pub fn width(self) -> Fixed16_16 {
         self.xmax - self.xmin
     }
 
-    /// Height of the box.
+    /// Height of the box in fixed-point units.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{BBox, Fixed16_16};
+    ///
+    /// let int = Fixed16_16::from_int;
+    /// let bbox = BBox::new(int(15), int(5), int(0), int(10));
+    /// assert_eq!(bbox.height(), int(10));
+    /// ```
     #[inline]
     pub fn height(self) -> Fixed16_16 {
         self.ymax - self.ymin
     }
 
     /// Expand the box to also contain `other`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{BBox, Fixed16_16};
+    ///
+    /// let int = Fixed16_16::from_int;
+    /// let a = BBox::new(int(5), int(0), int(0), int(5));
+    /// let b = BBox::new(int(10), int(3), int(2), int(8));
+    ///
+    /// let u = a.union(b);
+    /// assert_eq!(u.ymax, int(10));
+    /// assert_eq!(u.xmax, int(8));
+    /// ```
     #[inline]
     pub fn union(self, other: Self) -> Self {
         Self {

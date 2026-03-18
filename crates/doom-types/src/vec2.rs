@@ -13,19 +13,39 @@ pub struct Vec2Fixed {
 }
 
 impl Vec2Fixed {
-    /// Zero vector.
+    /// Zero vector (0, 0).
     pub const ZERO: Self = Self {
         x: Fixed16_16::ZERO,
         y: Fixed16_16::ZERO,
     };
 
     /// Construct from raw fixed-point values.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Vec2Fixed, Fixed16_16};
+    ///
+    /// let v = Vec2Fixed::new(Fixed16_16::from_int(1), Fixed16_16::from_int(2));
+    /// assert_eq!(v.x.to_int(), 1);
+    /// assert_eq!(v.y.to_int(), 2);
+    /// ```
     #[inline]
     pub const fn new(x: Fixed16_16, y: Fixed16_16) -> Self {
         Self { x, y }
     }
 
     /// Construct from integer coordinates.
+    ///
+    /// This automatically scales the provided integers into `Fixed16_16` format.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Vec2Fixed, Fixed16_16};
+    ///
+    /// let v = Vec2Fixed::from_ints(10, 20);
+    /// assert_eq!(v.x, Fixed16_16::from_int(10));
+    /// assert_eq!(v.y, Fixed16_16::from_int(20));
+    /// ```
     #[inline]
     pub fn from_ints(x: i32, y: i32) -> Self {
         Self {
@@ -34,19 +54,56 @@ impl Vec2Fixed {
         }
     }
 
-    /// Squared length (avoids a sqrt).
+    /// Squared length (avoids an expensive square root operation).
+    ///
+    /// Extremely useful for fast distance comparisons.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Vec2Fixed, Fixed16_16};
+    ///
+    /// // A 3-4-5 right triangle
+    /// let v = Vec2Fixed::from_ints(3, 4);
+    /// assert_eq!(v.length_sq(), Fixed16_16::from_int(25));
+    /// ```
     #[inline]
     pub fn length_sq(self) -> Fixed16_16 {
         self.x.fixed_mul(self.x) + self.y.fixed_mul(self.y)
     }
 
     /// Dot product.
+    ///
+    /// Useful for determining if two vectors are pointing in the same direction,
+    /// or for projecting one vector onto another.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Vec2Fixed, Fixed16_16};
+    ///
+    /// let a = Vec2Fixed::from_ints(1, 0);
+    /// let b = Vec2Fixed::from_ints(0, 1);
+    ///
+    /// // Orthogonal vectors have a dot product of 0
+    /// assert_eq!(a.dot(b), Fixed16_16::ZERO);
+    /// ```
     #[inline]
     pub fn dot(self, rhs: Self) -> Fixed16_16 {
         self.x.fixed_mul(rhs.x) + self.y.fixed_mul(rhs.y)
     }
 
     /// Component-wise scale by a fixed-point scalar.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Vec2Fixed, Fixed16_16};
+    ///
+    /// let v = Vec2Fixed::from_ints(2, 3);
+    /// let s = Fixed16_16::from_int(2);
+    ///
+    /// let scaled = v.scale(s);
+    /// assert_eq!(scaled.x, Fixed16_16::from_int(4));
+    /// assert_eq!(scaled.y, Fixed16_16::from_int(6));
+    /// ```
     #[inline]
     pub fn scale(self, s: Fixed16_16) -> Self {
         Self {
