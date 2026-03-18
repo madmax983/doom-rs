@@ -7,6 +7,7 @@ edition.workspace = true
 doom-types = { workspace = true }
 doom-map   = { workspace = true }
 thiserror  = { workspace = true }
+strum = { version = "0.28.0", features = ["strum_macros"] }
 
 [dev-dependencies]
 proptest = { workspace = true }

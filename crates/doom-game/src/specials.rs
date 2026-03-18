@@ -2455,13 +2455,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
     match special {
         // --- Type 1: toggle door (immediate, for backward compatibility with existing tests) ---
         1 => {
-            if left_sidedef == SIDEDEF_NONE {
+            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                 return;
-            }
-            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                Some(sd) => sd.sector as usize,
-                None => return,
             };
+            let sector_idx = sd.sector as usize;
 
             let Some(sector) = level.sectors.get_mut(sector_idx) else {
                 return;
@@ -2478,37 +2475,28 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
 
         // --- Type 2: open door, stays open (animated) ---
         2 => {
-            if left_sidedef == SIDEDEF_NONE {
+            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                 return;
-            }
-            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                Some(sd) => sd.sector as usize,
-                None => return,
             };
+            let sector_idx = sd.sector as usize;
             open_door(gs, level, sector_idx, false);
         }
 
         // --- Type 29: close door (animated) ---
         29 => {
-            if left_sidedef == SIDEDEF_NONE {
+            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                 return;
-            }
-            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                Some(sd) => sd.sector as usize,
-                None => return,
             };
+            let sector_idx = sd.sector as usize;
             close_door(gs, level, sector_idx);
         }
 
         // --- Types 16, 76: close door, wait 30s, reopen ---
         16 | 76 => {
-            if left_sidedef == SIDEDEF_NONE {
+            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                 return;
-            }
-            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                Some(sd) => sd.sector as usize,
-                None => return,
             };
+            let sector_idx = sd.sector as usize;
             close_wait_open_door(gs, level, sector_idx);
         }
 
@@ -2518,13 +2506,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             if gs.player.has_key(crate::player::KEY_BLUE_CARD)
                 || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
             {
-                if left_sidedef == SIDEDEF_NONE {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                     return;
-                }
-                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return,
                 };
+                let sector_idx = sd.sector as usize;
                 open_door(gs, level, sector_idx, true);
             }
         }
@@ -2533,13 +2518,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
                 || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
             {
-                if left_sidedef == SIDEDEF_NONE {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                     return;
-                }
-                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return,
                 };
+                let sector_idx = sd.sector as usize;
                 open_door(gs, level, sector_idx, true);
             }
         }
@@ -2548,13 +2530,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             if gs.player.has_key(crate::player::KEY_RED_CARD)
                 || gs.player.has_key(crate::player::KEY_RED_SKULL)
             {
-                if left_sidedef == SIDEDEF_NONE {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                     return;
-                }
-                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return,
                 };
+                let sector_idx = sd.sector as usize;
                 open_door(gs, level, sector_idx, true);
             }
         }
@@ -3274,37 +3253,28 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
 
         // Type 108: W1 Blazing door open-close.
         108 => {
-            if left_sidedef == SIDEDEF_NONE {
+            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                 return;
-            }
-            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                Some(sd) => sd.sector as usize,
-                None => return,
             };
+            let sector_idx = sd.sector as usize;
             open_blazing_door(gs, level, sector_idx, true);
         }
 
         // Type 109: W1 Blazing door open-stay.
         109 => {
-            if left_sidedef == SIDEDEF_NONE {
+            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                 return;
-            }
-            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                Some(sd) => sd.sector as usize,
-                None => return,
             };
+            let sector_idx = sd.sector as usize;
             open_blazing_door(gs, level, sector_idx, false);
         }
 
         // Type 110: W1 Blazing door close.
         110 => {
-            if left_sidedef == SIDEDEF_NONE {
+            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                 return;
-            }
-            let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                Some(sd) => sd.sector as usize,
-                None => return,
             };
+            let sector_idx = sd.sector as usize;
             close_blazing_door(gs, level, sector_idx);
         }
 
@@ -3317,13 +3287,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             if gs.player.has_key(crate::player::KEY_BLUE_CARD)
                 || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
             {
-                if left_sidedef == SIDEDEF_NONE {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                     return;
-                }
-                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return,
                 };
+                let sector_idx = sd.sector as usize;
                 open_door(gs, level, sector_idx, false);
             }
         }
@@ -3333,13 +3300,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             if gs.player.has_key(crate::player::KEY_BLUE_CARD)
                 || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
             {
-                if left_sidedef == SIDEDEF_NONE {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                     return;
-                }
-                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return,
                 };
+                let sector_idx = sd.sector as usize;
                 open_blazing_door(gs, level, sector_idx, false);
             }
         }
@@ -3349,13 +3313,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             if gs.player.has_key(crate::player::KEY_RED_CARD)
                 || gs.player.has_key(crate::player::KEY_RED_SKULL)
             {
-                if left_sidedef == SIDEDEF_NONE {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                     return;
-                }
-                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return,
                 };
+                let sector_idx = sd.sector as usize;
                 open_door(gs, level, sector_idx, false);
             }
         }
@@ -3365,13 +3326,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             if gs.player.has_key(crate::player::KEY_RED_CARD)
                 || gs.player.has_key(crate::player::KEY_RED_SKULL)
             {
-                if left_sidedef == SIDEDEF_NONE {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                     return;
-                }
-                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return,
                 };
+                let sector_idx = sd.sector as usize;
                 open_blazing_door(gs, level, sector_idx, false);
             }
         }
@@ -3381,13 +3339,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
                 || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
             {
-                if left_sidedef == SIDEDEF_NONE {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                     return;
-                }
-                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return,
                 };
+                let sector_idx = sd.sector as usize;
                 open_door(gs, level, sector_idx, false);
             }
         }
@@ -3397,13 +3352,10 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
                 || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
             {
-                if left_sidedef == SIDEDEF_NONE {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
                     return;
-                }
-                let sector_idx = match level.sidedefs.get(left_sidedef as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return,
                 };
+                let sector_idx = sd.sector as usize;
                 open_blazing_door(gs, level, sector_idx, false);
             }
         }
