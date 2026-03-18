@@ -639,7 +639,7 @@ pub fn render_actors_ex(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn render_actors_with_masked_ex(
+pub fn render_actors_with_masked_ex<'a>(
     actors: &[crate::sprite_lookup::ActorRenderInfo],
     level: &doom_map::Level,
     player_x: doom_types::Fixed16_16,
@@ -653,7 +653,7 @@ pub fn render_actors_with_masked_ex(
     // `Some((&out.clip_top, &out.clip_bot))` to prevent sprites from
     // bleeding through two-sided window frames.
     sprite_clip: Option<SpriteClip<'_>>,
-    masked_columns: Option<&[crate::render::MaskedColumnDraw]>,
+    masked_columns: Option<&'a [crate::render::MaskedColumnDraw<'a>]>,
 ) {
     use doom_game::states::sprite_names;
 
@@ -673,7 +673,7 @@ pub fn render_actors_with_masked_ex(
 
     enum VisibleElement<'a> {
         Actor(f32, &'a crate::sprite_lookup::ActorRenderInfo),
-        Masked(&'a crate::render::MaskedColumnDraw),
+        Masked(&'a crate::render::MaskedColumnDraw<'a>),
     }
 
     impl VisibleElement<'_> {

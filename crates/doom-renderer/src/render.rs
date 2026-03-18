@@ -203,18 +203,18 @@ fn draw_masked_column(
 }
 
 #[derive(Clone)]
-pub struct MaskedColumnDraw {
+pub struct MaskedColumnDraw<'a> {
     pub depth: f32,
     pub x: usize,
     pub y_top: usize,
     pub y_bot: usize,
     pub frac: u32,
     pub fracstep: u32,
-    pub source: Vec<u8>,
+    pub source: &'a [u8],
     pub colormap: [u8; 256],
 }
 
-pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw]) {
+pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw<'_>]) {
     for column in columns {
         draw_masked_column(
             fb,
@@ -223,7 +223,7 @@ pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw]) {
             column.y_bot,
             column.frac,
             column.fracstep,
-            &column.source,
+            column.source,
             &column.colormap,
         );
     }
@@ -265,7 +265,7 @@ pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw]) {
 /// vertical clip arrays derived from portal openings.  Pass `clip_top`/`clip_bot`
 /// to sprite renderers so sprites are clipped to the visible portal window —
 /// this prevents sprites from bleeding through two-sided window frames.
-pub struct RenderOut {
+pub struct RenderOut<'a> {
     /// Per-column z-buffer: perpendicular depth of nearest one-sided wall, or
     /// `f32::MAX` where no solid wall was drawn.
     pub z_buf: [f32; SCREEN_W],
@@ -282,7 +282,7 @@ pub struct RenderOut {
     /// `f32::MAX` when no bottom clip has been applied for that column.
     pub clip_bot_depth: [f32; SCREEN_W],
     /// Deferred masked midtexture columns to interleave with sprite rendering.
-    pub masked_columns: Vec<MaskedColumnDraw>,
+    pub masked_columns: Vec<MaskedColumnDraw<'a>>,
 }
 
 /// Render a Doom level into `fb` and return occlusion data for sprite clipping.
@@ -291,7 +291,7 @@ pub struct RenderOut {
 /// nearest *one-sided* wall.  Two-sided segs (portals) do **not** write to the
 /// z-buffer.  Pass `render_out.z_buf` and the clip arrays to sprite renderers.
 #[allow(clippy::too_many_arguments)]
-pub fn render_level(
+pub fn render_level<'a>(
     level: &Level,
     player_x: i32,
     player_y: i32,
@@ -299,11 +299,11 @@ pub fn render_level(
     fb: &mut Framebuffer,
     _palette: &PaletteLut,
     flat_cache: Option<&FlatCache>,
-    tex_cache: Option<&TextureCache>,
+    tex_cache: Option<&'a TextureCache>,
     colormap: Option<&ColormapCache>,
     anim: Option<&AnimState>,
     is_fullbright: bool,
-) -> RenderOut {
+) -> RenderOut<'a> {
     render_level_with_view_height(
         level,
         player_x,
@@ -322,7 +322,7 @@ pub fn render_level(
 
 /// Render a Doom level using an explicit player view height above the floor.
 #[allow(clippy::too_many_arguments)]
-pub fn render_level_with_view_height(
+pub fn render_level_with_view_height<'a>(
     level: &Level,
     player_x: i32,
     player_y: i32,
@@ -331,11 +331,11 @@ pub fn render_level_with_view_height(
     fb: &mut Framebuffer,
     _palette: &PaletteLut,
     flat_cache: Option<&FlatCache>,
-    tex_cache: Option<&TextureCache>,
+    tex_cache: Option<&'a TextureCache>,
     colormap: Option<&ColormapCache>,
     anim: Option<&AnimState>,
     is_fullbright: bool,
-) -> RenderOut {
+) -> RenderOut<'a> {
     render_level_with_view_height_and_extra_light(
         level,
         player_x,
@@ -355,7 +355,7 @@ pub fn render_level_with_view_height(
 
 /// Render a Doom level using an explicit player view height and player extra-light bonus.
 #[allow(clippy::too_many_arguments)]
-pub fn render_level_with_view_height_and_extra_light(
+pub fn render_level_with_view_height_and_extra_light<'a>(
     level: &Level,
     player_x: i32,
     player_y: i32,
@@ -364,12 +364,12 @@ pub fn render_level_with_view_height_and_extra_light(
     fb: &mut Framebuffer,
     _palette: &PaletteLut,
     flat_cache: Option<&FlatCache>,
-    tex_cache: Option<&TextureCache>,
+    tex_cache: Option<&'a TextureCache>,
     colormap: Option<&ColormapCache>,
     anim: Option<&AnimState>,
     is_fullbright: bool,
     extra_light: u8,
-) -> RenderOut {
+) -> RenderOut<'a> {
     // ------------------------------------------------------------------
     // Step 1: Draw background (ceiling top half, floor bottom half)
     // ------------------------------------------------------------------
@@ -967,7 +967,7 @@ pub fn render_level_with_view_height_and_extra_light(
                             y_bot: mid_draw_bot as usize,
                             frac: frac_start,
                             fracstep,
-                            source: col_data.to_vec(),
+                            source: col_data,
                             colormap: *wall_cm,
                         });
                     }
