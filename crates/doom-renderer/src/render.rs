@@ -265,6 +265,23 @@ pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw]) {
 /// vertical clip arrays derived from portal openings.  Pass `clip_top`/`clip_bot`
 /// to sprite renderers so sprites are clipped to the visible portal window —
 /// this prevents sprites from bleeding through two-sided window frames.
+/// Context for rendering a frame, grouping arguments.
+pub struct RenderContext<'a> {
+    pub level: &'a Level,
+    pub player_x: i32,
+    pub player_y: i32,
+    pub player_angle: Bam,
+    pub player_view_height: i32,
+    pub fb: &'a mut Framebuffer,
+    pub palette: &'a PaletteLut,
+    pub flat_cache: Option<&'a FlatCache>,
+    pub tex_cache: Option<&'a TextureCache>,
+    pub colormap: Option<&'a ColormapCache>,
+    pub anim: Option<&'a AnimState>,
+    pub is_fullbright: bool,
+    pub extra_light: u8,
+}
+
 pub struct RenderOut {
     /// Per-column z-buffer: perpendicular depth of nearest one-sided wall, or
     /// `f32::MAX` where no solid wall was drawn.
@@ -290,83 +307,36 @@ pub struct RenderOut {
 /// The z-buffer entry for each column holds the perpendicular depth of the
 /// nearest *one-sided* wall.  Two-sided segs (portals) do **not** write to the
 /// z-buffer.  Pass `render_out.z_buf` and the clip arrays to sprite renderers.
-pub fn render_level(
-    level: &Level,
-    player_x: i32,
-    player_y: i32,
-    player_angle: Bam,
-    fb: &mut Framebuffer,
-    _palette: &PaletteLut,
-    flat_cache: Option<&FlatCache>,
-    tex_cache: Option<&TextureCache>,
-    colormap: Option<&ColormapCache>,
-    anim: Option<&AnimState>,
-    is_fullbright: bool,
-) -> RenderOut {
-    render_level_with_view_height(
-        level,
-        player_x,
-        player_y,
-        player_angle,
-        PLAYER_HEIGHT,
-        fb,
-        _palette,
-        flat_cache,
-        tex_cache,
-        colormap,
-        anim,
-        is_fullbright,
-    )
+pub fn render_level(mut ctx: RenderContext<'_>) -> RenderOut {
+    ctx.player_view_height = PLAYER_HEIGHT;
+    ctx.extra_light = 0;
+    render_level_with_view_height_and_extra_light(ctx)
 }
 
 /// Render a Doom level using an explicit player view height above the floor.
-pub fn render_level_with_view_height(
-    level: &Level,
-    player_x: i32,
-    player_y: i32,
-    player_angle: Bam,
-    player_view_height: i32,
-    fb: &mut Framebuffer,
-    _palette: &PaletteLut,
-    flat_cache: Option<&FlatCache>,
-    tex_cache: Option<&TextureCache>,
-    colormap: Option<&ColormapCache>,
-    anim: Option<&AnimState>,
-    is_fullbright: bool,
-) -> RenderOut {
-    render_level_with_view_height_and_extra_light(
+pub fn render_level_with_view_height(mut ctx: RenderContext<'_>) -> RenderOut {
+    ctx.extra_light = 0;
+    render_level_with_view_height_and_extra_light(ctx)
+}
+
+/// Render a Doom level using an explicit player view height and player extra-light bonus.
+pub fn render_level_with_view_height_and_extra_light(ctx: RenderContext<'_>) -> RenderOut {
+    let RenderContext {
         level,
         player_x,
         player_y,
         player_angle,
         player_view_height,
         fb,
-        _palette,
+        palette: _palette,
         flat_cache,
         tex_cache,
         colormap,
         anim,
         is_fullbright,
-        0,
-    )
-}
+        extra_light,
+    } = ctx;
 
-/// Render a Doom level using an explicit player view height and player extra-light bonus.
-pub fn render_level_with_view_height_and_extra_light(
-    level: &Level,
-    player_x: i32,
-    player_y: i32,
-    player_angle: Bam,
-    player_view_height: i32,
-    fb: &mut Framebuffer,
-    _palette: &PaletteLut,
-    flat_cache: Option<&FlatCache>,
-    tex_cache: Option<&TextureCache>,
-    colormap: Option<&ColormapCache>,
-    anim: Option<&AnimState>,
-    is_fullbright: bool,
-    extra_light: u8,
-) -> RenderOut {
     // ------------------------------------------------------------------
     // Step 1: Draw background (ceiling top half, floor bottom half)
     // ------------------------------------------------------------------
@@ -2530,19 +2500,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level,
-            0,
-            0,
-            Bam::ZERO,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: Bam::ZERO,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
         assert!(
@@ -2559,9 +2531,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
     }
 
     #[test]
@@ -2594,9 +2578,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        let zbuf = render_level(
-            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        let zbuf = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let cx = HALF_W as usize;
         assert!(
@@ -2626,9 +2622,21 @@ mod tests {
 
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
-        let zbuf = render_level(
-            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        let zbuf = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let cx = HALF_W as usize;
         assert!(
@@ -2656,9 +2664,21 @@ mod tests {
 
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
-        let zbuf = render_level(
-            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        let zbuf = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let cx = HALF_W as usize;
         assert!(
@@ -2679,9 +2699,21 @@ mod tests {
 
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
-        let zbuf = render_level(
-            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        let zbuf = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let cx = HALF_W as usize;
         assert!(
@@ -2700,9 +2732,21 @@ mod tests {
 
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
-        render_level(
-            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         assert_eq!(
             fb.get_pixel(SCREEN_W - 1, 0),
@@ -2722,35 +2766,39 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         let mut unpegged = Framebuffer::new();
-        render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut unpegged,
-            &palette,
-            None,
-            Some(&tex_cache),
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut unpegged,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: Some(&tex_cache),
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         level.linedefs[0].flags |= FLAG_DONTPEGTOP;
         let mut pegged = Framebuffer::new();
-        render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut pegged,
-            &palette,
-            None,
-            Some(&tex_cache),
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut pegged,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: Some(&tex_cache),
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let sample_x = HALF_W as usize;
         let first_diff = (0..40usize).find_map(|y| {
@@ -2780,33 +2828,37 @@ mod tests {
         let mut fb_72 = Framebuffer::new();
         let mut fb_128 = Framebuffer::new();
 
-        render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut fb_72,
-            &palette,
-            None,
-            Some(&tex_72),
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb_72,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: Some(&tex_72),
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
-        render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut fb_128,
-            &palette,
-            None,
-            Some(&tex_128),
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb_128,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: Some(&tex_128),
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let sample_x = HALF_W as usize;
         let first_diff = (0..HALF_H as usize).find_map(|y| {
@@ -2833,19 +2885,21 @@ mod tests {
         let palette = PaletteLut::grayscale();
         let mut fb = Framebuffer::new();
 
-        render_level(
-            &level,
-            64,
-            0,
-            ANG90,
-            &mut fb,
-            &palette,
-            None,
-            Some(&tex_cache),
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: Some(&tex_cache),
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         assert_eq!(
             fb.get_pixel(SCREEN_W - 1, 0),
@@ -2867,19 +2921,21 @@ mod tests {
         let palette = PaletteLut::grayscale();
         let mut fb = Framebuffer::new();
 
-        let render_out = render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut fb,
-            &palette,
-            None,
-            Some(&tex_cache),
-            None,
-            None,
-            false,
-        );
+        let render_out = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: Some(&tex_cache),
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let sprite_cache = make_opaque_sprite_cache("TROOA0", 8, 8, 200);
         let actors = [ActorRenderInfo {
@@ -2933,9 +2989,21 @@ mod tests {
         let level = make_oblique_wall_level();
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
-        render_level(
-            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let view_left = (128.0f32, -192.0f32);
         let view_right = (512.0f32, 192.0f32);
@@ -2970,19 +3038,21 @@ mod tests {
         let palette = PaletteLut::grayscale();
         let mut fb = Framebuffer::new();
 
-        render_level(
-            &level,
-            0,
-            120,
-            ANG90,
-            &mut fb,
-            &palette,
-            None,
-            Some(&tex_cache),
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 120,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: Some(&tex_cache),
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let view_left = (8.0f32, -64.0f32);
         let view_right = (8.0f32, 64.0f32);
@@ -3011,34 +3081,38 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         let mut fb1 = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            Bam::ZERO,
-            &mut fb1,
-            &palette,
-            None,
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: Bam::ZERO,
+            fb: &mut fb1,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let mut fb2 = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            Bam::ZERO,
-            &mut fb2,
-            &palette,
-            None,
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: Bam::ZERO,
+            fb: &mut fb2,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         assert_eq!(fb1.data.as_slice(), fb2.data.as_slice());
     }
@@ -3075,19 +3149,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level,
-            0,
-            64,
-            Bam::ZERO,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 64,
+            player_angle: Bam::ZERO,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // The minimal wall (north of the east-facing player) projects to the left
         // portion of the screen (~columns 0-80).  Column 319 is always background.
@@ -3105,19 +3181,21 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // tex_cache = None should fall back to flat-shaded walls without panic.
-        render_level(
-            &level,
-            64,
-            0,
-            Bam::ZERO,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: Bam::ZERO,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // Should produce some output (background fill at minimum).
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
@@ -3182,19 +3260,21 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // Player at (64, 0) facing forward — exercises the wall path.
-        render_level(
-            &level,
-            64,
-            0,
-            Bam::ZERO,
-            &mut fb,
-            &palette,
-            Some(&cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: Bam::ZERO,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // Should not panic and should produce some non-zero output.
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
@@ -3239,9 +3319,21 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // Player at y=0, wall at y=128, facing ANG90 = North (+Y direction).
-        render_level(
-            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // The wall spans some columns around center (x=160).
         // We check that the framebuffer has been written in the upper half for
@@ -3287,9 +3379,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // We cannot directly inspect wall_top/wall_bot from outside, but we can
         // verify the visual outcome:
@@ -3356,19 +3460,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let center_x = HALF_W as usize;
         let lower_wall_top = project_wall_y(56 - PLAYER_HEIGHT, FOCAL_LEN as f32 / 128.0) as usize;
@@ -3411,19 +3517,21 @@ mod tests {
         let level = make_two_sided_level_with_vertices((-96, 160), (64, 256), 0, 128, 56, 96);
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
-        let out = render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        let out = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let v1 = &level.vertexes[0];
         let v2 = &level.vertexes[1];
@@ -3498,19 +3606,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let v1 = &level.vertexes[0];
         let v2 = &level.vertexes[1];
@@ -3591,38 +3701,42 @@ mod tests {
 
         let level = make_occluded_portal_level();
         let mut full_fb = Framebuffer::new();
-        render_level(
-            &level,
-            48,
-            0,
-            ANG90,
-            &mut full_fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 48,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut full_fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let mut near_only = make_minimal_level();
         near_only.vertexes[0] = doom_map::lumps::Vertex { x: -64, y: 128 };
         near_only.vertexes[1] = doom_map::lumps::Vertex { x: 64, y: 128 };
 
         let mut near_fb = Framebuffer::new();
-        render_level(
-            &near_only,
-            48,
-            0,
-            ANG90,
-            &mut near_fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &near_only,
+            player_x: 48,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut near_fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let mut leaked = Vec::new();
         for x in 0..SCREEN_W {
@@ -3677,19 +3791,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let center_x = HALF_W as usize;
         let floor_row = project_wall_y(0 - PLAYER_HEIGHT, FOCAL_LEN as f32 / 128.0) as usize;
@@ -3761,19 +3877,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let center_x = HALF_W as usize;
         let upper_sample = 70usize;
@@ -3803,9 +3921,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let x = HALF_W as usize;
         let is_wall = |px: u8| (32..64).contains(&px);
@@ -3875,19 +4005,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let x = HALF_W as usize;
         let portal_top = (HALF_H - ((72 - PLAYER_HEIGHT) * FOCAL_LEN / 128)) as usize;
@@ -3920,19 +4052,21 @@ mod tests {
         let level = make_two_sided_level(0, 128, 56, 72);
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
-        let out = render_level(
-            &level,
-            0,
-            0,
-            ANG90 - ANG45,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            None,
-            None,
-            false,
-        );
+        let out = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90 - ANG45,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let v1 = &level.vertexes[0];
         let v2 = &level.vertexes[1];
@@ -4003,9 +4137,21 @@ mod tests {
         let level = make_two_sided_level_with_vertices((-96, 160), (64, 256), 0, 128, 56, 72);
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
-        let out = render_level(
-            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        let out = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let v1 = &level.vertexes[0];
         let v2 = &level.vertexes[1];
@@ -4079,19 +4225,21 @@ mod tests {
         let near_only = make_two_sided_level(0, 128, 56, 72);
         let mut near_fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
-        let near_out = render_level(
-            &near_only,
-            0,
-            0,
-            angle,
-            &mut near_fb,
-            &palette,
-            None,
-            None,
-            None,
-            None,
-            false,
-        );
+        let near_out = render_level(crate::render::RenderContext {
+            level: &near_only,
+            player_x: 0,
+            player_y: 0,
+            player_angle: angle,
+            fb: &mut near_fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let flat1 = vec![10u8; FLAT_SIZE];
         let flat2 = vec![20u8; FLAT_SIZE];
@@ -4120,19 +4268,21 @@ mod tests {
 
         let nested = make_portal_window_with_far_portal_level();
         let mut fb = Framebuffer::new();
-        render_level(
-            &nested,
-            0,
-            0,
-            angle,
-            &mut fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &nested,
+            player_x: 0,
+            player_y: 0,
+            player_angle: angle,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         for x in 0..SCREEN_W {
             let top = near_out.clip_top[x];
@@ -4167,9 +4317,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = PaletteLut::grayscale();
 
-        render_level(
-            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let x = HALF_W as usize;
         let is_wall = |px: u8| (32..64).contains(&px);
@@ -4237,33 +4399,37 @@ mod tests {
 
         let near_only = make_two_sided_level(0, 128, 56, 72);
         let mut near_fb = Framebuffer::new();
-        let near_out = render_level(
-            &near_only,
-            0,
-            0,
-            ANG90,
-            &mut near_fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        let near_out = render_level(crate::render::RenderContext {
+            level: &near_only,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut near_fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
-        render_level(
-            &level,
-            0,
-            0,
-            ANG90,
-            &mut fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         for x in 0..SCREEN_W {
             let top = near_out.clip_top[x];
@@ -4306,9 +4472,21 @@ mod tests {
         let palette = PaletteLut::grayscale();
 
         // Player at (64, 0) looking toward the wall at y=128 (ANG90 = North = +Y).
-        render_level(
-            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // The wall should occupy vertical pixels around the center column.
         // Flat-shade color = 32 + (192 >> 3).min(31) = 32 + 24 = 56.
@@ -4544,36 +4722,40 @@ mod tests {
 
         // Render with is_fullbright = true.
         let mut fb_bright = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_bright,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            true,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_bright,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: true,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // Render again with is_fullbright = false but light=255 (auto-fullbright).
         let level255 = make_level_with_light(255);
         let mut fb_255 = Framebuffer::new();
-        render_level(
-            &level255,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_255,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level255,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_255,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // Both should produce identical output since identity colormap is used.
         assert_eq!(
@@ -4593,34 +4775,38 @@ mod tests {
         let cm = ColormapCache::identity();
 
         let mut fb_normal = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_normal,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_normal,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let mut fb_forced = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_forced,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            true,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_forced,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: true,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // With identity colormaps both should be the same (identity maps everything
         // to itself regardless of which row). But the function path is different.
@@ -4639,36 +4825,40 @@ mod tests {
         // Bright sector (light=255 = fullbright).
         let level_bright = make_level_with_light(255);
         let mut fb_bright = Framebuffer::new();
-        render_level(
-            &level_bright,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_bright,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level_bright,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_bright,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // Dark sector (light=0).
         let level_dark = make_level_with_light(0);
         let mut fb_dark = Framebuffer::new();
-        render_level(
-            &level_dark,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_dark,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level_dark,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_dark,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // The framebuffers should differ — the dark one has darker wall colors.
         assert_ne!(
@@ -4688,19 +4878,21 @@ mod tests {
 
         let level = make_level_with_light(255);
         let mut fb = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // With test colormap, row 0 maps everything to 0.
         // So all wall pixels should be 0 (since row 0 sets every pixel to 0).
@@ -4727,19 +4919,21 @@ mod tests {
 
         let level = make_level_with_light(0);
         let mut fb = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // With test colormap, row N maps everything to N.
         // light=0 gives base index 31. Distance attenuation might reduce it,
@@ -4767,36 +4961,38 @@ mod tests {
         let level = make_level_with_light(0);
 
         let mut fb_base = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_base,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_base,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let mut fb_boosted = Framebuffer::new();
-        render_level_with_view_height_and_extra_light(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            PLAYER_HEIGHT,
-            &mut fb_boosted,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-            2,
-        );
+        render_level_with_view_height_and_extra_light(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            player_view_height: PLAYER_HEIGHT,
+            fb: &mut fb_boosted,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            extra_light: 2,
+        });
 
         let cx = HALF_W as usize;
         let base_pixels: Vec<u8> = (0..SCREEN_H)
@@ -4831,36 +5027,40 @@ mod tests {
 
         let level = make_level_with_light(128);
         let mut fb_none = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_none,
-            &palette,
-            None,
-            None,
-            None,
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_none,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // With identity colormap, same result.
         let cm = ColormapCache::identity();
         let mut fb_ident = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_ident,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_ident,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // Both should be identical because identity colormap is a no-op.
         assert_eq!(
@@ -4880,19 +5080,21 @@ mod tests {
 
         let level = make_level_with_light(128);
         let mut fb = Framebuffer::new();
-        let _zbuf = render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        let _zbuf = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
         // No panic = pass.
     }
 
@@ -4908,19 +5110,21 @@ mod tests {
         for light in [255i16, 192, 128, 64, 0] {
             let level = make_level_with_light(light);
             let mut fb = Framebuffer::new();
-            render_level(
-                &level,
-                64,
-                0,
-                doom_types::ANG90,
-                &mut fb,
-                &palette,
-                None,
-                None,
-                Some(&cm),
-                None,
-                false,
-            );
+            render_level(crate::render::RenderContext {
+                level: &level,
+                player_x: 64,
+                player_y: 0,
+                player_angle: doom_types::ANG90,
+                fb: &mut fb,
+                palette: &palette,
+                flat_cache: None,
+                tex_cache: None,
+                colormap: Some(&cm),
+                anim: None,
+                is_fullbright: false,
+                player_view_height: 0,
+                extra_light: 0,
+            });
 
             // Sum of all pixel values — brighter scenes should have higher sums.
             let sum: u64 = fb.data.iter().map(|&px| px as u64).sum();
@@ -4945,19 +5149,21 @@ mod tests {
         // Medium light to get a non-trivial base index.
         let level = make_level_with_light(128);
         let mut fb = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // With test colormap, wall pixels at different columns should potentially
         // have different values (angular falloff gives edge columns darker rows).
@@ -4980,34 +5186,38 @@ mod tests {
         let level = make_level_with_light(128);
 
         let mut fb_no_cm = Framebuffer::new();
-        let zbuf_no_cm = render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_no_cm,
-            &palette,
-            None,
-            None,
-            None,
-            None,
-            false,
-        );
+        let zbuf_no_cm = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_no_cm,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let mut fb_cm = Framebuffer::new();
-        let zbuf_cm = render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb_cm,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        let zbuf_cm = render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_cm,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // Z-buffer should be identical: lighting does not affect geometry.
         for x in 0..SCREEN_W {
@@ -5031,19 +5241,21 @@ mod tests {
 
         let level = make_level_with_light(0);
         let mut fb = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            true, // fullbright
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: true,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // With fullbright, colormap row 0 is always used.
         // Row 0 in test_colormap maps everything to 0.
@@ -5102,34 +5314,38 @@ mod tests {
         let level = make_level_with_light(128);
 
         let mut fb1 = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb1,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb1,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let mut fb2 = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb2,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb2,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         assert_eq!(
             fb1.data.as_slice(),
@@ -5149,19 +5365,21 @@ mod tests {
         // Front sector bright (255), back sector dark (0).
         let level = make_two_sided_level_with_lights(255, 0);
         let mut fb = Framebuffer::new();
-        render_level(
-            &level,
-            0,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // No panic; visual output produced.
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
@@ -5188,35 +5406,39 @@ mod tests {
 
         let level_a = make_two_sided_level_with_lights(128, 255);
         let mut fb_a = Framebuffer::new();
-        render_level(
-            &level_a,
-            0,
-            0,
-            doom_types::ANG90,
-            &mut fb_a,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level_a,
+            player_x: 0,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_a,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let level_b = make_two_sided_level_with_lights(128, 0);
         let mut fb_b = Framebuffer::new();
-        render_level(
-            &level_b,
-            0,
-            0,
-            doom_types::ANG90,
-            &mut fb_b,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level_b,
+            player_x: 0,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb_b,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // Without a FlatCache, both should produce identical output because
         // wall textures use front sector light and background fill is constant.
@@ -5237,19 +5459,21 @@ mod tests {
 
         let level = make_level_with_light(128);
         let mut fb = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // The flat-shade fallback uses `wall_cm[32]`. With the darkening colormap,
         // this should produce a value less than 32 (some darkening).
@@ -5277,57 +5501,63 @@ mod tests {
         let bright_sum = {
             let level = make_level_with_light(255);
             let mut fb = Framebuffer::new();
-            render_level(
-                &level,
-                64,
-                0,
-                doom_types::ANG90,
-                &mut fb,
-                &palette,
-                None,
-                None,
-                Some(&cm),
-                None,
-                false,
-            );
+            render_level(crate::render::RenderContext {
+                level: &level,
+                player_x: 64,
+                player_y: 0,
+                player_angle: doom_types::ANG90,
+                fb: &mut fb,
+                palette: &palette,
+                flat_cache: None,
+                tex_cache: None,
+                colormap: Some(&cm),
+                anim: None,
+                is_fullbright: false,
+                player_view_height: 0,
+                extra_light: 0,
+            });
             fb.data.iter().map(|&px| px as u64).sum::<u64>()
         };
 
         let mid_sum = {
             let level = make_level_with_light(128);
             let mut fb = Framebuffer::new();
-            render_level(
-                &level,
-                64,
-                0,
-                doom_types::ANG90,
-                &mut fb,
-                &palette,
-                None,
-                None,
-                Some(&cm),
-                None,
-                false,
-            );
+            render_level(crate::render::RenderContext {
+                level: &level,
+                player_x: 64,
+                player_y: 0,
+                player_angle: doom_types::ANG90,
+                fb: &mut fb,
+                palette: &palette,
+                flat_cache: None,
+                tex_cache: None,
+                colormap: Some(&cm),
+                anim: None,
+                is_fullbright: false,
+                player_view_height: 0,
+                extra_light: 0,
+            });
             fb.data.iter().map(|&px| px as u64).sum::<u64>()
         };
 
         let dark_sum = {
             let level = make_level_with_light(0);
             let mut fb = Framebuffer::new();
-            render_level(
-                &level,
-                64,
-                0,
-                doom_types::ANG90,
-                &mut fb,
-                &palette,
-                None,
-                None,
-                Some(&cm),
-                None,
-                false,
-            );
+            render_level(crate::render::RenderContext {
+                level: &level,
+                player_x: 64,
+                player_y: 0,
+                player_angle: doom_types::ANG90,
+                fb: &mut fb,
+                palette: &palette,
+                flat_cache: None,
+                tex_cache: None,
+                colormap: Some(&cm),
+                anim: None,
+                is_fullbright: false,
+                player_view_height: 0,
+                extra_light: 0,
+            });
             fb.data.iter().map(|&px| px as u64).sum::<u64>()
         };
 
@@ -5424,19 +5654,21 @@ mod tests {
         let level = make_level_with_light(128);
         let mut fb = Framebuffer::new();
 
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         let has_nonzero = fb.data.iter().any(|&b| b != 0);
         assert!(has_nonzero, "flats with lighting must produce output");
@@ -5492,19 +5724,21 @@ mod tests {
         let level = make_level_with_light(0); // very dark, but fullbright overrides
 
         let mut fb = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            Some(&flat_cache),
-            None,
-            Some(&cm),
-            None,
-            true,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: Some(&flat_cache),
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: true,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // Fullbright → colormap row 0 (identity).
         // Flat pixels should be 50 (the flat data value).
@@ -5557,19 +5791,21 @@ mod tests {
 
         let level = make_two_sided_level_with_lights(64, 192);
         let mut fb = Framebuffer::new();
-        render_level(
-            &level,
-            0,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            true,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: true,
+            player_view_height: 0,
+            extra_light: 0,
+        });
         // No crash = success.
     }
 
@@ -5587,19 +5823,21 @@ mod tests {
         let palette = PaletteLut::grayscale();
         let cm = make_darkening_colormap();
         let mut fb = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
         // No crash.
     }
 
@@ -5612,19 +5850,21 @@ mod tests {
         let palette = PaletteLut::grayscale();
         let cm = make_darkening_colormap();
         let mut fb = Framebuffer::new();
-        render_level(
-            &level,
-            64,
-            0,
-            doom_types::ANG90,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            Some(&cm),
-            None,
-            false,
-        );
+        render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: doom_types::ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: Some(&cm),
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
         // No crash; should clamp to 255 (fullbright).
     }
 }

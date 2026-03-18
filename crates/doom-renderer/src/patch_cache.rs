@@ -40,11 +40,11 @@ impl PatchCache {
     /// Missing lumps are silently skipped (e.g. Doom 2 has no episode patches).
     pub fn preload_menu_patches(&mut self, wad: &WadStack) {
         let names = [
-            "M_DOOM", "M_NEWG", "M_NGAME", "M_OPTION", "M_OPTTTL", "M_LOADG", "M_SAVEG",
-            "M_QUITG", "M_EPISOD", "M_EPI1", "M_EPI2", "M_EPI3", "M_EPI4", "M_JKILL", "M_ROUGH",
-            "M_HURT", "M_ULTRA", "M_NMARE", "M_SKULL1", "M_SKULL2", "M_MESSG", "M_DETAIL",
-            "M_SCRNSZ", "M_MSENS", "M_SVOL", "M_THERML", "M_THERMM", "M_THERMR", "M_THERMO",
-            "M_PAUSE", "TITLEPIC", "CREDIT", "HELP", "HELP1", "HELP2",
+            "M_DOOM", "M_NEWG", "M_NGAME", "M_OPTION", "M_OPTTTL", "M_LOADG", "M_SAVEG", "M_QUITG",
+            "M_EPISOD", "M_EPI1", "M_EPI2", "M_EPI3", "M_EPI4", "M_JKILL", "M_ROUGH", "M_HURT",
+            "M_ULTRA", "M_NMARE", "M_SKULL1", "M_SKULL2", "M_MESSG", "M_DETAIL", "M_SCRNSZ",
+            "M_MSENS", "M_SVOL", "M_THERML", "M_THERMM", "M_THERMR", "M_THERMO", "M_PAUSE",
+            "TITLEPIC", "CREDIT", "HELP", "HELP1", "HELP2",
         ];
         for name in &names {
             self.get(name, wad);

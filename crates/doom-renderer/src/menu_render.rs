@@ -351,7 +351,11 @@ pub fn draw_menu_wad(
     }
 
     // Skull cursor — M_SKULL1 / M_SKULL2 at (item_x - 32, item_y).
-    let skull_name = if menu.skull_frame() == 0 { "M_SKULL1" } else { "M_SKULL2" };
+    let skull_name = if menu.skull_frame() == 0 {
+        "M_SKULL1"
+    } else {
+        "M_SKULL2"
+    };
     let cursor_y = layout
         .item_ys
         .get(menu.cursor())
@@ -589,12 +593,14 @@ pub fn draw_finale_wad(
 
     // Reveal `text_index` characters of the text.
     let visible: String = text.chars().take(text_index).collect();
-    let mut x = 10i32;
+    let x = 10i32;
     let mut y = 10i32;
     for line in visible.lines() {
         font.draw_string(fb, x, y, line, 4);
         y += 11;
-        if y > 190 { break; }
+        if y > 190 {
+            break;
+        }
     }
     // Keep x used — avoids unused variable warning.
     let _ = x;

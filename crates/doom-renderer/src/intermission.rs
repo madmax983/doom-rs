@@ -505,7 +505,7 @@ fn wi_draw_number(
 ) -> i32 {
     let s = value.to_string();
     for ch in s.bytes() {
-        let digit = (ch - b'0') as u8;
+        let digit = ch - b'0';
         let name = format!("WINUM{digit}");
         if let Some(p) = cache.get(&name, wad) {
             let p = p.clone();
@@ -621,10 +621,19 @@ pub fn draw_intermission_wad(
 
     // 3. Stats (shown as counting progresses).
     let phase = renderer.phase;
-    let show_kills   = !matches!(phase, IntermissionPhase::CountingKills);
-    let show_items   = !matches!(phase, IntermissionPhase::CountingKills | IntermissionPhase::CountingItems);
-    let show_secrets = matches!(phase, IntermissionPhase::ShowingTime | IntermissionPhase::Done);
-    let show_time    = matches!(phase, IntermissionPhase::ShowingTime | IntermissionPhase::Done);
+    let show_kills = !matches!(phase, IntermissionPhase::CountingKills);
+    let show_items = !matches!(
+        phase,
+        IntermissionPhase::CountingKills | IntermissionPhase::CountingItems
+    );
+    let show_secrets = matches!(
+        phase,
+        IntermissionPhase::ShowingTime | IntermissionPhase::Done
+    );
+    let show_time = matches!(
+        phase,
+        IntermissionPhase::ShowingTime | IntermissionPhase::Done
+    );
 
     if let Some(p) = cache.get("WIOSTK", wad) {
         let p = p.clone();

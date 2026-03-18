@@ -2777,9 +2777,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = crate::palette::PaletteLut::grayscale();
 
-        let zbuf = crate::render::render_level(
-            &level, 64, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        let zbuf = crate::render::render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 64,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // The wall at y=128 is 128 map units away from player at (64,0)
         // facing north. At least some central columns should have finite depth.
@@ -2971,9 +2983,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = crate::palette::PaletteLut::grayscale();
 
-        let zbuf = crate::render::render_level(
-            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
-        );
+        let zbuf = crate::render::render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 0,
+            player_y: 0,
+            player_angle: ANG90,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // For a two-sided seg, z_buf should remain at f32::MAX for
         // columns in the portal's span (no one-sided wall occluded them).
@@ -3232,19 +3256,21 @@ mod tests {
         let mut fb = Framebuffer::new();
         let palette = crate::palette::PaletteLut::grayscale();
 
-        let zbuf = crate::render::render_level(
-            &level,
-            32,
-            32,
-            doom_types::Bam::ZERO,
-            &mut fb,
-            &palette,
-            None,
-            None,
-            None,
-            None,
-            false,
-        );
+        let zbuf = crate::render::render_level(crate::render::RenderContext {
+            level: &level,
+            player_x: 32,
+            player_y: 32,
+            player_angle: doom_types::Bam::ZERO,
+            fb: &mut fb,
+            palette: &palette,
+            flat_cache: None,
+            tex_cache: None,
+            colormap: None,
+            anim: None,
+            is_fullbright: false,
+            player_view_height: 0,
+            extra_light: 0,
+        });
 
         // The test level has walls but the player is inside the box
         // looking east. The seg (vertex 0→1, i.e. (0,0)→(64,0)) is

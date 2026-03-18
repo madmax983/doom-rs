@@ -5,8 +5,6 @@
 //! `Framebuffer` and `PaletteLut` are the primary types consumed by `doom-tui`.
 
 pub mod anim;
-pub mod patch_cache;
-pub mod wad_font;
 pub mod automap;
 pub mod clip;
 pub mod colormap;
@@ -21,6 +19,7 @@ pub mod lighting;
 pub mod menu_render;
 pub mod palette;
 pub mod palette_flash;
+pub mod patch_cache;
 pub mod render;
 pub mod render_flags;
 pub mod seg;
@@ -32,6 +31,7 @@ pub mod statusbar;
 pub mod texture;
 pub mod texture_compose;
 pub mod visplane;
+pub mod wad_font;
 pub mod weapon_anim;
 pub mod wipe;
 
@@ -62,9 +62,10 @@ pub use menu_render::{
 };
 pub use palette::{PaletteLut, Rgb};
 pub use palette_flash::{PaletteFlash, PaletteFlashState};
+pub use patch_cache::PatchCache;
 pub use render::{
-    MaskedColumnDraw, PLAYER_HEIGHT, RenderOut, draw_masked_columns, render_level,
-    render_level_with_view_height, render_level_with_view_height_and_extra_light,
+    MaskedColumnDraw, PLAYER_HEIGHT, RenderContext, RenderOut, draw_masked_columns,
+    render_level, render_level_with_view_height, render_level_with_view_height_and_extra_light,
 };
 pub use render_flags::RenderFlag;
 pub use sky::{
@@ -82,17 +83,19 @@ pub use sprite_lookup::{
     ActorRenderInfo, ResolvedSprite, compute_rotation, render_flag_from_state, resolve_sprite,
     sprite_lump_name_str, sprite_lump_name_with_mirror,
 };
-pub use statusbar::{StatusBarData, draw_status_bar, draw_status_bar_data, draw_status_bar_wad, draw_stnum, draw_stysnum};
+pub use statusbar::{
+    StatusBarData, draw_status_bar, draw_status_bar_data, draw_status_bar_wad, draw_stnum,
+    draw_stysnum,
+};
 pub use texture::TextureCache;
 pub use texture_compose::{
     ComposedTexture, PatchDef, PatchImage, PatchPost, TextureDef, TextureDirectory,
     compose_texture, parse_patch, parse_pnames, parse_texture_lump,
 };
+pub use wad_font::{GLYPH_GAP, SPACE_WIDTH, WadFont};
 pub use weapon_anim::{
     MAX_BOB, RAISE_SPEED, WEAPON_BASE_X, WEAPON_BASE_Y, WEAPON_BOTTOM, WEAPON_FLASH_LIGHT_BONUS,
     WEAPON_TOP, WeaponAnimState, WeaponBob, WeaponSprite, draw_weapon_animated, draw_weapon_shaded,
     get_weapon_light_params, weapon_light_bonus, weapon_sprite_name,
 };
-pub use patch_cache::PatchCache;
-pub use wad_font::{GLYPH_GAP, SPACE_WIDTH, WadFont};
 pub use wipe::ScreenWipe;
