@@ -14,4 +14,7 @@ pub mod wad;
 
 pub use lump::{LumpDef, LumpName, RawLumpEntry};
 pub use stack::WadStack;
-pub use wad::{MapLumpGroup, REQUIRED_MAP_LUMPS, WadDir, WadError, WadFile, WadKind};
+pub use wad::{
+    ClassicMapLumpGroup, MapLumpGroup, REQUIRED_MAP_LUMPS, UdmfMapLumpGroup, WadDir, WadError,
+    WadFile, WadKind,
+};

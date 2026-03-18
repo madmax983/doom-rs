@@ -43,6 +43,10 @@ pub enum WadError {
     #[error("invalid WAD magic: expected IWAD or PWAD, got {0:?}")]
     InvalidMagic([u8; 4]),
 
+    /// A PWAD was provided where an IWAD is required.
+    #[error("expected an IWAD as the base WAD, but found a PWAD")]
+    ExpectedIwad,
+
     /// The lump count is negative (corrupted WAD).
     #[error("WAD lump count is negative: {0}")]
     NegativeLumpCount(i32),
@@ -240,13 +244,48 @@ pub const REQUIRED_MAP_LUMPS: &[&str] = &[
     "BLOCKMAP",
 ];
 
-/// Validated map lump group: marker + the 10 required sub-lumps.
+/// Validated classic map lump group: marker + the 10 required sub-lumps.
 #[derive(Debug)]
-pub struct MapLumpGroup<'a> {
+pub struct ClassicMapLumpGroup<'a> {
     /// Map name marker (e.g. "E1M1").
     pub marker: &'a LumpDef,
     /// The 10 required lumps in spec order.
     pub lumps: [&'a LumpDef; 10],
+}
+
+/// Validated UDMF map lump group: marker + `TEXTMAP` + auxiliary lumps + `ENDMAP`.
+#[derive(Debug)]
+pub struct UdmfMapLumpGroup<'a> {
+    /// Map name marker (e.g. "MAP01").
+    pub marker: &'a LumpDef,
+    /// The `TEXTMAP` lump containing the textual UDMF map body.
+    pub textmap: &'a LumpDef,
+    /// All auxiliary lumps between `TEXTMAP` and `ENDMAP`.
+    aux_lumps: &'a [LumpDef],
+    /// The terminating `ENDMAP` marker.
+    pub endmap: &'a LumpDef,
+}
+
+impl<'a> UdmfMapLumpGroup<'a> {
+    /// Find the last auxiliary lump with the given name inside this UDMF map.
+    pub fn find_lump(&self, name: &str) -> Option<&'a LumpDef> {
+        let key = LumpName::from_str(name);
+        self.aux_lumps.iter().rev().find(|lump| lump.name == key)
+    }
+
+    /// All auxiliary lumps between `TEXTMAP` and `ENDMAP`.
+    pub fn aux_lumps(&self) -> &'a [LumpDef] {
+        self.aux_lumps
+    }
+}
+
+/// Validated map lump group for either classic or UDMF map layouts.
+#[derive(Debug)]
+pub enum MapLumpGroup<'a> {
+    /// Classic binary Doom map marker followed by the fixed 10-lump payload.
+    Classic(ClassicMapLumpGroup<'a>),
+    /// UDMF map marker followed by `TEXTMAP`, auxiliary lumps, and `ENDMAP`.
+    Udmf(UdmfMapLumpGroup<'a>),
 }
 
 impl WadFile {
@@ -258,6 +297,22 @@ impl WadFile {
     pub fn map_lump_group<'a>(&'a self, map_name: &str) -> Option<MapLumpGroup<'a>> {
         let marker_idx = self.find_map_marker(map_name)?;
         let marker = &self.dir[marker_idx];
+
+        // UDMF layout: MAPxx/E#M# marker, then TEXTMAP ... ENDMAP.
+        if let Some(textmap) = self.dir.get(marker_idx + 1)
+            && textmap.name == LumpName::from_str("TEXTMAP")
+        {
+            let end_relative_idx = self.dir[marker_idx + 2..]
+                .iter()
+                .position(|lump| lump.name == LumpName::from_str("ENDMAP"))?;
+            let end_idx = marker_idx + 2 + end_relative_idx;
+            return Some(MapLumpGroup::Udmf(UdmfMapLumpGroup {
+                marker,
+                textmap,
+                aux_lumps: &self.dir[marker_idx + 2..end_idx],
+                endmap: &self.dir[end_idx],
+            }));
+        }
 
         // The 10 required lumps must immediately follow the marker.
         if marker_idx + 10 >= self.dir.len() {
@@ -273,10 +328,10 @@ impl WadFile {
             lumps[i] = Some(candidate);
         }
 
-        Some(MapLumpGroup {
+        Some(MapLumpGroup::Classic(ClassicMapLumpGroup {
             marker,
             lumps: lumps.map(Option::unwrap),
-        })
+        }))
     }
 }
 
@@ -610,5 +665,31 @@ mod tests {
         let wad = WadFile::parse(wad_bytes).unwrap();
         // find_lump returns last occurrence
         assert_eq!(wad.find_lump_data("DEMO").unwrap(), b"second");
+    }
+
+    #[test]
+    fn map_lump_group_detects_udmf_group() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("TEXTMAP", br#"namespace = "doom";"#),
+            ("ZNODES", b"not_relevant_here"),
+            ("ENDMAP", b""),
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+
+        let group = wad.map_lump_group("MAP01").expect("map group");
+
+        match group {
+            MapLumpGroup::Udmf(group) => {
+                assert_eq!(group.marker.name.as_str(), "MAP01");
+                assert_eq!(group.textmap.name.as_str(), "TEXTMAP");
+                assert_eq!(group.endmap.name.as_str(), "ENDMAP");
+                assert_eq!(
+                    group.find_lump("ZNODES").map(|lump| lump.name.as_str()),
+                    Some("ZNODES")
+                );
+            }
+            MapLumpGroup::Classic(_) => panic!("expected UDMF map group"),
+        }
     }
 }

@@ -14,7 +14,7 @@
 //! - Patch:    `u16 width/height`, `i16 leftoffset/topoffset`, `width × u32 col_offsets`,
 //!   then column posts (`topdelta`, `length`, pad, pixels, pad; 0xFF = end)
 
-use doom_wad::WadFile;
+use doom_wad::{WadFile, WadStack};
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -64,12 +64,56 @@ impl TextureCache {
 
         // Process TEXTURE1 (always present in valid IWADs).
         if let Some(data) = wad.find_lump_data("TEXTURE1") {
-            parse_texture_lump(data, &pnames, wad, &mut textures);
+            parse_texture_lump(
+                data,
+                &pnames,
+                |patch_name| wad.find_lump_data(patch_name),
+                &mut textures,
+            );
         }
 
         // TEXTURE2 is optional (only in registered Doom/Doom 2).
         if let Some(data) = wad.find_lump_data("TEXTURE2") {
-            parse_texture_lump(data, &pnames, wad, &mut textures);
+            parse_texture_lump(
+                data,
+                &pnames,
+                |patch_name| wad.find_lump_data(patch_name),
+                &mut textures,
+            );
+        }
+
+        TextureCache { textures }
+    }
+
+    /// Load and compose all wall textures from a stacked IWAD/PWAD view.
+    pub fn load_from_stack(wad: &WadStack) -> Self {
+        let pnames = match wad.lump_data("PNAMES") {
+            Some(d) => parse_pnames(d),
+            None => {
+                return TextureCache {
+                    textures: HashMap::new(),
+                };
+            }
+        };
+
+        let mut textures = HashMap::new();
+
+        if let Some(data) = wad.lump_data("TEXTURE1") {
+            parse_texture_lump(
+                data,
+                &pnames,
+                |patch_name| wad.lump_data(patch_name),
+                &mut textures,
+            );
+        }
+
+        if let Some(data) = wad.lump_data("TEXTURE2") {
+            parse_texture_lump(
+                data,
+                &pnames,
+                |patch_name| wad.lump_data(patch_name),
+                &mut textures,
+            );
         }
 
         TextureCache { textures }
@@ -146,12 +190,14 @@ struct MapPatch {
 }
 
 /// Parse one TEXTURE1 or TEXTURE2 lump and insert composed textures into `out`.
-fn parse_texture_lump(
+fn parse_texture_lump<'a, F>(
     data: &[u8],
     pnames: &[String],
-    wad: &WadFile,
+    mut find_patch: F,
     out: &mut HashMap<String, WallTexture>,
-) {
+) where
+    F: FnMut(&str) -> Option<&'a [u8]>,
+{
     if data.len() < 4 {
         return;
     }
@@ -226,7 +272,7 @@ fn parse_texture_lump(
                 Some(n) => n.clone(),
                 None => continue,
             };
-            let patch_data = match wad.find_lump_data(&patch_name) {
+            let patch_data = match find_patch(&patch_name) {
                 Some(d) => d,
                 None => continue,
             };

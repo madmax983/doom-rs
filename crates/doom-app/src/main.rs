@@ -1,6 +1,6 @@
 //! Doom engine entry point.
 //!
-//! Usage: doom-app --wad doom1.wad [--warp E1M1]
+//! Usage: doom-app --iwad doom1.wad [--pwad mod.wad] [--warp E1M1]
 
 mod audio_system;
 mod cheats;
@@ -34,7 +34,10 @@ use doom_renderer::{
 };
 use doom_tui::{DoomApp, DoomEventLoop, TicInput};
 use doom_types::{Bam, Fixed16_16};
-use doom_wad::{WadFile, WadStack};
+use doom_wad::WadStack;
+
+#[cfg(test)]
+use doom_wad::WadFile;
 
 #[cfg(test)]
 use doom_renderer::SwitchList;
@@ -49,9 +52,13 @@ use doom_audio::{SfxEmitter, SfxPriority, compute_spatial};
 #[derive(Parser, Debug)]
 #[command(name = "doom-app", about = "Doom engine (doom-rs)")]
 struct Args {
-    /// Path to IWAD file (doom1.wad, doom2.wad, freedoom1.wad, etc.)
+    /// Path to IWAD file (doom1.wad, doom2.wad, freedoom1.wad, etc.).
+    #[arg(long, alias = "wad")]
+    iwad: std::path::PathBuf,
+
+    /// Optional PWAD overlay(s). Repeat to stack multiple patch WADs.
     #[arg(long)]
-    wad: std::path::PathBuf,
+    pwad: Vec<std::path::PathBuf>,
 
     /// Map to load (e.g. E1M1, MAP01). Omit to start at the title screen.
     #[arg(long)]
@@ -161,7 +168,7 @@ pub(crate) struct DoomGame {
     patch_cache: PatchCache,
     /// WAD-based HU font (STCFN patches). `None` until WAD is attached.
     wad_font: Option<WadFont>,
-    /// WAD stack for patch lookups (same data as `wad`, kept as a stack).
+    /// WAD stack for patch lookups and stacked map loads.
     wad_stack: WadStack,
     /// Mugshot face animation FSM.
     face_state: FaceState,
@@ -174,8 +181,6 @@ pub(crate) struct DoomGame {
     /// Name → SFX ID lookup built from the WAD at startup (same ordering as
     /// `SfxCache`).  Used to play monster wake/attack/death sounds by lump name.
     sfx_lookup: std::collections::HashMap<String, u16>,
-    /// Parsed WAD retained for phase-driven map loads after intermission.
-    wad: Option<WadFile>,
     /// Current skill used when spawning the next map.
     skill: Skill,
     /// Top-level playing/intermission/finale controller.
@@ -270,7 +275,6 @@ impl DoomGame {
             debug_log,
             pain_sfx_id,
             sfx_lookup,
-            wad: None,
             skill: Skill::Medium,
             phase_controller,
             intermission_renderer: None,
@@ -330,8 +334,7 @@ impl DoomGame {
         doom_game::MapId::from_name(level_name).unwrap_or(doom_game::MapId::new(1, 1))
     }
 
-    fn attach_wad_for_transitions(&mut self, wad: WadFile, skill: Skill, wad_stack: WadStack) {
-        self.wad = Some(wad);
+    fn attach_wad_for_transitions(&mut self, skill: Skill, wad_stack: WadStack) {
         self.skill = skill;
         self.wad_stack = wad_stack;
         // Preload menu and status bar patches now that we have a WAD stack.
@@ -365,15 +368,15 @@ impl DoomGame {
     }
 
     fn load_map_after_intermission(&mut self, map_id: doom_game::MapId, carry_player_state: bool) {
-        let Some(wad) = self.wad.as_ref() else {
+        if !self.wad_stack.has_iwad() {
             self.console
                 .print("Cannot load next level: no WAD attached for transitions.".to_string());
             self.phase_controller.clear_load_request();
             return;
-        };
+        }
 
         let map_name = map_id.map_name();
-        let level = match Level::from_wad(wad, &map_name) {
+        let level = match Level::from_wad_stack(&self.wad_stack, &map_name) {
             Ok(level) => level,
             Err(e) => {
                 self.console
@@ -1561,7 +1564,7 @@ pub(crate) fn ticinput_to_ticcmd(input: TicInput) -> TicCmd {
 // `spawn_player` removed — replaced by `spawn_level_things` which spawns
 // ALL map things (player, monsters, items, decorations, keys).
 
-fn load_music_library(wad: &WadFile) -> std::collections::HashMap<String, Vec<u8>> {
+fn load_music_library(wad: &WadStack) -> std::collections::HashMap<String, Vec<u8>> {
     let mut music_library = std::collections::HashMap::new();
 
     for episode in 1..=4 {
@@ -1570,7 +1573,7 @@ fn load_music_library(wad: &WadFile) -> std::collections::HashMap<String, Vec<u8
             let Some(music_lump) = music_lump_for_map(&map_name) else {
                 continue;
             };
-            if let Some(mus_data) = wad.find_lump_data(&music_lump) {
+            if let Some(mus_data) = wad.lump_data(&music_lump) {
                 music_library.insert(music_lump, mus_data.to_vec());
             }
         }
@@ -1581,18 +1584,38 @@ fn load_music_library(wad: &WadFile) -> std::collections::HashMap<String, Vec<u8
         let Some(music_lump) = music_lump_for_map(&map_name) else {
             continue;
         };
-        if let Some(mus_data) = wad.find_lump_data(&music_lump) {
+        if let Some(mus_data) = wad.lump_data(&music_lump) {
             music_library.insert(music_lump, mus_data.to_vec());
         }
     }
 
     for lump in ["D_INTER", "D_DM2INT"] {
-        if let Some(mus_data) = wad.find_lump_data(lump) {
+        if let Some(mus_data) = wad.lump_data(lump) {
             music_library.insert(lump.to_string(), mus_data.to_vec());
         }
     }
 
     music_library
+}
+
+fn default_warp_map(wad_stack: &WadStack) -> String {
+    for map in 1..=32 {
+        let name = format!("MAP{map:02}");
+        if wad_stack.find_map_lump_group(&name).is_some() {
+            return name;
+        }
+    }
+
+    for episode in 1..=4 {
+        for map in 1..=9 {
+            let name = format!("E{episode}M{map}");
+            if wad_stack.find_map_lump_group(&name).is_some() {
+                return name;
+            }
+        }
+    }
+
+    "E1M1".to_string()
 }
 
 fn validate_mode_args(args: &Args) -> std::result::Result<(), &'static str> {
@@ -1665,31 +1688,39 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    // Load and parse the WAD file.
-    let wad_bytes = std::fs::read(&args.wad)
-        .with_context(|| format!("Failed to read WAD file: {}", args.wad.display()))?;
+    let iwad_bytes = std::fs::read(&args.iwad)
+        .with_context(|| format!("Failed to read IWAD file: {}", args.iwad.display()))?;
 
     // Build a WadStack for patch/lump lookups (menu graphics, HUD sprites).
     let mut wad_stack = WadStack::new();
     wad_stack
-        .push_iwad(wad_bytes.clone())
-        .with_context(|| format!("Failed to build WadStack: {}", args.wad.display()))?;
+        .push_iwad(iwad_bytes)
+        .with_context(|| format!("Failed to load IWAD: {}", args.iwad.display()))?;
 
-    let wad = WadFile::parse(wad_bytes)
-        .with_context(|| format!("Failed to parse WAD: {}", args.wad.display()))?;
+    for pwad_path in &args.pwad {
+        let pwad_bytes = std::fs::read(pwad_path)
+            .with_context(|| format!("Failed to read PWAD file: {}", pwad_path.display()))?;
+        wad_stack
+            .push_pwad(pwad_bytes)
+            .with_context(|| format!("Failed to load PWAD: {}", pwad_path.display()))?;
+    }
 
     // Build the PLAYPAL blit palette (for terminal RGB conversion).
-    let blit_palette = match wad.find_lump_data("PLAYPAL") {
+    let blit_palette = match wad_stack.lump_data("PLAYPAL") {
         Some(data) => PaletteLut::from_playpal(data).unwrap_or_else(|_| PaletteLut::grayscale()),
         None => PaletteLut::grayscale(),
     };
 
-    // Determine which map to load — default to E1M1 when no --warp is given.
-    let warp_str = args.warp.as_deref().unwrap_or("E1M1");
+    // Determine which map to load — default to the first canonical map present.
+    let warp_name = args
+        .warp
+        .clone()
+        .unwrap_or_else(|| default_warp_map(&wad_stack));
+    let warp_str = warp_name.as_str();
     let show_title = args.warp.is_none();
 
     // Parse the requested level.
-    let level = Level::from_wad(&wad, warp_str)
+    let level = Level::from_wad_stack(&wad_stack, warp_str)
         .with_context(|| format!("Failed to load map {warp_str}"))?;
 
     // Create game state and spawn ALL level things (player, monsters, items, keys).
@@ -1718,7 +1749,7 @@ fn main() -> Result<()> {
     }
 
     // Load flat texture cache (floor/ceiling textures between F_START and F_END).
-    let flat_cache = FlatCache::load(&wad);
+    let flat_cache = FlatCache::load_from_stack(&wad_stack);
     let flat_cache = if flat_cache.is_empty() {
         None
     } else {
@@ -1727,23 +1758,23 @@ fn main() -> Result<()> {
 
     // Load wall texture cache (TEXTURE1/TEXTURE2 composed textures).
     let tex_cache = {
-        let cache = TextureCache::load(&wad);
+        let cache = TextureCache::load_from_stack(&wad_stack);
         if cache.is_empty() { None } else { Some(cache) }
     };
 
     // Load sprite cache (sprite frames between S_START and S_END).
     let sprite_cache = {
-        let cache = SpriteCache::load(&wad);
+        let cache = SpriteCache::load_from_stack(&wad_stack);
         if cache.is_empty() { None } else { Some(cache) }
     };
 
     // Load colormap cache (COLORMAP lump: 34 × 256 bytes, light-level shading).
-    let colormap_cache = Some(ColormapCache::from_wad_file(&wad));
+    let colormap_cache = Some(ColormapCache::load(&wad_stack));
 
     // Try to open the audio subsystem.  Returns None in headless/CI environments.
-    let audio = AudioSystem::try_open(&wad);
+    let audio = AudioSystem::try_open(&wad_stack);
 
-    let music_library = load_music_library(&wad);
+    let music_library = load_music_library(&wad_stack);
 
     if let Err(message) = validate_mode_args(&args) {
         eprintln!("Error: {message}");
@@ -1770,7 +1801,7 @@ fn main() -> Result<()> {
 
     // Build a name→ID map for all DS* lumps so monster sounds can be resolved
     // by lump name at play time without additional WAD scans.
-    let sfx_lookup = audio_system::build_sfx_lookup(&wad);
+    let sfx_lookup = audio_system::build_sfx_lookup(&wad_stack);
 
     // Resolve player pain SFX (DSPLPAIN) once at startup so we can fire it cheaply.
     let pain_sfx_id = sfx_lookup.get("DSPLPAIN").copied();
@@ -1789,7 +1820,7 @@ fn main() -> Result<()> {
         pain_sfx_id,
         sfx_lookup,
     );
-    app.attach_wad_for_transitions(wad, skill, wad_stack);
+    app.attach_wad_for_transitions(skill, wad_stack);
 
     // Headless capture mode: tick N frames, render, save BMP, exit.
     if let Some(ref capture_path) = args.capture {
@@ -2148,9 +2179,12 @@ mod tests {
         make_walk_exit_level_named("E1M1")
     }
 
-    fn build_test_wad_from_lumps(lump_payloads: Vec<([u8; 8], Vec<u8>)>) -> WadFile {
+    fn build_test_wad_bytes_from_lumps(
+        kind: &[u8; 4],
+        lump_payloads: Vec<([u8; 8], Vec<u8>)>,
+    ) -> Vec<u8> {
         let mut data = Vec::new();
-        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(kind);
         data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
         data.extend_from_slice(&0i32.to_le_bytes());
 
@@ -2170,7 +2204,28 @@ mod tests {
             data.extend_from_slice(name);
         }
 
+        data
+    }
+
+    fn build_test_wad_from_lumps(lump_payloads: Vec<([u8; 8], Vec<u8>)>) -> WadFile {
+        let data = build_test_wad_bytes_from_lumps(b"IWAD", lump_payloads);
         WadFile::parse(data).expect("test WAD parse")
+    }
+
+    fn build_test_wad_stack_from_lumps(
+        iwad_lumps: Vec<([u8; 8], Vec<u8>)>,
+        pwad_lumps: Vec<([u8; 8], Vec<u8>)>,
+    ) -> WadStack {
+        let mut stack = WadStack::new();
+        stack
+            .push_iwad(build_test_wad_bytes_from_lumps(b"IWAD", iwad_lumps))
+            .expect("IWAD test stack push");
+        if !pwad_lumps.is_empty() {
+            stack
+                .push_pwad(build_test_wad_bytes_from_lumps(b"PWAD", pwad_lumps))
+                .expect("PWAD test stack push");
+        }
+        stack
     }
 
     fn build_minimal_wad_for_maps(map_names: &[&str]) -> WadFile {
@@ -2247,6 +2302,25 @@ mod tests {
         }
 
         build_test_wad_from_lumps(lump_payloads)
+    }
+
+    fn build_minimal_wad_stack_for_maps(map_names: &[&str]) -> WadStack {
+        let wad = build_minimal_wad_for_maps(map_names);
+        let mut stack = WadStack::new();
+        // Rebuild from bytes so the stack owns the same map data in IWAD position.
+        let mut lump_payloads: Vec<([u8; 8], Vec<u8>)> = Vec::new();
+        for lump in wad.lumps() {
+            let mut name = [0u8; 8];
+            let raw = lump.name.as_str().as_bytes();
+            for (idx, &byte) in raw.iter().take(8).enumerate() {
+                name[idx] = byte;
+            }
+            lump_payloads.push((name, wad.lump_data(lump).to_vec()));
+        }
+        stack
+            .push_iwad(build_test_wad_bytes_from_lumps(b"IWAD", lump_payloads))
+            .expect("IWAD test stack push");
+        stack
     }
 
     fn unique_temp_log_path(name: &str) -> PathBuf {
@@ -2839,10 +2913,13 @@ mod tests {
 
     #[test]
     fn load_music_library_includes_intermission_lumps() {
-        let wad = build_test_wad_from_lumps(vec![
-            (*b"D_INTER\0", vec![1, 2, 3, 4]),
-            (*b"D_DM2INT", vec![5, 6, 7, 8]),
-        ]);
+        let wad = build_test_wad_stack_from_lumps(
+            vec![
+                (*b"D_INTER\0", vec![1, 2, 3, 4]),
+                (*b"D_DM2INT", vec![5, 6, 7, 8]),
+            ],
+            Vec::new(),
+        );
 
         let library = load_music_library(&wad);
 
@@ -2913,9 +2990,8 @@ mod tests {
             std::collections::HashMap::new(),
         );
         game.attach_wad_for_transitions(
-            build_minimal_wad_for_maps(&["E1M1", "E1M2"]),
             Skill::Medium,
-            WadStack::new(),
+            build_minimal_wad_stack_for_maps(&["E1M1", "E1M2"]),
         );
         game.gs
             .mobjslab
@@ -3001,9 +3077,8 @@ mod tests {
             std::collections::HashMap::new(),
         );
         game.attach_wad_for_transitions(
-            build_minimal_wad_for_maps(&["E1M1", "E1M2"]),
             Skill::Medium,
-            WadStack::new(),
+            build_minimal_wad_stack_for_maps(&["E1M1", "E1M2"]),
         );
         game.gs
             .mobjslab
@@ -3039,9 +3114,8 @@ mod tests {
             std::collections::HashMap::new(),
         );
         game.attach_wad_for_transitions(
-            build_minimal_wad_for_maps(&["MAP01", "MAP02"]),
             Skill::Medium,
-            WadStack::new(),
+            build_minimal_wad_stack_for_maps(&["MAP01", "MAP02"]),
         );
         game.gs
             .mobjslab
@@ -3351,6 +3425,51 @@ mod tests {
         assert!(args.is_ok(), "args with --deh must parse successfully");
         let args = args.unwrap();
         assert_eq!(args.deh.as_deref(), Some("my_patch.deh"));
+    }
+
+    #[test]
+    fn cli_args_parse_iwad_and_pwad_flags() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--iwad",
+            "doom2.wad",
+            "--pwad",
+            "winterbase.wad",
+            "--pwad",
+            "fixes.wad",
+        ])
+        .expect("args with explicit IWAD/PWAD flags should parse");
+
+        assert_eq!(args.iwad, std::path::PathBuf::from("doom2.wad"));
+        assert_eq!(
+            args.pwad,
+            vec![
+                std::path::PathBuf::from("winterbase.wad"),
+                std::path::PathBuf::from("fixes.wad")
+            ]
+        );
+    }
+
+    #[test]
+    fn default_warp_map_prefers_map_markers_present_in_stack() {
+        let stack = build_test_wad_stack_from_lumps(
+            vec![(*b"E1M1\0\0\0\0", vec![]), (*b"THINGS\0\0", vec![])],
+            vec![
+                (*b"MAP01\0\0\0", vec![]),
+                (*b"THINGS\0\0", vec![]),
+                (*b"LINEDEFS", vec![]),
+                (*b"SIDEDEFS", vec![]),
+                (*b"VERTEXES", vec![]),
+                (*b"SEGS\0\0\0\0", vec![]),
+                (*b"SSECTORS", vec![]),
+                (*b"NODES\0\0\0", vec![]),
+                (*b"SECTORS\0", vec![]),
+                (*b"REJECT\0\0", vec![]),
+                (*b"BLOCKMAP", vec![]),
+            ],
+        );
+
+        assert_eq!(default_warp_map(&stack), "MAP01");
     }
 
     // -----------------------------------------------------------------------

@@ -25,7 +25,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use doom_audio::{
     AudioDriver, GenmidiBank, MAX_CHANNELS, MusScore, SfxCache, SfxPriority, mixer::PcmSample,
 };
-use doom_wad::WadFile;
+use doom_wad::WadStack;
 
 // ---------------------------------------------------------------------------
 // AudioEvent
@@ -74,7 +74,7 @@ impl AudioSystem {
     ///
     /// Returns `None` if no audio device is available (headless CI, etc.).
     /// The game continues silently in that case — no crash.
-    pub fn try_open(wad: &WadFile) -> Option<Self> {
+    pub fn try_open(wad: &WadStack) -> Option<Self> {
         const SAMPLE_RATE: u32 = 44_100;
 
         let driver = match AudioDriver::open(SAMPLE_RATE) {
@@ -96,21 +96,23 @@ impl AudioSystem {
 
         // Try to load the GENMIDI bank for real FM instrument sounds.
         // Gracefully falls back to the default sine-wave instrument if absent or malformed.
-        let genmidi_bank = wad
-            .find_lump_data("GENMIDI")
-            .and_then(|data| match GenmidiBank::parse(data) {
-                Ok(bank) => {
-                    eprintln!(
-                        "[audio] GENMIDI loaded: {} instruments",
-                        bank.instruments.len()
-                    );
-                    Some(bank)
-                }
-                Err(e) => {
-                    eprintln!("[audio] GENMIDI parse failed: {e} — using default sine instrument");
-                    None
-                }
-            });
+        let genmidi_bank =
+            wad.lump_data("GENMIDI")
+                .and_then(|data| match GenmidiBank::parse(data) {
+                    Ok(bank) => {
+                        eprintln!(
+                            "[audio] GENMIDI loaded: {} instruments",
+                            bank.instruments.len()
+                        );
+                        Some(bank)
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "[audio] GENMIDI parse failed: {e} — using default sine instrument"
+                        );
+                        None
+                    }
+                });
 
         let (tx, rx) = std::sync::mpsc::channel::<AudioEvent>();
 
@@ -233,10 +235,10 @@ impl AudioSystem {
 ///
 /// Uses [`sfx_candidate_names`] for lump discovery — the same ordering that
 /// [`build_sfx_lookup`] uses — so IDs are always consistent.
-fn populate_sfx_cache(wad: &WadFile, cache: &mut SfxCache) {
+fn populate_sfx_cache(wad: &WadStack, cache: &mut SfxCache) {
     for (idx, name) in sfx_candidate_names(wad).into_iter().enumerate() {
         let id = (idx + 1) as u16;
-        if let Some(data) = wad.find_lump_data(&name) {
+        if let Some(data) = wad.lump_data(&name) {
             match PcmSample::parse_sfx_lump(data) {
                 Ok(sample) => {
                     cache.insert(id, Arc::new(sample));
@@ -391,7 +393,7 @@ pub fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, 
 ///
 /// Uses the same candidate-lump strategy as [`populate_sfx_cache`] so that
 /// `sfx_lookup["DSPISTOL"]` always returns the same ID the mixer uses.
-pub fn build_sfx_lookup(wad: &WadFile) -> std::collections::HashMap<String, u16> {
+pub fn build_sfx_lookup(wad: &WadStack) -> std::collections::HashMap<String, u16> {
     let mut map = std::collections::HashMap::new();
     for (idx, name) in sfx_candidate_names(wad).into_iter().enumerate() {
         map.insert(name, (idx + 1) as u16);
@@ -407,11 +409,10 @@ pub fn build_sfx_lookup(wad: &WadFile) -> std::collections::HashMap<String, u16>
 ///
 /// Namespace markers (DS_START/DS_END) are intentionally ignored: they
 /// do not reliably contain all DS-prefixed SFX lumps in every WAD variant.
-fn sfx_candidate_names(wad: &WadFile) -> Vec<String> {
-    wad.lumps()
-        .iter()
-        .filter(|l| l.size > 0 && l.name.as_str().starts_with("DS"))
-        .map(|l| l.name.as_str().to_ascii_uppercase())
+fn sfx_candidate_names(wad: &WadStack) -> Vec<String> {
+    wad.all_lumps()
+        .filter(|(_, l)| l.size > 0 && l.name.as_str().starts_with("DS"))
+        .map(|(_, l)| l.name.as_str().to_ascii_uppercase())
         .collect()
 }
 
@@ -513,7 +514,14 @@ pub fn music_lump_for_map(map: &str) -> Option<String> {
 mod tests {
     use super::*;
 
-    #[allow(dead_code)]
+    fn stack_with_iwad_bytes(wad_bytes: Vec<u8>) -> WadStack {
+        let mut stack = WadStack::new();
+        stack
+            .push_iwad(wad_bytes)
+            .expect("IWAD test bytes must push");
+        stack
+    }
+
     fn make_iwad(lumps: &[(&str, &[u8])]) -> Vec<u8> {
         let mut data: Vec<u8> = Vec::new();
         data.extend_from_slice(b"IWAD");
@@ -757,7 +765,7 @@ mod tests {
         wad_bytes.extend_from_slice(b"IWAD");
         wad_bytes.extend_from_slice(&0i32.to_le_bytes()); // numlumps = 0
         wad_bytes.extend_from_slice(&12i32.to_le_bytes()); // directory at offset 12
-        let wad = doom_wad::WadFile::parse(wad_bytes).expect("minimal WAD must parse");
+        let wad = stack_with_iwad_bytes(wad_bytes);
         let mut cache = SfxCache::new();
         populate_sfx_cache(&wad, &mut cache);
         // No entries — no panic.
@@ -769,7 +777,7 @@ mod tests {
     fn sfx_cache_without_ds_markers_falls_back_to_ds_prefix_scan() {
         let sfx = valid_sfx_lump_1_sample();
         let wad_bytes = make_iwad(&[("THINGS", b"not_sfx"), ("DSPISTOL", sfx.as_slice())]);
-        let wad = doom_wad::WadFile::parse(wad_bytes).expect("test WAD must parse");
+        let wad = stack_with_iwad_bytes(wad_bytes);
 
         let mut cache = SfxCache::new();
         populate_sfx_cache(&wad, &mut cache);
