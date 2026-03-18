@@ -3605,7 +3605,9 @@ pub fn tick_conveyors(gs: &mut GameState, level: Option<&Level>) {
     };
 
     // Iterate all live actors and apply push if standing in a conveyor sector.
-    let handles: Vec<_> = gs.mobjslab.iter_handles().collect();
+    // Use a vector because we modify mobjs in the loop.
+    let mut handles = Vec::with_capacity(gs.mobjslab.len());
+    handles.extend(gs.mobjslab.iter_handles());
     for handle in handles {
         let (mz, _mx, _my) = match gs.mobjslab.get(handle) {
             Some(mo) => (mo.z.to_int(), mo.x, mo.y),
