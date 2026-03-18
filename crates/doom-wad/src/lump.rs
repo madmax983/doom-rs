@@ -47,11 +47,33 @@ impl RawLumpEntry {
 ///
 /// Names are case-insensitive in the original engine; we store them
 /// normalized to uppercase for consistent key comparisons.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_wad::lump::LumpName;
+///
+/// let name = LumpName::from_str("PlayPal");
+/// assert_eq!(name.as_str(), "PLAYPAL");
+/// ```
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct LumpName([u8; 8]);
 
 impl LumpName {
     /// Construct from a raw name field, uppercasing ASCII letters.
+    ///
+    /// The input must be an 8-byte array. Any bytes after the first null byte
+    /// are ignored and zero-filled.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_wad::lump::LumpName;
+    ///
+    /// let raw = *b"playpal\0";
+    /// let name = LumpName::from_raw(raw);
+    /// assert_eq!(name.as_str(), "PLAYPAL");
+    /// ```
     pub fn from_raw(raw: [u8; 8]) -> Self {
         let mut buf = raw;
         let mut seen_null = false;
@@ -68,7 +90,18 @@ impl LumpName {
         Self(buf)
     }
 
-    /// Construct from a string slice (must be ≤ 8 ASCII chars).
+    /// Construct from a string slice.
+    ///
+    /// The input string is truncated to 8 bytes. All characters are uppercased.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_wad::lump::LumpName;
+    ///
+    /// let name = LumpName::from_str("Demo1");
+    /// assert_eq!(name.as_str(), "DEMO1");
+    /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         let mut buf = [0u8; 8];
@@ -78,7 +111,16 @@ impl LumpName {
         Self(buf)
     }
 
-    /// Returns the name as a `&str`, trimming trailing null bytes.
+    /// Returns the name as a string slice (`&str`), trimming trailing null bytes.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_wad::lump::LumpName;
+    ///
+    /// let name = LumpName::from_str("E1M1");
+    /// assert_eq!(name.as_str(), "E1M1");
+    /// ```
     pub fn as_str(&self) -> &str {
         let len = self.0.iter().position(|&b| b == 0).unwrap_or(8);
         // SAFETY: we only store ASCII uppercase; valid UTF-8.
