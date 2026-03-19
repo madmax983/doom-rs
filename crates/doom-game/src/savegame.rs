@@ -1285,6 +1285,25 @@ mod tests {
         name
     }
 
+    #[test]
+    fn mobj_kind_roundtrip() {
+        // Enumerate over all valid discriminants and ensure they parse properly.
+        // And also make sure we test out of bounds.
+        for disc in 0..=73 {
+            let kind = mobj_kind_from_u16(disc).expect("all 0..=73 must map to a MobjKind");
+            let mut w = WriteCursor::new(2);
+            write_mobj_kind(&mut w, kind);
+            let mut r = ReadCursor::new(&w.buf);
+            let parsed = read_mobj_kind(&mut r).expect("must parse back");
+            assert_eq!(parsed, kind);
+        }
+
+        // 74 is out of bounds
+        assert!(mobj_kind_from_u16(74).is_none());
+        assert!(mobj_kind_from_u16(999).is_none());
+        assert!(mobj_kind_from_u16(0xFFFF).is_none());
+    }
+
     // --- Test 1: save_game produces bytes starting with SAVE_MAGIC ---
     #[test]
     fn save_starts_with_magic() {
