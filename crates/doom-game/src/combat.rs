@@ -224,7 +224,7 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         let Some(mo) = gs.mobjslab.get_mut(target) else {
             return;
         };
-        mo.health = (mo.health - effective_damage).max(0);
+        mo.health = mo.health.saturating_sub(effective_damage).max(0);
         if inflictor != MobjHandle::NULL {
             mo.target = inflictor;
             if target != gs.player.handle {
@@ -738,6 +738,17 @@ mod tests {
             20,
             "non-shootable actor must not take damage"
         );
+    }
+
+    #[test]
+    fn damage_mobj_overflow() {
+        let mut gs = make_game_state();
+        let target = spawn_trooper(&mut gs, 128, 0);
+        let inflictor = MobjHandle::NULL;
+        // Test with massive damage
+        damage_mobj(&mut gs, target, inflictor, i32::MAX);
+        let health = gs.mobjslab.get(target).unwrap().health;
+        assert_eq!(health, 0);
     }
 
     #[test]
