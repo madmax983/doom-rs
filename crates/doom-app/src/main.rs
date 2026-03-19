@@ -503,15 +503,12 @@ impl DoomGame {
     fn handle_sound_events(&mut self, events: impl IntoIterator<Item = doom_game::SoundRequest>) {
         use doom_game::SoundRequest;
 
-        let events_vec: Vec<_> = events.into_iter().collect();
-
-        for ev in &events_vec {
-            if let SoundRequest::PlayerUseLockedDoor(color) = ev {
-                self.cheat_message = Some((locked_door_message(*color).to_string(), 105));
-            }
-        }
-
         let Some(ref audio) = self.audio else {
+            for ev in events {
+                if let SoundRequest::PlayerUseLockedDoor(color) = ev {
+                    self.cheat_message = Some((locked_door_message(color).to_string(), 105));
+                }
+            }
             return;
         };
 
@@ -523,15 +520,18 @@ impl DoomGame {
             .unwrap_or_default();
         let player_origin = Some(self.gs.player.handle);
 
-        for ev in &events_vec {
-            let Some((lump, priority)) = sound_request_sfx(*ev) else {
+        for ev in events {
+            if let SoundRequest::PlayerUseLockedDoor(color) = ev {
+                self.cheat_message = Some((locked_door_message(color).to_string(), 105));
+            }
+            let Some((lump, priority)) = sound_request_sfx(ev) else {
                 continue;
             };
 
             let emitter = match ev {
                 SoundRequest::MonsterWake(_, _, x, y)
                 | SoundRequest::MonsterAttack(_, _, x, y)
-                | SoundRequest::MonsterDie(_, _, x, y) => Some((*x, *y)),
+                | SoundRequest::MonsterDie(_, _, x, y) => Some((x, y)),
                 SoundRequest::PlayerWeaponFire(_)
                 | SoundRequest::PlayerSuperShotgunOpen
                 | SoundRequest::PlayerSuperShotgunLoad
@@ -543,7 +543,7 @@ impl DoomGame {
             let origin = match ev {
                 SoundRequest::MonsterWake(_, handle, _, _)
                 | SoundRequest::MonsterAttack(_, handle, _, _)
-                | SoundRequest::MonsterDie(_, handle, _, _) => Some(*handle),
+                | SoundRequest::MonsterDie(_, handle, _, _) => Some(handle),
                 SoundRequest::PlayerWeaponFire(_)
                 | SoundRequest::PlayerSuperShotgunOpen
                 | SoundRequest::PlayerSuperShotgunLoad
@@ -634,44 +634,39 @@ impl DoomGame {
             return;
         }
 
-        let msgs: Vec<String> = self
-            .gs
-            .mobjslab
-            .iter_handles()
-            .filter_map(|h| {
-                let mo = self.gs.mobjslab.get(h)?;
-                if mo.flags & doom_game::mobj::flags::MF_COUNTKILL == 0 {
-                    return None;
-                }
-                let ex = mo.x.to_int();
-                let ey = mo.y.to_int();
-                let state_idx = mo.state.0;
-                let flags = mo.flags;
-                let is_dead = mo.health <= 0;
-                let target = mo.target;
-                Some(format!(
-                    "enemy idx={} gen={} {:?} pos=({},{}) health={} state={} tics={} dead={} flags={:#010x} target=({}, {}) threshold={} reaction={} movecount={} subsector={}",
-                    h.index,
-                    h.generation,
-                    mo.kind,
-                    ex,
-                    ey,
-                    mo.health,
-                    state_idx,
-                    mo.tics,
-                    is_dead,
-                    flags,
-                    target.index,
-                    target.generation,
-                    mo.threshold,
-                    mo.reactiontime,
-                    mo.movecount,
-                    mo.subsector,
-                ))
-            })
-            .collect();
-
-        for msg in msgs {
+        // Use a vector because `self.dlog` mutably borrows `self`.
+        let mut handles = Vec::with_capacity(self.gs.mobjslab.len());
+        handles.extend(self.gs.mobjslab.iter_handles());
+        for h in handles {
+            let Some(mo) = self.gs.mobjslab.get(h) else { continue };
+            if mo.flags & doom_game::mobj::flags::MF_COUNTKILL == 0 {
+                continue;
+            }
+            let ex = mo.x.to_int();
+            let ey = mo.y.to_int();
+            let state_idx = mo.state.0;
+            let flags = mo.flags;
+            let is_dead = mo.health <= 0;
+            let target = mo.target;
+            let msg = format!(
+                "enemy idx={} gen={} {:?} pos=({},{}) health={} state={} tics={} dead={} flags={:#010x} target=({}, {}) threshold={} reaction={} movecount={} subsector={}",
+                h.index,
+                h.generation,
+                mo.kind,
+                ex,
+                ey,
+                mo.health,
+                state_idx,
+                mo.tics,
+                is_dead,
+                flags,
+                target.index,
+                target.generation,
+                mo.threshold,
+                mo.reactiontime,
+                mo.movecount,
+                mo.subsector,
+            );
             self.dlog(&msg);
         }
     }
@@ -683,7 +678,7 @@ impl DoomGame {
             return;
         }
 
-        // Use a vector because we modify mobjs in the loop.
+        // Use a vector because we modify mobjs and `self.dlog` mutably borrows `self`.
         let mut handles = Vec::with_capacity(self.gs.mobjslab.len());
         handles.extend(self.gs.mobjslab.iter_handles());
         for h in handles {
@@ -995,7 +990,7 @@ impl DoomApp for DoomGame {
         // contention — weapon-priority sounds always win; monster sounds compete
         // with each other, matching Doom's original S_StartSound behaviour.
         {
-            let events: Vec<_> = self.gs.sound_queue.drain(..).collect();
+            let events = std::mem::take(&mut self.gs.sound_queue);
             self.handle_sound_events(events);
         }
 
