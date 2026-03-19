@@ -29,6 +29,7 @@
 //! (`sync_channel(1)`), then continues immediately.  If the channel is full the
 //! frame is silently dropped; the blit thread will display the next one instead.
 
+use crate::charset::{CharSet, RendererMode};
 use crate::input::{InputState, TicInput};
 use crate::scaler::ScalingMode;
 use crate::sixel::encode_doom_sixel;
@@ -85,11 +86,12 @@ const DEFAULT_REFRESH_HZ: u32 = 60;
 
 /// Render content for one frame, sent from the main loop to the blit thread.
 enum BlitPayload {
-    /// Halfblocks / ASCII: 320×200 palette-indexed framebuffer.
+    /// Half-block or character-mapped: 320×200 palette-indexed framebuffer.
     Halfblocks {
         fb: Framebuffer,
         active_palette: usize,
         scaling_mode: ScalingMode,
+        char_set: Option<CharSet>,
     },
     /// Pre-encoded sixel DCS string (dirty-frame cache already applied on main thread).
     Sixel(String),
@@ -136,9 +138,11 @@ fn run_blit_thread(
                         fb,
                         active_palette,
                         scaling_mode,
+                        char_set,
                     } => {
                         let widget = DoomFramebufferWidget::new(fb, &lut, *active_palette)
-                            .with_scaling(*scaling_mode);
+                            .with_scaling(*scaling_mode)
+                            .with_char_set(*char_set);
                         f.render_widget(widget, chunks[0]);
                     }
 
@@ -290,8 +294,11 @@ pub struct DoomEventLoop {
     /// a clone is sent to the blit thread.
     picker: Picker,
 
-    /// When true, use the detected graphics protocol instead of halfblocks.
-    use_graphics_protocol: bool,
+    /// The current renderer mode (halfblocks, sixel, kitty, iterm2, or character-mapped).
+    renderer_mode: RendererMode,
+
+    /// Character set for character-mapped modes (derived from renderer_mode).
+    char_set: Option<CharSet>,
 
     /// Whether keyboard enhancement flags were pushed at startup.
     /// Passed to the blit thread so it can pop them on exit.
@@ -438,7 +445,8 @@ impl DoomEventLoop {
             frame_count: 0,
             scaling_mode: ScalingMode::Nearest,
             picker,
-            use_graphics_protocol: false,
+            renderer_mode: RendererMode::Halfblocks,
+            char_set: None,
             keyboard_enhancement_active,
             last_tick_us: 0,
             last_render_us: 0,
@@ -457,19 +465,63 @@ impl DoomEventLoop {
         self.picker.protocol_type()
     }
 
-    /// Enable or disable the graphics protocol (Kitty/Sixel/iTerm2) renderer.
-    pub fn set_graphics_protocol(&mut self, enable: bool) {
-        self.use_graphics_protocol = enable;
+    /// Return the current renderer mode.
+    pub fn renderer_mode(&self) -> RendererMode {
+        self.renderer_mode
     }
 
-    /// Toggle between halfblocks and the detected graphics protocol.
+    /// Set the renderer mode.
     ///
-    /// Returns whether graphics protocol is now active.
-    pub fn toggle_graphics_protocol(&mut self) -> bool {
-        if self.picker.protocol_type() != ProtocolType::Halfblocks {
-            self.use_graphics_protocol = !self.use_graphics_protocol;
+    /// Graphics protocols (Sixel/Kitty/iTerm2) silently fall back to
+    /// halfblocks if the terminal doesn't support them.
+    pub fn set_renderer_mode(&mut self, mode: RendererMode) {
+        self.renderer_mode = mode;
+        self.char_set = match mode {
+            RendererMode::CharMap(cs) => Some(cs),
+            _ => None,
+        };
+    }
+
+    /// Cycle to the next renderer mode (for F2 toggle).
+    ///
+    /// Returns the new mode.
+    pub fn cycle_renderer_mode(&mut self) -> RendererMode {
+        let next = self.renderer_mode.next();
+        self.set_renderer_mode(next);
+        next
+    }
+
+    /// Legacy: enable or disable the detected graphics protocol.
+    pub fn set_graphics_protocol(&mut self, enable: bool) {
+        if enable {
+            // Pick the best available graphics protocol.
+            let mode = match self.picker.protocol_type() {
+                ProtocolType::Sixel => RendererMode::Sixel,
+                ProtocolType::Kitty => RendererMode::Kitty,
+                ProtocolType::Iterm2 => RendererMode::Iterm2,
+                _ => RendererMode::Halfblocks,
+            };
+            self.set_renderer_mode(mode);
+        } else {
+            self.set_renderer_mode(RendererMode::Halfblocks);
         }
-        self.use_graphics_protocol
+    }
+
+    /// Legacy: toggle between halfblocks and the detected graphics protocol.
+    pub fn toggle_graphics_protocol(&mut self) -> bool {
+        let is_gfx = matches!(
+            self.renderer_mode,
+            RendererMode::Sixel | RendererMode::Kitty | RendererMode::Iterm2
+        );
+        if is_gfx {
+            self.set_renderer_mode(RendererMode::Halfblocks);
+            false
+        } else if self.picker.protocol_type() != ProtocolType::Halfblocks {
+            self.set_graphics_protocol(true);
+            true
+        } else {
+            false
+        }
     }
 
     /// Set the scaling algorithm used for halfblocks rendering.
@@ -566,7 +618,9 @@ impl DoomEventLoop {
                             if key.code == KeyCode::Esc {
                                 self.input.push_escape();
                             }
-                            if key.code == KeyCode::F(5) {
+                            if key.code == KeyCode::F(2) {
+                                self.cycle_renderer_mode();
+                            } else if key.code == KeyCode::F(5) {
                                 self.input.push_f5();
                             } else if key.code == KeyCode::F(9) {
                                 self.input.push_f9();
@@ -626,80 +680,105 @@ impl DoomEventLoop {
             return;
         };
 
-        let protocol_type = self.picker.protocol_type();
         let font_size = self.picker.font_size();
-        let use_gfx = self.use_graphics_protocol && protocol_type != ProtocolType::Halfblocks;
+
+        // Resolve the effective mode: if the user picked a graphics protocol the
+        // terminal doesn't support, silently fall back to halfblocks.
+        let effective = match self.renderer_mode {
+            RendererMode::Sixel
+                if self.picker.protocol_type() != ProtocolType::Sixel =>
+            {
+                RendererMode::Halfblocks
+            }
+            RendererMode::Kitty
+                if self.picker.protocol_type() != ProtocolType::Kitty =>
+            {
+                RendererMode::Halfblocks
+            }
+            RendererMode::Iterm2
+                if self.picker.protocol_type() != ProtocolType::Iterm2 =>
+            {
+                RendererMode::Halfblocks
+            }
+            other => other,
+        };
 
         // ── Build payload ────────────────────────────────────────────────────
-        let payload = if use_gfx && protocol_type == ProtocolType::Sixel {
-            // Sixel: pre-encode (or reuse cache) on main thread.
-            // crossterm::terminal::size() does not require stdout write access.
-            let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
-            let game_h = rows.saturating_sub(1);
-            let (fw, fh) = font_size;
-            let dst_w = cols as usize * fw as usize;
-            let dst_h = game_h as usize * fh as usize;
-            let term_key = (cols, rows);
+        let payload = match effective {
+            RendererMode::Sixel => {
+                // Sixel: pre-encode (or reuse cache) on main thread.
+                let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+                let game_h = rows.saturating_sub(1);
+                let (fw, fh) = font_size;
+                let dst_w = cols as usize * fw as usize;
+                let dst_h = game_h as usize * fh as usize;
+                let term_key = (cols, rows);
 
-            if dst_w == 0 || dst_h == 0 {
-                return;
+                if dst_w == 0 || dst_h == 0 {
+                    return;
+                }
+
+                let fb_data = fb.as_slice();
+                let is_dirty = self.sixel_prev_term_size != term_key
+                    || active_palette != self.sixel_prev_palette
+                    || fb_data != self.sixel_prev_fb.as_slice();
+
+                let sixel_str = if is_dirty {
+                    let encoded = encode_doom_sixel(
+                        fb_data,
+                        lut,
+                        active_palette,
+                        Framebuffer::width(),
+                        Framebuffer::height(),
+                        dst_w,
+                        dst_h,
+                        cols,
+                    );
+                    self.sixel_prev_fb.clear();
+                    self.sixel_prev_fb.extend_from_slice(fb_data);
+                    self.sixel_prev_palette = active_palette;
+                    self.sixel_prev_term_size = term_key;
+                    self.sixel_cache = encoded.clone();
+                    encoded
+                } else {
+                    self.sixel_cache.clone()
+                };
+
+                BlitPayload::Sixel(sixel_str)
             }
-
-            let fb_data = fb.as_slice();
-            let is_dirty = self.sixel_prev_term_size != term_key
-                || active_palette != self.sixel_prev_palette
-                || fb_data != self.sixel_prev_fb.as_slice();
-
-            let sixel_str = if is_dirty {
-                let encoded = encode_doom_sixel(
-                    fb_data,
-                    lut,
+            RendererMode::Kitty | RendererMode::Iterm2 => {
+                // Kitty / iTerm2: convert palette-indexed → RGB on main thread.
+                let rgb_data: Vec<u8> = fb
+                    .as_slice()
+                    .iter()
+                    .flat_map(|&idx| {
+                        let rgb = lut.get(active_palette, idx);
+                        [rgb.r, rgb.g, rgb.b]
+                    })
+                    .collect();
+                match RgbImage::from_raw(
+                    Framebuffer::width() as u32,
+                    Framebuffer::height() as u32,
+                    rgb_data,
+                ) {
+                    Some(img) => BlitPayload::ImageProtocol {
+                        image: DynamicImage::ImageRgb8(img),
+                    },
+                    None => return,
+                }
+            }
+            RendererMode::Halfblocks | RendererMode::CharMap(_) => {
+                // Halfblocks or character-mapped: clone indexed framebuffer (64 KB).
+                let cs = match effective {
+                    RendererMode::CharMap(cs) => Some(cs),
+                    _ => None,
+                };
+                BlitPayload::Halfblocks {
+                    fb: fb.clone(),
                     active_palette,
-                    Framebuffer::width(),
-                    Framebuffer::height(),
-                    dst_w,
-                    dst_h,
-                    cols,
-                );
-                self.sixel_prev_fb.clear();
-                self.sixel_prev_fb.extend_from_slice(fb_data);
-                self.sixel_prev_palette = active_palette;
-                self.sixel_prev_term_size = term_key;
-                self.sixel_cache = encoded.clone();
-                encoded
-            } else {
-                self.sixel_cache.clone()
-            };
-
-            BlitPayload::Sixel(sixel_str)
-        } else if use_gfx
-            && (protocol_type == ProtocolType::Kitty || protocol_type == ProtocolType::Iterm2)
-        {
-            // Kitty / iTerm2: convert palette-indexed → RGB on main thread.
-            let rgb_data: Vec<u8> = fb
-                .as_slice()
-                .iter()
-                .flat_map(|&idx| {
-                    let rgb = lut.get(active_palette, idx);
-                    [rgb.r, rgb.g, rgb.b]
-                })
-                .collect();
-            match RgbImage::from_raw(
-                Framebuffer::width() as u32,
-                Framebuffer::height() as u32,
-                rgb_data,
-            ) {
-                Some(img) => BlitPayload::ImageProtocol {
-                    image: DynamicImage::ImageRgb8(img),
-                },
-                None => return,
-            }
-        } else {
-            // Halfblocks (default): clone indexed framebuffer (64 KB).
-            BlitPayload::Halfblocks {
-                fb: fb.clone(),
-                active_palette,
-                scaling_mode: self.scaling_mode,
+                    scaling_mode: self.scaling_mode,
+                    char_set: cs,
+                }
             }
         };
 
@@ -708,14 +787,9 @@ impl DoomEventLoop {
         let tick_ms = self.last_tick_us as f64 / 1000.0;
         let render_ms = self.last_render_us as f64 / 1000.0;
         let blit_ms = self.blit_elapsed_us.load(Ordering::Relaxed) as f64 / 1000.0;
-        let proto_name = match (use_gfx, protocol_type) {
-            (true, ProtocolType::Sixel) => "sixel*",
-            (true, ProtocolType::Kitty) => "kitty",
-            (true, ProtocolType::Iterm2) => "iterm2",
-            _ => "halfblocks",
-        };
+        let mode_name = effective.name();
         let status = format!(
-            " DOOM | {fps:.0}fps | tick:{tick_ms:.1} rnd:{render_ms:.1} blit:{blit_ms:.1}ms | {proto_name} | [Q] "
+            " DOOM | {fps:.0}fps | tick:{tick_ms:.1} rnd:{render_ms:.1} blit:{blit_ms:.1}ms | {mode_name} | [F2] cycle | [Q] "
         );
 
         // ── Dispatch (non-blocking) ──────────────────────────────────────────
@@ -786,7 +860,8 @@ mod tests {
             frame_count: 0,
             scaling_mode: ScalingMode::Nearest,
             picker: Picker::halfblocks(),
-            use_graphics_protocol: false,
+            renderer_mode: RendererMode::Halfblocks,
+            char_set: None,
             keyboard_enhancement_active: false,
             last_tick_us: 0,
             last_render_us: 0,

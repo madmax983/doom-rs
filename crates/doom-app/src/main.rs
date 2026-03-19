@@ -32,7 +32,7 @@ use doom_renderer::{
     draw_title_screen_wad, draw_weapon_animated, render_actors_with_masked_ex,
     render_flag_from_state, render_level_with_view_height_and_extra_light, thing_sprite_prefix,
 };
-use doom_tui::{DoomApp, DoomEventLoop, TicInput};
+use doom_tui::{DoomApp, DoomEventLoop, RendererMode, TicInput};
 use doom_types::{Bam, Fixed16_16};
 use doom_wad::WadStack;
 
@@ -114,6 +114,13 @@ struct Args {
     /// Example: --debug-log gameplay.log
     #[arg(long)]
     debug_log: Option<std::path::PathBuf>,
+
+    /// Renderer mode: halfblocks, sixel, kitty, iterm2, ascii, braille, shading, blocks.
+    /// Default: auto-detect best graphics protocol, fall back to halfblocks.
+    /// Graphics protocols silently fall back to halfblocks if unsupported.
+    /// Press F2 at runtime to cycle through all modes.
+    #[arg(long, default_value = "auto")]
+    renderer: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -1882,9 +1889,19 @@ fn main() -> Result<()> {
     let mut event_loop =
         DoomEventLoop::new().map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
 
-    // Enable graphics protocol (Sixel/Kitty/iTerm2) if the terminal supports it.
-    // Our custom palette-aware Sixel encoder makes this fast even at 35 Hz.
-    event_loop.set_graphics_protocol(true);
+    // Set renderer mode from --renderer flag.
+    // "auto" = detect best graphics protocol; named modes set explicitly (with silent fallback).
+    if args.renderer == "auto" {
+        event_loop.set_graphics_protocol(true);
+    } else if let Some(mode) = RendererMode::from_str_loose(&args.renderer) {
+        event_loop.set_renderer_mode(mode);
+    } else {
+        eprintln!(
+            "warning: unknown --renderer {:?}, using auto-detect",
+            args.renderer
+        );
+        event_loop.set_graphics_protocol(true);
+    }
 
     if let Some(demo_path) = args.playdemo {
         // Load and parse the demo file.
