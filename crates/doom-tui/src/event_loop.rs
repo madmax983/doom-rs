@@ -16,13 +16,22 @@
 //!       app.tick(input)
 //!       tic_timer -= TIC_DURATION
 //!   app.render(fb)
-//!   blit fb to terminal
+//!   try_send(encoded_frame) to blit thread   ← non-blocking; drop if blit still busy
 //!   sleep to fill remaining frame budget (vsync approximation)
 //! ```
+//!
+//! # Double-buffer async blit
+//!
+//! Terminal I/O (sixel in particular) takes ~28 ms per frame — far too long to
+//! block the game loop.  The blit thread owns the `Terminal` handle and calls
+//! `terminal.draw()` at its own rate.  The main loop prepares the next frame
+//! (encode sixel, clone framebuffer) and hands it off via a bounded channel
+//! (`sync_channel(1)`), then continues immediately.  If the channel is full the
+//! frame is silently dropped; the blit thread will display the next one instead.
 
 use crate::input::{InputState, TicInput};
 use crate::scaler::ScalingMode;
-use crate::sixel::DoomSixelWidget;
+use crate::sixel::encode_doom_sixel;
 use crate::widget::DoomFramebufferWidget;
 use crossterm::{
     event::{
@@ -46,12 +55,21 @@ use ratatui::{
 };
 use ratatui_image::{Resize, StatefulImage, picker::Picker, picker::ProtocolType};
 use std::io::{Stdout, stdout};
-use std::thread;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+    mpsc::{Receiver, SyncSender, sync_channel},
+};
+use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
 #[cfg(test)]
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::AtomicUsize;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// Doom simulation runs at exactly 35 tics per second.
 pub const TIC_RATE_HZ: u32 = 35;
@@ -60,6 +78,120 @@ pub const TIC_RATE_HZ: u32 = 35;
 pub const TIC_DURATION: Duration = Duration::from_nanos(1_000_000_000 / TIC_RATE_HZ as u64);
 
 const DEFAULT_REFRESH_HZ: u32 = 60;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Blit thread types
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Render content for one frame, sent from the main loop to the blit thread.
+enum BlitPayload {
+    /// Halfblocks / ASCII: 320×200 palette-indexed framebuffer.
+    Halfblocks {
+        fb: Framebuffer,
+        active_palette: usize,
+        scaling_mode: ScalingMode,
+    },
+    /// Pre-encoded sixel DCS string (dirty-frame cache already applied on main thread).
+    Sixel(String),
+    /// Kitty / iTerm2: pre-converted RGB image.
+    ImageProtocol { image: DynamicImage },
+}
+
+struct BlitFrame {
+    payload: BlitPayload,
+    /// Status bar text to render at the bottom of the terminal.
+    status: String,
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Blit thread
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Runs on the dedicated blit thread.
+///
+/// Owns the `Terminal` handle exclusively.  The main loop sends `BlitFrame`
+/// values through a bounded channel; this function calls `terminal.draw()` for
+/// each one, stores the elapsed time in `blit_elapsed_us`, and handles terminal
+/// cleanup when the channel closes.
+fn run_blit_thread(
+    rx: Receiver<BlitFrame>,
+    mut terminal: Terminal<CrosstermBackend<Stdout>>,
+    lut: PaletteLut,
+    picker: Picker,
+    keyboard_enhancement_active: bool,
+    blit_elapsed_us: Arc<AtomicU64>,
+) {
+    while let Ok(frame) = rx.recv() {
+        let t = Instant::now();
+
+        terminal
+            .draw(|f| {
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([Constraint::Min(0), Constraint::Length(1)])
+                    .split(f.area());
+
+                match &frame.payload {
+                    BlitPayload::Halfblocks {
+                        fb,
+                        active_palette,
+                        scaling_mode,
+                    } => {
+                        let widget = DoomFramebufferWidget::new(fb, &lut, *active_palette)
+                            .with_scaling(*scaling_mode);
+                        f.render_widget(widget, chunks[0]);
+                    }
+
+                    BlitPayload::Sixel(sixel_str) => {
+                        // Direct buffer write: identical strings between frames → ratatui
+                        // emits zero bytes for this cell → only status bar is flushed.
+                        if let Some(cell) =
+                            f.buffer_mut().cell_mut((chunks[0].x, chunks[0].y))
+                        {
+                            cell.set_symbol(sixel_str);
+                        }
+                        let mut past_first = false;
+                        for y in chunks[0].top()..chunks[0].bottom() {
+                            for x in chunks[0].left()..chunks[0].right() {
+                                if !past_first {
+                                    past_first = true;
+                                    continue;
+                                }
+                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                            }
+                        }
+                    }
+
+                    BlitPayload::ImageProtocol { image } => {
+                        // Create a fresh protocol per frame (kitty's incremental update
+                        // is not used; each frame is a complete image transmission).
+                        let mut proto = picker.new_resize_protocol(image.clone());
+                        let widget = StatefulImage::default().resize(Resize::Scale(None));
+                        f.render_stateful_widget(widget, chunks[0], &mut proto);
+                    }
+                }
+
+                let status_bar = Paragraph::new(frame.status.as_str())
+                    .style(Style::default().fg(Color::Black).bg(Color::Yellow));
+                f.render_widget(status_bar, chunks[1]);
+            })
+            .ok();
+
+        blit_elapsed_us.store(t.elapsed().as_micros() as u64, Ordering::Relaxed);
+    }
+
+    // Channel closed (sender dropped in DoomEventLoop::drop) → restore terminal.
+    if keyboard_enhancement_active {
+        let _ = execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags);
+    }
+    let _ = disable_raw_mode();
+    let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+    let _ = terminal.show_cursor();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modifier polling
+// ─────────────────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 struct ModifierSnapshot {
@@ -70,6 +202,10 @@ struct ModifierSnapshot {
 #[cfg(test)]
 static MODIFIER_SAMPLE_COUNT: AtomicUsize = AtomicUsize::new(0);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Error type
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// Errors that can occur during event loop setup or execution.
 #[derive(Debug, Error)]
 pub enum EventLoopError {
@@ -78,6 +214,10 @@ pub enum EventLoopError {
     #[error("terminal draw error: {0}")]
     Draw(String),
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DoomApp trait
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// Application trait — implement this to integrate your game with the event loop.
 pub trait DoomApp {
@@ -93,14 +233,36 @@ pub trait DoomApp {
     fn active_palette(&self) -> usize {
         0
     }
+
+    /// Called once per rendered frame after the frame has been dispatched to the
+    /// blit thread, with timing data for that frame:
+    ///
+    /// - `tick_us`   — time spent in `drain_ready_tics` (game simulation)
+    /// - `render_us` — time spent in `render()` (doom-renderer)
+    /// - `blit_us`   — actual `terminal.draw()` duration on the blit thread
+    ///                 (one frame stale; read from a shared atomic)
+    ///
+    /// Default: no-op.  Override to write to a debug log or update in-game stats.
+    fn on_frame_timings(&mut self, _tick_us: u64, _render_us: u64, _blit_us: u64) {}
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DoomEventLoop
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// The Doom terminal event loop.
 ///
 /// Manages terminal lifecycle, fixed-rate tic accumulation, input tracking,
-/// and render pacing. Call [`DoomEventLoop::run`] to start the loop.
+/// and render pacing.  The `Terminal` handle is moved into a background blit
+/// thread on the first call to [`DoomEventLoop::run`]; the main thread never
+/// writes to stdout after that point.
+///
+/// Call [`DoomEventLoop::run`] to start the loop.
 pub struct DoomEventLoop {
-    terminal: Terminal<CrosstermBackend<Stdout>>,
+    /// Terminal handle — `Some` until `run()` is first called, at which point it
+    /// is moved into the blit thread.  `None` while the loop is running.
+    pending_terminal: Option<Terminal<CrosstermBackend<Stdout>>>,
+
     input: InputState,
     is_running: bool,
 
@@ -116,38 +278,55 @@ pub struct DoomEventLoop {
     last_fps_update: Instant,
     frame_count: u64,
 
-    /// Scaling algorithm used when blitting the framebuffer to the terminal (halfblocks path).
+    /// Per-phase timings from the previous frame (microseconds).
+    last_tick_us: u64,
+    last_render_us: u64,
+
+    /// Scaling algorithm used for halfblocks rendering.
     scaling_mode: ScalingMode,
 
-    /// Graphics protocol picker — detects Kitty/Sixel/iTerm2 or falls back to halfblocks.
+    /// Protocol / font-size information detected at startup.
+    /// Kept on the main thread for toggling and status display;
+    /// a clone is sent to the blit thread.
     picker: Picker,
 
-    /// When true, use the detected graphics protocol (Kitty/Sixel/iTerm2) instead of halfblocks.
-    ///
-    /// Defaults to `false` because Sixel/iTerm2 encoding is too slow for 35+ Hz game rendering
-    /// on most terminals.  Enable with [`DoomEventLoop::set_graphics_protocol`] or let the user
-    /// toggle in-game.
+    /// When true, use the detected graphics protocol instead of halfblocks.
     use_graphics_protocol: bool,
 
-    /// Whether keyboard enhancement flags were successfully pushed at startup.
-    ///
-    /// When active, the terminal sends real `KeyEventKind::Release` events so the
-    /// `held` set is properly cleared on key-up.  Without this, Release events
-    /// never arrive and keys can get stuck.
+    /// Whether keyboard enhancement flags were pushed at startup.
+    /// Passed to the blit thread so it can pop them on exit.
     keyboard_enhancement_active: bool,
+
+    // ── Sixel dirty-frame cache ──────────────────────────────────────────────
+    // Pre-encode the sixel string on the main thread (fast, ~4 ms) and cache it.
+    // On clean frames the same string is sent to the blit thread; ratatui's cell
+    // diff skips the pty write for that cell entirely (~0 ms instead of ~28 ms).
+    sixel_cache: String,
+    sixel_prev_fb: Vec<u8>,
+    sixel_prev_palette: usize,
+    sixel_prev_term_size: (u16, u16),
+
+    // ── Async blit thread ────────────────────────────────────────────────────
+    /// Sender half of the frame channel.  Dropped in `Drop` to signal the blit
+    /// thread to exit.
+    blit_tx: Option<SyncSender<BlitFrame>>,
+    /// Join handle for the blit thread.
+    blit_thread: Option<JoinHandle<()>>,
+    /// Elapsed time of the most-recent `terminal.draw()` call on the blit thread
+    /// (microseconds).  Written by the blit thread; read by the main thread for
+    /// status-bar display and `on_frame_timings`.
+    blit_elapsed_us: Arc<AtomicU64>,
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Platform helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// Query the primary monitor's refresh rate via platform APIs.
-///
-/// On Windows, uses `EnumDisplaySettingsW`; falls back to `DEFAULT_REFRESH_HZ`
-/// on non-Windows platforms or if the query fails.
 #[allow(clippy::missing_const_for_fn)]
 fn query_refresh_rate() -> u32 {
     #[cfg(target_os = "windows")]
     {
-        // SAFETY: EnumDisplaySettingsW with a null device name queries the
-        // primary monitor's current display settings.  DEVMODEW must be
-        // zero-initialized with `dmSize` set before the call.
         unsafe {
             use std::mem;
             use windows_sys::Win32::Graphics::Gdi::{
@@ -182,9 +361,6 @@ fn sampled_modifier_snapshot() -> ModifierSnapshot {
             GetAsyncKeyState, VK_CONTROL, VK_SHIFT,
         };
 
-        // SAFETY: `GetAsyncKeyState` is a pure Win32 query for the current
-        // asynchronous key state. We only read the high bit to determine if
-        // either Shift or Control is physically down right now.
         let is_down =
             |virtual_key: i32| unsafe { (GetAsyncKeyState(virtual_key) as u16 & 0x8000) != 0 };
 
@@ -198,6 +374,10 @@ fn sampled_modifier_snapshot() -> ModifierSnapshot {
         ModifierSnapshot::default()
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// impl DoomEventLoop
+// ─────────────────────────────────────────────────────────────────────────────
 
 impl DoomEventLoop {
     fn sync_sampled_modifiers(&mut self) {
@@ -215,6 +395,9 @@ impl DoomEventLoop {
     }
 
     /// Set up the terminal (raw mode, alternate screen) and return the event loop.
+    ///
+    /// The `Terminal` handle is stored internally until [`run`] is called, at
+    /// which point it is moved into the blit thread.
     pub fn new() -> Result<Self, EventLoopError> {
         enable_raw_mode().map_err(|e| EventLoopError::TerminalSetup(e.to_string()))?;
 
@@ -222,11 +405,6 @@ impl DoomEventLoop {
         execute!(out, EnterAlternateScreen)
             .map_err(|e| EventLoopError::TerminalSetup(e.to_string()))?;
 
-        // Enable keyboard enhancement so we receive KeyEventKind::Release events.
-        // This prevents keys from getting "stuck" in the held set when the terminal
-        // doesn't send release events by default (which is most terminals without this).
-        // We request: disambiguate escape codes + report all keys (for modifier-only keys).
-        // Falls back gracefully if the terminal doesn't support it.
         let keyboard_enhancement_active = supports_keyboard_enhancement().unwrap_or(false)
             && execute!(
                 out,
@@ -237,9 +415,6 @@ impl DoomEventLoop {
             )
             .is_ok();
 
-        // Query the terminal for graphics protocol support AFTER entering alternate screen
-        // but BEFORE consuming any terminal events.  Falls back to halfblocks if the query
-        // fails or the terminal doesn't support any graphics protocol.
         let picker = Picker::from_query_stdio().unwrap_or_else(|_| Picker::halfblocks());
 
         let backend = CrosstermBackend::new(out);
@@ -251,7 +426,7 @@ impl DoomEventLoop {
         let target_frame_time = Duration::from_secs_f64(1.0 / f64::from(hz));
 
         Ok(Self {
-            terminal,
+            pending_terminal: Some(terminal),
             input: InputState::new(),
             is_running: true,
             target_frame_time,
@@ -265,6 +440,15 @@ impl DoomEventLoop {
             picker,
             use_graphics_protocol: false,
             keyboard_enhancement_active,
+            last_tick_us: 0,
+            last_render_us: 0,
+            sixel_cache: String::new(),
+            sixel_prev_fb: Vec::new(),
+            sixel_prev_palette: usize::MAX,
+            sixel_prev_term_size: (0, 0),
+            blit_tx: None,
+            blit_thread: None,
+            blit_elapsed_us: Arc::new(AtomicU64::new(0)),
         })
     }
 
@@ -274,8 +458,6 @@ impl DoomEventLoop {
     }
 
     /// Enable or disable the graphics protocol (Kitty/Sixel/iTerm2) renderer.
-    ///
-    /// Has no effect if the terminal only supports halfblocks.
     pub fn set_graphics_protocol(&mut self, enable: bool) {
         self.use_graphics_protocol = enable;
     }
@@ -290,17 +472,42 @@ impl DoomEventLoop {
         self.use_graphics_protocol
     }
 
-    /// Set the scaling algorithm used when blitting the framebuffer to the terminal.
-    ///
-    /// Defaults to [`ScalingMode::Nearest`] (no behavior change from earlier versions).
+    /// Set the scaling algorithm used for halfblocks rendering.
     pub fn set_scaling_mode(&mut self, mode: ScalingMode) {
         self.scaling_mode = mode;
     }
 
     /// Run the game loop until the user quits (Q or Escape).
     ///
-    /// `lut` is used to resolve palette indices to RGB at blit time.
+    /// On the first call, the `Terminal` handle is moved into the blit thread
+    /// along with a clone of `lut`.  Subsequent calls reuse the same thread.
     pub fn run<A: DoomApp>(&mut self, app: &mut A, lut: &PaletteLut) -> Result<(), EventLoopError> {
+        // ── Spawn blit thread on first call ─────────────────────────────────
+        if self.blit_tx.is_none() {
+            let terminal = self
+                .pending_terminal
+                .take()
+                .ok_or_else(|| EventLoopError::TerminalSetup("terminal already consumed".into()))?;
+
+            let lut_clone = lut.clone();
+            let picker_clone = self.picker.clone();
+            let kea = self.keyboard_enhancement_active;
+            let elapsed_arc = Arc::clone(&self.blit_elapsed_us);
+
+            // Capacity 1: main thread can prepare one frame ahead without blocking.
+            // If the channel is full (blit thread still writing), try_send drops the
+            // new frame — the display rate is naturally limited to the terminal's
+            // render throughput (~35 fps for a 28 ms sixel blit).
+            let (tx, rx) = sync_channel::<BlitFrame>(1);
+
+            let handle = thread::spawn(move || {
+                run_blit_thread(rx, terminal, lut_clone, picker_clone, kea, elapsed_arc);
+            });
+
+            self.blit_tx = Some(tx);
+            self.blit_thread = Some(handle);
+        }
+
         let mut fb = Framebuffer::new();
         let mut last_frame = Instant::now();
 
@@ -309,19 +516,29 @@ impl DoomEventLoop {
             let elapsed = last_frame.elapsed();
             last_frame = Instant::now();
 
-            // --- Input ---
+            // ── Input ────────────────────────────────────────────────────────
             self.poll_events();
 
-            // --- Fixed-step tic simulation ---
+            // ── Fixed-step tic simulation ────────────────────────────────────
             self.tic_accumulator += elapsed;
+            let t0 = Instant::now();
             self.drain_ready_tics(app);
+            self.last_tick_us = t0.elapsed().as_micros() as u64;
 
-            // --- Render ---
+            // ── Render ───────────────────────────────────────────────────────
+            let t1 = Instant::now();
             app.render(&mut fb);
-            let active_palette = app.active_palette();
-            self.blit(&fb, lut, active_palette)?;
+            self.last_render_us = t1.elapsed().as_micros() as u64;
 
-            // --- Frame pacing: sleep to fill remaining budget ---
+            // ── Blit (non-blocking dispatch to blit thread) ──────────────────
+            let active_palette = app.active_palette();
+            self.blit(&fb, lut, active_palette);
+
+            // Report the blit thread's timing from the previous frame (1 frame stale).
+            let blit_us = self.blit_elapsed_us.load(Ordering::Relaxed);
+            app.on_frame_timings(self.last_tick_us, self.last_render_us, blit_us);
+
+            // ── Frame pacing: sleep to fill remaining budget ──────────────────
             let draw_elapsed = self.frame_start.elapsed();
             if let Some(remaining) = self.target_frame_time.checked_sub(draw_elapsed) {
                 thread::sleep(remaining);
@@ -336,7 +553,6 @@ impl DoomEventLoop {
         while event::poll(Duration::from_millis(0)).unwrap_or(false) {
             match event::read() {
                 Ok(event::Event::Key(key)) => {
-                    // Mirror shift state into InputState for strafe detection.
                     self.input.sync_modifiers(
                         Some(key.modifiers.contains(KeyModifiers::SHIFT)),
                         Some(key.modifiers.contains(KeyModifiers::CONTROL)),
@@ -344,15 +560,12 @@ impl DoomEventLoop {
 
                     match key.kind {
                         KeyEventKind::Press => {
-                            // Q = hard quit; Escape is forwarded to the app as an
-                            // edge-triggered signal so it can handle menu/console logic.
                             if key.code == KeyCode::Char('q') {
                                 self.is_running = false;
                             }
                             if key.code == KeyCode::Esc {
                                 self.input.push_escape();
                             }
-                            // Quick save / load via F5 / F9.
                             if key.code == KeyCode::F(5) {
                                 self.input.push_f5();
                             } else if key.code == KeyCode::F(9) {
@@ -360,8 +573,6 @@ impl DoomEventLoop {
                             } else if key.code == KeyCode::Tab {
                                 self.input.push_tab();
                             }
-                            // Edge-triggered menu navigation (Up/Down/Enter).
-                            // These are also registered as held keys below for gameplay.
                             if key.code == KeyCode::Up {
                                 self.input.push_menu_up();
                             } else if key.code == KeyCode::Down {
@@ -369,7 +580,6 @@ impl DoomEventLoop {
                             } else if key.code == KeyCode::Enter {
                                 self.input.push_menu_select();
                             }
-                            // Queue raw char for console/cheat processing.
                             if let KeyCode::Char(ch) = key.code {
                                 self.input.push_console_char(ch);
                             } else if key.code == KeyCode::Enter {
@@ -386,8 +596,6 @@ impl DoomEventLoop {
                     }
                 }
                 Ok(event::Event::FocusLost) => {
-                    // Release all keys when the window loses focus to prevent
-                    // stuck keys after alt-tab.
                     self.input.clear();
                 }
                 _ => {}
@@ -395,18 +603,15 @@ impl DoomEventLoop {
         }
     }
 
-    /// Blit the framebuffer to the terminal.
+    /// Prepare a `BlitFrame` and try to send it to the blit thread.
     ///
-    /// If the terminal supports a graphics protocol (Kitty/Sixel/iTerm2) the framebuffer is
-    /// converted to an RGB image and rendered via ratatui-image at true pixel resolution.
-    /// Otherwise the existing half-block `▀` widget is used as a fallback.
-    fn blit(
-        &mut self,
-        fb: &Framebuffer,
-        lut: &PaletteLut,
-        active_palette: usize,
-    ) -> Result<(), EventLoopError> {
-        // Update FPS counter.
+    /// For sixel: encodes the frame (or reuses the cached string) on this thread,
+    /// then `try_send`s to the blit thread.  If the channel is full (blit still
+    /// writing the previous frame), the new frame is silently dropped.
+    ///
+    /// For all other paths: clones the framebuffer (64 KB) into the payload.
+    fn blit(&mut self, fb: &Framebuffer, lut: &PaletteLut, active_palette: usize) {
+        // ── FPS counter ──────────────────────────────────────────────────────
         self.frame_count += 1;
         self.frames_since_update += 1;
         let now = Instant::now();
@@ -417,101 +622,144 @@ impl DoomEventLoop {
             self.last_fps_update = now;
         }
 
-        let fps = self.fps;
-        let frame_count = self.frame_count;
-        let scaling_mode = self.scaling_mode;
+        let Some(ref tx) = self.blit_tx else {
+            return;
+        };
+
         let protocol_type = self.picker.protocol_type();
         let font_size = self.picker.font_size();
         let use_gfx = self.use_graphics_protocol && protocol_type != ProtocolType::Halfblocks;
 
-        // For Kitty/iTerm2: build a StatefulProtocol before the draw closure
-        // (borrow checker: can't hold &self.picker and &mut self.terminal simultaneously).
-        let mut img_proto = match (use_gfx, protocol_type) {
-            (true, ProtocolType::Kitty) | (true, ProtocolType::Iterm2) => {
-                let rgb_data: Vec<u8> = fb
-                    .as_slice()
-                    .iter()
-                    .flat_map(|&idx| {
-                        let rgb = lut.get(active_palette, idx);
-                        [rgb.r, rgb.g, rgb.b]
-                    })
-                    .collect();
-                RgbImage::from_raw(
-                    Framebuffer::width() as u32,
-                    Framebuffer::height() as u32,
-                    rgb_data,
-                )
-                .map(|img| {
-                    self.picker
-                        .new_resize_protocol(DynamicImage::ImageRgb8(img))
-                })
+        // ── Build payload ────────────────────────────────────────────────────
+        let payload = if use_gfx && protocol_type == ProtocolType::Sixel {
+            // Sixel: pre-encode (or reuse cache) on main thread.
+            // crossterm::terminal::size() does not require stdout write access.
+            let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+            let game_h = rows.saturating_sub(1);
+            let (fw, fh) = font_size;
+            let dst_w = cols as usize * fw as usize;
+            let dst_h = game_h as usize * fh as usize;
+            let term_key = (cols, rows);
+
+            if dst_w == 0 || dst_h == 0 {
+                return;
             }
-            _ => None,
+
+            let fb_data = fb.as_slice();
+            let is_dirty = self.sixel_prev_term_size != term_key
+                || active_palette != self.sixel_prev_palette
+                || fb_data != self.sixel_prev_fb.as_slice();
+
+            let sixel_str = if is_dirty {
+                let encoded = encode_doom_sixel(
+                    fb_data,
+                    lut,
+                    active_palette,
+                    Framebuffer::width(),
+                    Framebuffer::height(),
+                    dst_w,
+                    dst_h,
+                    cols,
+                );
+                self.sixel_prev_fb.clear();
+                self.sixel_prev_fb.extend_from_slice(fb_data);
+                self.sixel_prev_palette = active_palette;
+                self.sixel_prev_term_size = term_key;
+                self.sixel_cache = encoded.clone();
+                encoded
+            } else {
+                self.sixel_cache.clone()
+            };
+
+            BlitPayload::Sixel(sixel_str)
+        } else if use_gfx
+            && (protocol_type == ProtocolType::Kitty || protocol_type == ProtocolType::Iterm2)
+        {
+            // Kitty / iTerm2: convert palette-indexed → RGB on main thread.
+            let rgb_data: Vec<u8> = fb
+                .as_slice()
+                .iter()
+                .flat_map(|&idx| {
+                    let rgb = lut.get(active_palette, idx);
+                    [rgb.r, rgb.g, rgb.b]
+                })
+                .collect();
+            match RgbImage::from_raw(
+                Framebuffer::width() as u32,
+                Framebuffer::height() as u32,
+                rgb_data,
+            ) {
+                Some(img) => BlitPayload::ImageProtocol {
+                    image: DynamicImage::ImageRgb8(img),
+                },
+                None => return,
+            }
+        } else {
+            // Halfblocks (default): clone indexed framebuffer (64 KB).
+            BlitPayload::Halfblocks {
+                fb: fb.clone(),
+                active_palette,
+                scaling_mode: self.scaling_mode,
+            }
         };
 
-        self.terminal
-            .draw(|f| {
-                let chunks = Layout::default()
-                    .direction(Direction::Vertical)
-                    .constraints([Constraint::Min(0), Constraint::Length(1)])
-                    .split(f.area());
+        // ── Status bar text ──────────────────────────────────────────────────
+        let fps = self.fps;
+        let tick_ms = self.last_tick_us as f64 / 1000.0;
+        let render_ms = self.last_render_us as f64 / 1000.0;
+        let blit_ms = self.blit_elapsed_us.load(Ordering::Relaxed) as f64 / 1000.0;
+        let proto_name = match (use_gfx, protocol_type) {
+            (true, ProtocolType::Sixel) => "sixel*",
+            (true, ProtocolType::Kitty) => "kitty",
+            (true, ProtocolType::Iterm2) => "iterm2",
+            _ => "halfblocks",
+        };
+        let status = format!(
+            " DOOM | {fps:.0}fps | tick:{tick_ms:.1} rnd:{render_ms:.1} blit:{blit_ms:.1}ms | {proto_name} | [Q] "
+        );
 
-                if use_gfx && protocol_type == ProtocolType::Sixel {
-                    // Fast palette-aware sixel: no color quantization, scales to fill terminal.
-                    let widget = DoomSixelWidget::new(fb, lut, active_palette, font_size);
-                    f.render_widget(widget, chunks[0]);
-                } else if let Some(ref mut proto) = img_proto {
-                    // Kitty / iTerm2: use ratatui-image StatefulProtocol.
-                    let widget = StatefulImage::default().resize(Resize::Scale(None));
-                    f.render_stateful_widget(widget, chunks[0], proto);
-                } else {
-                    // Halfblocks (default): palette-aware, zero RGB conversion.
-                    let widget = DoomFramebufferWidget::new(fb, lut, active_palette)
-                        .with_scaling(scaling_mode);
-                    f.render_widget(widget, chunks[0]);
-                }
-
-                let proto_name = match (use_gfx, protocol_type) {
-                    (true, ProtocolType::Sixel) => "sixel*",
-                    (true, ProtocolType::Kitty) => "kitty",
-                    (true, ProtocolType::Iterm2) => "iterm2",
-                    _ => "halfblocks",
-                };
-                let status = format!(
-                    " DOOM | FPS: {fps:.1} | Frame: {frame_count} | {proto_name} | [Q/Esc] Quit "
-                );
-                let status_bar = Paragraph::new(status)
-                    .style(Style::default().fg(Color::Black).bg(Color::Yellow));
-                f.render_widget(status_bar, chunks[1]);
-            })
-            .map_err(|e| EventLoopError::Draw(e.to_string()))?;
-
-        Ok(())
+        // ── Dispatch (non-blocking) ──────────────────────────────────────────
+        // `try_send` returns Err if the channel is full (blit thread busy) or
+        // disconnected (blit thread has exited).  Both cases are safe to ignore:
+        // the frame is simply dropped and the next one will be sent instead.
+        let _ = tx.try_send(BlitFrame { payload, status });
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Drop
+// ─────────────────────────────────────────────────────────────────────────────
 
 impl Drop for DoomEventLoop {
     fn drop(&mut self) {
-        // Restore terminal state on exit, even if we panic.
-        if self.keyboard_enhancement_active {
-            let _ = execute!(self.terminal.backend_mut(), PopKeyboardEnhancementFlags);
+        // Case 1: run() was never called — terminal is still in pending_terminal.
+        if let Some(mut terminal) = self.pending_terminal.take() {
+            if self.keyboard_enhancement_active {
+                let _ = execute!(terminal.backend_mut(), PopKeyboardEnhancementFlags);
+            }
+            let _ = disable_raw_mode();
+            let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+            let _ = terminal.show_cursor();
+            return;
         }
-        let _ = disable_raw_mode();
-        let _ = execute!(self.terminal.backend_mut(), LeaveAlternateScreen);
-        let _ = self.terminal.show_cursor();
+
+        // Case 2: blit thread is running.  Drop the sender so the blit thread
+        // sees RecvError, runs its cleanup (restore terminal), and exits.
+        drop(self.blit_tx.take());
+        if let Some(handle) = self.blit_thread.take() {
+            let _ = handle.join();
+        }
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tests
+// ─────────────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// Mutex that serializes tests sharing the global `MODIFIER_SAMPLE_COUNT`.
-    ///
-    /// Rust's test harness runs tests in parallel by default.  Both
-    /// `poll_events_does_not_sample_modifiers` and
-    /// `drain_ready_tics_samples_modifiers_once_per_tic` reset and inspect the
-    /// same `AtomicUsize`; without serialization they race.
     static MODIFIER_COUNT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn reset_modifier_sample_count() {
@@ -526,7 +774,7 @@ mod tests {
         let backend = CrosstermBackend::new(stdout());
         let terminal = Terminal::new(backend).expect("test terminal");
         DoomEventLoop {
-            terminal,
+            pending_terminal: Some(terminal),
             input: InputState::new(),
             is_running: true,
             target_frame_time: Duration::from_secs_f64(1.0 / f64::from(DEFAULT_REFRESH_HZ)),
@@ -540,21 +788,28 @@ mod tests {
             picker: Picker::halfblocks(),
             use_graphics_protocol: false,
             keyboard_enhancement_active: false,
+            last_tick_us: 0,
+            last_render_us: 0,
+            sixel_cache: String::new(),
+            sixel_prev_fb: Vec::new(),
+            sixel_prev_palette: usize::MAX,
+            sixel_prev_term_size: (0, 0),
+            blit_tx: None,
+            blit_thread: None,
+            blit_elapsed_us: Arc::new(AtomicU64::new(0)),
         }
     }
 
     #[test]
     fn tic_duration_is_approx_28ms() {
-        // 1/35s ≈ 28.571 ms — check we're within 1µs of the exact value.
         let expected_ns = 1_000_000_000u64 / 35;
         assert_eq!(TIC_DURATION.as_nanos() as u64, expected_ns);
     }
 
     #[test]
     fn tic_accumulator_arithmetic_drains_correctly() {
-        // Simulate 3 tics worth of elapsed time arriving in one batch.
         let mut acc = Duration::ZERO;
-        let elapsed = TIC_DURATION * 3 + Duration::from_millis(5); // 3 full tics + leftover
+        let elapsed = TIC_DURATION * 3 + Duration::from_millis(5);
         acc += elapsed;
 
         let mut tic_count = 0u32;
@@ -563,7 +818,6 @@ mod tests {
             acc -= TIC_DURATION;
         }
         assert_eq!(tic_count, 3);
-        // Leftover < TIC_DURATION.
         assert!(acc < TIC_DURATION);
         assert!(acc >= Duration::from_millis(5));
     }
@@ -573,7 +827,6 @@ mod tests {
         assert_eq!(TIC_RATE_HZ, 35);
     }
 
-    /// Dummy app for testing the tic dispatch logic.
     struct CountingApp {
         ticks: u32,
     }
@@ -590,7 +843,6 @@ mod tests {
         let mut app = CountingApp { ticks: 0 };
         let mut acc = Duration::ZERO;
 
-        // Feed 2.5 tics worth of time.
         let elapsed = TIC_DURATION * 2 + TIC_DURATION / 2;
         acc += elapsed;
 

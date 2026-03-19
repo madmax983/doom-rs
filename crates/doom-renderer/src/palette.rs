@@ -53,6 +53,7 @@ impl Rgb {
 /// Precomputed palette lookup table: `[palette_idx][color_idx] → Rgb`.
 ///
 /// Owned in a `Vec` rather than a const-sized array to avoid 10 KB on the stack.
+#[derive(Clone)]
 pub struct PaletteLut {
     /// Flat storage: `data[palette * 256 + color]` → `Rgb`.
     data: Vec<Rgb>,
@@ -123,6 +124,18 @@ impl PaletteLut {
     pub fn get(&self, palette: usize, color: u8) -> Rgb {
         let pal = palette.min(self.n_palettes.saturating_sub(1));
         self.data[pal * PLAYPAL_COLORS + color as usize]
+    }
+
+    /// Return the 256-entry `Rgb` slice for `palette`, ready for direct `slice[color as usize]` indexing.
+    ///
+    /// Prefer this over repeated [`Self::get`] calls in tight rendering loops: computing the
+    /// palette offset once and indexing directly eliminates the per-call `.min()` + multiply.
+    ///
+    /// Clamps `palette` to `[0, n_palettes)` silently.
+    #[inline]
+    pub fn palette_slice(&self, palette: usize) -> &[Rgb] {
+        let pal = palette.min(self.n_palettes.saturating_sub(1));
+        &self.data[pal * PLAYPAL_COLORS..(pal + 1) * PLAYPAL_COLORS]
     }
 
     /// Number of palettes.
