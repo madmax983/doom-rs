@@ -27,33 +27,6 @@ use ratatui::{buffer::Buffer, layout::Rect, style::Color, widgets::Widget};
 
 /// Sqrt-gamma boost for character-mode foreground colors.
 ///
-/// Doom's palette is dark (lots of browns around RGB 60-120).  Characters like
-/// `.` or `⠂` cover only ~10-20% of the cell area, so even with a colored bg
-/// the result looks dim.  Applying `sqrt(c/255)*255` lifts the darks aggressively
-/// (30→87, 80→143) while barely touching brights (200→226), matching how CRTs
-/// handled gamma.
-///
-/// Uses integer `isqrt(c * 255)` — no floats, no LUT.
-#[inline]
-fn gamma_boost(c: u8) -> u8 {
-    isqrt_u16((c as u16) * 255) as u8
-}
-
-/// Integer square root (Newton's method, 4-5 iterations for u16 range).
-#[inline]
-fn isqrt_u16(n: u16) -> u16 {
-    if n == 0 {
-        return 0;
-    }
-    let mut x = n;
-    let mut y = (x + 1) / 2;
-    while y < x {
-        x = y;
-        y = (x + n / x) / 2;
-    }
-    x
-}
-
 /// Ratatui widget that blits a palette-indexed Doom framebuffer into the terminal.
 pub struct DoomFramebufferWidget<'a> {
     /// Raw palette-indexed pixel data (must be exactly `320 * 200` bytes).
@@ -98,7 +71,11 @@ impl<'a> DoomFramebufferWidget<'a> {
     /// Legacy helper: `true` = ascii mode (equivalent to `char_set == Some(CharSet::Ascii)`).
     #[must_use]
     pub fn with_ascii_mode(mut self, ascii_mode: bool) -> Self {
-        self.char_set = if ascii_mode { Some(CharSet::Ascii) } else { None };
+        self.char_set = if ascii_mode {
+            Some(CharSet::Ascii)
+        } else {
+            None
+        };
         self
     }
 }
@@ -140,8 +117,7 @@ impl Widget for DoomFramebufferWidget<'_> {
                 // table lookups.  Tables fit in L1 cache (≤220 + 2×55 = 330 usize entries).
                 let x_map: Vec<usize> = (0..term_w).map(|cx| (cx * fb_w) / term_w).collect();
                 // y_top: (cy * 2 * fb_h) / (term_h * 2) simplifies to (cy * fb_h) / term_h.
-                let y_top_map: Vec<usize> =
-                    (0..term_h).map(|cy| (cy * fb_h) / term_h).collect();
+                let y_top_map: Vec<usize> = (0..term_h).map(|cy| (cy * fb_h) / term_h).collect();
                 let y_bot_map: Vec<usize> = (0..term_h)
                     .map(|cy| (((cy * 2 + 1) * fb_h) / (term_h * 2)).min(fb_h - 1))
                     .collect();
@@ -167,8 +143,7 @@ impl Widget for DoomFramebufferWidget<'_> {
                 // luminance-mapped character.  This preserves the exact palette colors
                 // while adding character texture.
                 let x_map: Vec<usize> = (0..term_w).map(|cx| (cx * fb_w) / term_w).collect();
-                let y_top_map: Vec<usize> =
-                    (0..term_h).map(|cy| (cy * fb_h) / term_h).collect();
+                let y_top_map: Vec<usize> = (0..term_h).map(|cy| (cy * fb_h) / term_h).collect();
                 let y_bot_map: Vec<usize> = (0..term_h)
                     .map(|cy| (((cy * 2 + 1) * fb_h) / (term_h * 2)).min(fb_h - 1))
                     .collect();
@@ -181,9 +156,8 @@ impl Widget for DoomFramebufferWidget<'_> {
                     for (cell, &fb_x) in row_cells.iter_mut().zip(x_map.iter()) {
                         let top = pal_slice[data[top_row_base + fb_x] as usize];
                         let bot = pal_slice[data[bot_row_base + fb_x] as usize];
-                        let luma =
-                            (top.r as u32 * 2126 + top.g as u32 * 7152 + top.b as u32 * 722)
-                                / 10000;
+                        let luma = (top.r as u32 * 2126 + top.g as u32 * 7152 + top.b as u32 * 722)
+                            / 10000;
                         let c = cs.map_luma(luma as u8);
                         cell.set_char(c)
                             .set_fg(Color::Rgb(top.r, top.g, top.b))
@@ -198,9 +172,7 @@ impl Widget for DoomFramebufferWidget<'_> {
                     .map(|cx| (((cx as u64 * fb_w as u64) << 16) / term_w as u64) as u32)
                     .collect();
                 let fy_top_map: Vec<u32> = (0..term_h)
-                    .map(|cy| {
-                        (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32
-                    })
+                    .map(|cy| (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32)
                     .collect();
                 let fy_bot_map: Vec<u32> = (0..term_h)
                     .map(|cy| {
@@ -228,9 +200,7 @@ impl Widget for DoomFramebufferWidget<'_> {
                     .map(|cx| (((cx as u64 * fb_w as u64) << 16) / term_w as u64) as u32)
                     .collect();
                 let fy_top_map: Vec<u32> = (0..term_h)
-                    .map(|cy| {
-                        (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32
-                    })
+                    .map(|cy| (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32)
                     .collect();
                 let fy_bot_map: Vec<u32> = (0..term_h)
                     .map(|cy| {
@@ -246,8 +216,7 @@ impl Widget for DoomFramebufferWidget<'_> {
                     for (cell, &fx) in row_cells.iter_mut().zip(fx_map.iter()) {
                         let (tr, tg, tb) = sample_bilinear(data, self.lut, pal, fx, fy_top);
                         let (br, bg, bb) = sample_bilinear(data, self.lut, pal, fx, fy_bot);
-                        let luma =
-                            (tr as u32 * 2126 + tg as u32 * 7152 + tb as u32 * 722) / 10000;
+                        let luma = (tr as u32 * 2126 + tg as u32 * 7152 + tb as u32 * 722) / 10000;
                         let c = cs.map_luma(luma as u8);
                         cell.set_char(c)
                             .set_fg(Color::Rgb(tr, tg, tb))

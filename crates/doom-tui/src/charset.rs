@@ -43,12 +43,7 @@ impl CharSet {
     }
 
     /// All variants in cycle order (for F2 toggling).
-    pub const ALL: &'static [CharSet] = &[
-        Self::Ascii,
-        Self::Braille,
-        Self::Shading,
-        Self::Blocks,
-    ];
+    pub const ALL: &'static [CharSet] = &[Self::Ascii, Self::Braille, Self::Shading, Self::Blocks];
 }
 
 /// The top-level renderer mode, unifying graphics protocols and character strategies.
