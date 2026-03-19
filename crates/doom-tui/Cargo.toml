@@ -20,3 +20,7 @@ windows-sys = { version = "0.59", features = ["Win32_Graphics_Gdi", "Win32_UI_In
 [[bench]]
 name    = "sixel_bench"
 harness = false
+
+[[bench]]
+name    = "widget_bench"
+harness = false

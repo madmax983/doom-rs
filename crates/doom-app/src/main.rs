@@ -1291,6 +1291,17 @@ impl DoomApp for DoomGame {
     fn active_palette(&self) -> usize {
         self.palette_flash.active_palette()
     }
+
+    fn on_frame_timings(&mut self, tick_us: u64, render_us: u64, blit_us: u64) {
+        if self.debug_log.is_none() {
+            return;
+        }
+        let total_us = tick_us + render_us + blit_us;
+        let msg = format!(
+            "frame tick={tick_us}us render={render_us}us blit={blit_us}us total={total_us}us"
+        );
+        self.dlog(&msg);
+    }
 }
 
 // ---------------------------------------------------------------------------

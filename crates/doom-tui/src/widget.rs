@@ -84,57 +84,125 @@ impl Widget for DoomFramebufferWidget<'_> {
             return;
         }
 
-        for cy in 0..term_h {
-            for cx in 0..term_w {
-                let (top_r, top_g, top_b, bot_r, bot_g, bot_b) = match self.scaling_mode {
-                    ScalingMode::Nearest => {
-                        // Nearest-neighbor scaling (identical formula to abrash).
-                        let fb_x = (cx * fb_w) / term_w;
-                        let fb_y_top = (cy * 2 * fb_h) / (term_h * 2);
-                        let fb_y_bot = ((cy * 2 + 1) * fb_h) / (term_h * 2);
+        // Pre-slice the active palette once: eliminates per-cell `.min()` + multiply.
+        let pal_slice = self.lut.palette_slice(pal);
 
-                        if fb_x >= fb_w || fb_y_top >= fb_h {
-                            continue;
-                        }
+        // Compute the absolute index in buf.content for our area's top-left cell.
+        // This lets us slice buf.content directly per row, replacing per-cell cell_mut() calls
+        // (which each do a bounds-check, a Position conversion, and a stride multiply).
+        let buf_stride = buf.area.width as usize;
+        let area_origin_idx =
+            (area.y - buf.area.y) as usize * buf_stride + (area.x - buf.area.x) as usize;
 
-                        let idx_top = fb_y_top * fb_w + fb_x;
-                        let idx_bot = (fb_y_bot.min(fb_h - 1)) * fb_w + fb_x;
+        // Hoist scaling mode and ascii mode outside the pixel loops to eliminate
+        // per-cell branches on frame-invariant values.
+        match (self.scaling_mode, self.ascii_mode) {
+            (ScalingMode::Nearest, false) => {
+                // Precompute coordinate tables: replaces 3 divisions per cell with
+                // table lookups.  Tables fit in L1 cache (≤220 + 2×55 = 330 usize entries).
+                let x_map: Vec<usize> = (0..term_w).map(|cx| (cx * fb_w) / term_w).collect();
+                // y_top: (cy * 2 * fb_h) / (term_h * 2) simplifies to (cy * fb_h) / term_h.
+                let y_top_map: Vec<usize> =
+                    (0..term_h).map(|cy| (cy * fb_h) / term_h).collect();
+                let y_bot_map: Vec<usize> = (0..term_h)
+                    .map(|cy| (((cy * 2 + 1) * fb_h) / (term_h * 2)).min(fb_h - 1))
+                    .collect();
 
-                        let top = self.lut.get(pal, data[idx_top]);
-                        let bot = self.lut.get(pal, data[idx_bot]);
-                        (top.r, top.g, top.b, bot.r, bot.g, bot.b)
+                for cy in 0..term_h {
+                    // Row offsets computed once per outer iteration (eliminates fb_w mul in inner loop).
+                    let top_row_base = y_top_map[cy] * fb_w;
+                    let bot_row_base = y_bot_map[cy] * fb_w;
+                    let row_start = area_origin_idx + cy * buf_stride;
+                    let row_cells = &mut buf.content[row_start..row_start + term_w];
+                    for (cell, &fb_x) in row_cells.iter_mut().zip(x_map.iter()) {
+                        let top = pal_slice[data[top_row_base + fb_x] as usize];
+                        let bot = pal_slice[data[bot_row_base + fb_x] as usize];
+                        cell.set_char('▀')
+                            .set_fg(Color::Rgb(top.r, top.g, top.b))
+                            .set_bg(Color::Rgb(bot.r, bot.g, bot.b));
                     }
-                    ScalingMode::Bilinear => {
-                        // Bilinear: compute fixed-point source coordinates.
-                        // fx maps cx in [0, term_w) to [0, fb_w<<16).
-                        // fy_top maps the top sub-pixel; fy_bot maps the bottom.
-                        // We use u64 intermediate to avoid overflow before >> 16.
-                        let fx: u32 = (((cx as u64 * (fb_w as u64)) << 16) / term_w as u64) as u32;
-                        let fy_top: u32 =
-                            (((cy as u64 * 2 * (fb_h as u64)) << 16) / (term_h as u64 * 2)) as u32;
-                        let fy_bot: u32 = ((((cy as u64 * 2 + 1) * (fb_h as u64)) << 16)
-                            / (term_h as u64 * 2)) as u32;
+                }
+            }
+            (ScalingMode::Nearest, true) => {
+                // ASCII art mode: render top sub-pixel as a luminance-mapped character.
+                let x_map: Vec<usize> = (0..term_w).map(|cx| (cx * fb_w) / term_w).collect();
+                let y_top_map: Vec<usize> =
+                    (0..term_h).map(|cy| (cy * fb_h) / term_h).collect();
+                const CHARS: &[u8] = b" .:-=+*#%@";
 
+                for cy in 0..term_h {
+                    let top_row_base = y_top_map[cy] * fb_w;
+                    let row_start = area_origin_idx + cy * buf_stride;
+                    let row_cells = &mut buf.content[row_start..row_start + term_w];
+                    for (cell, &fb_x) in row_cells.iter_mut().zip(x_map.iter()) {
+                        let top = pal_slice[data[top_row_base + fb_x] as usize];
+                        let luma =
+                            (top.r as u32 * 2126 + top.g as u32 * 7152 + top.b as u32 * 722)
+                                / 10000;
+                        let char_idx = (luma * (CHARS.len() as u32 - 1)) / 255;
+                        let c = CHARS[char_idx as usize] as char;
+                        cell.set_char(c)
+                            .set_fg(Color::Rgb(top.r, top.g, top.b))
+                            .set_bg(Color::Rgb(0, 0, 0));
+                    }
+                }
+            }
+            (ScalingMode::Bilinear, false) => {
+                // Bilinear: precompute fixed-point coordinate tables.
+                // u64 arithmetic needed to avoid overflow before the >> 16 shift.
+                let fx_map: Vec<u32> = (0..term_w)
+                    .map(|cx| (((cx as u64 * fb_w as u64) << 16) / term_w as u64) as u32)
+                    .collect();
+                let fy_top_map: Vec<u32> = (0..term_h)
+                    .map(|cy| {
+                        (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32
+                    })
+                    .collect();
+                let fy_bot_map: Vec<u32> = (0..term_h)
+                    .map(|cy| {
+                        ((((cy as u64 * 2 + 1) * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32
+                    })
+                    .collect();
+
+                for cy in 0..term_h {
+                    let fy_top = fy_top_map[cy];
+                    let fy_bot = fy_bot_map[cy];
+                    let row_start = area_origin_idx + cy * buf_stride;
+                    let row_cells = &mut buf.content[row_start..row_start + term_w];
+                    for (cell, &fx) in row_cells.iter_mut().zip(fx_map.iter()) {
                         let (tr, tg, tb) = sample_bilinear(data, self.lut, pal, fx, fy_top);
                         let (br, bg, bb) = sample_bilinear(data, self.lut, pal, fx, fy_bot);
-                        (tr, tg, tb, br, bg, bb)
-                    }
-                };
-
-                if let Some(cell) = buf.cell_mut((area.x + cx as u16, area.y + cy as u16)) {
-                    if self.ascii_mode {
-                        let luma = (top_r as u32 * 2126 + top_g as u32 * 7152 + top_b as u32 * 722)
-                            / 10000;
-                        let chars = b" .:-=+*#%@";
-                        let char_idx = (luma * (chars.len() as u32 - 1)) / 255;
-                        let c = chars[char_idx as usize] as char;
-                        cell.set_char(c)
-                            .set_fg(Color::Rgb(top_r, top_g, top_b))
-                            .set_bg(Color::Rgb(0, 0, 0));
-                    } else {
                         cell.set_char('▀')
-                            .set_fg(Color::Rgb(top_r, top_g, top_b))
-                            .set_bg(Color::Rgb(bot_r, bot_g, bot_b));
+                            .set_fg(Color::Rgb(tr, tg, tb))
+                            .set_bg(Color::Rgb(br, bg, bb));
+                    }
+                }
+            }
+            (ScalingMode::Bilinear, true) => {
+                // Bilinear + ASCII art.
+                let fx_map: Vec<u32> = (0..term_w)
+                    .map(|cx| (((cx as u64 * fb_w as u64) << 16) / term_w as u64) as u32)
+                    .collect();
+                let fy_top_map: Vec<u32> = (0..term_h)
+                    .map(|cy| {
+                        (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32
+                    })
+                    .collect();
+                const CHARS: &[u8] = b" .:-=+*#%@";
+
+                for cy in 0..term_h {
+                    let fy_top = fy_top_map[cy];
+                    let row_start = area_origin_idx + cy * buf_stride;
+                    let row_cells = &mut buf.content[row_start..row_start + term_w];
+                    for (cell, &fx) in row_cells.iter_mut().zip(fx_map.iter()) {
+                        let (tr, tg, tb) = sample_bilinear(data, self.lut, pal, fx, fy_top);
+                        let luma =
+                            (tr as u32 * 2126 + tg as u32 * 7152 + tb as u32 * 722) / 10000;
+                        let char_idx = (luma * (CHARS.len() as u32 - 1)) / 255;
+                        let c = CHARS[char_idx as usize] as char;
+                        cell.set_char(c)
+                            .set_fg(Color::Rgb(tr, tg, tb))
+                            .set_bg(Color::Rgb(0, 0, 0));
                     }
                 }
             }
