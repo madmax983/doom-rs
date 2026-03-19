@@ -638,7 +638,9 @@ impl DoomGame {
         let mut handles = Vec::with_capacity(self.gs.mobjslab.len());
         handles.extend(self.gs.mobjslab.iter_handles());
         for h in handles {
-            let Some(mo) = self.gs.mobjslab.get(h) else { continue };
+            let Some(mo) = self.gs.mobjslab.get(h) else {
+                continue;
+            };
             if mo.flags & doom_game::mobj::flags::MF_COUNTKILL == 0 {
                 continue;
             }

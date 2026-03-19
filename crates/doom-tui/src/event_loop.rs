@@ -145,9 +145,7 @@ fn run_blit_thread(
                     BlitPayload::Sixel(sixel_str) => {
                         // Direct buffer write: identical strings between frames → ratatui
                         // emits zero bytes for this cell → only status bar is flushed.
-                        if let Some(cell) =
-                            f.buffer_mut().cell_mut((chunks[0].x, chunks[0].y))
-                        {
+                        if let Some(cell) = f.buffer_mut().cell_mut((chunks[0].x, chunks[0].y)) {
                             cell.set_symbol(sixel_str);
                         }
                         let mut past_first = false;
@@ -240,7 +238,7 @@ pub trait DoomApp {
     /// - `tick_us`   — time spent in `drain_ready_tics` (game simulation)
     /// - `render_us` — time spent in `render()` (doom-renderer)
     /// - `blit_us`   — actual `terminal.draw()` duration on the blit thread
-    ///                 (one frame stale; read from a shared atomic)
+    ///   (one frame stale; read from a shared atomic)
     ///
     /// Default: no-op.  Override to write to a debug log or update in-game stats.
     fn on_frame_timings(&mut self, _tick_us: u64, _render_us: u64, _blit_us: u64) {}
