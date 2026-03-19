@@ -20,9 +20,39 @@
 //! Nearest-neighbor: maps terminal cell `(cx, cy)` to framebuffer pixels
 //! `(fb_x, fb_y_top)` and `(fb_x, fb_y_bot)` using the same formula as abrash.
 
+use crate::charset::CharSet;
 use crate::scaler::{ScalingMode, sample_bilinear};
 use doom_renderer::{Framebuffer, PaletteLut};
 use ratatui::{buffer::Buffer, layout::Rect, style::Color, widgets::Widget};
+
+/// Sqrt-gamma boost for character-mode foreground colors.
+///
+/// Doom's palette is dark (lots of browns around RGB 60-120).  Characters like
+/// `.` or `⠂` cover only ~10-20% of the cell area, so even with a colored bg
+/// the result looks dim.  Applying `sqrt(c/255)*255` lifts the darks aggressively
+/// (30→87, 80→143) while barely touching brights (200→226), matching how CRTs
+/// handled gamma.
+///
+/// Uses integer `isqrt(c * 255)` — no floats, no LUT.
+#[inline]
+fn gamma_boost(c: u8) -> u8 {
+    isqrt_u16((c as u16) * 255) as u8
+}
+
+/// Integer square root (Newton's method, 4-5 iterations for u16 range).
+#[inline]
+fn isqrt_u16(n: u16) -> u16 {
+    if n == 0 {
+        return 0;
+    }
+    let mut x = n;
+    let mut y = (x + 1) / 2;
+    while y < x {
+        x = y;
+        y = (x + n / x) / 2;
+    }
+    x
+}
 
 /// Ratatui widget that blits a palette-indexed Doom framebuffer into the terminal.
 pub struct DoomFramebufferWidget<'a> {
@@ -34,8 +64,9 @@ pub struct DoomFramebufferWidget<'a> {
     pub active_palette: usize,
     /// Scaling algorithm to use when blitting to the terminal.
     pub scaling_mode: ScalingMode,
-    /// ASCII rendering mode: true to render as colored ASCII art.
-    pub ascii_mode: bool,
+    /// Character-mapped rendering: `Some(charset)` renders luminance-mapped characters
+    /// instead of half-blocks.  `None` = half-block mode (default).
+    pub char_set: Option<CharSet>,
 }
 
 impl<'a> DoomFramebufferWidget<'a> {
@@ -46,7 +77,7 @@ impl<'a> DoomFramebufferWidget<'a> {
             lut,
             active_palette,
             scaling_mode: ScalingMode::Nearest,
-            ascii_mode: false,
+            char_set: None,
         }
     }
 
@@ -57,10 +88,17 @@ impl<'a> DoomFramebufferWidget<'a> {
         self
     }
 
-    /// Set the ascii mode, returning `self` for chaining.
+    /// Set character-mapped rendering mode, returning `self` for chaining.
+    #[must_use]
+    pub fn with_char_set(mut self, cs: Option<CharSet>) -> Self {
+        self.char_set = cs;
+        self
+    }
+
+    /// Legacy helper: `true` = ascii mode (equivalent to `char_set == Some(CharSet::Ascii)`).
     #[must_use]
     pub fn with_ascii_mode(mut self, ascii_mode: bool) -> Self {
-        self.ascii_mode = ascii_mode;
+        self.char_set = if ascii_mode { Some(CharSet::Ascii) } else { None };
         self
     }
 }
@@ -94,10 +132,10 @@ impl Widget for DoomFramebufferWidget<'_> {
         let area_origin_idx =
             (area.y - buf.area.y) as usize * buf_stride + (area.x - buf.area.x) as usize;
 
-        // Hoist scaling mode and ascii mode outside the pixel loops to eliminate
+        // Hoist scaling mode and char_set outside the pixel loops to eliminate
         // per-cell branches on frame-invariant values.
-        match (self.scaling_mode, self.ascii_mode) {
-            (ScalingMode::Nearest, false) => {
+        match (self.scaling_mode, self.char_set) {
+            (ScalingMode::Nearest, None) => {
                 // Precompute coordinate tables: replaces 3 divisions per cell with
                 // table lookups.  Tables fit in L1 cache (≤220 + 2×55 = 330 usize entries).
                 let x_map: Vec<usize> = (0..term_w).map(|cx| (cx * fb_w) / term_w).collect();
@@ -123,31 +161,37 @@ impl Widget for DoomFramebufferWidget<'_> {
                     }
                 }
             }
-            (ScalingMode::Nearest, true) => {
-                // ASCII art mode: render top sub-pixel as a luminance-mapped character.
+            (ScalingMode::Nearest, Some(cs)) => {
+                // Character-mapped mode: same fg/bg as halfblocks (top pixel = fg,
+                // bottom pixel = bg), but the half-block `▀` is replaced by a
+                // luminance-mapped character.  This preserves the exact palette colors
+                // while adding character texture.
                 let x_map: Vec<usize> = (0..term_w).map(|cx| (cx * fb_w) / term_w).collect();
                 let y_top_map: Vec<usize> =
                     (0..term_h).map(|cy| (cy * fb_h) / term_h).collect();
-                const CHARS: &[u8] = b" .:-=+*#%@";
+                let y_bot_map: Vec<usize> = (0..term_h)
+                    .map(|cy| (((cy * 2 + 1) * fb_h) / (term_h * 2)).min(fb_h - 1))
+                    .collect();
 
                 for cy in 0..term_h {
                     let top_row_base = y_top_map[cy] * fb_w;
+                    let bot_row_base = y_bot_map[cy] * fb_w;
                     let row_start = area_origin_idx + cy * buf_stride;
                     let row_cells = &mut buf.content[row_start..row_start + term_w];
                     for (cell, &fb_x) in row_cells.iter_mut().zip(x_map.iter()) {
                         let top = pal_slice[data[top_row_base + fb_x] as usize];
+                        let bot = pal_slice[data[bot_row_base + fb_x] as usize];
                         let luma =
                             (top.r as u32 * 2126 + top.g as u32 * 7152 + top.b as u32 * 722)
                                 / 10000;
-                        let char_idx = (luma * (CHARS.len() as u32 - 1)) / 255;
-                        let c = CHARS[char_idx as usize] as char;
+                        let c = cs.map_luma(luma as u8);
                         cell.set_char(c)
                             .set_fg(Color::Rgb(top.r, top.g, top.b))
-                            .set_bg(Color::Rgb(0, 0, 0));
+                            .set_bg(Color::Rgb(bot.r, bot.g, bot.b));
                     }
                 }
             }
-            (ScalingMode::Bilinear, false) => {
+            (ScalingMode::Bilinear, None) => {
                 // Bilinear: precompute fixed-point coordinate tables.
                 // u64 arithmetic needed to avoid overflow before the >> 16 shift.
                 let fx_map: Vec<u32> = (0..term_w)
@@ -178,8 +222,8 @@ impl Widget for DoomFramebufferWidget<'_> {
                     }
                 }
             }
-            (ScalingMode::Bilinear, true) => {
-                // Bilinear + ASCII art.
+            (ScalingMode::Bilinear, Some(cs)) => {
+                // Bilinear + character-mapped: same fg/bg as bilinear halfblocks.
                 let fx_map: Vec<u32> = (0..term_w)
                     .map(|cx| (((cx as u64 * fb_w as u64) << 16) / term_w as u64) as u32)
                     .collect();
@@ -188,21 +232,26 @@ impl Widget for DoomFramebufferWidget<'_> {
                         (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32
                     })
                     .collect();
-                const CHARS: &[u8] = b" .:-=+*#%@";
+                let fy_bot_map: Vec<u32> = (0..term_h)
+                    .map(|cy| {
+                        ((((cy as u64 * 2 + 1) * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32
+                    })
+                    .collect();
 
                 for cy in 0..term_h {
                     let fy_top = fy_top_map[cy];
+                    let fy_bot = fy_bot_map[cy];
                     let row_start = area_origin_idx + cy * buf_stride;
                     let row_cells = &mut buf.content[row_start..row_start + term_w];
                     for (cell, &fx) in row_cells.iter_mut().zip(fx_map.iter()) {
                         let (tr, tg, tb) = sample_bilinear(data, self.lut, pal, fx, fy_top);
+                        let (br, bg, bb) = sample_bilinear(data, self.lut, pal, fx, fy_bot);
                         let luma =
                             (tr as u32 * 2126 + tg as u32 * 7152 + tb as u32 * 722) / 10000;
-                        let char_idx = (luma * (CHARS.len() as u32 - 1)) / 255;
-                        let c = CHARS[char_idx as usize] as char;
+                        let c = cs.map_luma(luma as u8);
                         cell.set_char(c)
                             .set_fg(Color::Rgb(tr, tg, tb))
-                            .set_bg(Color::Rgb(0, 0, 0));
+                            .set_bg(Color::Rgb(br, bg, bb));
                     }
                 }
             }
@@ -274,7 +323,7 @@ mod tests {
             lut: &lut,
             active_palette: 0,
             scaling_mode: ScalingMode::Nearest,
-            ascii_mode: false,
+            char_set: None,
         }
         .render(area, &mut buf);
         // No panic; buffer remains empty/default.
@@ -348,7 +397,7 @@ mod tests {
         let fb = make_fb_with(0);
         let lut = PaletteLut::grayscale();
         let w = DoomFramebufferWidget::new(&fb, &lut, 0).with_ascii_mode(true);
-        assert!(w.ascii_mode);
+        assert_eq!(w.char_set, Some(crate::charset::CharSet::Ascii));
     }
 
     #[test]
@@ -364,10 +413,12 @@ mod tests {
             .render(area, &mut buf);
         let cell = buf.cell((0, 0)).unwrap();
         // top_r = 255, top_g = 0, top_b = 0 -> luma = (255 * 2126) / 10000 = 54
-        // char_idx = (54 * 9) / 255 = 486 / 255 = 1
-        // b" .:-=+*#%@"[1] = '.'
-        assert_eq!(cell.symbol(), ".");
+        // ASCII ramp has 12 chars: char_idx = (54 * 11) / 255 = 2
+        // [' ', '.', ':', '+', '=', '!', '*', '?', '#', '%', '&', '@'][2] = ':'
+        assert_eq!(cell.symbol(), ":");
+        // fg = top pixel color (same as halfblocks)
         assert_eq!(cell.fg, Color::Rgb(255, 0, 0));
-        assert_eq!(cell.bg, Color::Rgb(0, 0, 0));
+        // bg = bottom pixel color (uniform fill → same as top)
+        assert_eq!(cell.bg, Color::Rgb(255, 0, 0));
     }
 }
