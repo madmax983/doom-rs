@@ -251,7 +251,7 @@ impl DehPatch {
                 // Consume exactly old_len + new_len bytes from `remaining`.
                 // The bytes may span multiple lines; we treat newlines as part
                 // of the data only where they fall within the counts.
-                let total = old_len + new_len;
+                let total = old_len.saturating_add(new_len);
                 if remaining.len() < total {
                     return Err(DehError::BadHeader(
                         "Unexpected end of input in Text section".to_owned(),
@@ -1438,5 +1438,16 @@ mod proptests {
         fn parser_does_not_panic(s in "\\PC*") {
             let _ = DehPatch::parse(&s);
         }
+    }
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+
+    #[test]
+    fn test_text_length_overflow() {
+        let input = "Text 18446744073709551615 1\n";
+        let _ = DehPatch::parse(input);
     }
 }
