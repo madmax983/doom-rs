@@ -1424,15 +1424,13 @@ mod tests_deh {
     use super::*;
 
     #[test]
-    #[should_panic]
     fn test_dehacked_parse_panic() {
-        let _ = DehPatch::parse("Text 1 1\n\n");
+        assert!(DehPatch::parse("Text 1 1\n\n").is_err());
     }
 
     #[test]
-    #[should_panic]
     fn test_dehacked_parse_panic_byte_index() {
-        let _ = DehPatch::parse("Text 1 1\n😊");
+        assert!(DehPatch::parse("Text 1 1\n😊").is_err());
     }
 }
 
