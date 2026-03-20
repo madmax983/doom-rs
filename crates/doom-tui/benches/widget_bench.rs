@@ -22,7 +22,11 @@ fn make_framebuffer() -> Framebuffer {
     // Varied palette indices — avoids uniform-field shortcuts in the compiler.
     for y in 0..Framebuffer::height() {
         for x in 0..Framebuffer::width() {
-            fb.set_pixel(x, y, ((x.wrapping_mul(3).wrapping_add(y.wrapping_mul(7))) % 256) as u8);
+            fb.set_pixel(
+                x,
+                y,
+                ((x.wrapping_mul(3).wrapping_add(y.wrapping_mul(7))) % 256) as u8,
+            );
         }
     }
     fb
@@ -43,17 +47,13 @@ fn bench_widget_render(c: &mut Criterion) {
     for &(label, cols, rows) in scenarios {
         let area = Rect::new(0, 0, cols, rows);
 
-        group.bench_with_input(
-            BenchmarkId::new("nearest", label),
-            &(cols, rows),
-            |b, _| {
-                b.iter(|| {
-                    let mut buf = Buffer::empty(area);
-                    DoomFramebufferWidget::new(&fb, &lut, 0).render(area, &mut buf);
-                    std::hint::black_box(buf)
-                });
-            },
-        );
+        group.bench_with_input(BenchmarkId::new("nearest", label), &(cols, rows), |b, _| {
+            b.iter(|| {
+                let mut buf = Buffer::empty(area);
+                DoomFramebufferWidget::new(&fb, &lut, 0).render(area, &mut buf);
+                std::hint::black_box(buf)
+            });
+        });
 
         group.bench_with_input(
             BenchmarkId::new("bilinear", label),
