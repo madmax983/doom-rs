@@ -12,6 +12,7 @@
 pub mod bsp;
 pub mod level;
 pub mod lumps;
+pub mod svg;
 pub mod udmf;
 
 pub use bsp::{BspChild, BspError, BspTree};
@@ -20,3 +21,4 @@ pub use lumps::{
     Blockmap, FLAG_TWO_SIDED, Linedef, LumpParseError, Node, NodeBBox, Reject, SIDEDEF_NONE,
     Sector, Seg, Sidedef, Ssector, Thing, Vertex,
 };
+pub use svg::export_map_to_svg;
