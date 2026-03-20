@@ -641,41 +641,46 @@ impl DoomGame {
             return;
         }
 
-        // Use a vector because `self.dlog` mutably borrows `self`.
-        let mut handles = Vec::with_capacity(self.gs.mobjslab.len());
-        handles.extend(self.gs.mobjslab.iter_handles());
-        for h in handles {
-            let Some(mo) = self.gs.mobjslab.get(h) else {
-                continue;
+        // Iterate by index to avoid allocating a vector while still dropping
+        // the immutable borrow of `self.gs` before calling `self.dlog`.
+        let slot_count = self.gs.mobjslab.slot_count();
+        for i in 0..slot_count {
+            let msg = {
+                let Some(h) = self.gs.mobjslab.handle_at(i) else {
+                    continue;
+                };
+                let Some(mo) = self.gs.mobjslab.get(h) else {
+                    continue;
+                };
+                if mo.flags & doom_game::mobj::flags::MF_COUNTKILL == 0 {
+                    continue;
+                }
+                let ex = mo.x.to_int();
+                let ey = mo.y.to_int();
+                let state_idx = mo.state.0;
+                let flags = mo.flags;
+                let is_dead = mo.health <= 0;
+                let target = mo.target;
+                format!(
+                    "enemy idx={} gen={} {:?} pos=({},{}) health={} state={} tics={} dead={} flags={:#010x} target=({}, {}) threshold={} reaction={} movecount={} subsector={}",
+                    h.index,
+                    h.generation,
+                    mo.kind,
+                    ex,
+                    ey,
+                    mo.health,
+                    state_idx,
+                    mo.tics,
+                    is_dead,
+                    flags,
+                    target.index,
+                    target.generation,
+                    mo.threshold,
+                    mo.reactiontime,
+                    mo.movecount,
+                    mo.subsector,
+                )
             };
-            if mo.flags & doom_game::mobj::flags::MF_COUNTKILL == 0 {
-                continue;
-            }
-            let ex = mo.x.to_int();
-            let ey = mo.y.to_int();
-            let state_idx = mo.state.0;
-            let flags = mo.flags;
-            let is_dead = mo.health <= 0;
-            let target = mo.target;
-            let msg = format!(
-                "enemy idx={} gen={} {:?} pos=({},{}) health={} state={} tics={} dead={} flags={:#010x} target=({}, {}) threshold={} reaction={} movecount={} subsector={}",
-                h.index,
-                h.generation,
-                mo.kind,
-                ex,
-                ey,
-                mo.health,
-                state_idx,
-                mo.tics,
-                is_dead,
-                flags,
-                target.index,
-                target.generation,
-                mo.threshold,
-                mo.reactiontime,
-                mo.movecount,
-                mo.subsector,
-            );
             self.dlog(&msg);
         }
     }
@@ -687,25 +692,34 @@ impl DoomGame {
             return;
         }
 
-        // Use a vector because we modify mobjs and `self.dlog` mutably borrows `self`.
-        let mut handles = Vec::with_capacity(self.gs.mobjslab.len());
-        handles.extend(self.gs.mobjslab.iter_handles());
-        for h in handles {
-            let Some(mo) = self.gs.mobjslab.get_mut(h) else {
-                continue;
+        // Iterate by index to avoid allocating a vector while still dropping
+        // the borrow of `self.gs` before calling `self.dlog`.
+        let slot_count = self.gs.mobjslab.slot_count();
+        for i in 0..slot_count {
+            let msg = {
+                let Some(h) = self.gs.mobjslab.handle_at(i) else {
+                    continue;
+                };
+                let Some(mo) = self.gs.mobjslab.get_mut(h) else {
+                    continue;
+                };
+                if mo.flags & doom_game::mobj::flags::MF_SCREAMED != 0 {
+                    // Clear the flag so we only log once.
+                    mo.flags &= !doom_game::mobj::flags::MF_SCREAMED;
+                    let kind = mo.kind;
+                    let x = mo.x.to_int();
+                    let y = mo.y.to_int();
+                    let state_idx = mo.state.0;
+                    Some(format!(
+                        "enemy_died {:?} pos=({},{}) death_state={}",
+                        kind, x, y, state_idx
+                    ))
+                } else {
+                    None
+                }
             };
-            if mo.flags & doom_game::mobj::flags::MF_SCREAMED != 0 {
-                // Clear the flag so we only log once.
-                mo.flags &= !doom_game::mobj::flags::MF_SCREAMED;
-                let kind = mo.kind;
-                let x = mo.x.to_int();
-                let y = mo.y.to_int();
-                let state_idx = mo.state.0;
-                let msg = format!(
-                    "enemy_died {:?} pos=({},{}) death_state={}",
-                    kind, x, y, state_idx
-                );
-                self.dlog(&msg);
+            if let Some(m) = msg {
+                self.dlog(&m);
             }
         }
     }

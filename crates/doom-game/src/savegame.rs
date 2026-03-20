@@ -1041,11 +1041,8 @@ pub fn save_game(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &
     }
 
     // --- Mobjs ---
-    // Collect all live mobjs with their handles.
-    let mut handles = Vec::with_capacity(gs.mobjslab.len());
-    handles.extend(gs.mobjslab.iter_handles());
-    w.write_u32(handles.len() as u32);
-    for &h in &handles {
+    w.write_u32(gs.mobjslab.len() as u32);
+    for h in gs.mobjslab.iter_handles() {
         // Write the handle itself so we can reconstruct the slab.
         write_mobj_handle(&mut w, h);
         let mo = gs
