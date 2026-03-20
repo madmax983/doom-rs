@@ -1716,7 +1716,7 @@ fn load_demo_player(path: &std::path::Path) -> Result<DemoPlayer> {
 // main
 // ---------------------------------------------------------------------------
 
-fn main() -> Result<()> {
+fn run_doom() -> Result<()> {
     // Initialize trig tables (required for sin/cos in the game simulation).
     // SAFETY: called exactly once at startup, single-threaded, before any
     // Bam::sin() or Bam::cos() calls.
@@ -1783,7 +1783,14 @@ fn main() -> Result<()> {
         let count = patch
             .apply(&mut mobjinfo_vec, &mut states_vec)
             .map_err(|e| anyhow::anyhow!("DeHackEd apply error: {e}"))?;
-        eprintln!("DeHackEd: applied {count} modification(s) from {deh_path}");
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} applied {} modification(s) from {}",
+            "⚙️".green(),
+            "DeHackEd:".green().bold(),
+            count.to_string().cyan(),
+            deh_path.as_str().yellow()
+        );
     }
 
     // Load flat texture cache (floor/ceiling textures between F_START and F_END).
@@ -1815,8 +1822,7 @@ fn main() -> Result<()> {
     let music_library = load_music_library(&wad_stack);
 
     if let Err(message) = validate_mode_args(&args) {
-        eprintln!("Error: {message}");
-        std::process::exit(1);
+        return Err(anyhow::anyhow!("Invalid arguments: {message}"));
     }
 
     // Server mode: spin up a relay server that forwards tic packets between
@@ -1879,10 +1885,13 @@ fn main() -> Result<()> {
             capture.active_palette,
         )
         .with_context(|| format!("Failed to write capture: {}", capture_path.display()))?;
-        eprintln!(
-            "Captured frame {} to {}",
-            args.capture_frames,
-            capture_path.display()
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} frame {} to {}",
+            "✅".green(),
+            "Captured".green().bold(),
+            args.capture_frames.to_string().cyan(),
+            capture_path.display().to_string().yellow()
         );
         return Ok(());
     }
@@ -1945,6 +1954,23 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+fn main() {
+    if let Err(err) = run_doom() {
+        use crossterm::style::Stylize;
+        eprintln!("\n{} {}: {}", "❌", "Fatal Error".red().bold(), err);
+
+        let mut causes = err.chain().skip(1).peekable();
+        if causes.peek().is_some() {
+            eprintln!("\n{} {}:", "↳", "Caused by".yellow().bold());
+            for cause in causes {
+                eprintln!("    {}", cause);
+            }
+        }
+        eprintln!();
+        std::process::exit(1);
+    }
 }
 
 // ---------------------------------------------------------------------------
