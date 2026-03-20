@@ -514,6 +514,22 @@ impl MobjSlab {
             .count()
     }
 
+    /// Total number of slots currently in the slab.
+    pub fn slot_count(&self) -> u32 {
+        self.slots.len() as u32
+    }
+
+    /// Get the handle at a specific slot index, if it is occupied.
+    pub fn handle_at(&self, index: u32) -> Option<MobjHandle> {
+        match self.slots.get(index as usize)? {
+            Slot::Occupied { generation, .. } => Some(MobjHandle {
+                index,
+                generation: *generation,
+            }),
+            Slot::Free { .. } => None,
+        }
+    }
+
     /// `true` if no actors are alive.
     pub fn is_empty(&self) -> bool {
         self.len() == 0
