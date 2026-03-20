@@ -382,7 +382,7 @@ pub fn trace_ray(
                 let v1 = &level.vertexes[ld.from_vertex as usize];
                 let v2 = &level.vertexes[ld.to_vertex as usize];
 
-                let t = ray_linedef_intersection(
+                let Some(t_val) = ray_linedef_intersection(
                     fx1,
                     fy1,
                     rdx,
@@ -391,37 +391,39 @@ pub fn trace_ray(
                     v1.y as f32,
                     v2.x as f32,
                     v2.y as f32,
-                );
+                ) else {
+                    continue;
+                };
 
-                if let Some(t_val) = t {
-                    // t_val is in parametric units where 1.0 = max_range.
-                    if (0.0..=1.0).contains(&t_val) && t_val < best_frac {
-                        // Check if this line blocks the ray.
-                        let blocks = if !ld.is_two_sided() {
-                            // One-sided: always blocks.
-                            true
-                        } else {
-                            // Two-sided: check the opening.
-                            match line_opening(level, ld) {
-                                Some((open_bottom, open_top)) => {
-                                    // A two-sided line blocks if the opening is closed.
-                                    open_top <= open_bottom
-                                }
-                                None => true, // shouldn't happen for two-sided, but safety
-                            }
-                        };
+                // t_val is in parametric units where 1.0 = max_range.
+                if !(0.0..=1.0).contains(&t_val) || t_val >= best_frac {
+                    continue;
+                }
 
-                        if blocks {
-                            let hit_x = (fx1 + rdx * t_val) as i32;
-                            let hit_y = (fy1 + rdy * t_val) as i32;
-                            best_frac = t_val;
-                            best_hit = TraceHit::Wall {
-                                linedef_index: ld_idx,
-                                hit_x,
-                                hit_y,
-                            };
+                // Check if this line blocks the ray.
+                let blocks = if !ld.is_two_sided() {
+                    // One-sided: always blocks.
+                    true
+                } else {
+                    // Two-sided: check the opening.
+                    match line_opening(level, ld) {
+                        Some((open_bottom, open_top)) => {
+                            // A two-sided line blocks if the opening is closed.
+                            open_top <= open_bottom
                         }
+                        None => true, // shouldn't happen for two-sided, but safety
                     }
+                };
+
+                if blocks {
+                    let hit_x = (fx1 + rdx * t_val) as i32;
+                    let hit_y = (fy1 + rdy * t_val) as i32;
+                    best_frac = t_val;
+                    best_hit = TraceHit::Wall {
+                        linedef_index: ld_idx,
+                        hit_x,
+                        hit_y,
+                    };
                 }
             }
 
@@ -442,7 +444,7 @@ pub fn trace_ray(
                         continue;
                     }
 
-                    if let Some(t_val) = ray_actor_intersection(
+                    let Some(t_val) = ray_actor_intersection(
                         fx1,
                         fy1,
                         rdx,
@@ -450,18 +452,22 @@ pub fn trace_ray(
                         ax as f32,
                         ay as f32,
                         radius as f32,
-                    ) {
-                        if (0.0..=1.0).contains(&t_val) && t_val < best_frac {
-                            let hit_x = (fx1 + rdx * t_val) as i32;
-                            let hit_y = (fy1 + rdy * t_val) as i32;
-                            best_frac = t_val;
-                            best_hit = TraceHit::Actor {
-                                actor_index: actor_idx,
-                                hit_x,
-                                hit_y,
-                            };
-                        }
+                    ) else {
+                        continue;
+                    };
+
+                    if !(0.0..=1.0).contains(&t_val) || t_val >= best_frac {
+                        continue;
                     }
+
+                    let hit_x = (fx1 + rdx * t_val) as i32;
+                    let hit_y = (fy1 + rdy * t_val) as i32;
+                    best_frac = t_val;
+                    best_hit = TraceHit::Actor {
+                        actor_index: actor_idx,
+                        hit_x,
+                        hit_y,
+                    };
                 }
             }
         }

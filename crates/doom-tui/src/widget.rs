@@ -25,8 +25,6 @@ use crate::scaler::{ScalingMode, sample_bilinear};
 use doom_renderer::{Framebuffer, PaletteLut};
 use ratatui::{buffer::Buffer, layout::Rect, style::Color, widgets::Widget};
 
-/// Sqrt-gamma boost for character-mode foreground colors.
-///
 /// Ratatui widget that blits a palette-indexed Doom framebuffer into the terminal.
 pub struct DoomFramebufferWidget<'a> {
     /// Raw palette-indexed pixel data (must be exactly `320 * 200` bytes).
