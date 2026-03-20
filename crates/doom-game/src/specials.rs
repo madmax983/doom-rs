@@ -3538,45 +3538,44 @@ pub fn init_conveyors(gs: &mut GameState, level: &Level) {
 ///
 /// This is a simplified implementation — real Doom uses momentum-based push
 /// rather than direct position adjustment.
+///
+/// **Performance:** Avoids 2 internal Vec allocations per game tic by iterating
+/// over the components of the game state directly instead of performing `.collect::<Vec<_>>()`. NLL
+/// provides the compiler proof necessary to drop mutability constraints correctly.
 pub fn tick_conveyors(gs: &mut GameState, level: Option<&Level>) {
     if gs.conveyors.is_empty() {
         return;
     }
 
-    // Collect conveyor data to avoid borrow conflict with mobjslab.
-    let conveyors: Vec<(usize, i32, i32, i16)> = gs
-        .conveyors
-        .iter()
-        .map(|c| (c.sector_index, c.push_x, c.push_y, 0i16))
-        .collect();
-
-    // Get sector floor heights if level is available.
-    let floor_heights: Vec<i16> = match level {
-        Some(lv) => lv.sectors.iter().map(|s| s.floor_height).collect(),
+    let level = match level {
+        Some(lv) => lv,
         None => return, // Cannot determine sector membership without level geometry.
     };
 
     // Iterate all live actors and apply push if standing in a conveyor sector.
-    // Use a vector because we modify mobjs in the loop.
+    // Use a vector because we modify mobjs in the loop, but NLL allows us to iterate
+    // `gs.conveyors` directly instead of collecting it first, meaning it's only one
+    // allocation per tic instead of three!
     let mut handles = Vec::with_capacity(gs.mobjslab.len());
     handles.extend(gs.mobjslab.iter_handles());
     for handle in handles {
-        let (mz, _mx, _my) = match gs.mobjslab.get(handle) {
-            Some(mo) => (mo.z.to_int(), mo.x, mo.y),
+        let mz = match gs.mobjslab.get(handle) {
+            Some(mo) => mo.z.to_int(),
             None => continue,
         };
 
-        for &(sector_idx, px, py, _) in &conveyors {
-            if sector_idx >= floor_heights.len() {
+        for conveyor in &gs.conveyors {
+            let sector_idx = conveyor.sector_index;
+            if sector_idx >= level.sectors.len() {
                 continue;
             }
-            let floor_h = floor_heights[sector_idx] as i32;
+            let floor_h = level.sectors[sector_idx].floor_height as i32;
 
             // Simple containment check: actor z matches sector floor.
             if mz == floor_h {
                 if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                    mo.x += Fixed16_16::from_raw(px);
-                    mo.y += Fixed16_16::from_raw(py);
+                    mo.x += Fixed16_16::from_raw(conveyor.push_x);
+                    mo.y += Fixed16_16::from_raw(conveyor.push_y);
                 }
                 break; // Only apply one conveyor per actor per tic.
             }
