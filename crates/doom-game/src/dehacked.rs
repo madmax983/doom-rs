@@ -253,15 +253,9 @@ impl DehPatch {
                 // of the data only where they fall within the counts.
                 let total = old_len + new_len;
                 if remaining.len() < total {
-                    // Not enough data -- store what we have and stop.
-                    let old_text = remaining
-                        .get(..old_len.min(remaining.len()))
-                        .unwrap_or(remaining)
-                        .to_owned();
-                    let start = old_len.min(remaining.len());
-                    let new_text = remaining.get(start..).unwrap_or("").to_owned();
-                    patch.texts.push(TextReplacement { old_text, new_text });
-                    break;
+                    return Err(DehError::BadHeader(
+                        "Unexpected end of input in Text section".to_owned(),
+                    ));
                 }
 
                 let old_text = remaining

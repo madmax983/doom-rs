@@ -256,10 +256,10 @@ pub trait DoomApp {
 ///
 /// Manages terminal lifecycle, fixed-rate tic accumulation, input tracking,
 /// and render pacing.  The `Terminal` handle is moved into a background blit
-/// thread on the first call to [`DoomEventLoop::run`]; the main thread never
+/// thread on the first call to [`DoomEventLoop::run()`]; the main thread never
 /// writes to stdout after that point.
 ///
-/// Call [`DoomEventLoop::run`] to start the loop.
+/// Call [`DoomEventLoop::run()`] to start the loop.
 pub struct DoomEventLoop {
     /// Terminal handle — `Some` until `run()` is first called, at which point it
     /// is moved into the blit thread.  `None` while the loop is running.
@@ -401,7 +401,7 @@ impl DoomEventLoop {
 
     /// Set up the terminal (raw mode, alternate screen) and return the event loop.
     ///
-    /// The `Terminal` handle is stored internally until [`run`] is called, at
+    /// The `Terminal` handle is stored internally until [`run`](DoomEventLoop::run) is called, at
     /// which point it is moved into the blit thread.
     pub fn new() -> Result<Self, EventLoopError> {
         enable_raw_mode().map_err(|e| EventLoopError::TerminalSetup(e.to_string()))?;
