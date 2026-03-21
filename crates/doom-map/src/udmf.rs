@@ -24,6 +24,10 @@ const THING_FLAG_MULTIPLAYER: u16 = 0x0010;
 const SIDEDEF_NONE: u16 = 0xFFFF;
 
 /// A UDMF value: string, integer, float, or boolean.
+///
+/// Universal Doom Map Format allows variables to have these dynamic types.
+/// The parser will decode numeric literals according to whether a decimal point
+/// or exponent is present, otherwise they become integers.
 #[derive(Debug, Clone, PartialEq)]
 pub enum UdmfValue {
     /// Quoted string.
@@ -37,6 +41,8 @@ pub enum UdmfValue {
 }
 
 /// A single key = value assignment within a UDMF block.
+///
+/// e.g. `x = 10.0;`
 #[derive(Debug, Clone)]
 pub struct UdmfField {
     pub key: String,
@@ -44,6 +50,8 @@ pub struct UdmfField {
 }
 
 /// A named block (e.g. `vertex { x = 10.0; y = 20.0; }`).
+///
+/// UDMF blocks contain properties mapped to key-value pairs.
 #[derive(Debug, Clone)]
 pub struct UdmfBlock {
     pub kind: String,
@@ -51,6 +59,9 @@ pub struct UdmfBlock {
 }
 
 /// The fully parsed TEXTMAP lump.
+///
+/// This represents a raw, unvalidated AST of the `TEXTMAP` file.
+/// To convert this into usable map geometry, call [`UdmfMap::into_level_data`].
 #[derive(Debug, Clone)]
 pub struct UdmfMap {
     /// The namespace declaration (first statement in the file).
@@ -60,6 +71,10 @@ pub struct UdmfMap {
 }
 
 /// Geometry converted from UDMF into the engine's classic `Level`-shaped arrays.
+///
+/// This provides the canonical flat arrays of vertexes, sectors, linedefs, etc.
+/// that the rest of the engine expects, identical in shape to what a classic
+/// binary Doom format WAD would provide.
 #[derive(Debug)]
 pub struct UdmfLevelData {
     pub things: Vec<Thing>,
@@ -137,6 +152,20 @@ impl UdmfMap {
     ///
     /// # Errors
     /// Returns `UdmfError` if the lump is not valid UTF-8 or fails to parse.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_map::udmf::UdmfMap;
+    ///
+    /// let textmap_data = br#"
+    /// namespace = "doom";
+    /// vertex { x = 10; y = 20; }
+    /// "#;
+    /// let map = UdmfMap::parse(textmap_data).unwrap();
+    /// assert_eq!(map.namespace, "doom");
+    /// assert_eq!(map.blocks.len(), 1);
+    /// assert_eq!(map.blocks[0].kind, "vertex");
+    /// ```
     pub fn parse(data: &[u8]) -> Result<Self, UdmfError> {
         let input = core::str::from_utf8(data)?;
         let mut parser = Parser::new(input);
@@ -187,6 +216,19 @@ impl UdmfMap {
     /// # Errors
     /// Returns `UdmfError` when required fields are missing, malformed, or
     /// outside the classic Doom value ranges.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_map::udmf::UdmfMap;
+    ///
+    /// let map = UdmfMap::parse(br#"
+    /// namespace = "doom";
+    /// vertex { x = 0; y = 0; }
+    /// "#).unwrap();
+    /// let level_data = map.into_level_data().unwrap();
+    /// assert_eq!(level_data.vertexes.len(), 1);
+    /// assert_eq!(level_data.vertexes[0].x, 0);
+    /// ```
     pub fn into_level_data(self) -> Result<UdmfLevelData, UdmfError> {
         if self.namespace != "doom" {
             return Err(UdmfError::UnsupportedNamespace(self.namespace));
