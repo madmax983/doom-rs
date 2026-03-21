@@ -49,11 +49,16 @@ unsafe impl Send for SendStream {}
 
 /// Live audio output driver backed by cpal.
 ///
-/// Drop the driver to stop audio output.  The internal cpal stream is kept
-/// alive for as long as this struct is alive.
+/// A thread-safe, shared reference to the [`SfxMixer`].
 pub type SharedSfxMixer = Arc<Mutex<SfxMixer>>;
+
+/// A thread-safe, shared reference to the [`MidiPlayer`].
 pub type SharedMidiPlayer = Arc<Mutex<MidiPlayer>>;
 
+/// Live audio output driver backed by cpal.
+///
+/// Drop the driver to stop audio output.  The internal cpal stream is kept
+/// alive for as long as this struct is alive.
 pub struct AudioDriver {
     /// Held solely to keep the cpal stream alive.
     _stream: Option<Box<SendStream>>,
@@ -165,6 +170,14 @@ impl AudioDriver {
     }
 
     /// Create a driver that owns no real stream — safe for headless / test use.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_audio::driver::AudioDriver;
+    ///
+    /// let driver = AudioDriver::null();
+    /// ```
     #[must_use]
     pub fn null() -> Self {
         Self {
