@@ -3,8 +3,8 @@
 //! The renderer consumes segs in front-to-back order (relative to the player)
 //! so solid-wall clipping can reject farther geometry early.
 
-use doom_map::Level;
 use doom_map::bsp::{BspChild, BspTree};
+use doom_map::{Level, SIDEDEF_NONE};
 
 fn seg_sort_key(level: &Level, seg_idx: usize, player_x: i32, player_y: i32) -> i64 {
     let Some(seg) = level.segs.get(seg_idx) else {
@@ -123,15 +123,76 @@ fn ordered_subsector_segs(
 ) -> Vec<usize> {
     let end = first_seg.saturating_add(seg_count).min(level.segs.len());
     let mut segs: Vec<usize> = (first_seg..end).collect();
+    if !subsector_needs_hardening_sort(level, first_seg, end - first_seg) {
+        return segs;
+    }
     segs.sort_by_key(|&seg_idx| seg_sort_key(level, seg_idx, player_x, player_y));
     segs
+}
+
+fn subsector_needs_hardening_sort(level: &Level, first_seg: usize, seg_count: usize) -> bool {
+    let end = first_seg.saturating_add(seg_count).min(level.segs.len());
+    (first_seg..end).any(|seg_idx| {
+        let Some(seg) = level.segs.get(seg_idx) else {
+            return false;
+        };
+        let Some(linedef) = level.linedefs.get(seg.linedef as usize) else {
+            return false;
+        };
+        if !linedef.is_two_sided() {
+            return false;
+        }
+
+        let front_sidedef_idx = if seg.direction == 0 {
+            linedef.right_sidedef
+        } else {
+            linedef.left_sidedef
+        };
+        let back_sidedef_idx = if seg.direction == 0 {
+            linedef.left_sidedef
+        } else {
+            linedef.right_sidedef
+        };
+        if front_sidedef_idx == SIDEDEF_NONE || back_sidedef_idx == SIDEDEF_NONE {
+            return false;
+        }
+
+        let Some(front_sector) = level
+            .sidedefs
+            .get(front_sidedef_idx as usize)
+            .and_then(|sidedef| level.sectors.get(sidedef.sector as usize))
+        else {
+            return false;
+        };
+
+        let Some(back_sector) = level
+            .sidedefs
+            .get(back_sidedef_idx as usize)
+            .and_then(|sidedef| level.sectors.get(sidedef.sector as usize))
+        else {
+            return false;
+        };
+
+        let front_floor = i32::from(front_sector.floor_height);
+        let front_ceil = i32::from(front_sector.ceil_height);
+        let back_floor = i32::from(back_sector.floor_height);
+        let back_ceil = i32::from(back_sector.ceil_height);
+
+        let opening_floor = front_floor.max(back_floor);
+        let opening_ceil = front_ceil.min(back_ceil);
+        let has_opening = opening_floor < opening_ceil;
+        let narrows_front_span = back_floor > front_floor || back_ceil < front_ceil;
+
+        has_opening && narrows_front_span
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use doom_map::lumps::{
-        Blockmap, Linedef, Node, NodeBBox, Reject, Sector, Seg, Sidedef, Ssector, Vertex,
+        Blockmap, FLAG_TWO_SIDED, Linedef, Node, NodeBBox, Reject, Sector, Seg, Sidedef, Ssector,
+        Vertex,
     };
 
     fn make_two_leaf_bsp_level() -> Level {
@@ -251,7 +312,11 @@ mod tests {
         }
     }
 
-    fn make_single_subsector_reversed_depth_level() -> Level {
+    fn make_single_subsector_reversed_depth_level(
+        portal_bearing: bool,
+        back_floor_height: i16,
+        back_ceil_height: i16,
+    ) -> Level {
         let vertexes = vec![
             Vertex { x: -64, y: 256 },
             Vertex { x: 64, y: 256 },
@@ -289,30 +354,51 @@ mod tests {
             Linedef {
                 from_vertex: 2,
                 to_vertex: 3,
-                flags: 0,
+                flags: if portal_bearing { FLAG_TWO_SIDED } else { 0 },
                 special: 0,
                 tag: 0,
                 right_sidedef: 0,
-                left_sidedef: 0xFFFF,
+                left_sidedef: if portal_bearing { 1 } else { 0xFFFF },
             },
         ];
-        let sidedefs = vec![Sidedef {
-            x_offset: 0,
-            y_offset: 0,
-            upper_texture: [0; 8],
-            lower_texture: [0; 8],
-            middle_texture: *b"WALL1\0\0\0",
-            sector: 0,
-        }];
-        let sectors = vec![Sector {
-            floor_height: 0,
-            ceil_height: 128,
-            floor_flat: *b"FLAT1\0\0\0",
-            ceil_flat: *b"FLAT2\0\0\0",
-            light_level: 192,
-            special: 0,
-            tag: 0,
-        }];
+        let sidedefs = vec![
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: *b"WALL1\0\0\0",
+                sector: 0,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: [0; 8],
+                lower_texture: [0; 8],
+                middle_texture: [0; 8],
+                sector: 1,
+            },
+        ];
+        let sectors = vec![
+            Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: back_floor_height,
+                ceil_height: back_ceil_height,
+                floor_flat: *b"FLAT3\0\0\0",
+                ceil_flat: *b"FLAT4\0\0\0",
+                light_level: 160,
+                special: 0,
+                tag: 0,
+            },
+        ];
         let ssectors = vec![Ssector {
             first_seg: 0,
             seg_count: 2,
@@ -359,8 +445,36 @@ mod tests {
     }
 
     #[test]
-    fn subsector_segs_are_sorted_nearest_first() {
-        let level = make_single_subsector_reversed_depth_level();
+    fn solid_only_subsector_preserves_map_order() {
+        let level = make_single_subsector_reversed_depth_level(false, 32, 96);
+        let order = collect_front_to_back_seg_indices(&level, 0, 0);
+        assert_eq!(order, vec![0, 1]);
+    }
+
+    #[test]
+    fn closed_two_sided_subsector_preserves_map_order() {
+        let level = make_single_subsector_reversed_depth_level(true, 64, 64);
+        let order = collect_front_to_back_seg_indices(&level, 0, 0);
+        assert_eq!(order, vec![0, 1]);
+    }
+
+    #[test]
+    fn full_height_two_sided_subsector_preserves_map_order() {
+        let level = make_single_subsector_reversed_depth_level(true, 0, 128);
+        let order = collect_front_to_back_seg_indices(&level, 0, 0);
+        assert_eq!(order, vec![0, 1]);
+    }
+
+    #[test]
+    fn wider_back_sector_subsector_preserves_map_order() {
+        let level = make_single_subsector_reversed_depth_level(true, -32, 160);
+        let order = collect_front_to_back_seg_indices(&level, 0, 0);
+        assert_eq!(order, vec![0, 1]);
+    }
+
+    #[test]
+    fn portal_bearing_subsector_still_sorts_nearest_first() {
+        let level = make_single_subsector_reversed_depth_level(true, 32, 96);
         let order = collect_front_to_back_seg_indices(&level, 0, 0);
         assert_eq!(order, vec![1, 0]);
     }

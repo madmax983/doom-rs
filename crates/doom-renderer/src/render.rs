@@ -685,21 +685,35 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
 
                 // Narrow the wall drawing window for farther geometry to this
                 // portal opening so solid walls behind do not leak outside it.
-                let lower_top = screen_back_floor.max(w_top);
-                let has_lower = lower_top < w_bot;
                 let has_portal_opening = screen_back_ceil < screen_back_floor;
-                let portal_top = screen_back_ceil.clamp(0, SCREEN_H as i32 - 1);
-                let portal_bot = if !has_portal_opening || has_lower {
-                    (screen_back_floor - 1).clamp(-1, SCREEN_H as i32 - 1)
+                // Only the opaque portal bands should constrain sprite clipping.
+                // A lowered ceiling contributes a top clip; a raised floor
+                // contributes a bottom clip. Vanilla also clips sprites against
+                // front-side ledges even when no back-side wall band is drawn.
+                let upper_bot = screen_back_ceil.min(w_bot);
+                let lower_top = screen_back_floor.max(w_top);
+                let has_upper = upper_bot > w_top;
+                let has_lower = lower_top < w_bot;
+                let front_blocks_top =
+                    back_sector.is_some_and(|bs| (bs.ceil_height as i32) > ceil_h);
+                let front_blocks_bottom =
+                    back_sector.is_some_and(|bs| (bs.floor_height as i32) < floor_h);
+                let portal_top = if has_upper {
+                    upper_bot.clamp(0, SCREEN_H as i32 - 1)
                 } else {
-                    screen_back_floor.clamp(-1, SCREEN_H as i32 - 1)
+                    w_top.clamp(0, SCREEN_H as i32 - 1)
                 };
-                if portal_top <= portal_bot {
-                    if portal_top > wall_clip_top[x] {
+                let portal_bot = if has_lower {
+                    (lower_top - 1).clamp(-1, SCREEN_H as i32 - 1)
+                } else {
+                    w_bot.clamp(-1, SCREEN_H as i32 - 1)
+                };
+                if has_portal_opening {
+                    if (has_upper || front_blocks_top) && portal_top > wall_clip_top[x] {
                         wall_clip_top[x] = portal_top;
                         wall_clip_top_depth[x] = depth_f32;
                     }
-                    if portal_bot < wall_clip_bot[x] {
+                    if (has_lower || front_blocks_bottom) && portal_bot < wall_clip_bot[x] {
                         wall_clip_bot[x] = portal_bot;
                         wall_clip_bot_depth[x] = depth_f32;
                     }
@@ -708,7 +722,7 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                     if wall_clip_top[x] > wall_clip_bot[x] && depth_f32 < z_buf[x] {
                         z_buf[x] = depth_f32;
                     }
-                } else {
+                } else if !has_portal_opening {
                     wall_clip_top[x] = 1;
                     wall_clip_bot[x] = 0;
                     wall_clip_top_depth[x] = depth_f32;
@@ -720,11 +734,6 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                 }
 
                 // Clamp so upper ≤ lower (degenerate case: equal heights, sealed door).
-                let upper_bot = screen_back_ceil.min(w_bot);
-                let lower_top = screen_back_floor.max(w_top);
-                let has_upper = upper_bot > w_top;
-                let has_lower = lower_top < w_bot;
-
                 // Inline visplane emission — Doom R_RenderSegLoop style.
                 // Emit ceiling/floor strips for the FRONT sector before
                 // advancing the open_top/open_bot trackers.
@@ -3324,6 +3333,126 @@ mod tests {
         assert!(
             !is_wall_color(px_below),
             "pixel at ({center_x}, {row_below_center}) = {px_below} should NOT be wall-colored (portal opening)"
+        );
+    }
+
+    #[test]
+    fn test_full_height_two_sided_line_does_not_narrow_sprite_clip_bounds() {
+        use doom_types::ANG90;
+        init_trig();
+
+        let level = make_two_sided_level(0, 128, 0, 128);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+        let out = render_level(
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
+        );
+
+        let x = HALF_W as usize;
+        assert_eq!(
+            out.clip_top[x], 0,
+            "fully open two-sided lines must not synthesize a top sprite clip"
+        );
+        assert_eq!(
+            out.clip_bot[x],
+            SCREEN_H as i32 - 1,
+            "fully open two-sided lines must not synthesize a bottom sprite clip"
+        );
+    }
+
+    #[test]
+    fn test_floor_step_portal_only_narrows_bottom_sprite_clip() {
+        use doom_types::ANG90;
+        init_trig();
+
+        let level = make_two_sided_level(0, 128, 56, 128);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+        let out = render_level(
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
+        );
+
+        let x = HALF_W as usize;
+        assert_eq!(
+            out.clip_top[x], 0,
+            "raised-floor portals must not synthesize a top sprite clip"
+        );
+        assert!(
+            out.clip_bot[x] < SCREEN_H as i32 - 1,
+            "raised-floor portals should still narrow the bottom sprite clip"
+        );
+    }
+
+    #[test]
+    fn test_ceiling_step_portal_only_narrows_top_sprite_clip() {
+        use doom_types::ANG90;
+        init_trig();
+
+        let level = make_two_sided_level(0, 128, 0, 72);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+        let out = render_level(
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
+        );
+
+        let x = HALF_W as usize;
+        assert!(
+            out.clip_top[x] > 0,
+            "lowered-ceiling portals should narrow the top sprite clip"
+        );
+        assert_eq!(
+            out.clip_bot[x],
+            SCREEN_H as i32 - 1,
+            "lowered-ceiling portals must not synthesize a bottom sprite clip"
+        );
+    }
+
+    #[test]
+    fn test_front_dropoff_portal_narrows_bottom_sprite_clip() {
+        use doom_types::ANG90;
+        init_trig();
+
+        let level = make_two_sided_level(56, 128, 0, 128);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+        let out = render_level(
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
+        );
+
+        let x = HALF_W as usize;
+        let expected_bot = project_wall_y(-PLAYER_HEIGHT, FOCAL_LEN as f32 / 128.0);
+        assert_eq!(
+            out.clip_top[x], 0,
+            "front drop-offs must not synthesize a top sprite clip"
+        );
+        assert_eq!(
+            out.clip_bot[x], expected_bot,
+            "front drop-offs should clip sprites behind the ledge at the front floor edge"
+        );
+    }
+
+    #[test]
+    fn test_front_low_ceiling_portal_narrows_top_sprite_clip() {
+        use doom_types::ANG90;
+        init_trig();
+
+        let level = make_two_sided_level(0, 72, 0, 128);
+        let mut fb = Framebuffer::new();
+        let palette = PaletteLut::grayscale();
+        let out = render_level(
+            &level, 0, 0, ANG90, &mut fb, &palette, None, None, None, None, false,
+        );
+
+        let x = HALF_W as usize;
+        let expected_top = project_wall_y(72 - PLAYER_HEIGHT, FOCAL_LEN as f32 / 128.0);
+        assert_eq!(
+            out.clip_top[x], expected_top,
+            "front lowered ceilings should clip sprites behind the portal at the front ceiling edge"
+        );
+        assert_eq!(
+            out.clip_bot[x],
+            SCREEN_H as i32 - 1,
+            "front lowered ceilings must not synthesize a bottom sprite clip"
         );
     }
 
