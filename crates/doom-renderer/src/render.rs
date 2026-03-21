@@ -218,14 +218,26 @@ pub struct MaskedColumnDraw<'a> {
 pub struct SpriteClipStep {
     pub depth: f32,
     pub row: i32,
+    pub silhouette_height: f32,
 }
 
 #[inline]
-fn record_sprite_clip_step(history: &mut Vec<SpriteClipStep>, depth: f32, row: i32) {
-    if history.last().is_some_and(|step| step.row == row) {
+fn record_sprite_clip_step(
+    history: &mut Vec<SpriteClipStep>,
+    depth: f32,
+    row: i32,
+    silhouette_height: f32,
+) {
+    if history.last().is_some_and(|step| {
+        step.row == row && step.silhouette_height.to_bits() == silhouette_height.to_bits()
+    }) {
         return;
     }
-    history.push(SpriteClipStep { depth, row });
+    history.push(SpriteClipStep {
+        depth,
+        row,
+        silhouette_height,
+    });
 }
 
 pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw<'_>]) {
@@ -731,6 +743,16 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                     w_bot.clamp(-1, SCREEN_H as i32 - 1)
                 };
                 if has_portal_opening {
+                    let top_silhouette_height = if has_upper {
+                        back_sector.map_or(ceil_h as f32, |bs| bs.ceil_height as f32)
+                    } else {
+                        ceil_h as f32
+                    };
+                    let bottom_silhouette_height = if has_lower {
+                        back_sector.map_or(floor_h as f32, |bs| bs.floor_height as f32)
+                    } else {
+                        floor_h as f32
+                    };
                     if (has_upper || front_blocks_top) && portal_top > wall_clip_top[x] {
                         wall_clip_top[x] = portal_top;
                         wall_clip_top_depth[x] = depth_f32;
@@ -738,6 +760,7 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                             &mut wall_clip_top_history[x],
                             depth_f32,
                             portal_top,
+                            top_silhouette_height,
                         );
                     }
                     if (has_lower || front_blocks_bottom) && portal_bot < wall_clip_bot[x] {
@@ -747,6 +770,7 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                             &mut wall_clip_bot_history[x],
                             depth_f32,
                             portal_bot,
+                            bottom_silhouette_height,
                         );
                     }
                     // If accumulation of portals has fully closed this column,
@@ -759,8 +783,18 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                     wall_clip_bot[x] = 0;
                     wall_clip_top_depth[x] = depth_f32;
                     wall_clip_bot_depth[x] = depth_f32;
-                    record_sprite_clip_step(&mut wall_clip_top_history[x], depth_f32, 1);
-                    record_sprite_clip_step(&mut wall_clip_bot_history[x], depth_f32, 0);
+                    record_sprite_clip_step(
+                        &mut wall_clip_top_history[x],
+                        depth_f32,
+                        1,
+                        f32::NEG_INFINITY,
+                    );
+                    record_sprite_clip_step(
+                        &mut wall_clip_bot_history[x],
+                        depth_f32,
+                        0,
+                        f32::INFINITY,
+                    );
                     // Fully-closed portal: acts as solid for sprite occlusion.
                     if depth_f32 < z_buf[x] {
                         z_buf[x] = depth_f32;

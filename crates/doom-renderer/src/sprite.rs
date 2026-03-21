@@ -474,7 +474,7 @@ pub struct SpriteClip<'a> {
 }
 
 impl<'a> SpriteClip<'a> {
-    fn clip_top(&self, x: usize, sprite_depth: f32, unclipped_top: i32) -> i32 {
+    fn clip_top(&self, x: usize, sprite_depth: f32, sprite_top_z: f32, unclipped_top: i32) -> i32 {
         let clip_row = self
             .top_history
             .and_then(|history| history.get(x))
@@ -482,7 +482,9 @@ impl<'a> SpriteClip<'a> {
                 steps
                     .iter()
                     .rev()
-                    .find(|step| sprite_depth >= step.depth)
+                    .find(|step| {
+                        sprite_depth >= step.depth && sprite_top_z > step.silhouette_height
+                    })
                     .map(|step| step.row)
             })
             .or_else(|| (sprite_depth >= self.top_depth[x]).then_some(self.top[x]));
@@ -490,7 +492,13 @@ impl<'a> SpriteClip<'a> {
         clip_row.map_or(unclipped_top, |row| unclipped_top.max(row))
     }
 
-    fn clip_bottom(&self, x: usize, sprite_depth: f32, unclipped_bottom: i32) -> i32 {
+    fn clip_bottom(
+        &self,
+        x: usize,
+        sprite_depth: f32,
+        sprite_bottom_z: f32,
+        unclipped_bottom: i32,
+    ) -> i32 {
         let clip_row = self
             .bottom_history
             .and_then(|history| history.get(x))
@@ -498,7 +506,9 @@ impl<'a> SpriteClip<'a> {
                 steps
                     .iter()
                     .rev()
-                    .find(|step| sprite_depth >= step.depth)
+                    .find(|step| {
+                        sprite_depth >= step.depth && sprite_bottom_z < step.silhouette_height
+                    })
                     .map(|step| step.row)
             })
             .or_else(|| (sprite_depth >= self.bottom_depth[x]).then_some(self.bottom[x]));
@@ -818,6 +828,7 @@ pub fn render_actors_with_masked_ex<'a>(
         }
 
         let actor_top_z = actor.z as f32 / 65536.0 + frame.top_offset as f32;
+        let actor_bottom_z = actor_top_z - frame.height as f32;
         let (screen_y_top, screen_y_bot) =
             project_sprite_vertical_bounds(view_z, actor_top_z, sprite_scale, screen_h);
         let screen_x_left =
@@ -865,12 +876,12 @@ pub fn render_actors_with_masked_ex<'a>(
 
             // Narrow vertical extent by portal clip (mfloorclip/mceilingclip).
             let col_top = if let Some(clip) = sprite_clip {
-                clip.clip_top(sx as usize, vx, sy_top_clamped)
+                clip.clip_top(sx as usize, vx, actor_top_z, sy_top_clamped)
             } else {
                 sy_top_clamped
             };
             let col_bot = if let Some(clip) = sprite_clip {
-                clip.clip_bottom(sx as usize, vx, sy_bot_clamped)
+                clip.clip_bottom(sx as usize, vx, actor_bottom_z, sy_bot_clamped)
             } else {
                 sy_bot_clamped
             };
@@ -1093,6 +1104,7 @@ fn render_things_impl(
             .and_then(|si| level.sectors.get(si))
             .map_or(0.0, |s| s.floor_height as f32);
         let thing_top_z = thing_floor + frame.top_offset as f32;
+        let thing_bottom_z = thing_top_z - frame.height as f32;
         let (screen_y_top, screen_y_bot) =
             project_sprite_vertical_bounds(view_z, thing_top_z, sprite_scale, screen_h);
 
@@ -1160,12 +1172,12 @@ fn render_things_impl(
 
             // Narrow vertical extent by portal clip (mfloorclip/mceilingclip).
             let col_top = if let Some(clip) = sprite_clip {
-                clip.clip_top(sx as usize, vx, sy_top_clamped)
+                clip.clip_top(sx as usize, vx, thing_top_z, sy_top_clamped)
             } else {
                 sy_top_clamped
             };
             let col_bot = if let Some(clip) = sprite_clip {
-                clip.clip_bottom(sx as usize, vx, sy_bot_clamped)
+                clip.clip_bottom(sx as usize, vx, thing_bottom_z, sy_bot_clamped)
             } else {
                 sy_bot_clamped
             };
@@ -2836,10 +2848,12 @@ mod tests {
             history.push(crate::render::SpriteClipStep {
                 depth: 128.0,
                 row: 150,
+                silhouette_height: 0.0,
             });
             history.push(crate::render::SpriteClipStep {
                 depth: 256.0,
                 row: 120,
+                silhouette_height: 0.0,
             });
         }
 
@@ -2869,6 +2883,160 @@ mod tests {
         assert_eq!(
             clipped_rows.1, 150,
             "sprite in front of the farther bottom clip should fall back to the nearer clip history, got {clipped_rows:?}"
+        );
+    }
+
+    #[test]
+    fn render_actors_ignore_bottom_clip_when_sprite_is_above_silhouette_height() {
+        let level = make_test_level(vec![]);
+        let player_x = doom_types::Fixed16_16::from_int(-96);
+        let player_y = doom_types::Fixed16_16::from_int(32);
+        let actor = crate::sprite_lookup::ActorRenderInfo {
+            x: doom_types::Fixed16_16::from_int(32).raw(),
+            y: doom_types::Fixed16_16::from_int(32).raw(),
+            z: doom_types::Fixed16_16::from_int(32).raw(),
+            angle: 0,
+            sprite: doom_game::states::sprite_names::SPR_NONE,
+            frame: 0,
+            height: doom_types::Fixed16_16::from_int(32).raw(),
+            render_flag: RenderFlag::Normal,
+            fallback_prefix: Some(*b"BAR1"),
+        };
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 95));
+
+        let top = [0i32; SCREEN_W];
+        let bottom = [SCREEN_H as i32 - 1; SCREEN_W];
+        let top_depth = [f32::MAX; SCREEN_W];
+        let bottom_depth = [f32::MAX; SCREEN_W];
+        let mut bottom_history: Vec<Vec<crate::render::SpriteClipStep>> =
+            std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
+        for history in &mut bottom_history {
+            history.push(crate::render::SpriteClipStep {
+                depth: 64.0,
+                row: 90,
+                silhouette_height: 0.0,
+            });
+        }
+
+        let mut unclipped_fb = Framebuffer::new();
+        render_actors_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut unclipped_fb,
+            &cache,
+            None,
+            None,
+            Some(full_screen_sprite_clip()),
+        );
+
+        let mut clipped_fb = Framebuffer::new();
+        render_actors_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut clipped_fb,
+            &cache,
+            None,
+            None,
+            Some(SpriteClip {
+                top: &top,
+                bottom: &bottom,
+                top_depth: &top_depth,
+                bottom_depth: &bottom_depth,
+                top_history: None,
+                bottom_history: Some(&bottom_history),
+            }),
+        );
+
+        let unclipped_rows = rendered_rows(&unclipped_fb, 95).expect("baseline sprite should draw");
+        let clipped_rows =
+            rendered_rows(&clipped_fb, 95).expect("sprite above floor silhouette should draw");
+        assert_eq!(
+            clipped_rows, unclipped_rows,
+            "bottom clip from a lower sector context must not crop a sprite above that floor"
+        );
+    }
+
+    #[test]
+    fn render_actors_ignore_top_clip_when_sprite_is_below_silhouette_height() {
+        let level = make_test_level(vec![]);
+        let player_x = doom_types::Fixed16_16::from_int(-96);
+        let player_y = doom_types::Fixed16_16::from_int(32);
+        let actor = crate::sprite_lookup::ActorRenderInfo {
+            x: doom_types::Fixed16_16::from_int(32).raw(),
+            y: doom_types::Fixed16_16::from_int(32).raw(),
+            z: doom_types::Fixed16_16::from_int(0).raw(),
+            angle: 0,
+            sprite: doom_game::states::sprite_names::SPR_NONE,
+            frame: 0,
+            height: doom_types::Fixed16_16::from_int(32).raw(),
+            render_flag: RenderFlag::Normal,
+            fallback_prefix: Some(*b"BAR1"),
+        };
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 96));
+
+        let top = [0i32; SCREEN_W];
+        let bottom = [SCREEN_H as i32 - 1; SCREEN_W];
+        let top_depth = [f32::MAX; SCREEN_W];
+        let bottom_depth = [f32::MAX; SCREEN_W];
+        let mut top_history: Vec<Vec<crate::render::SpriteClipStep>> =
+            std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
+        for history in &mut top_history {
+            history.push(crate::render::SpriteClipStep {
+                depth: 64.0,
+                row: 125,
+                silhouette_height: 64.0,
+            });
+        }
+
+        let mut unclipped_fb = Framebuffer::new();
+        render_actors_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut unclipped_fb,
+            &cache,
+            None,
+            None,
+            Some(full_screen_sprite_clip()),
+        );
+
+        let mut clipped_fb = Framebuffer::new();
+        render_actors_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut clipped_fb,
+            &cache,
+            None,
+            None,
+            Some(SpriteClip {
+                top: &top,
+                bottom: &bottom,
+                top_depth: &top_depth,
+                bottom_depth: &bottom_depth,
+                top_history: Some(&top_history),
+                bottom_history: None,
+            }),
+        );
+
+        let unclipped_rows = rendered_rows(&unclipped_fb, 96).expect("baseline sprite should draw");
+        let clipped_rows =
+            rendered_rows(&clipped_fb, 96).expect("sprite below ceiling silhouette should draw");
+        assert_eq!(
+            clipped_rows, unclipped_rows,
+            "top clip from a higher ceiling context must not crop a sprite below that ceiling"
         );
     }
 
