@@ -10,11 +10,13 @@
 //! - Reject size == `ceil(N_SECTORS² / 8)`
 
 pub mod bsp;
+pub mod export;
 pub mod level;
 pub mod lumps;
 pub mod udmf;
 
 pub use bsp::{BspChild, BspError, BspTree};
+pub use export::SvgExporter;
 pub use level::{Level, LevelError};
 pub use lumps::{
     Blockmap, FLAG_TWO_SIDED, Linedef, LumpParseError, Node, NodeBBox, Reject, SIDEDEF_NONE,
