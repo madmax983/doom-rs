@@ -225,6 +225,7 @@ pub(crate) struct DoomGame {
 }
 
 const DEAD_PLAYER_VIEW_HEIGHT: i32 = 6;
+
 #[inline]
 fn next_player_view_height(current: i32, player_dead: bool) -> i32 {
     if player_dead {
@@ -1205,14 +1206,7 @@ impl DoomApp for DoomGame {
             // Draw the first-person 3D view.
             // We pass a grayscale palette; render_level currently ignores it
             // (wall colors are derived from light levels only).
-            let RenderOut {
-                z_buf,
-                clip_top,
-                clip_bot,
-                clip_top_depth,
-                clip_bot_depth,
-                masked_columns,
-            } = render_level_with_view_height_and_extra_light(
+            let render_out = render_level_with_view_height_and_extra_light(
                 &self.level,
                 px,
                 py,
@@ -1227,6 +1221,17 @@ impl DoomApp for DoomGame {
                 false,
                 self.gs.player.extra_light,
             );
+
+            let RenderOut {
+                z_buf,
+                clip_top,
+                clip_bot,
+                clip_top_depth,
+                clip_bot_depth,
+                clip_top_history,
+                clip_bot_history,
+                masked_columns,
+            } = render_out;
 
             // Project live mobj positions as state-driven billboard sprites.
             // Uses ActorRenderInfo so animations play correctly.
@@ -1285,6 +1290,8 @@ impl DoomApp for DoomGame {
                         bottom: &clip_bot,
                         top_depth: &clip_top_depth,
                         bottom_depth: &clip_bot_depth,
+                        top_history: Some(&clip_top_history),
+                        bottom_history: Some(&clip_bot_history),
                     }),
                     Some(&masked_columns),
                 );
@@ -1332,17 +1339,6 @@ impl DoomApp for DoomGame {
 
     fn active_palette(&self) -> usize {
         self.palette_flash.active_palette()
-    }
-
-    fn on_frame_timings(&mut self, tick_us: u64, render_us: u64, blit_us: u64) {
-        if self.debug_log.is_none() {
-            return;
-        }
-        let total_us = tick_us + render_us + blit_us;
-        let msg = format!(
-            "frame tick={tick_us}us render={render_us}us blit={blit_us}us total={total_us}us"
-        );
-        self.dlog(&msg);
     }
 }
 
@@ -2894,6 +2890,42 @@ mod tests {
                 && log_text.contains("movecount=7")
                 && log_text.contains("subsector=3"),
             "debug log should include AI state fields for diagnosis, got: {log_text}"
+        );
+    }
+
+    #[test]
+    fn debug_log_ignores_frame_timing_diagnostics() {
+        let log_path = unique_temp_log_path("frame-timing-ignored");
+        let log_file = std::fs::File::create(&log_path).expect("temp debug log must open");
+        let mut game = DoomGame::new(
+            make_game_state(),
+            make_test_level(),
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+            None,
+            false,
+            Some(log_file),
+            None,
+            std::collections::HashMap::new(),
+        );
+
+        <DoomGame as DoomApp>::on_frame_timings(&mut game, 5_000, 18_000, 2_000);
+        game.debug_log
+            .as_ref()
+            .expect("debug log should still be present")
+            .sync_all()
+            .expect("debug log should flush");
+        drop(game);
+
+        let log_text = std::fs::read_to_string(&log_path).expect("debug log should be readable");
+        let _ = std::fs::remove_file(&log_path);
+
+        assert!(
+            !log_text.contains("slow-frame"),
+            "frame timing diagnostics should not be written to the debug log, got: {log_text}"
         );
     }
 
