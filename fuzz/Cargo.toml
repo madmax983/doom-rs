@@ -36,3 +36,13 @@ path = "fuzz_targets/fuzz_target_2.rs"
 test = false
 doc = false
 bench = false
+
+[dependencies.doom-game]
+path = "../crates/doom-game"
+
+[[bin]]
+name = "dehacked"
+path = "fuzz_targets/dehacked.rs"
+test = false
+doc = false
+bench = false
