@@ -26,6 +26,7 @@ use doom_audio::{
     AudioDriver, GenmidiBank, MAX_CHANNELS, MusScore, SfxCache, SfxPriority, mixer::PcmSample,
 };
 use doom_wad::WadStack;
+use crossterm::style::Stylize;
 
 // ---------------------------------------------------------------------------
 // AudioEvent
@@ -80,7 +81,12 @@ impl AudioSystem {
         let driver = match AudioDriver::open(SAMPLE_RATE) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("[audio] INIT FAILED: {e} — running silently");
+                eprintln!(
+                    "{} {} {}",
+                    "🔇".yellow(),
+                    "Audio:".yellow().bold(),
+                    format!("Init failed ({e}) — running silently").dark_grey()
+                );
                 return None;
             }
         };
@@ -101,14 +107,19 @@ impl AudioSystem {
                 .and_then(|data| match GenmidiBank::parse(data) {
                     Ok(bank) => {
                         eprintln!(
-                            "[audio] GENMIDI loaded: {} instruments",
-                            bank.instruments.len()
+                            "{} {} loaded {} instruments",
+                            "🎹".green(),
+                            "GENMIDI:".green().bold(),
+                            bank.instruments.len().to_string().cyan()
                         );
                         Some(bank)
                     }
                     Err(e) => {
                         eprintln!(
-                            "[audio] GENMIDI parse failed: {e} — using default sine instrument"
+                            "{} {} {}",
+                            "⚠️".yellow(),
+                            "GENMIDI:".yellow().bold(),
+                            format!("Parse failed ({e}) — using default sine instrument").dark_grey()
                         );
                         None
                     }
@@ -129,8 +140,10 @@ impl AudioSystem {
         let on_music_start = || {};
 
         eprintln!(
-            "[audio] SfxCache: {} entries loaded; spawning thread",
-            sfx_cache.len()
+            "{} {} {} entries loaded",
+            "🔊".green(),
+            "SfxCache:".green().bold(),
+            sfx_cache.len().to_string().cyan()
         );
 
         // Spawn the audio command thread.  It owns SfxCache and shared Arcs.
@@ -139,14 +152,9 @@ impl AudioSystem {
             if let Some(bank) = genmidi_bank {
                 if let Ok(mut mp) = midi_arc.lock() {
                     mp.load_genmidi(bank);
-                    eprintln!("[audio] GENMIDI applied to MidiPlayer");
                 }
-            } else {
-                eprintln!("[audio] no GENMIDI — using default sine-wave instrument");
             }
-            eprintln!("[audio] thread started");
             audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache, on_music_start);
-            eprintln!("[audio] thread exited");
         });
 
         Some(Self {
@@ -317,23 +325,20 @@ fn audio_cmd_thread(
 
             AudioEvent::StartMusic(data) => {
                 on_music_start();
-                eprintln!("[music] StartMusic received, data_len={}", data.len());
                 match MusScore::parse(&data) {
                     Ok(score) => {
-                        eprintln!(
-                            "[music] score parsed: {} events, {} instruments",
-                            score.events.len(),
-                            score.instruments.len()
-                        );
                         if let Ok(mut mp) = midi_arc.lock() {
-                            eprintln!("[music] genmidi={}", mp.genmidi.is_some());
                             mp.load_score(score);
-                            eprintln!("[music] score loaded — playback started");
                         }
                     }
                     Err(e) => {
                         // Non-fatal: log and continue.
-                        eprintln!("[music] parse failed: {e}");
+                        eprintln!(
+                            "{} {} {}",
+                            "⚠️".yellow(),
+                            "Music:".yellow().bold(),
+                            format!("Parse failed ({e})").dark_grey()
+                        );
                     }
                 }
             }
