@@ -214,6 +214,20 @@ pub struct MaskedColumnDraw<'a> {
     pub colormap: [u8; 256],
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SpriteClipStep {
+    pub depth: f32,
+    pub row: i32,
+}
+
+#[inline]
+fn record_sprite_clip_step(history: &mut Vec<SpriteClipStep>, depth: f32, row: i32) {
+    if history.last().is_some_and(|step| step.row == row) {
+        return;
+    }
+    history.push(SpriteClipStep { depth, row });
+}
+
 pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw<'_>]) {
     for column in columns {
         draw_masked_column(
@@ -281,6 +295,10 @@ pub struct RenderOut<'a> {
     /// Depth of the portal segment that established `clip_bot[x]`, or
     /// `f32::MAX` when no bottom clip has been applied for that column.
     pub clip_bot_depth: [f32; SCREEN_W],
+    /// Monotone top-clip state changes for each screen column.
+    pub clip_top_history: Vec<Vec<SpriteClipStep>>,
+    /// Monotone bottom-clip state changes for each screen column.
+    pub clip_bot_history: Vec<Vec<SpriteClipStep>>,
     /// Deferred masked midtexture columns to interleave with sprite rendering.
     pub masked_columns: Vec<MaskedColumnDraw<'a>>,
 }
@@ -388,6 +406,10 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
     let mut wall_clip_bot = [SCREEN_H as i32 - 1; SCREEN_W];
     let mut wall_clip_top_depth = [f32::MAX; SCREEN_W];
     let mut wall_clip_bot_depth = [f32::MAX; SCREEN_W];
+    let mut wall_clip_top_history: Vec<Vec<SpriteClipStep>> =
+        std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
+    let mut wall_clip_bot_history: Vec<Vec<SpriteClipStep>> =
+        std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
     let mut masked_columns = Vec::new();
 
     // Doom-style open column tracking for inline visplane emission.
@@ -712,10 +734,20 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                     if (has_upper || front_blocks_top) && portal_top > wall_clip_top[x] {
                         wall_clip_top[x] = portal_top;
                         wall_clip_top_depth[x] = depth_f32;
+                        record_sprite_clip_step(
+                            &mut wall_clip_top_history[x],
+                            depth_f32,
+                            portal_top,
+                        );
                     }
                     if (has_lower || front_blocks_bottom) && portal_bot < wall_clip_bot[x] {
                         wall_clip_bot[x] = portal_bot;
                         wall_clip_bot_depth[x] = depth_f32;
+                        record_sprite_clip_step(
+                            &mut wall_clip_bot_history[x],
+                            depth_f32,
+                            portal_bot,
+                        );
                     }
                     // If accumulation of portals has fully closed this column,
                     // write depth so sprites behind it cannot bleed through.
@@ -727,6 +759,8 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                     wall_clip_bot[x] = 0;
                     wall_clip_top_depth[x] = depth_f32;
                     wall_clip_bot_depth[x] = depth_f32;
+                    record_sprite_clip_step(&mut wall_clip_top_history[x], depth_f32, 1);
+                    record_sprite_clip_step(&mut wall_clip_bot_history[x], depth_f32, 0);
                     // Fully-closed portal: acts as solid for sprite occlusion.
                     if depth_f32 < z_buf[x] {
                         z_buf[x] = depth_f32;
@@ -1185,6 +1219,8 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
             clip_bot: wall_clip_bot,
             clip_top_depth: wall_clip_top_depth,
             clip_bot_depth: wall_clip_bot_depth,
+            clip_top_history: wall_clip_top_history,
+            clip_bot_history: wall_clip_bot_history,
             masked_columns,
         };
     }
@@ -1253,6 +1289,8 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
         clip_bot: wall_clip_bot,
         clip_top_depth: wall_clip_top_depth,
         clip_bot_depth: wall_clip_bot_depth,
+        clip_top_history: wall_clip_top_history,
+        clip_bot_history: wall_clip_bot_history,
         masked_columns,
     }
 }
@@ -2277,6 +2315,175 @@ mod tests {
         }
     }
 
+    /// Build a level with two nested top-clipping portals in the same subsector:
+    /// - Near portal at y=128 with a shallow top clip (front ceiling 96).
+    /// - Far portal at y=256 with a deeper top clip (front ceiling 72).
+    ///
+    /// A sprite at y=192 sits behind the near portal but in front of the far
+    /// portal. Doom should still use the near portal's saved clip state for
+    /// that sprite instead of borrowing the farther portal's tighter context.
+    fn make_nested_ceiling_portal_level() -> Level {
+        use doom_map::lumps::{
+            Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
+        };
+
+        let vertexes = vec![
+            Vertex { x: -64, y: 128 },
+            Vertex { x: 64, y: 128 },
+            Vertex { x: -64, y: 256 },
+            Vertex { x: 64, y: 256 },
+        ];
+
+        let sectors = vec![
+            Sector {
+                floor_height: 0,
+                ceil_height: 96,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT3\0\0\0",
+                ceil_flat: *b"FLAT4\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: 0,
+                ceil_height: 72,
+                floor_flat: *b"FLAT5\0\0\0",
+                ceil_flat: *b"FLAT6\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT7\0\0\0",
+                ceil_flat: *b"FLAT8\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+
+        let sidedefs = vec![
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"-\0\0\0\0\0\0\0",
+                lower_texture: *b"-\0\0\0\0\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"-\0\0\0\0\0\0\0",
+                lower_texture: *b"-\0\0\0\0\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"-\0\0\0\0\0\0\0",
+                lower_texture: *b"-\0\0\0\0\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 2,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"-\0\0\0\0\0\0\0",
+                lower_texture: *b"-\0\0\0\0\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 3,
+            },
+        ];
+
+        let linedefs = vec![
+            Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+            Linedef {
+                from_vertex: 2,
+                to_vertex: 3,
+                flags: 0x0004,
+                special: 0,
+                tag: 0,
+                right_sidedef: 2,
+                left_sidedef: 3,
+            },
+        ];
+
+        let segs = vec![
+            Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 2,
+                to_vertex: 3,
+                angle: 0,
+                linedef: 1,
+                direction: 0,
+                offset: 0,
+            },
+        ];
+
+        let ssectors = vec![Ssector {
+            seg_count: segs.len() as u16,
+            first_seg: 0,
+        }];
+        let things = vec![Thing {
+            x: 0,
+            y: 0,
+            angle: 0,
+            kind: 1,
+            flags: 7,
+        }];
+
+        let reject = Reject::parse_lump(&[0u8; 2], sectors.len()).expect("reject parse");
+        let mut bm_data = vec![0u8; 8 + 2 + 4];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("blockmap parse");
+
+        Level {
+            name: "NESTTOP".to_owned(),
+            things,
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes: vec![],
+            sectors,
+            reject,
+            blockmap,
+        }
+    }
+
     fn make_iwad(lumps: &[(&str, &[u8])]) -> Vec<u8> {
         let mut data: Vec<u8> = Vec::new();
         data.extend_from_slice(b"IWAD");
@@ -2488,6 +2695,15 @@ mod tests {
 
     fn first_wall_row(fb: &Framebuffer, x: usize) -> Option<usize> {
         (0..SCREEN_H).find(|&y| matches!(fb.get_pixel(x, y), Some(px) if (32..64).contains(&px)))
+    }
+
+    fn rendered_rows(fb: &Framebuffer, palette_idx: u8) -> Option<(usize, usize)> {
+        let top = (0..SCREEN_H)
+            .find(|&y| (0..SCREEN_W).any(|x| fb.get_pixel(x, y) == Some(palette_idx)))?;
+        let bottom = (0..SCREEN_H)
+            .rev()
+            .find(|&y| (0..SCREEN_W).any(|x| fb.get_pixel(x, y) == Some(palette_idx)))?;
+        Some((top, bottom))
     }
 
     fn exact_view_depth_for_screen_x(
@@ -2919,6 +3135,8 @@ mod tests {
                 bottom: &render_out.clip_bot,
                 top_depth: &render_out.clip_top_depth,
                 bottom_depth: &render_out.clip_bot_depth,
+                top_history: Some(&render_out.clip_top_history),
+                bottom_history: Some(&render_out.clip_bot_history),
             }),
             Some(&render_out.masked_columns),
         );
@@ -2932,6 +3150,129 @@ mod tests {
         assert!(
             has_grate,
             "opaque grate columns must still draw in front of the sprite"
+        );
+    }
+
+    #[test]
+    fn sprite_between_nested_top_portals_keeps_near_clip_context() {
+        use doom_game::states::sprite_names;
+        use doom_types::{ANG90, Fixed16_16};
+
+        init_trig();
+
+        let actor = ActorRenderInfo {
+            x: 0,
+            y: 192 << 16,
+            z: 128 << 16,
+            angle: 0,
+            sprite: sprite_names::SPR_TROO,
+            frame: 0,
+            height: 64 << 16,
+            render_flag: RenderFlag::Normal,
+            fallback_prefix: None,
+        };
+        let sprite_cache = make_opaque_sprite_cache("TROOA0", 8, 64, 201);
+        let palette = PaletteLut::grayscale();
+        let near_only = make_two_sided_level(0, 96, 0, 128);
+
+        let mut unclipped_fb = Framebuffer::new();
+        crate::sprite::render_actors_ex(
+            &[actor],
+            &near_only,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            ANG90,
+            &mut unclipped_fb,
+            &sprite_cache,
+            None,
+            None,
+            None,
+        );
+
+        let mut near_walls_fb = Framebuffer::new();
+        let near_out = render_level(
+            &near_only,
+            0,
+            0,
+            ANG90,
+            &mut near_walls_fb,
+            &palette,
+            None,
+            None,
+            None,
+            None,
+            false,
+        );
+        let mut near_fb = Framebuffer::new();
+        crate::sprite::render_actors_ex(
+            &[actor],
+            &near_only,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            ANG90,
+            &mut near_fb,
+            &sprite_cache,
+            Some(&near_out.z_buf),
+            None,
+            Some(crate::sprite::SpriteClip {
+                top: &near_out.clip_top,
+                bottom: &near_out.clip_bot,
+                top_depth: &near_out.clip_top_depth,
+                bottom_depth: &near_out.clip_bot_depth,
+                top_history: Some(&near_out.clip_top_history),
+                bottom_history: Some(&near_out.clip_bot_history),
+            }),
+        );
+
+        let nested = make_nested_ceiling_portal_level();
+        let mut nested_walls_fb = Framebuffer::new();
+        let nested_out = render_level(
+            &nested,
+            0,
+            0,
+            ANG90,
+            &mut nested_walls_fb,
+            &palette,
+            None,
+            None,
+            None,
+            None,
+            false,
+        );
+        let mut nested_fb = Framebuffer::new();
+        crate::sprite::render_actors_ex(
+            &[actor],
+            &nested,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            ANG90,
+            &mut nested_fb,
+            &sprite_cache,
+            Some(&nested_out.z_buf),
+            None,
+            Some(crate::sprite::SpriteClip {
+                top: &nested_out.clip_top,
+                bottom: &nested_out.clip_bot,
+                top_depth: &nested_out.clip_top_depth,
+                bottom_depth: &nested_out.clip_bot_depth,
+                top_history: Some(&nested_out.clip_top_history),
+                bottom_history: Some(&nested_out.clip_bot_history),
+            }),
+        );
+
+        let unclipped_rows =
+            rendered_rows(&unclipped_fb, 201).expect("baseline sprite should draw");
+        let near_rows = rendered_rows(&near_fb, 201).expect("near-only clipped sprite should draw");
+        let nested_rows =
+            rendered_rows(&nested_fb, 201).expect("nested clipped sprite should draw");
+
+        assert!(
+            near_rows.0 > unclipped_rows.0,
+            "near portal must actually crop the tall sprite: unclipped={unclipped_rows:?} near={near_rows:?}"
+        );
+        assert_eq!(
+            nested_rows, near_rows,
+            "sprite between the near and far portals should keep the near portal clip context, got nested={nested_rows:?} near={near_rows:?}"
         );
     }
 

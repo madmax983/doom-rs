@@ -469,23 +469,41 @@ pub struct SpriteClip<'a> {
     pub bottom: &'a [i32; SCREEN_W],
     pub top_depth: &'a [f32; SCREEN_W],
     pub bottom_depth: &'a [f32; SCREEN_W],
+    pub top_history: Option<&'a [Vec<crate::render::SpriteClipStep>]>,
+    pub bottom_history: Option<&'a [Vec<crate::render::SpriteClipStep>]>,
 }
 
 impl<'a> SpriteClip<'a> {
     fn clip_top(&self, x: usize, sprite_depth: f32, unclipped_top: i32) -> i32 {
-        if sprite_depth >= self.top_depth[x] {
-            unclipped_top.max(self.top[x])
-        } else {
-            unclipped_top
-        }
+        let clip_row = self
+            .top_history
+            .and_then(|history| history.get(x))
+            .and_then(|steps| {
+                steps
+                    .iter()
+                    .rev()
+                    .find(|step| sprite_depth >= step.depth)
+                    .map(|step| step.row)
+            })
+            .or_else(|| (sprite_depth >= self.top_depth[x]).then_some(self.top[x]));
+
+        clip_row.map_or(unclipped_top, |row| unclipped_top.max(row))
     }
 
     fn clip_bottom(&self, x: usize, sprite_depth: f32, unclipped_bottom: i32) -> i32 {
-        if sprite_depth >= self.bottom_depth[x] {
-            unclipped_bottom.min(self.bottom[x])
-        } else {
-            unclipped_bottom
-        }
+        let clip_row = self
+            .bottom_history
+            .and_then(|history| history.get(x))
+            .and_then(|steps| {
+                steps
+                    .iter()
+                    .rev()
+                    .find(|step| sprite_depth >= step.depth)
+                    .map(|step| step.row)
+            })
+            .or_else(|| (sprite_depth >= self.bottom_depth[x]).then_some(self.bottom[x]));
+
+        clip_row.map_or(unclipped_bottom, |row| unclipped_bottom.min(row))
     }
 }
 
@@ -2457,6 +2475,8 @@ mod tests {
             bottom: &BOTTOM,
             top_depth: &DEPTH,
             bottom_depth: &DEPTH,
+            top_history: None,
+            bottom_history: None,
         }
     }
 
@@ -2683,6 +2703,8 @@ mod tests {
             bottom: &bottom,
             top_depth: &top_depth,
             bottom_depth: &bottom_depth,
+            top_history: None,
+            bottom_history: None,
         };
 
         let mut unclipped_fb = Framebuffer::new();
@@ -2755,6 +2777,8 @@ mod tests {
             bottom: &bottom,
             top_depth: &top_depth,
             bottom_depth: &bottom_depth,
+            top_history: None,
+            bottom_history: None,
         };
 
         let mut fb = Framebuffer::new();
@@ -2776,6 +2800,75 @@ mod tests {
         assert!(
             clipped_rows.0 >= 145 && clipped_rows.1 <= 148,
             "sprite behind portal should be clipped to the portal window, got {clipped_rows:?}"
+        );
+    }
+
+    #[test]
+    fn render_actors_fall_back_to_nearer_bottom_clip_history() {
+        let level = make_test_level(vec![]);
+        let player_x = doom_types::Fixed16_16::from_int(-160);
+        let player_y = doom_types::Fixed16_16::from_int(32);
+        let actor = crate::sprite_lookup::ActorRenderInfo {
+            x: doom_types::Fixed16_16::from_int(32).raw(),
+            y: doom_types::Fixed16_16::from_int(32).raw(),
+            z: doom_types::Fixed16_16::from_int(-64).raw(),
+            angle: 0,
+            sprite: doom_game::states::sprite_names::SPR_NONE,
+            frame: 0,
+            height: doom_types::Fixed16_16::from_int(128).raw(),
+            render_flag: RenderFlag::Normal,
+            fallback_prefix: Some(*b"BAR1"),
+        };
+        let mut cache = SpriteCache::empty();
+        let frame = make_opaque_sprite(8, 128, 94);
+        cache.insert("BAR1A0".to_string(), frame);
+
+        let top = [0i32; SCREEN_W];
+        let mut bottom = [120i32; SCREEN_W];
+        let top_depth = [f32::MAX; SCREEN_W];
+        let mut bottom_depth = [256.0f32; SCREEN_W];
+        bottom.fill(120);
+        bottom_depth.fill(256.0);
+
+        let mut bottom_history: Vec<Vec<crate::render::SpriteClipStep>> =
+            std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
+        for history in &mut bottom_history {
+            history.push(crate::render::SpriteClipStep {
+                depth: 128.0,
+                row: 150,
+            });
+            history.push(crate::render::SpriteClipStep {
+                depth: 256.0,
+                row: 120,
+            });
+        }
+
+        let mut fb = Framebuffer::new();
+        render_actors_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut fb,
+            &cache,
+            None,
+            None,
+            Some(SpriteClip {
+                top: &top,
+                bottom: &bottom,
+                top_depth: &top_depth,
+                bottom_depth: &bottom_depth,
+                top_history: None,
+                bottom_history: Some(&bottom_history),
+            }),
+        );
+
+        let clipped_rows =
+            rendered_rows(&fb, 94).expect("sprite between clip contributors should draw");
+        assert_eq!(
+            clipped_rows.1, 150,
+            "sprite in front of the farther bottom clip should fall back to the nearer clip history, got {clipped_rows:?}"
         );
     }
 

@@ -527,6 +527,21 @@ impl DoomEventLoop {
         self.scaling_mode = mode;
     }
 
+    fn effective_renderer_mode(&self) -> RendererMode {
+        match self.renderer_mode {
+            RendererMode::Sixel if self.picker.protocol_type() != ProtocolType::Sixel => {
+                RendererMode::Halfblocks
+            }
+            RendererMode::Kitty if self.picker.protocol_type() != ProtocolType::Kitty => {
+                RendererMode::Halfblocks
+            }
+            RendererMode::Iterm2 if self.picker.protocol_type() != ProtocolType::Iterm2 => {
+                RendererMode::Halfblocks
+            }
+            other => other,
+        }
+    }
+
     /// Run the game loop until the user quits (Q or Escape).
     ///
     /// On the first call, the `Terminal` handle is moved into the blit thread
@@ -682,18 +697,7 @@ impl DoomEventLoop {
 
         // Resolve the effective mode: if the user picked a graphics protocol the
         // terminal doesn't support, silently fall back to halfblocks.
-        let effective = match self.renderer_mode {
-            RendererMode::Sixel if self.picker.protocol_type() != ProtocolType::Sixel => {
-                RendererMode::Halfblocks
-            }
-            RendererMode::Kitty if self.picker.protocol_type() != ProtocolType::Kitty => {
-                RendererMode::Halfblocks
-            }
-            RendererMode::Iterm2 if self.picker.protocol_type() != ProtocolType::Iterm2 => {
-                RendererMode::Halfblocks
-            }
-            other => other,
-        };
+        let effective = self.effective_renderer_mode();
 
         // ── Build payload ────────────────────────────────────────────────────
         let payload = match effective {
