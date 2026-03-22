@@ -293,78 +293,112 @@ impl DehPatch {
         patch: &mut DehPatch,
     ) -> Result<(), DehError> {
         // --- Early return for sections whose field lines look like headers ---
-        // CodePtr lines look like "Frame N = ActionName", which would be
-        // falsely captured by the "Frame N" section header detection below.
-        // Misc lines look like "Key = value" which could also collide.
-        // Handle these FIRST, before any section header detection.
-        match section {
-            Section::CodePtr => {
-                // Allow transitioning to a new section header.
-                if trimmed.eq_ignore_ascii_case("[STRINGS]")
-                    || trimmed.eq_ignore_ascii_case("[CODEPTR]")
-                    || trimmed.starts_with("Thing ")
-                    || trimmed.starts_with("Weapon ")
-                    || trimmed.starts_with("Ammo ")
-                    || trimmed.starts_with("Misc")
-                    || trimmed.starts_with("Text ")
-                {
-                    // Fall through to section header detection below.
-                } else {
-                    // Lines like: "Frame 10 = A_FireBFG"
-                    if let Some(eq_pos) = trimmed.find('=') {
-                        let lhs = trimmed[..eq_pos].trim();
-                        let rhs = trimmed[eq_pos + 1..].trim();
-                        if let Some(frame_part) = lhs.strip_prefix("Frame ") {
-                            if let Ok(frame_num) = frame_part.trim().parse::<usize>() {
-                                patch.code_pointers.insert(frame_num, rhs.to_owned());
-                            }
-                        }
-                    }
-                    return Ok(());
-                }
-            }
-            Section::Misc => {
-                // Allow transitioning to a new section header.
-                if trimmed.eq_ignore_ascii_case("[STRINGS]")
-                    || trimmed.eq_ignore_ascii_case("[CODEPTR]")
-                    || trimmed.starts_with("Thing ")
-                    || trimmed.starts_with("Frame ")
-                    || trimmed.starts_with("Weapon ")
-                    || trimmed.starts_with("Ammo ")
-                    || trimmed.starts_with("Misc")
-                    || trimmed.starts_with("Text ")
-                {
-                    // Fall through to section header detection below.
-                } else {
-                    // Lines like: "Key = value"
-                    if let Ok((key, val)) = Self::split_field(trimmed) {
-                        if let Ok(v) = Self::parse_i32(val) {
-                            patch.misc.push(MiscPatch {
-                                key: key.to_owned(),
-                                value: v,
-                            });
-                        }
-                    }
-                    return Ok(());
-                }
-            }
-            _ => {}
+        if Self::try_parse_codeptr_or_misc(trimmed, section, patch)? {
+            return Ok(());
         }
 
         // --- Section header detection ---
+        if Self::try_parse_preamble_or_header(trimmed, section, patch)? {
+            return Ok(());
+        }
 
+        // --- Field line: "key = value" ---
+        Self::parse_field(trimmed, section, patch)
+    }
+
+    /// Push a finished section into the appropriate `patch` vec.
+    fn finalise_section(section: Section, patch: &mut DehPatch) {
+        match section {
+            Section::None | Section::Strings | Section::CodePtr | Section::Misc => {}
+            Section::Thing(tp) => patch.things.push(tp),
+            Section::Frame(fp) => patch.frames.push(fp),
+            Section::Weapon(wp) => patch.weapons.push(wp),
+            Section::Ammo(ap) => patch.ammo.push(ap),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Parsing helpers
+    // -----------------------------------------------------------------------
+    /// Returns true if the line looks like a common section header.
+    fn is_common_header_for_misc(trimmed: &str) -> bool {
+        trimmed.eq_ignore_ascii_case("[STRINGS]")
+            || trimmed.eq_ignore_ascii_case("[CODEPTR]")
+            || trimmed.starts_with("Thing ")
+            || trimmed.starts_with("Frame ")
+            || trimmed.starts_with("Weapon ")
+            || trimmed.starts_with("Ammo ")
+            || trimmed.starts_with("Misc")
+            || trimmed.starts_with("Text ")
+    }
+
+    /// Tries to parse a line as a CodePtr or Misc field.
+    /// Returns `Ok(true)` if it handled the line, or `Ok(false)` if it should
+    /// fall through to regular section header detection.
+    fn try_parse_codeptr_or_misc(
+        trimmed: &str,
+        section: &Section,
+        patch: &mut DehPatch,
+    ) -> Result<bool, DehError> {
+        match section {
+            Section::CodePtr => {
+                if trimmed.eq_ignore_ascii_case("[STRINGS]")
+                    || trimmed.eq_ignore_ascii_case("[CODEPTR]")
+                    || trimmed.starts_with("Thing ")
+                    || trimmed.starts_with("Weapon ")
+                    || trimmed.starts_with("Ammo ")
+                    || trimmed.starts_with("Misc")
+                    || trimmed.starts_with("Text ")
+                {
+                    return Ok(false);
+                }
+                if let Some(eq_pos) = trimmed.find('=') {
+                    let lhs = trimmed[..eq_pos].trim();
+                    let rhs = trimmed[eq_pos + 1..].trim();
+                    if let Some(frame_part) = lhs.strip_prefix("Frame ") {
+                        if let Ok(frame_num) = frame_part.trim().parse::<usize>() {
+                            patch.code_pointers.insert(frame_num, rhs.to_owned());
+                        }
+                    }
+                }
+                Ok(true)
+            }
+            Section::Misc => {
+                if Self::is_common_header_for_misc(trimmed) {
+                    return Ok(false);
+                }
+                if let Ok((key, val)) = Self::split_field(trimmed) {
+                    if let Ok(v) = Self::parse_i32(val) {
+                        patch.misc.push(MiscPatch {
+                            key: key.to_owned(),
+                            value: v,
+                        });
+                    }
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
+    }
+    /// Checks for a section header or preamble line.
+    /// Returns `Ok(true)` if it successfully matched and processed a header.
+    fn try_parse_preamble_or_header(
+        trimmed: &str,
+        section: &mut Section,
+        patch: &mut DehPatch,
+    ) -> Result<bool, DehError> {
         // [STRINGS] section
         if trimmed.eq_ignore_ascii_case("[STRINGS]") {
             let old = std::mem::replace(section, Section::Strings);
             Self::finalise_section(old, patch);
-            return Ok(());
+            return Ok(true);
         }
 
         // [CODEPTR] section
         if trimmed.eq_ignore_ascii_case("[CODEPTR]") {
             let old = std::mem::replace(section, Section::CodePtr);
             Self::finalise_section(old, patch);
-            return Ok(());
+            return Ok(true);
         }
 
         // Informational headers (patch file preamble)
@@ -372,24 +406,24 @@ impl DehPatch {
             if let Ok(v) = rest.trim().parse::<i32>() {
                 patch.doom_version = Some(v);
             }
-            return Ok(());
+            return Ok(true);
         }
         if trimmed.starts_with("Doom version =") {
-            return Ok(());
+            return Ok(true);
         }
         if let Some(rest) = trimmed.strip_prefix("Patch format = ") {
             if let Ok(v) = rest.trim().parse::<i32>() {
                 patch.patch_format = Some(v);
             }
-            return Ok(());
+            return Ok(true);
         }
         if trimmed.starts_with("Patch format =") {
-            return Ok(());
+            return Ok(true);
         }
 
         // Skip "Patch File for DeHackEd" preamble lines
         if trimmed.starts_with("Patch File for") {
-            return Ok(());
+            return Ok(true);
         }
 
         // Thing N [optional name]
@@ -404,7 +438,7 @@ impl DehPatch {
                     }),
                 );
                 Self::finalise_section(old, patch);
-                return Ok(());
+                return Ok(true);
             }
         }
 
@@ -420,7 +454,7 @@ impl DehPatch {
                     }),
                 );
                 Self::finalise_section(old, patch);
-                return Ok(());
+                return Ok(true);
             }
         }
 
@@ -436,7 +470,7 @@ impl DehPatch {
                     }),
                 );
                 Self::finalise_section(old, patch);
-                return Ok(());
+                return Ok(true);
             }
         }
 
@@ -452,7 +486,7 @@ impl DehPatch {
                     }),
                 );
                 Self::finalise_section(old, patch);
-                return Ok(());
+                return Ok(true);
             }
         }
 
@@ -460,10 +494,17 @@ impl DehPatch {
         if trimmed.starts_with("Misc") {
             let old = std::mem::replace(section, Section::Misc);
             Self::finalise_section(old, patch);
-            return Ok(());
+            return Ok(true);
         }
 
-        // --- Field line: "key = value" ---
+        Ok(false)
+    }
+    /// Parses a "key = value" field line for the currently active section.
+    fn parse_field(
+        trimmed: &str,
+        section: &mut Section,
+        patch: &mut DehPatch,
+    ) -> Result<(), DehError> {
         match section {
             Section::None | Section::CodePtr | Section::Misc => {
                 // Outside a recognised section (or CodePtr/Misc already handled
@@ -537,21 +578,6 @@ impl DehPatch {
 
         Ok(())
     }
-
-    /// Push a finished section into the appropriate `patch` vec.
-    fn finalise_section(section: Section, patch: &mut DehPatch) {
-        match section {
-            Section::None | Section::Strings | Section::CodePtr | Section::Misc => {}
-            Section::Thing(tp) => patch.things.push(tp),
-            Section::Frame(fp) => patch.frames.push(fp),
-            Section::Weapon(wp) => patch.weapons.push(wp),
-            Section::Ammo(ap) => patch.ammo.push(ap),
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // Parsing helpers
-    // -----------------------------------------------------------------------
 
     /// Split `"key = value"` into `(trimmed_key, trimmed_value)`.
     fn split_field(line: &str) -> Result<(&str, &str), DehError> {
