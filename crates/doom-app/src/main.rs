@@ -1358,14 +1358,15 @@ fn draw_console_overlay(fb: &mut Framebuffer, console: &console::Console) {
     draw_mini_string(fb, 2, "--- CONSOLE ---", COLOR_HEADER);
 
     // Draw recent messages (up to 8), newest first.
-    let msgs: Vec<&str> = console
+    // Iterating directly avoids a `.collect::<Vec<_>>()` allocation per frame.
+    for (i, msg) in console
         .messages
         .iter()
         .rev()
         .take(8)
         .map(|s| s.as_str())
-        .collect();
-    for (i, msg) in msgs.iter().enumerate() {
+        .enumerate()
+    {
         let y = 10 + i * CHAR_H;
         if y + CHAR_H > PANEL_H {
             break;
