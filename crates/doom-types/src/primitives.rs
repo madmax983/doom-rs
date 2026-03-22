@@ -44,6 +44,12 @@ impl Brightness {
         Some(Self(v))
     }
 
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::Brightness;
+    /// let b = Brightness::new(128).unwrap();
+    /// assert_eq!(b.raw(), 128);
+    /// ```
     #[inline]
     pub const fn raw(self) -> u8 {
         self.0
@@ -85,6 +91,12 @@ impl SectorSpecial {
         if v <= 16 { Some(Self(v)) } else { None }
     }
 
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::SectorSpecial;
+    /// let s = SectorSpecial::NORMAL;
+    /// assert_eq!(s.raw(), 0);
+    /// ```
     #[inline]
     pub const fn raw(self) -> u8 {
         self.0
@@ -120,6 +132,12 @@ impl SkillLevel {
         if v <= 4 { Some(Self(v)) } else { None }
     }
 
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::SkillLevel;
+    /// let s = SkillLevel::UV;
+    /// assert_eq!(s.raw(), 3);
+    /// ```
     #[inline]
     pub const fn raw(self) -> u8 {
         self.0
@@ -156,6 +174,12 @@ impl PlayerNum {
         if v <= 3 { Some(Self(v)) } else { None }
     }
 
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::PlayerNum;
+    /// let p = PlayerNum::new(2).unwrap();
+    /// assert_eq!(p.raw(), 2);
+    /// ```
     #[inline]
     pub const fn raw(self) -> u8 {
         self.0
@@ -183,6 +207,12 @@ impl Coord {
         Self(v)
     }
 
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::Coord;
+    /// let c = Coord::new(32);
+    /// assert_eq!(c.raw(), 32);
+    /// ```
     #[inline]
     pub const fn raw(self) -> i16 {
         self.0

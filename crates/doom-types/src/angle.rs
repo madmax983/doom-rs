@@ -48,36 +48,84 @@ impl Bam {
     pub const ZERO: Self = Self(0);
 
     /// Create from a raw `u32`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::Bam;
+    /// let a = Bam::from_raw(0x4000_0000); // 90 degrees
+    /// assert_eq!(a.raw(), 0x4000_0000);
+    /// ```
     #[inline]
     pub const fn from_raw(raw: u32) -> Self {
         Self(raw)
     }
 
     /// Raw `u32` bit pattern.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::Bam;
+    /// let a = Bam::from_raw(0x8000_0000);
+    /// assert_eq!(a.raw(), 0x8000_0000);
+    /// ```
     #[inline]
     pub const fn raw(self) -> u32 {
         self.0
     }
 
     /// Wrapping addition (always correct for angles).
+    ///
+    /// Because angles are mapped to the full `u32` range, overflowing past 360 degrees
+    /// naturally wraps back around to 0 degrees via integer overflow.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Bam, ANG90, ANG180};
+    /// assert_eq!(ANG90.wrapping_add(ANG90), ANG180);
+    /// ```
     #[inline]
     pub fn wrapping_add(self, rhs: Self) -> Self {
         Self(self.0.wrapping_add(rhs.0))
     }
 
     /// Wrapping subtraction.
+    ///
+    /// Underflowing past 0 degrees wraps around to 360 degrees.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Bam, ANG90, ANG270};
+    /// assert_eq!(Bam::ZERO.wrapping_sub(ANG90), ANG270);
+    /// ```
     #[inline]
     pub fn wrapping_sub(self, rhs: Self) -> Self {
         Self(self.0.wrapping_sub(rhs.0))
     }
 
     /// Negate (180° flip = additive inverse in modular arithmetic).
+    ///
+    /// Flipping an angle is equivalent to adding 180 degrees.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Bam, ANG90, ANG270};
+    /// assert_eq!(ANG90.negate(), ANG270);
+    /// ```
     #[inline]
     pub fn negate(self) -> Self {
         Self(self.0.wrapping_neg())
     }
 
     /// Fine-angle index (0..8191) used for sin/cos table lookup.
+    ///
+    /// Doom uses an 8192-entry table for full-circle trigonometry.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::ANG90;
+    /// // 90 degrees is exactly 1/4th of the way through the 8192 entry table.
+    /// assert_eq!(ANG90.fine_angle(), 2048);
+    /// ```
     #[inline]
     pub const fn fine_angle(self) -> usize {
         (self.0 >> BAM_TO_FINE_SHIFT) as usize
@@ -85,8 +133,17 @@ impl Bam {
 
     /// Sin lookup (requires `init_trig_tables()` to have been called).
     ///
+    /// Maps the angle to an index in the precomputed trigonometry table.
+    ///
     /// # Safety
     /// Safe only after `init_trig_tables()`. Returns 0 before initialization.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Bam, ANG90, FIXED_ONE};
+    /// unsafe { Bam::init_trig_tables(); }
+    /// assert_eq!(ANG90.sin(), FIXED_ONE);
+    /// ```
     pub fn sin(self) -> Fixed16_16 {
         if !FINESINE.load(core::sync::atomic::Ordering::Acquire) {
             return Fixed16_16::ZERO;
@@ -96,6 +153,14 @@ impl Bam {
     }
 
     /// Cos lookup (sin shifted by 90°).
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Bam, ANG180, FIXED_ONE};
+    /// unsafe { Bam::init_trig_tables(); }
+    /// assert_eq!(Bam::ZERO.cos(), FIXED_ONE);
+    /// assert_eq!(ANG180.cos(), -FIXED_ONE);
+    /// ```
     pub fn cos(self) -> Fixed16_16 {
         let cos_angle = Bam(self.0.wrapping_add(ANG90.0));
         cos_angle.sin()
@@ -107,6 +172,13 @@ impl Bam {
     ///
     /// # Safety
     /// Must not be called concurrently or more than once.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Bam, ANG90, FIXED_ONE};
+    /// unsafe { Bam::init_trig_tables(); }
+    /// assert_eq!(ANG90.sin(), FIXED_ONE);
+    /// ```
     pub unsafe fn init_trig_tables() {
         use core::f64::consts::PI;
         // SAFETY: single-threaded init before any reads.
