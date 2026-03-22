@@ -231,30 +231,14 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
         }
 
         CheatCode::AllWeaponsAmmoKeys => {
-            // All weapons.
-            for slot in gs.player.weapons.iter_mut() {
-                *slot = true;
-            }
-            // Max ammo.
-            for (i, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
-                gs.player.max_ammo[i] = max_ammo;
-                gs.player.give_ammo(i, max_ammo);
-            }
+            give_all_weapons_and_ammo(gs);
             // All 6 keys.
             gs.player.keys = 0x3F;
             true
         }
 
         CheatCode::AllWeaponsAmmo => {
-            // All weapons.
-            for slot in gs.player.weapons.iter_mut() {
-                *slot = true;
-            }
-            // Max ammo.
-            for (i, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
-                gs.player.max_ammo[i] = max_ammo;
-                gs.player.give_ammo(i, max_ammo);
-            }
+            give_all_weapons_and_ammo(gs);
             // Explicitly do NOT give keys.
             true
         }
@@ -312,6 +296,19 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
             // Caller handles the actual warp / music switch using trailing digits.
             true
         }
+    }
+}
+
+/// Give the player all weapons and set all ammo to maximum.
+fn give_all_weapons_and_ammo(gs: &mut GameState) {
+    // All weapons.
+    for slot in gs.player.weapons.iter_mut() {
+        *slot = true;
+    }
+    // Max ammo.
+    for (i, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
+        gs.player.max_ammo[i] = max_ammo;
+        gs.player.give_ammo(i, max_ammo);
     }
 }
 
