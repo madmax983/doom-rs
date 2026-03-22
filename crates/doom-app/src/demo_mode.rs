@@ -60,12 +60,12 @@ impl Drop for DemoRecordingWrapper {
         let bytes = match self.recorder.to_bytes() {
             Ok(b) => b,
             Err(e) => {
-                eprintln!("Failed to serialise demo: {e}");
+                log::error!("Failed to serialise demo: {e}");
                 return;
             }
         };
         if let Err(e) = std::fs::write(&self.save_path, &bytes) {
-            eprintln!("Failed to write demo '{}': {e}", self.save_path.display());
+            log::error!("Failed to write demo '{}': {e}", self.save_path.display());
         }
     }
 }

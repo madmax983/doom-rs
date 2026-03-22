@@ -80,7 +80,7 @@ impl AudioSystem {
         let driver = match AudioDriver::open(SAMPLE_RATE) {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("[audio] INIT FAILED: {e} — running silently");
+                log::warn!("[audio] INIT FAILED: {e} — running silently");
                 return None;
             }
         };
@@ -100,14 +100,14 @@ impl AudioSystem {
             wad.lump_data("GENMIDI")
                 .and_then(|data| match GenmidiBank::parse(data) {
                     Ok(bank) => {
-                        eprintln!(
+                        log::debug!(
                             "[audio] GENMIDI loaded: {} instruments",
                             bank.instruments.len()
                         );
                         Some(bank)
                     }
                     Err(e) => {
-                        eprintln!(
+                        log::warn!(
                             "[audio] GENMIDI parse failed: {e} — using default sine instrument"
                         );
                         None
@@ -128,7 +128,7 @@ impl AudioSystem {
         #[cfg(not(test))]
         let on_music_start = || {};
 
-        eprintln!(
+        log::debug!(
             "[audio] SfxCache: {} entries loaded; spawning thread",
             sfx_cache.len()
         );
@@ -139,14 +139,14 @@ impl AudioSystem {
             if let Some(bank) = genmidi_bank {
                 if let Ok(mut mp) = midi_arc.lock() {
                     mp.load_genmidi(bank);
-                    eprintln!("[audio] GENMIDI applied to MidiPlayer");
+                    log::debug!("[audio] GENMIDI applied to MidiPlayer");
                 }
             } else {
-                eprintln!("[audio] no GENMIDI — using default sine-wave instrument");
+                log::debug!("[audio] no GENMIDI — using default sine-wave instrument");
             }
-            eprintln!("[audio] thread started");
+            log::debug!("[audio] thread started");
             audio_cmd_thread(rx, &mixer_arc, &midi_arc, &sfx_cache, on_music_start);
-            eprintln!("[audio] thread exited");
+            log::debug!("[audio] thread exited");
         });
 
         Some(Self {
@@ -317,23 +317,23 @@ fn audio_cmd_thread(
 
             AudioEvent::StartMusic(data) => {
                 on_music_start();
-                eprintln!("[music] StartMusic received, data_len={}", data.len());
+                log::debug!("[music] StartMusic received, data_len={}", data.len());
                 match MusScore::parse(&data) {
                     Ok(score) => {
-                        eprintln!(
+                        log::debug!(
                             "[music] score parsed: {} events, {} instruments",
                             score.events.len(),
                             score.instruments.len()
                         );
                         if let Ok(mut mp) = midi_arc.lock() {
-                            eprintln!("[music] genmidi={}", mp.genmidi.is_some());
+                            log::debug!("[music] genmidi={}", mp.genmidi.is_some());
                             mp.load_score(score);
-                            eprintln!("[music] score loaded — playback started");
+                            log::debug!("[music] score loaded — playback started");
                         }
                     }
                     Err(e) => {
                         // Non-fatal: log and continue.
-                        eprintln!("[music] parse failed: {e}");
+                        log::warn!("[music] parse failed: {e}");
                     }
                 }
             }
