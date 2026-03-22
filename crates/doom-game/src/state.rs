@@ -14,18 +14,22 @@ use crate::spawn::Skill;
 // Sound events
 // ---------------------------------------------------------------------------
 
+/// Represents the required key color when a locked door is denied access.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LockedDoorColor {
+    /// A blue keycard or skull key is required.
+    Blue,
+    /// A red keycard or skull key is required.
+    Red,
+    /// A yellow keycard or skull key is required.
+    Yellow,
+}
+
 /// A sound event emitted by the game simulation.
 ///
 /// The app (doom-app) drains `GameState::sound_queue` each tic and maps each
 /// variant to the appropriate WAD lump name for playback.  The game crate
 /// intentionally has no audio dependency — it only describes *what* happened.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LockedDoorColor {
-    Blue,
-    Red,
-    Yellow,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SoundRequest {
     /// Monster spotted the player / woke up.

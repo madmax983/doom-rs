@@ -406,6 +406,18 @@ impl Clone for Slot {
 ///
 /// Slot indices are stable; the generation counter prevents use-after-free.
 /// Clone produces a fully independent deep copy for rollback snapshots.
+///
+/// # Usage
+/// ```
+/// use doom_game::mobj::{MobjSlab, Mobj, MobjHandle, MobjKind};
+/// use doom_types::{Fixed16_16, Bam};
+/// let mut slab = MobjSlab::new();
+/// let mobj = Mobj::new(MobjKind::Player, Fixed16_16::ZERO, Fixed16_16::ZERO, Bam::ZERO);
+/// let handle: MobjHandle = slab.alloc(mobj);
+/// assert!(slab.get(handle).is_some());
+/// slab.free(handle);
+/// assert!(slab.get(handle).is_none());
+/// ```
 #[derive(Clone)]
 pub struct MobjSlab {
     slots: Vec<Slot>,
