@@ -1,11 +1,87 @@
+//! Export map geometry to an SVG vector graphic.
+//!
+//! This module provides the `export_map_to_svg` function, which is useful for debugging
+//! spatial structures (like BSP generation bugs, vertex winding orders, or sector
+//! bounds) visually without needing to boot up the entire 3D renderer. By producing
+//! a 2D overhead view of a [`Level`], developers and mappers can quickly verify that
+//! their parsed map matches their intentions.
+
 use crate::Level;
 
 /// Exports a `Level` to an SVG XML string.
 ///
-/// This provides a top-down, 2D view of the map geometry. One-sided linedefs
-/// (solid walls) are drawn with thick black lines, and two-sided linedefs
-/// (portals, windows, doors) are drawn with thinner gray lines. Map things
-/// are represented as small red circles.
+/// This function generates a top-down, 2D vector graphic representation of the entire
+/// map structure. It is specifically designed to give a fast, visual sanity-check
+/// of map parsers and procedural level generators. One-sided linedefs (solid walls)
+/// are drawn as thick, bright lines, while two-sided linedefs (portals, windows, doors)
+/// are drawn as thinner, dimmer lines to differentiate solid boundaries from open space.
+///
+/// Map things (monsters, items, spawn points) are rendered as red circles.
+///
+/// # Examples
+///
+/// Building a minimal square room and exporting it to SVG:
+///
+/// ```
+/// use doom_map::{Level, lumps::{Blockmap, Linedef, Reject, Sector, Sidedef, Vertex}};
+///
+/// let reject = Reject::parse_lump(&[0u8], 1).unwrap();
+/// let mut bm_data = vec![0u8; 14];
+/// bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+/// bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+/// bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+/// bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+/// bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+/// let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+///
+/// let level = Level {
+///     name: "TEST".to_owned(),
+///     things: vec![],
+///     vertexes: vec![
+///         Vertex { x: 0, y: 0 },
+///         Vertex { x: 64, y: 0 },
+///     ],
+///     linedefs: vec![
+///         Linedef {
+///             from_vertex: 0,
+///             to_vertex: 1,
+///             flags: 0,
+///             special: 0,
+///             tag: 0,
+///             right_sidedef: 0,
+///             left_sidedef: 0xFFFF,
+///         },
+///     ],
+///     sidedefs: vec![
+///         Sidedef {
+///             x_offset: 0,
+///             y_offset: 0,
+///             upper_texture: *b"WALL1\0\0\0",
+///             lower_texture: *b"WALL2\0\0\0",
+///             middle_texture: *b"WALL3\0\0\0",
+///             sector: 0,
+///         },
+///     ],
+///     sectors: vec![Sector {
+///         floor_height: 0,
+///         ceil_height: 128,
+///         floor_flat: *b"FLAT1\0\0\0",
+///         ceil_flat: *b"FLAT2\0\0\0",
+///         light_level: 192,
+///         special: 0,
+///         tag: 0,
+///     }],
+///     segs: vec![],
+///     ssectors: vec![],
+///     nodes: vec![],
+///     reject,
+///     blockmap,
+/// };
+///
+/// let svg_xml = doom_map::export_map_to_svg(&level);
+/// assert!(svg_xml.contains("<svg viewBox="));
+/// assert!(svg_xml.contains("</svg>"));
+/// ```
 pub fn export_map_to_svg(level: &Level) -> String {
     let mut min_x = i16::MAX;
     let mut max_x = i16::MIN;
