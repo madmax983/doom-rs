@@ -49,8 +49,20 @@ use doom_audio::{SfxEmitter, SfxPriority, compute_spatial};
 // CLI args
 // ---------------------------------------------------------------------------
 
+fn cli_styles() -> clap::builder::styling::Styles {
+    use clap::builder::styling::{AnsiColor, Effects, Styles};
+    Styles::styled()
+        .header(AnsiColor::Green.on_default() | Effects::BOLD)
+        .usage(AnsiColor::Green.on_default() | Effects::BOLD)
+        .literal(AnsiColor::Cyan.on_default() | Effects::BOLD)
+        .placeholder(AnsiColor::Cyan.on_default())
+        .error(AnsiColor::Red.on_default() | Effects::BOLD)
+        .valid(AnsiColor::Green.on_default() | Effects::BOLD)
+        .invalid(AnsiColor::Yellow.on_default() | Effects::BOLD)
+}
+
 #[derive(Parser, Debug)]
-#[command(name = "doom-app", about = "Doom engine (doom-rs)")]
+#[command(name = "doom-app", about = "Doom engine (doom-rs)", styles = cli_styles())]
 struct Args {
     /// Path to IWAD file (doom1.wad, doom2.wad, freedoom1.wad, etc.).
     #[arg(long, alias = "wad")]
@@ -1857,7 +1869,13 @@ fn run_doom() -> Result<()> {
         .and_then(|p| match std::fs::File::create(p) {
             Ok(f) => Some(f),
             Err(e) => {
-                eprintln!("Warning: could not open debug log '{}': {e}", p.display());
+                use crossterm::style::Stylize;
+                eprintln!(
+                    "⚠️ {}: could not open debug log '{}': {}",
+                    "Warning".yellow().bold(),
+                    p.display(),
+                    e
+                );
                 None
             }
         });
@@ -1940,8 +1958,10 @@ fn run_doom() -> Result<()> {
     } else if let Some(mode) = RendererMode::from_str_loose(&args.renderer) {
         event_loop.set_renderer_mode(mode);
     } else {
+        use crossterm::style::Stylize;
         eprintln!(
-            "warning: unknown --renderer {:?}, using auto-detect",
+            "⚠️ {}: unknown --renderer {:?}, using auto-detect",
+            "Warning".yellow().bold(),
             args.renderer
         );
         event_loop.set_graphics_protocol(true);
