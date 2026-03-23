@@ -63,9 +63,7 @@ pub fn get_sound_target(gs: &GameState, sector_index: usize) -> Option<MobjHandl
 ///
 /// Called on level transitions to clear stale sound state.
 pub fn clear_sound_targets(gs: &mut GameState) {
-    for target in gs.sound_targets.iter_mut() {
-        *target = None;
-    }
+    gs.sound_targets.fill(None);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,9 +147,7 @@ pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emit
     // If generation wrapped to 0, reset all traversed counters so the
     // comparison `traversed[s] >= gen` works correctly.
     if gs.sound_gen == 0 {
-        for t in gs.sound_traversed.iter_mut() {
-            *t = 0;
-        }
+        gs.sound_traversed.fill(0);
         gs.sound_gen = 1;
     }
 
