@@ -220,14 +220,9 @@ pub fn linedef_effect(special: u16) -> Option<LinedefEffect> {
         // Floors
         5 | 24 | 64 | 91 | 101 => Some(FloorRaiseToLowestCeiling),
         18 | 20 | 22 | 47 | 68 | 69 | 95 => Some(FloorRaiseToNearest),
-        14 | 66 | 67 | 92 => {
-            // 14/66: raise 24+change, 67: raise 32+change, 92: raise 24
-            // Differentiate by actual amount
-            match special {
-                67 => Some(FloorRaiseBy32),
-                _ => Some(FloorRaiseBy24),
-            }
-        }
+        // 14/66: raise 24+change, 67: raise 32+change, 92: raise 24
+        14 | 66 | 92 => Some(FloorRaiseBy24),
+        67 => Some(FloorRaiseBy32),
         15 | 58 | 59 | 93 => Some(FloorRaiseBy24),
         30 | 96 => Some(FloorRaiseByShortestLowerTexture),
         56 | 65 | 94 => Some(FloorCrushAndRaise),
@@ -252,19 +247,13 @@ pub fn linedef_effect(special: u16) -> Option<LinedefEffect> {
         54 | 89 => Some(PerpetualLiftStop),
 
         // Stairs
-        7 | 8 => match special {
-            7 => Some(StairsBuild8),
-            _ => Some(StairsTurbo16),
-        },
+        7 => Some(StairsBuild8),
+        8 => Some(StairsTurbo16),
         100 | 127 => Some(StairsTurbo16),
 
         // Lights
-        12 | 80 | 81 => match special {
-            12 => Some(LightTurnOn255),
-            80 => Some(LightTurnOnMaxNeighbor),
-            81 => Some(LightTurnOn255),
-            _ => None,
-        },
+        12 | 81 => Some(LightTurnOn255),
+        80 => Some(LightTurnOnMaxNeighbor),
         13 => Some(LightTurnOnMaxNeighbor),
         79 | 104 => Some(LightTurnOff),
         17 => Some(LightStartBlinking),

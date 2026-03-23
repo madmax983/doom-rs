@@ -251,7 +251,9 @@ impl DehPatch {
                 // Consume exactly old_len + new_len bytes from `remaining`.
                 // The bytes may span multiple lines; we treat newlines as part
                 // of the data only where they fall within the counts.
-                let total = old_len + new_len;
+                let total = old_len.checked_add(new_len).ok_or_else(|| {
+                    DehError::BadHeader("Text section length overflow".to_owned())
+                })?;
                 if remaining.len() < total {
                     return Err(DehError::BadHeader(
                         "Unexpected end of input in Text section".to_owned(),
@@ -1425,6 +1427,11 @@ mod tests_deh {
     #[test]
     fn test_dehacked_parse_panic_byte_index() {
         assert!(DehPatch::parse("Text 1 1\n😊").is_err());
+    }
+
+    #[test]
+    fn test_dehacked_parse_text_overflow() {
+        assert!(DehPatch::parse("Text 18446744073709551615 1\n").is_err());
     }
 }
 

@@ -4,3 +4,6 @@
 ## 2025-03-22 - Remove unnecessary allocations in sector specials
 **Learning:** `ev_floor_...` and `ev_teleport` were redundantly allocating intermediate vectors through `.collect()` on iterator pipelines before iterating over them.
 **Action:** Replace `collect()` in favor of direct chaining or iterator folding / lazy position matching (`.iter().position()`) for significant performance improvements across common game event checks, bypassing memory allocation altogether and avoiding fighting the borrow checker by separating read-only and mutating iterations correctly when NLL allows or by cloning only minimal identifiers.
+**[NLL Enables Zero-Allocation Iteration in Game State Modifiers]**
+**Learning:** Rust's Non-Lexical Lifetimes (NLL) allow us to disjointly borrow immutable components of a struct (e.g., `level.sectors`) while mutably passing another component (`gs`) into a function inside a loop. We do not need to `.collect::<Vec<_>>()` iterator results into an intermediate array just to appease the borrow checker in these cases.
+**Action:** When a game loop filters and processes entities from an immutable level definition to apply them to a mutable game state, move the iterator chain directly into the `for` loop, eliminating unnecessary heap allocations on the hot path.

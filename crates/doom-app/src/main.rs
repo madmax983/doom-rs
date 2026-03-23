@@ -121,6 +121,10 @@ struct Args {
     /// Press F2 at runtime to cycle through all modes.
     #[arg(long, default_value = "auto")]
     renderer: String,
+
+    /// Export the level layout to an SVG file and exit.
+    #[arg(long)]
+    export_svg: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1358,14 +1362,15 @@ fn draw_console_overlay(fb: &mut Framebuffer, console: &console::Console) {
     draw_mini_string(fb, 2, "--- CONSOLE ---", COLOR_HEADER);
 
     // Draw recent messages (up to 8), newest first.
-    let msgs: Vec<&str> = console
+    // Iterating directly avoids a `.collect::<Vec<_>>()` allocation per frame.
+    for (i, msg) in console
         .messages
         .iter()
         .rev()
         .take(8)
         .map(|s| s.as_str())
-        .collect();
-    for (i, msg) in msgs.iter().enumerate() {
+        .enumerate()
+    {
         let y = 10 + i * CHAR_H;
         if y + CHAR_H > PANEL_H {
             break;
@@ -1760,6 +1765,20 @@ fn run_doom() -> Result<()> {
     // Parse the requested level.
     let level = Level::from_wad_stack(&wad_stack, warp_str)
         .with_context(|| format!("Failed to load map {warp_str}"))?;
+
+    if let Some(ref svg_path) = args.export_svg {
+        let svg_data = doom_map::export_map_to_svg(&level);
+        std::fs::write(svg_path, svg_data)
+            .with_context(|| format!("Failed to write SVG to {}", svg_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} layout to {}",
+            "🌟".green(),
+            "Exported".green().bold(),
+            svg_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
 
     // Create game state and spawn ALL level things (player, monsters, items, keys).
     let mut gs = GameState::new(warp_str);

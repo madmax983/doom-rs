@@ -275,7 +275,7 @@ enum LoopAction {
     Restart {
         /// Absolute tick number of the first event after restart.
         restart_tick: u64,
-        /// Delta of event[0] (added to restart_tick to get first event's due tick).
+        /// Delta of `events[0]` (added to `restart_tick` to get first event's due tick).
         first_delta: u64,
     },
     /// An event is due — process it.

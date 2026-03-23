@@ -83,6 +83,10 @@ pub enum LevelError {
 }
 
 /// A fully parsed and validated Doom map.
+///
+/// This structure holds the loaded geometry data from the binary map lumps,
+/// including `THINGS`, `VERTEXES`, `LINEDEFS`, `SIDEDEFS`, `SECTORS`, `SEGS`,
+/// `SSECTORS`, `NODES`, `REJECT`, and `BLOCKMAP`.
 pub struct Level {
     /// Map name (e.g. "E1M1").
     pub name: String,
@@ -118,6 +122,9 @@ impl Level {
     ///
     /// Vanilla Doom treats subsectors as belonging to a single sector and
     /// resolves that sector from the first seg in the leaf.
+    ///
+    /// Returns `None` if the `subsector_idx` is out of bounds or if the
+    /// internal references (seg -> linedef -> sidedef) are missing.
     #[must_use]
     pub fn subsector_sector_index(&self, subsector_idx: usize) -> Option<usize> {
         let ss = self.ssectors.get(subsector_idx)?;
@@ -128,6 +135,18 @@ impl Level {
     ///
     /// # Errors
     /// Returns `LevelError` for any structural or bounds violation.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use doom_map::level::Level;
+    /// use doom_wad::WadFile;
+    ///
+    /// let bytes = std::fs::read("doom1.wad").unwrap();
+    /// let wad = WadFile::parse(bytes).unwrap();
+    /// let level = Level::from_wad(&wad, "E1M1").unwrap();
+    ///
+    /// assert_eq!(level.name, "E1M1");
+    /// ```
     pub fn from_wad(wad: &WadFile, map_name: &str) -> Result<Self, LevelError> {
         let group = wad
             .map_lump_group(map_name)
@@ -140,6 +159,20 @@ impl Level {
     ///
     /// # Errors
     /// Returns `LevelError` for any structural or bounds violation.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// use doom_map::level::Level;
+    /// use doom_wad::{WadFile, WadStack};
+    ///
+    /// let iwad_bytes = std::fs::read("doom1.wad").unwrap();
+    /// let pwad_bytes = std::fs::read("mymap.wad").unwrap();
+    /// let mut stack = WadStack::new();
+    /// stack.push_iwad(iwad_bytes).unwrap();
+    /// stack.push_pwad(pwad_bytes).unwrap();
+    ///
+    /// let level = Level::from_wad_stack(&stack, "E1M1").unwrap();
+    /// ```
     pub fn from_wad_stack(wad_stack: &WadStack, map_name: &str) -> Result<Self, LevelError> {
         let (wad, group) = wad_stack
             .find_map_lump_group(map_name)
@@ -381,6 +414,11 @@ impl Level {
     }
 
     /// Convenience: access the validated BSP tree.
+    ///
+    /// # Panics
+    /// Panics if the BSP invariant is violated post-load, which indicates a
+    /// memory corruption or bug because it was successfully validated
+    /// upon map load.
     pub fn bsp(&self) -> BspTree<'_> {
         // Already validated at load time, so this cannot fail.
         BspTree::validate(&self.nodes, &self.ssectors, self.segs.len())

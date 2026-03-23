@@ -14,18 +14,22 @@ use crate::spawn::Skill;
 // Sound events
 // ---------------------------------------------------------------------------
 
+/// Represents the required key color when a locked door is denied access.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LockedDoorColor {
+    /// A blue keycard or skull key is required.
+    Blue,
+    /// A red keycard or skull key is required.
+    Red,
+    /// A yellow keycard or skull key is required.
+    Yellow,
+}
+
 /// A sound event emitted by the game simulation.
 ///
 /// The app (doom-app) drains `GameState::sound_queue` each tic and maps each
 /// variant to the appropriate WAD lump name for playback.  The game crate
 /// intentionally has no audio dependency — it only describes *what* happened.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LockedDoorColor {
-    Blue,
-    Red,
-    Yellow,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SoundRequest {
     /// Monster spotted the player / woke up.
@@ -818,5 +822,87 @@ mod tests {
             gs2.tic_num, 42,
             "clone must not share tic_num with original"
         );
+    }
+
+    fn setup_player_gs() -> GameState {
+        let mut gs = GameState::new("E1M1");
+        let mut player_mo = crate::mobj::Mobj::new(
+            crate::mobj::MobjKind::Player,
+            doom_types::Fixed16_16::ZERO,
+            doom_types::Fixed16_16::ZERO,
+            doom_types::Bam::ZERO,
+        );
+        player_mo.health = 100;
+        let handle = gs.mobjslab.alloc(player_mo);
+        gs.player.handle = handle;
+        gs.player.set_health_capped(100, 100);
+        gs
+    }
+
+    #[test]
+    fn test_sync_player_mobj_health() {
+        let mut gs = setup_player_gs();
+        gs.player.set_health_capped(50, 100);
+
+        // Before sync, mobj health is still 100
+        assert_eq!(gs.mobjslab.get(gs.player.handle).unwrap().health, 100);
+
+        gs.sync_player_mobj_health();
+
+        // After sync, mobj health matches player state
+        assert_eq!(gs.mobjslab.get(gs.player.handle).unwrap().health, 50);
+    }
+
+    #[test]
+    fn test_damage_player() {
+        let mut gs = setup_player_gs();
+        gs.damage_player(30);
+
+        assert_eq!(gs.player.health(), 70);
+        assert_eq!(gs.mobjslab.get(gs.player.handle).unwrap().health, 70);
+    }
+
+    #[test]
+    fn test_heal_player() {
+        let mut gs = setup_player_gs();
+        gs.damage_player(50);
+        assert_eq!(gs.player.health(), 50);
+
+        gs.heal_player(20);
+        assert_eq!(gs.player.health(), 70);
+        assert_eq!(gs.mobjslab.get(gs.player.handle).unwrap().health, 70);
+
+        // Heal up to max capacity
+        gs.heal_player(100);
+        assert_eq!(gs.player.health(), 100);
+        assert_eq!(gs.mobjslab.get(gs.player.handle).unwrap().health, 100);
+    }
+
+    #[test]
+    fn test_heal_player_overheal() {
+        let mut gs = setup_player_gs();
+        gs.heal_player_overheal(50, 200);
+
+        assert_eq!(gs.player.health(), 150);
+        assert_eq!(gs.mobjslab.get(gs.player.handle).unwrap().health, 150);
+
+        // Ensure cap works
+        gs.heal_player_overheal(100, 200);
+        assert_eq!(gs.player.health(), 200);
+        assert_eq!(gs.mobjslab.get(gs.player.handle).unwrap().health, 200);
+    }
+
+    #[test]
+    fn test_set_player_health_capped() {
+        let mut gs = setup_player_gs();
+        gs.set_player_health_capped(120, 150);
+
+        assert_eq!(gs.player.health(), 120);
+        assert_eq!(gs.mobjslab.get(gs.player.handle).unwrap().health, 120);
+
+        // Ensure cap works
+        gs.set_player_health_capped(200, 150);
+        assert_eq!(gs.player.health(), 150);
+        assert_eq!(gs.mobjslab.get(gs.player.handle).unwrap().health, 150);
     }
 }

@@ -1481,16 +1481,14 @@ const PLATFORM_WAIT: i32 = 105;
 ///
 /// Returns the number of platforms created.
 pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed: i16) -> usize {
-    let sector_indices: Vec<usize> = level
+    let mut count = 0;
+    for idx in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, _)| i)
-        .collect();
-
-    let mut count = 0;
-    for idx in sector_indices {
+    {
         // Avoid duplicate platforms on the same sector.
         if gs.active_platforms.iter().any(|p| p.sector_index == idx) {
             continue;
@@ -1893,15 +1891,13 @@ fn activate_crusher(
     remove_when_done: bool,
     ceiling_type: CeilingType,
 ) {
-    let sector_indices: Vec<usize> = level
+    for idx in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, _)| i)
-        .collect();
-
-    for idx in sector_indices {
+    {
         // Avoid duplicate crushers on the same sector.
         if gs.active_ceilings.iter().any(|c| c.sector_index == idx) {
             continue;
@@ -1934,15 +1930,13 @@ fn stop_crushers(gs: &mut GameState, tag: u16) {
 
 /// Activate a lift (lower-wait-raise) on all sectors matching `tag`.
 fn activate_lift(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    let sector_indices: Vec<usize> = level
+    for idx in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, _)| i)
-        .collect();
-
-    for idx in sector_indices {
+    {
         // Avoid duplicate floor movers on the same sector.
         if gs.active_floors.iter().any(|f| f.sector_index == idx) {
             continue;
@@ -1984,16 +1978,14 @@ pub fn ev_do_lift(
     speed: i16,
     wait_tics: i32,
 ) -> usize {
-    let sector_indices: Vec<usize> = level
+    let mut count = 0;
+    for idx in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, _)| i)
-        .collect();
-
-    let mut count = 0;
-    for idx in sector_indices {
+    {
         // Avoid duplicate lifts on the same sector.
         if gs.lifts.iter().any(|l| l.sector_index == idx) {
             continue;
@@ -2535,14 +2527,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // --- Type 63: remote tag-based door (open stay) ---
         63 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let sector_indices: Vec<usize> = level
+            for idx in level
                 .sectors
                 .iter()
                 .enumerate()
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
-                .collect();
-            for idx in sector_indices {
+            {
                 open_door(gs, level, idx, false);
             }
         }
@@ -3048,14 +3039,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 7: S1 Build stairs 8 units.
         7 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let sector_indices: Vec<usize> = level
+            for idx in level
                 .sectors
                 .iter()
                 .enumerate()
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
-                .collect();
-            for idx in sector_indices {
+            {
                 ev_build_stairs(gs, level, idx, StairType::Build8, false);
             }
         }
@@ -3063,14 +3053,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 8: W1 Build stairs turbo 16 units.
         8 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let sector_indices: Vec<usize> = level
+            for idx in level
                 .sectors
                 .iter()
                 .enumerate()
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
-                .collect();
-            for idx in sector_indices {
+            {
                 ev_build_stairs(gs, level, idx, StairType::Turbo16, false);
             }
         }
@@ -3078,14 +3067,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 100: W1 Build stairs turbo 16 + crush.
         100 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let sector_indices: Vec<usize> = level
+            for idx in level
                 .sectors
                 .iter()
                 .enumerate()
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
-                .collect();
-            for idx in sector_indices {
+            {
                 ev_build_stairs(gs, level, idx, StairType::Turbo16, true);
             }
         }
@@ -3093,14 +3081,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 127: S1 Build stairs turbo 16 units.
         127 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let sector_indices: Vec<usize> = level
+            for idx in level
                 .sectors
                 .iter()
                 .enumerate()
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
-                .collect();
-            for idx in sector_indices {
+            {
                 ev_build_stairs(gs, level, idx, StairType::Turbo16, false);
             }
         }
@@ -3112,14 +3099,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 9: S1 Donut.
         9 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let sector_indices: Vec<usize> = level
+            for idx in level
                 .sectors
                 .iter()
                 .enumerate()
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
-                .collect();
-            for idx in sector_indices {
+            {
                 ev_do_donut(gs, level, idx);
             }
         }
@@ -3127,14 +3113,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 146: W1 Donut.
         146 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let sector_indices: Vec<usize> = level
+            for idx in level
                 .sectors
                 .iter()
                 .enumerate()
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
-                .collect();
-            for idx in sector_indices {
+            {
                 ev_do_donut(gs, level, idx);
             }
         }
@@ -3203,14 +3188,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 105: WR Blazing door open-close.
         105 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let sector_indices: Vec<usize> = level
+            for idx in level
                 .sectors
                 .iter()
                 .enumerate()
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
-                .collect();
-            for idx in sector_indices {
+            {
                 open_blazing_door(gs, level, idx, true);
             }
         }
@@ -3218,14 +3202,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 106: WR Blazing door open-stay.
         106 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let sector_indices: Vec<usize> = level
+            for idx in level
                 .sectors
                 .iter()
                 .enumerate()
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
-                .collect();
-            for idx in sector_indices {
+            {
                 open_blazing_door(gs, level, idx, false);
             }
         }
@@ -3233,14 +3216,13 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         // Type 107: WR Blazing door close.
         107 => {
             let tag = level.linedefs[linedef_idx].tag;
-            let sector_indices: Vec<usize> = level
+            for idx in level
                 .sectors
                 .iter()
                 .enumerate()
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
-                .collect();
-            for idx in sector_indices {
+            {
                 close_blazing_door(gs, level, idx);
             }
         }
