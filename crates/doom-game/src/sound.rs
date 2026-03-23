@@ -40,11 +40,11 @@ pub const ML_SOUNDBLOCK: u16 = 0x0040;
 /// the level.  Resets all sound targets to `None` and all traversal counters
 /// to 0.
 pub fn init_sound_state(gs: &mut GameState, num_sectors: usize) {
-    gs.sound_targets.clear();
-    gs.sound_targets.resize(num_sectors, None);
-    gs.sound_traversed.clear();
-    gs.sound_traversed.resize(num_sectors, 0);
-    gs.sound_gen = 0;
+    gs.sound.targets.clear();
+    gs.sound.targets.resize(num_sectors, None);
+    gs.sound.traversed.clear();
+    gs.sound.traversed.resize(num_sectors, 0);
+    gs.sound.generation = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,14 +56,14 @@ pub fn init_sound_state(gs: &mut GameState, num_sectors: usize) {
 /// Returns `None` if no noise has reached this sector, or if the sector index
 /// is out of range.
 pub fn get_sound_target(gs: &GameState, sector_index: usize) -> Option<MobjHandle> {
-    gs.sound_targets.get(sector_index).copied().flatten()
+    gs.sound.targets.get(sector_index).copied().flatten()
 }
 
 /// Reset all sound targets to `None`.
 ///
 /// Called on level transitions to clear stale sound state.
 pub fn clear_sound_targets(gs: &mut GameState) {
-    for target in gs.sound_targets.iter_mut() {
+    for target in gs.sound.targets.iter_mut() {
         *target = None;
     }
 }
@@ -129,7 +129,7 @@ pub fn adjacent_sectors(level: &Level, sector_index: usize) -> Vec<usize> {
 /// Linedefs with `ML_SOUNDBLOCK` count against the propagation budget:
 /// sound can cross one such line total (matching vanilla Doom).
 ///
-/// After this call, `gs.sound_targets[sector]` will be `Some(target)` for
+/// After this call, `gs.sound.targets[sector]` will be `Some(target)` for
 /// every reached sector.
 pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emitter: MobjHandle) {
     // Determine the emitter's sector from its current position.
@@ -145,17 +145,17 @@ pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emit
     };
 
     // Increment generation counter to mark a new flood fill pass.
-    gs.sound_gen = gs.sound_gen.wrapping_add(1);
+    gs.sound.generation = gs.sound.generation.wrapping_add(1);
     // If generation wrapped to 0, reset all traversed counters so the
     // comparison `traversed[s] >= gen` works correctly.
-    if gs.sound_gen == 0 {
-        for t in gs.sound_traversed.iter_mut() {
+    if gs.sound.generation == 0 {
+        for t in gs.sound.traversed.iter_mut() {
             *t = 0;
         }
-        gs.sound_gen = 1;
+        gs.sound.generation = 1;
     }
 
-    let new_gen = gs.sound_gen;
+    let new_gen = gs.sound.generation;
 
     // Start flood fill from the emitter's sector with one soundblock crossing
     // available. Crossing a second `ML_SOUNDBLOCK` stops propagation.
@@ -175,19 +175,19 @@ fn recursive_sound(
     new_gen: u32,
 ) {
     // Bounds check.
-    if sector_idx >= gs.sound_traversed.len() {
+    if sector_idx >= gs.sound.traversed.len() {
         return;
     }
 
     // Already visited this generation with at least as much budget?
     // The generation check prevents revisiting in the same pass.
-    if gs.sound_traversed[sector_idx] >= new_gen {
+    if gs.sound.traversed[sector_idx] >= new_gen {
         return;
     }
 
     // Mark as visited and set the sound target.
-    gs.sound_traversed[sector_idx] = new_gen;
-    gs.sound_targets[sector_idx] = Some(target);
+    gs.sound.traversed[sector_idx] = new_gen;
+    gs.sound.targets[sector_idx] = Some(target);
 
     // Propagate through two-sided linedefs bounding this sector.
     for ld in &level.linedefs {
@@ -456,12 +456,12 @@ mod tests {
     fn init_sound_state_creates_correct_sized_vectors() {
         let mut gs = GameState::new("TEST");
         init_sound_state(&mut gs, 5);
-        assert_eq!(gs.sound_targets.len(), 5);
-        assert_eq!(gs.sound_traversed.len(), 5);
-        assert_eq!(gs.sound_gen, 0);
+        assert_eq!(gs.sound.targets.len(), 5);
+        assert_eq!(gs.sound.traversed.len(), 5);
+        assert_eq!(gs.sound.generation, 0);
         for i in 0..5 {
-            assert!(gs.sound_targets[i].is_none());
-            assert_eq!(gs.sound_traversed[i], 0);
+            assert!(gs.sound.targets[i].is_none());
+            assert_eq!(gs.sound.traversed[i], 0);
         }
     }
 
@@ -619,13 +619,13 @@ mod tests {
         let mut gs = make_game_state_with_sound(1);
         let player = gs.player.handle;
 
-        assert_eq!(gs.sound_gen, 0);
+        assert_eq!(gs.sound.generation, 0);
         p_noise_alert(&mut gs, &level, player, player);
-        assert_eq!(gs.sound_gen, 1);
+        assert_eq!(gs.sound.generation, 1);
         p_noise_alert(&mut gs, &level, player, player);
-        assert_eq!(gs.sound_gen, 2);
+        assert_eq!(gs.sound.generation, 2);
         p_noise_alert(&mut gs, &level, player, player);
-        assert_eq!(gs.sound_gen, 3);
+        assert_eq!(gs.sound.generation, 3);
     }
 
     #[test]
@@ -648,7 +648,7 @@ mod tests {
             );
         }
         // Generation counter should show only one alert.
-        assert_eq!(gs.sound_gen, 1);
+        assert_eq!(gs.sound.generation, 1);
     }
 
     #[test]
@@ -983,9 +983,9 @@ mod tests {
         let gs2 = gs.clone();
 
         // Cloned state should have identical sound data.
-        assert_eq!(gs2.sound_targets.len(), 3);
-        assert_eq!(gs2.sound_traversed.len(), 3);
-        assert_eq!(gs2.sound_gen, gs.sound_gen);
+        assert_eq!(gs2.sound.targets.len(), 3);
+        assert_eq!(gs2.sound.traversed.len(), 3);
+        assert_eq!(gs2.sound.generation, gs.sound.generation);
         for i in 0..3 {
             assert_eq!(
                 get_sound_target(&gs2, i),

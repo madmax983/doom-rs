@@ -981,7 +981,7 @@ mod tests {
     #[test]
     fn tick_world_processes_scrolling_walls() {
         let mut gs = make_game_state();
-        gs.scrolling_walls.push(crate::state::ScrollingWall {
+        gs.movers.scrolling_walls.push(crate::state::ScrollingWall {
             linedef_index: 0,
             speed_x: 1,
             speed_y: 0,
@@ -992,7 +992,7 @@ mod tests {
         tick_world(&mut gs, None);
 
         assert_eq!(
-            gs.scrolling_walls[0].accumulated_x, 1,
+            gs.movers.scrolling_walls[0].accumulated_x, 1,
             "tick_world must advance scrolling walls"
         );
     }
@@ -2127,7 +2127,7 @@ mod tests {
         let missile_handle = gs.mobjslab.alloc(missile);
 
         // Add a scrolling wall.
-        gs.scrolling_walls.push(crate::state::ScrollingWall {
+        gs.movers.scrolling_walls.push(crate::state::ScrollingWall {
             linedef_index: 0,
             speed_x: 2,
             speed_y: 0,
@@ -2146,7 +2146,7 @@ mod tests {
         assert_eq!(missile_mo.tics, 4);
 
         // Scrolling wall should have advanced.
-        assert_eq!(gs.scrolling_walls[0].accumulated_x, 2);
+        assert_eq!(gs.movers.scrolling_walls[0].accumulated_x, 2);
 
         // Level time should have incremented.
         assert_eq!(gs.level_time, 1);

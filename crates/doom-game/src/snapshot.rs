@@ -101,18 +101,18 @@ mod prop_tests {
             secrets in 0u32..=100u32,
         ) {
             let mut gs = GameState::new("E1M1");
-            gs.kill_count   = kills;
-            gs.item_count   = items;
-            gs.secret_count = secrets;
+            gs.level_stats.kill_count   = kills;
+            gs.level_stats.item_count   = items;
+            gs.level_stats.secret_count = secrets;
             let snap = gs.save_snapshot();
             // Corrupt live state.
-            gs.kill_count   = 0;
-            gs.item_count   = 0;
-            gs.secret_count = 0;
+            gs.level_stats.kill_count   = 0;
+            gs.level_stats.item_count   = 0;
+            gs.level_stats.secret_count = 0;
             gs.restore_snapshot(snap);
-            prop_assert_eq!(gs.kill_count,   kills,   "kill_count mismatch");
-            prop_assert_eq!(gs.item_count,   items,   "item_count mismatch");
-            prop_assert_eq!(gs.secret_count, secrets, "secret_count mismatch");
+            prop_assert_eq!(gs.level_stats.kill_count,   kills,   "kill_count mismatch");
+            prop_assert_eq!(gs.level_stats.item_count,   items,   "item_count mismatch");
+            prop_assert_eq!(gs.level_stats.secret_count, secrets, "secret_count mismatch");
         }
 
         // Property: snapshot tic_num accessor matches the tic at save time.

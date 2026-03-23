@@ -506,6 +506,39 @@ impl DoomRng {
 /// - No `Instant::now()` inside tic logic.
 /// - No `Arc`/`Rc` — everything must deep-clone cleanly.
 /// - RNG state (`rng`) is the only source of "randomness".
+/// Statistics for the current level (kills, items, secrets).
+#[derive(Clone, Debug, Default)]
+pub struct LevelStats {
+    pub kill_count: u32,
+    pub item_count: u32,
+    pub secret_count: u32,
+    pub total_kills: u32,
+    pub total_items: u32,
+    pub total_secrets: u32,
+}
+
+/// Active sector movers, scrollers, conveyors, and light effects.
+#[derive(Clone, Debug, Default)]
+pub struct SectorMovers {
+    pub active_doors: Vec<DoorMover>,
+    pub active_lights: Vec<LightSpecial>,
+    pub active_ceilings: Vec<CeilingMover>,
+    pub active_floors: Vec<FloorMover>,
+    pub active_platforms: Vec<PerpetualPlatform>,
+    pub lifts: Vec<LiftMover>,
+    pub sector_lights: Vec<SectorLightEffect>,
+    pub scrolling_walls: Vec<ScrollingWall>,
+    pub conveyors: Vec<ConveyorBelt>,
+}
+
+/// Sound propagation state for the current level.
+#[derive(Clone, Debug, Default)]
+pub struct SoundPropagation {
+    pub targets: Vec<Option<MobjHandle>>,
+    pub traversed: Vec<u32>,
+    pub generation: u32,
+}
+
 #[derive(Clone, Debug)]
 pub struct GameState {
     /// Monotonically increasing tic counter (wraps at `u32::MAX`).
@@ -523,64 +556,20 @@ pub struct GameState {
     /// Current level identifier (e.g. `"E1M1"`).
     pub level_name: String,
 
-    // --- End-of-level statistics ---
-    pub kill_count: u32,
-    pub item_count: u32,
-    pub secret_count: u32,
-    /// Total killable monsters in the map (for percentage display).
-    pub total_kills: u32,
-    /// Total collectable items.
-    pub total_items: u32,
-    /// Total secret sectors in the map (sectors with special type 9).
-    pub total_secrets: u32,
+    /// Level completion statistics.
+    pub level_stats: LevelStats,
 
-    /// Active door/floor/ceiling movers (ticked by `specials::tick_doors`).
-    pub active_doors: Vec<DoorMover>,
-    /// Active light specials (ticked by `specials::tick_lights`).
-    pub active_lights: Vec<LightSpecial>,
-    /// Active ceiling movers / crushers (ticked by `specials::tick_ceilings`).
-    pub active_ceilings: Vec<CeilingMover>,
-    /// Active floor movers / lifts (ticked by `specials::tick_floors`).
-    pub active_floors: Vec<FloorMover>,
-    /// Active perpetual platforms (ticked by `specials::tick_platforms`).
-    pub active_platforms: Vec<PerpetualPlatform>,
-    /// Active lifts (lower-wait-raise) (ticked by `specials::tick_lifts`).
-    pub lifts: Vec<LiftMover>,
+    /// Active sector movers and logic.
+    pub movers: SectorMovers,
 
-    /// Extended sector light effects (ticked by `specials::tick_sector_lights`).
-    pub sector_lights: Vec<SectorLightEffect>,
-
-    /// Active scrolling wall textures (ticked by `specials::tick_scrollers`).
-    pub scrolling_walls: Vec<ScrollingWall>,
-
-    /// Active conveyor belt sectors (ticked by `specials::tick_conveyors`).
-    pub conveyors: Vec<ConveyorBelt>,
+    /// Sound propagation tracking.
+    pub sound: SoundPropagation,
 
     /// Level exit requested this tic (cleared to `None` at start of each tick).
     pub exit_request: Option<ExitRequest>,
 
     /// Number of tics elapsed in the current level (incremented each tick).
     pub level_time: u32,
-
-    // --- Sound propagation state ---
-    /// Per-sector sound target: which actor made noise that this sector "heard".
-    ///
-    /// Indexed by sector index.  `None` = no noise has reached this sector.
-    /// Resized to `level.sectors.len()` by `sound::init_sound_state`.
-    pub sound_targets: Vec<Option<MobjHandle>>,
-
-    /// Per-sector generation counter for flood-fill visited tracking.
-    ///
-    /// Avoids clearing the whole vec each time `p_noise_alert` runs.
-    /// A sector is considered "visited this generation" when
-    /// `sound_traversed[s] >= sound_gen`.
-    pub sound_traversed: Vec<u32>,
-
-    /// Current sound generation counter.
-    ///
-    /// Incremented each time `p_noise_alert` is called to mark a new
-    /// flood-fill pass.
-    pub sound_gen: u32,
 
     // --- Automap visibility state ---
     /// Per-linedef visibility flag: `true` if the player has visited a
@@ -624,26 +613,11 @@ impl GameState {
             mobjslab: MobjSlab::new(),
             player: PlayerState::default(),
             level_name: level_name.to_string(),
-            kill_count: 0,
-            item_count: 0,
-            secret_count: 0,
-            total_kills: 0,
-            total_items: 0,
-            total_secrets: 0,
-            active_doors: Vec::new(),
-            active_lights: Vec::new(),
-            active_ceilings: Vec::new(),
-            active_floors: Vec::new(),
-            active_platforms: Vec::new(),
-            lifts: Vec::new(),
-            sector_lights: Vec::new(),
-            scrolling_walls: Vec::new(),
-            conveyors: Vec::new(),
+            level_stats: LevelStats::default(),
+            movers: SectorMovers::default(),
+            sound: SoundPropagation::default(),
             exit_request: None,
             level_time: 0,
-            sound_targets: Vec::new(),
-            sound_traversed: Vec::new(),
-            sound_gen: 0,
             seen_lines: Vec::new(),
             skill: Skill::Medium,
             sound_queue: Vec::new(),
@@ -746,7 +720,7 @@ impl GameState {
     /// The renderer adds these offsets to the sidedef's `x_offset`/`y_offset`
     /// when drawing the wall texture.
     pub fn get_scroll_offset(&self, linedef_index: usize) -> (i32, i32) {
-        for sw in &self.scrolling_walls {
+        for sw in &self.movers.scrolling_walls {
             if sw.linedef_index == linedef_index {
                 return (sw.accumulated_x, sw.accumulated_y);
             }
@@ -808,7 +782,7 @@ mod tests {
         assert_eq!(gs.tic_num, 0);
         assert_eq!(gs.level_name, "E1M1");
         assert!(gs.mobjslab.is_empty());
-        assert_eq!(gs.kill_count, 0);
+        assert_eq!(gs.level_stats.kill_count, 0);
     }
 
     #[test]

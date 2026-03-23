@@ -2848,12 +2848,12 @@ mod tests {
 
         assert!(!moved, "the move should be blocked by the near door");
         assert_eq!(
-            gs.active_doors.len(),
+            gs.movers.active_doors.len(),
             1,
             "monster should still open a blocking door even when the door lives in a neighbouring blockmap cell"
         );
         assert_eq!(
-            gs.active_doors[0].sector, 1,
+            gs.movers.active_doors[0].sector, 1,
             "monster should open the actual blocking door"
         );
     }

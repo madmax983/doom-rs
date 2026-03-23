@@ -973,12 +973,12 @@ pub fn save_game(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &
     // --- Counters ---
     w.write_u32(gs.tic_num);
     w.write_u32(gs.level_time);
-    w.write_u32(gs.kill_count);
-    w.write_u32(gs.item_count);
-    w.write_u32(gs.secret_count);
-    w.write_u32(gs.total_kills);
-    w.write_u32(gs.total_items);
-    w.write_u32(gs.total_secrets);
+    w.write_u32(gs.level_stats.kill_count);
+    w.write_u32(gs.level_stats.item_count);
+    w.write_u32(gs.level_stats.secret_count);
+    w.write_u32(gs.level_stats.total_kills);
+    w.write_u32(gs.level_stats.total_items);
+    w.write_u32(gs.level_stats.total_secrets);
 
     // --- Level name (string form) ---
     let name_bytes = gs.level_name.as_bytes();
@@ -993,50 +993,50 @@ pub fn save_game(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &
     }
 
     // --- Door movers ---
-    w.write_u32(gs.active_doors.len() as u32);
-    for door in &gs.active_doors {
+    w.write_u32(gs.movers.active_doors.len() as u32);
+    for door in &gs.movers.active_doors {
         write_door_mover(&mut w, door);
     }
 
     // --- Light specials ---
-    w.write_u32(gs.active_lights.len() as u32);
-    for light in &gs.active_lights {
+    w.write_u32(gs.movers.active_lights.len() as u32);
+    for light in &gs.movers.active_lights {
         write_light_special(&mut w, light);
     }
 
     // --- Ceiling movers ---
-    w.write_u32(gs.active_ceilings.len() as u32);
-    for ceil in &gs.active_ceilings {
+    w.write_u32(gs.movers.active_ceilings.len() as u32);
+    for ceil in &gs.movers.active_ceilings {
         write_ceiling_mover(&mut w, ceil);
     }
 
     // --- Floor movers ---
-    w.write_u32(gs.active_floors.len() as u32);
-    for floor in &gs.active_floors {
+    w.write_u32(gs.movers.active_floors.len() as u32);
+    for floor in &gs.movers.active_floors {
         write_floor_mover(&mut w, floor);
     }
 
     // --- Perpetual platforms ---
-    w.write_u32(gs.active_platforms.len() as u32);
-    for plat in &gs.active_platforms {
+    w.write_u32(gs.movers.active_platforms.len() as u32);
+    for plat in &gs.movers.active_platforms {
         write_perpetual_platform(&mut w, plat);
     }
 
     // --- Lifts ---
-    w.write_u32(gs.lifts.len() as u32);
-    for lift in &gs.lifts {
+    w.write_u32(gs.movers.lifts.len() as u32);
+    for lift in &gs.movers.lifts {
         write_lift_mover(&mut w, lift);
     }
 
     // --- Scrolling walls ---
-    w.write_u32(gs.scrolling_walls.len() as u32);
-    for sw in &gs.scrolling_walls {
+    w.write_u32(gs.movers.scrolling_walls.len() as u32);
+    for sw in &gs.movers.scrolling_walls {
         write_scrolling_wall(&mut w, sw);
     }
 
     // --- Conveyor belts ---
-    w.write_u32(gs.conveyors.len() as u32);
-    for cb in &gs.conveyors {
+    w.write_u32(gs.movers.conveyors.len() as u32);
+    for cb in &gs.movers.conveyors {
         write_conveyor_belt(&mut w, cb);
     }
 
@@ -1227,20 +1227,20 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     state.mobjslab = mobjslab;
     state.player = player;
     state.player.handle = player_handle;
-    state.kill_count = kill_count;
-    state.item_count = item_count;
-    state.secret_count = secret_count;
-    state.total_kills = total_kills;
-    state.total_items = total_items;
-    state.total_secrets = total_secrets;
-    state.active_doors = active_doors;
-    state.active_lights = active_lights;
-    state.active_ceilings = active_ceilings;
-    state.active_floors = active_floors;
-    state.active_platforms = active_platforms;
-    state.lifts = lifts;
-    state.scrolling_walls = scrolling_walls;
-    state.conveyors = conveyors;
+    state.level_stats.kill_count = kill_count;
+    state.level_stats.item_count = item_count;
+    state.level_stats.secret_count = secret_count;
+    state.level_stats.total_kills = total_kills;
+    state.level_stats.total_items = total_items;
+    state.level_stats.total_secrets = total_secrets;
+    state.movers.active_doors = active_doors;
+    state.movers.active_lights = active_lights;
+    state.movers.active_ceilings = active_ceilings;
+    state.movers.active_floors = active_floors;
+    state.movers.active_platforms = active_platforms;
+    state.movers.lifts = lifts;
+    state.movers.scrolling_walls = scrolling_walls;
+    state.movers.conveyors = conveyors;
     state.exit_request = exit_request;
     state.level_time = level_time;
 
@@ -1438,20 +1438,20 @@ mod tests {
     #[test]
     fn roundtrip_totals() {
         let mut gs = test_game_state();
-        gs.total_kills = 50;
-        gs.total_items = 30;
-        gs.total_secrets = 5;
-        gs.kill_count = 10;
-        gs.item_count = 7;
-        gs.secret_count = 2;
+        gs.level_stats.total_kills = 50;
+        gs.level_stats.total_items = 30;
+        gs.level_stats.total_secrets = 5;
+        gs.level_stats.kill_count = 10;
+        gs.level_stats.item_count = 7;
+        gs.level_stats.secret_count = 2;
         let data = save_game(&gs, &test_level_name(), 2, "totals test");
         let loaded = load_game(&data).expect("load must succeed");
-        assert_eq!(loaded.state.total_kills, 50);
-        assert_eq!(loaded.state.total_items, 30);
-        assert_eq!(loaded.state.total_secrets, 5);
-        assert_eq!(loaded.state.kill_count, 10);
-        assert_eq!(loaded.state.item_count, 7);
-        assert_eq!(loaded.state.secret_count, 2);
+        assert_eq!(loaded.state.level_stats.total_kills, 50);
+        assert_eq!(loaded.state.level_stats.total_items, 30);
+        assert_eq!(loaded.state.level_stats.total_secrets, 5);
+        assert_eq!(loaded.state.level_stats.kill_count, 10);
+        assert_eq!(loaded.state.level_stats.item_count, 7);
+        assert_eq!(loaded.state.level_stats.secret_count, 2);
     }
 
     // --- Test 15: Roundtrip preserves exit_request (None) ---
@@ -1487,7 +1487,7 @@ mod tests {
     #[test]
     fn roundtrip_door_movers() {
         let mut gs = test_game_state();
-        gs.active_doors.push(DoorMover {
+        gs.movers.active_doors.push(DoorMover {
             sector: 5,
             target_height: 128,
             current_height: 64,
@@ -1498,7 +1498,7 @@ mod tests {
             reopen_height: 0,
             reopen_countdown: -1,
         });
-        gs.active_doors.push(DoorMover {
+        gs.movers.active_doors.push(DoorMover {
             sector: 10,
             target_height: 0,
             current_height: 100,
@@ -1511,18 +1511,18 @@ mod tests {
         });
         let data = save_game(&gs, &test_level_name(), 2, "doors test");
         let loaded = load_game(&data).expect("load must succeed");
-        assert_eq!(loaded.state.active_doors.len(), 2);
-        assert_eq!(loaded.state.active_doors[0].sector, 5);
-        assert_eq!(loaded.state.active_doors[0].target_height, 128);
-        assert_eq!(loaded.state.active_doors[1].sector, 10);
-        assert_eq!(loaded.state.active_doors[1].speed, -2);
+        assert_eq!(loaded.state.movers.active_doors.len(), 2);
+        assert_eq!(loaded.state.movers.active_doors[0].sector, 5);
+        assert_eq!(loaded.state.movers.active_doors[0].target_height, 128);
+        assert_eq!(loaded.state.movers.active_doors[1].sector, 10);
+        assert_eq!(loaded.state.movers.active_doors[1].speed, -2);
     }
 
     // --- Test 17: Roundtrip with floor movers preserves count ---
     #[test]
     fn roundtrip_floor_movers() {
         let mut gs = test_game_state();
-        gs.active_floors.push(FloorMover {
+        gs.movers.active_floors.push(FloorMover {
             sector_index: 3,
             target_height: -64,
             speed: 4,
@@ -1537,11 +1537,11 @@ mod tests {
         });
         let data = save_game(&gs, &test_level_name(), 2, "floors test");
         let loaded = load_game(&data).expect("load must succeed");
-        assert_eq!(loaded.state.active_floors.len(), 1);
-        assert_eq!(loaded.state.active_floors[0].sector_index, 3);
-        assert_eq!(loaded.state.active_floors[0].target_height, -64);
-        assert_eq!(loaded.state.active_floors[0].direction, MoveDirection::Down);
-        assert!(loaded.state.active_floors[0].crush);
+        assert_eq!(loaded.state.movers.active_floors.len(), 1);
+        assert_eq!(loaded.state.movers.active_floors[0].sector_index, 3);
+        assert_eq!(loaded.state.movers.active_floors[0].target_height, -64);
+        assert_eq!(loaded.state.movers.active_floors[0].direction, MoveDirection::Down);
+        assert!(loaded.state.movers.active_floors[0].crush);
     }
 
     // --- Test 18: save_slot_filename format ---
@@ -1656,7 +1656,7 @@ mod tests {
     #[test]
     fn roundtrip_ceiling_movers() {
         let mut gs = test_game_state();
-        gs.active_ceilings.push(CeilingMover {
+        gs.movers.active_ceilings.push(CeilingMover {
             sector_index: 7,
             top_height: 128,
             bottom_height: 8,
@@ -1671,17 +1671,17 @@ mod tests {
         });
         let data = save_game(&gs, &test_level_name(), 2, "ceiling test");
         let loaded = load_game(&data).expect("load must succeed");
-        assert_eq!(loaded.state.active_ceilings.len(), 1);
-        assert_eq!(loaded.state.active_ceilings[0].sector_index, 7);
-        assert_eq!(loaded.state.active_ceilings[0].crush_damage, 10);
-        assert_eq!(loaded.state.active_ceilings[0].tag, 42);
+        assert_eq!(loaded.state.movers.active_ceilings.len(), 1);
+        assert_eq!(loaded.state.movers.active_ceilings[0].sector_index, 7);
+        assert_eq!(loaded.state.movers.active_ceilings[0].crush_damage, 10);
+        assert_eq!(loaded.state.movers.active_ceilings[0].tag, 42);
     }
 
     // --- Test 23: Roundtrip preserves light specials ---
     #[test]
     fn roundtrip_light_specials() {
         let mut gs = test_game_state();
-        gs.active_lights.push(LightSpecial {
+        gs.movers.active_lights.push(LightSpecial {
             sector: 2,
             timer: 15,
             period: 30,
@@ -1691,10 +1691,10 @@ mod tests {
         });
         let data = save_game(&gs, &test_level_name(), 2, "light test");
         let loaded = load_game(&data).expect("load must succeed");
-        assert_eq!(loaded.state.active_lights.len(), 1);
-        assert_eq!(loaded.state.active_lights[0].sector, 2);
-        assert_eq!(loaded.state.active_lights[0].bright, 255);
-        assert!(loaded.state.active_lights[0].is_bright);
+        assert_eq!(loaded.state.movers.active_lights.len(), 1);
+        assert_eq!(loaded.state.movers.active_lights[0].sector, 2);
+        assert_eq!(loaded.state.movers.active_lights[0].bright, 255);
+        assert!(loaded.state.movers.active_lights[0].is_bright);
     }
 
     // --- Test 24: Roundtrip preserves tic_num ---
@@ -1734,12 +1734,12 @@ mod tests {
             trooper.health = 20;
             gs.mobjslab.alloc(trooper);
         }
-        gs.total_kills = 5;
+        gs.level_stats.total_kills = 5;
         let data = save_game(&gs, &test_level_name(), 2, "multi mobj");
         let loaded = load_game(&data).expect("load must succeed");
         // 1 player + 5 troopers.
         assert_eq!(loaded.state.mobjslab.len(), 6);
-        assert_eq!(loaded.state.total_kills, 5);
+        assert_eq!(loaded.state.level_stats.total_kills, 5);
     }
 
     // --- Test 27: Header description is stored correctly ---

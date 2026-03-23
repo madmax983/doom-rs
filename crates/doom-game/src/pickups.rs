@@ -471,7 +471,7 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
     if picked_up {
         if let Some(mo) = gs.mobjslab.get(item_handle) {
             if mo.flags & flags::MF_COUNTITEM != 0 {
-                gs.item_count += 1;
+                gs.level_stats.item_count += 1;
             }
         }
         gs.player.bonus_count = 6; // HUD flash for 6 tics
