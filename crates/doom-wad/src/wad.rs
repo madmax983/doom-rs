@@ -110,12 +110,23 @@ impl WadFile {
         if numlumps < 0 {
             return Err(WadError::NegativeLumpCount(numlumps));
         }
+
+        // Havoc 👺: Negative directory offset could cause a cast to a huge usize
+        // or a crash when wrapping. Let's make sure it's valid.
+        if infotableofs < 0 {
+            return Err(WadError::DirectoryOutOfBounds {
+                offset: infotableofs as usize, // Will be garbage but signals the error
+                dir_size: (numlumps as usize).saturating_mul(size_of::<RawLumpEntry>()),
+                file_len: data.len(),
+            });
+        }
+
         let numlumps = numlumps as usize;
         let dir_offset = infotableofs as usize;
-        let dir_size = numlumps * size_of::<RawLumpEntry>();
+        let dir_size = numlumps.saturating_mul(size_of::<RawLumpEntry>());
 
         let dir_end = dir_offset.saturating_add(dir_size);
-        if dir_end > data.len() {
+        if dir_end > data.len() || dir_offset > data.len() {
             return Err(WadError::DirectoryOutOfBounds {
                 offset: dir_offset,
                 dir_size,
