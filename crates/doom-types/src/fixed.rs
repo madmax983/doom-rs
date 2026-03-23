@@ -27,24 +27,52 @@ impl Fixed16_16 {
     pub const ZERO: Self = Self(0);
 
     /// Create from a raw `i32` (no scaling — you supply the already-shifted bits).
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Fixed16_16, FIXED_ONE};
+    /// let f = Fixed16_16::from_raw(1 << 16);
+    /// assert_eq!(f, FIXED_ONE);
+    /// ```
     #[inline]
     pub const fn from_raw(raw: i32) -> Self {
         Self(raw)
     }
 
     /// Convert an integer to fixed-point by shifting left 16 bits.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::Fixed16_16;
+    /// let f = Fixed16_16::from_int(5);
+    /// assert_eq!(f.raw(), 5 << 16);
+    /// ```
     #[inline]
     pub const fn from_int(n: i32) -> Self {
         Self(n << FRAC_BITS)
     }
 
     /// Extract the integer part (truncates toward negative infinity).
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::Fixed16_16;
+    /// let f = Fixed16_16::from_int(42);
+    /// assert_eq!(f.to_int(), 42);
+    /// ```
     #[inline]
     pub const fn to_int(self) -> i32 {
         self.0 >> FRAC_BITS
     }
 
     /// Return the raw `i32` bit pattern.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::Fixed16_16;
+    /// let f = Fixed16_16::from_int(1);
+    /// assert_eq!(f.raw(), 65536);
+    /// ```
     #[inline]
     pub const fn raw(self) -> i32 {
         self.0
@@ -100,12 +128,28 @@ impl Fixed16_16 {
     }
 
     /// Absolute value.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::Fixed16_16;
+    /// let a = Fixed16_16::from_int(-5);
+    /// assert_eq!(a.abs(), Fixed16_16::from_int(5));
+    /// ```
     #[inline]
     pub fn abs(self) -> Self {
         Self(self.0.wrapping_abs())
     }
 
     /// Linear interpolation: `self + t * (other - self)` where `t ∈ [0, FIXED_ONE]`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::{Fixed16_16, FIXED_ONE};
+    /// let a = Fixed16_16::from_int(0);
+    /// let b = Fixed16_16::from_int(10);
+    /// let t = Fixed16_16::from_raw(FIXED_ONE.raw() / 2); // 0.5
+    /// assert_eq!(a.lerp(b, t), Fixed16_16::from_int(5));
+    /// ```
     #[inline]
     pub fn lerp(self, other: Self, t: Self) -> Self {
         self + (other - self).fixed_mul(t)
