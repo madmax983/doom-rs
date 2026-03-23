@@ -259,17 +259,11 @@ const BAM_PER_DEGREE: u32 = (0x1_0000_0000u64 / 360) as u32;
 /// Returns `true` if a teleport destination was found and the actor was moved.
 pub fn ev_teleport(gs: &mut GameState, level: &Level, tag: u16, mobj_handle: MobjHandle) -> bool {
     // Collect sector indices matching the tag.
-    let tagged_sectors: Vec<usize> = level
-        .sectors
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| s.tag == tag)
-        .map(|(i, _)| i)
-        .collect();
+    let first_tagged_sector = level.sectors.iter().position(|s| s.tag == tag);
 
-    if tagged_sectors.is_empty() {
+    let Some(first_tagged_idx) = first_tagged_sector else {
         return false;
-    }
+    };
 
     // Find the first Teleport Destination thing (kind == 14) in the level.
     // In Doom, teleport destinations are placed by mappers inside the target
@@ -287,7 +281,7 @@ pub fn ev_teleport(gs: &mut GameState, level: &Level, tag: u16, mobj_handle: Mob
         // placed in the appropriate target sector by the mapper.
 
         // Get the floor height of the first tagged sector for Z placement.
-        let dest_floor = level.sectors[tagged_sectors[0]].floor_height;
+        let dest_floor = level.sectors[first_tagged_idx].floor_height;
 
         // Move the actor to the destination.
         if let Some(mo) = gs.mobjslab.get_mut(mobj_handle) {
