@@ -117,8 +117,14 @@ impl Fixed16_16 {
     pub fn fixed_div(self, rhs: Self) -> Self {
         debug_assert!(rhs.0 != 0, "FixedDiv: division by zero");
         let numerator = (self.0 as i64) << FRAC_BITS;
-        let mut result = numerator / rhs.0 as i64;
         // Havoc 👺: Catch overflow division cases!
+        // Handle the edge case where division by -1 overflows the i64 representation.
+        let mut result = if rhs.0 == -1 && numerator == i64::MIN {
+            i64::MAX
+        } else {
+            numerator / rhs.0 as i64
+        };
+
         if result > i32::MAX as i64 {
             result = i32::MAX as i64;
         } else if result < i32::MIN as i64 {
@@ -355,6 +361,23 @@ mod prop_tests {
         #[test]
         fn mul_by_one_is_identity(a in fixed_strategy()) {
             prop_assert_eq!(a.fixed_mul(FIXED_ONE), a);
+        }
+
+        #[test]
+        fn fixed_div_does_not_panic_on_negative_one(a in any::<i32>()) {
+            // Only requirement is rhs != 0
+            let dividend = Fixed16_16(a);
+            let divisor = Fixed16_16(-1);
+            let _ = dividend.fixed_div(divisor); // Shouldn't panic!
+        }
+
+        #[test]
+        fn fixed_div_does_not_panic(a in any::<i32>(), b in any::<i32>()) {
+            let dividend = Fixed16_16(a);
+            let divisor = Fixed16_16(b);
+            if b != 0 {
+                let _ = dividend.fixed_div(divisor);
+            }
         }
     }
 }

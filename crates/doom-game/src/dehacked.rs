@@ -254,6 +254,17 @@ impl DehPatch {
                 let total = old_len.checked_add(new_len).ok_or_else(|| {
                     DehError::BadHeader("Text section length overflow".to_owned())
                 })?;
+
+                // Havoc 👺: Defend against OOM and huge allocations from fuzzed lengths.
+                // Doom's executable is ~700KB, so text replacements will never logically exceed 1MB.
+                // Without this, the fuzzer (or an attacker) can trigger an OOM by requesting
+                // a 4GB allocation via `old_len` or `new_len`.
+                if total > 1024 * 1024 {
+                    return Err(DehError::BadHeader(
+                        "Text section length exceeds maximum permitted size".to_owned(),
+                    ));
+                }
+
                 if remaining.len() < total {
                     return Err(DehError::BadHeader(
                         "Unexpected end of input in Text section".to_owned(),

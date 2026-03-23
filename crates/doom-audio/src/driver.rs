@@ -176,7 +176,10 @@ impl AudioDriver {
     /// ```
     /// use doom_audio::driver::AudioDriver;
     ///
+    /// # #[cfg(not(feature = "loom"))]
+    /// # {
     /// let driver = AudioDriver::null();
+    /// # }
     /// ```
     #[must_use]
     pub fn null() -> Self {
