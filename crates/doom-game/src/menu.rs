@@ -1360,4 +1360,29 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn select_out_of_bounds_item_returns_none() {
+        let mut menu = GameMenu::new(false);
+        menu.open();
+        menu.cursor = 999;
+        assert_eq!(menu.select(), None);
+    }
+
+    #[test]
+    fn title_screen_from_phase_sets_state() {
+        let ts = TitleScreen::from_phase(TitlePhase::Credits);
+        assert_eq!(ts.phase(), TitlePhase::Credits);
+        assert_eq!(ts.tic(), 0);
+    }
+
+    #[test]
+    fn title_screen_demo_phase_tick_does_not_transition() {
+        let mut ts = TitleScreen::from_phase(TitlePhase::Demo(1));
+        for _ in 0..1000 {
+            ts.tick();
+        }
+        assert_eq!(ts.phase(), TitlePhase::Demo(1));
+        assert_eq!(ts.tic(), 1000);
+    }
 }
