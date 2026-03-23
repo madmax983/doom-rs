@@ -102,7 +102,7 @@ impl AudioDriver {
         // requested rate — so SFX resampling and OPL timing are correct.
         let actual_rate = config.sample_rate().0;
 
-        eprintln!(
+        log::debug!(
             "[audio-driver] device={:?} channels={} sample_rate={} format={:?}",
             device.name().unwrap_or_default(),
             config.channels(),
@@ -153,7 +153,7 @@ impl AudioDriver {
                         }
                     }
                 },
-                |err| eprintln!("audio stream error: {err}"),
+                |err| log::error!("audio stream error: {err}"),
                 None,
             )
             .map_err(|e| AudioError::Stream(e.to_string()))?;

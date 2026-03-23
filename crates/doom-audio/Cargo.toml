@@ -10,6 +10,7 @@ cpal       = { workspace = true }
 nom        = { workspace = true }
 thiserror  = { workspace = true }
 loom = { version = "0.7", optional = true }
+log = "0.4.29"
 
 [dev-dependencies]
 loom = "0.7"
