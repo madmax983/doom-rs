@@ -17,6 +17,46 @@ use crate::snapshot::SnapshotRing;
 ///
 /// Generic over `S: Clone` so that the game state type does not need to
 /// be imported from `doom-game` at the type level (only at call sites).
+///
+/// ## Examples
+///
+/// ```rust
+/// use doom_net::RollbackManager;
+/// use doom_net::{TicCmd, TicPacket, packet::MAX_PLAYERS};
+///
+/// // Game state can be any Clone type.
+/// #[derive(Clone, Debug, PartialEq)]
+/// struct GameState { hp: i32 }
+///
+/// // Create a manager for player slot 0.
+/// let mut rm: RollbackManager<GameState> = RollbackManager::new(0);
+///
+/// // 1. Save a snapshot of the state at tic 0.
+/// rm.save_snapshot(0, GameState { hp: 100 });
+///
+/// // 2. Predict local input for tic 0.
+/// let predicted_cmd = TicCmd { forward_move: 50, ..TicCmd::default() };
+/// rm.record_local_input(0, predicted_cmd);
+///
+/// // 3. Simulate tic 0 locally (game loop would do this).
+/// rm.advance_tic(); // now at tic 1
+///
+/// // 4. Server authoritative packet arrives for tic 0, but contradicts our prediction!
+/// let mut auth_cmds = [TicCmd::default(); MAX_PLAYERS];
+/// auth_cmds[0] = TicCmd { forward_move: -50, ..TicCmd::default() }; // They moved backwards!
+///
+/// let auth_packet = TicPacket {
+///     tic: 0,
+///     sender: 255, // Server
+///     ack_tic: 0,
+///     state_checksum: 0,
+///     cmds: auth_cmds,
+/// };
+/// rm.receive_packet(&auth_packet);
+///
+/// // 5. The manager detects the mismatch and flags a rollback.
+/// assert_eq!(rm.needs_rollback(), Some(0));
+/// ```
 #[derive(Debug, Clone)]
 pub struct RollbackManager<S: Clone> {
     /// Snapshot ring for game state rollback.
