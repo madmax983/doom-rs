@@ -125,6 +125,12 @@ struct Args {
     /// Export the level layout to an SVG file and exit.
     #[arg(long)]
     export_svg: Option<std::path::PathBuf>,
+
+    /// Play back a .lmp demo file entirely headlessly, record the player's path,
+    /// export the level layout and path to an SVG file, and exit.
+    /// Example: --playdemo demo.lmp --export-demo-path path.svg
+    #[arg(long)]
+    export_demo_path: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1677,6 +1683,18 @@ fn validate_mode_args(args: &Args) -> std::result::Result<(), &'static str> {
     if args.capture.is_some() && args.connect.is_some() {
         return Err("--capture cannot be combined with --connect");
     }
+    if args.export_demo_path.is_some() && args.playdemo.is_none() {
+        return Err("--export-demo-path requires --playdemo");
+    }
+    if args.export_demo_path.is_some() && args.record.is_some() {
+        return Err("--export-demo-path cannot be combined with --record");
+    }
+    if args.export_demo_path.is_some() && args.server.is_some() {
+        return Err("--export-demo-path cannot be combined with --server");
+    }
+    if args.export_demo_path.is_some() && args.connect.is_some() {
+        return Err("--export-demo-path cannot be combined with --connect");
+    }
     if args.server.is_some() && args.record.is_some() {
         return Err("--server and --record are mutually exclusive");
     }
@@ -1884,6 +1902,37 @@ fn run_doom() -> Result<()> {
         sfx_lookup,
     );
     app.attach_wad_for_transitions(skill, wad_stack);
+
+    // Headless demo path SVG export mode: play demo to completion, record path, save SVG, exit.
+    if let Some(ref export_path) = args.export_demo_path {
+        // We know args.playdemo is Some because of validate_mode_args
+        let demo_path = args.playdemo.as_ref().unwrap();
+        let demo_player = load_demo_player(demo_path)?;
+        let mut playback_app = demo_mode::DemoPlaybackApp::new(app, demo_player);
+
+        let mut path_points = Vec::new();
+        while !playback_app.player().is_finished() {
+            playback_app.tick(TicInput::default());
+
+            // Extract the player's X and Y coordinates.
+            let handle = playback_app.inner().gs.player.handle;
+            if let Some(mo) = playback_app.inner().gs.mobjslab.get(handle) {
+                path_points.push((mo.x.to_int(), mo.y.to_int()));
+            }
+        }
+
+        let svg_data = doom_map::export_map_with_path_to_svg(&playback_app.inner().level, &path_points);
+        std::fs::write(export_path, svg_data)
+            .with_context(|| format!("Failed to write demo SVG path to {}", export_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} demo path layout to {}",
+            "🌟".green(),
+            "Exported".green().bold(),
+            export_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
 
     // Headless capture mode: tick N frames, render, save BMP, exit.
     if let Some(ref capture_path) = args.capture {

@@ -21,4 +21,4 @@ pub use lumps::{
     Blockmap, FLAG_TWO_SIDED, Linedef, LumpParseError, Node, NodeBBox, Reject, SIDEDEF_NONE,
     Sector, Seg, Sidedef, Ssector, Thing, Vertex,
 };
-pub use svg::export_map_to_svg;
+pub use svg::{export_map_to_svg, export_map_with_path_to_svg};

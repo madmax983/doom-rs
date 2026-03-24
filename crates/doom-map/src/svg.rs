@@ -83,19 +83,35 @@ use crate::Level;
 /// assert!(svg_xml.contains("</svg>"));
 /// ```
 pub fn export_map_to_svg(level: &Level) -> String {
-    let mut min_x = i16::MAX;
-    let mut max_x = i16::MIN;
-    let mut min_y = i16::MAX;
-    let mut max_y = i16::MIN;
+    export_map_with_path_to_svg(level, &[])
+}
+
+/// Exports a `Level` to an SVG XML string, overlaying a given spatial path.
+///
+/// Functions identically to [`export_map_to_svg`] but additionally draws a red
+/// polyline along the coordinates provided in `path`. This is useful for
+/// visualizing player movement, demo playback, or AI pathfinding over a map.
+pub fn export_map_with_path_to_svg(level: &Level, path: &[(i32, i32)]) -> String {
+    let mut min_x = i32::MAX;
+    let mut max_x = i32::MIN;
+    let mut min_y = i32::MAX;
+    let mut max_y = i32::MIN;
 
     for v in &level.vertexes {
-        min_x = min_x.min(v.x);
-        max_x = max_x.max(v.x);
-        min_y = min_y.min(v.y);
-        max_y = max_y.max(v.y);
+        min_x = min_x.min(v.x as i32);
+        max_x = max_x.max(v.x as i32);
+        min_y = min_y.min(v.y as i32);
+        max_y = max_y.max(v.y as i32);
     }
 
-    if level.vertexes.is_empty() {
+    for &(px, py) in path {
+        min_x = min_x.min(px);
+        max_x = max_x.max(px);
+        min_y = min_y.min(py);
+        max_y = max_y.max(py);
+    }
+
+    if level.vertexes.is_empty() && path.is_empty() {
         min_x = 0;
         max_x = 100;
         min_y = 0;
@@ -104,10 +120,10 @@ pub fn export_map_to_svg(level: &Level) -> String {
 
     // Add some padding
     let pad = 128;
-    let width = (max_x as i32 - min_x as i32) + pad * 2;
-    let height = (max_y as i32 - min_y as i32) + pad * 2;
-    let v_min_x = min_x as i32 - pad;
-    let v_min_y = min_y as i32 - pad;
+    let width = (max_x - min_x) + pad * 2;
+    let height = (max_y - min_y) + pad * 2;
+    let v_min_x = min_x - pad;
+    let v_min_y = min_y - pad;
 
     let mut svg = String::new();
     svg.push_str(&format!(
@@ -153,6 +169,18 @@ pub fn export_map_to_svg(level: &Level) -> String {
             "<circle cx=\"{}\" cy=\"{}\" r=\"16\" fill=\"#f55\" />\n",
             thing.x, thing.y
         ));
+    }
+
+    // Draw the path as a single polyline.
+    if !path.is_empty() {
+        svg.push_str("<polyline points=\"");
+        for (i, &(px, py)) in path.iter().enumerate() {
+            if i > 0 {
+                svg.push(' ');
+            }
+            svg.push_str(&format!("{},{}", px, py));
+        }
+        svg.push_str("\" fill=\"none\" stroke=\"#f55\" stroke-width=\"4\" opacity=\"0.75\" />\n");
     }
 
     svg.push_str("</g>\n</svg>\n");
@@ -263,5 +291,16 @@ mod tests {
 
         // Check for thing element
         assert!(svg.contains("<circle cx=\"32\" cy=\"32\" r=\"16\" fill=\"#f55\" />"));
+    }
+
+    #[test]
+    fn test_export_svg_with_path() {
+        let level = make_test_level();
+        let path = vec![(0, 0), (32, 32), (64, 64)];
+        let svg = export_map_with_path_to_svg(&level, &path);
+
+        assert!(svg.contains("<svg viewBox="));
+        assert!(svg.contains("</svg>"));
+        assert!(svg.contains("<polyline points=\"0,0 32,32 64,64\" fill=\"none\" stroke=\"#f55\" stroke-width=\"4\" opacity=\"0.75\" />"));
     }
 }

@@ -89,6 +89,16 @@ impl DemoPlaybackApp {
         Self { inner, player }
     }
 
+    /// Access the wrapped [`DoomGame`].
+    pub fn inner(&self) -> &DoomGame {
+        &self.inner
+    }
+
+    /// Access the underlying [`DemoPlayer`].
+    pub fn player(&self) -> &DemoPlayer {
+        &self.player
+    }
+
     /// Feed a single [`TicCmd`] directly to the inner game state, bypassing the
     /// higher-level `DoomGame::tick` path (which would consume a live `TicInput`
     /// and process cheats/saves).
