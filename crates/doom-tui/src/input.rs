@@ -25,9 +25,13 @@ pub const TURN_SPEED: i16 = 640; // roughly 1/50 of a full circle in BAM >> 16
 
 /// Button flags.
 pub mod buttons {
+    /// Action button (fire weapon, punch).
     pub const BT_ATTACK: u8 = 0x01;
+    /// Interact button (open doors, press switches).
     pub const BT_USE: u8 = 0x02;
+    /// Signal to change the active weapon.
     pub const BT_CHANGE: u8 = 0x04;
+    /// Mask to extract weapon number from the upper bits.
     pub const BT_WEAPONMASK: u8 = 0x38; // bits 3-5 = weapon number
 }
 

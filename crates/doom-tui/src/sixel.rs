@@ -36,14 +36,35 @@ use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 
 /// Palette-aware Sixel widget for a Doom framebuffer.
 pub struct DoomSixelWidget<'a> {
+    /// Raw indexed pixel data from the `Framebuffer`.
     pub data: &'a [u8],
+    /// RGB color lookup table mapping `data` indices to actual colors.
     pub lut: &'a PaletteLut,
+    /// The currently active palette index in the `lut` (usually 0, unless taking damage).
     pub active_palette: usize,
     /// Terminal font cell size in pixels `(width, height)` — from `Picker::font_size()`.
     pub font_size: (u16, u16),
 }
 
 impl<'a> DoomSixelWidget<'a> {
+    /// Creates a new `DoomSixelWidget` referencing the current frame state.
+    ///
+    /// The actual scaling and bounds calculation occurs in `Widget::render`
+    /// to dynamically fit the terminal window.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::{Framebuffer, PaletteLut};
+    /// use doom_tui::sixel::DoomSixelWidget;
+    ///
+    /// let fb = Framebuffer::new();
+    /// let lut = PaletteLut::grayscale();
+    /// let active_palette = 0; // Normal view, no damage tint
+    /// let font_size = (8, 16); // Typical font cell size
+    ///
+    /// let widget = DoomSixelWidget::new(&fb, &lut, active_palette, font_size);
+    /// ```
     pub fn new(
         fb: &'a Framebuffer,
         lut: &'a PaletteLut,
@@ -99,6 +120,35 @@ impl Widget for DoomSixelWidget<'_> {
     }
 }
 
+/// Directly encodes a paletted source buffer into a Sixel string, applying
+/// nearest-neighbor scaling dynamically to match the output size.
+///
+/// Converts from indexed pixels straight to DCS output without any generic
+/// RGB conversions. Calculates differences from previous frames implicitly
+/// using Ratatui's state caching (on the main event loop thread) but handles
+/// the actual bitwise image building here.
+///
+/// ## Parameters
+///
+/// - `data`: Raw framebuffer indices (`src_w` × `src_h` length).
+/// - `lut`: RGB lookup table.
+/// - `pal`: The active palette to index into the lookup table.
+/// - `src_w`: Width of the source buffer.
+/// - `src_h`: Height of the source buffer.
+/// - `dst_w`: Desired width in Sixel pixels.
+/// - `dst_h`: Desired height in Sixel pixels.
+/// - `area_w`: Column width of the target terminal cell area (used for aspect ratios).
+///
+/// ## Examples
+///
+/// ```
+/// use doom_renderer::PaletteLut;
+/// use doom_tui::sixel::encode_doom_sixel;
+///
+/// let lut = PaletteLut::grayscale();
+/// let data = vec![0; 320 * 200];
+/// let encoded_string = encode_doom_sixel(&data, &lut, 0, 320, 200, 640, 400, 80);
+/// ```
 pub fn encode_doom_sixel(
     data: &[u8],
     lut: &PaletteLut,
