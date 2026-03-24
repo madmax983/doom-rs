@@ -712,4 +712,23 @@ mod tests {
         assert_eq!(p.keys, 0);
         assert!(!p.has_key(KEY_BLUE_CARD));
     }
+
+    #[test]
+    fn weapon_from_num_converts_correctly_and_handles_bounds() {
+        assert_eq!(WeaponType::from_num(0), Some(WeaponType::Fist));
+        assert_eq!(WeaponType::from_num(1), Some(WeaponType::Pistol));
+        assert_eq!(WeaponType::from_num(8), Some(WeaponType::SuperShotgun));
+        assert_eq!(WeaponType::from_num(9), None);
+        assert_eq!(WeaponType::from_num(255), None);
+        assert_eq!(WeaponType::from_num(256), None);
+        assert_eq!(WeaponType::from_num(usize::MAX), None);
+    }
+
+    #[test]
+    fn ammo_from_repr_converts_correctly_and_handles_bounds() {
+        assert_eq!(AmmoType::from_repr(0), Some(AmmoType::Bullets));
+        assert_eq!(AmmoType::from_repr(1), Some(AmmoType::Shells));
+        assert_eq!(AmmoType::from_repr(255), Some(AmmoType::None));
+        assert_eq!(AmmoType::from_repr(4), None);
+    }
 }
