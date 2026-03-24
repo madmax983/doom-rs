@@ -1857,7 +1857,12 @@ fn run_doom() -> Result<()> {
         .and_then(|p| match std::fs::File::create(p) {
             Ok(f) => Some(f),
             Err(e) => {
-                eprintln!("Warning: could not open debug log '{}': {e}", p.display());
+                use crossterm::style::Stylize;
+                eprintln!(
+                    "\n⚠️  {}: could not open debug log '{}': {e}",
+                    "Warning".yellow().bold(),
+                    p.display().to_string().cyan()
+                );
                 None
             }
         });
@@ -1940,9 +1945,11 @@ fn run_doom() -> Result<()> {
     } else if let Some(mode) = RendererMode::from_str_loose(&args.renderer) {
         event_loop.set_renderer_mode(mode);
     } else {
+        use crossterm::style::Stylize;
         eprintln!(
-            "warning: unknown --renderer {:?}, using auto-detect",
-            args.renderer
+            "\n⚠️  {}: unknown --renderer {}, using auto-detect",
+            "Warning".yellow().bold(),
+            args.renderer.cyan()
         );
         event_loop.set_graphics_protocol(true);
     }
