@@ -243,7 +243,12 @@ impl MusScore {
                         .get(cursor)
                         .ok_or(AudioError::InvalidMus("truncated delta-time"))?;
                     cursor += 1;
-                    delta |= u32::from(b & 0x7F) << shift;
+                    let shifted = u32::from(b & 0x7F)
+                        .checked_shl(shift)
+                        .ok_or(AudioError::InvalidMus("delta-time shift overflow"))?;
+                    delta = delta
+                        .checked_add(shifted)
+                        .ok_or(AudioError::InvalidMus("delta-time value overflow"))?;
                     shift += 7;
                     if (b & 0x80) == 0 {
                         break;
@@ -273,7 +278,7 @@ mod tests {
 
     /// Build the 16-byte fixed MUS header with given score_start and
     /// instrument_count (no instrument list entries).
-    fn make_header(score_start: u16, instrument_count: u16) -> Vec<u8> {
+    pub(crate) fn make_header(score_start: u16, instrument_count: u16) -> Vec<u8> {
         let mut h = Vec::with_capacity(16);
         h.extend_from_slice(b"MUS\x1a");
         h.extend_from_slice(&0u16.to_le_bytes()); // score_length (don't care)
@@ -352,5 +357,25 @@ mod tests {
                 note: 60
             }
         );
+    }
+}
+
+#[cfg(test)]
+mod tests_havoc {
+    use super::*;
+
+    #[test]
+    fn mus_delta_time_overflow() {
+        let mut data = super::tests::make_header(16, 0);
+        data.push(0x80); // Event type 0, channel 0, last_in_group = 1
+        data.push(0x00); // Note byte
+        data.push(0xff); // Delta byte 1 (continue)
+        data.push(0xff); // Delta byte 2 (continue)
+        data.push(0xff); // Delta byte 3 (continue)
+        data.push(0xff); // Delta byte 4 (continue)
+        data.push(0xff); // Delta byte 5 (continue)
+        data.push(0xff); // Delta byte 6 (continue)
+        let result = MusScore::parse(&data);
+        assert!(result.is_err());
     }
 }
