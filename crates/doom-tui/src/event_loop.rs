@@ -211,8 +211,10 @@ static MODIFIER_SAMPLE_COUNT: AtomicUsize = AtomicUsize::new(0);
 /// Errors that can occur during event loop setup or execution.
 #[derive(Debug, Error)]
 pub enum EventLoopError {
+    /// Failed to configure crossterm (raw mode or alternate screen).
     #[error("terminal setup failed: {0}")]
     TerminalSetup(String),
+    /// Failed to draw the frame layout via Ratatui.
     #[error("terminal draw error: {0}")]
     Draw(String),
 }
