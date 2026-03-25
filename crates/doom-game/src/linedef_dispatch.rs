@@ -745,7 +745,8 @@ fn dispatch_specials(
 
 fn queue_locked_door_feedback(gs: &mut GameState, activator: MobjHandle, color: LockedDoorColor) {
     if activator == gs.player.handle {
-        gs.sound.sound_queue
+        gs.sound
+            .sound_queue
             .push(SoundRequest::PlayerUseLockedDoor(color));
     }
 }
@@ -852,7 +853,12 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, auto_c
         None => return,
     };
     let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
-    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs
+        .movers
+        .active_doors
+        .iter()
+        .any(|d| d.sector == sector_idx)
+    {
         return;
     }
     gs.movers.active_doors.push(crate::state::DoorMover {
@@ -874,7 +880,12 @@ fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
         None => return,
     };
     let target = sector.floor_height;
-    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs
+        .movers
+        .active_doors
+        .iter()
+        .any(|d| d.sector == sector_idx)
+    {
         return;
     }
     gs.movers.active_doors.push(crate::state::DoorMover {
@@ -896,7 +907,12 @@ fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) 
         Some(s) => s,
         None => return,
     };
-    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs
+        .movers
+        .active_doors
+        .iter()
+        .any(|d| d.sector == sector_idx)
+    {
         return;
     }
     let reopen_h = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
@@ -924,7 +940,12 @@ fn open_blazing_door_helper(
         None => return,
     };
     let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
-    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs
+        .movers
+        .active_doors
+        .iter()
+        .any(|d| d.sector == sector_idx)
+    {
         return;
     }
     gs.movers.active_doors.push(crate::state::DoorMover {
@@ -946,7 +967,12 @@ fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usiz
         None => return,
     };
     let target = sector.floor_height;
-    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs
+        .movers
+        .active_doors
+        .iter()
+        .any(|d| d.sector == sector_idx)
+    {
         return;
     }
     gs.movers.active_doors.push(crate::state::DoorMover {
@@ -1485,7 +1511,11 @@ mod tests {
             0,
         );
         assert!(result, "door dispatch should succeed");
-        assert_eq!(gs.movers.active_doors.len(), 1, "door mover should be created");
+        assert_eq!(
+            gs.movers.active_doors.len(),
+            1,
+            "door mover should be created"
+        );
     }
 
     #[test]
