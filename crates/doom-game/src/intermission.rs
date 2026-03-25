@@ -42,12 +42,12 @@ impl GameState {
     pub fn compute_intermission_stats(&self) -> IntermissionStats {
         IntermissionStats {
             kills: self.player.kill_count,
-            total_kills: self.total_kills,
+            total_kills: self.stats.total_kills,
             items: self.player.item_count,
-            total_items: self.total_items,
+            total_items: self.stats.total_items,
             secrets: self.player.secret_count,
-            total_secrets: self.total_secrets,
-            time_tics: self.level_time,
+            total_secrets: self.stats.total_secrets,
+            time_tics: self.stats.level_time,
             par_time_tics: par_time(&self.level_name),
         }
     }
@@ -150,10 +150,10 @@ mod tests {
         gs.player.kill_count = kills;
         gs.player.item_count = items;
         gs.player.secret_count = secrets;
-        gs.total_kills = total_kills;
-        gs.total_items = total_items;
-        gs.total_secrets = total_secrets;
-        gs.level_time = level_time;
+        gs.stats.total_kills = total_kills;
+        gs.stats.total_items = total_items;
+        gs.stats.total_secrets = total_secrets;
+        gs.stats.level_time = level_time;
         gs
     }
 

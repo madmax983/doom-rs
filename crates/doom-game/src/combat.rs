@@ -261,7 +261,7 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             .get(target)
             .map(|mo| (mo.x, mo.y))
             .unwrap_or_default();
-        gs.sound_queue
+        gs.sound.sound_queue
             .push(crate::state::SoundRequest::MonsterDie(kind, target, sx, sy));
     } else {
         // -------------------------------------------------------------------

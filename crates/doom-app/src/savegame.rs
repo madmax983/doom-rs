@@ -231,9 +231,9 @@ pub fn apply_save(gs: &mut GameState, payload: &SavePayload) -> Result<(), SaveE
     gs.rng.set_index(payload.rng_index);
 
     // Restore statistics.
-    gs.kill_count = payload.kill_count;
-    gs.item_count = payload.item_count;
-    gs.secret_count = payload.secret_count;
+    gs.stats.kill_count = payload.kill_count;
+    gs.stats.item_count = payload.item_count;
+    gs.stats.secret_count = payload.secret_count;
 
     // Restore player health.
     // `set_health_capped` clamps to [0, cap]; use a large cap to restore exact value.
@@ -318,9 +318,9 @@ fn build_payload(gs: &GameState) -> SavePayload {
         player_weapons: weapons_mask,
         player_keys: gs.player.keys,
         active_weapon: gs.player.weapon as u8,
-        kill_count: gs.kill_count,
-        item_count: gs.item_count,
-        secret_count: gs.secret_count,
+        kill_count: gs.stats.kill_count,
+        item_count: gs.stats.item_count,
+        secret_count: gs.stats.secret_count,
     }
 }
 

@@ -1017,7 +1017,7 @@ impl DoomApp for DoomGame {
         // contention — weapon-priority sounds always win; monster sounds compete
         // with each other, matching Doom's original S_StartSound behaviour.
         {
-            let events = std::mem::take(&mut self.gs.sound_queue);
+            let events = std::mem::take(&mut self.gs.sound.sound_queue);
             self.handle_sound_events(events);
         }
 

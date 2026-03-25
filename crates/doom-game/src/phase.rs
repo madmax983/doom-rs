@@ -823,8 +823,8 @@ mod tests {
         let mut ctrl = GamePhaseController::new(MapId::new(1, 1));
         let mut gs = make_test_game_state("E1M1");
         gs.player.kill_count = 10;
-        gs.total_kills = 20;
-        gs.level_time = 350;
+        gs.stats.total_kills = 20;
+        gs.stats.level_time = 350;
         gs.exit_request = Some(ExitRequest::Normal);
 
         ctrl.tick(&mut gs);
