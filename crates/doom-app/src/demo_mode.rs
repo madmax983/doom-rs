@@ -95,6 +95,11 @@ impl DemoPlaybackApp {
     fn tick_cmd(&mut self, cmd: TicCmd) {
         self.inner.gs.tick(cmd, Some(&mut self.inner.level));
     }
+
+    /// Returns `true` if the demo has been completely replayed.
+    pub fn is_finished(&self) -> bool {
+        self.player.is_finished()
+    }
 }
 
 impl DoomApp for DemoPlaybackApp {
@@ -349,6 +354,25 @@ mod tests {
         app.tick(TicInput::default());
         assert_eq!(app.inner.gs.tic_num, tic_start);
         assert!(app.player.is_finished());
+    }
+
+    #[test]
+    fn playback_app_is_finished_evaluates_correctly() {
+        let game = make_doom_game();
+        let player = make_player(3); // Demo with 3 tics
+        let mut app = DemoPlaybackApp::new(game, player);
+
+        assert!(!app.is_finished(), "demo must not be finished initially");
+
+        app.tick(TicInput::default());
+        assert!(!app.is_finished(), "demo must not be finished after 1 tic");
+
+        app.tick(TicInput::default());
+        app.tick(TicInput::default());
+        assert!(
+            app.is_finished(),
+            "demo must be finished after consuming all 3 tics"
+        );
     }
 
     // -----------------------------------------------------------------------

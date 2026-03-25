@@ -76,6 +76,10 @@ struct Args {
     #[arg(long)]
     playdemo: Option<std::path::PathBuf>,
 
+    /// Play back a .lmp demo file as fast as possible to benchmark the engine (e.g. --timedemo my.lmp)
+    #[arg(long)]
+    timedemo: Option<std::path::PathBuf>,
+
     /// Path to DeHackEd (.deh) patch file to apply.
     #[arg(long)]
     deh: Option<String>,
@@ -1884,6 +1888,46 @@ fn run_doom() -> Result<()> {
         sfx_lookup,
     );
     app.attach_wad_for_transitions(skill, wad_stack);
+
+    // Timedemo mode: play back a demo as fast as possible, then print FPS and exit.
+    if let Some(ref timedemo_path) = args.timedemo {
+        use crossterm::style::Stylize;
+        use std::time::Instant;
+
+        let player = load_demo_player(timedemo_path)?;
+        let mut playback_app = demo_mode::DemoPlaybackApp::new(app, player);
+        let mut framebuffer = Framebuffer::new();
+
+        println!(
+            "{} {} timedemo from {}",
+            "🚀".cyan(),
+            "Starting".cyan().bold(),
+            timedemo_path.display().to_string().cyan()
+        );
+
+        let start = Instant::now();
+        let mut actual_tics = 0;
+
+        while !playback_app.is_finished() {
+            playback_app.tick(TicInput::default());
+            playback_app.render(&mut framebuffer);
+            actual_tics += 1;
+        }
+
+        let duration = start.elapsed();
+        let fps = (actual_tics as f64) / duration.as_secs_f64();
+
+        println!(
+            "{} {} timedemo: {} tics in {:.2} seconds ({:.2} fps)",
+            "✅".green(),
+            "Finished".green().bold(),
+            actual_tics.to_string().yellow(),
+            duration.as_secs_f64(),
+            fps.to_string().green().bold()
+        );
+
+        return Ok(());
+    }
 
     // Headless capture mode: tick N frames, render, save BMP, exit.
     if let Some(ref capture_path) = args.capture {
