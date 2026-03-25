@@ -106,8 +106,9 @@ pub use specials::{
 };
 pub use state::{
     CeilingMover, CeilingType, ConveyorBelt, DoomRng, ExitRequest, FloorMover, GameState,
-    LiftMover, LiftStatus, LightEffectType, LockedDoorColor, MoveDirection, PerpetualPlatform,
-    PlatformStatus, RNG_TABLE, ScrollingWall, SectorLightEffect, SoundRequest,
+    LevelStats, LiftMover, LiftStatus, LightEffectType, LockedDoorColor, MoveDirection,
+    PerpetualPlatform, PlatformStatus, RNG_TABLE, ScrollingWall, SectorLightEffect, SectorMovers,
+    SoundPropagation, SoundRequest,
 };
 pub use states::STATES;
 pub use states::sprite_names;

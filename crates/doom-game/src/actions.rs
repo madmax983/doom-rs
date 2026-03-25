@@ -588,7 +588,7 @@ fn transition_to_see_state(
         .get(handle)
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
-    gs.sound_queue.push(crate::state::SoundRequest::MonsterWake(
+    gs.sound.sound_queue.push(crate::state::SoundRequest::MonsterWake(
         kind, handle, mo_x, mo_y,
     ));
 }
@@ -1090,7 +1090,7 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound_queue
+    gs.sound.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Trooper,
             handle,
@@ -1143,7 +1143,7 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound_queue
+    gs.sound.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Sergeant,
             handle,
@@ -1190,7 +1190,7 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound_queue
+    gs.sound.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Imp,
             handle,
@@ -1230,7 +1230,7 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
             .map(|mo| (mo.x, mo.y))
             .unwrap_or_default();
 
-        gs.sound_queue
+        gs.sound.sound_queue
             .push(crate::state::SoundRequest::MonsterAttack(
                 MobjKind::Demon,
                 handle,
@@ -1264,7 +1264,7 @@ fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound_queue
+    gs.sound.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Cacodemon,
             handle,
@@ -1302,7 +1302,7 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound_queue
+    gs.sound.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             bruis_kind, handle, sx, sy,
         ));
@@ -1353,7 +1353,7 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound_queue
+    gs.sound.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             cpos_kind, handle, sx, sy,
         ));
@@ -1383,7 +1383,7 @@ fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound_queue
+    gs.sound.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Cyberdemon,
             handle,
@@ -1416,7 +1416,7 @@ fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound_queue
+    gs.sound.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Revenant,
             handle,
@@ -1492,7 +1492,7 @@ fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound_queue
+    gs.sound.sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Mancubus,
             handle,
@@ -2941,12 +2941,12 @@ mod tests {
 
         assert!(!moved, "the move should be blocked by the near door");
         assert_eq!(
-            gs.active_doors.len(),
+            gs.movers.active_doors.len(),
             1,
             "monster should still open a blocking door even when the door lives in a neighbouring blockmap cell"
         );
         assert_eq!(
-            gs.active_doors[0].sector, 1,
+            gs.movers.active_doors[0].sector, 1,
             "monster should open the actual blocking door"
         );
     }

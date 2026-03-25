@@ -407,7 +407,7 @@ pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) -> bool {
         WeaponType::Chainsaw => p_fire_chainsaw(gs, level),
     }
 
-    gs.sound_queue.push(SoundRequest::PlayerWeaponFire(weapon));
+    gs.sound.sound_queue.push(SoundRequest::PlayerWeaponFire(weapon));
 
     if weapon_makes_noise(weapon) {
         if let Some(lv) = level {
@@ -1167,7 +1167,7 @@ mod tests {
 
         assert!(fired, "dispatcher should report a successful shot");
         assert_eq!(
-            gs.sound_queue,
+            gs.sound.sound_queue,
             vec![SoundRequest::PlayerWeaponFire(WeaponType::Pistol)]
         );
     }
@@ -1182,7 +1182,7 @@ mod tests {
 
         assert!(!fired, "switching away from an empty weapon is not a shot");
         assert!(
-            gs.sound_queue.is_empty(),
+            gs.sound.sound_queue.is_empty(),
             "no player weapon sound should be queued when nothing fired"
         );
     }

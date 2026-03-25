@@ -492,9 +492,67 @@ impl DoomRng {
     }
 }
 
+
 // ---------------------------------------------------------------------------
 // GameState
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// GameState Sub-structs
+// ---------------------------------------------------------------------------
+
+/// End-of-level statistics and map tracking.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct LevelStats {
+    pub kill_count: u32,
+    pub item_count: u32,
+    pub secret_count: u32,
+    /// Total killable monsters in the map (for percentage display).
+    pub total_kills: u32,
+    /// Total collectable items.
+    pub total_items: u32,
+    /// Total secret sectors in the map (sectors with special type 9).
+    pub total_secrets: u32,
+    /// Number of tics elapsed in the current level (incremented each tick).
+    pub level_time: u32,
+}
+
+/// Active sector movers and environmental specials.
+#[derive(Clone, Debug, Default)]
+pub struct SectorMovers {
+    /// Active door/floor/ceiling movers (ticked by `specials::tick_doors`).
+    pub active_doors: Vec<DoorMover>,
+    /// Active light specials (ticked by `specials::tick_lights`).
+    pub active_lights: Vec<LightSpecial>,
+    /// Active ceiling movers / crushers (ticked by `specials::tick_ceilings`).
+    pub active_ceilings: Vec<CeilingMover>,
+    /// Active floor movers / lifts (ticked by `specials::tick_floors`).
+    pub active_floors: Vec<FloorMover>,
+    /// Active perpetual platforms (ticked by `specials::tick_platforms`).
+    pub active_platforms: Vec<PerpetualPlatform>,
+    /// Active lifts (lower-wait-raise) (ticked by `specials::tick_lifts`).
+    pub lifts: Vec<LiftMover>,
+    /// Extended sector light effects (ticked by `specials::tick_sector_lights`).
+    pub sector_lights: Vec<SectorLightEffect>,
+    /// Active scrolling wall textures (ticked by `specials::tick_scrollers`).
+    pub scrolling_walls: Vec<ScrollingWall>,
+    /// Active conveyor belt sectors (ticked by `specials::tick_conveyors`).
+    pub conveyors: Vec<ConveyorBelt>,
+}
+
+/// Sound propagation and event queues.
+#[derive(Clone, Debug, Default)]
+pub struct SoundPropagation {
+    /// Per-sector sound target: which actor made noise that this sector "heard".
+    /// Indexed by sector index. `None` = no noise has reached this sector.
+    pub sound_targets: Vec<Option<MobjHandle>>,
+    /// Per-sector generation counter for flood-fill visited tracking.
+    pub sound_traversed: Vec<u32>,
+    /// Current sound generation counter.
+    pub sound_gen: u32,
+    /// Sound events queued this tic.
+    pub sound_queue: Vec<SoundRequest>,
+}
 
 /// Complete, self-contained game simulation state.
 ///
@@ -508,6 +566,8 @@ impl DoomRng {
 /// - RNG state (`rng`) is the only source of "randomness".
 #[derive(Clone, Debug)]
 pub struct GameState {
+
+
     /// Monotonically increasing tic counter (wraps at `u32::MAX`).
     pub tic_num: u32,
 
@@ -523,64 +583,17 @@ pub struct GameState {
     /// Current level identifier (e.g. `"E1M1"`).
     pub level_name: String,
 
-    // --- End-of-level statistics ---
-    pub kill_count: u32,
-    pub item_count: u32,
-    pub secret_count: u32,
-    /// Total killable monsters in the map (for percentage display).
-    pub total_kills: u32,
-    /// Total collectable items.
-    pub total_items: u32,
-    /// Total secret sectors in the map (sectors with special type 9).
-    pub total_secrets: u32,
 
-    /// Active door/floor/ceiling movers (ticked by `specials::tick_doors`).
-    pub active_doors: Vec<DoorMover>,
-    /// Active light specials (ticked by `specials::tick_lights`).
-    pub active_lights: Vec<LightSpecial>,
-    /// Active ceiling movers / crushers (ticked by `specials::tick_ceilings`).
-    pub active_ceilings: Vec<CeilingMover>,
-    /// Active floor movers / lifts (ticked by `specials::tick_floors`).
-    pub active_floors: Vec<FloorMover>,
-    /// Active perpetual platforms (ticked by `specials::tick_platforms`).
-    pub active_platforms: Vec<PerpetualPlatform>,
-    /// Active lifts (lower-wait-raise) (ticked by `specials::tick_lifts`).
-    pub lifts: Vec<LiftMover>,
+    pub stats: LevelStats,
 
-    /// Extended sector light effects (ticked by `specials::tick_sector_lights`).
-    pub sector_lights: Vec<SectorLightEffect>,
 
-    /// Active scrolling wall textures (ticked by `specials::tick_scrollers`).
-    pub scrolling_walls: Vec<ScrollingWall>,
+    pub movers: SectorMovers,
 
-    /// Active conveyor belt sectors (ticked by `specials::tick_conveyors`).
-    pub conveyors: Vec<ConveyorBelt>,
+
+    pub sound: SoundPropagation,
 
     /// Level exit requested this tic (cleared to `None` at start of each tick).
     pub exit_request: Option<ExitRequest>,
-
-    /// Number of tics elapsed in the current level (incremented each tick).
-    pub level_time: u32,
-
-    // --- Sound propagation state ---
-    /// Per-sector sound target: which actor made noise that this sector "heard".
-    ///
-    /// Indexed by sector index.  `None` = no noise has reached this sector.
-    /// Resized to `level.sectors.len()` by `sound::init_sound_state`.
-    pub sound_targets: Vec<Option<MobjHandle>>,
-
-    /// Per-sector generation counter for flood-fill visited tracking.
-    ///
-    /// Avoids clearing the whole vec each time `p_noise_alert` runs.
-    /// A sector is considered "visited this generation" when
-    /// `sound_traversed[s] >= sound_gen`.
-    pub sound_traversed: Vec<u32>,
-
-    /// Current sound generation counter.
-    ///
-    /// Incremented each time `p_noise_alert` is called to mark a new
-    /// flood-fill pass.
-    pub sound_gen: u32,
 
     // --- Automap visibility state ---
     /// Per-linedef visibility flag: `true` if the player has visited a
@@ -593,12 +606,6 @@ pub struct GameState {
     // --- Difficulty ---
     /// Current skill level (affects Nightmare respawning).
     pub skill: Skill,
-
-    // --- Pending sound events ---
-    /// Sound events queued this tic.  The app drains this after each
-    /// `tick()` call and plays the corresponding WAD sound effects.
-    /// Cleared at the start of each tick so events don't accumulate.
-    pub sound_queue: Vec<SoundRequest>,
 
     // --- Boss Brain (Icon of Sin) ---
     /// Set `true` once the Boss Brain's see state fires; cubes only
@@ -624,29 +631,12 @@ impl GameState {
             mobjslab: MobjSlab::new(),
             player: PlayerState::default(),
             level_name: level_name.to_string(),
-            kill_count: 0,
-            item_count: 0,
-            secret_count: 0,
-            total_kills: 0,
-            total_items: 0,
-            total_secrets: 0,
-            active_doors: Vec::new(),
-            active_lights: Vec::new(),
-            active_ceilings: Vec::new(),
-            active_floors: Vec::new(),
-            active_platforms: Vec::new(),
-            lifts: Vec::new(),
-            sector_lights: Vec::new(),
-            scrolling_walls: Vec::new(),
-            conveyors: Vec::new(),
+            stats: LevelStats::default(),
+            movers: SectorMovers::default(),
+            sound: SoundPropagation::default(),
             exit_request: None,
-            level_time: 0,
-            sound_targets: Vec::new(),
-            sound_traversed: Vec::new(),
-            sound_gen: 0,
             seen_lines: Vec::new(),
             skill: Skill::Medium,
-            sound_queue: Vec::new(),
             brain_awake: false,
             brain_targets: Vec::new(),
             brain_target_index: 0,
@@ -746,7 +736,7 @@ impl GameState {
     /// The renderer adds these offsets to the sidedef's `x_offset`/`y_offset`
     /// when drawing the wall texture.
     pub fn get_scroll_offset(&self, linedef_index: usize) -> (i32, i32) {
-        for sw in &self.scrolling_walls {
+        for sw in &self.movers.scrolling_walls {
             if sw.linedef_index == linedef_index {
                 return (sw.accumulated_x, sw.accumulated_y);
             }
@@ -808,7 +798,7 @@ mod tests {
         assert_eq!(gs.tic_num, 0);
         assert_eq!(gs.level_name, "E1M1");
         assert!(gs.mobjslab.is_empty());
-        assert_eq!(gs.kill_count, 0);
+        assert_eq!(gs.stats.kill_count, 0);
     }
 
     #[test]

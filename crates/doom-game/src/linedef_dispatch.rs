@@ -627,7 +627,7 @@ fn dispatch_lifts(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefEf
             true
         }
         PerpetualLiftStop => {
-            gs.active_platforms.retain(|p| p.tag != tag);
+            gs.movers.active_platforms.retain(|p| p.tag != tag);
             true
         }
         _ => false,
@@ -745,7 +745,7 @@ fn dispatch_specials(
 
 fn queue_locked_door_feedback(gs: &mut GameState, activator: MobjHandle, color: LockedDoorColor) {
     if activator == gs.player.handle {
-        gs.sound_queue
+        gs.sound.sound_queue
             .push(SoundRequest::PlayerUseLockedDoor(color));
     }
 }
@@ -852,10 +852,10 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, auto_c
         None => return,
     };
     let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
-    if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
         return;
     }
-    gs.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::state::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -874,10 +874,10 @@ fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
         None => return,
     };
     let target = sector.floor_height;
-    if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
         return;
     }
-    gs.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::state::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -896,11 +896,11 @@ fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) 
         Some(s) => s,
         None => return,
     };
-    if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
         return;
     }
     let reopen_h = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
-    gs.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::state::DoorMover {
         sector: sector_idx,
         target_height: sector.floor_height,
         current_height: sector.ceil_height,
@@ -924,10 +924,10 @@ fn open_blazing_door_helper(
         None => return,
     };
     let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
-    if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
         return;
     }
-    gs.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::state::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -946,10 +946,10 @@ fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usiz
         None => return,
     };
     let target = sector.floor_height;
-    if gs.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
         return;
     }
-    gs.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::state::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -1485,7 +1485,7 @@ mod tests {
             0,
         );
         assert!(result, "door dispatch should succeed");
-        assert_eq!(gs.active_doors.len(), 1, "door mover should be created");
+        assert_eq!(gs.movers.active_doors.len(), 1, "door mover should be created");
     }
 
     #[test]
@@ -1508,7 +1508,7 @@ mod tests {
             !result,
             "back-side use should fail for non-manual front-only use lines"
         );
-        assert!(gs.active_doors.is_empty());
+        assert!(gs.movers.active_doors.is_empty());
         assert_eq!(level.linedefs[0].special, 31);
     }
 
@@ -1532,7 +1532,7 @@ mod tests {
             result,
             "back-side use should still work for manual door lines Doom allows"
         );
-        assert_eq!(gs.active_doors.len(), 1);
+        assert_eq!(gs.movers.active_doors.len(), 1);
     }
 
     #[test]
@@ -1590,7 +1590,7 @@ mod tests {
             0,
         );
         assert!(!result, "locked door without key should fail");
-        assert!(gs.active_doors.is_empty());
+        assert!(gs.movers.active_doors.is_empty());
     }
 
     #[test]
@@ -1611,7 +1611,7 @@ mod tests {
 
         assert!(!result, "locked door without key should fail");
         assert_eq!(
-            gs.sound_queue,
+            gs.sound.sound_queue,
             vec![crate::state::SoundRequest::PlayerUseLockedDoor(
                 crate::state::LockedDoorColor::Blue,
             )],
@@ -1644,7 +1644,7 @@ mod tests {
 
         assert!(!result, "monster without key should not activate the door");
         assert!(
-            gs.sound_queue.is_empty(),
+            gs.sound.sound_queue.is_empty(),
             "monster should not get keyed-door feedback"
         );
         assert_eq!(
@@ -1672,7 +1672,7 @@ mod tests {
             0,
         );
         assert!(result, "locked door with key should succeed");
-        assert_eq!(gs.active_doors.len(), 1);
+        assert_eq!(gs.movers.active_doors.len(), 1);
     }
 
     #[test]

@@ -205,10 +205,10 @@ pub fn spawn_level_things(
         // --- Track totals for intermission screen ---
         if let Some(spawned) = gs.mobjslab.get(handle) {
             if spawned.flags & flags::MF_COUNTKILL != 0 {
-                gs.total_kills += 1;
+                gs.stats.total_kills += 1;
             }
             if spawned.flags & flags::MF_COUNTITEM != 0 {
-                gs.total_items += 1;
+                gs.stats.total_items += 1;
             }
         }
     }
@@ -1019,8 +1019,8 @@ mod tests {
         ]);
         let mut gs = GameState::new("E1M1");
         spawn_level_things(&mut gs, &level, Skill::Medium, false);
-        assert_eq!(gs.total_kills, 1, "Trooper should count as a kill");
-        assert_eq!(gs.total_items, 1, "HealthBonus should count as an item");
+        assert_eq!(gs.stats.total_kills, 1, "Trooper should count as a kill");
+        assert_eq!(gs.stats.total_items, 1, "HealthBonus should count as an item");
     }
 
     #[test]
@@ -1050,7 +1050,7 @@ mod tests {
         ]);
         let mut gs = GameState::new("E1M1");
         spawn_level_things(&mut gs, &level, Skill::Medium, false);
-        assert_eq!(gs.total_kills, 3, "All three monsters should be counted");
+        assert_eq!(gs.stats.total_kills, 3, "All three monsters should be counted");
     }
 
     // ===================================================================
@@ -1270,8 +1270,8 @@ mod tests {
         let handle = spawn_level_things(&mut gs, &level, Skill::Medium, false);
         assert!(handle.is_none());
         assert!(gs.mobjslab.is_empty());
-        assert_eq!(gs.total_kills, 0);
-        assert_eq!(gs.total_items, 0);
+        assert_eq!(gs.stats.total_kills, 0);
+        assert_eq!(gs.stats.total_items, 0);
     }
 
     // ===================================================================
