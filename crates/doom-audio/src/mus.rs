@@ -243,6 +243,9 @@ impl MusScore {
                         .get(cursor)
                         .ok_or(AudioError::InvalidMus("truncated delta-time"))?;
                     cursor += 1;
+                    if shift >= 32 {
+                        return Err(AudioError::InvalidMus("delta-time overflow"));
+                    }
                     delta |= u32::from(b & 0x7F) << shift;
                     shift += 7;
                     if (b & 0x80) == 0 {
