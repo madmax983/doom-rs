@@ -77,8 +77,25 @@ pub enum WadError {
 
 /// A parsed, validated WAD file.
 ///
-/// Holds an owned copy of the raw bytes plus the validated lump directory.
-/// All `LumpDef` offsets and sizes are guaranteed to be in bounds.
+/// A WAD (Where's All the Data?) file is the core archive format for Doom.
+/// It contains a header, a directory of lumps (files within the archive),
+/// and the raw data payload for those lumps.
+///
+/// This struct holds an owned copy of the raw bytes plus the validated lump directory.
+/// All [`LumpDef`] offsets and sizes are guaranteed to be in bounds at parse time,
+/// so accessing lump data later is infallible.
+///
+/// # Examples
+/// ```
+/// use doom_wad::WadFile;
+///
+/// // A minimal valid WAD with one 4-byte lump named "TEST".
+/// let wad_bytes = b"IWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0TEST\0\0\0\0DATA".to_vec();
+/// let wad = WadFile::parse(wad_bytes).unwrap();
+///
+/// assert_eq!(wad.lump_count(), 1);
+/// assert_eq!(wad.find_lump_data("TEST").unwrap(), b"DATA");
+/// ```
 #[derive(Debug)]
 pub struct WadFile {
     kind: WadKind,
@@ -87,10 +104,15 @@ pub struct WadFile {
 }
 
 impl WadFile {
-    /// Parse a WAD from raw bytes (typically `std::fs::read("doom.wad")`).
+    /// Parse a WAD from raw bytes (typically loaded via `std::fs::read("doom.wad")`).
+    ///
+    /// The parser reads the 12-byte header, jumps to the directory offset, and
+    /// processes every 16-byte lump entry. During this phase, it validates that
+    /// every lump's byte range falls strictly within the bounds of the provided data.
     ///
     /// # Errors
-    /// Returns `WadError` if the file is malformed or any lump is out of bounds.
+    /// Returns [`WadError`] if the file is malformed, too short, has invalid magic bytes,
+    /// or if any lump's claimed offset and size exceed the file's total length.
     pub fn parse(data: Vec<u8>) -> Result<Self, WadError> {
         if data.len() < 12 {
             return Err(WadError::TooShort(data.len()));
@@ -189,7 +211,11 @@ impl WadFile {
         &self.dir
     }
 
-    /// Find the last lump with the given name (PWAD override semantics).
+    /// Find the last lump with the given name.
+    ///
+    /// Because WADs can contain multiple lumps with the same name (especially
+    /// marker lumps or map data), this method searches backwards from the end
+    /// of the directory. This respects the engine's "last defined wins" rule.
     ///
     /// Returns `None` if no lump with that name exists.
     pub fn find_lump(&self, name: &str) -> Option<&LumpDef> {
@@ -302,7 +328,12 @@ pub enum MapLumpGroup<'a> {
 impl WadFile {
     /// Locate and validate a map's lump group.
     ///
-    /// # Errors
+    /// Maps in Doom aren't single files; they are a contiguous sequence of lumps
+    /// following a specific marker (like `E1M1` or `MAP01`). This method finds
+    /// the marker and groups the subsequent lumps based on whether they follow
+    /// the classic binary format (10 required lumps like `THINGS`, `LINEDEFS`)
+    /// or the newer text-based `UDMF` format.
+    ///
     /// Returns `None` if the map marker isn't present or any required lump
     /// is missing from the expected position after the marker.
     pub fn map_lump_group<'a>(&'a self, map_name: &str) -> Option<MapLumpGroup<'a>> {
