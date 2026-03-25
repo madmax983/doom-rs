@@ -339,6 +339,70 @@ fn dispatch_effect(
 
     match effect {
         // --- Doors ---
+        DoorOpenWaitClose
+        | DoorOpen
+        | DoorClose
+        | DoorCloseWaitOpen
+        | DoorBlazeOpenWaitClose
+        | DoorBlazeOpen
+        | DoorBlazeClose => dispatch_doors(gs, level, linedef_index, tag, effect),
+
+        // --- Locked doors ---
+        DoorLockedBlue | DoorLockedRed | DoorLockedYellow | DoorLockedBlueOpen
+        | DoorLockedRedOpen | DoorLockedYellowOpen => {
+            dispatch_locked_doors(gs, level, linedef_index, tag, effect, activator)
+        }
+
+        // --- Floors ---
+        FloorRaiseToLowestCeiling
+        | FloorRaiseToNearest
+        | FloorRaiseBy24
+        | FloorRaiseBy32
+        | FloorRaiseByShortestLowerTexture
+        | FloorCrushAndRaise
+        | FloorLowerToLowest
+        | FloorLowerToHighest
+        | FloorLowerToHighestMinus8
+        | FloorLowerAndChange => dispatch_floors(gs, level, tag, effect),
+
+        // --- Ceilings ---
+        CeilingLowerToFloor
+        | CeilingLowerTo8AboveFloor
+        | CeilingRaiseToHighest
+        | CeilingCrushAndRaise
+        | CeilingCrushStop
+        | CeilingFastCrush
+        | CeilingSilentCrush => dispatch_ceilings(gs, level, tag, effect),
+
+        // --- Lifts ---
+        LiftLowerWaitRaise | LiftBlazeDown | PerpetualLiftStart | PerpetualLiftStop => {
+            dispatch_lifts(gs, level, tag, effect)
+        }
+
+        // --- Stairs ---
+        StairsBuild8 | StairsTurbo16 => dispatch_stairs(gs, level, tag, effect),
+
+        // --- Lights ---
+        LightTurnOn255 | LightTurnOnMaxNeighbor | LightTurnOff | LightStartBlinking => {
+            dispatch_lights(gs, level, tag, effect)
+        }
+
+        // --- Specials ---
+        Donut | Exit | SecretExit | Teleport | TeleportMonstersOnly => {
+            dispatch_specials(gs, level, linedef_index, tag, effect, activator)
+        }
+    }
+}
+
+fn dispatch_doors(
+    gs: &mut GameState,
+    level: &mut Level,
+    linedef_index: usize,
+    tag: u16,
+    effect: LinedefEffect,
+) -> bool {
+    use LinedefEffect::*;
+    match effect {
         DoorOpenWaitClose => {
             door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
             true
@@ -387,8 +451,20 @@ fn dispatch_effect(
             close_door_by_tag_or_back(gs, level, linedef_index, tag, true);
             true
         }
+        _ => false,
+    }
+}
 
-        // --- Locked doors ---
+fn dispatch_locked_doors(
+    gs: &mut GameState,
+    level: &mut Level,
+    linedef_index: usize,
+    tag: u16,
+    effect: LinedefEffect,
+    activator: MobjHandle,
+) -> bool {
+    use LinedefEffect::*;
+    match effect {
         DoorLockedBlue => {
             if !crate::switch::player_has_key(gs, KeyType::BlueCard)
                 && !crate::switch::player_has_key(gs, KeyType::BlueSkull)
@@ -449,8 +525,13 @@ fn dispatch_effect(
             door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
             true
         }
+        _ => false,
+    }
+}
 
-        // --- Floors ---
+fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefEffect) -> bool {
+    use LinedefEffect::*;
+    match effect {
         FloorRaiseToLowestCeiling => {
             crate::specials::ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, false);
             true
@@ -484,18 +565,20 @@ fn dispatch_effect(
             true
         }
         FloorLowerToHighestMinus8 => {
-            // Lower floor to highest adjacent floor + 8 (Doom's convention for "minus 8").
-            // Handled by the existing specials with turbo speed for some types.
             crate::specials::ev_floor_lower_to_highest(gs, level, tag, 4);
             true
         }
         FloorLowerAndChange => {
-            // Lower floor to lowest + change texture. Simplified: just lower.
             crate::specials::ev_floor_lower_to_lowest(gs, level, tag, 1);
             true
         }
+        _ => false,
+    }
+}
 
-        // --- Ceilings ---
+fn dispatch_ceilings(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefEffect) -> bool {
+    use LinedefEffect::*;
+    match effect {
         CeilingLowerToFloor => {
             crate::specials::ev_ceiling_lower_to_floor(gs, level, tag, 2);
             true
@@ -524,8 +607,13 @@ fn dispatch_effect(
             crate::specials::ev_ceiling_crush_and_raise(gs, level, tag, 2);
             true
         }
+        _ => false,
+    }
+}
 
-        // --- Lifts ---
+fn dispatch_lifts(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefEffect) -> bool {
+    use LinedefEffect::*;
+    match effect {
         LiftLowerWaitRaise => {
             crate::specials::ev_do_lift(gs, level, tag, 4, 105);
             true
@@ -542,8 +630,13 @@ fn dispatch_effect(
             gs.active_platforms.retain(|p| p.tag != tag);
             true
         }
+        _ => false,
+    }
+}
 
-        // --- Stairs ---
+fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: LinedefEffect) -> bool {
+    use LinedefEffect::*;
+    match effect {
         StairsBuild8 => {
             let indices = sectors_by_tag(level, tag);
             for idx in indices {
@@ -570,8 +663,18 @@ fn dispatch_effect(
             }
             true
         }
+        _ => false,
+    }
+}
 
-        // --- Lights ---
+fn dispatch_lights(
+    _gs: &mut GameState,
+    level: &mut Level,
+    tag: u16,
+    effect: LinedefEffect,
+) -> bool {
+    use LinedefEffect::*;
+    match effect {
         LightTurnOn255 => {
             set_sector_light_by_tag(level, tag, 255);
             true
@@ -591,8 +694,20 @@ fn dispatch_effect(
             // at level load. Runtime trigger is a no-op in our simplified model.
             true
         }
+        _ => false,
+    }
+}
 
-        // --- Specials ---
+fn dispatch_specials(
+    gs: &mut GameState,
+    level: &mut Level,
+    _linedef_index: usize,
+    tag: u16,
+    effect: LinedefEffect,
+    activator: MobjHandle,
+) -> bool {
+    use LinedefEffect::*;
+    match effect {
         Donut => {
             let indices = sectors_by_tag(level, tag);
             for idx in indices {
@@ -624,6 +739,7 @@ fn dispatch_effect(
             }
             true
         }
+        _ => false,
     }
 }
 
