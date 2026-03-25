@@ -363,12 +363,10 @@ pub fn trace_ray(
         // Only process cells within the blockmap grid.
         if cell_x >= 0 && cell_x < cols && cell_y >= 0 && cell_y < rows {
             // Test linedefs in this cell.
-            let linedef_indices: Vec<u16> = level
+            for ld_idx_u16 in level
                 .blockmap
                 .block_linedefs(cell_x as usize, cell_y as usize)
-                .collect();
-
-            for ld_idx_u16 in linedef_indices {
+            {
                 let ld_idx = ld_idx_u16 as usize;
                 if ld_idx >= level.linedefs.len() {
                     continue;
