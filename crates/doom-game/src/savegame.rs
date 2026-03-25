@@ -1540,7 +1540,10 @@ mod tests {
         assert_eq!(loaded.state.movers.active_floors.len(), 1);
         assert_eq!(loaded.state.movers.active_floors[0].sector_index, 3);
         assert_eq!(loaded.state.movers.active_floors[0].target_height, -64);
-        assert_eq!(loaded.state.movers.active_floors[0].direction, MoveDirection::Down);
+        assert_eq!(
+            loaded.state.movers.active_floors[0].direction,
+            MoveDirection::Down
+        );
         assert!(loaded.state.movers.active_floors[0].crush);
     }
 

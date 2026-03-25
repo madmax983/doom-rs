@@ -492,7 +492,6 @@ impl DoomRng {
     }
 }
 
-
 // ---------------------------------------------------------------------------
 // GameState
 // ---------------------------------------------------------------------------
@@ -566,8 +565,6 @@ pub struct SoundPropagation {
 /// - RNG state (`rng`) is the only source of "randomness".
 #[derive(Clone, Debug)]
 pub struct GameState {
-
-
     /// Monotonically increasing tic counter (wraps at `u32::MAX`).
     pub tic_num: u32,
 
@@ -583,12 +580,9 @@ pub struct GameState {
     /// Current level identifier (e.g. `"E1M1"`).
     pub level_name: String,
 
-
     pub stats: LevelStats,
 
-
     pub movers: SectorMovers,
-
 
     pub sound: SoundPropagation,
 

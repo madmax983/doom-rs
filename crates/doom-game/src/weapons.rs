@@ -315,7 +315,9 @@ fn check_ammo(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) -> bool {
 }
 
 fn queue_weapon_sound_and_noise(gs: &mut GameState, weapon: WeaponType, level: Option<&Level>) {
-    gs.sound.sound_queue.push(SoundRequest::PlayerWeaponFire(weapon));
+    gs.sound
+        .sound_queue
+        .push(SoundRequest::PlayerWeaponFire(weapon));
     if !matches!(weapon, WeaponType::Fist)
         && let Some(lv) = level
     {
@@ -479,15 +481,21 @@ fn a_check_reload(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
 }
 
 fn a_open_shotgun2(gs: &mut GameState) {
-    gs.sound.sound_queue.push(SoundRequest::PlayerSuperShotgunOpen);
+    gs.sound
+        .sound_queue
+        .push(SoundRequest::PlayerSuperShotgunOpen);
 }
 
 fn a_load_shotgun2(gs: &mut GameState) {
-    gs.sound.sound_queue.push(SoundRequest::PlayerSuperShotgunLoad);
+    gs.sound
+        .sound_queue
+        .push(SoundRequest::PlayerSuperShotgunLoad);
 }
 
 fn a_close_shotgun2(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
-    gs.sound.sound_queue.push(SoundRequest::PlayerSuperShotgunClose);
+    gs.sound
+        .sound_queue
+        .push(SoundRequest::PlayerSuperShotgunClose);
     a_refire(gs, cmd, level);
 }
 
@@ -1330,19 +1338,28 @@ mod tests {
         for _ in 0..7 {
             tick_psprites(&mut gs, TicCmd::default(), None);
         }
-        assert_eq!(gs.sound.sound_queue, vec![SoundRequest::PlayerSuperShotgunOpen]);
+        assert_eq!(
+            gs.sound.sound_queue,
+            vec![SoundRequest::PlayerSuperShotgunOpen]
+        );
         gs.sound.sound_queue.clear();
 
         for _ in 0..6 {
             tick_psprites(&mut gs, TicCmd::default(), None);
         }
-        assert_eq!(gs.sound.sound_queue, vec![SoundRequest::PlayerSuperShotgunLoad]);
+        assert_eq!(
+            gs.sound.sound_queue,
+            vec![SoundRequest::PlayerSuperShotgunLoad]
+        );
         gs.sound.sound_queue.clear();
 
         for _ in 0..6 {
             tick_psprites(&mut gs, TicCmd::default(), None);
         }
-        assert_eq!(gs.sound.sound_queue, vec![SoundRequest::PlayerSuperShotgunClose]);
+        assert_eq!(
+            gs.sound.sound_queue,
+            vec![SoundRequest::PlayerSuperShotgunClose]
+        );
     }
 
     #[test]

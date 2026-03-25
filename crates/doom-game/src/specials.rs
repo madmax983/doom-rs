@@ -1263,7 +1263,8 @@ pub fn ev_build_stairs(
 
     // Raise the starting sector first.
     if !gs
-        .movers.active_floors
+        .movers
+        .active_floors
         .iter()
         .any(|f| f.sector_index == start_sector)
     {
@@ -1315,7 +1316,8 @@ pub fn ev_build_stairs(
             }
             // Skip if already has a floor mover.
             if gs
-                .movers.active_floors
+                .movers
+                .active_floors
                 .iter()
                 .any(|f| f.sector_index == other_sector)
             {
@@ -1419,7 +1421,8 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
 
         // Skip if already has a mover.
         if gs
-            .movers.active_floors
+            .movers
+            .active_floors
             .iter()
             .any(|f| f.sector_index == hole_sector)
         {
@@ -1482,7 +1485,12 @@ pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed:
         .map(|(i, _)| i)
     {
         // Avoid duplicate platforms on the same sector.
-        if gs.movers.active_platforms.iter().any(|p| p.sector_index == idx) {
+        if gs
+            .movers
+            .active_platforms
+            .iter()
+            .any(|p| p.sector_index == idx)
+        {
             continue;
         }
         let sector = &level.sectors[idx];
@@ -1848,7 +1856,8 @@ pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) 
             continue;
         }
         if gs
-            .movers.active_ceilings
+            .movers
+            .active_ceilings
             .iter()
             .any(|c| c.sector_index == sector_idx)
         {
@@ -1891,7 +1900,12 @@ fn activate_crusher(
         .map(|(i, _)| i)
     {
         // Avoid duplicate crushers on the same sector.
-        if gs.movers.active_ceilings.iter().any(|c| c.sector_index == idx) {
+        if gs
+            .movers
+            .active_ceilings
+            .iter()
+            .any(|c| c.sector_index == idx)
+        {
             continue;
         }
         let sector = &level.sectors[idx];
@@ -1930,7 +1944,12 @@ fn activate_lift(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
         .map(|(i, _)| i)
     {
         // Avoid duplicate floor movers on the same sector.
-        if gs.movers.active_floors.iter().any(|f| f.sector_index == idx) {
+        if gs
+            .movers
+            .active_floors
+            .iter()
+            .any(|f| f.sector_index == idx)
+        {
             continue;
         }
         let sector = &level.sectors[idx];
@@ -2067,7 +2086,8 @@ fn activate_floor_raise_single_typed(
     floor_type: FloorType,
 ) {
     if gs
-        .movers.active_floors
+        .movers
+        .active_floors
         .iter()
         .any(|f| f.sector_index == sector_idx)
     {
@@ -2103,7 +2123,8 @@ fn activate_floor_lower_single_typed(
     floor_type: FloorType,
 ) {
     if gs
-        .movers.active_floors
+        .movers
+        .active_floors
         .iter()
         .any(|f| f.sector_index == sector_idx)
     {
@@ -2141,7 +2162,12 @@ fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: b
     let target = lowest_adjacent_ceiling(level, sector_idx) - 4;
 
     // Avoid duplicate movers for the same sector.
-    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs
+        .movers
+        .active_doors
+        .iter()
+        .any(|d| d.sector == sector_idx)
+    {
         return;
     }
 
@@ -2200,7 +2226,12 @@ fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
     let target = sector.floor_height;
 
     // Avoid duplicate movers for the same sector.
-    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs
+        .movers
+        .active_doors
+        .iter()
+        .any(|d| d.sector == sector_idx)
+    {
         return;
     }
 
@@ -2225,7 +2256,12 @@ fn close_wait_open_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         Some(s) => s,
         None => return,
     };
-    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs
+        .movers
+        .active_doors
+        .iter()
+        .any(|d| d.sector == sector_idx)
+    {
         return;
     }
     let reopen_h = lowest_adjacent_ceiling(level, sector_idx) - 4;
@@ -2253,7 +2289,12 @@ fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_
 
     let target = lowest_adjacent_ceiling(level, sector_idx) - 4;
 
-    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs
+        .movers
+        .active_doors
+        .iter()
+        .any(|d| d.sector == sector_idx)
+    {
         return;
     }
 
@@ -2279,7 +2320,12 @@ fn close_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
 
     let target = sector.floor_height;
 
-    if gs.movers.active_doors.iter().any(|d| d.sector == sector_idx) {
+    if gs
+        .movers
+        .active_doors
+        .iter()
+        .any(|d| d.sector == sector_idx)
+    {
         return;
     }
 
@@ -2388,7 +2434,8 @@ pub fn p_use_lines(gs: &mut GameState, level: &mut Level, handle: MobjHandle) {
         }
 
         if special == 0 && blocks_use {
-            gs.sound.sound_queue
+            gs.sound
+                .sound_queue
                 .push(crate::state::SoundRequest::PlayerUseFail);
             return;
         }
@@ -4129,7 +4176,11 @@ mod tests {
 
         // Activate the linedef — enqueues a DoorMover.
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.movers.active_doors.len(), 1, "DoorMover should be enqueued");
+        assert_eq!(
+            gs.movers.active_doors.len(),
+            1,
+            "DoorMover should be enqueued"
+        );
 
         // Tick doors several times — ceiling should rise.
         let initial_ceil = level.sectors[1].ceil_height;
@@ -4158,7 +4209,11 @@ mod tests {
 
         p_use_lines(&mut gs, &mut level, handle);
 
-        assert_eq!(gs.movers.active_doors.len(), 1, "door mover should be queued");
+        assert_eq!(
+            gs.movers.active_doors.len(),
+            1,
+            "door mover should be queued"
+        );
         assert_eq!(
             gs.movers.active_doors[0].countdown, -1,
             "auto-close doors should not spend their wait time before opening"
@@ -4607,7 +4662,11 @@ mod tests {
 
         // Activate line type 6 (fast crusher, perpetual).
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.movers.active_ceilings.len(), 1, "one crusher must be created");
+        assert_eq!(
+            gs.movers.active_ceilings.len(),
+            1,
+            "one crusher must be created"
+        );
 
         let initial_ceil = level.sectors[1].ceil_height;
         assert_eq!(initial_ceil, 128);
@@ -4752,7 +4811,11 @@ mod tests {
 
         // Activate line type 62 (lift lower-wait-raise, speed 4).
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.movers.active_floors.len(), 1, "one floor mover must be created");
+        assert_eq!(
+            gs.movers.active_floors.len(),
+            1,
+            "one floor mover must be created"
+        );
 
         // Lowest adjacent floor is sector 0's floor = 0.
         assert_eq!(
@@ -4771,7 +4834,10 @@ mod tests {
         assert_eq!(level.sectors[1].floor_height, 0, "floor must lower to 0");
 
         // Should now be in wait phase.
-        assert!(gs.movers.active_floors[0].waiting, "lift must enter wait phase");
+        assert!(
+            gs.movers.active_floors[0].waiting,
+            "lift must enter wait phase"
+        );
         assert_eq!(
             gs.movers.active_floors[0].wait_remaining, LIFT_WAIT,
             "wait_remaining must be set to LIFT_WAIT"
@@ -4908,7 +4974,10 @@ mod tests {
             gs.movers.active_floors[0].target_height, 96,
             "target = lowest adjacent ceiling = 96"
         );
-        assert!(gs.movers.active_floors[0].crush, "type 5 must have crush=true");
+        assert!(
+            gs.movers.active_floors[0].crush,
+            "type 5 must have crush=true"
+        );
     }
 
     #[test]
@@ -4966,7 +5035,10 @@ mod tests {
             gs.movers.active_floors[0].target_height, 92,
             "target = lowest_adj_ceil(100) - 8 = 92"
         );
-        assert!(gs.movers.active_floors[0].crush, "type 56 must have crush=true");
+        assert!(
+            gs.movers.active_floors[0].crush,
+            "type 56 must have crush=true"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -4999,7 +5071,11 @@ mod tests {
         assert_eq!(gs.movers.active_floors.len(), 1);
 
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.movers.active_floors.len(), 1, "must not create duplicate lifts");
+        assert_eq!(
+            gs.movers.active_floors.len(),
+            1,
+            "must not create duplicate lifts"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -5037,8 +5113,16 @@ mod tests {
         });
 
         let gs2 = gs.clone();
-        assert_eq!(gs2.movers.active_ceilings.len(), 1, "clone must include ceilings");
-        assert_eq!(gs2.movers.active_floors.len(), 1, "clone must include floors");
+        assert_eq!(
+            gs2.movers.active_ceilings.len(),
+            1,
+            "clone must include ceilings"
+        );
+        assert_eq!(
+            gs2.movers.active_floors.len(),
+            1,
+            "clone must include floors"
+        );
         assert_eq!(gs2.movers.active_ceilings[0].top_height, 128);
         assert_eq!(gs2.movers.active_floors[0].target_height, 0);
     }
@@ -6312,7 +6396,11 @@ mod tests {
         assert!(gs.movers.active_floors[0].crush, "crush flag must be set");
 
         // Verify it's a FloorMover that can deal crush damage.
-        let _crush_dmg: i32 = if gs.movers.active_floors[0].crush { 10 } else { 0 };
+        let _crush_dmg: i32 = if gs.movers.active_floors[0].crush {
+            10
+        } else {
+            0
+        };
         assert_eq!(_crush_dmg, 10, "crush damage should be 10 when crush=true");
 
         // Verify the mover direction is correct.
@@ -6599,16 +6687,18 @@ mod tests {
         let mut level = make_tagged_linedef_level(54, 10);
 
         // Create a platform first.
-        gs.movers.active_platforms.push(crate::state::PerpetualPlatform {
-            sector_index: 1,
-            low_height: 0,
-            high_height: 64,
-            speed: 1,
-            wait_tics: 105,
-            wait_remaining: 0,
-            status: crate::state::PlatformStatus::Down,
-            tag: 10,
-        });
+        gs.movers
+            .active_platforms
+            .push(crate::state::PerpetualPlatform {
+                sector_index: 1,
+                low_height: 0,
+                high_height: 64,
+                speed: 1,
+                wait_tics: 105,
+                wait_remaining: 0,
+                status: crate::state::PlatformStatus::Down,
+                tag: 10,
+            });
 
         activate_linedef(&mut gs, &mut level, 0);
 
@@ -6637,16 +6727,18 @@ mod tests {
         let mut gs = GameState::new("TEST");
         let mut level = make_tagged_linedef_level(89, 10);
 
-        gs.movers.active_platforms.push(crate::state::PerpetualPlatform {
-            sector_index: 1,
-            low_height: 0,
-            high_height: 64,
-            speed: 1,
-            wait_tics: 105,
-            wait_remaining: 0,
-            status: crate::state::PlatformStatus::Down,
-            tag: 10,
-        });
+        gs.movers
+            .active_platforms
+            .push(crate::state::PerpetualPlatform {
+                sector_index: 1,
+                low_height: 0,
+                high_height: 64,
+                speed: 1,
+                wait_tics: 105,
+                wait_remaining: 0,
+                status: crate::state::PlatformStatus::Down,
+                tag: 10,
+            });
 
         activate_linedef(&mut gs, &mut level, 0);
 
@@ -6728,7 +6820,8 @@ mod tests {
         // Verify monotonically increasing target heights.
         for i in 1..gs.movers.active_floors.len() {
             assert!(
-                gs.movers.active_floors[i].target_height > gs.movers.active_floors[i - 1].target_height,
+                gs.movers.active_floors[i].target_height
+                    > gs.movers.active_floors[i - 1].target_height,
                 "stair target heights must be monotonically increasing"
             );
         }
@@ -6756,16 +6849,18 @@ mod tests {
             floor_type: FloorType::RaiseToNearest,
         });
 
-        gs.movers.active_platforms.push(crate::state::PerpetualPlatform {
-            sector_index: 3,
-            low_height: -16,
-            high_height: 48,
-            speed: 1,
-            wait_tics: 105,
-            wait_remaining: 0,
-            status: crate::state::PlatformStatus::Down,
-            tag: 7,
-        });
+        gs.movers
+            .active_platforms
+            .push(crate::state::PerpetualPlatform {
+                sector_index: 3,
+                low_height: -16,
+                high_height: 48,
+                speed: 1,
+                wait_tics: 105,
+                wait_remaining: 0,
+                status: crate::state::PlatformStatus::Down,
+                tag: 7,
+            });
 
         let snap = gs.save_snapshot();
         gs.movers.active_floors.clear();
@@ -6933,7 +7028,10 @@ mod tests {
             gs.movers.active_ceilings[0].ceiling_type,
             CeilingType::FastCrushAndRaise
         );
-        assert_eq!(gs.movers.active_ceilings[0].speed, 2, "fast crusher uses speed 2");
+        assert_eq!(
+            gs.movers.active_ceilings[0].speed, 2,
+            "fast crusher uses speed 2"
+        );
 
         // Tick once.
         tick_ceilings(&mut gs, &mut level);
@@ -6946,7 +7044,10 @@ mod tests {
         let mut gs2 = GameState::new("TEST");
         let mut level2 = make_tagged_sector_level(0, 128, 1, 25);
         activate_linedef(&mut gs2, &mut level2, 0);
-        assert_eq!(gs2.movers.active_ceilings[0].speed, 1, "slow crusher uses speed 1");
+        assert_eq!(
+            gs2.movers.active_ceilings[0].speed, 1,
+            "slow crusher uses speed 1"
+        );
 
         tick_ceilings(&mut gs2, &mut level2);
         assert_eq!(
@@ -7082,7 +7183,10 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_ceilings[0].speed, 2, "initial speed is 2");
-        assert_eq!(gs.movers.active_ceilings[0].normal_speed, 2, "normal speed is 2");
+        assert_eq!(
+            gs.movers.active_ceilings[0].normal_speed, 2,
+            "normal speed is 2"
+        );
 
         // FastCrushAndRaise does NOT slow down (only CrushAndRaise and SilentCrush do).
         // FastCrushAndRaise: tick a few times.
@@ -7275,7 +7379,10 @@ mod tests {
             gs.movers.active_ceilings[0].ceiling_type,
             CeilingType::CrushAndRaise
         );
-        assert_eq!(gs.movers.active_ceilings[0].speed, 1, "type 73 is slow (speed 1)");
+        assert_eq!(
+            gs.movers.active_ceilings[0].speed, 1,
+            "type 73 is slow (speed 1)"
+        );
     }
 
     #[test]
@@ -7313,7 +7420,10 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_ceilings.len(), 1);
-        assert_eq!(gs.movers.active_ceilings[0].ceiling_type, CeilingType::SilentCrush);
+        assert_eq!(
+            gs.movers.active_ceilings[0].ceiling_type,
+            CeilingType::SilentCrush
+        );
         assert!(
             gs.movers.active_ceilings[0].silent,
             "type 141 must set silent=true"
@@ -7855,7 +7965,10 @@ mod tests {
             level.sectors[1].floor_height, 64,
             "floor must be back at original"
         );
-        assert!(gs.movers.lifts.is_empty(), "lift must be removed after full cycle");
+        assert!(
+            gs.movers.lifts.is_empty(),
+            "lift must be removed after full cycle"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -7868,7 +7981,10 @@ mod tests {
         let mut level = make_lift_test_level(16, 0, 5);
         ev_do_lift(&mut gs, &level, 5, 8, 105);
 
-        assert_eq!(gs.movers.lifts[0].speed, 8, "blazing lift must have speed 8");
+        assert_eq!(
+            gs.movers.lifts[0].speed, 8,
+            "blazing lift must have speed 8"
+        );
 
         // 64/8 = 8 tics to lower.
         for _ in 0..8 {
@@ -7963,7 +8079,11 @@ mod tests {
         let mut level = make_lift_test_level(16, 120, 5);
 
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.movers.lifts.len(), 1, "line type 120 should create a LiftMover");
+        assert_eq!(
+            gs.movers.lifts.len(),
+            1,
+            "line type 120 should create a LiftMover"
+        );
         assert_eq!(
             gs.movers.lifts[0].speed, 8,
             "line type 120 should be blazing speed 8"
@@ -7982,7 +8102,11 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
 
-        assert_eq!(gs.movers.active_doors.len(), 1, "should create a door mover");
+        assert_eq!(
+            gs.movers.active_doors.len(),
+            1,
+            "should create a door mover"
+        );
         assert_eq!(
             gs.movers.active_doors[0].speed, BLAZING_DOOR_SPEED,
             "blazing door must have speed 8"
@@ -7999,7 +8123,11 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
 
-        assert_eq!(gs.movers.active_doors.len(), 1, "should create a door mover");
+        assert_eq!(
+            gs.movers.active_doors.len(),
+            1,
+            "should create a door mover"
+        );
         assert_eq!(
             gs.movers.active_doors[0].speed, BLAZING_DOOR_SPEED,
             "blazing door type 108 must have speed 8"
@@ -8173,7 +8301,11 @@ mod tests {
         let mut level = make_lift_test_level(16, 122, 5);
 
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.movers.lifts.len(), 1, "line type 122 should create a LiftMover");
+        assert_eq!(
+            gs.movers.lifts.len(),
+            1,
+            "line type 122 should create a LiftMover"
+        );
         assert_eq!(gs.movers.lifts[0].speed, 8);
     }
 
@@ -8186,7 +8318,11 @@ mod tests {
         let mut level = make_lift_test_level(16, 123, 5);
 
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.movers.lifts.len(), 1, "line type 123 should create a LiftMover");
+        assert_eq!(
+            gs.movers.lifts.len(),
+            1,
+            "line type 123 should create a LiftMover"
+        );
         assert_eq!(gs.movers.lifts[0].speed, 8);
     }
 
@@ -8759,7 +8895,11 @@ mod tests {
         let level = make_conveyor_level(253, 10, 5);
         init_conveyors(&mut gs, &level);
 
-        assert_eq!(gs.movers.conveyors.len(), 1, "must create 1 conveyor for type 253");
+        assert_eq!(
+            gs.movers.conveyors.len(),
+            1,
+            "must create 1 conveyor for type 253"
+        );
         assert_eq!(gs.movers.conveyors[0].sector_index, 0);
         assert_eq!(gs.movers.conveyors[0].push_x, 10);
         assert_eq!(gs.movers.conveyors[0].push_y, 5);
@@ -8979,13 +9119,21 @@ mod tests {
         let mut gs = GameState::new("TEST");
         let level_254 = make_conveyor_level(254, 20, 10);
         init_conveyors(&mut gs, &level_254);
-        assert_eq!(gs.movers.conveyors.len(), 1, "type 254 must create a conveyor");
+        assert_eq!(
+            gs.movers.conveyors.len(),
+            1,
+            "type 254 must create a conveyor"
+        );
         assert_eq!(gs.movers.conveyors[0].push_x, 20);
 
         let mut gs2 = GameState::new("TEST");
         let level_255 = make_conveyor_level(255, -5, 15);
         init_conveyors(&mut gs2, &level_255);
-        assert_eq!(gs2.movers.conveyors.len(), 1, "type 255 must create a conveyor");
+        assert_eq!(
+            gs2.movers.conveyors.len(),
+            1,
+            "type 255 must create a conveyor"
+        );
         assert_eq!(gs2.movers.conveyors[0].push_x, -5);
         assert_eq!(gs2.movers.conveyors[0].push_y, 15);
     }
@@ -9160,10 +9308,16 @@ mod tests {
         let level = make_multi_sector_level([0, 64, 32], [128, 128, 128], [0, 1, 0], 0, 0);
         ev_floor_lower_to_lowest(&mut gs, &level, 1, 2);
         assert_eq!(gs.movers.active_floors.len(), 1);
-        assert_eq!(gs.movers.active_floors[0].target_height, 0, "lowest adjacent = 0");
+        assert_eq!(
+            gs.movers.active_floors[0].target_height, 0,
+            "lowest adjacent = 0"
+        );
         assert_eq!(gs.movers.active_floors[0].speed, 2);
         assert_eq!(gs.movers.active_floors[0].direction, MoveDirection::Down);
-        assert_eq!(gs.movers.active_floors[0].floor_type, FloorType::LowerToLowest);
+        assert_eq!(
+            gs.movers.active_floors[0].floor_type,
+            FloorType::LowerToLowest
+        );
     }
 
     #[test]
@@ -9177,7 +9331,10 @@ mod tests {
             gs.movers.active_floors[0].target_height, 48,
             "highest adjacent = 48"
         );
-        assert_eq!(gs.movers.active_floors[0].floor_type, FloorType::LowerToHighest);
+        assert_eq!(
+            gs.movers.active_floors[0].floor_type,
+            FloorType::LowerToHighest
+        );
     }
 
     #[test]
@@ -9203,8 +9360,14 @@ mod tests {
         let level = make_multi_sector_level([32, 0, 64], [128, 128, 128], [0, 1, 0], 0, 0);
         ev_floor_raise_to_nearest(&mut gs, &level, 1, 1);
         assert_eq!(gs.movers.active_floors.len(), 1);
-        assert_eq!(gs.movers.active_floors[0].target_height, 32, "next highest = 32");
-        assert_eq!(gs.movers.active_floors[0].floor_type, FloorType::RaiseToNearest);
+        assert_eq!(
+            gs.movers.active_floors[0].target_height, 32,
+            "next highest = 32"
+        );
+        assert_eq!(
+            gs.movers.active_floors[0].floor_type,
+            FloorType::RaiseToNearest
+        );
     }
 
     #[test]
@@ -9281,7 +9444,10 @@ mod tests {
         assert_eq!(gs.movers.active_floors.len(), 1);
         // floor=16, shortest lower texture=48, target=16+48=64.
         assert_eq!(gs.movers.active_floors[0].target_height, 64, "16 + 48 = 64");
-        assert_eq!(gs.movers.active_floors[0].floor_type, FloorType::RaiseByTexture);
+        assert_eq!(
+            gs.movers.active_floors[0].floor_type,
+            FloorType::RaiseByTexture
+        );
     }
 
     #[test]
@@ -9317,7 +9483,10 @@ mod tests {
             gs.movers.active_floors[0].target_height, 200,
             "target = own ceiling = 200"
         );
-        assert_eq!(gs.movers.active_floors[0].floor_type, FloorType::RaiseToCeiling);
+        assert_eq!(
+            gs.movers.active_floors[0].floor_type,
+            FloorType::RaiseToCeiling
+        );
     }
 
     // --- Line type dispatch tests ---
@@ -9359,7 +9528,10 @@ mod tests {
             gs.movers.active_floors[0].target_height, 38,
             "type 36: target = highest_adj(30) + 8 = 38"
         );
-        assert_eq!(gs.movers.active_floors[0].speed, 4, "type 36: turbo speed = 4");
+        assert_eq!(
+            gs.movers.active_floors[0].speed, 4,
+            "type 36: turbo speed = 4"
+        );
     }
 
     #[test]
@@ -9374,7 +9546,10 @@ mod tests {
             gs.movers.active_floors[0].target_height, 92,
             "type 56: target = lowest_adj_ceil(100) - 8 = 92"
         );
-        assert!(gs.movers.active_floors[0].crush, "type 56 must have crush=true");
+        assert!(
+            gs.movers.active_floors[0].crush,
+            "type 56 must have crush=true"
+        );
     }
 
     #[test]
@@ -9526,6 +9701,9 @@ mod tests {
             gs.movers.active_floors[0].target_height, 32,
             "next lowest adjacent below 64 = 32"
         );
-        assert_eq!(gs.movers.active_floors[0].floor_type, FloorType::LowerToNearest);
+        assert_eq!(
+            gs.movers.active_floors[0].floor_type,
+            FloorType::LowerToNearest
+        );
     }
 }

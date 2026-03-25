@@ -588,9 +588,11 @@ fn transition_to_see_state(
         .get(handle)
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
-    gs.sound.sound_queue.push(crate::state::SoundRequest::MonsterWake(
-        kind, handle, mo_x, mo_y,
-    ));
+    gs.sound
+        .sound_queue
+        .push(crate::state::SoundRequest::MonsterWake(
+            kind, handle, mo_x, mo_y,
+        ));
 }
 
 // ---------------------------------------------------------------------------
@@ -1090,7 +1092,8 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound.sound_queue
+    gs.sound
+        .sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Trooper,
             handle,
@@ -1143,7 +1146,8 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound.sound_queue
+    gs.sound
+        .sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Sergeant,
             handle,
@@ -1190,7 +1194,8 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound.sound_queue
+    gs.sound
+        .sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Imp,
             handle,
@@ -1230,7 +1235,8 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
             .map(|mo| (mo.x, mo.y))
             .unwrap_or_default();
 
-        gs.sound.sound_queue
+        gs.sound
+            .sound_queue
             .push(crate::state::SoundRequest::MonsterAttack(
                 MobjKind::Demon,
                 handle,
@@ -1264,7 +1270,8 @@ fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound.sound_queue
+    gs.sound
+        .sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Cacodemon,
             handle,
@@ -1302,7 +1309,8 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound.sound_queue
+    gs.sound
+        .sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             bruis_kind, handle, sx, sy,
         ));
@@ -1353,7 +1361,8 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound.sound_queue
+    gs.sound
+        .sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             cpos_kind, handle, sx, sy,
         ));
@@ -1383,7 +1392,8 @@ fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound.sound_queue
+    gs.sound
+        .sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Cyberdemon,
             handle,
@@ -1416,7 +1426,8 @@ fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound.sound_queue
+    gs.sound
+        .sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Revenant,
             handle,
@@ -1492,7 +1503,8 @@ fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| (mo.x, mo.y))
         .unwrap_or_default();
 
-    gs.sound.sound_queue
+    gs.sound
+        .sound_queue
         .push(crate::state::SoundRequest::MonsterAttack(
             MobjKind::Mancubus,
             handle,
@@ -2190,13 +2202,11 @@ mod tests {
             (-100, 0, DI_WEST),
             (0, 100, DI_NORTH),
             (0, -100, DI_SOUTH),
-
             // Exact diagonals
             (100, 100, DI_NORTHEAST),
             (-100, 100, DI_NORTHWEST),
             (-100, -100, DI_SOUTHWEST),
             (100, -100, DI_SOUTHEAST),
-
             // Shallow diagonals (still diagonal territory: ax/ay < 2.0 and ay/ax < 2.0)
             (100, 60, DI_NORTHEAST),
             (60, 100, DI_NORTHEAST),
@@ -2206,19 +2216,16 @@ mod tests {
             (-60, -100, DI_SOUTHWEST),
             (100, -60, DI_SOUTHEAST),
             (60, -100, DI_SOUTHEAST),
-
             // Mostly horizontal (ax > 2 * ay)
             (100, 40, DI_EAST),
             (100, -40, DI_EAST),
             (-100, 40, DI_WEST),
             (-100, -40, DI_WEST),
-
             // Mostly vertical (ay > 2 * ax)
             (40, 100, DI_NORTH),
             (-40, 100, DI_NORTH),
             (40, -100, DI_SOUTH),
             (-40, -100, DI_SOUTH),
-
             // Edge cases
             (0, 0, DI_NORTHEAST), // Handled as diagonal in current logic since 0 is not > 0
         ];
@@ -2228,7 +2235,9 @@ mod tests {
                 dir_to_target(dx, dy),
                 expected,
                 "dir_to_target({}, {}) should be {}",
-                dx, dy, expected
+                dx,
+                dy,
+                expected
             );
         }
     }
@@ -2700,10 +2709,14 @@ mod tests {
 
         let can_fire = p_check_missile_range(&mut gs, trooper, player_handle, None);
 
-        assert!(can_fire, "MF_JUSTHIT must bypass normal missile range checks");
+        assert!(
+            can_fire,
+            "MF_JUSTHIT must bypass normal missile range checks"
+        );
         let mo = gs.mobjslab.get(trooper).unwrap();
         assert_eq!(
-            mo.flags & flags::MF_JUSTHIT, 0,
+            mo.flags & flags::MF_JUSTHIT,
+            0,
             "p_check_missile_range must clear MF_JUSTHIT"
         );
     }
@@ -2742,8 +2755,14 @@ mod tests {
         gs.rng.set_index(11);
         let can_fire_trooper = p_check_missile_range(&mut gs, trooper, player_handle, None);
 
-        assert!(!can_fire_demon, "Demon should fail random gate because dist > random");
-        assert!(can_fire_trooper, "Trooper should pass random gate because dist - 128 < random");
+        assert!(
+            !can_fire_demon,
+            "Demon should fail random gate because dist > random"
+        );
+        assert!(
+            can_fire_trooper,
+            "Trooper should pass random gate because dist - 128 < random"
+        );
     }
 
     #[test]
@@ -2757,10 +2776,16 @@ mod tests {
         // RNG_TABLE[20] = 154 (true).
 
         gs.rng.set_index(6);
-        assert!(!p_check_missile_range(&mut gs, cyber, player_handle, None), "Cyberdemon should fail with random=149 vs dist=154");
+        assert!(
+            !p_check_missile_range(&mut gs, cyber, player_handle, None),
+            "Cyberdemon should fail with random=149 vs dist=154"
+        );
 
         gs.rng.set_index(20);
-        assert!(p_check_missile_range(&mut gs, cyber, player_handle, None), "Cyberdemon should fire with random=154 vs dist=154");
+        assert!(
+            p_check_missile_range(&mut gs, cyber, player_handle, None),
+            "Cyberdemon should fire with random=154 vs dist=154"
+        );
     }
 
     #[test]

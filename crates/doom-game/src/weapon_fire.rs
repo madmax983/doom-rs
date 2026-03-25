@@ -407,7 +407,9 @@ pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) -> bool {
         WeaponType::Chainsaw => p_fire_chainsaw(gs, level),
     }
 
-    gs.sound.sound_queue.push(SoundRequest::PlayerWeaponFire(weapon));
+    gs.sound
+        .sound_queue
+        .push(SoundRequest::PlayerWeaponFire(weapon));
 
     if weapon_makes_noise(weapon) {
         if let Some(lv) = level {

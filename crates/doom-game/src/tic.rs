@@ -1650,9 +1650,15 @@ mod tests {
         let mut gs = make_game_state();
         assert_eq!(gs.stats.level_time, 0, "level_time starts at 0");
         gs.tick(TicCmd::default(), None);
-        assert_eq!(gs.stats.level_time, 1, "level_time must be 1 after first tick");
+        assert_eq!(
+            gs.stats.level_time, 1,
+            "level_time must be 1 after first tick"
+        );
         gs.tick(TicCmd::default(), None);
-        assert_eq!(gs.stats.level_time, 2, "level_time must be 2 after second tick");
+        assert_eq!(
+            gs.stats.level_time, 2,
+            "level_time must be 2 after second tick"
+        );
     }
 
     // -----------------------------------------------------------------------

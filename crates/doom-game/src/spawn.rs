@@ -1020,7 +1020,10 @@ mod tests {
         let mut gs = GameState::new("E1M1");
         spawn_level_things(&mut gs, &level, Skill::Medium, false);
         assert_eq!(gs.stats.total_kills, 1, "Trooper should count as a kill");
-        assert_eq!(gs.stats.total_items, 1, "HealthBonus should count as an item");
+        assert_eq!(
+            gs.stats.total_items, 1,
+            "HealthBonus should count as an item"
+        );
     }
 
     #[test]
@@ -1050,7 +1053,10 @@ mod tests {
         ]);
         let mut gs = GameState::new("E1M1");
         spawn_level_things(&mut gs, &level, Skill::Medium, false);
-        assert_eq!(gs.stats.total_kills, 3, "All three monsters should be counted");
+        assert_eq!(
+            gs.stats.total_kills, 3,
+            "All three monsters should be counted"
+        );
     }
 
     // ===================================================================
