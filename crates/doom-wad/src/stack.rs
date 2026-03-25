@@ -15,28 +15,68 @@
 use crate::lump::LumpDef;
 use crate::wad::{WadError, WadFile, WadKind};
 
-/// Ordered stack of WAD files.
+/// Ordered stack of WAD files, responsible for resolving PWAD overrides.
 ///
-/// The IWAD must be the first file pushed via `push_iwad()`.
-/// PWADs are pushed with `push_pwad()`.
+/// When modifying a game as old as Doom, modders distribute "Patch WADs" (`PWAD`s)
+/// rather than full game files. The `WadStack` manages this layered approach.
+/// It holds the base game (`IWAD`) at the bottom and layers any number of `PWAD`s
+/// on top. When the engine asks for a lump (like a texture or sound), the stack
+/// searches from the top down, ensuring the most recently loaded patch wins.
+///
+/// The IWAD must be the first file pushed via [`WadStack::push_iwad`].
+/// PWADs are subsequently pushed with [`WadStack::push_pwad`].
 ///
 /// Data access must go through the stack itself because lump offsets
-/// are relative to each individual file's byte array.
+/// are relative to each individual file's owned byte array.
+///
+/// # Examples
+/// ```
+/// use doom_wad::{WadStack, WadFile};
+///
+/// // 1. Create the stack.
+/// let mut stack = WadStack::new();
+///
+/// // 2. Push the base game (IWAD) first.
+/// // (Using a minimal 12-byte empty WAD for the example)
+/// let iwad_bytes = b"IWAD\0\0\0\0\x0C\0\0\0".to_vec();
+/// stack.push_iwad(iwad_bytes).unwrap();
+///
+/// // 3. Push any patches (PWADs).
+/// let pwad_bytes = b"PWAD\0\0\0\0\x0C\0\0\0".to_vec();
+/// stack.push_pwad(pwad_bytes).unwrap();
+///
+/// assert_eq!(stack.wad_count(), 2);
+/// ```
 pub struct WadStack {
     /// Each WAD file in load order (IWAD first, then PWADs).
     wads: Vec<WadFile>,
 }
 
 impl WadStack {
-    /// Create an empty stack.  Call `push_iwad()` before anything else.
+    /// Create an empty stack.
+    ///
+    /// You must call [`WadStack::push_iwad`] before pushing any PWADs or
+    /// attempting to read data, as every valid Doom environment requires a base game.
     pub fn new() -> Self {
         Self { wads: Vec::new() }
     }
 
-    /// Push the IWAD.  Must be called exactly once before any `push_pwad()`.
+    /// Push the base `IWAD` onto the bottom of the stack.
+    ///
+    /// Must be called exactly once before any [`WadStack::push_pwad`]. The `IWAD`
+    /// contains the core assets of the game (e.g., `doom.wad` or `doom2.wad`).
     ///
     /// # Errors
-    /// `WadError::ExpectedIwad` if the file is a PWAD.
+    /// Returns [`WadError::ExpectedIwad`] if the provided data is actually a `PWAD`
+    /// instead of an `IWAD`. Also returns a [`WadError`] if the WAD is malformed.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::WadStack;
+    /// let mut stack = WadStack::new();
+    /// let minimal_iwad = b"IWAD\0\0\0\0\x0C\0\0\0".to_vec();
+    /// assert!(stack.push_iwad(minimal_iwad).is_ok());
+    /// ```
     pub fn push_iwad(&mut self, data: Vec<u8>) -> Result<(), WadError> {
         let wad = WadFile::parse(data)?;
         if wad.kind() != WadKind::Iwad {
@@ -46,10 +86,23 @@ impl WadStack {
         Ok(())
     }
 
-    /// Push a PWAD on top of the stack.
+    /// Push a `PWAD` (Patch WAD) on top of the stack.
+    ///
+    /// Any lumps defined in this `PWAD` will override lumps with the exact same
+    /// name in the `IWAD` or any previously pushed `PWAD`s.
     ///
     /// # Errors
-    /// `WadError` if the file is malformed or any lump is out of bounds.
+    /// Returns [`WadError`] if the file is malformed or any lump is out of bounds.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::WadStack;
+    /// let mut stack = WadStack::new();
+    /// stack.push_iwad(b"IWAD\0\0\0\0\x0C\0\0\0".to_vec()).unwrap();
+    ///
+    /// let minimal_pwad = b"PWAD\0\0\0\0\x0C\0\0\0".to_vec();
+    /// assert!(stack.push_pwad(minimal_pwad).is_ok());
+    /// ```
     pub fn push_pwad(&mut self, data: Vec<u8>) -> Result<(), WadError> {
         let wad = WadFile::parse(data)?;
         self.wads.push(wad);
@@ -76,8 +129,20 @@ impl WadStack {
 
     /// Resolve a lump by name using PWAD-override semantics.
     ///
-    /// Searches from the **last** loaded WAD to the first.  Returns the
-    /// first match found (i.e., the most recently loaded definition).
+    /// Searches from the **last** loaded WAD down to the first (`IWAD`).
+    /// Returns the first match found (i.e., the most recently loaded definition).
+    /// This is the core mechanism that allows small mods to replace specific
+    /// sprites or sounds without modifying the original game data.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::WadStack;
+    /// let mut stack = WadStack::new();
+    /// // ... push IWAD and PWADs ...
+    /// // This will return the "PLAYPAL" from the highest PWAD that defines it,
+    /// // or fallback to the IWAD if no patches override it.
+    /// let resolved = stack.find_lump("PLAYPAL");
+    /// ```
     pub fn find_lump(&self, name: &str) -> Option<(&WadFile, &LumpDef)> {
         for wad in self.wads.iter().rev() {
             if let Some(lump) = wad.find_lump(name) {
@@ -88,6 +153,19 @@ impl WadStack {
     }
 
     /// Convenience: return the raw bytes for a lump, resolved from the stack.
+    ///
+    /// Performs the same top-down search as [`WadStack::find_lump`], but returns
+    /// the actual byte payload instead of the descriptor.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::WadStack;
+    /// let mut stack = WadStack::new();
+    /// // ...
+    /// if let Some(bytes) = stack.lump_data("DEMO1") {
+    ///     println!("Found DEMO1 with {} bytes", bytes.len());
+    /// }
+    /// ```
     pub fn lump_data(&self, name: &str) -> Option<&[u8]> {
         let (wad, lump) = self.find_lump(name)?;
         Some(wad.lump_data(lump))
