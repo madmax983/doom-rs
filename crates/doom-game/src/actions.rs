@@ -2183,33 +2183,54 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn dir_to_target_east() {
-        assert_eq!(dir_to_target(100, 0), 0); // East
-    }
+    fn test_dir_to_target() {
+        let cases = [
+            // Pure directions
+            (100, 0, DI_EAST),
+            (-100, 0, DI_WEST),
+            (0, 100, DI_NORTH),
+            (0, -100, DI_SOUTH),
 
-    #[test]
-    fn dir_to_target_north() {
-        assert_eq!(dir_to_target(0, 100), 2); // North
-    }
+            // Exact diagonals
+            (100, 100, DI_NORTHEAST),
+            (-100, 100, DI_NORTHWEST),
+            (-100, -100, DI_SOUTHWEST),
+            (100, -100, DI_SOUTHEAST),
 
-    #[test]
-    fn dir_to_target_ne_diagonal() {
-        assert_eq!(dir_to_target(50, 50), 1); // NE
-    }
+            // Shallow diagonals (still diagonal territory: ax/ay < 2.0 and ay/ax < 2.0)
+            (100, 60, DI_NORTHEAST),
+            (60, 100, DI_NORTHEAST),
+            (-100, 60, DI_NORTHWEST),
+            (-60, 100, DI_NORTHWEST),
+            (-100, -60, DI_SOUTHWEST),
+            (-60, -100, DI_SOUTHWEST),
+            (100, -60, DI_SOUTHEAST),
+            (60, -100, DI_SOUTHEAST),
 
-    #[test]
-    fn dir_to_target_west() {
-        assert_eq!(dir_to_target(-100, 0), DI_WEST);
-    }
+            // Mostly horizontal (ax > 2 * ay)
+            (100, 40, DI_EAST),
+            (100, -40, DI_EAST),
+            (-100, 40, DI_WEST),
+            (-100, -40, DI_WEST),
 
-    #[test]
-    fn dir_to_target_south() {
-        assert_eq!(dir_to_target(0, -100), DI_SOUTH);
-    }
+            // Mostly vertical (ay > 2 * ax)
+            (40, 100, DI_NORTH),
+            (-40, 100, DI_NORTH),
+            (40, -100, DI_SOUTH),
+            (-40, -100, DI_SOUTH),
 
-    #[test]
-    fn dir_to_target_sw() {
-        assert_eq!(dir_to_target(-50, -50), DI_SOUTHWEST);
+            // Edge cases
+            (0, 0, DI_NORTHEAST), // Handled as diagonal in current logic since 0 is not > 0
+        ];
+
+        for &(dx, dy, expected) in &cases {
+            assert_eq!(
+                dir_to_target(dx, dy),
+                expected,
+                "dir_to_target({}, {}) should be {}",
+                dx, dy, expected
+            );
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -2668,6 +2689,78 @@ mod tests {
             after_second.state, missile_sn,
             "trooper should enter missile state once movecount has counted down"
         );
+    }
+
+    #[test]
+    fn p_check_missile_range_mf_justhit_returns_true_and_clears_flag() {
+        let mut gs = make_game_state();
+        let player_handle = gs.player.handle;
+        let trooper = spawn_monster_targeting_player(&mut gs, MobjKind::Trooper, 100, 0, 20);
+        gs.mobjslab.get_mut(trooper).unwrap().flags |= flags::MF_JUSTHIT;
+
+        let can_fire = p_check_missile_range(&mut gs, trooper, player_handle, None);
+
+        assert!(can_fire, "MF_JUSTHIT must bypass normal missile range checks");
+        let mo = gs.mobjslab.get(trooper).unwrap();
+        assert_eq!(
+            mo.flags & flags::MF_JUSTHIT, 0,
+            "p_check_missile_range must clear MF_JUSTHIT"
+        );
+    }
+
+    #[test]
+    fn p_check_missile_range_reactiontime_prevents_fire() {
+        let mut gs = make_game_state();
+        let player_handle = gs.player.handle;
+        // Trooper within range
+        let trooper = spawn_monster_targeting_player(&mut gs, MobjKind::Trooper, 200, 0, 20);
+        gs.mobjslab.get_mut(trooper).unwrap().reactiontime = 10;
+
+        let can_fire = p_check_missile_range(&mut gs, trooper, player_handle, None);
+
+        assert!(!can_fire, "reactiontime > 0 must prevent missile fire");
+    }
+
+    #[test]
+    fn p_check_missile_range_null_melee_state_adjusts_distance() {
+        let mut gs = make_game_state();
+        let player_handle = gs.player.handle;
+
+        let demon = spawn_monster_targeting_player(&mut gs, MobjKind::Demon, 300, 0, 150);
+        gs.mobjslab.get_mut(demon).unwrap().reactiontime = 0;
+
+        let trooper = spawn_monster_targeting_player(&mut gs, MobjKind::Trooper, 300, 0, 20);
+        gs.mobjslab.get_mut(trooper).unwrap().reactiontime = 0;
+
+        // RNG_TABLE[11] = 140.
+        // demon: dist = 200, random = 140 -> can_fire = false
+        // trooper: dist = 108, random = 140 -> can_fire = true
+
+        gs.rng.set_index(11);
+        let can_fire_demon = p_check_missile_range(&mut gs, demon, player_handle, None);
+
+        gs.rng.set_index(11);
+        let can_fire_trooper = p_check_missile_range(&mut gs, trooper, player_handle, None);
+
+        assert!(!can_fire_demon, "Demon should fail random gate because dist > random");
+        assert!(can_fire_trooper, "Trooper should pass random gate because dist - 128 < random");
+    }
+
+    #[test]
+    fn p_check_missile_range_cyberdemon_distance_limits() {
+        let mut gs = make_game_state();
+        let player_handle = gs.player.handle;
+        let cyber = spawn_monster_targeting_player(&mut gs, MobjKind::Cyberdemon, 500, 0, 4000);
+        gs.mobjslab.get_mut(cyber).unwrap().reactiontime = 0;
+
+        // RNG_TABLE[6] = 149 (false).
+        // RNG_TABLE[20] = 154 (true).
+
+        gs.rng.set_index(6);
+        assert!(!p_check_missile_range(&mut gs, cyber, player_handle, None), "Cyberdemon should fail with random=149 vs dist=154");
+
+        gs.rng.set_index(20);
+        assert!(p_check_missile_range(&mut gs, cyber, player_handle, None), "Cyberdemon should fire with random=154 vs dist=154");
     }
 
     #[test]
