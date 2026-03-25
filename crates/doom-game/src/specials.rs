@@ -957,14 +957,13 @@ pub fn shortest_lower_texture(level: &Level, sector_index: usize) -> i16 {
 ///
 /// Creates one `FloorMover` per matching sector.
 pub fn ev_floor_lower_to_lowest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    let per_sector: Vec<(usize, i16)> = level
+    for (idx, target) in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, _)| (i, lowest_adjacent_floor(level, i)))
-        .collect();
-    for (idx, target) in per_sector {
+    {
         activate_floor_lower_single_typed(
             gs,
             level,
@@ -979,14 +978,13 @@ pub fn ev_floor_lower_to_lowest(gs: &mut GameState, level: &Level, tag: u16, spe
 
 /// Lower floor to highest adjacent floor on all sectors matching `tag`.
 pub fn ev_floor_lower_to_highest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    let per_sector: Vec<(usize, i16)> = level
+    for (idx, target) in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, _)| (i, highest_adjacent_floor(level, i)))
-        .collect();
-    for (idx, target) in per_sector {
+    {
         activate_floor_lower_single_typed(
             gs,
             level,
@@ -1066,14 +1064,13 @@ pub fn ev_floor_raise_to_lowest_ceiling(
     speed: i16,
     crush: bool,
 ) {
-    let per_sector: Vec<(usize, i16)> = level
+    for (idx, target) in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, _)| (i, lowest_adjacent_ceiling(level, i)))
-        .collect();
-    for (idx, target) in per_sector {
+    {
         activate_floor_raise_single_typed(
             gs,
             level,
@@ -1089,14 +1086,13 @@ pub fn ev_floor_raise_to_lowest_ceiling(
 
 /// Raise floor to next highest adjacent floor on all sectors matching `tag`.
 pub fn ev_floor_raise_to_nearest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    let per_sector: Vec<(usize, i16)> = level
+    for (idx, target) in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, _)| (i, next_highest_floor(level, i)))
-        .collect();
-    for (idx, target) in per_sector {
+    {
         activate_floor_raise_single_typed(
             gs,
             level,
@@ -1112,14 +1108,13 @@ pub fn ev_floor_raise_to_nearest(gs: &mut GameState, level: &Level, tag: u16, sp
 
 /// Raise floor by shortest lower texture height on all sectors matching `tag`.
 pub fn ev_floor_raise_by_texture(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    let per_sector: Vec<(usize, i16)> = level
+    for (idx, target) in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, s)| (i, s.floor_height + shortest_lower_texture(level, i)))
-        .collect();
-    for (idx, target) in per_sector {
+    {
         activate_floor_raise_single_typed(
             gs,
             level,
@@ -1135,14 +1130,13 @@ pub fn ev_floor_raise_by_texture(gs: &mut GameState, level: &Level, tag: u16, sp
 
 /// Raise floor by exactly 24 units on all sectors matching `tag`.
 pub fn ev_floor_raise_24(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    let per_sector: Vec<(usize, i16)> = level
+    for (idx, target) in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, s)| (i, s.floor_height + 24))
-        .collect();
-    for (idx, target) in per_sector {
+    {
         activate_floor_raise_single_typed(
             gs,
             level,
@@ -1158,14 +1152,13 @@ pub fn ev_floor_raise_24(gs: &mut GameState, level: &Level, tag: u16, speed: i16
 
 /// Raise floor by exactly 32 units on all sectors matching `tag`.
 pub fn ev_floor_raise_32(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    let per_sector: Vec<(usize, i16)> = level
+    for (idx, target) in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, s)| (i, s.floor_height + 32))
-        .collect();
-    for (idx, target) in per_sector {
+    {
         activate_floor_raise_single_typed(
             gs,
             level,
@@ -1187,14 +1180,13 @@ pub fn ev_floor_raise_to_ceiling(
     speed: i16,
     crush: bool,
 ) {
-    let per_sector: Vec<(usize, i16)> = level
+    for (idx, target) in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, s)| (i, s.ceil_height))
-        .collect();
-    for (idx, target) in per_sector {
+    {
         activate_floor_raise_single_typed(
             gs,
             level,
