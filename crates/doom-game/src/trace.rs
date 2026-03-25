@@ -149,13 +149,14 @@ pub fn actors_in_cell(
     origin_x: i32,
     origin_y: i32,
     actor_positions: &[(i32, i32, i32, i32, bool)],
-) -> Vec<usize> {
+    result: &mut Vec<usize>,
+) {
     let cell_min_x = cell_x * 128 + origin_x;
     let cell_min_y = cell_y * 128 + origin_y;
     let cell_max_x = cell_min_x + 128;
     let cell_max_y = cell_min_y + 128;
 
-    let mut result = Vec::new();
+    result.clear();
     for (i, &(ax, ay, radius, _height, _shootable)) in actor_positions.iter().enumerate() {
         // Bounding-box overlap: actor extends from (ax - radius) to (ax + radius).
         if ax + radius >= cell_min_x
@@ -166,7 +167,6 @@ pub fn actors_in_cell(
             result.push(i);
         }
     }
-    result
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +359,9 @@ pub fn trace_ray(
     // Maximum cells to visit (safety limit against infinite loops).
     let max_cells = (cols + rows) as usize * 2 + 4;
 
+    // Buffer for actor overlap tests to avoid per-cell allocations.
+    let mut cell_actors = Vec::new();
+
     for _step in 0..max_cells {
         // Only process cells within the blockmap grid.
         if cell_x >= 0 && cell_x < cols && cell_y >= 0 && cell_y < rows {
@@ -429,9 +432,16 @@ pub fn trace_ray(
 
             // Test actors in this cell.
             if check_actors {
-                let actors = actors_in_cell(cell_x, cell_y, origin_x, origin_y, actor_positions);
+                actors_in_cell(
+                    cell_x,
+                    cell_y,
+                    origin_x,
+                    origin_y,
+                    actor_positions,
+                    &mut cell_actors,
+                );
 
-                for actor_idx in actors {
+                for &actor_idx in &cell_actors {
                     // Skip the shooter.
                     if shooter_index == Some(actor_idx) {
                         continue;
@@ -879,7 +889,8 @@ mod tests {
     fn actors_in_correct_cell() {
         // Cell (0,0) covers [0, 128) x [0, 128). Actor at (64, 64) with radius 16.
         let actors = vec![(64, 64, 16, 56, true)];
-        let result = actors_in_cell(0, 0, 0, 0, &actors);
+        let mut result = Vec::new();
+        actors_in_cell(0, 0, 0, 0, &actors, &mut result);
         assert_eq!(result, vec![0], "actor at (64,64) should be in cell (0,0)");
     }
 
@@ -887,7 +898,8 @@ mod tests {
     fn actors_in_adjacent_cell_excluded() {
         // Cell (1,0) covers [128, 256) x [0, 128). Actor at (64, 64) radius 16.
         let actors = vec![(64, 64, 16, 56, true)];
-        let result = actors_in_cell(1, 0, 0, 0, &actors);
+        let mut result = Vec::new();
+        actors_in_cell(1, 0, 0, 0, &actors, &mut result);
         assert!(
             result.is_empty(),
             "actor at (64,64) should NOT be in cell (1,0)"
@@ -897,7 +909,8 @@ mod tests {
     #[test]
     fn empty_cell_returns_empty() {
         let actors: Vec<(i32, i32, i32, i32, bool)> = vec![];
-        let result = actors_in_cell(0, 0, 0, 0, &actors);
+        let mut result = Vec::new();
+        actors_in_cell(0, 0, 0, 0, &actors, &mut result);
         assert!(result.is_empty(), "no actors -> empty result");
     }
 
@@ -905,8 +918,13 @@ mod tests {
     fn actor_on_cell_boundary_overlap() {
         // Actor at (120, 64), radius 20. Extends to x=140 which overlaps cell(1,0) = [128,256).
         let actors = vec![(120, 64, 20, 56, true)];
-        let result0 = actors_in_cell(0, 0, 0, 0, &actors);
-        let result1 = actors_in_cell(1, 0, 0, 0, &actors);
+
+        let mut result0 = Vec::new();
+        actors_in_cell(0, 0, 0, 0, &actors, &mut result0);
+
+        let mut result1 = Vec::new();
+        actors_in_cell(1, 0, 0, 0, &actors, &mut result1);
+
         assert!(result0.contains(&0), "actor should be in cell(0,0)");
         assert!(
             result1.contains(&0),
@@ -921,7 +939,8 @@ mod tests {
             (96, 96, 10, 56, true),
             (200, 200, 10, 56, true), // in cell (1,1)
         ];
-        let result = actors_in_cell(0, 0, 0, 0, &actors);
+        let mut result = Vec::new();
+        actors_in_cell(0, 0, 0, 0, &actors, &mut result);
         assert_eq!(result.len(), 2);
         assert!(result.contains(&0));
         assert!(result.contains(&1));
@@ -931,7 +950,8 @@ mod tests {
     fn actors_with_nonzero_origin() {
         // Origin at (-128, -128). Cell(0,0) covers [-128, 0) x [-128, 0).
         let actors = vec![(-64, -64, 10, 56, true)];
-        let result = actors_in_cell(0, 0, -128, -128, &actors);
+        let mut result = Vec::new();
+        actors_in_cell(0, 0, -128, -128, &actors, &mut result);
         assert!(
             result.contains(&0),
             "actor should be in cell with shifted origin"
