@@ -513,6 +513,38 @@ mod prop_tests {
             );
         }
 
+        // Property: `heal_overheal(n, cap)` never pushes health above `cap`.
+        #[test]
+        fn heal_overheal_preserves_cap_invariant(
+            initial_damage in 0i32..=100i32,
+            heal_amount in 0i32..=10000i32,
+            cap in 100i32..=200i32,
+        ) {
+            let mut player = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            player.apply_damage(initial_damage);
+            player.heal_overheal(heal_amount, cap);
+            let h = player.health();
+            prop_assert!(
+                h <= cap,
+                "health {} > cap {} after heal_overheal({}, {})", h, cap, heal_amount, cap
+            );
+        }
+
+        // Property: `set_health_capped(n, cap)` always stays within `[0, cap]`.
+        #[test]
+        fn set_health_capped_preserves_bounds(
+            value in i32::MIN..=i32::MAX,
+            cap in 0i32..=500i32,
+        ) {
+            let mut player = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            player.set_health_capped(value, cap);
+            let h = player.health();
+            prop_assert!(
+                h >= 0 && h <= cap,
+                "health {} outside bounds [0, {}] after set_health_capped({}, {})", h, cap, value, cap
+            );
+        }
+
         // Property: key bitmask operations are idempotent — giving the same
         // key twice is the same as giving it once.
         #[test]
@@ -617,6 +649,33 @@ mod tests {
         let mut p = PlayerState::pistol_start(MobjHandle::NULL);
         p.heal(50);
         assert_eq!(p.health(), MAX_HEALTH);
+    }
+
+    #[test]
+    fn heal_overheal_exceeds_max_health_up_to_cap() {
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        assert_eq!(p.health(), 100);
+        p.heal_overheal(50, 200);
+        assert_eq!(p.health(), 150);
+
+        p.heal_overheal(100, 200);
+        assert_eq!(p.health(), 200);
+
+        p.heal_overheal(50, 200);
+        assert_eq!(p.health(), 200, "Should cap at 200");
+    }
+
+    #[test]
+    fn set_health_capped_clamps_to_bounds() {
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        p.set_health_capped(150, 200);
+        assert_eq!(p.health(), 150);
+
+        p.set_health_capped(300, 200);
+        assert_eq!(p.health(), 200, "Should cap at 200");
+
+        p.set_health_capped(-50, 200);
+        assert_eq!(p.health(), 0, "Should clamp to 0 at minimum");
     }
 
     #[test]
