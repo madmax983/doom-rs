@@ -141,6 +141,10 @@ struct Args {
     /// Export the level layout to an SVG file and exit.
     #[arg(long)]
     export_svg: Option<std::path::PathBuf>,
+
+    /// Export the level layout to an OBJ 3D model file and exit.
+    #[arg(long)]
+    export_obj: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1792,6 +1796,20 @@ fn run_doom() -> Result<()> {
             "🌟".green(),
             "Exported".green().bold(),
             svg_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
+
+    if let Some(ref obj_path) = args.export_obj {
+        let obj_data = doom_map::obj::export_map_to_obj(&level);
+        std::fs::write(obj_path, obj_data)
+            .with_context(|| format!("Failed to write OBJ to {}", obj_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} 3D model to {}",
+            "🌟".green(),
+            "Exported".green().bold(),
+            obj_path.display().to_string().cyan()
         );
         return Ok(());
     }
