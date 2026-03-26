@@ -94,6 +94,11 @@ impl DemoPlaybackApp {
     /// and process cheats/saves).
     fn tick_cmd(&mut self, cmd: TicCmd) {
         self.inner.gs.tick(cmd, Some(&mut self.inner.level));
+        self.inner.player_view_height = super::next_player_view_height(
+            self.inner.player_view_height,
+            self.inner.gs.player.is_dead(),
+        );
+        self.inner.tick_weapon_anim();
     }
 
     /// Returns `true` if the demo has been completely replayed.
