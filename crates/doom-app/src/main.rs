@@ -145,6 +145,10 @@ struct Args {
     /// Export the level layout to an OBJ 3D model file and exit.
     #[arg(long)]
     export_obj: Option<std::path::PathBuf>,
+
+    /// Export the level layout to a GeoJSON file and exit.
+    #[arg(long)]
+    export_geojson: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1796,6 +1800,20 @@ fn run_doom() -> Result<()> {
             "🌟".green(),
             "Exported".green().bold(),
             svg_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
+
+    if let Some(ref geojson_path) = args.export_geojson {
+        let geojson_data = doom_map::export_map_to_geojson(&level);
+        std::fs::write(geojson_path, geojson_data)
+            .with_context(|| format!("Failed to write GeoJSON to {}", geojson_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} GeoJSON to {}",
+            "✅".green(),
+            "Exported".bold(),
+            geojson_path.display()
         );
         return Ok(());
     }
