@@ -693,9 +693,15 @@ impl GameState {
         if min >= max {
             return min;
         }
-        let span = (max - min + 1) as u32;
+        // Use abs_diff and saturating_add to prevent i32 overflow
+        // on extremely large ranges (e.g., i32::MIN to i32::MAX).
+        let span = min.abs_diff(max).saturating_add(1);
         let r = self.p_random() as u32;
-        min + (r % span) as i32
+
+        let offset = r % span;
+        // Compute securely in i64 to avoid wrapping the u32 offset into a negative i32.
+        let result = (min as i64) + (offset as i64);
+        result.clamp(i32::MIN as i64, i32::MAX as i64) as i32
     }
 
     /// Return `p_random() as i32 - p_random() as i32`.
@@ -888,5 +894,75 @@ mod tests {
         gs.set_player_health_capped(200, 150);
         assert_eq!(gs.player.health(), 150);
         assert_eq!(gs.mobjslab.get(gs.player.handle).unwrap().health, 150);
+    }
+
+    #[test]
+    fn test_p_random_range() {
+        let mut gs = GameState::new("E1M1");
+
+        // Single value
+        assert_eq!(gs.p_random_range(5, 5), 5);
+        assert_eq!(gs.p_random_range(10, 5), 10); // min > max returns min
+
+        // Small range
+        let mut found_min = false;
+        let mut found_max = false;
+        for _ in 0..1000 {
+            let v = gs.p_random_range(1, 10);
+            assert!((1..=10).contains(&v));
+            if v == 1 {
+                found_min = true;
+            }
+            if v == 10 {
+                found_max = true;
+            }
+        }
+        assert!(found_min && found_max);
+
+        // Negative range
+        let mut found_min_neg = false;
+        let mut found_max_neg = false;
+        for _ in 0..1000 {
+            let v = gs.p_random_range(-20, -10);
+            assert!((-20..=-10).contains(&v));
+            if v == -20 {
+                found_min_neg = true;
+            }
+            if v == -10 {
+                found_max_neg = true;
+            }
+        }
+        assert!(found_min_neg && found_max_neg);
+
+        // Range crossing zero
+        let v = gs.p_random_range(-10, 10);
+        assert!((-10..=10).contains(&v));
+
+        // Large range that would overflow max - min
+        let v = gs.p_random_range(-2_000_000_000, 2_000_000_000);
+        assert!((-2_000_000_000..=2_000_000_000).contains(&v));
+
+        // Extreme i32 range
+        let _v = gs.p_random_range(i32::MIN, i32::MAX);
+        // This should not panic
+    }
+
+    #[test]
+    fn test_p_subrandom() {
+        let mut gs = GameState::new("E1M1");
+
+        let mut found_neg = false;
+        let mut found_pos = false;
+        for _ in 0..1000 {
+            let v = gs.p_subrandom();
+            assert!((-255..=255).contains(&v));
+            if v < 0 {
+                found_neg = true;
+            }
+            if v > 0 {
+                found_pos = true;
+            }
+        }
+        assert!(found_neg && found_pos);
     }
 }
