@@ -1403,6 +1403,52 @@ mod tests {
         assert_eq!(classify_trigger(31), Some(TriggerType::SwitchOnce));
     }
 
+    #[test]
+    fn trigger_type_table_driven() {
+        let cases = [
+            (2, Some(TriggerType::WalkOnce)),
+            (72, Some(TriggerType::WalkRepeat)),
+            (7, Some(TriggerType::SwitchOnce)),
+            (42, Some(TriggerType::SwitchRepeat)),
+            (1, Some(TriggerType::SwitchRepeat)), // DR
+            (31, Some(TriggerType::SwitchOnce)),  // D1
+            (24, Some(TriggerType::GunOnce)),
+            (48, None), // Passive
+        ];
+
+        for (special, expected) in cases {
+            assert_eq!(
+                classify_trigger(special),
+                expected,
+                "classify_trigger({}) should be {:?}",
+                special,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn test_segment_intersection_frac_intersecting() {
+        // (0, 0) -> (10, 10) intersects (0, 10) -> (10, 0) at (5, 5).
+        let result = segment_intersection_frac(0, 0, 10, 10, 0, 10, 10, 0);
+        assert_eq!(result, Some((100, 200)));
+    }
+
+    #[test]
+    fn test_segment_intersection_frac_parallel_no_intersection() {
+        // (0, 0) -> (10, 0) and (0, 10) -> (10, 10) are parallel.
+        let result = segment_intersection_frac(0, 0, 10, 0, 0, 10, 10, 10);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_segment_intersection_frac_non_intersecting_lines() {
+        // (0, 0) -> (10, 0) and (0, 10) -> (10, 20).
+        let result = segment_intersection_frac(0, 0, 10, 0, 0, 10, 10, 20);
+        // The lines would intersect outside the segment (t_num/denom out of 0..=1).
+        assert_eq!(result, None);
+    }
+
     // -----------------------------------------------------------------------
     // Tests: linedef_effect
     // -----------------------------------------------------------------------
