@@ -463,11 +463,21 @@ const FOCAL_LEN: f32 = 160.0;
 /// Eye height above floor in map units (matches render.rs PLAYER_HEIGHT).
 const PLAYER_HEIGHT: f32 = 41.0;
 
+/// Connects the rendering of sprite geometry to the wall occlusion arrays tracking `mceilingclip` and `mfloorclip`.
+///
+/// During the standard wall rendering pass, Doom updates these clip bounds whenever the player
+/// looks through a two-sided linedef window. Sprites rendered through such windows must be clipped
+/// to the same viewable bounds so they do not bleed into the window frames. This struct packages
+/// those 1D Z-depth and coordinate arrays.
 #[derive(Clone, Copy)]
 pub struct SpriteClip<'a> {
+    /// The specific screen Y row at which the visual portal opening begins per column.
     pub top: &'a [i32; SCREEN_W],
+    /// The specific screen Y row at which the visual portal opening ends per column.
     pub bottom: &'a [i32; SCREEN_W],
+    /// The raw perpendicular distance to the portal establishing `top`. Sprites closer than this ignore the top clip.
     pub top_depth: &'a [f32; SCREEN_W],
+    /// The raw perpendicular distance to the portal establishing `bottom`. Sprites closer than this ignore the bottom clip.
     pub bottom_depth: &'a [f32; SCREEN_W],
 }
 
@@ -638,6 +648,11 @@ pub fn render_actors_ex(
     );
 }
 
+/// Executes a combined Painter's algorithm to render both two-sided masked wall columns and individual sprite actors in a single back-to-front depth sorted pass.
+///
+/// Doom processes geometry front-to-back using a BSP tree, but things with transparent pixels
+/// (like grates, fences, or monsters) require drawing farther elements before nearer ones.
+/// This method handles interleaving those objects with accurate scaling, projection, and portal window occlusion.
 #[allow(clippy::too_many_arguments)]
 pub fn render_actors_with_masked_ex<'a>(
     actors: &[crate::sprite_lookup::ActorRenderInfo],

@@ -129,11 +129,39 @@ impl Default for SolidWallClipper {
 }
 
 impl SolidWallClipper {
+    /// Prepares a fresh clipper for a new rendered frame.
+    ///
+    /// Every new frame must start with an unobstructed view of the world.
+    /// As the renderer processes solid walls front-to-back, it records their
+    /// columns here to avoid drawing the geometry hidden behind them.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// # use doom_renderer::clip::SolidWallClipper;
+    /// let clipper = SolidWallClipper::new();
+    /// // All 320 columns are currently open.
+    /// assert_eq!(clipper.uncovered_runs(0, 319), vec![(0, 319)]);
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Records that a one-sided wall completely obstructs the column `x`.
+    ///
+    /// Once marked, any segs processed later that fall into this screen column
+    /// will be skipped entirely. This is the heart of Doom's software occlusion.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// # use doom_renderer::clip::SolidWallClipper;
+    /// let mut clipper = SolidWallClipper::new();
+    /// clipper.mark_column(160);
+    /// // The center column is now blocked; the runs split around it.
+    /// assert_eq!(clipper.uncovered_runs(159, 161), vec![(159, 159), (161, 161)]);
+    /// ```
     pub fn mark_column(&mut self, x: usize) {
         if x < SCREEN_W {
             self.covered[x] = true;
@@ -172,10 +200,16 @@ impl SolidWallClipper {
     }
 }
 
-/// Plane type used for row-wise span clipping.
+/// Identifies whether we are evaluating occlusion against the sky or the ground.
+///
+/// Doom processes floors and ceilings symmetrically when finding visible spans.
+/// We use this enum to select which array (`mceilingclip` vs `mfloorclip`)
+/// the span must be checked against to ensure it isn't drawn over a nearer wall.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaneClipKind {
+    /// Geometry above the player's head.
     Ceiling,
+    /// Geometry below the player's feet.
     Floor,
 }
 

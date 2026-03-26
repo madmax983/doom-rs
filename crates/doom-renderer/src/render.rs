@@ -202,18 +202,59 @@ fn draw_masked_column(
     }
 }
 
+/// Retains the drawing commands for a single column of a two-sided middle texture.
+///
+/// Unlike solid walls, midtextures contain transparent pixels and must be drawn back-to-front
+/// with sprites to ensure things behind grates are visible, and grates don't paint over
+/// things in front of them. The renderer defers their execution by creating these command blocks.
 #[derive(Clone)]
 pub struct MaskedColumnDraw<'a> {
+    /// Distance from the focal plane. Used directly for back-to-front sorting alongside sprites.
     pub depth: f32,
+    /// The specific screen column to paint into.
     pub x: usize,
+    /// The screen Y coordinate where the texture column visibly begins.
     pub y_top: usize,
+    /// The screen Y coordinate where the texture column visibly ends.
     pub y_bot: usize,
+    /// The initial starting texture Y coordinate, encoded as a 16.16 fixed point.
     pub frac: u32,
+    /// How much to add to `frac` per vertical pixel.
     pub fracstep: u32,
+    /// A single slice containing the 8-bit palette indices for one column of the texture.
     pub source: &'a [u8],
+    /// The fully distance-attenuated 256-color mapping array based on the wall's sector light.
     pub colormap: [u8; 256],
 }
 
+/// Dispatches a collected buffer of deferred 2-sided middle textures into the active framebuffer.
+///
+/// Masks out pixel 0. Called directly by the sprite interleaving code to paint grates and fences
+/// correctly around enemy units.
+///
+/// ## Examples
+///
+/// ```
+/// # use doom_renderer::framebuffer::Framebuffer;
+/// # use doom_renderer::render::{MaskedColumnDraw, draw_masked_columns};
+/// # use doom_renderer::column::IDENTITY_COLORMAP;
+/// let mut fb = Framebuffer::new();
+/// let tex_col = [0, 42, 0, 42]; // Palette index 0 is transparent.
+/// let columns = vec![MaskedColumnDraw {
+///     depth: 100.0,
+///     x: 10,
+///     y_top: 0,
+///     y_bot: 3,
+///     frac: 0,
+///     fracstep: 1 << 16,
+///     source: &tex_col,
+///     colormap: IDENTITY_COLORMAP,
+/// }];
+/// draw_masked_columns(&mut fb, &columns);
+///
+/// assert_eq!(fb.get_pixel(10, 0), Some(0), "Row 0 remains untouched (transparent)");
+/// assert_eq!(fb.get_pixel(10, 1), Some(42), "Row 1 painted with opaque pixel");
+/// ```
 pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw<'_>]) {
     for column in columns {
         draw_masked_column(

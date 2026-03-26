@@ -7,27 +7,48 @@
 const SCREEN_W: usize = 320;
 const UNUSED: i16 = -1;
 
-/// Distinguishes ceiling and floor visplanes.
+/// Specifies whether a visplane covers the floor or the ceiling of a sector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PlaneKind {
+    /// Defines a sky or sector ceiling plane bounding the top of a space.
     Ceiling,
+    /// Defines a walkable sector floor plane bounding the bottom of a space.
     Floor,
 }
 
-/// One allocated visplane.
+/// Represents a single continuous horizontal plane (a specific floor or ceiling at a specific height/light).
+///
+/// Doom renders floors and ceilings by finding contiguous screen regions that share the same texture,
+/// height, and light level properties. `Visplane` builds the boundary outlines per-column so they
+/// can be converted into fast horizontal drawing runs.
 #[derive(Debug, Clone)]
 pub struct Visplane {
+    /// Disambiguates whether this applies to the floor or the ceiling.
     pub kind: PlaneKind,
+    /// The exact Z-height elevation of the plane in world space coordinates.
     pub height: i32,
+    /// The exact flat texture lump name, stored exactly as an 8-byte array.
     pub flat_name: [u8; 8],
+    /// The unattenuated light level of the sector owning this visplane.
     pub light_level: u8,
+    /// The absolute lowest X coordinate column that this visplane occupies on screen.
     pub min_x: usize,
+    /// The absolute highest X coordinate column that this visplane occupies on screen.
     pub max_x: usize,
     top: [i16; SCREEN_W],
     bottom: [i16; SCREEN_W],
 }
 
 impl Visplane {
+    /// Creates an entirely clear boundary tracking structure for a unique plane surface.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// # use doom_renderer::visplane::{Visplane, PlaneKind};
+    /// let vp = Visplane::new(PlaneKind::Floor, 0, *b"FLAT14\0\0", 192);
+    /// assert!(vp.is_empty(), "A newly instantiated visplane should have no columns");
+    /// ```
     #[must_use]
     pub fn new(kind: PlaneKind, height: i32, flat_name: [u8; 8], light_level: u8) -> Self {
         Self {
@@ -42,11 +63,13 @@ impl Visplane {
         }
     }
 
+    /// Determines whether the specified column intersects with this visplane's defined geometric bounds.
     #[must_use]
     pub fn has_column(&self, x: usize) -> bool {
         x < SCREEN_W && self.top[x] != UNUSED
     }
 
+    /// Retrieves the precise `[top, bottom]` screen row boundaries where this visplane intersects column `x`.
     #[must_use]
     pub fn column_bounds(&self, x: usize) -> Option<(i16, i16)> {
         if !self.has_column(x) {
@@ -65,17 +88,24 @@ impl Visplane {
         self.max_x = self.max_x.max(x);
     }
 
+    /// Confirms whether this visplane's bounding arrays remain completely unfilled.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.min_x >= SCREEN_W
     }
 }
 
-/// Horizontal run on a single screen row.
+/// A horizontal segment spanning identical surface properties, prepared for optimized rasterization.
+///
+/// Rather than drawing per pixel or per column, Doom draws flats horizontally because constant-Z
+/// surfaces have simpler perspective scaling calculations per-row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpanRun {
+    /// The fixed screen Y row that this horizontal line segment will be drawn on.
     pub y: usize,
+    /// The inclusive starting X coordinate in the framebuffer for this line segment.
     pub x1: usize,
+    /// The inclusive ending X coordinate in the framebuffer for this line segment.
     pub x2: usize,
 }
 
@@ -127,11 +157,21 @@ pub struct VisplaneSet {
 }
 
 impl VisplaneSet {
+    /// Prepares an empty, fast-clearing flat manager ready to organize surfaces for a new frame.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// # use doom_renderer::visplane::VisplaneSet;
+    /// let mut set = VisplaneSet::new();
+    /// assert_eq!(set.planes().len(), 0);
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Extracs the full array of consolidated visplanes ready to be converted to `SpanRun` strips and painted.
     #[must_use]
     pub fn planes(&self) -> &[Visplane] {
         &self.planes

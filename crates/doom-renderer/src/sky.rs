@@ -45,6 +45,10 @@ pub struct SkyCoverage {
 }
 
 impl SkyCoverage {
+    /// Initializes a totally un-drawn, opaque `SkyCoverage` mask.
+    ///
+    /// Every column begins completely blocked. By default, nothing will be rendered as sky
+    /// until specific `F_SKY1` floor or ceiling spans are recorded via `record_span`.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -52,6 +56,22 @@ impl SkyCoverage {
         }
     }
 
+    /// Updates the specific vertical span `[top..bot]` (inclusive) within column `x`
+    /// to indicate that the sky texture must be drawn there.
+    ///
+    /// Called by the renderer whenever a floor or ceiling visplane marked `F_SKY1`
+    /// is encountered. Clamps any runs extending past the physical screen boundaries.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// # use doom_renderer::sky::SkyCoverage;
+    /// let mut sky = SkyCoverage::new();
+    /// // Record that column 10 has sky visible between rows 20 and 30.
+    /// sky.record_span(10, 20, 30);
+    /// assert!(sky.contains(10, 25), "Row 25 is within the sky mask");
+    /// assert!(!sky.contains(10, 35), "Row 35 is not in the sky mask");
+    /// ```
     pub fn record_span(&mut self, x: usize, top: i32, bot: i32) {
         if x >= SCREEN_W {
             return;
@@ -93,6 +113,7 @@ impl SkyCoverage {
         self.columns[x][end_word] |= tail_mask;
     }
 
+    /// Extracts whether the single screen pixel `(x, y)` sits inside a registered `F_SKY1` flat region.
     #[must_use]
     pub fn contains(&self, x: usize, y: usize) -> bool {
         if x >= SCREEN_W || y >= SCREEN_H {

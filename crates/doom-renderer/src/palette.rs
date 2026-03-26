@@ -25,25 +25,48 @@ pub const PLAYPAL_SIZE: usize = PLAYPAL_COUNT * PLAYPAL_COLORS * 3;
 #[derive(Debug, Error)]
 pub enum PaletteError {
     #[error("PLAYPAL lump is {actual} bytes; expected {PLAYPAL_SIZE}")]
-    WrongSize { actual: usize },
+    /// The parser encountered a PLAYPAL lump that does not contain exactly 14 palettes.
+    ///
+    /// Doom hardcodes the expectation of 14 palettes, each with 256 colors defined as 3-byte RGB tuples.
+    WrongSize {
+        /// The number of bytes actually found in the lump.
+        actual: usize
+    },
 }
 
 /// RGB color triple.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Rgb {
+    /// The intensity of the red color channel.
     pub r: u8,
+    /// The intensity of the green color channel.
     pub g: u8,
+    /// The intensity of the blue color channel.
     pub b: u8,
 }
 
 impl Rgb {
+    /// The absence of all light. Commonly used as the transparent color key.
     pub const BLACK: Self = Self { r: 0, g: 0, b: 0 };
+
+    /// The maximum intensity across all color channels.
     pub const WHITE: Self = Self {
         r: 255,
         g: 255,
         b: 255,
     };
 
+    /// Instantiates a color from raw 8-bit color channels.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// # use doom_renderer::palette::Rgb;
+    /// let magenta = Rgb::new(255, 0, 255);
+    /// assert_eq!(magenta.r, 255);
+    /// assert_eq!(magenta.g, 0);
+    /// assert_eq!(magenta.b, 255);
+    /// ```
     #[inline]
     pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
