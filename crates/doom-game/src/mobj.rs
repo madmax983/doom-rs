@@ -422,6 +422,7 @@ impl Clone for Slot {
 pub struct MobjSlab {
     slots: Vec<Slot>,
     free_head: Option<u32>,
+    live_count: usize,
     /// Next generation value to assign (never 0).
     next_generation: u32,
 }
@@ -432,6 +433,7 @@ impl MobjSlab {
         Self {
             slots: Vec::new(),
             free_head: None,
+            live_count: 0,
             next_generation: 1,
         }
     }
@@ -441,6 +443,8 @@ impl MobjSlab {
         let new_gen = self.next_generation;
         // Advance generation, skip 0 (reserved as null sentinel).
         self.next_generation = self.next_generation.wrapping_add(1).max(1);
+
+        self.live_count += 1;
 
         if let Some(free_idx) = self.free_head {
             let next = match &self.slots[free_idx as usize] {
@@ -483,6 +487,7 @@ impl MobjSlab {
             next_free: self.free_head,
         };
         self.free_head = Some(handle.index);
+        self.live_count -= 1;
         true
     }
 
@@ -519,11 +524,12 @@ impl MobjSlab {
     }
 
     /// Number of live actors.
+    ///
+    /// ⚡ Bolt: Tracking `live_count` explicitly reduces `len()` to an O(1) operation
+    /// instead of requiring an O(N) iteration over the entire generational arena.
+    #[inline]
     pub fn len(&self) -> usize {
-        self.slots
-            .iter()
-            .filter(|s| matches!(s, Slot::Occupied { .. }))
-            .count()
+        self.live_count
     }
 
     /// Total number of slots currently in the slab.
