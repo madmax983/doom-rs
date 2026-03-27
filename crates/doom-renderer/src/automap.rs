@@ -69,7 +69,8 @@ const PADDING_FRAC: f32 = 0.05;
 /// These constants map to the original Doom automap colours and are used
 /// internally by the renderer.
 #[allow(dead_code)]
-pub(crate) mod automap_colors {
+#[doc(hidden)]
+pub mod automap_colors {
     /// Background: black.
     pub const BACKGROUND: u8 = 0;
     /// One-sided (solid) wall: red.
@@ -111,6 +112,18 @@ pub(crate) mod automap_colors {
 /// Implements [`doom_game::AutomapCanvas`] so that `doom_game::draw_automap_full`
 /// can render directly into the renderer's framebuffer without the game crate
 /// knowing about `Framebuffer`.
+///
+/// # Examples
+/// ```
+/// use doom_renderer::{Framebuffer, RendererAutomapCanvas};
+/// use doom_game::AutomapCanvas;
+///
+/// let mut fb = Framebuffer::new();
+/// let mut canvas = RendererAutomapCanvas::new(&mut fb);
+///
+/// canvas.set_pixel(10, 10, 255);
+/// assert_eq!(canvas.get_pixel(10, 10), Some(255));
+/// ```
 pub struct RendererAutomapCanvas<'a> {
     /// Mutable reference to the target framebuffer.
     fb: &'a mut Framebuffer,
@@ -118,6 +131,8 @@ pub struct RendererAutomapCanvas<'a> {
 
 impl<'a> RendererAutomapCanvas<'a> {
     /// Wrap a mutable `Framebuffer` reference as an `AutomapCanvas`.
+    ///
+    /// This allows passing the renderer's framebuffer to game-side map drawing functions.
     pub fn new(fb: &'a mut Framebuffer) -> Self {
         Self { fb }
     }
@@ -158,8 +173,8 @@ impl AutomapCanvas for RendererAutomapCanvas<'_> {
 /// Render the automap overlay onto the framebuffer using the full game-side
 /// automap logic (visibility tracking, grid, thing markers, cheat flags).
 ///
-/// This delegates to [`doom_game::draw_automap_full`] through the
-/// [`RendererAutomapCanvas`] bridge.
+/// This function bridges the pure game logic in `doom_game` with the pixel buffer
+/// in `doom_renderer`. It handles translating coordinate spaces and angles.
 ///
 /// # Parameters
 /// - `fb`: target framebuffer (320x200).
@@ -227,6 +242,15 @@ pub fn draw_grid_on_fb(fb: &mut Framebuffer, center_x: f32, center_y: f32, zoom:
 ///
 /// The arrow is approximately 8 pixels long, pointing in `player_angle`.
 /// Uses [`automap_colors::PLAYER`] colour.
+///
+/// # Examples
+/// ```
+/// use doom_renderer::{Framebuffer, draw_player_arrow_on_fb};
+/// use doom_types::ANG90;
+///
+/// let mut fb = Framebuffer::new();
+/// draw_player_arrow_on_fb(&mut fb, 160, 100, ANG90); // Draw arrow facing north
+/// ```
 pub fn draw_player_arrow_on_fb(fb: &mut Framebuffer, sx: i32, sy: i32, player_angle: Bam) {
     let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
 
@@ -568,7 +592,17 @@ fn map_bounds(level: &Level) -> Option<(i32, i32, i32, i32)> {
 
 /// Integer Bresenham line drawing directly onto a `Framebuffer`.
 ///
+/// This implements the classic rasterization algorithm without floating-point math,
+/// essential for fast, pixel-perfect 2D map lines.
 /// Pixels outside `[0, 319] x [0, 199]` are silently skipped (no panic).
+///
+/// # Examples
+/// ```
+/// use doom_renderer::{Framebuffer, draw_line_fb};
+///
+/// let mut fb = Framebuffer::new();
+/// draw_line_fb(&mut fb, 10, 10, 50, 10, 255); // Draw horizontal white line
+/// ```
 pub fn draw_line_fb(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: u8) {
     let dx = (x1 - x0).abs();
     let dy = (y1 - y0).abs();
@@ -616,6 +650,15 @@ fn draw_line(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: u8
 ///
 /// Doom Y increases upward; screen Y increases downward. The transform
 /// flips Y so north remains up on the automap.
+///
+/// # Examples
+/// ```
+/// use doom_renderer::map_to_screen;
+///
+/// let (sx, sy) = map_to_screen(0.0, 0.0, 0.0, 0.0, 1.0);
+/// assert_eq!(sx, 160); // Centered X
+/// assert_eq!(sy, 100); // Centered Y
+/// ```
 pub fn map_to_screen(
     map_x: f32,
     map_y: f32,
