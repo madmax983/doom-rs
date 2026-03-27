@@ -6,6 +6,7 @@ mod audio_system;
 mod cheats;
 mod console;
 mod demo_mode;
+mod exporter;
 mod net_mode;
 mod savegame;
 
@@ -149,6 +150,10 @@ struct Args {
     /// Export the level layout to a GeoJSON file and exit.
     #[arg(long)]
     export_geojson: Option<std::path::PathBuf>,
+
+    /// Export a full HTML level dashboard (stats + interactive map) and exit.
+    #[arg(long)]
+    export_html: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1843,6 +1848,20 @@ fn run_doom() -> Result<()> {
         _ => Skill::Medium, // default: 3 = Hurt Me Plenty
     };
     spawn_level_things(&mut gs, &level, skill, false);
+
+    if let Some(ref html_path) = args.export_html {
+        let html_data = exporter::export_html_dashboard(&level, &gs);
+        std::fs::write(html_path, html_data)
+            .with_context(|| format!("Failed to write HTML to {}", html_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} HTML dashboard to {}",
+            "🌟".green(),
+            "Exported".green().bold(),
+            html_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
 
     // Apply DeHackEd patch if one was specified.
     if let Some(ref deh_path) = args.deh {
