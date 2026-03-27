@@ -1812,9 +1812,9 @@ fn run_doom() -> Result<()> {
         use crossterm::style::Stylize;
         println!(
             "{} {} GeoJSON to {}",
-            "✅".green(),
-            "Exported".bold(),
-            geojson_path.display()
+            "🌟".green(),
+            "Exported".green().bold(),
+            geojson_path.display().to_string().cyan()
         );
         return Ok(());
     }
