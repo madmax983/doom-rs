@@ -335,4 +335,83 @@ mod tests {
         // But B is overridden
         assert_eq!(stack.lump_data("B").unwrap(), b"b_override");
     }
+
+    #[test]
+    fn has_iwad_detects_base_wad() {
+        let mut stack = WadStack::new();
+        assert!(!stack.has_iwad());
+        let iwad = make_wad(b"IWAD", &[("TEST", b"data")]);
+        stack.push_iwad(iwad).unwrap();
+        assert!(stack.has_iwad());
+    }
+
+    #[test]
+    fn all_lumps_iterates_in_order() {
+        let iwad = make_wad(b"IWAD", &[("LUMP1", b"data1")]);
+        let pwad = make_wad(b"PWAD", &[("LUMP2", b"data2")]);
+        let mut stack = WadStack::new();
+        stack.push_iwad(iwad).unwrap();
+        stack.push_pwad(pwad).unwrap();
+
+        let lumps: Vec<_> = stack
+            .all_lumps()
+            .map(|(_, l)| l.name.as_str().to_string())
+            .collect();
+        assert_eq!(lumps, vec!["LUMP1", "LUMP2"]);
+    }
+
+    #[test]
+    fn map_lump_group_searches_pwads_first() {
+        // Build IWAD with MAP01
+        let iwad = make_wad(
+            b"IWAD",
+            &[
+                ("MAP01", b""),
+                ("THINGS", b"iwad_things"),
+                ("LINEDEFS", b"iwad_linedefs"),
+                ("SIDEDEFS", b"iwad_sidedefs"),
+                ("VERTEXES", b"iwad_vertexes"),
+                ("SEGS", b"iwad_segs"),
+                ("SSECTORS", b"iwad_ssectors"),
+                ("NODES", b"iwad_nodes"),
+                ("SECTORS", b"iwad_sectors"),
+                ("REJECT", b"iwad_reject"),
+                ("BLOCKMAP", b"iwad_blockmap"),
+            ],
+        );
+        // Build PWAD that completely replaces MAP01
+        let pwad = make_wad(
+            b"PWAD",
+            &[
+                ("MAP01", b""),
+                ("THINGS", b"pwad_things"),
+                ("LINEDEFS", b"pwad_linedefs"),
+                ("SIDEDEFS", b"pwad_sidedefs"),
+                ("VERTEXES", b"pwad_vertexes"),
+                ("SEGS", b"pwad_segs"),
+                ("SSECTORS", b"pwad_ssectors"),
+                ("NODES", b"pwad_nodes"),
+                ("SECTORS", b"pwad_sectors"),
+                ("REJECT", b"pwad_reject"),
+                ("BLOCKMAP", b"pwad_blockmap"),
+            ],
+        );
+
+        let mut stack = WadStack::new();
+        stack.push_iwad(iwad).unwrap();
+        stack.push_pwad(pwad).unwrap();
+
+        let (wad, group) = stack.find_map_lump_group("MAP01").unwrap();
+
+        // Ensure the WAD returned is the PWAD.
+        assert_eq!(wad.kind(), WadKind::Pwad);
+
+        match group {
+            crate::wad::MapLumpGroup::Classic(c) => {
+                // Check that we got the PWAD lumps, not the IWAD ones.
+                assert_eq!(wad.lump_data(c.lumps[0]), b"pwad_things");
+            }
+            _ => panic!("Expected Classic map lump group"),
+        }
+    }
 }
