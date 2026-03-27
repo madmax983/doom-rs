@@ -734,4 +734,39 @@ mod tests {
             MapLumpGroup::Classic(_) => panic!("expected UDMF map group"),
         }
     }
+
+    #[test]
+    fn map_lump_group_missing_lumps_returns_none() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("THINGS", b"iwad_things"),
+            // Missing LINEDEFS
+            ("SIDEDEFS", b"iwad_sidedefs"),
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        assert!(wad.map_lump_group("MAP01").is_none());
+    }
+
+    #[test]
+    fn find_lump_data_returns_none_if_missing() {
+        let wad_bytes = make_iwad(&[("TEST", b"data")]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        assert!(wad.find_lump_data("MISSING").is_none());
+    }
+
+    #[test]
+    fn lumps_between_returns_correct_range() {
+        let wad_bytes = make_iwad(&[
+            ("F_START", b""),
+            ("FLAT1", b"flat1_data"),
+            ("FLAT2", b"flat2_data"),
+            ("F_END", b""),
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        let flats: Vec<_> = wad
+            .lumps_between("F_START", "F_END")
+            .map(|l| l.name.as_str().to_string())
+            .collect();
+        assert_eq!(flats, vec!["FLAT1", "FLAT2"]);
+    }
 }
