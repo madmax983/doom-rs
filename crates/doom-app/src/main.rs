@@ -542,7 +542,8 @@ impl DoomGame {
         let Some(ref audio) = self.audio else {
             for ev in events {
                 if let SoundRequest::PlayerUseLockedDoor(color) = ev {
-                    self.hud_messages.push(locked_door_message(color).to_string(), 105);
+                    self.hud_messages
+                        .push(locked_door_message(color).to_string(), 105);
                 }
             }
             return;
@@ -558,7 +559,8 @@ impl DoomGame {
 
         for ev in events {
             if let SoundRequest::PlayerUseLockedDoor(color) = ev {
-                self.hud_messages.push(locked_door_message(color).to_string(), 105);
+                self.hud_messages
+                    .push(locked_door_message(color).to_string(), 105);
             }
             let Some((lump, priority)) = sound_request_sfx(ev) else {
                 continue;
@@ -3045,7 +3047,10 @@ mod tests {
         )]);
 
         assert_eq!(
-            game.hud_messages.active_messages().first().map(|m| m.text()),
+            game.hud_messages
+                .active_messages()
+                .first()
+                .map(|m| m.text()),
             Some("You need a blue key to open this door"),
             "locked door feedback should surface the classic Doom HUD message"
         );
