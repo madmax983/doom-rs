@@ -463,13 +463,25 @@ const FOCAL_LEN: f32 = 160.0;
 /// Eye height above floor in map units (matches render.rs PLAYER_HEIGHT).
 const PLAYER_HEIGHT: f32 = 41.0;
 
+/// Provides vertical clipping boundaries to constrain where sprites can be drawn.
+///
+/// This is populated from the `RenderOut` of the main wall pass. It prevents
+/// sprites from bleeding through two-sided window frames (portal ledges) by
+/// passing the top (`mceilingclip`) and bottom (`mfloorclip`) screen limits
+/// and their associated view depths.
 #[derive(Clone, Copy)]
 pub struct SpriteClip<'a> {
+    /// The topmost allowed screen row per column. Starts at 0, pushed down by portal ceilings.
     pub top: &'a [i32; SCREEN_W],
+    /// The bottommost allowed screen row per column. Starts at SCREEN_H-1, pushed up by portal floors.
     pub bottom: &'a [i32; SCREEN_W],
+    /// The view depth of the portal that established the top clip.
     pub top_depth: &'a [f32; SCREEN_W],
+    /// The view depth of the portal that established the bottom clip.
     pub bottom_depth: &'a [f32; SCREEN_W],
+    /// The history of top-clip changes, allowing sprites to correctly clip behind partial portal overlaps.
     pub top_history: Option<&'a [Vec<crate::render::SpriteClipStep>]>,
+    /// The history of bottom-clip changes, allowing sprites to correctly clip behind partial portal overlaps.
     pub bottom_history: Option<&'a [Vec<crate::render::SpriteClipStep>]>,
 }
 

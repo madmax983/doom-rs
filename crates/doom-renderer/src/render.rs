@@ -202,22 +202,43 @@ fn draw_masked_column(
     }
 }
 
+/// A deferred vertical column of a masked middle texture (e.g., a grate or fence).
+///
+/// Because Doom uses a Painter's algorithm for masked textures and sprites, these
+/// columns are collected during the main wall pass and later drawn back-to-front
+/// interleaved with sprite slices.
 #[derive(Clone)]
 pub struct MaskedColumnDraw<'a> {
+    /// The perpendicular view-space depth of the seg that emitted this column.
     pub depth: f32,
+    /// The screen X coordinate (column index) where this strip will be drawn.
     pub x: usize,
+    /// The topmost screen row of this strip.
     pub y_top: usize,
+    /// The bottommost screen row of this strip.
     pub y_bot: usize,
+    /// The starting texture coordinate fraction (16.16 fixed point).
     pub frac: u32,
+    /// The texture coordinate vertical step per screen pixel (16.16 fixed point).
     pub fracstep: u32,
+    /// The raw texture column data to sample from.
     pub source: &'a [u8],
+    /// The distance-attenuated colormap for this specific column.
     pub colormap: [u8; 256],
 }
 
+/// Records a change in the top or bottom clipping boundary for sprites.
+///
+/// As the renderer traverses sectors front-to-back, portal openings (two-sided segs)
+/// act as windows that restrict where sprites behind them can be drawn. This struct
+/// captures the depth and the screen row where that window boundary was established.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpriteClipStep {
+    /// The perpendicular view-space depth of the portal that established this clip.
     pub depth: f32,
+    /// The screen row (Y coordinate) of the clip boundary.
     pub row: i32,
+    /// The world-space height of the portal sill or header.
     pub silhouette_height: f32,
 }
 
