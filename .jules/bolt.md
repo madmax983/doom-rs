@@ -7,3 +7,7 @@
 **[NLL Enables Zero-Allocation Iteration in Game State Modifiers]**
 **Learning:** Rust's Non-Lexical Lifetimes (NLL) allow us to disjointly borrow immutable components of a struct (e.g., `level.sectors`) while mutably passing another component (`gs`) into a function inside a loop. We do not need to `.collect::<Vec<_>>()` iterator results into an intermediate array just to appease the borrow checker in these cases.
 **Action:** When a game loop filters and processes entities from an immutable level definition to apply them to a mutable game state, move the iterator chain directly into the `for` loop, eliminating unnecessary heap allocations on the hot path.
+
+## 2025-03-27 - MobjSlab len Optimization
+**Learning:** Computing `len()` on a generational arena by iterating over all slots `slots.iter().filter(...).count()` is O(N) and creates unnecessary overhead on hot paths where allocations or tick operations occur frequently. Adding a `live_count` field turns it into an O(1) read.
+**Action:** Track active elements with an explicit `live_count` in custom slab structures when `len()` is called frequently, ensuring to correctly maintain the count during `alloc`, `free`, and `clear` operations.
