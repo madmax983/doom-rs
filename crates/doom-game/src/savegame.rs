@@ -308,88 +308,7 @@ fn write_mobj_kind(w: &mut WriteCursor, k: MobjKind) {
 
 fn read_mobj_kind(r: &mut ReadCursor<'_>) -> Result<MobjKind, SaveError> {
     let disc = r.read_u16()?;
-    mobj_kind_from_u16(disc).ok_or(SaveError::Truncated)
-}
-
-/// Convert a u16 discriminant back to `MobjKind`.
-fn mobj_kind_from_u16(v: u16) -> Option<MobjKind> {
-    match v {
-        0 => Some(MobjKind::Player),
-        1 => Some(MobjKind::Trooper),
-        2 => Some(MobjKind::Sergeant),
-        3 => Some(MobjKind::Imp),
-        4 => Some(MobjKind::Demon),
-        5 => Some(MobjKind::Spectre),
-        6 => Some(MobjKind::LostSoul),
-        7 => Some(MobjKind::Cacodemon),
-        8 => Some(MobjKind::BaronOfHell),
-        9 => Some(MobjKind::HellKnight),
-        10 => Some(MobjKind::Arachnotron),
-        11 => Some(MobjKind::PainElemental),
-        12 => Some(MobjKind::Revenant),
-        13 => Some(MobjKind::Mancubus),
-        14 => Some(MobjKind::ArchVile),
-        15 => Some(MobjKind::SpiderMastermind),
-        16 => Some(MobjKind::Cyberdemon),
-        17 => Some(MobjKind::WolfSS),
-        18 => Some(MobjKind::BulletPuff),
-        19 => Some(MobjKind::Blood),
-        20 => Some(MobjKind::SmokeTrail),
-        21 => Some(MobjKind::SpawnFire),
-        22 => Some(MobjKind::Rocket),
-        23 => Some(MobjKind::PlasmaBall),
-        24 => Some(MobjKind::BfgBall),
-        25 => Some(MobjKind::ArachPlaz),
-        26 => Some(MobjKind::Tracer),
-        27 => Some(MobjKind::BfgPickup),
-        28 => Some(MobjKind::Chaingun),
-        29 => Some(MobjKind::Chainsaw),
-        30 => Some(MobjKind::RocketLauncher),
-        31 => Some(MobjKind::PlasmaRifle),
-        32 => Some(MobjKind::Shotgun),
-        33 => Some(MobjKind::SuperShotgun),
-        34 => Some(MobjKind::Clip),
-        35 => Some(MobjKind::ClipBox),
-        36 => Some(MobjKind::RocketAmmo),
-        37 => Some(MobjKind::RocketBox),
-        38 => Some(MobjKind::Cell),
-        39 => Some(MobjKind::CellPack),
-        40 => Some(MobjKind::Shell),
-        41 => Some(MobjKind::ShellBox),
-        42 => Some(MobjKind::HealthBonus),
-        43 => Some(MobjKind::ArmorBonus),
-        44 => Some(MobjKind::GreenArmor),
-        45 => Some(MobjKind::BlueArmor),
-        46 => Some(MobjKind::Stimpack),
-        47 => Some(MobjKind::Medikit),
-        48 => Some(MobjKind::Megasphere),
-        49 => Some(MobjKind::Soulsphere),
-        50 => Some(MobjKind::BlueCard),
-        51 => Some(MobjKind::RedCard),
-        52 => Some(MobjKind::YellowCard),
-        53 => Some(MobjKind::BlueSkull),
-        54 => Some(MobjKind::RedSkull),
-        55 => Some(MobjKind::YellowSkull),
-        56 => Some(MobjKind::Berserk),
-        57 => Some(MobjKind::BlurSphere),
-        58 => Some(MobjKind::RadSuit),
-        59 => Some(MobjKind::Allmap),
-        60 => Some(MobjKind::Infrared),
-        61 => Some(MobjKind::Column),
-        62 => Some(MobjKind::TechLamp),
-        63 => Some(MobjKind::TechLamp2),
-        64 => Some(MobjKind::Barrel),
-        65 => Some(MobjKind::BossBrain),
-        66 => Some(MobjKind::CommanderKeen),
-        67 => Some(MobjKind::BfgExtra),
-        68 => Some(MobjKind::ImpFireball),
-        69 => Some(MobjKind::CacoFireball),
-        70 => Some(MobjKind::BaronBall),
-        71 => Some(MobjKind::FatShot),
-        72 => Some(MobjKind::InvulnerabilitySphere),
-        73 => Some(MobjKind::Backpack),
-        _ => None,
-    }
+    MobjKind::from_repr(disc).ok_or(SaveError::Truncated)
 }
 
 fn write_weapon_type(w: &mut WriteCursor, wt: WeaponType) {
@@ -1286,8 +1205,8 @@ mod tests {
     fn mobj_kind_roundtrip() {
         // Enumerate over all valid discriminants and ensure they parse properly.
         // And also make sure we test out of bounds.
-        for disc in 0..=73 {
-            let kind = mobj_kind_from_u16(disc).expect("all 0..=73 must map to a MobjKind");
+        for disc in 0..=75 {
+            let kind = MobjKind::from_repr(disc).expect("all 0..=75 must map to a MobjKind");
             let mut w = WriteCursor::new(2);
             write_mobj_kind(&mut w, kind);
             let mut r = ReadCursor::new(&w.buf);
@@ -1295,10 +1214,10 @@ mod tests {
             assert_eq!(parsed, kind);
         }
 
-        // 74 is out of bounds
-        assert!(mobj_kind_from_u16(74).is_none());
-        assert!(mobj_kind_from_u16(999).is_none());
-        assert!(mobj_kind_from_u16(0xFFFF).is_none());
+        // 76 is out of bounds
+        assert!(MobjKind::from_repr(76).is_none());
+        assert!(MobjKind::from_repr(999).is_none());
+        assert!(MobjKind::from_repr(0xFFFF).is_none());
     }
 
     // --- Test 1: save_game produces bytes starting with SAVE_MAGIC ---
