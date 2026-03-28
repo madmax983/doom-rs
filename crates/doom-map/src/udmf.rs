@@ -45,7 +45,9 @@ pub enum UdmfValue {
 /// e.g. `x = 10.0;`
 #[derive(Debug, Clone)]
 pub struct UdmfField {
+    /// The property name.
     pub key: String,
+    /// The assigned value.
     pub value: UdmfValue,
 }
 
@@ -54,7 +56,9 @@ pub struct UdmfField {
 /// UDMF blocks contain properties mapped to key-value pairs.
 #[derive(Debug, Clone)]
 pub struct UdmfBlock {
+    /// The block name (e.g. "vertex", "sector").
     pub kind: String,
+    /// The key-value fields contained in this block.
     pub fields: Vec<UdmfField>,
 }
 
@@ -77,72 +81,115 @@ pub struct UdmfMap {
 /// binary Doom format WAD would provide.
 #[derive(Debug)]
 pub struct UdmfLevelData {
+    /// Level objects like monsters, items, and player starts.
     pub things: Vec<Thing>,
+    /// Line segments connecting vertices to form geometry walls.
     pub linedefs: Vec<Linedef>,
+    /// Visual definitions for walls on one or both sides of a linedef.
     pub sidedefs: Vec<Sidedef>,
+    /// 2D points in space that linedefs connect.
     pub vertexes: Vec<Vertex>,
+    /// Areas of the map with distinct floor/ceiling heights, textures, and lighting.
     pub sectors: Vec<Sector>,
 }
 
 /// Parse errors from the UDMF TEXTMAP parser and converter.
 #[derive(Debug, thiserror::Error)]
 pub enum UdmfError {
+    /// The textmap is not valid UTF-8.
     #[error("UDMF TEXTMAP is not valid UTF-8")]
     InvalidUtf8(#[from] core::str::Utf8Error),
 
+    /// A syntax error occurred during parsing.
     #[error("UDMF parse error near offset {offset}: {message}")]
-    ParseFailed { offset: usize, message: String },
+    ParseFailed {
+        /// Byte offset where the parse failed.
+        offset: usize,
+        /// Error description.
+        message: String,
+    },
 
+    /// The textmap is missing the required namespace declaration.
     #[error("UDMF missing required namespace assignment")]
     MissingNamespace,
 
+    /// The declared namespace is not supported by the parser.
     #[error("unsupported UDMF namespace '{0}'")]
     UnsupportedNamespace(String),
 
+    /// A required field is missing from a block.
     #[error("UDMF {block}[{index}] missing required field '{field}'")]
     MissingField {
+        /// The block type (e.g. "vertex").
         block: &'static str,
+        /// The index of the block.
         index: usize,
+        /// The missing field name.
         field: &'static str,
     },
 
+    /// A field was provided with the wrong type.
     #[error("UDMF {block}[{index}] field '{field}' must be {expected}")]
     WrongType {
+        /// The block type (e.g. "vertex").
         block: &'static str,
+        /// The index of the block.
         index: usize,
+        /// The field name.
         field: &'static str,
+        /// A description of the expected type.
         expected: &'static str,
     },
 
+    /// A fractional number was supplied where an integer is required.
     #[error("UDMF {block}[{index}] field '{field}' must be integral, got {value}")]
     NonIntegral {
+        /// The block type (e.g. "vertex").
         block: &'static str,
+        /// The index of the block.
         index: usize,
+        /// The field name.
         field: &'static str,
+        /// The offending fractional value.
         value: f64,
     },
 
+    /// A value falls outside the valid range.
     #[error("UDMF {block}[{index}] field '{field}' value {value} is out of range")]
     OutOfRange {
+        /// The block type (e.g. "vertex").
         block: &'static str,
+        /// The index of the block.
         index: usize,
+        /// The field name.
         field: &'static str,
+        /// A string representation of the out-of-bounds value.
         value: String,
     },
 
+    /// A lump name or texture name is longer than 8 characters.
     #[error("UDMF {block}[{index}] field '{field}' texture/name '{value}' exceeds 8 characters")]
     NameTooLong {
+        /// The block type (e.g. "vertex").
         block: &'static str,
+        /// The index of the block.
         index: usize,
+        /// The field name.
         field: &'static str,
+        /// The oversized name.
         value: String,
     },
 
+    /// A lump name or texture name contains non-ASCII characters.
     #[error("UDMF {block}[{index}] field '{field}' texture/name '{value}' must be ASCII")]
     NameNotAscii {
+        /// The block type (e.g. "vertex").
         block: &'static str,
+        /// The index of the block.
         index: usize,
+        /// The field name.
         field: &'static str,
+        /// The offending name.
         value: String,
     },
 }

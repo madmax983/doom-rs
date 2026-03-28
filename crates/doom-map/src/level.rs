@@ -37,47 +37,83 @@ pub enum LevelError {
 
     /// Required lump is missing or in the wrong position.
     #[error("map '{map}': required lump {lump} missing")]
-    MissingLump { map: String, lump: &'static str },
+    MissingLump {
+        /// Map name where the error occurred.
+        map: String,
+        /// The name of the missing lump.
+        lump: &'static str,
+    },
 
     /// A lump failed to parse.
     #[error("map '{map}': lump parse error: {source}")]
-    ParseError { map: String, source: LumpParseError },
+    ParseError {
+        /// Map name where the error occurred.
+        map: String,
+        /// The underlying parse error.
+        source: LumpParseError,
+    },
 
     /// BSP structural validation failed.
     #[error("map '{map}': BSP validation failed: {source}")]
-    BspInvalid { map: String, source: BspError },
+    BspInvalid {
+        /// Map name where the error occurred.
+        map: String,
+        /// The underlying BSP error.
+        source: BspError,
+    },
 
     /// UDMF parsing or conversion failed.
     #[error("map '{map}': UDMF error: {source}")]
-    Udmf { map: String, source: UdmfError },
+    Udmf {
+        /// Map name where the error occurred.
+        map: String,
+        /// The underlying UDMF error.
+        source: UdmfError,
+    },
 
     /// The UDMF namespace requires features this engine does not support yet.
     #[error("map '{map}': unsupported UDMF namespace '{namespace}': {detail}")]
     UnsupportedUdmfNamespace {
+        /// Map name where the error occurred.
         map: String,
+        /// The unsupported namespace.
         namespace: String,
+        /// Details about the unsupported features.
         detail: String,
     },
 
     /// A linedef references a vertex index that's out of range.
     #[error("map '{map}': linedef {idx} references vertex {v} >= N_VERTEXES ({n})")]
     LindefVertexOutOfBounds {
+        /// Map name where the error occurred.
         map: String,
+        /// The index of the offending linedef.
         idx: usize,
+        /// The out-of-bounds vertex index referenced.
         v: usize,
+        /// The total number of valid vertexes.
         n: usize,
     },
 
     /// A linedef has the two-sided flag but is missing a left sidedef.
     #[error("map '{map}': linedef {idx} is two-sided but left_sidedef is 0xFFFF")]
-    TwoSidedMissingLeft { map: String, idx: usize },
+    TwoSidedMissingLeft {
+        /// Map name where the error occurred.
+        map: String,
+        /// The index of the offending linedef.
+        idx: usize,
+    },
 
     /// A sidedef references a sector that's out of range.
     #[error("map '{map}': sidedef {idx} references sector {s} >= N_SECTORS ({n})")]
     SidedefSectorOutOfBounds {
+        /// Map name where the error occurred.
         map: String,
+        /// The index of the offending sidedef.
         idx: usize,
+        /// The out-of-bounds sector index referenced.
         s: usize,
+        /// The total number of valid sectors.
         n: usize,
     },
 }
@@ -90,15 +126,25 @@ pub enum LevelError {
 pub struct Level {
     /// Map name (e.g. "E1M1").
     pub name: String,
+    /// Level objects like monsters, items, and player starts.
     pub things: Vec<Thing>,
+    /// Line segments connecting vertices to form geometry walls.
     pub linedefs: Vec<Linedef>,
+    /// Visual definitions for walls on one or both sides of a linedef.
     pub sidedefs: Vec<Sidedef>,
+    /// 2D points in space that linedefs connect.
     pub vertexes: Vec<Vertex>,
+    /// Renderable splits of linedefs, used by the BSP tree.
     pub segs: Vec<Seg>,
+    /// Convex subsectors that form the leaves of the BSP tree.
     pub ssectors: Vec<Ssector>,
+    /// The binary space partitioning (BSP) tree nodes for drawing order.
     pub nodes: Vec<Node>,
+    /// Areas of the map with distinct floor/ceiling heights, textures, and lighting.
     pub sectors: Vec<Sector>,
+    /// The line-of-sight lookup table to speed up monster AI.
     pub reject: Reject,
+    /// The collision detection grid.
     pub blockmap: Blockmap,
 }
 

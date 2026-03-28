@@ -56,23 +56,33 @@ pub enum WadError {
         "WAD directory offset {offset} + directory size {dir_size} exceeds file length {file_len}"
     )]
     DirectoryOutOfBounds {
+        /// The starting offset of the directory in the file.
         offset: usize,
+        /// The calculated size of the directory in bytes.
         dir_size: usize,
+        /// The total size of the WAD file in bytes.
         file_len: usize,
     },
 
     /// A specific lump's data range exceeds the file.
     #[error("lump {name} at [{offset}, {end}) exceeds file length {file_len}")]
     LumpOutOfBounds {
+        /// The name of the lump causing the error.
         name: String,
+        /// The starting offset of the lump's data.
         offset: usize,
+        /// The ending offset of the lump's data.
         end: usize,
+        /// The total size of the WAD file in bytes.
         file_len: usize,
     },
 
     /// A lump entry has a negative filepos or size field.
     #[error("lump {name} has negative filepos or size")]
-    LumpNegativeField { name: String },
+    LumpNegativeField {
+        /// The name of the lump causing the error.
+        name: String,
+    },
 }
 
 /// A parsed, validated WAD file.

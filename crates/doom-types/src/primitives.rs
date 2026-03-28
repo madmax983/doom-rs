@@ -38,7 +38,16 @@
 pub struct Brightness(u8);
 
 impl Brightness {
-    /// Create, returning `None` if out of range (always succeeds for `u8`).
+    /// Create a new `Brightness` level.
+    ///
+    /// Returns `None` if out of range (always succeeds for `u8` since `Brightness` allows 0..=255).
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::Brightness;
+    /// let b = Brightness::new(128).unwrap();
+    /// assert_eq!(b.raw(), 128);
+    /// ```
     #[inline]
     pub const fn new(v: u8) -> Option<Self> {
         Some(Self(v))
@@ -127,6 +136,16 @@ impl SectorSpecial {
 pub struct SkillLevel(u8);
 
 impl SkillLevel {
+    /// Create a new `SkillLevel`.
+    ///
+    /// Returns `None` if `v > 4`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::SkillLevel;
+    /// let s = SkillLevel::new(2).unwrap();
+    /// assert_eq!(s, SkillLevel::HMP);
+    /// ```
     #[inline]
     pub const fn new(v: u8) -> Option<Self> {
         if v <= 4 { Some(Self(v)) } else { None }
@@ -143,10 +162,15 @@ impl SkillLevel {
         self.0
     }
 
+    /// Skill 1: I'm Too Young To Die
     pub const ITYTD: Self = Self(0);
+    /// Skill 2: Hey, Not Too Rough
     pub const HNTR: Self = Self(1);
+    /// Skill 3: Hurt Me Plenty
     pub const HMP: Self = Self(2);
+    /// Skill 4: Ultra-Violence
     pub const UV: Self = Self(3);
+    /// Skill 5: Nightmare!
     pub const NM: Self = Self(4);
 }
 
@@ -169,6 +193,16 @@ impl SkillLevel {
 pub struct PlayerNum(u8);
 
 impl PlayerNum {
+    /// Create a new `PlayerNum`.
+    ///
+    /// Returns `None` if `v > 3`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::PlayerNum;
+    /// let p = PlayerNum::new(2).unwrap();
+    /// assert_eq!(p.raw(), 2);
+    /// ```
     #[inline]
     pub const fn new(v: u8) -> Option<Self> {
         if v <= 3 { Some(Self(v)) } else { None }
@@ -202,6 +236,14 @@ impl PlayerNum {
 pub struct Coord(pub i16);
 
 impl Coord {
+    /// Create a new map coordinate.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::Coord;
+    /// let c = Coord::new(-1024);
+    /// assert_eq!(c.raw(), -1024);
+    /// ```
     #[inline]
     pub const fn new(v: i16) -> Self {
         Self(v)

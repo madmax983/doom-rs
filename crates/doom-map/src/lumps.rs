@@ -26,16 +26,22 @@ pub enum LumpParseError {
     /// Lump byte count is not divisible by the expected entry size.
     #[error("{lump}: expected size divisible by {entry_size}, got {actual}")]
     BadLength {
+        /// The name of the lump that failed.
         lump: &'static str,
+        /// The expected struct size in bytes.
         entry_size: usize,
+        /// The actual byte length of the lump data.
         actual: usize,
     },
 
     /// The reject lump is the wrong size for the number of sectors.
     #[error("REJECT: expected {expected} bytes for {n_sectors} sectors, got {actual}")]
     BadRejectSize {
+        /// The number of sectors in the map.
         n_sectors: usize,
+        /// The expected size of the reject table in bytes.
         expected: usize,
+        /// The actual size of the reject table in bytes.
         actual: usize,
     },
 
@@ -194,7 +200,9 @@ impl Sidedef {
 /// A map vertex: raw (x, y) in i16 map-unit coordinates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Vertex {
+    /// X coordinate in map units.
     pub x: i16,
+    /// Y coordinate in map units.
     pub y: i16,
 }
 
@@ -303,9 +311,13 @@ pub const NODE_INDEX_MASK: u16 = 0x7FFF;
 /// An axis-aligned bounding box in node format (ymax, ymin, xmin, xmax).
 #[derive(Clone, Copy, Debug)]
 pub struct NodeBBox {
+    /// Maximum Y coordinate.
     pub ymax: i16,
+    /// Minimum Y coordinate.
     pub ymin: i16,
+    /// Minimum X coordinate.
     pub xmin: i16,
+    /// Maximum X coordinate.
     pub xmax: i16,
 }
 

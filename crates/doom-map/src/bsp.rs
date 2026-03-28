@@ -23,40 +23,61 @@ use thiserror::Error;
 pub enum BspError {
     /// The leaf-count invariant is violated.
     #[error("BSP invariant violated: N_SSECTORS ({ssectors}) != N_NODES ({nodes}) + 1")]
-    LeafCountMismatch { nodes: usize, ssectors: usize },
+    LeafCountMismatch {
+        /// Number of nodes.
+        nodes: usize,
+        /// Number of subsectors.
+        ssectors: usize,
+    },
 
     /// A child pointer has a leaf bit but the index exceeds N_SSECTORS.
     #[error("BSP node {node_idx}: leaf child index {child_idx} >= N_SSECTORS ({n_ssectors})")]
     LeafChildOutOfBounds {
+        /// The node index.
         node_idx: usize,
+        /// The referenced child subsector index.
         child_idx: usize,
+        /// Total subsector count.
         n_ssectors: usize,
     },
 
     /// A child pointer has no leaf bit but the index exceeds N_NODES.
     #[error("BSP node {node_idx}: node child index {child_idx} >= N_NODES ({n_nodes})")]
     NodeChildOutOfBounds {
+        /// The node index.
         node_idx: usize,
+        /// The referenced child node index.
         child_idx: usize,
+        /// Total node count.
         n_nodes: usize,
     },
 
     /// A node bounding box is degenerate (ymax < ymin or xmax < xmin).
     #[error("BSP node {node_idx}: bounding box is degenerate")]
-    DegenerateBBox { node_idx: usize },
+    DegenerateBBox {
+        /// The node index.
+        node_idx: usize,
+    },
 
     /// A subsector has zero segs.
     #[error("BSP subsector {ss_idx}: seg_count is 0")]
-    EmptySubsector { ss_idx: usize },
+    EmptySubsector {
+        /// The subsector index.
+        ss_idx: usize,
+    },
 
     /// A subsector's seg range exceeds N_SEGS.
     #[error(
         "BSP subsector {ss_idx}: first_seg({first_seg}) + seg_count({seg_count}) > N_SEGS({n_segs})"
     )]
     SubsectorSegsOutOfBounds {
+        /// The subsector index.
         ss_idx: usize,
+        /// The first seg index.
         first_seg: usize,
+        /// Number of segs.
         seg_count: usize,
+        /// Total seg count.
         n_segs: usize,
     },
 }
