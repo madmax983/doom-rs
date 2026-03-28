@@ -61,6 +61,8 @@ pub enum RendererMode {
     Iterm2,
     /// Luminance-mapped characters from the given character set.
     CharMap(CharSet),
+    /// Top-down Cogmind-style ASCII roguelike view.
+    Cogmind,
 }
 
 impl RendererMode {
@@ -76,6 +78,7 @@ impl RendererMode {
         Self::CharMap(CharSet::Braille),
         Self::CharMap(CharSet::Shading),
         Self::CharMap(CharSet::Blocks),
+        Self::Cogmind,
     ];
 
     /// Short display name for the status bar.
@@ -89,6 +92,7 @@ impl RendererMode {
             Self::CharMap(CharSet::Braille) => "braille",
             Self::CharMap(CharSet::Shading) => "shading",
             Self::CharMap(CharSet::Blocks) => "blocks",
+            Self::Cogmind => "cogmind",
         }
     }
 
@@ -103,6 +107,7 @@ impl RendererMode {
             "braille" => Some(Self::CharMap(CharSet::Braille)),
             "shading" => Some(Self::CharMap(CharSet::Shading)),
             "blocks" => Some(Self::CharMap(CharSet::Blocks)),
+            "cogmind" => Some(Self::Cogmind),
             _ => None,
         }
     }

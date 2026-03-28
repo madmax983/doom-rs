@@ -765,8 +765,9 @@ impl DoomEventLoop {
                     None => return,
                 }
             }
-            RendererMode::Halfblocks | RendererMode::CharMap(_) => {
-                // Halfblocks or character-mapped: clone indexed framebuffer (64 KB).
+            RendererMode::Halfblocks | RendererMode::CharMap(_) | RendererMode::Cogmind => {
+                // Halfblocks, character-mapped, or Cogmind (stub: falls back to
+                // halfblocks until CogmindFrame integration is wired up).
                 let cs = match effective {
                     RendererMode::CharMap(cs) => Some(cs),
                     _ => None,
