@@ -10,6 +10,7 @@
 //! - [`DoomApp`] — implement this trait to plug your game in
 
 pub mod charset;
+pub mod cogmind;
 pub mod event_loop;
 pub mod input;
 pub mod scaler;
@@ -17,6 +18,7 @@ pub mod sixel;
 pub mod widget;
 
 pub use charset::{CharSet, RendererMode};
+pub use cogmind::{CogmindCell, CogmindFrame, CogmindWidget};
 pub use event_loop::{DoomApp, DoomEventLoop, EventLoopError, TIC_DURATION, TIC_RATE_HZ};
 pub use input::{InputState, TicInput, buttons};
 pub use scaler::{ScalingMode, sample_bilinear};
