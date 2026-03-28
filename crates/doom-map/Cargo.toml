@@ -8,6 +8,8 @@ doom-types = { workspace = true }
 doom-wad   = { workspace = true }
 thiserror  = { workspace = true }
 nom        = { workspace = true }
+comfy-table = "7.2.2"
+crossterm.workspace = true
 
 [dev-dependencies]
 proptest = { workspace = true }

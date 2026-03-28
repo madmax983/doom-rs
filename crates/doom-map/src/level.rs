@@ -457,21 +457,63 @@ impl Level {
 
     /// Print a one-line geometry summary (used by the Phase 3 CLI gate).
     pub fn print_stats(&self) {
+        use comfy_table::{Attribute, Cell, Color, Table};
+        use crossterm::style::Stylize;
+
         let bsp = self.bsp();
+
         println!(
-            "Level {}: {} things, {} linedefs, {} sidedefs, {} vertexes, \
-             {} sectors, {} segs, {} ssectors, {} nodes (BSP depth {})",
-            self.name,
-            self.things.len(),
-            self.linedefs.len(),
-            self.sidedefs.len(),
-            self.vertexes.len(),
-            self.sectors.len(),
-            self.segs.len(),
-            self.ssectors.len(),
-            self.nodes.len(),
-            bsp.max_depth(),
+            "\n{} {}\n",
+            "🗺️ ".cyan(),
+            format!("Level {} Geometry Summary", self.name)
+                .green()
+                .bold()
         );
+
+        let mut table = Table::new();
+        table.set_header(vec![
+            Cell::new("Category").add_attribute(Attribute::Bold).fg(Color::Cyan),
+            Cell::new("Count").add_attribute(Attribute::Bold).fg(Color::Yellow),
+        ]);
+
+        table.add_row(vec![
+            Cell::new("👹 Things"),
+            Cell::new(self.things.len()),
+        ]);
+        table.add_row(vec![
+            Cell::new("📏 Linedefs"),
+            Cell::new(self.linedefs.len()),
+        ]);
+        table.add_row(vec![
+            Cell::new("🧱 Sidedefs"),
+            Cell::new(self.sidedefs.len()),
+        ]);
+        table.add_row(vec![
+            Cell::new("📌 Vertexes"),
+            Cell::new(self.vertexes.len()),
+        ]);
+        table.add_row(vec![
+            Cell::new("🟩 Sectors"),
+            Cell::new(self.sectors.len()),
+        ]);
+        table.add_row(vec![
+            Cell::new("✂️  Segs"),
+            Cell::new(self.segs.len()),
+        ]);
+        table.add_row(vec![
+            Cell::new("🧩 Ssectors"),
+            Cell::new(self.ssectors.len()),
+        ]);
+        table.add_row(vec![
+            Cell::new("🌳 Nodes"),
+            Cell::new(self.nodes.len()),
+        ]);
+        table.add_row(vec![
+            Cell::new("📉 BSP Depth"),
+            Cell::new(bsp.max_depth()),
+        ]);
+
+        println!("{table}");
     }
 }
 
