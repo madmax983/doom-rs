@@ -4,6 +4,7 @@
 
 mod audio_system;
 mod cheats;
+mod cogmind;
 mod console;
 mod demo_mode;
 mod net_mode;
