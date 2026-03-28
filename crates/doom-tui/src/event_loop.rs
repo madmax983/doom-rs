@@ -30,7 +30,7 @@
 //! frame is silently dropped; the blit thread will display the next one instead.
 
 use crate::charset::{CharSet, RendererMode};
-use crate::cogmind::{CogmindFrame, CogmindWidget};
+use crate::cogmind::{CogmindFrame, CogmindHud, CogmindHudWidget, CogmindWidget};
 use crate::input::{InputState, TicInput};
 use crate::scaler::ScalingMode;
 use crate::sixel::encode_doom_sixel;
@@ -106,6 +106,8 @@ struct BlitFrame {
     payload: BlitPayload,
     /// Status bar text to render at the bottom of the terminal.
     status: String,
+    /// Cogmind HUD data (replaces status bar in cogmind mode).
+    cogmind_hud: Option<CogmindHud>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -181,9 +183,14 @@ fn run_blit_thread(
                     }
                 }
 
-                let status_bar = Paragraph::new(frame.status.as_str())
-                    .style(Style::default().fg(Color::Black).bg(Color::Yellow));
-                f.render_widget(status_bar, chunks[1]);
+                if let Some(hud) = &frame.cogmind_hud {
+                    let widget = CogmindHudWidget::new(hud);
+                    f.render_widget(widget, chunks[1]);
+                } else {
+                    let status_bar = Paragraph::new(frame.status.as_str())
+                        .style(Style::default().fg(Color::Black).bg(Color::Yellow));
+                    f.render_widget(status_bar, chunks[1]);
+                }
             })
             .ok();
 
@@ -262,6 +269,13 @@ pub trait DoomApp {
     /// Returns `Some(frame)` if the app supports Cogmind mode, `None` otherwise.
     /// Default: `None` (not supported).
     fn render_cogmind(&mut self, _term_w: u16, _term_h: u16) -> Option<CogmindFrame> {
+        None
+    }
+
+    /// Return HUD data for cogmind-mode status bar.
+    ///
+    /// Default: `None` (falls back to generic status bar).
+    fn cogmind_hud(&self) -> Option<CogmindHud> {
         None
     }
 }
@@ -624,7 +638,12 @@ impl DoomEventLoop {
 
             // ── Blit (non-blocking dispatch to blit thread) ──────────────────
             let active_palette = app.active_palette();
-            self.blit(&fb, lut, active_palette, cogmind_frame);
+            let cogmind_hud = if self.renderer_mode == RendererMode::Cogmind {
+                app.cogmind_hud()
+            } else {
+                None
+            };
+            self.blit(&fb, lut, active_palette, cogmind_frame, cogmind_hud);
 
             // Report the blit thread's timing from the previous frame (1 frame stale).
             let blit_us = self.blit_elapsed_us.load(Ordering::Relaxed);
@@ -710,6 +729,7 @@ impl DoomEventLoop {
         lut: &PaletteLut,
         active_palette: usize,
         cogmind_frame: Option<CogmindFrame>,
+        cogmind_hud: Option<CogmindHud>,
     ) {
         // ── FPS counter ──────────────────────────────────────────────────────
         self.frame_count += 1;
@@ -838,7 +858,11 @@ impl DoomEventLoop {
         // `try_send` returns Err if the channel is full (blit thread busy) or
         // disconnected (blit thread has exited).  Both cases are safe to ignore:
         // the frame is simply dropped and the next one will be sent instead.
-        let _ = tx.try_send(BlitFrame { payload, status });
+        let _ = tx.try_send(BlitFrame {
+            payload,
+            status,
+            cogmind_hud,
+        });
     }
 }
 

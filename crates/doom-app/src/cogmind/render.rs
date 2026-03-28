@@ -1,0 +1,404 @@
+//! Frame compositor for cogmind-mode rendering.
+//!
+//! [`CogmindState`] holds the cached tile grid and per-sector visibility map.
+//! Each frame, [`CogmindState::render_frame`] composites tiles and entities
+//! into a [`CogmindFrame`] centered on the player.
+
+use doom_game::GameState;
+use doom_map::Level;
+use doom_tui::{CogmindCell, CogmindFrame};
+
+use super::glyphs::{TileKind, apply_light, dim_remembered, entity_glyph, tile_glyph, wall_glyph};
+use super::tile_grid::{CELL_SIZE, TileGrid};
+use super::visibility::{SectorVisibility, VisibilityMap};
+
+// ---------------------------------------------------------------------------
+// CogmindState
+// ---------------------------------------------------------------------------
+
+/// Persistent state for cogmind-mode rendering across frames.
+///
+/// Caches the tile grid and visibility map for the current level, rebuilding
+/// them only when the level changes.
+pub struct CogmindState {
+    /// Tile grid for the current level (lazily built).
+    pub tile_grid: Option<TileGrid>,
+    /// Per-sector visibility map (lazily built).
+    pub visibility: Option<VisibilityMap>,
+    /// Name of the level the cached grid was built for.
+    cached_level_name: String,
+}
+
+impl CogmindState {
+    /// Create a new state with no cached data.
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            tile_grid: None,
+            visibility: None,
+            cached_level_name: String::new(),
+        }
+    }
+
+    /// Ensure the tile grid and visibility map are built for the given level.
+    ///
+    /// If the level name matches the cached one, this is a no-op.  Otherwise
+    /// the grid and visibility map are rebuilt from scratch.
+    pub fn ensure_grid(&mut self, level: &Level) {
+        if self.tile_grid.is_some() && self.cached_level_name == level.name {
+            return;
+        }
+        self.tile_grid = Some(TileGrid::from_level(level));
+        self.visibility = Some(VisibilityMap::new(level.sectors.len()));
+        self.cached_level_name = level.name.clone();
+    }
+
+    /// Update the visibility map based on the player's current sector.
+    ///
+    /// Uses the level's REJECT table to determine which sectors are visible
+    /// from the player's sector.
+    pub fn update_visibility(&mut self, player_sector: usize, level: &Level) {
+        let Some(vis) = self.visibility.as_mut() else {
+            return;
+        };
+        let sector_lights: Vec<u8> = level
+            .sectors
+            .iter()
+            .map(|s| s.light_level.clamp(0, 255) as u8)
+            .collect();
+        vis.update(
+            player_sector,
+            |a, b| level.reject.visible(a, b),
+            &sector_lights,
+        );
+    }
+
+    /// Composite tiles, visibility, and entities into a [`CogmindFrame`].
+    ///
+    /// The viewport is centered on the player.  Each terminal cell maps to a
+    /// `CELL_SIZE x CELL_SIZE` region of map space.
+    #[must_use]
+    pub fn render_frame(
+        &self,
+        gs: &GameState,
+        level: &Level,
+        term_w: u16,
+        term_h: u16,
+    ) -> CogmindFrame {
+        let mut frame = CogmindFrame::new(term_w, term_h);
+
+        let grid = match self.tile_grid.as_ref() {
+            Some(g) => g,
+            None => return frame,
+        };
+        let vis = match self.visibility.as_ref() {
+            Some(v) => v,
+            None => return frame,
+        };
+
+        // --- Locate the player ---
+        let player_mobj = match gs.mobjslab.get(gs.player.handle) {
+            Some(m) => m,
+            None => return frame,
+        };
+        let player_x = player_mobj.x.to_int();
+        let player_y = player_mobj.y.to_int();
+
+        // Viewport origin in map units.  The player is centered in the terminal.
+        let tw = i32::from(term_w);
+        let th = i32::from(term_h);
+        let vp_origin_x = player_x - (tw / 2) * CELL_SIZE;
+        let vp_origin_y = player_y - (th / 2) * CELL_SIZE;
+
+        // --- Phase 1: tile rendering ---
+        for ty in 0..term_h {
+            for tx in 0..term_w {
+                let map_x = vp_origin_x + i32::from(tx) * CELL_SIZE + CELL_SIZE / 2;
+                let map_y = vp_origin_y + i32::from(ty) * CELL_SIZE + CELL_SIZE / 2;
+
+                let (gx, gy) = grid.map_to_grid(map_x, map_y);
+                if gx < 0 || gy < 0 {
+                    // Off the grid => void cell (already default black).
+                    continue;
+                }
+
+                let tile = match grid.get(gx as usize, gy as usize) {
+                    Some(t) => t,
+                    None => continue,
+                };
+
+                // Determine effective tile kind (doors may have opened at runtime).
+                let effective_kind = if tile.kind == TileKind::DoorClosed {
+                    // Check live sector heights: if ceiling > floor, door is open.
+                    if let Some(si) = tile.sector_idx {
+                        if let Some(sector) = level.sectors.get(si) {
+                            if sector.ceil_height > sector.floor_height {
+                                TileKind::DoorOpen
+                            } else {
+                                TileKind::DoorClosed
+                            }
+                        } else {
+                            tile.kind
+                        }
+                    } else {
+                        tile.kind
+                    }
+                } else {
+                    tile.kind
+                };
+
+                // Determine glyph.
+                let tg = if effective_kind == TileKind::Wall {
+                    let neighbors = grid.wall_neighbors(gx as usize, gy as usize);
+                    let ch = wall_glyph(neighbors);
+                    let base = tile_glyph(TileKind::Wall);
+                    super::glyphs::TileGlyph {
+                        glyph: ch,
+                        fg: base.fg,
+                        bg: base.bg,
+                    }
+                } else {
+                    tile_glyph(effective_kind)
+                };
+
+                // Apply visibility/lighting.
+                let sector_idx = match tile.sector_idx {
+                    Some(si) => si,
+                    None => {
+                        // No sector => treat as void.
+                        continue;
+                    }
+                };
+
+                let cell = match vis.get(sector_idx) {
+                    SectorVisibility::Visible(light) => {
+                        let fg = apply_light(tg.fg, light);
+                        let bg = apply_light(tg.bg, light);
+                        CogmindCell {
+                            glyph: tg.glyph,
+                            fg,
+                            bg,
+                        }
+                    }
+                    SectorVisibility::Remembered(_light) => {
+                        let fg = dim_remembered(tg.fg);
+                        let bg = dim_remembered(tg.bg);
+                        CogmindCell {
+                            glyph: tg.glyph,
+                            fg,
+                            bg,
+                        }
+                    }
+                    SectorVisibility::Unexplored => {
+                        // Leave as default black.
+                        continue;
+                    }
+                };
+
+                // Terminal Y is flipped vs Doom Y (Doom Y+ is north/up,
+                // terminal row 0 is top).  Flip so north is screen-top.
+                let screen_y = term_h.saturating_sub(1).saturating_sub(ty);
+                frame.set(tx, screen_y, cell);
+            }
+        }
+
+        // --- Phase 2: entity overlay ---
+        for handle in gs.mobjslab.iter_handles() {
+            let mobj = match gs.mobjslab.get(handle) {
+                Some(m) => m,
+                None => continue,
+            };
+
+            let mx = mobj.x.to_int();
+            let my = mobj.y.to_int();
+
+            // Map position -> terminal cell.
+            let tx = (mx - vp_origin_x) / CELL_SIZE;
+            let ty = (my - vp_origin_y) / CELL_SIZE;
+
+            if tx < 0 || ty < 0 || tx >= tw || ty >= th {
+                continue;
+            }
+
+            // Check visibility of the entity's sector.
+            if let Some(sector_idx) = level.sector_index_at(mx, my) {
+                match vis.get(sector_idx) {
+                    SectorVisibility::Visible(light) => {
+                        let eg = entity_glyph(mobj.kind, mobj.health);
+                        let fg = apply_light(eg.fg, light);
+                        let bg = apply_light(eg.bg, light);
+                        // Flip Y for terminal coordinates.
+                        let screen_y = (term_h.saturating_sub(1)).saturating_sub(ty as u16);
+                        frame.set(
+                            tx as u16,
+                            screen_y,
+                            CogmindCell {
+                                glyph: eg.glyph,
+                                fg,
+                                bg,
+                            },
+                        );
+                    }
+                    SectorVisibility::Remembered(_) | SectorVisibility::Unexplored => {
+                        // Don't render entities in non-visible sectors.
+                    }
+                }
+            }
+        }
+
+        frame
+    }
+}
+
+// ===========================================================================
+// Tests
+// ===========================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use doom_game::mobj::flags;
+    use doom_game::player::PlayerState;
+    use doom_game::{GameState, Mobj, MobjKind};
+    use doom_map::{Blockmap, Reject, Sector, Seg, Sidedef, Ssector};
+    use doom_types::{Bam, Fixed16_16};
+
+    /// Build a minimal level with valid BSP data (0 nodes, 1 ssector, 1 seg).
+    fn make_bsp_test_level() -> Level {
+        let mut bm_data = vec![0u8; 14];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("blockmap parse");
+        let reject = Reject::parse_lump(&[0u8], 1).expect("reject parse");
+
+        Level {
+            name: "TEST".to_owned(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 0xFFFF,
+            }],
+            sidedefs: vec![Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"\0\0\0\0\0\0\0\0",
+                lower_texture: *b"\0\0\0\0\0\0\0\0",
+                middle_texture: *b"\0\0\0\0\0\0\0\0",
+                sector: 0,
+            }],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: 0 },
+                doom_map::Vertex { x: 128, y: 0 },
+            ],
+            segs: vec![Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            }],
+            ssectors: vec![Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            }],
+            nodes: vec![],
+            sectors: vec![Sector {
+                floor_height: 0,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            }],
+            reject,
+            blockmap,
+        }
+    }
+
+    /// Build a GameState with a player mobj at the origin.
+    fn make_test_game_state() -> GameState {
+        let mut gs = GameState::new("TEST");
+        let mut mo = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
+        mo.radius = Fixed16_16::from_int(16);
+        mo.height = Fixed16_16::from_int(56);
+        let handle = gs.mobjslab.alloc(mo);
+        gs.player = PlayerState::pistol_start(handle);
+        gs
+    }
+
+    #[test]
+    fn cogmind_state_new_has_no_grid() {
+        let state = CogmindState::new();
+        assert!(state.tile_grid.is_none());
+        assert!(state.visibility.is_none());
+        assert!(state.cached_level_name.is_empty());
+    }
+
+    #[test]
+    fn ensure_grid_builds_on_first_call() {
+        let mut state = CogmindState::new();
+        let level = make_bsp_test_level();
+        state.ensure_grid(&level);
+
+        assert!(state.tile_grid.is_some());
+        assert!(state.visibility.is_some());
+        assert_eq!(state.cached_level_name, "TEST");
+    }
+
+    #[test]
+    fn ensure_grid_caches_for_same_level() {
+        let mut state = CogmindState::new();
+        let level = make_bsp_test_level();
+
+        state.ensure_grid(&level);
+        let grid_ptr = state.tile_grid.as_ref().unwrap() as *const TileGrid;
+
+        // Second call with same level name should not rebuild.
+        state.ensure_grid(&level);
+        let grid_ptr2 = state.tile_grid.as_ref().unwrap() as *const TileGrid;
+        assert_eq!(grid_ptr, grid_ptr2, "grid should be cached, not rebuilt");
+    }
+
+    #[test]
+    fn render_frame_returns_correct_dimensions() {
+        let state = CogmindState::new();
+        let gs = make_test_game_state();
+        let level = make_bsp_test_level();
+
+        // Even without a grid, render_frame should return a frame with correct dims.
+        let frame = state.render_frame(&gs, &level, 80, 24);
+        assert_eq!(frame.width(), 80);
+        assert_eq!(frame.height(), 24);
+    }
+
+    #[test]
+    fn render_frame_with_grid_returns_correct_dimensions() {
+        let mut state = CogmindState::new();
+        let gs = make_test_game_state();
+        let level = make_bsp_test_level();
+
+        state.ensure_grid(&level);
+        state.update_visibility(0, &level);
+
+        let frame = state.render_frame(&gs, &level, 60, 20);
+        assert_eq!(frame.width(), 60);
+        assert_eq!(frame.height(), 20);
+    }
+}
