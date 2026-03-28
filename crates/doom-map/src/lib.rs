@@ -10,6 +10,7 @@
 //! - Reject size == `ceil(N_SECTORS² / 8)`
 
 pub mod bsp;
+pub mod dot;
 pub mod geojson;
 pub mod level;
 pub mod lumps;
@@ -18,6 +19,7 @@ pub mod svg;
 pub mod udmf;
 
 pub use bsp::{BspChild, BspError, BspTree};
+pub use dot::export_map_to_dot;
 pub use geojson::export_map_to_geojson;
 pub use level::{Level, LevelError};
 pub use lumps::{

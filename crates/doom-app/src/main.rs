@@ -149,6 +149,10 @@ struct Args {
     /// Export the level layout to a GeoJSON file and exit.
     #[arg(long)]
     export_geojson: Option<std::path::PathBuf>,
+
+    /// Export the level's sector connectivity graph to a DOT file and exit.
+    #[arg(long)]
+    export_dot: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1829,6 +1833,20 @@ fn run_doom() -> Result<()> {
             "🌟".green(),
             "Exported".green().bold(),
             obj_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
+
+    if let Some(ref dot_path) = args.export_dot {
+        let dot_data = doom_map::export_map_to_dot(&level);
+        std::fs::write(dot_path, dot_data)
+            .with_context(|| format!("Failed to write DOT to {}", dot_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} sector connectivity graph to {}",
+            "🌟".green(),
+            "Exported".green().bold(),
+            dot_path.display().to_string().cyan()
         );
         return Ok(());
     }
