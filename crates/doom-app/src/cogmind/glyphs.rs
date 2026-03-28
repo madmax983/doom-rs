@@ -321,8 +321,7 @@ pub fn apply_light(color: Rgb, light: u8) -> Rgb {
 pub fn dim_remembered(color: Rgb) -> Rgb {
     // Convert to grayscale via luminance weights (approx ITU-R BT.601),
     // then scale to 40%.
-    let gray = (u16::from(color.0) * 77 + u16::from(color.1) * 150 + u16::from(color.2) * 29)
-        / 256;
+    let gray = (u16::from(color.0) * 77 + u16::from(color.1) * 150 + u16::from(color.2) * 29) / 256;
     let dimmed = (gray * 102 / 255) as u8; // 102/255 ≈ 0.40
     (dimmed, dimmed, dimmed)
 }

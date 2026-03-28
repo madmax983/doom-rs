@@ -8,7 +8,13 @@
 //! to the terminal buffer, centering it if the frame is smaller than the
 //! available area.
 
-use ratatui::{buffer::Buffer, layout::Rect, style::Color, widgets::Widget};
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    style::{Color, Modifier, Style},
+    text::{Line, Span},
+    widgets::{Paragraph, Widget},
+};
 
 /// A single cell in a [`CogmindFrame`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -144,6 +150,141 @@ impl Widget for CogmindWidget<'_> {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// CogmindHud — roguelike status bar data
+// ---------------------------------------------------------------------------
+
+/// Player vitals for the cogmind-mode HUD bar.
+///
+/// Passed across the `DoomApp` trait boundary as plain values so that
+/// `doom-tui` never needs to depend on `doom-game`.
+#[derive(Debug, Clone, Default)]
+pub struct CogmindHud {
+    pub health: i32,
+    pub max_health: i32,
+    pub armor: i32,
+    /// Current weapon's ammo count, or `None` for melee weapons.
+    pub ammo: Option<u32>,
+    /// Current weapon's max ammo, or `None` for melee.
+    pub max_ammo: Option<u32>,
+    /// Short weapon name (e.g. "SG", "RL", "BFG").
+    pub weapon_name: &'static str,
+    /// Which of the 6 key slots the player holds (B/Y/R cards + skulls).
+    pub keys: [bool; 6],
+    pub kill_count: u32,
+    pub total_monsters: u32,
+    /// Level name (e.g. "E1M3" or "MAP07").
+    pub level_name: String,
+}
+
+impl CogmindHud {
+    /// Render the HUD as a styled `ratatui` `Line` suitable for a 1-row bar.
+    #[must_use]
+    pub fn to_line(&self) -> Line<'static> {
+        let mut spans: Vec<Span<'static>> = Vec::with_capacity(16);
+
+        // -- Health (color-coded) --
+        let hp_color = match self.health {
+            h if h > 66 => Color::Green,
+            h if h > 33 => Color::Yellow,
+            _ => Color::Red,
+        };
+        spans.push(Span::styled(" HP:", Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled(
+            format!("{}", self.health),
+            Style::default().fg(hp_color).add_modifier(Modifier::BOLD),
+        ));
+
+        // -- Armor --
+        spans.push(Span::styled("  AR:", Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled(
+            format!("{}", self.armor),
+            Style::default().fg(Color::Cyan),
+        ));
+
+        // -- Ammo --
+        spans.push(Span::styled(
+            format!("  {}:", self.weapon_name),
+            Style::default().fg(Color::DarkGray),
+        ));
+        if let (Some(cur), Some(max)) = (self.ammo, self.max_ammo) {
+            let ammo_color = if cur == 0 {
+                Color::Red
+            } else if cur * 4 <= max {
+                Color::Yellow
+            } else {
+                Color::White
+            };
+            spans.push(Span::styled(
+                format!("{cur}/{max}"),
+                Style::default().fg(ammo_color),
+            ));
+        } else {
+            spans.push(Span::styled("--", Style::default().fg(Color::DarkGray)));
+        }
+
+        // -- Keys: [B][Y][R] cards, [b][y][r] skulls --
+        spans.push(Span::styled("  ", Style::default()));
+        let key_labels = ['B', 'Y', 'R', 'b', 'y', 'r'];
+        let key_colors = [
+            Color::Blue,
+            Color::Yellow,
+            Color::Red,
+            Color::Blue,
+            Color::Yellow,
+            Color::Red,
+        ];
+        for (i, &held) in self.keys.iter().enumerate() {
+            if held {
+                spans.push(Span::styled(
+                    format!("[{}]", key_labels[i]),
+                    Style::default()
+                        .fg(key_colors[i])
+                        .add_modifier(Modifier::BOLD),
+                ));
+            }
+        }
+
+        // -- Level + kills --
+        spans.push(Span::styled(
+            format!("  {}", self.level_name),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ));
+        spans.push(Span::styled(
+            format!("  K:{}/{}", self.kill_count, self.total_monsters),
+            Style::default().fg(Color::DarkGray),
+        ));
+
+        Line::from(spans)
+    }
+}
+
+/// Ratatui widget that renders a [`CogmindHud`] as a styled status bar.
+pub struct CogmindHudWidget<'a> {
+    hud: &'a CogmindHud,
+}
+
+impl<'a> CogmindHudWidget<'a> {
+    #[must_use]
+    pub fn new(hud: &'a CogmindHud) -> Self {
+        Self { hud }
+    }
+}
+
+impl Widget for CogmindHudWidget<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        let line = self.hud.to_line();
+        let paragraph = Paragraph::new(line).style(Style::default().bg(Color::Rgb(20, 20, 30)));
+        paragraph.render(area, buf);
+    }
+}
+
+// ===========================================================================
+// Tests
+// ===========================================================================
 
 #[cfg(test)]
 mod tests {
@@ -299,5 +440,98 @@ mod tests {
         // Origin (0,0) should still be the default reset character.
         let origin = buf.cell((0, 0)).unwrap();
         assert_ne!(origin.symbol(), "X");
+    }
+
+    // -- CogmindHud tests --
+
+    fn make_test_hud() -> CogmindHud {
+        CogmindHud {
+            health: 75,
+            max_health: 100,
+            armor: 50,
+            ammo: Some(24),
+            max_ammo: Some(50),
+            weapon_name: "SG",
+            keys: [true, false, false, false, false, true],
+            kill_count: 12,
+            total_monsters: 45,
+            level_name: "E1M3".to_owned(),
+        }
+    }
+
+    #[test]
+    fn hud_to_line_contains_health() {
+        let hud = make_test_hud();
+        let line = hud.to_line();
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(text.contains("75"), "HUD should show health: {text}");
+    }
+
+    #[test]
+    fn hud_to_line_contains_armor() {
+        let hud = make_test_hud();
+        let line = hud.to_line();
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(text.contains("50"), "HUD should show armor: {text}");
+    }
+
+    #[test]
+    fn hud_to_line_contains_ammo() {
+        let hud = make_test_hud();
+        let line = hud.to_line();
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(text.contains("24/50"), "HUD should show ammo: {text}");
+    }
+
+    #[test]
+    fn hud_to_line_melee_shows_dashes() {
+        let hud = CogmindHud {
+            weapon_name: "FIST",
+            ammo: None,
+            max_ammo: None,
+            ..make_test_hud()
+        };
+        let line = hud.to_line();
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(text.contains("--"), "Melee weapon should show --: {text}");
+    }
+
+    #[test]
+    fn hud_to_line_contains_level_name() {
+        let hud = make_test_hud();
+        let line = hud.to_line();
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(text.contains("E1M3"), "HUD should show level: {text}");
+    }
+
+    #[test]
+    fn hud_to_line_contains_kills() {
+        let hud = make_test_hud();
+        let line = hud.to_line();
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(text.contains("12/45"), "HUD should show kills: {text}");
+    }
+
+    #[test]
+    fn hud_to_line_shows_held_keys() {
+        let hud = make_test_hud();
+        let line = hud.to_line();
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        // Blue card and red skull are held
+        assert!(text.contains("[B]"), "HUD should show blue key: {text}");
+        assert!(text.contains("[r]"), "HUD should show red skull: {text}");
+        // Yellow card not held — should not appear
+        assert!(!text.contains("[Y]"), "Yellow card not held: {text}");
+    }
+
+    #[test]
+    fn hud_widget_renders_into_buffer() {
+        let hud = make_test_hud();
+        let area = Rect::new(0, 0, 80, 1);
+        let mut buf = Buffer::empty(area);
+        CogmindHudWidget::new(&hud).render(area, &mut buf);
+        // Should have written something (not all spaces).
+        let has_content = (0..80u16).any(|x| buf.cell((x, 0)).map_or(false, |c| c.symbol() != " "));
+        assert!(has_content, "HUD widget should render non-blank content");
     }
 }

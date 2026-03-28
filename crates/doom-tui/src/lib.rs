@@ -18,7 +18,7 @@ pub mod sixel;
 pub mod widget;
 
 pub use charset::{CharSet, RendererMode};
-pub use cogmind::{CogmindCell, CogmindFrame, CogmindWidget};
+pub use cogmind::{CogmindCell, CogmindFrame, CogmindHud, CogmindHudWidget, CogmindWidget};
 pub use event_loop::{DoomApp, DoomEventLoop, EventLoopError, TIC_DURATION, TIC_RATE_HZ};
 pub use input::{InputState, TicInput, buttons};
 pub use scaler::{ScalingMode, sample_bilinear};

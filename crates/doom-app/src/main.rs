@@ -227,6 +227,8 @@ pub(crate) struct DoomGame {
     transition_buttons_down: u8,
     /// First-person weapon bob/raise/flash controller.
     weapon_anim: WeaponAnimState,
+    /// Cogmind-mode rendering state (tile grid + visibility cache).
+    cogmind_state: cogmind::render::CogmindState,
 }
 
 const DEAD_PLAYER_VIEW_HEIGHT: i32 = 6;
@@ -317,6 +319,7 @@ impl DoomGame {
             intermission_renderer: None,
             transition_buttons_down: 0,
             weapon_anim: WeaponAnimState::new(),
+            cogmind_state: cogmind::render::CogmindState::new(),
         };
 
         game.reset_weapon_anim();
@@ -1340,6 +1343,85 @@ impl DoomApp for DoomGame {
 
     fn active_palette(&self) -> usize {
         self.palette_flash.active_palette()
+    }
+
+    fn render_cogmind(&mut self, term_w: u16, term_h: u16) -> Option<doom_tui::CogmindFrame> {
+        // Not available on the title screen.
+        if self.title_screen.is_some() {
+            return None;
+        }
+
+        // Ensure grid is built for the current level.
+        self.cogmind_state.ensure_grid(&self.level);
+
+        // Find the player's sector via BSP lookup.
+        let player_mobj = self.gs.mobjslab.get(self.gs.player.handle)?;
+        let px = player_mobj.x.to_int();
+        let py = player_mobj.y.to_int();
+
+        if let Some(sector_idx) = self.level.sector_index_at(px, py) {
+            self.cogmind_state
+                .update_visibility(sector_idx, &self.level);
+        }
+
+        Some(
+            self.cogmind_state
+                .render_frame(&self.gs, &self.level, term_w, term_h),
+        )
+    }
+
+    fn cogmind_hud(&self) -> Option<doom_tui::CogmindHud> {
+        if self.title_screen.is_some() {
+            return None;
+        }
+        use doom_game::player::{
+            KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD,
+            KEY_YELLOW_SKULL,
+        };
+        use doom_game::{AmmoType, WEAPON_AMMO};
+
+        let p = &self.gs.player;
+        let ammo_type = WEAPON_AMMO[p.weapon as usize];
+        let (ammo, max_ammo) = if ammo_type != AmmoType::None {
+            (
+                Some(p.ammo(ammo_type as usize)),
+                Some(p.max_ammo[ammo_type as usize]),
+            )
+        } else {
+            (None, None)
+        };
+
+        let weapon_name = match p.weapon {
+            doom_game::WeaponType::Fist => "FIST",
+            doom_game::WeaponType::Pistol => "PIST",
+            doom_game::WeaponType::Shotgun => "SG",
+            doom_game::WeaponType::Chaingun => "CG",
+            doom_game::WeaponType::RocketLauncher => "RL",
+            doom_game::WeaponType::PlasmaRifle => "PLAS",
+            doom_game::WeaponType::Bfg => "BFG",
+            doom_game::WeaponType::Chainsaw => "SAW",
+            doom_game::WeaponType::SuperShotgun => "SSG",
+        };
+
+        Some(doom_tui::CogmindHud {
+            health: p.health(),
+            max_health: 100,
+            armor: p.armor(),
+            ammo,
+            max_ammo,
+            weapon_name,
+            keys: [
+                p.keys & KEY_BLUE_CARD != 0,
+                p.keys & KEY_YELLOW_CARD != 0,
+                p.keys & KEY_RED_CARD != 0,
+                p.keys & KEY_BLUE_SKULL != 0,
+                p.keys & KEY_YELLOW_SKULL != 0,
+                p.keys & KEY_RED_SKULL != 0,
+            ],
+            kill_count: p.kill_count,
+            total_monsters: self.gs.stats.total_kills,
+            level_name: self.gs.level_name.clone(),
+        })
     }
 }
 
