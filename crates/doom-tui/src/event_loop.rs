@@ -30,6 +30,7 @@
 //! frame is silently dropped; the blit thread will display the next one instead.
 
 use crate::charset::{CharSet, RendererMode};
+use crate::cogmind::{CogmindFrame, CogmindWidget};
 use crate::input::{InputState, TicInput};
 use crate::scaler::ScalingMode;
 use crate::sixel::encode_doom_sixel;
@@ -97,6 +98,8 @@ enum BlitPayload {
     Sixel(String),
     /// Kitty / iTerm2: pre-converted RGB image.
     ImageProtocol { image: DynamicImage },
+    /// Cogmind mode: pre-rendered grid of styled cells.
+    Cogmind(CogmindFrame),
 }
 
 struct BlitFrame {
@@ -170,6 +173,11 @@ fn run_blit_thread(
                         let mut proto = picker.new_resize_protocol(image.clone());
                         let widget = StatefulImage::default().resize(Resize::Scale(None));
                         f.render_stateful_widget(widget, chunks[0], &mut proto);
+                    }
+
+                    BlitPayload::Cogmind(frame) => {
+                        let widget = CogmindWidget::new(frame);
+                        f.render_widget(widget, chunks[0]);
                     }
                 }
 
@@ -248,6 +256,14 @@ pub trait DoomApp {
     ///
     /// Default: no-op.  Override to write to a debug log or update in-game stats.
     fn on_frame_timings(&mut self, _tick_us: u64, _render_us: u64, _blit_us: u64) {}
+
+    /// Render a Cogmind-mode frame for the given terminal dimensions.
+    ///
+    /// Returns `Some(frame)` if the app supports Cogmind mode, `None` otherwise.
+    /// Default: `None` (not supported).
+    fn render_cogmind(&mut self, _term_w: u16, _term_h: u16) -> Option<CogmindFrame> {
+        None
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -597,9 +613,18 @@ impl DoomEventLoop {
             app.render(&mut fb);
             self.last_render_us = t1.elapsed().as_micros() as u64;
 
+            // ── Cogmind frame (computed before blit so we can pass it) ───────
+            let cogmind_frame = if self.renderer_mode == RendererMode::Cogmind {
+                let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
+                let game_h = rows.saturating_sub(1);
+                app.render_cogmind(cols, game_h)
+            } else {
+                None
+            };
+
             // ── Blit (non-blocking dispatch to blit thread) ──────────────────
             let active_palette = app.active_palette();
-            self.blit(&fb, lut, active_palette);
+            self.blit(&fb, lut, active_palette, cogmind_frame);
 
             // Report the blit thread's timing from the previous frame (1 frame stale).
             let blit_us = self.blit_elapsed_us.load(Ordering::Relaxed);
@@ -679,7 +704,13 @@ impl DoomEventLoop {
     /// writing the previous frame), the new frame is silently dropped.
     ///
     /// For all other paths: clones the framebuffer (64 KB) into the payload.
-    fn blit(&mut self, fb: &Framebuffer, lut: &PaletteLut, active_palette: usize) {
+    fn blit(
+        &mut self,
+        fb: &Framebuffer,
+        lut: &PaletteLut,
+        active_palette: usize,
+        cogmind_frame: Option<CogmindFrame>,
+    ) {
         // ── FPS counter ──────────────────────────────────────────────────────
         self.frame_count += 1;
         self.frames_since_update += 1;
@@ -765,9 +796,21 @@ impl DoomEventLoop {
                     None => return,
                 }
             }
-            RendererMode::Halfblocks | RendererMode::CharMap(_) | RendererMode::Cogmind => {
-                // Halfblocks, character-mapped, or Cogmind (stub: falls back to
-                // halfblocks until CogmindFrame integration is wired up).
+            RendererMode::Cogmind => {
+                // Cogmind mode: use the pre-rendered frame if available,
+                // otherwise fall back to halfblocks.
+                if let Some(frame) = cogmind_frame {
+                    BlitPayload::Cogmind(frame)
+                } else {
+                    BlitPayload::Halfblocks {
+                        fb: fb.clone(),
+                        active_palette,
+                        scaling_mode: self.scaling_mode,
+                        char_set: None,
+                    }
+                }
+            }
+            RendererMode::Halfblocks | RendererMode::CharMap(_) => {
                 let cs = match effective {
                     RendererMode::CharMap(cs) => Some(cs),
                     _ => None,
