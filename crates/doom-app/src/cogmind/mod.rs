@@ -5,3 +5,5 @@
 #![allow(dead_code)]
 
 pub mod glyphs;
+pub mod tile_grid;
+pub mod visibility;
