@@ -42,7 +42,7 @@ pub use automap::{
 };
 pub use colormap::{ColormapCache, INVULN_COLORMAP, build_invuln_colormap};
 pub use column::{DrawColumnParams, IDENTITY_COLORMAP, draw_column, draw_column_solid};
-pub use doom_game::AutomapState;
+
 pub use flat_cache::FlatCache;
 pub use font::BitmapFont;
 pub use framebuffer::Framebuffer;
