@@ -3568,12 +3568,20 @@ pub fn tick_conveyors(gs: &mut GameState, level: Option<&Level>) {
     };
 
     // Iterate all live actors and apply push if standing in a conveyor sector.
-    // Use a vector because we modify mobjs in the loop, but NLL allows us to iterate
-    // `gs.movers.conveyors` directly instead of collecting it first, meaning it's only one
-    // allocation per tic instead of three!
-    let mut handles = Vec::with_capacity(gs.mobjslab.len());
-    handles.extend(gs.mobjslab.iter_handles());
-    for handle in handles {
+    // Use index iteration to avoid allocating a vector of handles while satisfying the borrow checker,
+    // ensuring determinism by capturing the initial bounds.
+    let initial_slot_count = gs.mobjslab.slot_count();
+    let initial_generation = gs.mobjslab.next_generation();
+
+    for i in 0..initial_slot_count {
+        let Some(handle) = gs.mobjslab.handle_at(i) else {
+            continue;
+        };
+        // Skip mobjs spawned during this iteration.
+        if handle.generation >= initial_generation {
+            continue;
+        }
+
         let mz = match gs.mobjslab.get(handle) {
             Some(mo) => mo.z.to_int(),
             None => continue,

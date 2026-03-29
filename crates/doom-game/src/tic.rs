@@ -222,13 +222,23 @@ fn tick_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> T
 /// The player mobj is skipped (its state machine is managed separately
 /// by `tick_player`).
 pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
-    // Collect handles first to avoid borrow conflicts during iteration.
-    let mut handles = Vec::with_capacity(gs.mobjslab.len());
-    handles.extend(gs.mobjslab.iter_handles());
+    // Collect iteration boundaries to avoid borrow conflicts and guarantee determinism.
+    // We only process mobjs that existed at the start of the tic.
+    let initial_slot_count = gs.mobjslab.slot_count();
+    let initial_generation = gs.mobjslab.next_generation();
+
     let player_handle = gs.player.handle;
     let is_nightmare = gs.skill == crate::spawn::Skill::Nightmare;
 
-    for handle in handles {
+    for i in 0..initial_slot_count {
+        let Some(handle) = gs.mobjslab.handle_at(i) else {
+            continue;
+        };
+        // Skip mobjs spawned during this iteration.
+        if handle.generation >= initial_generation {
+            continue;
+        }
+
         // Skip the player mobj — it's handled by tick_player.
         if handle == player_handle {
             continue;
@@ -427,12 +437,18 @@ impl GameState {
     /// backward compatibility with existing call sites.
     #[doc(hidden)]
     pub fn run_thinkers(&mut self, level: Option<&Level>) {
-        // Collect handles first to avoid borrow conflicts during iteration.
-        let mut handles = Vec::with_capacity(self.mobjslab.len());
-        handles.extend(self.mobjslab.iter_handles());
+        // Collect iteration boundaries to avoid borrow conflicts and guarantee determinism.
+        let initial_slot_count = self.mobjslab.slot_count();
+        let initial_generation = self.mobjslab.next_generation();
 
-        for handle in handles {
-            self.advance_mobj_state(handle, level);
+        for i in 0..initial_slot_count {
+            if let Some(handle) = self.mobjslab.handle_at(i) {
+                // Skip mobjs spawned during this iteration.
+                if handle.generation >= initial_generation {
+                    continue;
+                }
+                self.advance_mobj_state(handle, level);
+            }
         }
     }
 
