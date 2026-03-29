@@ -8,7 +8,6 @@ mod cogmind;
 mod console;
 mod demo_mode;
 mod net_mode;
-mod savegame;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -891,12 +890,11 @@ impl DoomApp for DoomGame {
                             self.menu.close();
                         }
                         doom_game::menu::MenuResult::LoadGame(slot) => {
-                            let path = format!("doom_save_{slot}.bin");
-                            match savegame::load_game(std::path::Path::new(&path)) {
-                                Ok((_header, payload)) => {
-                                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                                        self.console.print(format!("Load failed: {e}"));
-                                    } else {
+                            let path = doom_game::savegame::save_slot_filename(slot as usize);
+                            match std::fs::read(&path) {
+                                Ok(data) => match doom_game::savegame::load_game(&data) {
+                                    Ok(loaded) => {
+                                        self.gs = loaded.state;
                                         self.player_view_height = if self.gs.player.is_dead() {
                                             DEAD_PLAYER_VIEW_HEIGHT
                                         } else {
@@ -906,15 +904,27 @@ impl DoomApp for DoomGame {
                                         self.start_level_music();
                                         self.menu.close();
                                     }
-                                }
+                                    Err(e) => self.console.print(format!("Load failed: {e}")),
+                                },
                                 Err(e) => self.console.print(format!("Load failed: {e}")),
                             }
                         }
                         doom_game::menu::MenuResult::SaveGame(slot) => {
-                            let path = format!("doom_save_{slot}.bin");
-                            if let Err(e) =
-                                savegame::save_game(std::path::Path::new(&path), &self.gs, slot)
-                            {
+                            let path = doom_game::savegame::save_slot_filename(slot as usize);
+
+                            // Get exactly 8 bytes for level name
+                            let mut level_name = [0u8; 8];
+                            let name_bytes = self.gs.level_name.as_bytes();
+                            let copy_len = name_bytes.len().min(8);
+                            level_name[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+
+                            let data = doom_game::savegame::save_game(
+                                &self.gs,
+                                &level_name,
+                                self.skill as u8,
+                                &format!("Slot {}", slot),
+                            );
+                            if let Err(e) = std::fs::write(&path, &data) {
                                 self.console.print(format!("Save failed: {e}"));
                             } else {
                                 self.console.print(format!("Saved to slot {slot}."));
@@ -988,7 +998,18 @@ impl DoomApp for DoomGame {
 
         // Quick save (F5).
         if input.f5_save {
-            if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0) {
+            let mut level_name = [0u8; 8];
+            let name_bytes = self.gs.level_name.as_bytes();
+            let copy_len = name_bytes.len().min(8);
+            level_name[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+
+            let data = doom_game::savegame::save_game(
+                &self.gs,
+                &level_name,
+                self.skill as u8,
+                "Quick Save",
+            );
+            if let Err(e) = std::fs::write(&self.save_path, &data) {
                 self.console.print(format!("Save failed: {e}"));
             } else {
                 self.console.print("Game saved.".to_string());
@@ -997,16 +1018,18 @@ impl DoomApp for DoomGame {
 
         // Quick load (F9).
         if input.f9_load {
-            match savegame::load_game(&self.save_path) {
-                Ok((_header, payload)) => {
-                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                        self.console.print(format!("Load failed: {e}"));
-                    } else {
+            match std::fs::read(&self.save_path) {
+                Ok(data) => match doom_game::savegame::load_game(&data) {
+                    Ok(loaded) => {
+                        self.gs = loaded.state;
                         self.reset_weapon_anim();
                         self.console.print("Game loaded.".to_string());
                         self.start_level_music();
                     }
-                }
+                    Err(e) => {
+                        self.console.print(format!("Load failed: {e}"));
+                    }
+                },
                 Err(e) => {
                     self.console.print(format!("Load failed: {e}"));
                 }

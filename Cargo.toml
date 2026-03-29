@@ -44,7 +44,6 @@ cpal = "0.15"
 
 # Networking
 tokio     = { version = "1", features = ["full"] }
-bincode   = "2"
 crc32fast = "1"
 
 # Parsing
