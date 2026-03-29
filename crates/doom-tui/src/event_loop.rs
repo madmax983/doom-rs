@@ -53,6 +53,7 @@ use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
+    text::{Line, Span},
     widgets::Paragraph,
 };
 use ratatui_image::{Resize, StatefulImage, picker::Picker, picker::ProtocolType};
@@ -105,7 +106,7 @@ enum BlitPayload {
 struct BlitFrame {
     payload: BlitPayload,
     /// Status bar text to render at the bottom of the terminal.
-    status: String,
+    status: Line<'static>,
     /// Cogmind HUD data (replaces status bar in cogmind mode).
     cogmind_hud: Option<CogmindHud>,
 }
@@ -187,8 +188,8 @@ fn run_blit_thread(
                     let widget = CogmindHudWidget::new(hud);
                     f.render_widget(widget, chunks[1]);
                 } else {
-                    let status_bar = Paragraph::new(frame.status.as_str())
-                        .style(Style::default().fg(Color::Black).bg(Color::Yellow));
+                    let status_bar = Paragraph::new(frame.status.clone())
+                        .style(Style::default().bg(Color::Rgb(20, 20, 30)));
                     f.render_widget(status_bar, chunks[1]);
                 }
             })
@@ -850,9 +851,27 @@ impl DoomEventLoop {
         let render_ms = self.last_render_us as f64 / 1000.0;
         let blit_ms = self.blit_elapsed_us.load(Ordering::Relaxed) as f64 / 1000.0;
         let mode_name = effective.name();
-        let status = format!(
-            " DOOM | {fps:.0}fps | tick:{tick_ms:.1} rnd:{render_ms:.1} blit:{blit_ms:.1}ms | {mode_name} | [F2] cycle | [Q] "
-        );
+
+        let fps_color = if fps >= 30.0 { Color::Green } else { Color::Yellow };
+        let status = Line::from(vec![
+            Span::styled(" DOOM ", Style::default().fg(Color::White).bg(Color::Red).add_modifier(ratatui::style::Modifier::BOLD)),
+            Span::styled(" | ", Style::default().fg(Color::DarkGray)),
+            Span::styled(format!("{fps:.0} fps"), Style::default().fg(fps_color).add_modifier(ratatui::style::Modifier::BOLD)),
+            Span::styled(" | ", Style::default().fg(Color::DarkGray)),
+            Span::styled("tick:", Style::default().fg(Color::Gray)),
+            Span::styled(format!("{tick_ms:.1}ms "), Style::default().fg(Color::Cyan)),
+            Span::styled("rnd:", Style::default().fg(Color::Gray)),
+            Span::styled(format!("{render_ms:.1}ms "), Style::default().fg(Color::Cyan)),
+            Span::styled("blit:", Style::default().fg(Color::Gray)),
+            Span::styled(format!("{blit_ms:.1}ms"), Style::default().fg(Color::Cyan)),
+            Span::styled(" | ", Style::default().fg(Color::DarkGray)),
+            Span::styled(mode_name.to_string(), Style::default().fg(Color::Magenta).add_modifier(ratatui::style::Modifier::BOLD)),
+            Span::styled(" | ", Style::default().fg(Color::DarkGray)),
+            Span::styled("[F2]", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)),
+            Span::styled(" cycle ", Style::default().fg(Color::Gray)),
+            Span::styled("[Q]", Style::default().fg(Color::Yellow).add_modifier(ratatui::style::Modifier::BOLD)),
+            Span::styled(" quit ", Style::default().fg(Color::Gray)),
+        ]);
 
         // ── Dispatch (non-blocking) ──────────────────────────────────────────
         // `try_send` returns Err if the channel is full (blit thread busy) or
