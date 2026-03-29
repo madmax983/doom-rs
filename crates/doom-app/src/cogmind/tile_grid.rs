@@ -6,7 +6,7 @@
 
 use doom_map::{FLAG_TWO_SIDED, Level, SIDEDEF_NONE, Ssector};
 
-use super::glyphs::{TileKind, sector_floor_kind};
+use super::glyphs::{Rgb, TileKind, sector_floor_kind};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -28,6 +28,8 @@ pub struct Tile {
     pub sector_idx: Option<usize>,
     /// Light level (0-255) inherited from the sector.
     pub light: u8,
+    /// Hazard glow tint from adjacent nukage/lava tiles, if any.
+    pub glow: Option<Rgb>,
 }
 
 impl Default for Tile {
@@ -36,6 +38,7 @@ impl Default for Tile {
             kind: TileKind::Void,
             sector_idx: None,
             light: 0,
+            glow: None,
         }
     }
 }
@@ -90,6 +93,7 @@ impl TileGrid {
                                 kind,
                                 sector_idx: Some(si),
                                 light,
+                                glow: None,
                             };
                         }
                     }
@@ -140,6 +144,8 @@ impl TileGrid {
                 }
             }
         }
+
+        compute_hazard_glow(&mut tiles, grid_w, grid_h);
 
         Self {
             tiles,
@@ -193,6 +199,67 @@ impl TileGrid {
             mask |= 0x08;
         }
         mask
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Hazard glow
+// ---------------------------------------------------------------------------
+
+/// Nukage glow color (green).
+const NUKAGE_GLOW: Rgb = (0, 180, 0);
+/// Lava glow color (orange-red).
+const LAVA_GLOW: Rgb = (200, 80, 0);
+
+fn compute_hazard_glow(tiles: &mut [Tile], grid_w: usize, grid_h: usize) {
+    // Snapshot kinds to avoid aliasing.
+    let kinds: Vec<TileKind> = tiles.iter().map(|t| t.kind).collect();
+    for gy in 0..grid_h {
+        for gx in 0..grid_w {
+            let idx = gy * grid_w + gx;
+            // Only floors/height-changes/open-doors can receive glow.
+            if !matches!(
+                kinds[idx],
+                TileKind::Floor | TileKind::DoorOpen | TileKind::HeightChange
+            ) {
+                continue;
+            }
+            let neighbors = [
+                if gy + 1 < grid_h {
+                    Some((gy + 1) * grid_w + gx)
+                } else {
+                    None
+                },
+                if gx + 1 < grid_w {
+                    Some(gy * grid_w + gx + 1)
+                } else {
+                    None
+                },
+                if gy > 0 {
+                    Some((gy - 1) * grid_w + gx)
+                } else {
+                    None
+                },
+                if gx > 0 {
+                    Some(gy * grid_w + gx - 1)
+                } else {
+                    None
+                },
+            ];
+            for ni in neighbors.into_iter().flatten() {
+                match kinds[ni] {
+                    TileKind::Nukage => {
+                        tiles[idx].glow = Some(NUKAGE_GLOW);
+                        break;
+                    }
+                    TileKind::Lava => {
+                        tiles[idx].glow = Some(LAVA_GLOW);
+                        break;
+                    }
+                    _ => {}
+                }
+            }
+        }
     }
 }
 
@@ -380,5 +447,46 @@ mod tests {
         assert_eq!(tile.kind, TileKind::Void);
         assert_eq!(tile.sector_idx, None);
         assert_eq!(tile.light, 0);
+    }
+
+    #[test]
+    fn hazard_glow_adjacent_to_nukage() {
+        let mut tiles = vec![Tile::default(); 4]; // 2x2
+        tiles[0] = Tile { kind: TileKind::Floor, sector_idx: Some(0), light: 128, glow: None };
+        tiles[1] = Tile { kind: TileKind::Nukage, sector_idx: Some(1), light: 128, glow: None };
+        tiles[2] = Tile { kind: TileKind::Floor, sector_idx: Some(0), light: 128, glow: None };
+        tiles[3] = Tile { kind: TileKind::Floor, sector_idx: Some(0), light: 128, glow: None };
+        compute_hazard_glow(&mut tiles, 2, 2);
+        assert!(tiles[0].glow.is_some());
+        assert_eq!(tiles[0].glow.unwrap(), NUKAGE_GLOW);
+        assert!(tiles[1].glow.is_none()); // nukage itself doesn't get glow
+    }
+
+    #[test]
+    fn hazard_glow_not_on_walls() {
+        let mut tiles = vec![Tile::default(); 4];
+        tiles[0] = Tile { kind: TileKind::Wall, sector_idx: Some(0), light: 128, glow: None };
+        tiles[1] = Tile { kind: TileKind::Lava, sector_idx: Some(1), light: 128, glow: None };
+        tiles[2] = Tile::default();
+        tiles[3] = Tile::default();
+        compute_hazard_glow(&mut tiles, 2, 2);
+        assert!(tiles[0].glow.is_none(), "walls should not receive glow");
+    }
+
+    #[test]
+    fn hazard_glow_lava() {
+        let mut tiles = vec![Tile::default(); 4];
+        tiles[0] = Tile { kind: TileKind::Floor, sector_idx: Some(0), light: 128, glow: None };
+        tiles[1] = Tile { kind: TileKind::Lava, sector_idx: Some(1), light: 128, glow: None };
+        tiles[2] = Tile::default();
+        tiles[3] = Tile::default();
+        compute_hazard_glow(&mut tiles, 2, 2);
+        assert_eq!(tiles[0].glow, Some(LAVA_GLOW));
+    }
+
+    #[test]
+    fn tile_default_has_no_glow() {
+        let tile = Tile::default();
+        assert_eq!(tile.glow, None);
     }
 }
