@@ -8,7 +8,10 @@ use doom_game::GameState;
 use doom_map::Level;
 use doom_tui::{CogmindCell, CogmindFrame};
 
+use super::effects::EffectLayer;
 use super::glyphs::{TileKind, apply_light, dim_remembered, entity_glyph, tile_glyph, wall_glyph};
+use super::lighting::{effective_light, entity_light_boost, blend_hazard_glow};
+use super::sight_line::sight_line_cells;
 use super::tile_grid::{CELL_SIZE, TileGrid};
 use super::visibility::{SectorVisibility, VisibilityMap};
 
@@ -27,6 +30,8 @@ pub struct CogmindState {
     pub visibility: Option<VisibilityMap>,
     /// Name of the level the cached grid was built for.
     cached_level_name: String,
+    /// Particle effect layer (combat debris, projectile trails, dust).
+    pub effects: EffectLayer,
 }
 
 impl CogmindState {
@@ -37,6 +42,7 @@ impl CogmindState {
             tile_grid: None,
             visibility: None,
             cached_level_name: String::new(),
+            effects: EffectLayer::new(),
         }
     }
 
@@ -51,6 +57,7 @@ impl CogmindState {
         self.tile_grid = Some(TileGrid::from_level(level));
         self.visibility = Some(VisibilityMap::new(level.sectors.len()));
         self.cached_level_name = level.name.clone();
+        self.effects = EffectLayer::new();
     }
 
     /// Update the visibility map based on the player's current sector.
@@ -77,9 +84,8 @@ impl CogmindState {
     ///
     /// The viewport is centered on the player.  Each terminal cell maps to a
     /// `CELL_SIZE x CELL_SIZE` region of map space.
-    #[must_use]
     pub fn render_frame(
-        &self,
+        &mut self,
         gs: &GameState,
         level: &Level,
         term_w: u16,
@@ -109,6 +115,16 @@ impl CogmindState {
         let th = i32::from(term_h);
         let vp_origin_x = player_x - (tw / 2) * CELL_SIZE;
         let vp_origin_y = player_y - (th / 2) * CELL_SIZE;
+
+        // Tick effects and spawn new particles.
+        self.effects.tick();
+        self.effects.spawn_combat_debris(gs);
+        self.effects.spawn_projectile_trails(gs);
+
+        let tic = gs.tic_num;
+        let player_tx = tw / 2;
+        let player_ty = th / 2;
+        let mut visible_floors: Vec<(i32, i32)> = Vec::new();
 
         // --- Phase 1: tile rendering ---
         for ty in 0..term_h {
@@ -172,8 +188,24 @@ impl CogmindState {
 
                 let cell = match vis.get(sector_idx) {
                     SectorVisibility::Visible(light) => {
-                        let fg = apply_light(tg.fg, light);
-                        let bg = apply_light(tg.bg, light);
+                        let sector_special = level.sectors.get(sector_idx)
+                            .map_or(0, |s| s.special);
+                        let eff_light = effective_light(
+                            light, sector_special, sector_idx, tic,
+                            player_tx, player_ty,
+                            i32::from(tx), i32::from(ty),
+                        );
+                        let mut fg = apply_light(tg.fg, eff_light);
+                        let mut bg = apply_light(tg.bg, eff_light);
+                        // Apply hazard glow if present on this tile.
+                        if let Some(glow) = tile.glow {
+                            fg = blend_hazard_glow(fg, glow);
+                            bg = blend_hazard_glow(bg, glow);
+                        }
+                        // Track visible floor positions for ambient dust spawning.
+                        if matches!(effective_kind, TileKind::Floor | TileKind::DoorOpen) {
+                            visible_floors.push((map_x, map_y));
+                        }
                         CogmindCell {
                             glyph: tg.glyph,
                             fg,
@@ -225,8 +257,9 @@ impl CogmindState {
                 match vis.get(sector_idx) {
                     SectorVisibility::Visible(light) => {
                         let eg = entity_glyph(mobj.kind, mobj.health);
-                        let fg = apply_light(eg.fg, light);
-                        let bg = apply_light(eg.bg, light);
+                        let boosted = entity_light_boost(light);
+                        let fg = apply_light(eg.fg, boosted);
+                        let bg = apply_light(eg.bg, boosted);
                         // Flip Y for terminal coordinates.
                         let screen_y = (term_h.saturating_sub(1)).saturating_sub(ty as u16);
                         frame.set(
@@ -245,6 +278,62 @@ impl CogmindState {
                 }
             }
         }
+
+        // --- Phase 2.5: effect particles ---
+        for effect in &self.effects.effects {
+            let etx = (effect.x - vp_origin_x) / CELL_SIZE;
+            let ety = (effect.y - vp_origin_y) / CELL_SIZE;
+            if etx < 0 || ety < 0 || etx >= tw || ety >= th {
+                continue;
+            }
+            // Don't overwrite the player glyph.
+            if etx == player_tx && ety == player_ty {
+                continue;
+            }
+            let screen_y = (term_h.saturating_sub(1)).saturating_sub(ety as u16);
+            let fg = effect.current_fg();
+            frame.set(etx as u16, screen_y, CogmindCell {
+                glyph: effect.glyph,
+                fg,
+                bg: (0, 0, 0),
+            });
+        }
+
+        // --- Phase 3: player sight line ---
+        let player_screen_x = player_tx;
+        let player_screen_y = (term_h.saturating_sub(1)).saturating_sub(player_ty as u16);
+
+        let sight_cells = sight_line_cells(player_mobj.angle, |dx, dy| {
+            let check_tx = player_tx + dx;
+            let check_ty = player_ty + dy;
+            if check_tx < 0 || check_ty < 0 || check_tx >= tw || check_ty >= th {
+                return true; // out of bounds = treat as wall
+            }
+            let map_check_x = vp_origin_x + check_tx * CELL_SIZE + CELL_SIZE / 2;
+            let map_check_y = vp_origin_y + check_ty * CELL_SIZE + CELL_SIZE / 2;
+            let (gx, gy) = grid.map_to_grid(map_check_x, map_check_y);
+            if gx < 0 || gy < 0 {
+                return true;
+            }
+            grid.get(gx as usize, gy as usize)
+                .is_none_or(|t| t.kind == TileKind::Wall)
+        });
+
+        for sc in &sight_cells {
+            let sx = player_screen_x + sc.dx;
+            let sy = i32::from(player_screen_y) + sc.dy;
+            if sx >= 0 && sy >= 0 && sx < tw && sy < i32::from(term_h) {
+                frame.set(sx as u16, sy as u16, CogmindCell {
+                    glyph: sc.glyph,
+                    fg: sc.fg,
+                    bg: (0, 0, 0),
+                });
+            }
+        }
+
+        // Spawn ambient dust using this frame's visible floors (for next frame).
+        self.effects.spawn_ambient_dust(&visible_floors);
+        self.effects.clean_stale_handles(gs);
 
         frame
     }
@@ -349,6 +438,7 @@ mod tests {
         assert!(state.tile_grid.is_none());
         assert!(state.visibility.is_none());
         assert!(state.cached_level_name.is_empty());
+        assert!(state.effects.effects.is_empty());
     }
 
     #[test]
@@ -378,7 +468,7 @@ mod tests {
 
     #[test]
     fn render_frame_returns_correct_dimensions() {
-        let state = CogmindState::new();
+        let mut state = CogmindState::new();
         let gs = make_test_game_state();
         let level = make_bsp_test_level();
 

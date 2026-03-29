@@ -1,8 +1,6 @@
 //! Sight-line module: produces a 2–3 cell directional ray from the player
 //! based on their facing angle, rendered in Phase 3 of the cogmind compositor.
 
-#![allow(dead_code)] // Compositor integration wires these up in a later task.
-
 use doom_types::Bam;
 
 use super::glyphs::Rgb;
