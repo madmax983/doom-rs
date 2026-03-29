@@ -129,11 +129,20 @@ impl Default for SolidWallClipper {
 }
 
 impl SolidWallClipper {
+    /// Bootstraps an empty `SolidWallClipper`.
+    ///
+    /// By default, the player starts with a fully open 320x200 view. As we iterate
+    /// over the `segs` front-to-back, we use this struct to close off portions of that view.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Declares a screen column completely blocked by a solid, one-sided wall.
+    ///
+    /// If we paint a solid wall at screen column `x`, any geometry (walls, sprites, or portals)
+    /// projecting to column `x` that is *farther* away than this wall is mathematically invisible.
+    /// By marking `x` as covered, we can instantly reject any farther segs that try to draw here.
     pub fn mark_column(&mut self, x: usize) {
         if x < SCREEN_W {
             self.covered[x] = true;
@@ -172,10 +181,16 @@ impl SolidWallClipper {
     }
 }
 
-/// Plane type used for row-wise span clipping.
+/// Differentiates between the two horizontal surfaces bounding a sector.
+///
+/// In Doom's 2.5D engine, ceilings and floors are rendered via horizontal raster spans
+/// (visplanes) rather than vertical columns (walls). When a portal (a two-sided wall)
+/// partially covers the screen, it clamps the visible window for these planes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaneClipKind {
+    #[doc(hidden)]
     Ceiling,
+    #[doc(hidden)]
     Floor,
 }
 

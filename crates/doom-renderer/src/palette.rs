@@ -23,27 +23,43 @@ pub const PLAYPAL_SIZE: usize = PLAYPAL_COUNT * PLAYPAL_COLORS * 3;
 
 /// Errors from palette construction.
 #[derive(Debug, Error)]
+/// Indicates a fatal mismatch reading the `PLAYPAL` lump.
+///
+/// Doom expects `PLAYPAL` to contain exactly 14 palettes, each with 256 colors,
+/// where each color is a 3-byte `(R, G, B)` sequence. Total bytes must be 10,752.
 pub enum PaletteError {
     #[error("PLAYPAL lump is {actual} bytes; expected {PLAYPAL_SIZE}")]
+    #[doc(hidden)]
     WrongSize { actual: usize },
 }
 
-/// RGB color triple.
+/// An unpacked 24-bit TrueColor pixel representation.
+///
+/// Under the hood, the entire `doom-renderer` engine only deals in 8-bit palette indices.
+/// It doesn't actually know what 'red' or 'green' means. This struct exists solely at the
+/// final blit stage where those 8-bit integers are translated through the active palette
+/// into full-color triples suitable for the terminal or an OS window.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Rgb {
+    #[doc(hidden)]
     pub r: u8,
+    #[doc(hidden)]
     pub g: u8,
+    #[doc(hidden)]
     pub b: u8,
 }
 
 impl Rgb {
+    #[doc(hidden)]
     pub const BLACK: Self = Self { r: 0, g: 0, b: 0 };
+    #[doc(hidden)]
     pub const WHITE: Self = Self {
         r: 255,
         g: 255,
         b: 255,
     };
 
+    /// Translates raw `r`, `g`, `b` bytes into a standard `Rgb` bundle.
     #[inline]
     pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }

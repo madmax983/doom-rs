@@ -159,22 +159,59 @@ impl Widget for CogmindWidget<'_> {
 ///
 /// Passed across the `DoomApp` trait boundary as plain values so that
 /// `doom-tui` never needs to depend on `doom-game`.
+///
+/// Player vitals mapped into an ASCII-rendered ratatui widget.
+///
+/// In Doom, the HUD is a sprawling bitmap. But in a terminal, we must reduce
+/// that graphic into a single row of styled text. This struct holds the raw
+/// values, and `to_line` transforms them into colored, fixed-width text spans
+/// that emulate the data density of games like *Cogmind* or *Cataclysm: DDA*.
+///
+/// We intentionally strip out the `Arc`s and `Mutex`es used in `doom-game`
+/// here. This is a pure data struct, populated once per frame, allowing the
+/// TUI layer to remain blissfully ignorant of the game's simulation state.
+///
+/// ## Examples
+///
+/// ```
+/// # use doom_tui::cogmind::CogmindHud;
+/// let hud = CogmindHud {
+///     health: 45,
+///     max_health: 100,
+///     armor: 0,
+///     ammo: Some(12),
+///     max_ammo: Some(50),
+///     weapon_name: "SG",
+///     keys: [true, false, false, false, false, false],
+///     kill_count: 5,
+///     total_monsters: 10,
+///     level_name: "E1M1".to_string(),
+/// };
+///
+/// let line = hud.to_line();
+/// assert_eq!(line.width(), 41); // Fixed-width rendering
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct CogmindHud {
+    #[doc(hidden)]
     pub health: i32,
+    #[doc(hidden)]
     pub max_health: i32,
+    #[doc(hidden)]
     pub armor: i32,
-    /// Current weapon's ammo count, or `None` for melee weapons.
+    #[doc(hidden)]
     pub ammo: Option<u32>,
-    /// Current weapon's max ammo, or `None` for melee.
+    #[doc(hidden)]
     pub max_ammo: Option<u32>,
-    /// Short weapon name (e.g. "SG", "RL", "BFG").
+    #[doc(hidden)]
     pub weapon_name: &'static str,
-    /// Which of the 6 key slots the player holds (B/Y/R cards + skulls).
+    #[doc(hidden)]
     pub keys: [bool; 6],
+    #[doc(hidden)]
     pub kill_count: u32,
+    #[doc(hidden)]
     pub total_monsters: u32,
-    /// Level name (e.g. "E1M3" or "MAP07").
+    #[doc(hidden)]
     pub level_name: String,
 }
 
@@ -268,6 +305,12 @@ pub struct CogmindHudWidget<'a> {
 }
 
 impl<'a> CogmindHudWidget<'a> {
+    /// Bind a snapshot of the player's HUD data into a renderable terminal widget.
+    ///
+    /// Ratatui consumes widgets by value during rendering (`render(self, area, buf)`).
+    /// By binding a reference to the `CogmindHud` rather than owning it, we can
+    /// cheaply construct this widget on every single frame without copying strings
+    /// or triggering allocations.
     #[must_use]
     pub fn new(hud: &'a CogmindHud) -> Self {
         Self { hud }
@@ -531,7 +574,7 @@ mod tests {
         let mut buf = Buffer::empty(area);
         CogmindHudWidget::new(&hud).render(area, &mut buf);
         // Should have written something (not all spaces).
-        let has_content = (0..80u16).any(|x| buf.cell((x, 0)).map_or(false, |c| c.symbol() != " "));
+        let has_content = (0..80u16).any(|x| buf.cell((x, 0)).is_some_and(|c| c.symbol() != " "));
         assert!(has_content, "HUD widget should render non-blank content");
     }
 }

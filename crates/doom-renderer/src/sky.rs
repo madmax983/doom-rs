@@ -45,6 +45,12 @@ pub struct SkyCoverage {
 }
 
 impl SkyCoverage {
+    /// Creates a blank sky mask containing no sky.
+    ///
+    /// This structure holds a single bit for every pixel on the 320x200 screen. As the BSP
+    /// traversal emits ceiling visplanes with the `F_SKY1` flat, we instead write `1`s into this
+    /// bitmask. Later, we sweep the screen once, looking up texels for the sky sphere based on
+    /// the player's view angle, writing pixels anywhere the mask is set.
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -52,6 +58,7 @@ impl SkyCoverage {
         }
     }
 
+    /// Tags a continuous vertical band of pixels in a single column as 'containing sky'.
     pub fn record_span(&mut self, x: usize, top: i32, bot: i32) {
         if x >= SCREEN_W {
             return;
@@ -93,6 +100,10 @@ impl SkyCoverage {
         self.columns[x][end_word] |= tail_mask;
     }
 
+    /// Determines if the engine should substitute a sky texel for the pixel at `(x, y)`.
+    ///
+    /// By checking this mask *after* all solid walls are drawn, we avoid overdraw operations
+    /// on pixels that would be immediately hidden.
     #[must_use]
     pub fn contains(&self, x: usize, y: usize) -> bool {
         if x >= SCREEN_W || y >= SCREEN_H {

@@ -30,25 +30,81 @@ pub struct MusHeader {
     pub instrument_count: u16,
 }
 
-/// A single decoded MUS event.
+/// A discrete event fired by the MUS decoder, advancing the song.
+///
+/// In standard MIDI, notes, pitch bends, and patches stream continuously. Id Software's
+/// MUS format squashes this data tightly into a bit-packed stream to fit Doom's tiny memory
+/// footprint. We convert it back into an enum representing musical concepts instead of
+/// arbitrary bit patterns.
+///
+/// Each `MusEvent` maps to a physical command sent to the OPL2/OPL3 synthesizer chips,
+/// meaning these are instructions rather than raw sounds.
+///
+/// ## Examples
+///
+/// ```
+/// # use doom_audio::mus::MusEvent;
+/// // Play middle C (Note 60) with an explicit velocity of 100 on Channel 1
+/// let play_note = MusEvent::PlayNote {
+///     channel: 1,
+///     note: 60,
+///     volume: Some(100),
+/// };
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum MusEvent {
-    /// Note-off for `note` on `channel`.
-    ReleaseNote { channel: u8, note: u8 },
-    /// Note-on for `note` on `channel`, with optional velocity override.
-    PlayNote {
+    /// Signals that a previously pressed key has been released, silencing the oscillator.
+    ///
+    /// Every `PlayNote` must eventually be followed by a `ReleaseNote` on the same channel
+    /// and note index to prevent stuck notes and free up polyphony voices for the OPL2 chip.
+    ReleaseNote {
+        #[doc(hidden)]
         channel: u8,
+        #[doc(hidden)]
         note: u8,
+    },
+    /// Triggers a new tone on the specified channel.
+    ///
+    /// The `volume` field is crucial for dynamics—MUS files compress space by omitting it
+    /// if the note strikes at the same velocity as the previous note on this channel.
+    PlayNote {
+        #[doc(hidden)]
+        channel: u8,
+        #[doc(hidden)]
+        note: u8,
+        #[doc(hidden)]
         volume: Option<u8>,
     },
-    /// Pitch-wheel change on `channel`.
-    PitchWheel { channel: u8, value: u8 },
-    /// System-level event on `channel`.
-    SystemEvent { channel: u8, controller: u8 },
-    /// Controller change on `channel`.
-    Controller {
+    /// Bends the pitch of all currently playing notes on the channel.
+    ///
+    /// Used for smooth glissandos (like a guitar string bend). The value represents
+    /// the degree of bend, which is applied mathematically to the base frequency.
+    PitchWheel {
+        #[doc(hidden)]
         channel: u8,
+        #[doc(hidden)]
+        value: u8,
+    },
+    /// A macro-level command that changes the overall state of a channel.
+    ///
+    /// In MUS, this is a proprietary DMX engine feature, primarily used to toggle
+    /// percussion modes or silence a channel completely (e.g. `AllNotesOff`).
+    SystemEvent {
+        #[doc(hidden)]
+        channel: u8,
+        #[doc(hidden)]
         controller: u8,
+    },
+    /// Modifies a continuous controller on the channel (e.g., modulation, panning, or expression).
+    ///
+    /// The most critical controller in MUS is `0`, which executes a Patch Change (changing the
+    /// instrument playing on the channel).
+    Controller {
+        #[doc(hidden)]
+        channel: u8,
+        #[doc(hidden)]
+        controller: u8,
+        #[doc(hidden)]
         value: u8,
     },
     /// Measure (bar) boundary marker — no payload.
@@ -57,7 +113,28 @@ pub enum MusEvent {
     ScoreEnd,
 }
 
-/// A fully-parsed MUS score.
+/// A fully decoded piece of Doom music, loaded into memory.
+///
+/// Unlike streaming audio (`.wav` or `.mp3`), a MUS score is essentially sheet music.
+/// The `events` vector contains every note, volume change, and instrument selection
+/// in the track, grouped with exact delay timestamps (`delta_ticks`).
+///
+/// These tracks were originally designed to drive an OPL2 synthesizer chip. The entire
+/// score must be parsed up-front to guarantee we catch every system event and tempo
+/// marker before we attempt to pass it to the playback loop.
+///
+/// ## Examples
+///
+/// Loading the E1M1 ("At Doom's Gate") track directly from a byte slice.
+///
+/// ```
+/// # use doom_audio::mus::MusScore;
+/// # let minimal_data = b"MUS\x1a\x00\x00\x10\x00\x01\x00\x00\x00\x00\x00\x00\x00\x60";
+/// let score = MusScore::parse(minimal_data)
+///     .expect("A valid MUS file parses immediately");
+///
+/// assert!(score.events.len() > 0);
+/// ```
 pub struct MusScore {
     /// File header.
     pub header: MusHeader,

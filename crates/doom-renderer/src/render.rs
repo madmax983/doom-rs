@@ -261,6 +261,12 @@ fn record_sprite_clip_step(
     });
 }
 
+/// Executes the deferred rendering phase for transparent linedefs.
+///
+/// Classic Doom uses a Painter's Algorithm for transparent 2D textures (sprites and grates).
+/// As the `render_level` BSP traversal steps through the world, any seg containing a masked
+/// texture is clipped, projected, and added to a list. This allows the engine to paint them
+/// over top of the opaque walls later.
 pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw<'_>]) {
     for column in columns {
         draw_masked_column(

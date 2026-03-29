@@ -678,6 +678,15 @@ pub fn render_actors_ex(
     );
 }
 
+/// Depth-sorts and rasterizes all opaque sprites and transparent linedefs.
+///
+/// Because Doom uses an implicit Z-buffer mapping columns to depths for its opaque walls,
+/// any objects that don't fit that model—like a floating fireball or a wire-mesh fence—must
+/// be painted *after* the walls, back-to-front.
+///
+/// This extended function combines the `MobjSlab` actors and the deferred `MaskedColumnDraw`
+/// structures from the BSP traversal, sorting them into a unified list by distance from the
+/// player's eye before rasterizing.
 #[allow(clippy::too_many_arguments)]
 pub fn render_actors_with_masked_ex<'a>(
     actors: &[crate::sprite_lookup::ActorRenderInfo],

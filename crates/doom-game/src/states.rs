@@ -525,6 +525,7 @@ pub mod ids {
     pub const S_PLASMA_UP: u16 = 286;
     pub const S_PLASMA_DOWN: u16 = 287;
     pub const S_PLASMA_READY: u16 = 288;
+    #[doc(hidden)]
     pub const S_PLASMA1: u16 = 289;
     pub const S_PLASMA2: u16 = 290;
     // BFG (BFGG)

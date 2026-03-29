@@ -10,24 +10,33 @@ const UNUSED: i16 = -1;
 /// Distinguishes ceiling and floor visplanes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PlaneKind {
+    /// Ceiling visplane.
     Ceiling,
+    /// Floor visplane.
     Floor,
 }
 
 /// One allocated visplane.
 #[derive(Debug, Clone)]
 pub struct Visplane {
+    /// Floor or ceiling.
     pub kind: PlaneKind,
+    /// World-space height of the plane.
     pub height: i32,
+    /// The flat texture name for this plane.
     pub flat_name: [u8; 8],
+    /// Sector light level.
     pub light_level: u8,
+    /// Leftmost drawn column.
     pub min_x: usize,
+    /// Rightmost drawn column.
     pub max_x: usize,
     top: [i16; SCREEN_W],
     bottom: [i16; SCREEN_W],
 }
 
 impl Visplane {
+    /// Creates a fresh slab for a specific combination of properties.
     #[must_use]
     pub fn new(kind: PlaneKind, height: i32, flat_name: [u8; 8], light_level: u8) -> Self {
         Self {
@@ -42,11 +51,13 @@ impl Visplane {
         }
     }
 
+    /// Checks if this specific visplane handles pixel data in column `x`.
     #[must_use]
     pub fn has_column(&self, x: usize) -> bool {
         x < SCREEN_W && self.top[x] != UNUSED
     }
 
+    /// Reads the visible `(top, bottom)` row limits for column `x`.
     #[must_use]
     pub fn column_bounds(&self, x: usize) -> Option<(i16, i16)> {
         if !self.has_column(x) {
@@ -65,6 +76,10 @@ impl Visplane {
         self.max_x = self.max_x.max(x);
     }
 
+    /// Determines if this visplane contains no pixel data.
+    ///
+    /// Empty visplanes can be culled or overwritten to save memory
+    /// during the BSP traversal algorithm.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.min_x >= SCREEN_W
@@ -74,8 +89,11 @@ impl Visplane {
 /// Horizontal run on a single screen row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpanRun {
+    /// Screen row Y-coordinate.
     pub y: usize,
+    /// Left edge X-coordinate (inclusive).
     pub x1: usize,
+    /// Right edge X-coordinate (inclusive).
     pub x2: usize,
 }
 
@@ -127,11 +145,20 @@ pub struct VisplaneSet {
 }
 
 impl VisplaneSet {
+    /// Initializes a blank list of Visplanes.
+    ///
+    /// While classic Doom used a fixed array (leading to the infamous "Visplane Overflow" crashes
+    /// when looking at highly detailed architecture), this struct wraps a dynamic vector that grows
+    /// as needed.
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Retrieves a view over all currently active visplanes.
+    ///
+    /// Once the BSP traversal (`render_level`) is completely finished, this slice contains every
+    /// contiguous polygon of ceiling or floor that must be drawn to the screen.
     #[must_use]
     pub fn planes(&self) -> &[Visplane] {
         &self.planes
