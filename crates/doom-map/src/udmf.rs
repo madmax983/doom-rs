@@ -968,4 +968,94 @@ mod tests {
             Err(UdmfError::UnsupportedNamespace(namespace)) if namespace == "zdoom"
         ));
     }
+
+    #[test]
+    fn missing_namespace_returns_error() {
+        let map = UdmfMap::parse(
+            br#"
+            vertex { x = 0; y = 0; }
+            "#,
+        );
+
+        assert!(matches!(map, Err(UdmfError::MissingNamespace)));
+    }
+
+    #[test]
+    fn should_parse_string_escapes() {
+        let map = UdmfMap::parse(
+            br#"
+            namespace = "doom";
+            vertex { name = "test\n\"escape\""; }
+            "#,
+        )
+        .expect("parse");
+
+        assert_eq!(map.blocks[0].fields[0].key, "name");
+        assert_eq!(
+            map.blocks[0].fields[0].value,
+            UdmfValue::Str("test\n\"escape\"".to_string())
+        );
+    }
+
+    #[test]
+    fn should_parse_number_formats() {
+        let map = UdmfMap::parse(
+            br#"
+            namespace = "doom";
+            vertex {
+                int_val = -42;
+                float_val = 4.25;
+                exp_val = -1.2e+3;
+            }
+            "#,
+        )
+        .expect("parse");
+
+        let fields = &map.blocks[0].fields;
+        assert_eq!(fields[0].value, UdmfValue::Int(-42));
+        assert_eq!(fields[1].value, UdmfValue::Float(4.25));
+        assert_eq!(fields[2].value, UdmfValue::Float(-1200.0));
+    }
+
+    #[test]
+    fn should_skip_comments() {
+        let map = UdmfMap::parse(
+            br#"
+            // This is a line comment
+            namespace = "doom";
+            /* This is a
+               block comment */
+            vertex { x = 0; y = 0; }
+            "#,
+        )
+        .expect("parse");
+
+        assert_eq!(map.namespace, "doom");
+        assert_eq!(map.blocks.len(), 1);
+    }
+
+    #[test]
+    fn thing_flags_mapping() {
+        let map = UdmfMap::parse(
+            br#"
+            namespace = "doom";
+            thing { x=0; y=0; type=1; skill1 = true; skill3 = true; skill4 = false; single = false; ambush = true; }
+            "#,
+        )
+        .expect("parse");
+
+        let level_data = map.into_level_data().expect("convert");
+        let flags = level_data.things[0].flags;
+
+        // skill1 is true, so THING_FLAG_EASY (1) should be set
+        // skill3 is true, so THING_FLAG_MEDIUM (2) should be set
+        // skill4 is false, and skill5 is missing, so THING_FLAG_HARD (4) should NOT be set
+        // ambush is true, so THING_FLAG_AMBUSH (8) should be set
+        // single is false, so THING_FLAG_MULTIPLAYER (16) should be set
+        assert_eq!(flags & THING_FLAG_EASY, THING_FLAG_EASY);
+        assert_eq!(flags & THING_FLAG_MEDIUM, THING_FLAG_MEDIUM);
+        assert_eq!(flags & THING_FLAG_HARD, 0);
+        assert_eq!(flags & THING_FLAG_AMBUSH, THING_FLAG_AMBUSH);
+        assert_eq!(flags & THING_FLAG_MULTIPLAYER, THING_FLAG_MULTIPLAYER);
+    }
 }
