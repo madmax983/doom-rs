@@ -537,6 +537,12 @@ impl MobjSlab {
         self.slots.len() as u32
     }
 
+    /// Returns the next generation value (used for non-allocating snapshots).
+    #[inline]
+    pub fn next_generation(&self) -> u32 {
+        self.next_generation
+    }
+
     /// Get the handle at a specific slot index, if it is occupied.
     pub fn handle_at(&self, index: u32) -> Option<MobjHandle> {
         match self.slots.get(index as usize)? {

@@ -468,11 +468,19 @@ pub fn p_radius_attack(
         None => return,
     };
 
-    // Collect handles up front.
-    let mut handles = Vec::with_capacity(gs.mobjslab.len());
-    handles.extend(gs.mobjslab.iter_handles());
+    // Collect iteration boundaries up front.
+    let initial_slot_count = gs.mobjslab.slot_count();
+    let initial_generation = gs.mobjslab.next_generation();
 
-    for handle in handles {
+    for i in 0..initial_slot_count {
+        let Some(handle) = gs.mobjslab.handle_at(i) else {
+            continue;
+        };
+        // Skip mobjs spawned during this iteration.
+        if handle.generation >= initial_generation {
+            continue;
+        }
+
         if handle == source {
             continue;
         }
