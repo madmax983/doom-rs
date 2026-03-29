@@ -3,8 +3,6 @@
 //! Effects render as Phase 2.5 (after entities, before sight line). The
 //! `EffectLayer` lives on `CogmindState` and persists across frames.
 
-#![allow(dead_code)] // Compositor integration wires these up in a later task.
-
 use std::collections::HashSet;
 
 use doom_game::mobj::MobjHandle;
