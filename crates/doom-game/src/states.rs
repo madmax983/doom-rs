@@ -4,28 +4,57 @@
 //! `frame` (0=A, 1=B, ... plus fullbright bit 0x80), `tics`, `action`,
 //! and `next_state`.
 
-use crate::actions::{
-    ACTION_BFG_SOUND as BFG_SOUND, ACTION_BRAIN_AWAKE as BRAIN_AWAKE,
-    ACTION_BRAIN_DIE as BRAIN_DIE, ACTION_BRAIN_EXPLODE as BRAIN_EXPLODE,
-    ACTION_BRAIN_SCREAM as BRAIN_SCREAM, ACTION_BRAIN_SPIT as BRAIN_SPIT,
-    ACTION_BRUIS_ATTACK as BRUIS_ATTACK, ACTION_BSPI_ATTACK as BSPI_ATTACK, ACTION_CHASE as CHASE,
-    ACTION_CHECK_RELOAD as CHECK_RELOAD, ACTION_CLOSE_SHOTGUN2 as CLOSE_SHOTGUN2,
-    ACTION_CPOS_ATTACK as CPOS_ATTACK, ACTION_FALL as FALL, ACTION_FAT_ATTACK1 as FAT_ATTACK1,
-    ACTION_FIRE as FIRE, ACTION_FIRE_BFG as FIRE_BFG, ACTION_FIRE_CGUN as FIRE_CGUN,
-    ACTION_FIRE_MISSILE as FIRE_MISSILE, ACTION_FIRE_PISTOL as FIRE_PISTOL,
-    ACTION_FIRE_PLASMA as FIRE_PLASMA, ACTION_FIRE_SHOTGUN as FIRE_SHOTGUN,
-    ACTION_FIRE_SHOTGUN2 as FIRE_SHOTGUN2, ACTION_GUN_FLASH as GUN_FLASH, ACTION_LIGHT0 as LIGHT0,
-    ACTION_LIGHT1 as LIGHT1, ACTION_LIGHT2 as LIGHT2, ACTION_LOAD_SHOTGUN2 as LOAD_SHOTGUN2,
-    ACTION_LOOK as LOOK, ACTION_LOWER as LOWER, ACTION_NONE as NONE,
-    ACTION_OPEN_SHOTGUN2 as OPEN_SHOTGUN2, ACTION_PAIN_ATTACK as PAIN_ATTACK,
-    ACTION_POS_ATTACK as POS_ATTACK, ACTION_PUNCH as PUNCH, ACTION_RAISE as RAISE,
-    ACTION_REFIRE as REFIRE, ACTION_SARG_ATTACK as SARG_ATTACK, ACTION_SAW as SAW,
-    ACTION_SCREAM as SCREAM, ACTION_SKEL_MISSILE as SKEL_MISSILE,
-    ACTION_SKULL_ATTACK as SKULL_ATTACK, ACTION_SPOS_ATTACK as SPOS_ATTACK,
-    ACTION_TROO_ATTACK as TROO_ATTACK, ACTION_VILE_ATTACK as VILE_ATTACK,
-    ACTION_VILE_CHASE as VILE_CHASE, ACTION_VILE_START as VILE_START,
-    ACTION_VILE_TARGET as VILE_TARGET, ACTION_WEAPON_READY as WEAPON_READY,
-};
+use crate::actions::Action;
+
+const BFG_SOUND: u8 = Action::BfgSound as u8;
+const BRAIN_AWAKE: u8 = Action::BrainAwake as u8;
+const BRAIN_DIE: u8 = Action::BrainDie as u8;
+const BRAIN_EXPLODE: u8 = Action::BrainExplode as u8;
+const BRAIN_SCREAM: u8 = Action::BrainScream as u8;
+const BRAIN_SPIT: u8 = Action::BrainSpit as u8;
+const BRUIS_ATTACK: u8 = Action::BruisAttack as u8;
+const BSPI_ATTACK: u8 = Action::BspiAttack as u8;
+const CHASE: u8 = Action::Chase as u8;
+const CHECK_RELOAD: u8 = Action::CheckReload as u8;
+const CLOSE_SHOTGUN2: u8 = Action::CloseShotgun2 as u8;
+const CPOS_ATTACK: u8 = Action::CposAttack as u8;
+const FALL: u8 = Action::Fall as u8;
+const FAT_ATTACK1: u8 = Action::FatAttack1 as u8;
+const FIRE: u8 = Action::Fire as u8;
+const FIRE_BFG: u8 = Action::FireBfg as u8;
+const FIRE_CGUN: u8 = Action::FireCgun as u8;
+const FIRE_MISSILE: u8 = Action::FireMissile as u8;
+const FIRE_PISTOL: u8 = Action::FirePistol as u8;
+const FIRE_PLASMA: u8 = Action::FirePlasma as u8;
+const FIRE_SHOTGUN: u8 = Action::FireShotgun as u8;
+const FIRE_SHOTGUN2: u8 = Action::FireShotgun2 as u8;
+const GUN_FLASH: u8 = Action::GunFlash as u8;
+const LIGHT0: u8 = Action::Light0 as u8;
+const LIGHT1: u8 = Action::Light1 as u8;
+const LIGHT2: u8 = Action::Light2 as u8;
+const LOAD_SHOTGUN2: u8 = Action::LoadShotgun2 as u8;
+const LOOK: u8 = Action::Look as u8;
+const LOWER: u8 = Action::Lower as u8;
+const NONE: u8 = Action::None as u8;
+const OPEN_SHOTGUN2: u8 = Action::OpenShotgun2 as u8;
+const PAIN_ATTACK: u8 = Action::PainAttack as u8;
+const POS_ATTACK: u8 = Action::PosAttack as u8;
+const PUNCH: u8 = Action::Punch as u8;
+const RAISE: u8 = Action::Raise as u8;
+const REFIRE: u8 = Action::Refire as u8;
+const SARG_ATTACK: u8 = Action::SargAttack as u8;
+const SAW: u8 = Action::Saw as u8;
+const SCREAM: u8 = Action::Scream as u8;
+const SKEL_MISSILE: u8 = Action::SkelMissile as u8;
+const SKULL_ATTACK: u8 = Action::SkullAttack as u8;
+const SPOS_ATTACK: u8 = Action::SposAttack as u8;
+const TROO_ATTACK: u8 = Action::TrooAttack as u8;
+const VILE_ATTACK: u8 = Action::VileAttack as u8;
+const VILE_CHASE: u8 = Action::VileChase as u8;
+const VILE_START: u8 = Action::VileStart as u8;
+const VILE_TARGET: u8 = Action::VileTarget as u8;
+const WEAPON_READY: u8 = Action::WeaponReady as u8;
+
 use crate::mobj::{MobjStateEntry, StateNum};
 
 /// Fullbright bit for frame field.
@@ -1112,7 +1141,7 @@ mod tests {
         let e = &STATES[ids::S_NULL as usize];
         assert_eq!(e.tics, -1);
         assert_eq!(e.next_state, StateNum(ids::S_NULL));
-        assert_eq!(e.action, actions::ACTION_NONE);
+        assert_eq!(e.action, actions::Action::None as u8);
         assert_eq!(e.sprite, SPR_NONE);
     }
 
@@ -1121,14 +1150,14 @@ mod tests {
         let e = &STATES[ids::S_POSS_STND as usize];
         assert_eq!(e.tics, 10);
         assert_eq!(e.next_state, StateNum(ids::S_POSS_STND2));
-        assert_eq!(e.action, actions::ACTION_LOOK);
+        assert_eq!(e.action, actions::Action::Look as u8);
         assert_eq!(e.sprite, SPR_POSS);
         assert_eq!(e.frame, 0);
 
         let e2 = &STATES[ids::S_POSS_STND2 as usize];
         assert_eq!(e2.tics, 10);
         assert_eq!(e2.next_state, StateNum(ids::S_POSS_STND));
-        assert_eq!(e2.action, actions::ACTION_LOOK);
+        assert_eq!(e2.action, actions::Action::Look as u8);
         assert_eq!(e2.sprite, SPR_POSS);
         assert_eq!(e2.frame, 1);
     }
@@ -1143,10 +1172,10 @@ mod tests {
         assert_eq!(run2.next_state, StateNum(ids::S_POSS_RUN3));
         assert_eq!(run3.next_state, StateNum(ids::S_POSS_RUN4));
         assert_eq!(run4.next_state, StateNum(ids::S_POSS_RUN1));
-        assert_eq!(run1.action, actions::ACTION_CHASE);
-        assert_eq!(run2.action, actions::ACTION_CHASE);
-        assert_eq!(run3.action, actions::ACTION_CHASE);
-        assert_eq!(run4.action, actions::ACTION_CHASE);
+        assert_eq!(run1.action, actions::Action::Chase as u8);
+        assert_eq!(run2.action, actions::Action::Chase as u8);
+        assert_eq!(run3.action, actions::Action::Chase as u8);
+        assert_eq!(run4.action, actions::Action::Chase as u8);
     }
 
     #[test]
@@ -1210,7 +1239,7 @@ mod tests {
     fn attack_states_return_to_run() {
         let atk3 = &STATES[ids::S_POSS_ATK3 as usize];
         assert_eq!(atk3.next_state, StateNum(ids::S_POSS_RUN1));
-        assert_eq!(atk3.action, actions::ACTION_NONE);
+        assert_eq!(atk3.action, actions::Action::None as u8);
 
         let spos_atk3 = &STATES[ids::S_SPOS_ATK3 as usize];
         assert_eq!(spos_atk3.next_state, StateNum(ids::S_SPOS_RUN1));
@@ -1226,19 +1255,19 @@ mod tests {
     fn attack_atk2_fires_correct_action() {
         assert_eq!(
             STATES[ids::S_POSS_ATK2 as usize].action,
-            actions::ACTION_POS_ATTACK
+            actions::Action::PosAttack as u8
         );
         assert_eq!(
             STATES[ids::S_SPOS_ATK2 as usize].action,
-            actions::ACTION_SPOS_ATTACK
+            actions::Action::SposAttack as u8
         );
         assert_eq!(
             STATES[ids::S_TROO_ATK2 as usize].action,
-            actions::ACTION_TROO_ATTACK
+            actions::Action::TrooAttack as u8
         );
         assert_eq!(
             STATES[ids::S_SARG_ATK2 as usize].action,
-            actions::ACTION_SARG_ATTACK
+            actions::Action::SargAttack as u8
         );
     }
 
@@ -1660,23 +1689,23 @@ mod tests {
     fn weapon_ready_and_transition_states_use_psprite_actions() {
         assert_eq!(
             STATES[ids::S_PISTOL_UP as usize].action,
-            actions::ACTION_RAISE
+            actions::Action::Raise as u8
         );
         assert_eq!(
             STATES[ids::S_PISTOL_DOWN as usize].action,
-            actions::ACTION_LOWER
+            actions::Action::Lower as u8
         );
         assert_eq!(
             STATES[ids::S_PISTOL_READY as usize].action,
-            actions::ACTION_WEAPON_READY
+            actions::Action::WeaponReady as u8
         );
         assert_eq!(
             STATES[ids::S_SAW_READY1 as usize].action,
-            actions::ACTION_WEAPON_READY
+            actions::Action::WeaponReady as u8
         );
         assert_eq!(
             STATES[ids::S_SAW_READY2 as usize].action,
-            actions::ACTION_WEAPON_READY
+            actions::Action::WeaponReady as u8
         );
     }
 
@@ -1684,75 +1713,75 @@ mod tests {
     fn key_weapon_attack_states_fire_psprite_actions() {
         assert_eq!(
             STATES[ids::S_CHAIN2 as usize].action,
-            actions::ACTION_FIRE_CGUN
+            actions::Action::FireCgun as u8
         );
         assert_eq!(
             STATES[ids::S_CHAIN3 as usize].action,
-            actions::ACTION_REFIRE
+            actions::Action::Refire as u8
         );
         assert_eq!(
             STATES[ids::S_MISSILE1 as usize].action,
-            actions::ACTION_GUN_FLASH
+            actions::Action::GunFlash as u8
         );
         assert_eq!(
             STATES[ids::S_PISTOL_FLASH1 as usize].action,
-            actions::ACTION_LIGHT1
+            actions::Action::Light1 as u8
         );
         assert_eq!(
             STATES[ids::S_SGUN_FLASH2 as usize].action,
-            actions::ACTION_LIGHT2
+            actions::Action::Light2 as u8
         );
         assert_eq!(
             STATES[ids::S_PLASMA_FLASH1 as usize].action,
-            actions::ACTION_LIGHT1
+            actions::Action::Light1 as u8
         );
         assert_eq!(
             STATES[ids::S_LIGHTDONE as usize].action,
-            actions::ACTION_LIGHT0
+            actions::Action::Light0 as u8
         );
         assert_eq!(
             STATES[ids::S_MISSILE2 as usize].action,
-            actions::ACTION_FIRE_MISSILE
+            actions::Action::FireMissile as u8
         );
         assert_eq!(
             STATES[ids::S_PLASMA1 as usize].action,
-            actions::ACTION_FIRE_PLASMA
+            actions::Action::FirePlasma as u8
         );
         assert_eq!(
             STATES[ids::S_PLASMA3 as usize].action,
-            actions::ACTION_FIRE_PLASMA
+            actions::Action::FirePlasma as u8
         );
         assert_eq!(
             STATES[ids::S_PLASMA5 as usize].action,
-            actions::ACTION_REFIRE
+            actions::Action::Refire as u8
         );
         assert_eq!(
             STATES[ids::S_BFG1 as usize].action,
-            actions::ACTION_BFG_SOUND
+            actions::Action::BfgSound as u8
         );
         assert_eq!(
             STATES[ids::S_BFG2 as usize].action,
-            actions::ACTION_FIRE_BFG
+            actions::Action::FireBfg as u8
         );
         assert_eq!(
             STATES[ids::S_DSGUN4 as usize].action,
-            actions::ACTION_CHECK_RELOAD
+            actions::Action::CheckReload as u8
         );
         assert_eq!(
             STATES[ids::S_DSGUN5 as usize].action,
-            actions::ACTION_OPEN_SHOTGUN2
+            actions::Action::OpenShotgun2 as u8
         );
         assert_eq!(
             STATES[ids::S_DSGUN6 as usize].action,
-            actions::ACTION_LOAD_SHOTGUN2
+            actions::Action::LoadShotgun2 as u8
         );
         assert_eq!(
             STATES[ids::S_DSGUN7 as usize].action,
-            actions::ACTION_CLOSE_SHOTGUN2
+            actions::Action::CloseShotgun2 as u8
         );
         assert_eq!(
             STATES[ids::S_DSGUN8 as usize].action,
-            actions::ACTION_REFIRE
+            actions::Action::Refire as u8
         );
     }
 
@@ -1790,10 +1819,10 @@ mod tests {
         );
         assert_eq!(
             STATES[ids::S_PUNCH5 as usize].action,
-            actions::ACTION_REFIRE
+            actions::Action::Refire as u8
         );
-        assert_eq!(STATES[ids::S_SGUN4 as usize].action, actions::ACTION_REFIRE);
-        assert_eq!(STATES[ids::S_SAW3 as usize].action, actions::ACTION_REFIRE);
+        assert_eq!(STATES[ids::S_SGUN4 as usize].action, actions::Action::Refire as u8);
+        assert_eq!(STATES[ids::S_SAW3 as usize].action, actions::Action::Refire as u8);
     }
 
     // -----------------------------------------------------------------------
@@ -1884,7 +1913,7 @@ mod tests {
     fn chaingunner_attack_uses_cpos_action() {
         assert_eq!(
             STATES[ids::S_CPOS_ATK2 as usize].action,
-            actions::ACTION_CPOS_ATTACK
+            actions::Action::CposAttack as u8
         );
     }
 
@@ -1892,7 +1921,7 @@ mod tests {
     fn revenant_attack_uses_skel_missile() {
         assert_eq!(
             STATES[ids::S_SKEL_ATK2 as usize].action,
-            actions::ACTION_SKEL_MISSILE
+            actions::Action::SkelMissile as u8
         );
     }
 
@@ -1900,7 +1929,7 @@ mod tests {
     fn mancubus_attack_uses_fat_attack() {
         assert_eq!(
             STATES[ids::S_FATT_ATK2 as usize].action,
-            actions::ACTION_FAT_ATTACK1
+            actions::Action::FatAttack1 as u8
         );
     }
 
@@ -1908,7 +1937,7 @@ mod tests {
     fn arachnotron_attack_uses_bspi_attack() {
         assert_eq!(
             STATES[ids::S_BSPI_ATK2 as usize].action,
-            actions::ACTION_BSPI_ATTACK
+            actions::Action::BspiAttack as u8
         );
     }
 
@@ -1916,7 +1945,7 @@ mod tests {
     fn pain_elemental_attack_uses_pain_attack() {
         assert_eq!(
             STATES[ids::S_PAIN_ATK2 as usize].action,
-            actions::ACTION_PAIN_ATTACK
+            actions::Action::PainAttack as u8
         );
     }
 
@@ -1924,7 +1953,7 @@ mod tests {
     fn lost_soul_attack_uses_skull_attack() {
         assert_eq!(
             STATES[ids::S_SKULL_ATK2 as usize].action,
-            actions::ACTION_SKULL_ATTACK
+            actions::Action::SkullAttack as u8
         );
     }
 

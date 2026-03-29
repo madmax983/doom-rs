@@ -124,7 +124,7 @@ pub fn p_set_mobj_state(
     };
 
     // Fire action on state entry (needs &mut self — all borrows released above).
-    if action != crate::actions::ACTION_NONE {
+    if action != crate::actions::Action::None as u8 {
         crate::actions::dispatch_action(gs, handle, action, level);
     }
 

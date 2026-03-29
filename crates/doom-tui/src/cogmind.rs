@@ -531,7 +531,7 @@ mod tests {
         let mut buf = Buffer::empty(area);
         CogmindHudWidget::new(&hud).render(area, &mut buf);
         // Should have written something (not all spaces).
-        let has_content = (0..80u16).any(|x| buf.cell((x, 0)).map_or(false, |c| c.symbol() != " "));
+        let has_content = (0..80u16).any(|x| buf.cell((x, 0)).is_some_and(|c| c.symbol() != " "));
         assert!(has_content, "HUD widget should render non-blank content");
     }
 }
