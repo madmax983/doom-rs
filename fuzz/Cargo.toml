@@ -70,3 +70,12 @@ path = "fuzz_targets/fuzz_target_6.rs"
 test = false
 doc = false
 bench = false
+[[bin]]
+name = "fuzz_target_10"
+path = "fuzz_targets/fuzz_target_10.rs"
+test = false
+doc = false
+bench = false
+
+[dependencies.doom-renderer]
+path = "../crates/doom-renderer"

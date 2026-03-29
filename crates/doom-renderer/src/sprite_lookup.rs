@@ -155,7 +155,7 @@ pub fn compute_rotation(thing_angle: u32, viewer_angle: u32) -> u8 {
 /// assert_eq!(sprite_lump_name_str("TROO", 1, 3), "TROOB3");
 /// ```
 pub fn sprite_lump_name_str(sprite_name: &str, frame: u8, rotation: u8) -> String {
-    let frame_char = (b'A' + frame) as char;
+    let frame_char = char::from_u32(u32::from(b'A') + u32::from(frame)).unwrap_or('?');
     format!("{}{}{}", sprite_name, frame_char, rotation)
 }
 
@@ -729,6 +729,13 @@ mod tests {
             sprite_names::SPR_NONE,
             "S_NULL should have SPR_NONE"
         );
+    }
+
+    #[test]
+    fn sprite_lump_name_str_does_not_panic_on_large_frame() {
+        // Triggered by Havoc: passing a frame >= 191 would overflow b'A' + frame.
+        let name = sprite_lump_name_str("TROO", 200, 0);
+        assert!(!name.is_empty(), "Name should not be empty");
     }
 
     // ======================================================================
