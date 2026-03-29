@@ -1022,6 +1022,19 @@ fn bam_from_xy(dx: i32, dy: i32) -> Bam {
     Bam(bam_val as u32)
 }
 
+/// Helper to extract the active target for an actor.
+/// Returns the target handle if the actor has a valid, non-dead target.
+pub fn get_alive_target(gs: &GameState, handle: MobjHandle) -> Option<MobjHandle> {
+    let target = match gs.mobjslab.get(handle) {
+        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
+        _ => return None,
+    };
+    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+        return None;
+    }
+    Some(target)
+}
+
 // ---------------------------------------------------------------------------
 // A_Fall
 // ---------------------------------------------------------------------------
@@ -1062,13 +1075,9 @@ fn a_scream(gs: &mut GameState, handle: MobjHandle) {
 /// Fires a single hitscan bolt at the current target.
 fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     // Check target exists and is alive.
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(_target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     // Face the target, then read the resulting angle.
     a_face_target(gs, handle);
@@ -1110,13 +1119,9 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 ///
 /// Fires 3 hitscan pellets with a small angular spread centered on the target.
 fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(_target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     let angle = match gs.mobjslab.get(handle) {
@@ -1165,13 +1170,13 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
 /// Uses melee if the target is within `MELEERANGE`, otherwise spawns an
 /// `ImpFireball` projectile aimed at the target.
 fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>) {
-    let (target, mo_x, mo_y) = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => (mo.target, mo.x, mo.y),
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
+    let (mo_x, mo_y) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x, mo.y),
+        None => return,
+    };
 
     a_face_target(gs, handle);
 
@@ -1212,13 +1217,13 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
 ///
 /// Deals melee damage only if the target is within `MELEERANGE`.
 fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
-    let (target, mo_x, mo_y) = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => (mo.target, mo.x, mo.y),
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
+    let (mo_x, mo_y) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.x, mo.y),
+        None => return,
+    };
 
     let (tx, ty) = match gs.mobjslab.get(target) {
         Some(t) => (t.x, t.y),
@@ -1254,13 +1259,9 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Faces the target, then spawns a `CacoFireball` projectile.
 fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::CacoFireball);
@@ -1288,13 +1289,9 @@ fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Faces the target, then spawns a `BaronBall` projectile.
 fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     let bruis_kind = gs
@@ -1325,13 +1322,9 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
 /// Fires a single hitscan bolt at the current target with angle spread.
 /// Same behavior as the Zombieman's `A_PosAttack`.
 fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(_target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     let angle = match gs.mobjslab.get(handle) {
@@ -1376,13 +1369,9 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
 ///
 /// Faces the target, then spawns a `Rocket` projectile aimed at the target.
 fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::Rocket);
@@ -1410,13 +1399,9 @@ fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Faces the target, then spawns a `Tracer` (homing) projectile.
 fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::Tracer);
@@ -1486,13 +1471,9 @@ fn fat_shoot(gs: &mut GameState, handle: MobjHandle, angle_offset: u32) {
 /// Mancubus spread fire #1: face target, then fire two `FatShot` projectiles
 /// at +FATSPREAD and 0.
 fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(_target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     fat_shoot(gs, handle, FATSPREAD);
@@ -1518,13 +1499,9 @@ fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
 /// Mancubus spread fire #2: face target, then fire two `FatShot` projectiles
 /// at −FATSPREAD and 0.
 fn a_fat_attack2(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(_target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     fat_shoot(gs, handle, 0u32.wrapping_sub(FATSPREAD));
@@ -1536,13 +1513,9 @@ fn a_fat_attack2(gs: &mut GameState, handle: MobjHandle) {
 /// Mancubus spread fire #3: face target, then fire two `FatShot` projectiles
 /// at +FATSPREAD/2 and −FATSPREAD/2.
 fn a_fat_attack3(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(_target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     fat_shoot(gs, handle, FATSPREAD / 2);
@@ -1560,18 +1533,9 @@ const SKULLSPEED: i32 = 20;
 ///
 /// Sets `MF_SKULLFLY` and computes momentum toward the target at `SKULLSPEED`.
 fn a_skull_attack(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    let target_alive = gs
-        .mobjslab
-        .get(target)
-        .map(|t| !t.is_dead())
-        .unwrap_or(false);
-    if !target_alive {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     // Set the skull-fly flag so the Lost Soul damages on contact.
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
@@ -1611,13 +1575,9 @@ fn a_skull_attack(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Faces the target, then spawns an `ArachPlaz` projectile.
 fn a_bspi_attack(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::ArachPlaz);
@@ -1632,13 +1592,9 @@ fn a_bspi_attack(gs: &mut GameState, handle: MobjHandle) {
 /// Fires a single hitscan bolt with angle spread, identical to the
 /// Chaingunner attack pattern.
 fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(_target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
     let angle = match gs.mobjslab.get(handle) {
@@ -1674,18 +1630,9 @@ const LOST_SOUL_MAX: usize = 21;
 /// Faces the target, then spawns a `LostSoul` if the current count of Lost
 /// Souls in the level is below `LOST_SOUL_MAX` (21).
 fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs
-        .mobjslab
-        .get(target)
-        .map(|t| t.is_dead())
-        .unwrap_or(false)
-    {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
 
@@ -1847,13 +1794,9 @@ fn a_vile_start(gs: &mut GameState, handle: MobjHandle) {
 /// Spawns a VileFire actor at the target's position, sets the fire's
 /// `target` to the Vile (owner) and `tracer` to the target (tracking).
 fn a_vile_target(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
     a_face_target(gs, handle);
 
     let (tx, ty, tz) = match gs.mobjslab.get(target) {
@@ -1880,13 +1823,9 @@ fn a_vile_target(gs: &mut GameState, handle: MobjHandle) {
 /// Deals 20 direct damage + 70 blast damage to the target and applies
 /// an upward thrust of 15 map units (momz).
 fn a_vile_attack(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
     a_face_target(gs, handle);
 
     // Direct damage: 20 hit points.
