@@ -452,10 +452,30 @@ mod tests {
     #[test]
     fn hazard_glow_adjacent_to_nukage() {
         let mut tiles = vec![Tile::default(); 4]; // 2x2
-        tiles[0] = Tile { kind: TileKind::Floor, sector_idx: Some(0), light: 128, glow: None };
-        tiles[1] = Tile { kind: TileKind::Nukage, sector_idx: Some(1), light: 128, glow: None };
-        tiles[2] = Tile { kind: TileKind::Floor, sector_idx: Some(0), light: 128, glow: None };
-        tiles[3] = Tile { kind: TileKind::Floor, sector_idx: Some(0), light: 128, glow: None };
+        tiles[0] = Tile {
+            kind: TileKind::Floor,
+            sector_idx: Some(0),
+            light: 128,
+            glow: None,
+        };
+        tiles[1] = Tile {
+            kind: TileKind::Nukage,
+            sector_idx: Some(1),
+            light: 128,
+            glow: None,
+        };
+        tiles[2] = Tile {
+            kind: TileKind::Floor,
+            sector_idx: Some(0),
+            light: 128,
+            glow: None,
+        };
+        tiles[3] = Tile {
+            kind: TileKind::Floor,
+            sector_idx: Some(0),
+            light: 128,
+            glow: None,
+        };
         compute_hazard_glow(&mut tiles, 2, 2);
         assert!(tiles[0].glow.is_some());
         assert_eq!(tiles[0].glow.unwrap(), NUKAGE_GLOW);
@@ -465,8 +485,18 @@ mod tests {
     #[test]
     fn hazard_glow_not_on_walls() {
         let mut tiles = vec![Tile::default(); 4];
-        tiles[0] = Tile { kind: TileKind::Wall, sector_idx: Some(0), light: 128, glow: None };
-        tiles[1] = Tile { kind: TileKind::Lava, sector_idx: Some(1), light: 128, glow: None };
+        tiles[0] = Tile {
+            kind: TileKind::Wall,
+            sector_idx: Some(0),
+            light: 128,
+            glow: None,
+        };
+        tiles[1] = Tile {
+            kind: TileKind::Lava,
+            sector_idx: Some(1),
+            light: 128,
+            glow: None,
+        };
         tiles[2] = Tile::default();
         tiles[3] = Tile::default();
         compute_hazard_glow(&mut tiles, 2, 2);
@@ -476,8 +506,18 @@ mod tests {
     #[test]
     fn hazard_glow_lava() {
         let mut tiles = vec![Tile::default(); 4];
-        tiles[0] = Tile { kind: TileKind::Floor, sector_idx: Some(0), light: 128, glow: None };
-        tiles[1] = Tile { kind: TileKind::Lava, sector_idx: Some(1), light: 128, glow: None };
+        tiles[0] = Tile {
+            kind: TileKind::Floor,
+            sector_idx: Some(0),
+            light: 128,
+            glow: None,
+        };
+        tiles[1] = Tile {
+            kind: TileKind::Lava,
+            sector_idx: Some(1),
+            light: 128,
+            glow: None,
+        };
         tiles[2] = Tile::default();
         tiles[3] = Tile::default();
         compute_hazard_glow(&mut tiles, 2, 2);

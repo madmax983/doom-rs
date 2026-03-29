@@ -10,7 +10,7 @@ use doom_tui::{CogmindCell, CogmindFrame};
 
 use super::effects::EffectLayer;
 use super::glyphs::{TileKind, apply_light, dim_remembered, entity_glyph, tile_glyph, wall_glyph};
-use super::lighting::{effective_light, entity_light_boost, blend_hazard_glow};
+use super::lighting::{blend_hazard_glow, effective_light, entity_light_boost};
 use super::sight_line::sight_line_cells;
 use super::tile_grid::{CELL_SIZE, TileGrid};
 use super::visibility::{SectorVisibility, VisibilityMap};
@@ -188,12 +188,16 @@ impl CogmindState {
 
                 let cell = match vis.get(sector_idx) {
                     SectorVisibility::Visible(light) => {
-                        let sector_special = level.sectors.get(sector_idx)
-                            .map_or(0, |s| s.special);
+                        let sector_special = level.sectors.get(sector_idx).map_or(0, |s| s.special);
                         let eff_light = effective_light(
-                            light, sector_special, sector_idx, tic,
-                            player_tx, player_ty,
-                            i32::from(tx), i32::from(ty),
+                            light,
+                            sector_special,
+                            sector_idx,
+                            tic,
+                            player_tx,
+                            player_ty,
+                            i32::from(tx),
+                            i32::from(ty),
                         );
                         let mut fg = apply_light(tg.fg, eff_light);
                         let mut bg = apply_light(tg.bg, eff_light);
@@ -292,11 +296,15 @@ impl CogmindState {
             }
             let screen_y = (term_h.saturating_sub(1)).saturating_sub(ety as u16);
             let fg = effect.current_fg();
-            frame.set(etx as u16, screen_y, CogmindCell {
-                glyph: effect.glyph,
-                fg,
-                bg: (0, 0, 0),
-            });
+            frame.set(
+                etx as u16,
+                screen_y,
+                CogmindCell {
+                    glyph: effect.glyph,
+                    fg,
+                    bg: (0, 0, 0),
+                },
+            );
         }
 
         // --- Phase 3: player sight line ---
@@ -323,11 +331,15 @@ impl CogmindState {
             let sx = player_screen_x + sc.dx;
             let sy = i32::from(player_screen_y) + sc.dy;
             if sx >= 0 && sy >= 0 && sx < tw && sy < i32::from(term_h) {
-                frame.set(sx as u16, sy as u16, CogmindCell {
-                    glyph: sc.glyph,
-                    fg: sc.fg,
-                    bg: (0, 0, 0),
-                });
+                frame.set(
+                    sx as u16,
+                    sy as u16,
+                    CogmindCell {
+                        glyph: sc.glyph,
+                        fg: sc.fg,
+                        bg: (0, 0, 0),
+                    },
+                );
             }
         }
 

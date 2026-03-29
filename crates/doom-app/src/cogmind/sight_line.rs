@@ -35,14 +35,14 @@ const CYAN_DIM: Rgb = (0, 60, 80);
 
 /// `(dx, dy, glyph)` per octant in Doom space (Y+ = north).
 const OCTANTS: [(i32, i32, char); 8] = [
-    (1, 0, '\u{25B8}'),  // 0: East  ▸
-    (1, 1, '\u{2571}'),  // 1: NE    ╱
-    (0, 1, '\u{25B4}'),  // 2: North ▴
-    (-1, 1, '\u{2572}'), // 3: NW    ╲
-    (-1, 0, '\u{25C2}'), // 4: West  ◂
+    (1, 0, '\u{25B8}'),   // 0: East  ▸
+    (1, 1, '\u{2571}'),   // 1: NE    ╱
+    (0, 1, '\u{25B4}'),   // 2: North ▴
+    (-1, 1, '\u{2572}'),  // 3: NW    ╲
+    (-1, 0, '\u{25C2}'),  // 4: West  ◂
     (-1, -1, '\u{2571}'), // 5: SW   ╱
-    (0, -1, '\u{25BE}'), // 6: South ▾
-    (1, -1, '\u{2572}'), // 7: SE    ╲
+    (0, -1, '\u{25BE}'),  // 6: South ▾
+    (1, -1, '\u{2572}'),  // 7: SE    ╲
 ];
 
 // ---------------------------------------------------------------------------
@@ -70,10 +70,7 @@ pub fn angle_to_octant(angle: Bam) -> usize {
 /// row 0 at top, positive = down).
 ///
 /// The ray stops early if `is_wall` returns `true` for the next step.
-pub fn sight_line_cells(
-    angle: Bam,
-    is_wall: impl Fn(i32, i32) -> bool,
-) -> Vec<SightCell> {
+pub fn sight_line_cells(angle: Bam, is_wall: impl Fn(i32, i32) -> bool) -> Vec<SightCell> {
     let oct = angle_to_octant(angle);
     let (doom_dx, doom_dy, arrow) = OCTANTS[oct];
 
