@@ -5,3 +5,7 @@
 **[Hide internal renderer modules]**
 **Tangle:** The `doom-renderer` crate leaked internal constant modules `automap_colors` and `menu_colors` as `pub mod`s in `automap.rs` and `menu_render.rs` and re-exported them in `lib.rs` even though they are only used internally within the renderer for the GUI.
 **Blueprint:** Altered the visibility of these modules to `pub(crate)` and removed them from the crate's `pub use` interface. Added `#[allow(dead_code)]` to bypass rustc warning of `pub` items missing callers since they are now module-private yet some constants are unimplemented but part of a well-defined palette standard. This ensures strict internal encapsulation.
+
+**[Duplicate Save Game Implementation]**
+**Tangle:** The codebase had two separate implementations for saving and loading the game state: one in `doom-game` providing manual little-endian binary serialization (`savegame.rs`) and another redundant implementation in `doom-app` (`savegame.rs`) which additionally dragged in `bincode` as a dependency for the whole workspace, violating domain boundary guidelines by handling game logic serialization in the app layer.
+**Blueprint:** Removed `doom-app/src/savegame.rs` and the `bincode` dependency from `doom-app/Cargo.toml`. Refactored `doom-app/src/main.rs` to delegate completely to the robust serialization implementation in `doom_game::save_game` and `doom_game::load_game`. This eliminates redundant code, removes unnecessary dependencies, and enforces the single source of truth for game serialization inside the `doom-game` domain.

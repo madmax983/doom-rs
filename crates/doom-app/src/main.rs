@@ -8,8 +8,6 @@ mod cogmind;
 mod console;
 mod demo_mode;
 mod net_mode;
-mod savegame;
-
 use anyhow::{Context, Result};
 use clap::Parser;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
@@ -892,11 +890,10 @@ impl DoomApp for DoomGame {
                         }
                         doom_game::menu::MenuResult::LoadGame(slot) => {
                             let path = format!("doom_save_{slot}.bin");
-                            match savegame::load_game(std::path::Path::new(&path)) {
-                                Ok((_header, payload)) => {
-                                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                                        self.console.print(format!("Load failed: {e}"));
-                                    } else {
+                            match std::fs::read(std::path::Path::new(&path)) {
+                                Ok(data) => match doom_game::load_game(&data) {
+                                    Ok(save_game) => {
+                                        self.gs = save_game.state;
                                         self.player_view_height = if self.gs.player.is_dead() {
                                             DEAD_PLAYER_VIEW_HEIGHT
                                         } else {
@@ -906,15 +903,20 @@ impl DoomApp for DoomGame {
                                         self.start_level_music();
                                         self.menu.close();
                                     }
-                                }
+                                    Err(e) => self.console.print(format!("Load failed: {e}")),
+                                },
                                 Err(e) => self.console.print(format!("Load failed: {e}")),
                             }
                         }
                         doom_game::menu::MenuResult::SaveGame(slot) => {
                             let path = format!("doom_save_{slot}.bin");
-                            if let Err(e) =
-                                savegame::save_game(std::path::Path::new(&path), &self.gs, slot)
-                            {
+                            let mut level_name = [0u8; 8];
+                            let bytes = self.level.name.as_bytes();
+                            let len = bytes.len().min(8);
+                            level_name[..len].copy_from_slice(&bytes[..len]);
+                            let save_data =
+                                doom_game::save_game(&self.gs, &level_name, 2, "Save Game");
+                            if let Err(e) = std::fs::write(std::path::Path::new(&path), save_data) {
                                 self.console.print(format!("Save failed: {e}"));
                             } else {
                                 self.console.print(format!("Saved to slot {slot}."));
@@ -988,7 +990,12 @@ impl DoomApp for DoomGame {
 
         // Quick save (F5).
         if input.f5_save {
-            if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0) {
+            let mut level_name = [0u8; 8];
+            let bytes = self.level.name.as_bytes();
+            let len = bytes.len().min(8);
+            level_name[..len].copy_from_slice(&bytes[..len]);
+            let save_data = doom_game::save_game(&self.gs, &level_name, 2, "Quick Save");
+            if let Err(e) = std::fs::write(&self.save_path, save_data) {
                 self.console.print(format!("Save failed: {e}"));
             } else {
                 self.console.print("Game saved.".to_string());
@@ -997,16 +1004,18 @@ impl DoomApp for DoomGame {
 
         // Quick load (F9).
         if input.f9_load {
-            match savegame::load_game(&self.save_path) {
-                Ok((_header, payload)) => {
-                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                        self.console.print(format!("Load failed: {e}"));
-                    } else {
+            match std::fs::read(&self.save_path) {
+                Ok(data) => match doom_game::load_game(&data) {
+                    Ok(save_game) => {
+                        self.gs = save_game.state;
                         self.reset_weapon_anim();
                         self.console.print("Game loaded.".to_string());
                         self.start_level_music();
                     }
-                }
+                    Err(e) => {
+                        self.console.print(format!("Load failed: {e}"));
+                    }
+                },
                 Err(e) => {
                     self.console.print(format!("Load failed: {e}"));
                 }
