@@ -34,21 +34,42 @@ pub struct MusHeader {
 #[derive(Debug, Clone, PartialEq)]
 pub enum MusEvent {
     /// Note-off for `note` on `channel`.
-    ReleaseNote { channel: u8, note: u8 },
+    ReleaseNote {
+        /// The MIDI channel (0-15).
+        channel: u8,
+        /// The MIDI note number (0-127).
+        note: u8,
+    },
     /// Note-on for `note` on `channel`, with optional velocity override.
     PlayNote {
+        /// The MIDI channel (0-15).
         channel: u8,
+        /// The MIDI note number (0-127).
         note: u8,
+        /// Optional note velocity (0-127). If `None`, use the channel's default volume.
         volume: Option<u8>,
     },
     /// Pitch-wheel change on `channel`.
-    PitchWheel { channel: u8, value: u8 },
+    PitchWheel {
+        /// The MIDI channel (0-15).
+        channel: u8,
+        /// The pitch wheel value.
+        value: u8,
+    },
     /// System-level event on `channel`.
-    SystemEvent { channel: u8, controller: u8 },
+    SystemEvent {
+        /// The MIDI channel (0-15).
+        channel: u8,
+        /// The system controller number.
+        controller: u8,
+    },
     /// Controller change on `channel`.
     Controller {
+        /// The MIDI channel (0-15).
         channel: u8,
+        /// The controller number (0-127).
         controller: u8,
+        /// The controller value (0-127).
         value: u8,
     },
     /// Measure (bar) boundary marker — no payload.

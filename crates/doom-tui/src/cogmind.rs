@@ -161,8 +161,11 @@ impl Widget for CogmindWidget<'_> {
 /// `doom-tui` never needs to depend on `doom-game`.
 #[derive(Debug, Clone, Default)]
 pub struct CogmindHud {
+    /// The player's current health.
     pub health: i32,
+    /// The player's maximum health limit.
     pub max_health: i32,
+    /// The player's current armor points.
     pub armor: i32,
     /// Current weapon's ammo count, or `None` for melee weapons.
     pub ammo: Option<u32>,
@@ -172,7 +175,9 @@ pub struct CogmindHud {
     pub weapon_name: &'static str,
     /// Which of the 6 key slots the player holds (B/Y/R cards + skulls).
     pub keys: [bool; 6],
+    /// The number of enemies killed in the current level.
     pub kill_count: u32,
+    /// The total number of monsters present in the level at map start.
     pub total_monsters: u32,
     /// Level name (e.g. "E1M3" or "MAP07").
     pub level_name: String,
@@ -268,6 +273,10 @@ pub struct CogmindHudWidget<'a> {
 }
 
 impl<'a> CogmindHudWidget<'a> {
+    /// Create a new widget that will render the given `hud` state.
+    ///
+    /// The widget binds to the `hud` reference and generates a styled
+    /// line when it is rendered.
     #[must_use]
     pub fn new(hud: &'a CogmindHud) -> Self {
         Self { hud }
