@@ -71,12 +71,7 @@ pub fn flicker_offset(sector_special: u16, sector_idx: usize, tic: u32) -> i16 {
 /// bonus. Each cell further away reduces the bonus by `LIGHT_PER_CELL`.
 /// Tiles beyond `PLAYER_LIGHT_RADIUS` get 0.
 #[must_use]
-pub fn player_radial_bonus(
-    player_tx: i32,
-    player_ty: i32,
-    tile_tx: i32,
-    tile_ty: i32,
-) -> i32 {
+pub fn player_radial_bonus(player_tx: i32, player_ty: i32, tile_tx: i32, tile_ty: i32) -> i32 {
     let dist = (player_tx - tile_tx).abs() + (player_ty - tile_ty).abs();
     if dist > PLAYER_LIGHT_RADIUS {
         return 0;
@@ -338,7 +333,10 @@ mod tests {
         // We test many tics: at least one should produce 0 if sector_light is low.
         let any_zero = (0..500).any(|tic| effective_light(5, 1, 42, tic, 100, 100, 0, 0) == 0);
         // With sector_light=5, flicker can go to -40, so 5 + (-40) = -35 → 0.
-        assert!(any_zero, "dark sector + flicker should clamp to 0 sometimes");
+        assert!(
+            any_zero,
+            "dark sector + flicker should clamp to 0 sometimes"
+        );
     }
 
     #[test]
