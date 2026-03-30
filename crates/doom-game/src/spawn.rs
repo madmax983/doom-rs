@@ -19,7 +19,8 @@ use crate::states::STATES;
 // ---------------------------------------------------------------------------
 
 /// Skill level for thing filtering.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum Skill {
     /// I'm Too Young To Die.
     Baby = 0,
@@ -31,6 +32,15 @@ pub enum Skill {
     Hard = 3,
     /// Nightmare!
     Nightmare = 4,
+}
+
+impl Skill {
+    /// Convert an integer to a `Skill`.
+    ///
+    /// Returns `None` for any out-of-range value.
+    pub fn from_num(n: u8) -> Option<Self> {
+        Self::from_repr(n)
+    }
 }
 
 // ---------------------------------------------------------------------------
