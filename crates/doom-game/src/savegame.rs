@@ -313,83 +313,7 @@ fn read_mobj_kind(r: &mut ReadCursor<'_>) -> Result<MobjKind, SaveError> {
 
 /// Convert a u16 discriminant back to `MobjKind`.
 fn mobj_kind_from_u16(v: u16) -> Option<MobjKind> {
-    match v {
-        0 => Some(MobjKind::Player),
-        1 => Some(MobjKind::Trooper),
-        2 => Some(MobjKind::Sergeant),
-        3 => Some(MobjKind::Imp),
-        4 => Some(MobjKind::Demon),
-        5 => Some(MobjKind::Spectre),
-        6 => Some(MobjKind::LostSoul),
-        7 => Some(MobjKind::Cacodemon),
-        8 => Some(MobjKind::BaronOfHell),
-        9 => Some(MobjKind::HellKnight),
-        10 => Some(MobjKind::Arachnotron),
-        11 => Some(MobjKind::PainElemental),
-        12 => Some(MobjKind::Revenant),
-        13 => Some(MobjKind::Mancubus),
-        14 => Some(MobjKind::ArchVile),
-        15 => Some(MobjKind::SpiderMastermind),
-        16 => Some(MobjKind::Cyberdemon),
-        17 => Some(MobjKind::WolfSS),
-        18 => Some(MobjKind::BulletPuff),
-        19 => Some(MobjKind::Blood),
-        20 => Some(MobjKind::SmokeTrail),
-        21 => Some(MobjKind::SpawnFire),
-        22 => Some(MobjKind::Rocket),
-        23 => Some(MobjKind::PlasmaBall),
-        24 => Some(MobjKind::BfgBall),
-        25 => Some(MobjKind::ArachPlaz),
-        26 => Some(MobjKind::Tracer),
-        27 => Some(MobjKind::BfgPickup),
-        28 => Some(MobjKind::Chaingun),
-        29 => Some(MobjKind::Chainsaw),
-        30 => Some(MobjKind::RocketLauncher),
-        31 => Some(MobjKind::PlasmaRifle),
-        32 => Some(MobjKind::Shotgun),
-        33 => Some(MobjKind::SuperShotgun),
-        34 => Some(MobjKind::Clip),
-        35 => Some(MobjKind::ClipBox),
-        36 => Some(MobjKind::RocketAmmo),
-        37 => Some(MobjKind::RocketBox),
-        38 => Some(MobjKind::Cell),
-        39 => Some(MobjKind::CellPack),
-        40 => Some(MobjKind::Shell),
-        41 => Some(MobjKind::ShellBox),
-        42 => Some(MobjKind::HealthBonus),
-        43 => Some(MobjKind::ArmorBonus),
-        44 => Some(MobjKind::GreenArmor),
-        45 => Some(MobjKind::BlueArmor),
-        46 => Some(MobjKind::Stimpack),
-        47 => Some(MobjKind::Medikit),
-        48 => Some(MobjKind::Megasphere),
-        49 => Some(MobjKind::Soulsphere),
-        50 => Some(MobjKind::BlueCard),
-        51 => Some(MobjKind::RedCard),
-        52 => Some(MobjKind::YellowCard),
-        53 => Some(MobjKind::BlueSkull),
-        54 => Some(MobjKind::RedSkull),
-        55 => Some(MobjKind::YellowSkull),
-        56 => Some(MobjKind::Berserk),
-        57 => Some(MobjKind::BlurSphere),
-        58 => Some(MobjKind::RadSuit),
-        59 => Some(MobjKind::Allmap),
-        60 => Some(MobjKind::Infrared),
-        61 => Some(MobjKind::Column),
-        62 => Some(MobjKind::TechLamp),
-        63 => Some(MobjKind::TechLamp2),
-        64 => Some(MobjKind::Barrel),
-        65 => Some(MobjKind::BossBrain),
-        66 => Some(MobjKind::CommanderKeen),
-        67 => Some(MobjKind::BfgExtra),
-        68 => Some(MobjKind::ImpFireball),
-        69 => Some(MobjKind::CacoFireball),
-        70 => Some(MobjKind::BaronBall),
-        71 => Some(MobjKind::FatShot),
-        72 => Some(MobjKind::InvulnerabilitySphere),
-        73 => Some(MobjKind::Backpack),
-        _ => None,
-    }
+    MobjKind::from_repr(v)
 }
 
 fn write_weapon_type(w: &mut WriteCursor, wt: WeaponType) {
@@ -694,27 +618,11 @@ fn read_light_special(r: &mut ReadCursor<'_>) -> Result<LightSpecial, SaveError>
 }
 
 fn write_ceiling_type(w: &mut WriteCursor, ct: CeilingType) {
-    let byte = match ct {
-        CeilingType::LowerToFloor => 0u8,
-        CeilingType::CrushAndRaise => 1u8,
-        CeilingType::LowerAndCrush => 2u8,
-        CeilingType::FastCrushAndRaise => 3u8,
-        CeilingType::SilentCrush => 4u8,
-        CeilingType::RaiseToHighest => 5u8,
-    };
-    w.write_u8(byte);
+    w.write_u8(ct as u8);
 }
 
 fn read_ceiling_type(r: &mut ReadCursor<'_>) -> Result<CeilingType, SaveError> {
-    match r.read_u8()? {
-        0 => Ok(CeilingType::LowerToFloor),
-        1 => Ok(CeilingType::CrushAndRaise),
-        2 => Ok(CeilingType::LowerAndCrush),
-        3 => Ok(CeilingType::FastCrushAndRaise),
-        4 => Ok(CeilingType::SilentCrush),
-        5 => Ok(CeilingType::RaiseToHighest),
-        _ => Err(SaveError::Truncated),
-    }
+    CeilingType::from_repr(r.read_u8()?).ok_or(SaveError::Truncated)
 }
 
 fn write_ceiling_mover(w: &mut WriteCursor, c: &CeilingMover) {
@@ -748,39 +656,11 @@ fn read_ceiling_mover(r: &mut ReadCursor<'_>) -> Result<CeilingMover, SaveError>
 }
 
 fn write_floor_type(w: &mut WriteCursor, ft: FloorType) {
-    let byte = match ft {
-        FloorType::LowerToLowest => 0u8,
-        FloorType::LowerToHighest => 1u8,
-        FloorType::LowerToNearest => 2u8,
-        FloorType::RaiseToHighest => 3u8,
-        FloorType::RaiseToNearest => 4u8,
-        FloorType::RaiseByTexture => 5u8,
-        FloorType::RaiseToCeiling => 6u8,
-        FloorType::LowerAndChange => 7u8,
-        FloorType::RaiseAndChange => 8u8,
-        FloorType::Raise24 => 9u8,
-        FloorType::Raise32 => 10u8,
-        FloorType::RaiseCrush => 11u8,
-    };
-    w.write_u8(byte);
+    w.write_u8(ft as u8);
 }
 
 fn read_floor_type(r: &mut ReadCursor<'_>) -> Result<FloorType, SaveError> {
-    match r.read_u8()? {
-        0 => Ok(FloorType::LowerToLowest),
-        1 => Ok(FloorType::LowerToHighest),
-        2 => Ok(FloorType::LowerToNearest),
-        3 => Ok(FloorType::RaiseToHighest),
-        4 => Ok(FloorType::RaiseToNearest),
-        5 => Ok(FloorType::RaiseByTexture),
-        6 => Ok(FloorType::RaiseToCeiling),
-        7 => Ok(FloorType::LowerAndChange),
-        8 => Ok(FloorType::RaiseAndChange),
-        9 => Ok(FloorType::Raise24),
-        10 => Ok(FloorType::Raise32),
-        11 => Ok(FloorType::RaiseCrush),
-        _ => Err(SaveError::Truncated),
-    }
+    FloorType::from_repr(r.read_u8()?).ok_or(SaveError::Truncated)
 }
 
 fn write_floor_mover(w: &mut WriteCursor, fm: &FloorMover) {
@@ -814,21 +694,11 @@ fn read_floor_mover(r: &mut ReadCursor<'_>) -> Result<FloorMover, SaveError> {
 }
 
 fn write_platform_status(w: &mut WriteCursor, status: PlatformStatus) {
-    let byte = match status {
-        PlatformStatus::Up => 0u8,
-        PlatformStatus::Down => 1u8,
-        PlatformStatus::Waiting => 2u8,
-    };
-    w.write_u8(byte);
+    w.write_u8(status as u8);
 }
 
 fn read_platform_status(r: &mut ReadCursor<'_>) -> Result<PlatformStatus, SaveError> {
-    match r.read_u8()? {
-        0 => Ok(PlatformStatus::Up),
-        1 => Ok(PlatformStatus::Down),
-        2 => Ok(PlatformStatus::Waiting),
-        _ => Err(SaveError::Truncated),
-    }
+    PlatformStatus::from_repr(r.read_u8()?).ok_or(SaveError::Truncated)
 }
 
 fn write_perpetual_platform(w: &mut WriteCursor, p: &PerpetualPlatform) {
@@ -856,23 +726,11 @@ fn read_perpetual_platform(r: &mut ReadCursor<'_>) -> Result<PerpetualPlatform, 
 }
 
 fn write_lift_status(w: &mut WriteCursor, status: LiftStatus) {
-    let byte = match status {
-        LiftStatus::Lowering => 0u8,
-        LiftStatus::Waiting => 1u8,
-        LiftStatus::Raising => 2u8,
-        LiftStatus::Done => 3u8,
-    };
-    w.write_u8(byte);
+    w.write_u8(status as u8);
 }
 
 fn read_lift_status(r: &mut ReadCursor<'_>) -> Result<LiftStatus, SaveError> {
-    match r.read_u8()? {
-        0 => Ok(LiftStatus::Lowering),
-        1 => Ok(LiftStatus::Waiting),
-        2 => Ok(LiftStatus::Raising),
-        3 => Ok(LiftStatus::Done),
-        _ => Err(SaveError::Truncated),
-    }
+    LiftStatus::from_repr(r.read_u8()?).ok_or(SaveError::Truncated)
 }
 
 fn write_lift_mover(w: &mut WriteCursor, lm: &LiftMover) {
@@ -1286,8 +1144,8 @@ mod tests {
     fn mobj_kind_roundtrip() {
         // Enumerate over all valid discriminants and ensure they parse properly.
         // And also make sure we test out of bounds.
-        for disc in 0..=73 {
-            let kind = mobj_kind_from_u16(disc).expect("all 0..=73 must map to a MobjKind");
+        for disc in 0..=75 {
+            let kind = mobj_kind_from_u16(disc).expect("all 0..=75 must map to a MobjKind");
             let mut w = WriteCursor::new(2);
             write_mobj_kind(&mut w, kind);
             let mut r = ReadCursor::new(&w.buf);
@@ -1295,8 +1153,8 @@ mod tests {
             assert_eq!(parsed, kind);
         }
 
-        // 74 is out of bounds
-        assert!(mobj_kind_from_u16(74).is_none());
+        // 76 is out of bounds
+        assert!(mobj_kind_from_u16(76).is_none());
         assert!(mobj_kind_from_u16(999).is_none());
         assert!(mobj_kind_from_u16(0xFFFF).is_none());
     }

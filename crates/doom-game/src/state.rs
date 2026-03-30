@@ -131,7 +131,8 @@ pub enum MoveDirection {
 }
 
 /// The type of ceiling motion behavior.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum CeilingType {
     /// Lower ceiling to floor height.
     LowerToFloor,
@@ -180,7 +181,8 @@ pub struct CeilingMover {
 }
 
 /// The type of floor motion behavior.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum FloorType {
     /// Lower floor to lowest adjacent floor.
     LowerToLowest,
@@ -246,7 +248,8 @@ pub struct FloorMover {
 // ---------------------------------------------------------------------------
 
 /// Current movement status of a perpetual platform.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum PlatformStatus {
     /// Platform is moving upward.
     Up,
@@ -286,7 +289,8 @@ pub struct PerpetualPlatform {
 // ---------------------------------------------------------------------------
 
 /// Current movement status of a lift.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum LiftStatus {
     /// Lift floor is lowering toward `low_height`.
     Lowering,

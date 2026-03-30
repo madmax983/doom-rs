@@ -45,6 +45,7 @@ impl MobjHandle {
 /// Values are stable (`repr u16`) for wire serialization and demo compatibility.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 #[repr(u16)]
+#[derive(strum_macros::FromRepr)]
 pub enum MobjKind {
     // Players
     Player = 0,
