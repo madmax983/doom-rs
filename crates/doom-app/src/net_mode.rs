@@ -28,35 +28,14 @@ pub(crate) const DEFAULT_PORT: u16 = 5029;
 ///
 /// Only the wire-compatible fields are copied; console/UI fields are dropped.
 pub(crate) fn ticinput_to_ticcmd(input: TicInput) -> TicCmd {
-    let mut cmd = TicCmd::default();
-    cmd.forward_move = input.forward_move;
-    cmd.side_move = input.side_move;
-    cmd.angle_turn = input.angle_turn;
-    cmd.buttons = input.buttons;
-    cmd.chatchar = input.chatchar;
-    cmd
-}
-
-/// Convert a [`TicInput`] to the wire format [`doom_net::TicCmd`].
-pub(crate) fn ticinput_to_wire(input: TicInput) -> doom_net::TicCmd {
-    doom_net::TicCmd {
+    TicCmd {
         forward_move: input.forward_move,
         side_move: input.side_move,
         angle_turn: input.angle_turn,
         buttons: input.buttons,
         chatchar: input.chatchar,
+        ..Default::default()
     }
-}
-
-/// Convert a [`doom_net::TicCmd`] to a [`TicCmd`] (doom-game format).
-pub(crate) fn wire_to_ticcmd(w: doom_net::TicCmd) -> TicCmd {
-    let mut cmd = TicCmd::default();
-    cmd.forward_move = w.forward_move;
-    cmd.side_move = w.side_move;
-    cmd.angle_turn = w.angle_turn;
-    cmd.buttons = w.buttons;
-    cmd.chatchar = w.chatchar;
-    cmd
 }
 
 // ---------------------------------------------------------------------------
@@ -265,9 +244,9 @@ impl NetGameApp {
 impl DoomApp for NetGameApp {
     fn tick(&mut self, input: TicInput) {
         // Convert local input to wire format and send to the server.
-        let wire_cmd = ticinput_to_wire(input);
+        let wire_cmd = ticinput_to_ticcmd(input);
         let slot = self.client.player_slot();
-        let mut cmds = [doom_net::TicCmd::default(); MAX_PLAYERS];
+        let mut cmds = [doom_types::TicCmd::default(); MAX_PLAYERS];
         if (slot as usize) < MAX_PLAYERS {
             cmds[slot as usize] = wire_cmd;
         }
@@ -287,7 +266,7 @@ impl DoomApp for NetGameApp {
             // Apply the authoritative command for our slot (or the first
             // non-zero command).  For now, use our own slot's command.
             let auth_cmd = if (slot as usize) < MAX_PLAYERS {
-                wire_to_ticcmd(server_pkt.cmds[slot as usize])
+                server_pkt.cmds[slot as usize]
             } else {
                 ticinput_to_ticcmd(input)
             };
@@ -329,44 +308,6 @@ mod tests {
     // -- Conversion helper tests (preserved from original) --
 
     #[test]
-    fn ticinput_to_wire_preserves_forward_move() {
-        let input = TicInput {
-            forward_move: 42,
-            ..Default::default()
-        };
-        let wire = ticinput_to_wire(input);
-        assert_eq!(wire.forward_move, 42);
-    }
-
-    #[test]
-    fn wire_to_ticcmd_preserves_buttons() {
-        let wire = doom_net::TicCmd {
-            buttons: 0b0101,
-            ..Default::default()
-        };
-        let cmd = wire_to_ticcmd(wire);
-        assert_eq!(cmd.buttons, 0b0101);
-    }
-
-    #[test]
-    fn wire_roundtrip_is_identity() {
-        let input = TicInput {
-            forward_move: 50,
-            side_move: -10,
-            angle_turn: 1000,
-            buttons: 3,
-            chatchar: b'a',
-            ..Default::default()
-        };
-        let wire = ticinput_to_wire(input);
-        let cmd = wire_to_ticcmd(wire);
-        assert_eq!(cmd.forward_move, 50);
-        assert_eq!(cmd.side_move, -10);
-        assert_eq!(cmd.angle_turn, 1000);
-        assert_eq!(cmd.buttons, 3);
-    }
-
-    #[test]
     fn ticinput_to_ticcmd_copies_all_fields() {
         let input = TicInput {
             forward_move: 100,
@@ -382,26 +323,6 @@ mod tests {
         assert_eq!(cmd.angle_turn, 640);
         assert_eq!(cmd.buttons, 0x03);
         assert_eq!(cmd.chatchar, b'z');
-    }
-
-    #[test]
-    fn default_wire_cmd_is_all_zeros() {
-        let wire = doom_net::TicCmd::default();
-        assert_eq!(wire.forward_move, 0);
-        assert_eq!(wire.side_move, 0);
-        assert_eq!(wire.angle_turn, 0);
-        assert_eq!(wire.buttons, 0);
-        assert_eq!(wire.chatchar, 0);
-    }
-
-    #[test]
-    fn wire_cmd_to_ticcmd_preserves_chatchar() {
-        let wire = doom_net::TicCmd {
-            chatchar: b'X',
-            ..Default::default()
-        };
-        let cmd = wire_to_ticcmd(wire);
-        assert_eq!(cmd.chatchar, b'X');
     }
 
     // -- Server tests --

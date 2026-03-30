@@ -1590,13 +1590,14 @@ fn psprite_transition_flags(weapon: WeaponType, state: doom_game::StateNum) -> (
 ///
 /// Both structs have identical movement/button fields; this is a direct copy.
 pub(crate) fn ticinput_to_ticcmd(input: TicInput) -> TicCmd {
-    let mut cmd = TicCmd::default();
-    cmd.forward_move = input.forward_move;
-    cmd.side_move = input.side_move;
-    cmd.angle_turn = input.angle_turn;
-    cmd.buttons = input.buttons;
-    cmd.chatchar = input.chatchar;
-    cmd
+    TicCmd {
+        forward_move: input.forward_move,
+        side_move: input.side_move,
+        angle_turn: input.angle_turn,
+        buttons: input.buttons,
+        chatchar: input.chatchar,
+        ..Default::default()
+    }
 }
 
 // `spawn_player` removed — replaced by `spawn_level_things` which spawns

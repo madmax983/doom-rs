@@ -2116,7 +2116,7 @@ mod tests {
     use crate::mobj::{Mobj, MobjKind, StateNum, flags};
     use crate::player::PlayerState;
     use crate::state::GameState;
-    use crate::tic::TicCmd;
+    use doom_types::TicCmd;
     use doom_types::{Bam, Fixed16_16};
 
     fn make_game_state() -> GameState {

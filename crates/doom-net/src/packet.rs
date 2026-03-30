@@ -4,38 +4,16 @@
 //! server.  Serialisation is manual little-endian, no `serde` or `bincode` on
 //! the hot path.
 //!
-//! [`TicCmd`] is the doom-net wire-format player input command, layout-compatible
-//! with `doom_game::TicCmd`.  It is defined here so that doom-net only depends on
-//! `doom-types`, not `doom-game`.
+//! [`TicCmd`] is the wire-format player input command. It is imported from `doom-types`
+//! so that it can be shared across the entire workspace.
+
+pub use doom_types::TicCmd;
 
 /// Maximum number of players in a multiplayer session.
 pub const MAX_PLAYERS: usize = 4;
 
 /// Maximum number of tics the rollback system can rewind.
 pub const MAX_ROLLBACK_TICS: usize = 8;
-
-// ---------------------------------------------------------------------------
-// TicCmd -- wire-format player input
-// ---------------------------------------------------------------------------
-
-/// One tic of player input -- the wire-compatible command struct.
-///
-/// Layout mirrors `doom_game::TicCmd` field-for-field so that the two types
-/// can be transmuted or field-copied at the doom-game/doom-net boundary.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-#[repr(C)]
-pub struct TicCmd {
-    /// Forward/backward movement (-128..127, positive = forward).
-    pub forward_move: i8,
-    /// Lateral strafe (-128..127, positive = right).
-    pub side_move: i8,
-    /// Angle delta in 16-bit BAM units (shifted left 16 -> 32-bit BAM).
-    pub angle_turn: i16,
-    /// Button bitfield (`bt::BT_*` flags).
-    pub buttons: u8,
-    /// ASCII chat character (0 = none).
-    pub chatchar: u8,
-}
 
 // ---------------------------------------------------------------------------
 // TicCmd wire size
@@ -155,20 +133,17 @@ mod tests {
 
     fn sample_packet() -> TicPacket {
         let mut cmds = [TicCmd::default(); MAX_PLAYERS];
-        cmds[0] = TicCmd {
-            forward_move: 50,
-            side_move: -10,
-            angle_turn: 640,
-            buttons: 0x01,
-            chatchar: 0,
-        };
-        cmds[1] = TicCmd {
-            forward_move: -20,
-            side_move: 30,
-            angle_turn: -512,
-            buttons: 0x03,
-            chatchar: b'Z',
-        };
+        cmds[0].forward_move = 50;
+        cmds[0].side_move = -10;
+        cmds[0].angle_turn = 640;
+        cmds[0].buttons = 0x01;
+        cmds[0].chatchar = 0;
+        cmds[1].forward_move = -20;
+        cmds[1].side_move = 30;
+        cmds[1].angle_turn = -512;
+        cmds[1].buttons = 0x03;
+        cmds[1].chatchar = b'Z';
+
         TicPacket {
             tic: 42,
             sender: 0,

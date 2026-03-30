@@ -14,7 +14,7 @@ use crate::player::{AmmoType, PlayerState, PspriteState, WeaponType, psprite_slo
 use crate::projectile::p_spawn_player_missile;
 use crate::state::{GameState, SoundRequest};
 use crate::states::{STATES, ids, sprite_names};
-use crate::tic::{TicCmd, bt};
+use doom_types::{TicCmd, bt};
 
 // ---------------------------------------------------------------------------
 // Weapon stat table
@@ -778,7 +778,7 @@ mod tests {
     use crate::player::{PlayerState, WeaponType, psprite_slots};
     use crate::state::GameState;
     use crate::states::ids;
-    use crate::tic::{TicCmd, bt};
+    use doom_types::{TicCmd, bt};
     use doom_types::{Bam, Fixed16_16};
 
     /// Build a minimal GameState with a live player Mobj at the origin.
@@ -800,9 +800,10 @@ mod tests {
     }
 
     fn cmd_with_buttons(buttons: u8) -> TicCmd {
-        let mut cmd = TicCmd::default();
-        cmd.buttons = buttons;
-        cmd
+        TicCmd {
+            buttons,
+            ..Default::default()
+        }
     }
 
     fn ready_player_psprites(gs: &mut GameState) {

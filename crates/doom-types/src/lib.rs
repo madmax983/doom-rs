@@ -11,11 +11,13 @@ pub mod bbox;
 pub mod fixed;
 pub mod limits;
 pub mod primitives;
+pub mod ticcmd;
 pub mod vec2;
 
 pub use angle::{ANG45, ANG90, ANG180, ANG270, Bam};
 pub use bbox::BBox;
 pub use fixed::{FIXED_ONE, FRAC_BITS, Fixed16_16};
+pub use ticcmd::{TicCmd, bt};
 pub use vec2::Vec2Fixed;
 
 // Verus spine proofs (only processed by verus, not rustc).

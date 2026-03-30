@@ -74,11 +74,12 @@ impl DemoTicCmd {
     /// The `buttons`, `chatchar`, and padding fields default to zero.
     #[must_use]
     pub fn to_ticcmd(&self) -> TicCmd {
-        let mut cmd = TicCmd::default();
-        cmd.forward_move = self.forward_move;
-        cmd.side_move = self.side_move;
-        cmd.angle_turn = self.angle_turn;
-        cmd
+        TicCmd {
+            forward_move: self.forward_move,
+            side_move: self.side_move,
+            angle_turn: self.angle_turn,
+            ..Default::default()
+        }
     }
 }
 
@@ -135,12 +136,14 @@ mod tests {
     // Test 10: TicCmd to DemoTicCmd conversion (strips buttons/chatchar)
     #[test]
     fn from_ticcmd_strips_buttons_and_chatchar() {
-        let mut tic = TicCmd::default();
-        tic.forward_move = 30;
-        tic.side_move = -20;
-        tic.angle_turn = 500;
-        tic.buttons = 0xFF;
-        tic.chatchar = b'A';
+        let tic = TicCmd {
+            forward_move: 30,
+            side_move: -20,
+            angle_turn: 500,
+            buttons: 0xFF,
+            chatchar: b'A',
+            ..Default::default()
+        };
 
         let demo_cmd = DemoTicCmd::from_ticcmd(&tic);
         assert_eq!(demo_cmd.forward_move, 30);
@@ -189,11 +192,13 @@ mod tests {
 
     #[test]
     fn ticcmd_roundtrip_preserves_movement_and_angle() {
-        let mut tic = TicCmd::default();
-        tic.forward_move = -50;
-        tic.side_move = 40;
-        tic.angle_turn = -8000;
-        tic.buttons = 0x03;
+        let tic = TicCmd {
+            forward_move: -50,
+            side_move: 40,
+            angle_turn: -8000,
+            buttons: 0x03,
+            ..Default::default()
+        };
 
         let demo = DemoTicCmd::from_ticcmd(&tic);
         let back = demo.to_ticcmd();

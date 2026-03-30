@@ -528,7 +528,7 @@ mod tests {
     use crate::player::PlayerState;
     use crate::state::GameState;
     use crate::states::ids;
-    use crate::tic::TicCmd;
+    use doom_types::TicCmd;
     use doom_types::{Bam, Fixed16_16};
 
     // -----------------------------------------------------------------------
