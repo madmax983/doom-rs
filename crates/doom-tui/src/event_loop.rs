@@ -1081,10 +1081,9 @@ mod tests {
 
     #[test]
     fn poll_events_does_not_sample_modifiers() {
+        let mut loop_ = make_test_event_loop();
         let _guard = MODIFIER_COUNT_LOCK.lock().unwrap();
         reset_modifier_sample_count();
-        reset_modifier_sample_count();
-        let mut loop_ = make_test_event_loop();
 
         loop_.poll_events();
 
@@ -1095,10 +1094,10 @@ mod tests {
 
     #[test]
     fn drain_ready_tics_samples_modifiers_once_per_tic() {
+        let mut loop_ = make_test_event_loop();
         let _guard = MODIFIER_COUNT_LOCK.lock().unwrap();
         reset_modifier_sample_count();
-        reset_modifier_sample_count();
-        let mut loop_ = make_test_event_loop();
+
         let mut app = CountingApp { ticks: 0 };
         loop_.tic_accumulator = TIC_DURATION * 2 + TIC_DURATION / 2;
 

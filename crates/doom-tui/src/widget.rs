@@ -368,6 +368,16 @@ mod tests {
     }
 
     #[test]
+    fn with_ascii_mode_false_builder_clears_mode() {
+        let fb = make_fb_with(0);
+        let lut = PaletteLut::grayscale();
+        let w = DoomFramebufferWidget::new(&fb, &lut, 0)
+            .with_char_set(Some(crate::charset::CharSet::Ascii))
+            .with_ascii_mode(false);
+        assert_eq!(w.char_set, None);
+    }
+
+    #[test]
     fn ascii_mode_renders_correct_character() {
         let mut fb = Framebuffer::new();
         // Palette index 1 = red in the test_primary LUT.
@@ -386,6 +396,48 @@ mod tests {
         // fg = top pixel color (same as halfblocks)
         assert_eq!(cell.fg, Color::Rgb(255, 0, 0));
         // bg = bottom pixel color (uniform fill → same as top)
+        assert_eq!(cell.bg, Color::Rgb(255, 0, 0));
+    }
+
+    #[test]
+    fn charmap_mode_with_bilinear_scaling_renders_correct_character() {
+        let mut fb = Framebuffer::new();
+        // Palette index 1 = red in the test_primary LUT.
+        fb.clear(1);
+        let lut = PaletteLut::test_primary();
+        let area = Rect::new(0, 0, 1, 1);
+        let mut buf = Buffer::empty(area);
+        DoomFramebufferWidget::new(&fb, &lut, 0)
+            .with_scaling(ScalingMode::Bilinear)
+            .with_char_set(Some(crate::charset::CharSet::Ascii))
+            .render(area, &mut buf);
+        let cell = buf.cell((0, 0)).unwrap();
+        // Bilinear blend of uniform red is still red (255, 0, 0).
+        // Luma calculation: (255 * 2126) / 10000 = 54.
+        // ASCII char idx = (54 * 11) / 255 = 2 -> ':'
+        assert_eq!(cell.symbol(), ":");
+        assert_eq!(cell.fg, Color::Rgb(255, 0, 0));
+        assert_eq!(cell.bg, Color::Rgb(255, 0, 0));
+    }
+
+    #[test]
+    fn charmap_mode_with_nearest_scaling_renders_correct_character() {
+        let mut fb = Framebuffer::new();
+        // Palette index 1 = red in the test_primary LUT.
+        fb.clear(1);
+        let lut = PaletteLut::test_primary();
+        let area = Rect::new(0, 0, 1, 1);
+        let mut buf = Buffer::empty(area);
+        DoomFramebufferWidget::new(&fb, &lut, 0)
+            .with_scaling(ScalingMode::Nearest)
+            .with_char_set(Some(crate::charset::CharSet::Ascii))
+            .render(area, &mut buf);
+        let cell = buf.cell((0, 0)).unwrap();
+        // Nearest neighbor of uniform red is red (255, 0, 0).
+        // Luma calculation: (255 * 2126) / 10000 = 54.
+        // ASCII char idx = (54 * 11) / 255 = 2 -> ':'
+        assert_eq!(cell.symbol(), ":");
+        assert_eq!(cell.fg, Color::Rgb(255, 0, 0));
         assert_eq!(cell.bg, Color::Rgb(255, 0, 0));
     }
 }
