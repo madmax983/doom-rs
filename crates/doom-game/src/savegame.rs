@@ -388,6 +388,8 @@ fn mobj_kind_from_u16(v: u16) -> Option<MobjKind> {
         71 => Some(MobjKind::FatShot),
         72 => Some(MobjKind::InvulnerabilitySphere),
         73 => Some(MobjKind::Backpack),
+        74 => Some(MobjKind::VileFire),
+        75 => Some(MobjKind::BossCube),
         _ => None,
     }
 }
@@ -1609,11 +1611,28 @@ mod tests {
         imp.tics = 10;
         gs.mobjslab.alloc(imp);
 
+        // Add a VileFire and BossCube to verify batch 22 MobjKind deserialization.
+        let vile_fire = Mobj::new(
+            MobjKind::VileFire,
+            Fixed16_16::from_int(100),
+            Fixed16_16::from_int(100),
+            Bam::ZERO,
+        );
+        gs.mobjslab.alloc(vile_fire);
+
+        let boss_cube = Mobj::new(
+            MobjKind::BossCube,
+            Fixed16_16::from_int(200),
+            Fixed16_16::from_int(200),
+            Bam::ZERO,
+        );
+        gs.mobjslab.alloc(boss_cube);
+
         let data = save_game(&gs, &test_level_name(), 2, "mobj test");
         let loaded = load_game(&data).expect("load must succeed");
 
-        // Should have 2 mobjs (player + imp).
-        assert_eq!(loaded.state.mobjslab.len(), 2);
+        // Should have 4 mobjs (player + imp + vile_fire + boss_cube).
+        assert_eq!(loaded.state.mobjslab.len(), 4);
 
         // Check that the imp's data survived.
         let mut handles = Vec::with_capacity(loaded.state.mobjslab.len());
@@ -1634,6 +1653,30 @@ mod tests {
         assert_eq!(imp_loaded.angle, Bam(0x8000_0000));
         assert_eq!(imp_loaded.state, StateNum(42));
         assert_eq!(imp_loaded.tics, 10);
+
+        let vile_fire_handle = handles.iter().find(|h| {
+            loaded
+                .state
+                .mobjslab
+                .get(**h)
+                .is_some_and(|m| m.kind == MobjKind::VileFire)
+        });
+        assert!(
+            vile_fire_handle.is_some(),
+            "vile fire must be present after load"
+        );
+
+        let boss_cube_handle = handles.iter().find(|h| {
+            loaded
+                .state
+                .mobjslab
+                .get(**h)
+                .is_some_and(|m| m.kind == MobjKind::BossCube)
+        });
+        assert!(
+            boss_cube_handle.is_some(),
+            "boss cube must be present after load"
+        );
     }
 
     // --- Test 22: Roundtrip preserves ceiling movers ---
