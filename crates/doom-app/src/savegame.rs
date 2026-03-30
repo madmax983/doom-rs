@@ -50,8 +50,14 @@ impl SaveHeader {
     /// null-padded to fill the 24-byte fixed field.
     pub fn new(slot: u8, tic_num: u32, desc: &str) -> Self {
         let mut description = [0u8; 24];
+        let mut len = 0;
+        for ch in desc.chars() {
+            if len + ch.len_utf8() > 23 {
+                break;
+            }
+            len += ch.len_utf8();
+        }
         let bytes = desc.as_bytes();
-        let len = bytes.len().min(23);
         description[..len].copy_from_slice(&bytes[..len]);
         Self {
             magic: Self::MAGIC,

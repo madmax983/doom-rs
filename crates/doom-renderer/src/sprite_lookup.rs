@@ -155,8 +155,18 @@ pub fn compute_rotation(thing_angle: u32, viewer_angle: u32) -> u8 {
 /// assert_eq!(sprite_lump_name_str("TROO", 1, 3), "TROOB3");
 /// ```
 pub fn sprite_lump_name_str(sprite_name: &str, frame: u8, rotation: u8) -> String {
-    let frame_char = (b'A' + frame) as char;
+    let frame_char = b'A'.saturating_add(frame) as char;
     format!("{}{}{}", sprite_name, frame_char, rotation)
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+
+    #[test]
+    fn test_sprite_lump_name_str_overflow() {
+        let _ = sprite_lump_name_str("POSS", 200, 1);
+    }
 }
 
 /// Construct the sprite lump name and indicate whether the sprite should

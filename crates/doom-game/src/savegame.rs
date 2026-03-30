@@ -834,8 +834,14 @@ pub fn save_game(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &
     w.write_u8(skill);
     w.write_u32(gs.stats.level_time);
     let mut desc_buf = [0u8; 24];
+    let mut copy_len = 0;
+    for ch in description.chars() {
+        if copy_len + ch.len_utf8() > 24 {
+            break;
+        }
+        copy_len += ch.len_utf8();
+    }
     let desc_bytes = description.as_bytes();
-    let copy_len = desc_bytes.len().min(24);
     desc_buf[..copy_len].copy_from_slice(&desc_bytes[..copy_len]);
     w.write_bytes(&desc_buf);
 
