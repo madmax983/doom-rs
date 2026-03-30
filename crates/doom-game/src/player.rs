@@ -67,7 +67,7 @@ pub mod powers {
 // ---------------------------------------------------------------------------
 
 /// Weapon slots (index = selection key − 1 for keys 1-7; chainsaw = key 1 alt).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default, strum::FromRepr)]
 #[repr(u8)]
 pub enum WeaponType {
     Fist = 0,
@@ -403,18 +403,7 @@ impl WeaponType {
     ///
     /// Returns `None` for any out-of-range value.
     pub fn from_num(n: usize) -> Option<Self> {
-        match n {
-            0 => Some(WeaponType::Fist),
-            1 => Some(WeaponType::Pistol),
-            2 => Some(WeaponType::Shotgun),
-            3 => Some(WeaponType::Chaingun),
-            4 => Some(WeaponType::RocketLauncher),
-            5 => Some(WeaponType::PlasmaRifle),
-            6 => Some(WeaponType::Bfg),
-            7 => Some(WeaponType::Chainsaw),
-            8 => Some(WeaponType::SuperShotgun),
-            _ => None,
-        }
+        Self::from_repr(n.try_into().ok()?)
     }
 }
 
