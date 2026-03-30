@@ -236,6 +236,32 @@ mod tests {
         let u = a.union(b);
         assert_eq!(u.ymax, int(10));
         assert_eq!(u.xmax, int(8));
+
+        // Test else branches of union where self values are retained
+        let c = BBox::new(int(15), int(-5), int(-5), int(15));
+        let d = BBox::new(int(10), int(0), int(0), int(10));
+        let v = c.union(d);
+        assert_eq!(v.ymax, int(15));
+        assert_eq!(v.ymin, int(-5));
+        assert_eq!(v.xmin, int(-5));
+        assert_eq!(v.xmax, int(15));
+
+        // Test mixed branches
+        let e = BBox::new(int(5), int(0), int(-5), int(5));
+        let f = BBox::new(int(10), int(-5), int(0), int(10));
+        let w = e.union(f);
+        assert_eq!(w.ymax, int(10));
+        assert_eq!(w.ymin, int(-5));
+        assert_eq!(w.xmin, int(-5));
+        assert_eq!(w.xmax, int(10));
+
+        let g = BBox::new(int(5), int(0), int(5), int(10));
+        let h = BBox::new(int(10), int(-5), int(0), int(5));
+        let x = g.union(h);
+        assert_eq!(x.ymax, int(10));
+        assert_eq!(x.ymin, int(-5));
+        assert_eq!(x.xmin, int(0));
+        assert_eq!(x.xmax, int(10));
     }
 
     #[test]

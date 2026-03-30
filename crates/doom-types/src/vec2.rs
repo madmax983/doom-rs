@@ -179,4 +179,24 @@ mod tests {
         let zero = Vec2Fixed::ZERO;
         assert_eq!(zero.length_sq(), Fixed16_16::ZERO);
     }
+
+    #[test]
+    fn new_and_neg_trait() {
+        let v = Vec2Fixed::new(Fixed16_16::from_int(5), Fixed16_16::from_int(-2));
+        assert_eq!(v.x.to_int(), 5);
+        assert_eq!(v.y.to_int(), -2);
+
+        let n = -v;
+        assert_eq!(n.x.to_int(), -5);
+        assert_eq!(n.y.to_int(), 2);
+    }
+
+    #[test]
+    fn sub_trait() {
+        let a = Vec2Fixed::from_ints(5, 5);
+        let b = Vec2Fixed::from_ints(2, 3);
+        let c = a - b;
+        assert_eq!(c.x.to_int(), 3);
+        assert_eq!(c.y.to_int(), 2);
+    }
 }
