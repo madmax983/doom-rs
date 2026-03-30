@@ -118,6 +118,12 @@ pub struct OplChip {
     channels: [OplChannel; 9],
     /// Per-channel synthesis state (phase accumulators + ADSR envelopes).
     synth: [ChannelState; 9],
+    /// Previous input sample for post high-pass filtering.
+    post_hp_prev_in: f32,
+    /// Previous output sample for post high-pass filtering.
+    post_hp_prev_out: f32,
+    /// Integrator state for post low-pass filtering.
+    post_lp_state: f32,
 }
 
 impl Default for OplChip {
@@ -164,6 +170,9 @@ impl OplChip {
             regs: [0u8; 256],
             channels: [OplChannel::default(); 9],
             synth: [ChannelState::default(); 9],
+            post_hp_prev_in: 0.0,
+            post_hp_prev_out: 0.0,
+            post_lp_state: 0.0,
         }
     }
 
@@ -271,6 +280,16 @@ impl OplChip {
     /// then mixes their outputs into `buf`.  Output range: approximately [-1.0, 1.0].
     pub fn synthesize(&mut self, buf: &mut [f32], sample_rate: u32) {
         let sr = sample_rate as f32;
+        // "Crunch" voicing pass:
+        // 1) gentle drive to add harmonics,
+        // 2) high-pass to tighten low-end mud,
+        // 3) low-pass to smooth high-frequency fizz.
+        let drive = 1.75f32;
+        let makeup = 1.2f32;
+        let hp_hz = 150.0f32;
+        let lp_hz = 4_300.0f32;
+        let hp_alpha = sr / (sr + std::f32::consts::TAU * hp_hz);
+        let lp_alpha = (std::f32::consts::TAU * lp_hz / sr).clamp(0.0, 1.0);
 
         for s in buf.iter_mut() {
             let mut mix = 0.0f32;
@@ -374,10 +393,17 @@ impl OplChip {
                 mix += channel_out;
             }
 
-            // Clamp the mixed output — no per-channel division, matching real
-            // OPL2 DAC saturation behaviour.  Dividing by 9 makes music 9×
-            // too quiet and inaudible beneath SFX.
-            *s = mix.clamp(-1.0, 1.0);
+            // Apply a guitar-oriented post voicing curve to the FM mix.
+            let driven = mix * drive;
+            let saturated = driven / (1.0 + driven.abs());
+            let hp = hp_alpha * (self.post_hp_prev_out + saturated - self.post_hp_prev_in);
+            self.post_hp_prev_in = saturated;
+            self.post_hp_prev_out = hp;
+            self.post_lp_state += lp_alpha * (hp - self.post_lp_state);
+
+            // Clamp the voiced mix — no per-channel division, matching real
+            // OPL2 DAC saturation behaviour while keeping practical loudness.
+            *s = (self.post_lp_state * makeup).clamp(-1.0, 1.0);
         }
     }
 }
