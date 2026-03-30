@@ -85,7 +85,7 @@ impl CogmindFrame {
     pub fn get(&self, x: u16, y: u16) -> Option<&CogmindCell> {
         if x < self.width && y < self.height {
             let idx = usize::from(y) * usize::from(self.width) + usize::from(x);
-            Some(&self.cells[idx])
+            self.cells.get(idx)
         } else {
             None
         }
@@ -390,6 +390,15 @@ mod tests {
     }
 
     #[test]
+    fn widget_zero_frame_size_is_noop() {
+        let frame = CogmindFrame::new(0, 0);
+        let area = Rect::new(0, 0, 10, 10);
+        let mut buf = Buffer::empty(Rect::new(0, 0, 10, 10));
+        CogmindWidget::new(&frame).render(area, &mut buf);
+        // No panic = success.
+    }
+
+    #[test]
     fn widget_blank_cells_are_spaces() {
         let frame = CogmindFrame::new(3, 3);
         let area = Rect::new(0, 0, 3, 3);
@@ -412,6 +421,53 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn widget_large_frame_is_clipped() {
+        let mut frame = CogmindFrame::new(4, 4);
+        frame.set(
+            3,
+            3,
+            CogmindCell {
+                glyph: 'X',
+                fg: (255, 255, 255),
+                bg: (0, 0, 0),
+            },
+        );
+
+        let area = Rect::new(0, 0, 3, 3); // Area smaller than frame
+        let mut buf = Buffer::empty(area);
+        CogmindWidget::new(&frame).render(area, &mut buf);
+
+        // The 'X' at (3, 3) should be clipped and not written to the buffer.
+        // It's out of bounds, so cell(3,3) doesn't exist.
+        // Also checking that (0,0) is default.
+        let cell = buf.cell((0, 0)).unwrap();
+        assert_eq!(cell.symbol(), " ");
+    }
+
+    #[test]
+    fn widget_draws_out_of_bounds_clipped_gracefully() {
+        let mut frame = CogmindFrame::new(4, 4);
+        frame.set(
+            0,
+            0,
+            CogmindCell {
+                glyph: 'X',
+                fg: (255, 255, 255),
+                bg: (0, 0, 0),
+            },
+        );
+        frame.width = 10; // Corrupt width manually so loop goes OOB
+
+        let area = Rect::new(0, 0, 10, 10);
+        let mut buf = Buffer::empty(area);
+        CogmindWidget::new(&frame).render(area, &mut buf);
+
+        // At 5,5 frame.get() returns None, shouldn't crash
+        let cell = buf.cell((5, 5)).unwrap();
+        assert_eq!(cell.symbol(), " ");
     }
 
     #[test]
