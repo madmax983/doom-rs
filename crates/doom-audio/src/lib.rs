@@ -9,6 +9,7 @@ pub mod opl;
 pub mod sfx;
 pub mod sfx_mixer;
 pub mod spatial;
+pub mod wav;
 
 pub use driver::AudioDriver;
 pub use midi::{GenmidiBank, GenmidiInstrument, MidiPlayer};
@@ -17,6 +18,7 @@ pub use mus::{MusEvent, MusScore};
 pub use sfx::{SfxCache, play_sfx};
 pub use sfx_mixer::{MAX_CHANNELS, SfxChannel, SfxMixer, SfxPriority};
 pub use spatial::{MAX_SFX_DIST, SfxEmitter, SpatialParams, compute_spatial};
+pub use wav::{encode_pcm16_wav_mono, render_mus_to_wav_mono};
 
 /// Top-level error type for the doom-audio crate.
 #[derive(Debug, thiserror::Error)]
