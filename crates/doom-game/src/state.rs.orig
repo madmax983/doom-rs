@@ -954,7 +954,7 @@ mod tests {
             if min > max {
                 std::mem::swap(&mut min, &mut max);
             }
-            let mut gs = GameState::new("");
+            let mut gs = GameState::new("E1M1");
             let v = gs.p_random_range(min, max);
             if min < max {
                 prop_assert!((min..=max).contains(&v));
@@ -963,7 +963,7 @@ mod tests {
 
         #[test]
         fn p_subrandom_proptest(seed in 0u8..255u8) {
-            let mut gs = GameState::new("");
+            let mut gs = GameState::new("E1M1");
             for _ in 0..seed {
                 gs.p_random();
             }
