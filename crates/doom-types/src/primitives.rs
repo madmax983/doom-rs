@@ -246,4 +246,51 @@ mod tests {
         assert!(Brightness::new(255).is_some());
         assert!(Brightness::new(0).is_some());
     }
+
+    #[test]
+    fn test_coverage_primitives() {
+        let b = Brightness::new(128).unwrap();
+        assert_eq!(b.raw(), 128);
+        assert_eq!(b, Brightness::new(128).unwrap());
+        #[allow(clippy::clone_on_copy)]
+        let b2 = b.clone();
+        assert_eq!(format!("{:?}", b), format!("{:?}", b2));
+        assert!(b <= Brightness::MAX);
+        assert!(b >= Brightness::MIN);
+
+        let s = SectorSpecial::NORMAL;
+        assert_eq!(s.raw(), 0);
+        assert_eq!(s, SectorSpecial::new(0).unwrap());
+        #[allow(clippy::clone_on_copy)]
+        let s2 = s.clone();
+        assert_eq!(format!("{:?}", s), format!("{:?}", s2));
+
+        let sl = SkillLevel::UV;
+        assert_eq!(sl.raw(), 3);
+        assert_eq!(sl, SkillLevel::new(3).unwrap());
+        assert_eq!(SkillLevel::ITYTD.raw(), 0);
+        assert_eq!(SkillLevel::HNTR.raw(), 1);
+        assert_eq!(SkillLevel::HMP.raw(), 2);
+        assert_eq!(SkillLevel::NM.raw(), 4);
+        #[allow(clippy::clone_on_copy)]
+        let sl2 = sl.clone();
+        assert_eq!(format!("{:?}", sl), format!("{:?}", sl2));
+        assert!(sl <= SkillLevel::NM);
+
+        let p = PlayerNum::new(2).unwrap();
+        assert_eq!(p.raw(), 2);
+        assert_eq!(p, PlayerNum::new(2).unwrap());
+        #[allow(clippy::clone_on_copy)]
+        let p2 = p.clone();
+        assert_eq!(format!("{:?}", p), format!("{:?}", p2));
+        assert!(p >= PlayerNum::new(0).unwrap());
+
+        let c = Coord::new(32);
+        assert_eq!(c.raw(), 32);
+        assert_eq!(c, Coord::new(32));
+        #[allow(clippy::clone_on_copy)]
+        let c2 = c.clone();
+        assert_eq!(format!("{:?}", c), format!("{:?}", c2));
+        assert!(c <= Coord::new(100));
+    }
 }

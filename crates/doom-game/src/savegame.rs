@@ -1787,6 +1787,95 @@ mod tests {
         assert_eq!(r.read_i32(), Err(SaveError::Truncated));
     }
 
+    // --- Test 30b: read_bytes out of bounds ---
+    #[test]
+    fn read_cursor_bytes_out_of_bounds() {
+        let data = [0u8; 2];
+        let mut r = ReadCursor::new(&data);
+        assert_eq!(r.read_bytes::<4>(), Err(SaveError::Truncated));
+    }
+
+    // --- Test 30c: SaveError Display format ---
+    #[test]
+    fn save_error_display() {
+        assert_eq!(
+            format!("{}", SaveError::TooShort),
+            "save data too short for header"
+        );
+        assert_eq!(
+            format!("{}", SaveError::BadMagic),
+            "bad magic bytes in save data"
+        );
+        assert_eq!(
+            format!("{}", SaveError::BadVersion),
+            "unsupported save format version"
+        );
+        assert_eq!(format!("{}", SaveError::Truncated), "save data truncated");
+    }
+
+    // --- Test 30d: Invalid enums return Truncated ---
+    #[test]
+    fn invalid_enum_variants_return_truncated() {
+        let mut w = WriteCursor::new(64);
+        w.write_u16(999); // Invalid MobjKind
+        w.write_u8(99); // Invalid WeaponType
+        w.write_u8(99); // Invalid MoveDirection
+        w.write_u8(99); // Invalid CeilingType
+        w.write_u8(99); // Invalid FloorType
+        w.write_u8(99); // Invalid PlatformStatus
+        w.write_u8(99); // Invalid LiftStatus
+
+        let data = w.into_bytes();
+        let mut r = ReadCursor::new(&data);
+
+        assert_eq!(read_mobj_kind(&mut r), Err(SaveError::Truncated));
+        assert_eq!(read_weapon_type(&mut r), Err(SaveError::Truncated));
+        assert_eq!(read_move_direction(&mut r), Err(SaveError::Truncated));
+        assert_eq!(read_ceiling_type(&mut r), Err(SaveError::Truncated));
+        assert_eq!(read_floor_type(&mut r), Err(SaveError::Truncated));
+        assert_eq!(read_platform_status(&mut r), Err(SaveError::Truncated));
+        assert_eq!(read_lift_status(&mut r), Err(SaveError::Truncated));
+    }
+
+    // --- Test 30e: Invalid exit request returns Truncated ---
+    #[test]
+    fn invalid_exit_request_returns_truncated() {
+        let gs = test_game_state();
+
+        // Modify the exit request byte which is located before door count.
+        // We know it's at offset 99 (after stats, level_time, etc and name len+str)
+        // Let's just find it by loading and corrupting the exact byte safely
+        // But since offsets may change, a simpler way is to just test the specific error path.
+        // The parsing logic says:
+        // let exit_request = match r.read_u8()? { 0..2 => .. _ => return Err(SaveError::Truncated) }
+        // Let's create a truncated save data payload
+        let mut w = WriteCursor::new(64);
+        w.write_bytes(&SAVE_MAGIC);
+        w.write_u32(SAVE_VERSION);
+        w.write_bytes(&test_level_name());
+        w.write_u8(2); // skill
+        w.write_u32(0); // level_time
+        w.write_bytes(&[0u8; 24]); // desc
+        write_player_state(&mut w, &gs.player);
+        w.write_u32(gs.rng.index());
+        w.write_u32(0); // tic_num
+        w.write_u32(0); // level_time
+        w.write_u32(0); // kill_count
+        w.write_u32(0); // item_count
+        w.write_u32(0); // secret_count
+        w.write_u32(0); // total_kills
+        w.write_u32(0); // total_items
+        w.write_u32(0); // total_secrets
+
+        let name_bytes = gs.level_name.as_bytes();
+        w.write_u32(name_bytes.len() as u32);
+        w.write_bytes(name_bytes);
+        w.write_u8(99); // INVALID EXIT REQUEST
+
+        let bad_data = w.into_bytes();
+        assert_eq!(load_game(&bad_data).unwrap_err(), SaveError::Truncated);
+    }
+
     // --- Test 31: Roundtrip preserves player pending_weapon ---
     #[test]
     fn roundtrip_pending_weapon() {
