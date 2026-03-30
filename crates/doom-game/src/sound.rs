@@ -39,12 +39,58 @@ pub const ML_SOUNDBLOCK: u16 = 0x0040;
 /// Must be called when a level is loaded, passing the number of sectors in
 /// the level.  Resets all sound targets to `None` and all traversal counters
 /// to 0.
-pub fn init_sound_state(gs: &mut GameState, num_sectors: usize) {
+pub fn init_sound_state(gs: &mut GameState, level: &Level) {
+    let num_sectors = level.sectors.len();
     gs.sound_targets.clear();
     gs.sound_targets.resize(num_sectors, None);
     gs.sound_traversed.clear();
     gs.sound_traversed.resize(num_sectors, 0);
     gs.sound_gen = 0;
+
+    // Precalculate sound links for O(1) adjacency lookup in recursive_sound
+    gs.sound_links.clear();
+    gs.sound_links.resize(num_sectors, Vec::new());
+
+    for ld in &level.linedefs {
+        if !ld.is_two_sided() {
+            continue;
+        }
+
+        let right_sd = match level.sidedefs.get(ld.right_sidedef as usize) {
+            Some(sd) => sd,
+            None => continue,
+        };
+        let left_sd = match level.sidedefs.get(ld.left_sidedef as usize) {
+            Some(sd) => sd,
+            None => continue,
+        };
+
+        let rs = right_sd.sector as usize;
+        let ls = left_sd.sector as usize;
+
+        if rs != ls {
+            let blocks = if ld.flags & ML_SOUNDBLOCK != 0 { 1 } else { 0 };
+
+            // Add ls to rs
+            if let Some(link) = gs.sound_links[rs].iter_mut().find(|(s, _)| *s == ls) {
+                // Keep the minimum block cost if multiple lines connect the same sectors
+                if blocks < link.1 {
+                    link.1 = blocks;
+                }
+            } else {
+                gs.sound_links[rs].push((ls, blocks));
+            }
+
+            // Add rs to ls
+            if let Some(link) = gs.sound_links[ls].iter_mut().find(|(s, _)| *s == rs) {
+                if blocks < link.1 {
+                    link.1 = blocks;
+                }
+            } else {
+                gs.sound_links[ls].push((rs, blocks));
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -159,7 +205,7 @@ pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emit
 
     // Start flood fill from the emitter's sector with one soundblock crossing
     // available. Crossing a second `ML_SOUNDBLOCK` stops propagation.
-    recursive_sound(gs, level, emitter_sector, 1, target, new_gen);
+    recursive_sound(gs, emitter_sector, 1, target, new_gen);
 }
 
 /// Recursive flood fill: propagate sound into `sector_idx` and its neighbors.
@@ -168,7 +214,6 @@ pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emit
 /// can still pass through (starts at 1, decremented by each soundblock line).
 fn recursive_sound(
     gs: &mut GameState,
-    level: &Level,
     sector_idx: usize,
     sound_blocks_remaining: i32,
     target: MobjHandle,
@@ -189,39 +234,13 @@ fn recursive_sound(
     gs.sound_traversed[sector_idx] = new_gen;
     gs.sound_targets[sector_idx] = Some(target);
 
-    // Propagate through two-sided linedefs bounding this sector.
-    for ld in &level.linedefs {
-        if !ld.is_two_sided() {
-            continue;
-        }
-
-        let right_sd = match level.sidedefs.get(ld.right_sidedef as usize) {
-            Some(sd) => sd,
-            None => continue,
-        };
-        let left_sd = match level.sidedefs.get(ld.left_sidedef as usize) {
-            Some(sd) => sd,
-            None => continue,
-        };
-
-        let right_sector = right_sd.sector as usize;
-        let left_sector = left_sd.sector as usize;
-
-        // Check if this linedef bounds our current sector.
-        let other_sector = if right_sector == sector_idx {
-            left_sector
-        } else if left_sector == sector_idx {
-            right_sector
-        } else {
-            continue;
-        };
-
-        // Calculate sound block cost for this linedef.
-        let blocks = if ld.flags & ML_SOUNDBLOCK != 0 { 1 } else { 0 };
+    // Propagate through precalculated sound links for this sector.
+    let num_links = gs.sound_links.get(sector_idx).map_or(0, |l| l.len());
+    for i in 0..num_links {
+        let (other_sector, blocks) = gs.sound_links[sector_idx][i];
         let remaining = sound_blocks_remaining - blocks;
-
         if remaining >= 0 {
-            recursive_sound(gs, level, other_sector, remaining, target, new_gen);
+            recursive_sound(gs, other_sector, remaining, target, new_gen);
         }
     }
 }
@@ -409,9 +428,9 @@ mod tests {
 
     /// Create a GameState with sound state initialized for `n_sectors` and
     /// a player mobj at `(0, 0)` in subsector 0.
-    fn make_game_state_with_sound(n_sectors: usize) -> GameState {
+    fn make_game_state_with_sound(level: &Level) -> GameState {
         let mut gs = GameState::new("TEST");
-        init_sound_state(&mut gs, n_sectors);
+        init_sound_state(&mut gs, level);
 
         // Spawn player at (0, 0), subsector 0.
         let mut player_mo = Mobj::new(
@@ -455,7 +474,8 @@ mod tests {
     #[test]
     fn init_sound_state_creates_correct_sized_vectors() {
         let mut gs = GameState::new("TEST");
-        init_sound_state(&mut gs, 5);
+        let level = make_test_level(5, &[(0, 1, 0), (1, 2, 0), (2, 3, 0), (3, 4, 0)]);
+        init_sound_state(&mut gs, &level);
         assert_eq!(gs.sound_targets.len(), 5);
         assert_eq!(gs.sound_traversed.len(), 5);
         assert_eq!(gs.sound_gen, 0);
@@ -469,7 +489,7 @@ mod tests {
     fn p_noise_alert_sets_sound_target_in_emitter_sector() {
         // 2 sectors connected by a normal two-sided linedef.
         let level = make_test_level(2, &[(0, 1, 0)]);
-        let mut gs = make_game_state_with_sound(2);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);
@@ -482,7 +502,7 @@ mod tests {
     fn sound_propagates_through_two_sided_linedef() {
         // 2 sectors connected by a normal two-sided linedef.
         let level = make_test_level(2, &[(0, 1, 0)]);
-        let mut gs = make_game_state_with_sound(2);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);
@@ -496,7 +516,7 @@ mod tests {
     fn sound_does_not_propagate_through_one_sided_linedef() {
         // 2 sectors with NO connecting linedefs (isolated sectors).
         let level = make_test_level(2, &[]);
-        let mut gs = make_game_state_with_sound(2);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         // Add a one-sided linedef (not two-sided) to the level -- but
@@ -515,7 +535,7 @@ mod tests {
     fn sound_passes_through_one_soundblock_linedef() {
         // 2 sectors connected by a ML_SOUNDBLOCK linedef.
         let level = make_test_level(2, &[(0, 1, ML_SOUNDBLOCK)]);
-        let mut gs = make_game_state_with_sound(2);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);
@@ -529,7 +549,7 @@ mod tests {
     fn sound_blocked_by_two_consecutive_soundblock_linedefs() {
         // 3 sectors: 0 --[SOUNDBLOCK]--> 1 --[SOUNDBLOCK]--> 2
         let level = make_test_level(3, &[(0, 1, ML_SOUNDBLOCK), (1, 2, ML_SOUNDBLOCK)]);
-        let mut gs = make_game_state_with_sound(3);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);
@@ -554,7 +574,7 @@ mod tests {
                 (2, 3, ML_SOUNDBLOCK),
             ],
         );
-        let mut gs = make_game_state_with_sound(4);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);
@@ -575,8 +595,9 @@ mod tests {
 
     #[test]
     fn get_sound_target_returns_none_initially() {
+        let level = make_test_level(3, &[(0, 1, 0), (1, 2, 0)]);
         let mut gs = GameState::new("TEST");
-        init_sound_state(&mut gs, 3);
+        init_sound_state(&mut gs, &level);
 
         assert_eq!(get_sound_target(&gs, 0), None);
         assert_eq!(get_sound_target(&gs, 1), None);
@@ -586,7 +607,7 @@ mod tests {
     #[test]
     fn get_sound_target_returns_some_after_noise() {
         let level = make_test_level(1, &[]);
-        let mut gs = make_game_state_with_sound(1);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         assert_eq!(get_sound_target(&gs, 0), None);
@@ -597,7 +618,7 @@ mod tests {
     #[test]
     fn clear_sound_targets_resets_all_to_none() {
         let level = make_test_level(3, &[(0, 1, 0), (1, 2, 0)]);
-        let mut gs = make_game_state_with_sound(3);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);
@@ -616,7 +637,7 @@ mod tests {
     #[test]
     fn sound_generation_counter_increments() {
         let level = make_test_level(1, &[]);
-        let mut gs = make_game_state_with_sound(1);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         assert_eq!(gs.sound_gen, 0);
@@ -633,7 +654,7 @@ mod tests {
         // Create a diamond topology: 0 <-> 1, 0 <-> 2, 1 <-> 3, 2 <-> 3
         // Sound should reach sector 3 exactly once despite two paths.
         let level = make_test_level(4, &[(0, 1, 0), (0, 2, 0), (1, 3, 0), (2, 3, 0)]);
-        let mut gs = make_game_state_with_sound(4);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);
@@ -680,7 +701,7 @@ mod tests {
     #[test]
     fn monster_should_wake_true_for_non_ambush_with_sound_target() {
         let level = make_test_level(1, &[]);
-        let mut gs = make_game_state_with_sound(1);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         // Spawn a non-ambush monster in sector 0 (subsector 0).
@@ -704,7 +725,7 @@ mod tests {
     #[test]
     fn monster_should_wake_false_when_no_sound_target() {
         let level = make_test_level(1, &[]);
-        let mut gs = make_game_state_with_sound(1);
+        let mut gs = make_game_state_with_sound(&level);
 
         let monster = spawn_monster(&mut gs, MobjKind::Trooper, 10, 0, 0, 0);
 
@@ -717,7 +738,7 @@ mod tests {
     #[test]
     fn monster_should_wake_ambush_requires_los() {
         let level = make_test_level(1, &[]);
-        let mut gs = make_game_state_with_sound(1);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         // Spawn an AMBUSH (deaf) monster close enough for LOS (within 4096 range).
@@ -872,7 +893,7 @@ mod tests {
         };
 
         let mut gs = GameState::new("TEST");
-        init_sound_state(&mut gs, 2);
+        init_sound_state(&mut gs, &level);
 
         // Player in subsector 0 (sector 0).
         let mut player_mo = Mobj::new(
@@ -910,7 +931,7 @@ mod tests {
     #[test]
     fn multiple_noise_alerts_update_targets() {
         let level = make_test_level(2, &[(0, 1, 0)]);
-        let mut gs = make_game_state_with_sound(2);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         // First alert from player.
@@ -931,7 +952,7 @@ mod tests {
     fn sound_propagates_across_multiple_sectors() {
         // Chain: 0 <-> 1 <-> 2 <-> 3 <-> 4
         let level = make_test_level(5, &[(0, 1, 0), (1, 2, 0), (2, 3, 0), (3, 4, 0)]);
-        let mut gs = make_game_state_with_sound(5);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);
@@ -975,7 +996,7 @@ mod tests {
     #[test]
     fn game_state_clone_includes_sound_state() {
         let level = make_test_level(3, &[(0, 1, 0), (1, 2, 0)]);
-        let mut gs = make_game_state_with_sound(3);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);
@@ -1008,7 +1029,7 @@ mod tests {
     #[test]
     fn sound_target_cleared_after_clear() {
         let level = make_test_level(2, &[(0, 1, 0)]);
-        let mut gs = make_game_state_with_sound(2);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);
@@ -1024,7 +1045,7 @@ mod tests {
     #[test]
     fn p_noise_alert_with_stale_emitter_handle_is_graceful() {
         let level = make_test_level(1, &[]);
-        let mut gs = make_game_state_with_sound(1);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         // Create and immediately free an actor to get a stale handle.
@@ -1052,8 +1073,9 @@ mod tests {
 
     #[test]
     fn get_sound_target_out_of_range_returns_none() {
+        let level = make_test_level(1, &[]);
         let mut gs = GameState::new("TEST");
-        init_sound_state(&mut gs, 2);
+        init_sound_state(&mut gs, &level);
         assert_eq!(get_sound_target(&gs, 999), None);
     }
 
@@ -1079,7 +1101,7 @@ mod tests {
                 (3, 4, ML_SOUNDBLOCK),
             ],
         );
-        let mut gs = make_game_state_with_sound(5);
+        let mut gs = make_game_state_with_sound(&level);
         let player = gs.player.handle;
 
         p_noise_alert(&mut gs, &level, player, player);

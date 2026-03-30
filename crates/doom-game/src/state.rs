@@ -565,6 +565,10 @@ pub struct GameState {
     /// Resized to `level.sectors.len()` by `sound::init_sound_state`.
     pub sound_targets: Vec<Option<MobjHandle>>,
 
+    /// Precomputed sector adjacency and soundblock costs.
+    /// Outer index: sector. Inner vec: `(connected_sector_idx, sound_blocks)`.
+    pub sound_links: Vec<Vec<(usize, i32)>>,
+
     /// Per-sector generation counter for flood-fill visited tracking.
     ///
     /// Avoids clearing the whole vec each time `p_noise_alert` runs.
@@ -638,6 +642,7 @@ impl GameState {
             exit_request: None,
             level_time: 0,
             sound_targets: Vec::new(),
+            sound_links: Vec::new(),
             sound_traversed: Vec::new(),
             sound_gen: 0,
             seen_lines: Vec::new(),

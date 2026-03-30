@@ -1223,7 +1223,7 @@ mod tests {
     fn fire_current_weapon_emits_noise_alert_when_level_present() {
         let mut gs = make_game_state();
         let level = make_sound_level();
-        init_sound_state(&mut gs, level.sectors.len());
+        init_sound_state(&mut gs, &level);
         gs.player.weapon = WeaponType::Pistol;
 
         fire_current_weapon(&mut gs, Some(&level));
