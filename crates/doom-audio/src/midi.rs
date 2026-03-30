@@ -336,6 +336,13 @@ pub struct MidiPlayer {
     ///
     /// Updated by `Controller { controller: 2, value }` events.
     channel_program: [u8; 16],
+    /// Fractional source-sample position used when resampling the native OPL
+    /// stream (49_716 Hz) to the output device sample rate.
+    resample_frac: f64,
+    /// Previous native OPL sample used as index 0 for linear interpolation.
+    resample_prev: f32,
+    /// Whether `resample_prev` has been initialized.
+    resample_initialized: bool,
 }
 
 impl Default for MidiPlayer {
@@ -359,6 +366,9 @@ impl MidiPlayer {
             sample_count: 0,
             genmidi: None,
             channel_program: [0u8; 16],
+            resample_frac: 0.0,
+            resample_prev: 0.0,
+            resample_initialized: false,
         }
     }
 
@@ -390,6 +400,9 @@ impl MidiPlayer {
         self.event_cursor = 0;
         self.next_event_tick = first_tick;
         self.sample_count = 0;
+        self.resample_frac = 0.0;
+        self.resample_prev = 0.0;
+        self.resample_initialized = false;
     }
 
     /// Stop playback and silence all OPL channels.
@@ -401,6 +414,9 @@ impl MidiPlayer {
         self.sample_count = 0;
         self.event_cursor = 0;
         self.next_event_tick = 0;
+        self.resample_frac = 0.0;
+        self.resample_prev = 0.0;
+        self.resample_initialized = false;
     }
 
     /// Advance playback by `n_samples` at `sample_rate` Hz, synthesizing OPL
@@ -507,8 +523,47 @@ impl MidiPlayer {
         }
 
         // Synthesize OPL audio for this window.
-        // Agent 1 implements OplChip::synthesize; we call it here.
-        self.opl.synthesize(buf, sample_rate);
+        //
+        // Doom's OPL hardware runs at 49_716 Hz; synthesizing directly at the
+        // output device sample rate audibly shifts timbre and envelope timing.
+        // Keep synthesis at the native chip rate and linearly resample.
+        const OPL_RATE: u32 = 49_716;
+        if sample_rate == OPL_RATE {
+            self.opl.synthesize(buf, sample_rate);
+        } else if n_samples > 0 {
+            let step = OPL_RATE as f64 / sample_rate as f64;
+            let start_pos = self.resample_frac;
+            let last_pos = start_pos + step * (n_samples.saturating_sub(1) as f64);
+
+            let max_interp_idx = last_pos.floor() as usize + 1;
+            let consumed_idx = (start_pos + step * n_samples as f64).floor() as usize;
+            let max_needed = max_interp_idx.max(consumed_idx);
+
+            let mut src = vec![0.0f32; max_needed + 1];
+            src[0] = if self.resample_initialized {
+                self.resample_prev
+            } else {
+                self.resample_initialized = true;
+                0.0
+            };
+            if max_needed > 0 {
+                self.opl.synthesize(&mut src[1..], OPL_RATE);
+            }
+
+            for (i, out) in buf.iter_mut().enumerate() {
+                let pos = start_pos + step * i as f64;
+                let idx = pos.floor() as usize;
+                let frac = (pos - idx as f64) as f32;
+                let a = src[idx];
+                let b = src[idx + 1];
+                *out = a + (b - a) * frac;
+            }
+
+            let end_pos = start_pos + step * n_samples as f64;
+            let drop = end_pos.floor() as usize;
+            self.resample_frac = end_pos - drop as f64;
+            self.resample_prev = src[drop];
+        }
 
         self.sample_count = sample_count_end;
     }
@@ -896,6 +951,43 @@ mod tests {
         assert!(
             buf.iter().all(|&s| s == 0.0),
             "advance_samples must zero the buffer when no score is loaded"
+        );
+    }
+
+    #[test]
+    fn midi_resampler_is_stable_across_buffer_boundaries() {
+        let score = make_score_with_deltas(vec![
+            (
+                0,
+                MusEvent::PlayNote {
+                    channel: 0,
+                    note: 60,
+                    volume: Some(127),
+                },
+            ),
+            (140, MusEvent::ScoreEnd),
+        ]);
+
+        let mut oneshot = MidiPlayer::new();
+        oneshot.load_score(score.clone());
+        let mut one = vec![0.0f32; 2048];
+        oneshot.advance_samples(one.len(), 44_100, &mut one);
+
+        let mut chunked = MidiPlayer::new();
+        chunked.load_score(score);
+        let mut two = vec![0.0f32; 2048];
+        chunked.advance_samples(1024, 44_100, &mut two[..1024]);
+        chunked.advance_samples(1024, 44_100, &mut two[1024..]);
+
+        let max_diff = one
+            .iter()
+            .zip(&two)
+            .map(|(a, b)| (a - b).abs())
+            .fold(0.0f32, f32::max);
+
+        assert!(
+            max_diff < 0.02,
+            "resampled output should stay stable across buffer splits (max_diff={max_diff})"
         );
     }
 
