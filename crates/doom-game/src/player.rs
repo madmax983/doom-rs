@@ -276,7 +276,7 @@ impl PlayerState {
     /// Has no effect if the player is already at or above `MAX_HEALTH`.
     pub fn heal(&mut self, amount: i32) {
         if self.health < MAX_HEALTH {
-            self.health = (self.health + amount).min(MAX_HEALTH);
+            self.health = self.health.saturating_add(amount).min(MAX_HEALTH);
         }
     }
 
@@ -285,7 +285,7 @@ impl PlayerState {
     /// Used for power-up items (Soulsphere, Megasphere) that can overheal.
     /// Health is capped at `cap` (e.g. 200).
     pub fn heal_overheal(&mut self, amount: i32, cap: i32) {
-        self.health = (self.health + amount).min(cap);
+        self.health = self.health.saturating_add(amount).min(cap);
     }
 
     /// Set health directly to `value`, clamped to `[0, cap]`.
@@ -790,5 +790,34 @@ mod tests {
         assert_eq!(AmmoType::from_repr(1), Some(AmmoType::Shells));
         assert_eq!(AmmoType::from_repr(255), Some(AmmoType::None));
         assert_eq!(AmmoType::from_repr(4), None);
+    }
+}
+
+#[cfg(test)]
+mod proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn havoc_player_health_heal_does_not_panic(start_health in i32::MIN..i32::MAX, amount in i32::MIN..i32::MAX) {
+            let mut p = PlayerState::default();
+            p.health = start_health;
+            p.heal(amount);
+        }
+
+        #[test]
+        fn havoc_player_health_heal_overheal_does_not_panic(start_health in i32::MIN..i32::MAX, amount in i32::MIN..i32::MAX, cap in i32::MIN..i32::MAX) {
+            let mut p = PlayerState::default();
+            p.health = start_health;
+            p.heal_overheal(amount, cap);
+        }
+
+        #[test]
+        fn havoc_player_health_damage_does_not_panic(start_health in i32::MIN..i32::MAX, amount in i32::MIN..i32::MAX) {
+            let mut p = PlayerState::default();
+            p.health = start_health;
+            p.apply_damage(amount);
+        }
     }
 }

@@ -604,26 +604,31 @@ impl DehPatch {
 
     fn parse_i32(s: &str) -> Result<i32, DehError> {
         s.parse::<i32>()
+            .or_else(|_| s.parse::<i64>().map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32))
             .map_err(|_| DehError::BadField(format!("expected i32, got {s:?}")))
     }
 
     fn parse_u32(s: &str) -> Result<u32, DehError> {
         s.parse::<u32>()
+            .or_else(|_| s.parse::<i64>().map(|v| v.clamp(0, u32::MAX as i64) as u32))
             .map_err(|_| DehError::BadField(format!("expected u32, got {s:?}")))
     }
 
     fn parse_u16(s: &str) -> Result<u16, DehError> {
         s.parse::<u16>()
+            .or_else(|_| s.parse::<i64>().map(|v| v.clamp(0, u16::MAX as i64) as u16))
             .map_err(|_| DehError::BadField(format!("expected u16, got {s:?}")))
     }
 
     fn parse_u8(s: &str) -> Result<u8, DehError> {
         s.parse::<u8>()
+            .or_else(|_| s.parse::<i64>().map(|v| v.clamp(0, u8::MAX as i64) as u8))
             .map_err(|_| DehError::BadField(format!("expected u8, got {s:?}")))
     }
 
     fn parse_usize(s: &str) -> Result<usize, DehError> {
         s.parse::<usize>()
+            .or_else(|_| s.parse::<isize>().map(|v| v.max(0) as usize))
             .map_err(|_| DehError::BadField(format!("expected usize, got {s:?}")))
     }
 
@@ -726,11 +731,11 @@ impl DehPatch {
 
             if let Some(d) = patch.duration {
                 // MobjStateEntry::tics is i16.
-                state.tics = d as i16;
+                state.tics = d.clamp(i16::MIN as i32, i16::MAX as i32) as i16;
                 count += 1;
             }
             if let Some(nf) = patch.next_frame {
-                state.next_state = StateNum(nf as u16);
+                state.next_state = StateNum(nf.min(u16::MAX as usize) as u16);
                 count += 1;
             }
             if let Some(sn) = patch.sprite_number {
