@@ -78,6 +78,23 @@ pub struct TicPacket {
 
 impl TicPacket {
     /// Serialize this packet to a `Vec<u8>` in little-endian format.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{TicPacket, TicCmd, packet::MAX_PLAYERS};
+    ///
+    /// let packet = TicPacket {
+    ///     tic: 42,
+    ///     sender: 0,
+    ///     ack_tic: 40,
+    ///     state_checksum: 12345,
+    ///     cmds: [TicCmd::default(); MAX_PLAYERS],
+    /// };
+    ///
+    /// let bytes = packet.to_bytes();
+    /// assert_eq!(bytes.len(), doom_net::packet::TIC_PACKET_SIZE);
+    /// ```
     #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(TIC_PACKET_SIZE);
@@ -101,6 +118,26 @@ impl TicPacket {
     /// Deserialize a packet from a little-endian byte slice.
     ///
     /// Returns `None` if `data` is too short.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{TicPacket, TicCmd, packet::MAX_PLAYERS};
+    ///
+    /// let original = TicPacket {
+    ///     tic: 100,
+    ///     sender: 1,
+    ///     ack_tic: 99,
+    ///     state_checksum: 9876,
+    ///     cmds: [TicCmd::default(); MAX_PLAYERS],
+    /// };
+    ///
+    /// let bytes = original.to_bytes();
+    /// let parsed = TicPacket::from_bytes(&bytes).expect("Should parse successfully");
+    ///
+    /// assert_eq!(parsed.tic, 100);
+    /// assert_eq!(parsed.sender, 1);
+    /// ```
     #[must_use]
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
         if data.len() < TIC_PACKET_SIZE {
