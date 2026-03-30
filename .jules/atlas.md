@@ -5,3 +5,7 @@
 **[Hide internal renderer modules]**
 **Tangle:** The `doom-renderer` crate leaked internal constant modules `automap_colors` and `menu_colors` as `pub mod`s in `automap.rs` and `menu_render.rs` and re-exported them in `lib.rs` even though they are only used internally within the renderer for the GUI.
 **Blueprint:** Altered the visibility of these modules to `pub(crate)` and removed them from the crate's `pub use` interface. Added `#[allow(dead_code)]` to bypass rustc warning of `pub` items missing callers since they are now module-private yet some constants are unimplemented but part of a well-defined palette standard. This ensures strict internal encapsulation.
+
+## 2024-03-26 - Removed duplicate `savegame` modules
+**Tangle:** Both `doom-app` and `doom-game` had their own `savegame` modules, and `doom-app`'s version was essentially doing exactly what `doom-game`'s did but with duplication. `doom-game` already implements saving and loading `GameState` using its own byte format, but `doom-app` was using `bincode` directly to save the exact same data to disk, leading to duplication and an inconsistent save format.
+**Blueprint:** Removed `crates/doom-app/src/savegame.rs` and modified `crates/doom-app/src/main.rs` to use the serialization mechanisms correctly provided by `doom-game::savegame` (`save_game` and `load_game`).

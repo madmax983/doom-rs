@@ -7,7 +7,6 @@ mod cheats;
 mod console;
 mod demo_mode;
 mod net_mode;
-mod savegame;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -18,8 +17,9 @@ use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
 use doom_game::player::WeaponType;
 use doom_game::{
-    GamePhase, GamePhaseController, GameState, Skill, TicCmd, TitleScreen, init_conveyors,
-    init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
+    GamePhase, GamePhaseController, GameState, SaveGame, Skill, TicCmd, TitleScreen,
+    init_conveyors, init_scrolling_walls, init_sector_lights, kind_to_doomed_type, load_game,
+    save_game, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
@@ -877,11 +877,10 @@ impl DoomApp for DoomGame {
                         }
                         doom_game::menu::MenuResult::LoadGame(slot) => {
                             let path = format!("doom_save_{slot}.bin");
-                            match savegame::load_game(std::path::Path::new(&path)) {
-                                Ok((_header, payload)) => {
-                                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                                        self.console.print(format!("Load failed: {e}"));
-                                    } else {
+                            match std::fs::read(&path) {
+                                Ok(data) => match load_game(&data) {
+                                    Ok(SaveGame { state, .. }) => {
+                                        self.gs = state;
                                         self.player_view_height = if self.gs.player.is_dead() {
                                             DEAD_PLAYER_VIEW_HEIGHT
                                         } else {
@@ -891,15 +890,29 @@ impl DoomApp for DoomGame {
                                         self.start_level_music();
                                         self.menu.close();
                                     }
+                                    Err(e) => {
+                                        self.console.print(format!("Load failed: {e}"));
+                                    }
+                                },
+                                Err(e) => {
+                                    self.console.print(format!("Load failed: {e}"));
                                 }
-                                Err(e) => self.console.print(format!("Load failed: {e}")),
                             }
                         }
                         doom_game::menu::MenuResult::SaveGame(slot) => {
                             let path = format!("doom_save_{slot}.bin");
-                            if let Err(e) =
-                                savegame::save_game(std::path::Path::new(&path), &self.gs, slot)
-                            {
+                            let mut level_name_bytes = [0u8; 8];
+                            let name_bytes = self.gs.level_name.as_bytes();
+                            let copy_len = name_bytes.len().min(8);
+                            level_name_bytes[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+
+                            let data = save_game(
+                                &self.gs,
+                                &level_name_bytes,
+                                2, // Defaulting skill for now or should keep in state
+                                &format!("Slot {}", slot),
+                            );
+                            if let Err(e) = std::fs::write(&path, data) {
                                 self.console.print(format!("Save failed: {e}"));
                             } else {
                                 self.console.print(format!("Saved to slot {slot}."));
@@ -979,7 +992,18 @@ impl DoomApp for DoomGame {
 
         // Quick save (F5).
         if input.f5_save {
-            if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0) {
+            let mut level_name_bytes = [0u8; 8];
+            let name_bytes = self.gs.level_name.as_bytes();
+            let copy_len = name_bytes.len().min(8);
+            level_name_bytes[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
+
+            let data = save_game(
+                &self.gs,
+                &level_name_bytes,
+                2, // Defaulting skill for now
+                "Quicksave",
+            );
+            if let Err(e) = std::fs::write(&self.save_path, data) {
                 self.console.print(format!("Save failed: {e}"));
             } else {
                 self.console.print("Game saved.".to_string());
@@ -988,16 +1012,18 @@ impl DoomApp for DoomGame {
 
         // Quick load (F9).
         if input.f9_load {
-            match savegame::load_game(&self.save_path) {
-                Ok((_header, payload)) => {
-                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                        self.console.print(format!("Load failed: {e}"));
-                    } else {
+            match std::fs::read(&self.save_path) {
+                Ok(data) => match load_game(&data) {
+                    Ok(SaveGame { state, .. }) => {
+                        self.gs = state;
                         self.reset_weapon_anim();
                         self.console.print("Game loaded.".to_string());
                         self.start_level_music();
                     }
-                }
+                    Err(e) => {
+                        self.console.print(format!("Load failed: {e}"));
+                    }
+                },
                 Err(e) => {
                     self.console.print(format!("Load failed: {e}"));
                 }
