@@ -190,7 +190,7 @@ pub(crate) struct DoomGame {
     /// Optional audio subsystem.  `None` when no audio device is available.
     audio: Option<AudioSystem>,
     /// WAD music lumps keyed by their canonical `D_*` lump names.
-    music_library: std::collections::HashMap<String, Vec<u8>>,
+    music_library: std::collections::HashMap<String, std::sync::Arc<[u8]>>,
     /// Flat texture cache (floor/ceiling textures loaded from the WAD).
     flat_cache: Option<FlatCache>,
     /// Wall texture cache (TEXTURE1/TEXTURE2 composed textures from the WAD).
@@ -262,7 +262,7 @@ impl DoomGame {
         mut gs: GameState,
         level: Level,
         audio: Option<AudioSystem>,
-        music_library: std::collections::HashMap<String, Vec<u8>>,
+        music_library: std::collections::HashMap<String, std::sync::Arc<[u8]>>,
         flat_cache: Option<FlatCache>,
         tex_cache: Option<TextureCache>,
         sprite_cache: Option<SpriteCache>,
@@ -352,7 +352,7 @@ impl DoomGame {
         let Some(music) = self.music_library.get(lump_name) else {
             return false;
         };
-        audio.start_music(music.clone());
+        audio.start_music(std::sync::Arc::clone(music));
         true
     }
 
@@ -1729,7 +1729,7 @@ pub(crate) fn ticinput_to_ticcmd(input: TicInput) -> TicCmd {
 // `spawn_player` removed — replaced by `spawn_level_things` which spawns
 // ALL map things (player, monsters, items, decorations, keys).
 
-fn load_music_library(wad: &WadStack) -> std::collections::HashMap<String, Vec<u8>> {
+fn load_music_library(wad: &WadStack) -> std::collections::HashMap<String, std::sync::Arc<[u8]>> {
     let mut music_library = std::collections::HashMap::new();
 
     for episode in 1..=4 {
@@ -1739,7 +1739,7 @@ fn load_music_library(wad: &WadStack) -> std::collections::HashMap<String, Vec<u
                 continue;
             };
             if let Some(mus_data) = wad.lump_data(&music_lump) {
-                music_library.insert(music_lump, mus_data.to_vec());
+                music_library.insert(music_lump, std::sync::Arc::<[u8]>::from(mus_data));
             }
         }
     }
@@ -1750,13 +1750,13 @@ fn load_music_library(wad: &WadStack) -> std::collections::HashMap<String, Vec<u
             continue;
         };
         if let Some(mus_data) = wad.lump_data(&music_lump) {
-            music_library.insert(music_lump, mus_data.to_vec());
+            music_library.insert(music_lump, std::sync::Arc::<[u8]>::from(mus_data));
         }
     }
 
     for lump in ["D_INTER", "D_DM2INT"] {
         if let Some(mus_data) = wad.lump_data(lump) {
-            music_library.insert(lump.to_string(), mus_data.to_vec());
+            music_library.insert(lump.to_string(), std::sync::Arc::<[u8]>::from(mus_data));
         }
     }
 
@@ -2759,10 +2759,10 @@ mod tests {
     fn music_library_for(
         level_name: &str,
         data: Vec<u8>,
-    ) -> std::collections::HashMap<String, Vec<u8>> {
+    ) -> std::collections::HashMap<String, std::sync::Arc<[u8]>> {
         let mut library = std::collections::HashMap::new();
         if let Some(lump) = music_lump_for_map(level_name) {
-            library.insert(lump, data);
+            library.insert(lump, std::sync::Arc::<[u8]>::from(data));
         }
         library
     }
@@ -3388,8 +3388,14 @@ mod tests {
 
         let library = load_music_library(&wad);
 
-        assert_eq!(library.get("D_INTER"), Some(&vec![1, 2, 3, 4]));
-        assert_eq!(library.get("D_DM2INT"), Some(&vec![5, 6, 7, 8]));
+        assert_eq!(
+            library.get("D_INTER"),
+            Some(&std::sync::Arc::<[u8]>::from(vec![1, 2, 3, 4]))
+        );
+        assert_eq!(
+            library.get("D_DM2INT"),
+            Some(&std::sync::Arc::<[u8]>::from(vec![5, 6, 7, 8]))
+        );
     }
 
     #[test]
@@ -3439,7 +3445,10 @@ mod tests {
         let audio = AudioSystem::try_open_null().expect("null audio must succeed");
         let mut music_library = music_library_for("E1M1", vec![1, 2, 3, 4]);
         music_library.extend(music_library_for("E1M2", vec![5, 6, 7, 8]));
-        music_library.insert("D_INTER".to_string(), vec![9, 10, 11, 12]);
+        music_library.insert(
+            "D_INTER".to_string(),
+            std::sync::Arc::<[u8]>::from(vec![9, 10, 11, 12]),
+        );
         let mut game = DoomGame::new(
             make_game_state(),
             make_walk_exit_level(),
