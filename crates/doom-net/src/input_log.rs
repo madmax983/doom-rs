@@ -44,6 +44,15 @@ impl InputLog {
     ///
     /// # Panics
     /// Panics if `capacity` is 0.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::InputLog;
+    ///
+    /// let log = InputLog::new(32);
+    /// assert_eq!(log.get(0), None);
+    /// ```
     #[must_use]
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "InputLog capacity must be > 0");
@@ -57,6 +66,14 @@ impl InputLog {
     }
 
     /// Create a log with the default capacity ([`MAX_ROLLBACK_TICS`]).
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::InputLog;
+    ///
+    /// let log = InputLog::with_default_capacity();
+    /// ```
     #[must_use]
     pub fn with_default_capacity() -> Self {
         Self::new(MAX_ROLLBACK_TICS)
@@ -64,6 +81,19 @@ impl InputLog {
 
     /// Record inputs for `tic`.  Marks the entry as non-authoritative
     /// (predicted) by default.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    ///
+    /// let mut log = InputLog::new(8);
+    /// let mut cmds = [TicCmd::default(); MAX_PLAYERS];
+    /// cmds[0].forward_move = 50;
+    ///
+    /// log.record(10, cmds);
+    /// assert!(!log.has_authoritative(10)); // Just recorded, so it's predicted
+    /// ```
     pub fn record(&mut self, tic: u32, cmds: [TicCmd; MAX_PLAYERS]) {
         let slot = (tic as usize) % self.capacity;
         self.log[slot] = Some(InputEntry {
@@ -74,6 +104,18 @@ impl InputLog {
     }
 
     /// Retrieve the inputs for `tic`, if stored and the tic matches.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    ///
+    /// let mut log = InputLog::new(8);
+    /// log.record(5, [TicCmd::default(); MAX_PLAYERS]);
+    ///
+    /// assert!(log.get(5).is_some());
+    /// assert!(log.get(6).is_none());
+    /// ```
     #[must_use]
     pub fn get(&self, tic: u32) -> Option<&[TicCmd; MAX_PLAYERS]> {
         let slot = (tic as usize) % self.capacity;
@@ -85,6 +127,19 @@ impl InputLog {
 
     /// Returns `true` if we have authoritative (server-confirmed) inputs
     /// for `tic`.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    ///
+    /// let mut log = InputLog::new(8);
+    /// log.record(1, [TicCmd::default(); MAX_PLAYERS]); // Predicted
+    /// assert_eq!(log.has_authoritative(1), false);
+    ///
+    /// log.set_authoritative(1, [TicCmd::default(); MAX_PLAYERS]); // Server confirmed
+    /// assert_eq!(log.has_authoritative(1), true);
+    /// ```
     #[must_use]
     pub fn has_authoritative(&self, tic: u32) -> bool {
         let slot = (tic as usize) % self.capacity;
@@ -94,6 +149,17 @@ impl InputLog {
     /// Overwrite the entry for `tic` with server-confirmed inputs.
     ///
     /// Marks the entry as authoritative.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    ///
+    /// let mut log = InputLog::new(8);
+    /// log.set_authoritative(42, [TicCmd::default(); MAX_PLAYERS]);
+    ///
+    /// assert!(log.has_authoritative(42));
+    /// ```
     pub fn set_authoritative(&mut self, tic: u32, cmds: [TicCmd; MAX_PLAYERS]) {
         let slot = (tic as usize) % self.capacity;
         self.log[slot] = Some(InputEntry {
