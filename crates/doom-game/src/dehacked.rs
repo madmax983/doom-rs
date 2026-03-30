@@ -604,7 +604,10 @@ impl DehPatch {
 
     fn parse_i32(s: &str) -> Result<i32, DehError> {
         s.parse::<i32>()
-            .or_else(|_| s.parse::<i64>().map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32))
+            .or_else(|_| {
+                s.parse::<i64>()
+                    .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+            })
             .map_err(|_| DehError::BadField(format!("expected i32, got {s:?}")))
     }
 

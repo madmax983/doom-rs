@@ -7,6 +7,7 @@ mod cheats;
 mod cogmind;
 mod console;
 mod demo_mode;
+mod export_stats;
 mod net_mode;
 mod savegame;
 
@@ -164,6 +165,10 @@ struct Args {
     /// Number of full music loops to render when using --export-music-wav.
     #[arg(long, default_value = "1")]
     music_loops: u32,
+
+    /// Export the total map statistics (kills, items, secrets, par time) to a JSON file and exit.
+    #[arg(long)]
+    export_map_stats: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -2013,6 +2018,23 @@ fn run_doom() -> Result<()> {
             "🎵".green(),
             "Exported".green().bold(),
             wav_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
+
+    if let Some(ref stats_path) = args.export_map_stats {
+        let mut gs = GameState::new(warp_str);
+        doom_game::spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        let stats = gs.compute_intermission_stats();
+        let json_data = export_stats::export_map_stats_to_json(warp_str, &stats);
+        std::fs::write(stats_path, json_data)
+            .with_context(|| format!("Failed to write map stats to {}", stats_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} map stats to {}",
+            "🌟".green(),
+            "Exported".green().bold(),
+            stats_path.display().to_string().cyan()
         );
         return Ok(());
     }

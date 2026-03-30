@@ -35,7 +35,6 @@ use doom_types::{ANG90, Bam, Fixed16_16, TicCmd, bt};
 use crate::mobj::{MobjHandle, StateNum, flags};
 use crate::state::GameState;
 
-
 // ---------------------------------------------------------------------------
 // Movement constants
 // ---------------------------------------------------------------------------
