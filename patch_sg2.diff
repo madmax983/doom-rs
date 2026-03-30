@@ -1,0 +1,14 @@
+<<<<<<< SEARCH
+        kill_count: gs.kill_count,
+        item_count: gs.item_count,
+        secret_count: gs.secret_count,
+    }
+}
+=======
+        kill_count: gs.kill_count,
+        item_count: gs.item_count,
+        secret_count: gs.secret_count,
+        player_score: gs.player.score,
+    }
+}
+>>>>>>> REPLACE

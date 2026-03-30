@@ -475,6 +475,23 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             }
         }
         gs.player.bonus_count = 6; // HUD flash for 6 tics
+
+        // Arcade scoring for pickups
+        let score = match kind {
+            MobjKind::HealthBonus | MobjKind::ArmorBonus => 10,
+            MobjKind::Stimpack => 50,
+            MobjKind::Medikit => 100,
+            MobjKind::Soulsphere | MobjKind::Megasphere => 1000,
+            MobjKind::GreenArmor | MobjKind::BlueArmor => 200,
+            MobjKind::Clip | MobjKind::Shell | MobjKind::RocketAmmo | MobjKind::Cell => 20,
+            MobjKind::ClipBox | MobjKind::ShellBox | MobjKind::RocketBox | MobjKind::CellPack => 50,
+            MobjKind::Shotgun | MobjKind::SuperShotgun | MobjKind::Chaingun | MobjKind::RocketLauncher | MobjKind::PlasmaRifle | MobjKind::BfgPickup | MobjKind::Chainsaw => 500,
+            MobjKind::Backpack => 500,
+            MobjKind::InvulnerabilitySphere | MobjKind::Berserk | MobjKind::BlurSphere | MobjKind::RadSuit | MobjKind::Allmap | MobjKind::Infrared => 1000,
+            MobjKind::BlueCard | MobjKind::YellowCard | MobjKind::RedCard | MobjKind::BlueSkull | MobjKind::YellowSkull | MobjKind::RedSkull => 2000,
+            _ => 0,
+        };
+        gs.player.score += score;
     }
 
     picked_up

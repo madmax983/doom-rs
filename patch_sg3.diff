@@ -1,0 +1,14 @@
+<<<<<<< SEARCH
+    gs.kill_count = payload.kill_count;
+    gs.item_count = payload.item_count;
+    gs.secret_count = payload.secret_count;
+
+    // Restore player health.
+=======
+    gs.kill_count = payload.kill_count;
+    gs.item_count = payload.item_count;
+    gs.secret_count = payload.secret_count;
+    gs.player.score = payload.player_score;
+
+    // Restore player health.
+>>>>>>> REPLACE

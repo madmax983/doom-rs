@@ -1,0 +1,11 @@
+<<<<<<< SEARCH
+    /// Secret count at save time.
+    pub secret_count: u32,
+}
+=======
+    /// Secret count at save time.
+    pub secret_count: u32,
+    /// Player arcade score.
+    pub player_score: u32,
+}
+>>>>>>> REPLACE

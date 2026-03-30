@@ -103,6 +103,8 @@ pub struct IntermissionRenderer {
     pub par_time: u32,
     /// Level time in seconds.
     pub level_time: u32,
+    /// Arcade score.
+    pub score: u32,
     /// Episode number (1-3 for Doom 1, 0 for Doom 2).
     pub episode: u8,
     /// Map number.
@@ -174,6 +176,7 @@ impl IntermissionRenderer {
             episode,
             map,
             time_phase_tics: 0,
+            score: stats.score,
         }
     }
 
@@ -188,6 +191,7 @@ impl IntermissionRenderer {
         level_time: u32,
         episode: u8,
         map: u8,
+        score: u32,
     ) -> Self {
         Self {
             tic: 0,
@@ -203,6 +207,7 @@ impl IntermissionRenderer {
             episode,
             map,
             time_phase_tics: 0,
+            score,
         }
     }
 
@@ -719,6 +724,7 @@ mod tests {
             level_time,
             episode,
             map,
+            0,
         )
     }
 

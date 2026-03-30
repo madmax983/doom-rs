@@ -97,6 +97,8 @@ pub struct StatusBarData {
     pub keys: u8,
     /// Mugshot frame index (0-7, placeholder for future sprite-based faces).
     pub face_index: u8,
+    /// Player arcade score.
+    pub score: u32,
 }
 
 impl StatusBarData {
@@ -128,6 +130,7 @@ impl StatusBarData {
             weapons: player.weapons,
             keys: player.keys,
             face_index: 0,
+            score: player.score,
         }
     }
 }
@@ -1216,6 +1219,9 @@ pub fn draw_status_bar_wad(
         draw_stysnum(fb, cache, wad, 288, *ty, cur, 3);
         draw_stysnum(fb, cache, wad, 314, *ty, max, 3);
     }
+
+    // 9. Arcade Score (drawn on top left edge of the HUD or somewhere visible)
+    draw_stnum(fb, cache, wad, 314, BAR - 16, data.score as i32, 7);
 }
 
 // ===========================================================================

@@ -209,6 +209,8 @@ pub struct PlayerState {
     pub item_count: u32,
     /// Number of secret sectors discovered by this player.
     pub secret_count: u32,
+    /// Player arcade score.
+    pub score: u32,
 }
 
 impl PlayerState {
@@ -250,6 +252,7 @@ impl PlayerState {
             kill_count: 0,
             item_count: 0,
             secret_count: 0,
+            score: 0,
         }
     }
 

@@ -32,6 +32,8 @@ pub struct IntermissionStats {
     pub time_tics: u32,
     /// Par time for the level (in tics, 35 tics = 1 second).
     pub par_time_tics: u32,
+    /// Arcade score at the end of the level.
+    pub score: u32,
 }
 
 impl GameState {
@@ -49,6 +51,7 @@ impl GameState {
             total_secrets: self.total_secrets,
             time_tics: self.level_time,
             par_time_tics: par_time(&self.level_name),
+            score: self.player.score,
         }
     }
 }

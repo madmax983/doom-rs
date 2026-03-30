@@ -1,0 +1,14 @@
+<<<<<<< SEARCH
+            kill_count: 0,
+            item_count: 0,
+            secret_count: 0,
+        };
+        let config = bincode::config::standard();
+=======
+            kill_count: 0,
+            item_count: 0,
+            secret_count: 0,
+            player_score: 0,
+        };
+        let config = bincode::config::standard();
+>>>>>>> REPLACE

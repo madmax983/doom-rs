@@ -235,6 +235,7 @@ pub fn tick_sector_secrets(gs: &mut GameState, level: &mut Level) {
     if let Some(sector_idx) = player_sector_index(gs, level) {
         if level.sectors[sector_idx].special == 9 {
             gs.secret_count += 1;
+            gs.player.score += 5000; // Arcade scoring
             level.sectors[sector_idx].special = 0;
         }
     }

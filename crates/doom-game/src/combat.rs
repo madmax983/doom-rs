@@ -240,6 +240,16 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
     };
 
     if new_health <= 0 {
+        // Arcade scoring
+        if inflictor != MobjHandle::NULL && inflictor == gs.player.handle {
+            if let Some(mo) = gs.mobjslab.get(target) {
+                let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
+                if info.spawn_health > 0 {
+                    gs.player.score += info.spawn_health as u32 * 10;
+                }
+            }
+        }
+
         // -------------------------------------------------------------------
         // Death transition — use p_set_mobj_state so the entry action
         // (A_Scream on the first death frame) fires correctly.

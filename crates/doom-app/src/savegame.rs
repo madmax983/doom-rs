@@ -121,6 +121,8 @@ pub struct SavePayload {
     pub item_count: u32,
     /// Secret count at save time.
     pub secret_count: u32,
+    /// Player arcade score.
+    pub player_score: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -234,6 +236,7 @@ pub fn apply_save(gs: &mut GameState, payload: &SavePayload) -> Result<(), SaveE
     gs.kill_count = payload.kill_count;
     gs.item_count = payload.item_count;
     gs.secret_count = payload.secret_count;
+    gs.player.score = payload.player_score;
 
     // Restore player health.
     // `set_health_capped` clamps to [0, cap]; use a large cap to restore exact value.
@@ -321,6 +324,7 @@ fn build_payload(gs: &GameState) -> SavePayload {
         kill_count: gs.kill_count,
         item_count: gs.item_count,
         secret_count: gs.secret_count,
+        player_score: gs.player.score,
     }
 }
 
@@ -448,6 +452,7 @@ mod tests {
             kill_count: 0,
             item_count: 0,
             secret_count: 0,
+            player_score: 0,
         };
         let config = bincode::config::standard();
         let mut buf = Vec::new();
