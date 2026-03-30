@@ -728,6 +728,7 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
         None => return,
     };
 
+    let mut intercepts = Vec::new();
     let pellets = info.pellets;
     let spread = info.spread;
     let range = info.range;
@@ -758,7 +759,15 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
         // Deterministic damage: vary by pellet index and tic_num.
         let damage = damage_lo + ((tic.wrapping_add(i as u32)) % damage_range) as i32;
 
-        p_line_attack(gs, handle, shot_angle, range, damage, level);
+        p_line_attack(
+            &mut intercepts,
+            gs,
+            handle,
+            shot_angle,
+            range,
+            damage,
+            level,
+        );
     }
 }
 
@@ -786,8 +795,8 @@ mod tests {
     use crate::player::{PlayerState, WeaponType, psprite_slots};
     use crate::state::GameState;
     use crate::states::ids;
-    use doom_types::{TicCmd, bt};
     use doom_types::{Bam, Fixed16_16};
+    use doom_types::{TicCmd, bt};
 
     /// Build a minimal GameState with a live player Mobj at the origin.
     ///

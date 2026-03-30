@@ -26,15 +26,15 @@ const AUTOAIM_TOP_SLOPE: f32 = 100.0 / 160.0;
 const AUTOAIM_BOTTOM_SLOPE: f32 = -100.0 / 160.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum HitscanInterceptKind {
+pub enum HitscanInterceptKind {
     Line(usize),
     Actor(MobjHandle),
 }
 
 #[derive(Clone, Copy, Debug)]
-struct HitscanIntercept {
-    frac: f32,
-    kind: HitscanInterceptKind,
+pub struct HitscanIntercept {
+    pub frac: f32,
+    pub kind: HitscanInterceptKind,
 }
 
 fn fixed_to_f32(value: Fixed16_16) -> f32 {
@@ -94,14 +94,15 @@ fn ray_actor_intersection(
 }
 
 fn collect_actor_hitscan_intercepts(
+    intercepts: &mut Vec<HitscanIntercept>,
     gs: &GameState,
     source: MobjHandle,
     sx: f32,
     sy: f32,
     rdx: f32,
     rdy: f32,
-) -> Vec<HitscanIntercept> {
-    let mut intercepts = Vec::new();
+) {
+    intercepts.clear();
 
     for handle in gs.mobjslab.iter_handles() {
         if handle == source {
@@ -132,8 +133,6 @@ fn collect_actor_hitscan_intercepts(
             }
         }
     }
-
-    intercepts
 }
 
 fn sort_hitscan_intercepts(intercepts: &mut [HitscanIntercept]) {
@@ -296,7 +295,11 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
 // ---------------------------------------------------------------------------
 
 /// Query the first actor a hitscan attack would strike.
+///
+/// ⚡ Bolt: Accepts a reusable `intercepts` scratch buffer to eliminate per-pellet
+/// heap allocations during multi-ray hitscan attacks (e.g., shotgun).
 pub(crate) fn p_line_attack_target(
+    intercepts: &mut Vec<HitscanIntercept>,
     gs: &GameState,
     source: MobjHandle,
     angle: Bam,
@@ -322,7 +325,7 @@ pub(crate) fn p_line_attack_target(
 
     let rdx = angle_cos * range_f;
     let rdy = angle_sin * range_f;
-    let mut intercepts = collect_actor_hitscan_intercepts(gs, source, sx, sy, rdx, rdy);
+    collect_actor_hitscan_intercepts(intercepts, gs, source, sx, sy, rdx, rdy);
 
     if let Some(lv) = level {
         for (linedef_idx, linedef) in lv.linedefs.iter().enumerate() {
@@ -353,12 +356,12 @@ pub(crate) fn p_line_attack_target(
         }
     }
 
-    sort_hitscan_intercepts(&mut intercepts);
+    sort_hitscan_intercepts(intercepts);
 
     let mut topslope = AUTOAIM_TOP_SLOPE;
     let mut bottomslope = AUTOAIM_BOTTOM_SLOPE;
 
-    for intercept in intercepts {
+    for intercept in intercepts.iter() {
         let dist = intercept.frac * range_f;
         if dist <= HITSCAN_EPSILON {
             continue;
@@ -423,7 +426,11 @@ pub(crate) fn p_line_attack_target(
 /// `None`, only actor intercepts are considered.
 ///
 /// Returns `Some(handle)` if an actor was hit and damaged, `None` otherwise.
+///
+/// ⚡ Bolt: Accepts a reusable `intercepts` scratch buffer to eliminate per-pellet
+/// heap allocations during multi-ray hitscan attacks (e.g., shotgun).
 pub fn p_line_attack(
+    intercepts: &mut Vec<HitscanIntercept>,
     gs: &mut GameState,
     source: MobjHandle,
     angle: Bam,
@@ -431,7 +438,7 @@ pub fn p_line_attack(
     damage: i32,
     level: Option<&Level>,
 ) -> Option<MobjHandle> {
-    let hit = p_line_attack_target(gs, source, angle, range, level)?;
+    let hit = p_line_attack_target(intercepts, gs, source, angle, range, level)?;
     damage_mobj(gs, hit, source, damage);
     Some(hit)
 }
@@ -576,6 +583,18 @@ mod tests {
         mo.state = spawn_sn;
         mo.tics = STATES[spawn_sn.0 as usize].tics;
         gs.mobjslab.alloc(mo)
+    }
+
+    fn test_p_line_attack(
+        gs: &mut GameState,
+        source: MobjHandle,
+        angle: Bam,
+        range: Fixed16_16,
+        damage: i32,
+        level: Option<&Level>,
+    ) -> Option<MobjHandle> {
+        let mut intercepts = Vec::new();
+        p_line_attack(&mut intercepts, gs, source, angle, range, damage, level)
     }
 
     fn make_open_combat_level() -> doom_map::Level {
@@ -886,7 +905,7 @@ mod tests {
         src.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
         let src_handle = gs.mobjslab.alloc(src);
 
-        let result = p_line_attack(&mut gs, src_handle, Bam::ZERO, MISSILERANGE, 10, None);
+        let result = test_p_line_attack(&mut gs, src_handle, Bam::ZERO, MISSILERANGE, 10, None);
         assert!(result.is_none(), "must return None when no targets exist");
     }
 
@@ -897,7 +916,8 @@ mod tests {
         let mut gs = make_game_state();
         let _trooper = spawn_trooper(&mut gs, 100, 0);
         let src = gs.player.handle;
-        let result = p_line_attack(&mut gs, src, Bam::ZERO, Fixed16_16::from_int(500), 5, None);
+        let result =
+            test_p_line_attack(&mut gs, src, Bam::ZERO, Fixed16_16::from_int(500), 5, None);
         assert!(result.is_some(), "should hit actor directly ahead");
     }
 
@@ -912,7 +932,7 @@ mod tests {
         // Even if trig tables were initialized and the geometry lined up,
         // dead actors must be skipped.  With uninitialized tables, t=0 and
         // both the dead-check and t<=0 guard fire — None is the expected result.
-        let result = p_line_attack(&mut gs, src, Bam::ZERO, MISSILERANGE, 10, None);
+        let result = test_p_line_attack(&mut gs, src, Bam::ZERO, MISSILERANGE, 10, None);
         assert!(result.is_none(), "dead actors must not be hit");
     }
 
@@ -928,7 +948,7 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 512, -21);
         let angle = Bam(((-8i32) << 18) as u32);
 
-        let result = p_line_attack(&mut gs, src, angle, Fixed16_16::from_int(1024), 5, None);
+        let result = test_p_line_attack(&mut gs, src, angle, Fixed16_16::from_int(1024), 5, None);
 
         assert_eq!(result, Some(trooper));
         assert!(gs.mobjslab.get(trooper).unwrap().health < 20);
@@ -1209,7 +1229,7 @@ mod tests {
         // ray will have zero direction and return Nothing. We need to
         // test the blockmap path so we pass Some(&level).
         // Since trig tables return 0, the ray has zero direction — no hit.
-        let result = p_line_attack(
+        let result = test_p_line_attack(
             &mut gs,
             player_h,
             Bam::ZERO,
@@ -1247,7 +1267,7 @@ mod tests {
         // Trooper at (64, 100) — behind the wall at y=64.
         let trooper = spawn_trooper(&mut gs, 64, 100);
 
-        let result = p_line_attack(
+        let result = test_p_line_attack(
             &mut gs,
             player_h,
             Bam::ZERO,
@@ -1283,7 +1303,7 @@ mod tests {
         // because the ray has zero direction (cos=sin=0).
         let trooper = spawn_trooper(&mut gs, 64, 1);
 
-        let result = p_line_attack(
+        let result = test_p_line_attack(
             &mut gs,
             player_h,
             Bam::ZERO,
@@ -1314,7 +1334,7 @@ mod tests {
 
         let trooper = spawn_trooper(&mut gs, 64, 50);
 
-        let result = p_line_attack(
+        let result = test_p_line_attack(
             &mut gs,
             player_h,
             Bam::ZERO,
@@ -1350,7 +1370,7 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 512, -21);
         let angle = Bam(((-8i32) << 18) as u32);
 
-        let result = p_line_attack(
+        let result = test_p_line_attack(
             &mut gs,
             player_h,
             angle,
@@ -1378,7 +1398,7 @@ mod tests {
         let low_trooper = spawn_trooper(&mut gs, 128, 0);
         gs.mobjslab.get_mut(low_trooper).unwrap().z = Fixed16_16::ZERO;
 
-        let result = p_line_attack(
+        let result = test_p_line_attack(
             &mut gs,
             player_h,
             Bam::ZERO,
@@ -1412,7 +1432,7 @@ mod tests {
         let high_far = spawn_trooper(&mut gs, 160, 0);
         gs.mobjslab.get_mut(high_far).unwrap().z = Fixed16_16::from_int(128);
 
-        let result = p_line_attack(
+        let result = test_p_line_attack(
             &mut gs,
             player_h,
             Bam::ZERO,
