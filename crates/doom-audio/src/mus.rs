@@ -58,6 +58,7 @@ pub enum MusEvent {
 }
 
 /// A fully-parsed MUS score.
+#[derive(Clone)]
 pub struct MusScore {
     /// File header.
     pub header: MusHeader,
