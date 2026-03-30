@@ -507,8 +507,8 @@ impl Blockmap {
         let n_blocks = x_count as usize * y_count as usize;
         let offsets_end = Self::HEADER_BYTES + n_blocks * 2;
 
-        let mut offsets = Vec::with_capacity(n_blocks);
         let offset_bytes = &data[Self::HEADER_BYTES..offsets_end.min(data.len())];
+        let mut offsets = Vec::with_capacity(offset_bytes.len() / 2);
         for chunk in offset_bytes.chunks_exact(2) {
             offsets.push(u16::from_le_bytes([chunk[0], chunk[1]]));
         }

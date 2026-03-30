@@ -8,6 +8,8 @@ edition = "2024"
 cargo-fuzz = true
 
 [dependencies]
+doom-map = { path = "../crates/doom-map" }
+
 libfuzzer-sys = "0.4"
 
 [dependencies.doom-types]
@@ -70,3 +72,15 @@ path = "fuzz_targets/fuzz_target_6.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "udmf"
+path = "fuzz_targets/udmf.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "lumps"
+path = "fuzz_targets/lumps.rs"
+test = false
+doc = false

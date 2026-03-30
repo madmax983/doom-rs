@@ -1,0 +1,7 @@
+use doom_map::lumps::Blockmap;
+
+#[test]
+fn test_crash() {
+    let data = vec![0xf8, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff];
+    let _ = Blockmap::parse_lump(&data);
+}
