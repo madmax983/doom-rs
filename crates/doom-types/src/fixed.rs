@@ -118,12 +118,7 @@ impl Fixed16_16 {
         debug_assert!(rhs.0 != 0, "FixedDiv: division by zero");
         let numerator = (self.0 as i64) << FRAC_BITS;
         // Havoc 👺: Catch overflow division cases!
-        // Handle the edge case where division by -1 overflows the i64 representation.
-        let mut result = if rhs.0 == -1 && numerator == i64::MIN {
-            i64::MAX
-        } else {
-            numerator / rhs.0 as i64
-        };
+        let mut result = numerator / rhs.0 as i64;
 
         if result > i32::MAX as i64 {
             result = i32::MAX as i64;
@@ -256,6 +251,57 @@ mod tests {
     fn fixed_one_is_unit() {
         assert_eq!(FIXED_ONE.to_int(), 1);
         assert_eq!(FIXED_ONE.fixed_mul(FIXED_ONE), FIXED_ONE);
+    }
+
+    #[test]
+    fn display_format() {
+        let a = Fixed16_16::from_int(42) + Fixed16_16::from_raw(1 << 15);
+        assert_eq!(format!("{}", a), "42.50000");
+    }
+
+    #[test]
+    fn traits_add_sub_assign() {
+        let mut a = Fixed16_16::from_int(5);
+        a += Fixed16_16::from_int(3);
+        assert_eq!(a, Fixed16_16::from_int(8));
+        a -= Fixed16_16::from_int(4);
+        assert_eq!(a, Fixed16_16::from_int(4));
+    }
+
+    #[test]
+    fn traits_neg_mul_div() {
+        let a = Fixed16_16::from_int(5);
+        assert_eq!(-a, Fixed16_16::from_int(-5));
+        let b = Fixed16_16::from_int(2);
+        assert_eq!(a * b, Fixed16_16::from_int(10));
+        assert_eq!(a / b, Fixed16_16::from_int(2) + Fixed16_16(1 << 15));
+    }
+
+    #[test]
+    fn traits_from() {
+        let a: Fixed16_16 = 42.into();
+        assert_eq!(a, Fixed16_16::from_int(42));
+        let b: i32 = a.into();
+        assert_eq!(b, 42);
+    }
+
+    #[test]
+    fn fixed_div_overflow_clamping() {
+        let a = Fixed16_16::from_int(32767);
+        let b = Fixed16_16::from_raw(1); // very small positive
+        assert_eq!(a.fixed_div(b), Fixed16_16::from_raw(i32::MAX));
+
+        let c = Fixed16_16::from_int(-32768);
+        let d = Fixed16_16::from_raw(1); // very small positive
+        assert_eq!(c.fixed_div(d), Fixed16_16::from_raw(i32::MIN));
+
+        let min_val = Fixed16_16::from_raw(i32::MIN);
+        let neg_one = Fixed16_16::from_int(-1);
+        assert_eq!(min_val.fixed_div(neg_one), Fixed16_16::from_raw(i32::MAX));
+
+        let min_val2 = Fixed16_16::from_raw(i32::MIN);
+        let neg_one2 = Fixed16_16::from_raw(-1);
+        assert_eq!(min_val2.fixed_div(neg_one2), Fixed16_16::from_raw(i32::MAX));
     }
 
     #[test]

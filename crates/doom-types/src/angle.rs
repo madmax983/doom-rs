@@ -242,6 +242,25 @@ mod tests {
     }
 
     #[test]
+    fn display_format() {
+        let a = Bam::from_raw(0x4000_0000);
+        assert_eq!(format!("{}", a), "90.00°");
+    }
+
+    #[test]
+    fn sub_trait() {
+        let a = Bam(0xABCD_EF01);
+        let b = Bam(0x1234_5678);
+        assert_eq!(a - b, a.wrapping_sub(b));
+    }
+
+    #[test]
+    fn neg_trait() {
+        let a = Bam(0x4000_0000);
+        assert_eq!(-a, a.negate());
+    }
+
+    #[test]
     fn additive_inverse_holds() {
         let a = Bam(0x1234_5678);
         let b = Bam(0xABCD_EF01);
