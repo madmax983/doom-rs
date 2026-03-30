@@ -19,28 +19,22 @@
 //! # Automap colour palette
 //! The [`automap_colors`] module exposes classic Doom automap palette indices
 //! as public constants.
-
+use crate::framebuffer::Framebuffer;
+use crate::palette::PaletteLut;
 use doom_game::AutomapCanvas;
 use doom_game::AutomapState;
 use doom_map::Level;
 use doom_types::Bam;
-
-use crate::framebuffer::Framebuffer;
-use crate::palette::PaletteLut;
-
 // ---------------------------------------------------------------------------
 // Screen constants (mirrors FB_WIDTH / FB_HEIGHT)
 // ---------------------------------------------------------------------------
-
 const SCREEN_W: i32 = 320;
 const SCREEN_H: i32 = 200;
 const HALF_W: i32 = SCREEN_W / 2; // 160
 const HALF_H: i32 = SCREEN_H / 2; // 100
-
 // ---------------------------------------------------------------------------
 // Palette indices -- Doom automap colour scheme (internal, for legacy API)
 // ---------------------------------------------------------------------------
-
 /// One-sided wall (solid, no left sidedef).
 const COLOR_ONE_SIDED: u8 = 176; // red
 /// Two-sided line, no height difference between sectors.
@@ -53,17 +47,13 @@ const COLOR_SECRET: u8 = 252; // purple
 const COLOR_PLAYER: u8 = 119; // green (classic automap player arrow)
 /// Background fill.
 const COLOR_BACKGROUND: u8 = 0; // black
-
 /// Linedef flag bit 5 -- secret wall.
 const FLAG_SECRET: u16 = 0x0020;
-
 // Padding fraction applied to each side of the computed map bounds (legacy mode).
 const PADDING_FRAC: f32 = 0.05;
-
 // ---------------------------------------------------------------------------
 // Public automap colour constants
 // ---------------------------------------------------------------------------
-
 /// Classic Doom automap palette indices (PLAYPAL colour table).
 ///
 /// These constants map to the original Doom automap colours and can be used
@@ -100,11 +90,9 @@ pub mod automap_colors {
     /// Crosshair / player position indicator: green.
     pub const CROSSHAIR: u8 = 112;
 }
-
 // ---------------------------------------------------------------------------
 // RendererAutomapCanvas -- bridges AutomapCanvas trait to Framebuffer
 // ---------------------------------------------------------------------------
-
 /// Automap canvas implementation that draws onto a [`Framebuffer`].
 ///
 /// Implements [`doom_game::AutomapCanvas`] so that `doom_game::draw_automap_full`
@@ -114,21 +102,18 @@ pub struct RendererAutomapCanvas<'a> {
     /// Mutable reference to the target framebuffer.
     fb: &'a mut Framebuffer,
 }
-
 impl<'a> RendererAutomapCanvas<'a> {
     /// Wrap a mutable `Framebuffer` reference as an `AutomapCanvas`.
     pub fn new(fb: &'a mut Framebuffer) -> Self {
         Self { fb }
     }
 }
-
 impl AutomapCanvas for RendererAutomapCanvas<'_> {
     fn set_pixel(&mut self, x: i32, y: i32, color: u8) {
         if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
             self.fb.set_pixel(x as usize, y as usize, color);
         }
     }
-
     fn get_pixel(&self, x: i32, y: i32) -> Option<u8> {
         if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
             self.fb.get_pixel(x as usize, y as usize)
@@ -136,24 +121,19 @@ impl AutomapCanvas for RendererAutomapCanvas<'_> {
             None
         }
     }
-
     fn clear(&mut self, color: u8) {
         self.fb.clear(color);
     }
-
     fn width(&self) -> i32 {
         SCREEN_W
     }
-
     fn height(&self) -> i32 {
         SCREEN_H
     }
 }
-
 // ---------------------------------------------------------------------------
 // render_automap -- full integration entry point
 // ---------------------------------------------------------------------------
-
 /// Render the automap overlay onto the framebuffer using the full game-side
 /// automap logic (visibility tracking, grid, thing markers, cheat flags).
 ///
@@ -190,10 +170,8 @@ pub fn render_automap(
         show_all_lines,
         show_all_things,
     };
-
     // Convert BAM angle to radians.
     let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
-
     let mut canvas = RendererAutomapCanvas::new(fb);
     doom_game::draw_automap_full(
         &mut canvas,
@@ -205,11 +183,9 @@ pub fn render_automap(
         angle_rad,
     );
 }
-
 // ---------------------------------------------------------------------------
 // Grid drawing (renderer-side, for standalone use)
 // ---------------------------------------------------------------------------
-
 /// Draw a grid overlay onto the framebuffer at the given map center and zoom.
 ///
 /// Grid lines are spaced at 128 map-unit intervals (the classic Doom grid).
@@ -221,34 +197,27 @@ pub fn draw_grid_on_fb(fb: &mut Framebuffer, center_x: f32, center_y: f32, zoom:
     let mut canvas = RendererAutomapCanvas::new(fb);
     doom_game::draw_grid(&mut canvas, center_x, center_y, zoom);
 }
-
 /// Draw a directional player arrow onto the framebuffer at a screen position.
 ///
 /// The arrow is approximately 8 pixels long, pointing in `player_angle`.
 /// Uses [`automap_colors::PLAYER`] colour.
 pub fn draw_player_arrow_on_fb(fb: &mut Framebuffer, sx: i32, sy: i32, player_angle: Bam) {
     let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
-
     let cos_a = angle_rad.cos() as f32;
     let sin_a = angle_rad.sin() as f32;
-
     let shaft_len: f32 = 8.0;
     let barb_len: f32 = 4.0;
-
     let tip_x = sx as f32 + cos_a * shaft_len;
     let tip_y = sy as f32 - sin_a * shaft_len;
     let tail_x = sx as f32 - cos_a * shaft_len;
     let tail_y = sy as f32 + sin_a * shaft_len;
-
     let barb_angle_offset = core::f64::consts::FRAC_PI_4 * 3.0;
     let left_barb_angle = angle_rad + barb_angle_offset;
     let right_barb_angle = angle_rad - barb_angle_offset;
-
     let left_x = tip_x + (left_barb_angle.cos() as f32) * barb_len;
     let left_y = tip_y - (left_barb_angle.sin() as f32) * barb_len;
     let right_x = tip_x + (right_barb_angle.cos() as f32) * barb_len;
     let right_y = tip_y - (right_barb_angle.sin() as f32) * barb_len;
-
     draw_line_fb(
         fb,
         tail_x as i32,
@@ -274,14 +243,11 @@ pub fn draw_player_arrow_on_fb(fb: &mut Framebuffer, sx: i32, sy: i32, player_an
         COLOR_PLAYER,
     );
 }
-
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-
 // ---------------------------------------------------------------------------
 // Public API -- legacy (auto-fit) entry point
 // ---------------------------------------------------------------------------
-
 /// Render a 2D overhead automap of `level` into `fb` (legacy auto-fit mode).
 ///
 /// This is the backward-compatible entry point that auto-computes zoom and
@@ -300,38 +266,29 @@ pub fn draw_automap(
 ) {
     // Fill background.
     fb.clear(COLOR_BACKGROUND);
-
     // Compute map bounds from vertexes.
     let Some((min_x, max_x, min_y, max_y)) = map_bounds(level) else {
         return;
     };
-
     let map_w = (max_x - min_x) as f32;
     let map_h = (max_y - min_y) as f32;
-
     if map_w < 1.0 || map_h < 1.0 {
         return;
     }
-
     let padded_w = map_w * (1.0 + 2.0 * PADDING_FRAC);
     let padded_h = map_h * (1.0 + 2.0 * PADDING_FRAC);
-
     let scale = (SCREEN_W as f32 / padded_w).min(SCREEN_H as f32 / padded_h);
-
     // Build an ephemeral AutomapState centered on the map.
     let mut state = AutomapState::new();
     state.center_x = (min_x as f32 + max_x as f32) / 2.0;
     state.center_y = (min_y as f32 + max_y as f32) / 2.0;
     state.zoom = scale;
-
     // Use the internal draw with this computed scale/center.
     draw_automap_internal(fb, level, &state, player_x, player_y, player_angle);
 }
-
 // ---------------------------------------------------------------------------
 // Public API -- stateful entry point
 // ---------------------------------------------------------------------------
-
 /// Render a 2D overhead automap using the interactive [`AutomapState`].
 ///
 /// This is the preferred entry point for interactive automap usage with
@@ -348,14 +305,11 @@ pub fn draw_automap_ex(
     player_angle: Bam,
 ) {
     fb.clear(COLOR_BACKGROUND);
-
     draw_automap_internal(fb, level, state, player_x, player_y, player_angle);
 }
-
 // ---------------------------------------------------------------------------
 // Internal rendering
 // ---------------------------------------------------------------------------
-
 /// Core automap rendering: draws linedefs + player arrow.
 fn draw_automap_internal(
     fb: &mut Framebuffer,
@@ -368,7 +322,6 @@ fn draw_automap_internal(
     if level.vertexes.is_empty() {
         return;
     }
-
     let center_x = state.center_x;
     let center_y = state.center_y;
     let zoom = state.zoom;
@@ -378,33 +331,26 @@ fn draw_automap_internal(
         let sy = HALF_H - ((wy - center_y) * zoom) as i32;
         (sx, sy)
     };
-
     // Draw all linedefs.
     for ld in &level.linedefs {
         let color = line_color(ld, level);
-
         let Some(v1) = level.vertexes.get(ld.from_vertex as usize) else {
             continue;
         };
         let Some(v2) = level.vertexes.get(ld.to_vertex as usize) else {
             continue;
         };
-
         let (x0, y0) = world_to_screen(v1.x as f32, v1.y as f32);
         let (x1, y1) = world_to_screen(v2.x as f32, v2.y as f32);
-
         draw_line_fb(fb, x0, y0, x1, y1, color);
     }
-
     // Draw player arrow.
     let (px, py) = world_to_screen(player_x as f32, player_y as f32);
     draw_player_arrow_internal(fb, px, py, player_angle);
 }
-
 // ---------------------------------------------------------------------------
 // Line colour classification
 // ---------------------------------------------------------------------------
-
 /// Choose an automap colour for a linedef based on its properties.
 ///
 /// Colour priority:
@@ -417,11 +363,9 @@ pub fn line_color(ld: &doom_map::Linedef, level: &Level) -> u8 {
     if ld.flags & FLAG_SECRET != 0 {
         return COLOR_SECRET;
     }
-
     if !ld.is_two_sided() {
         return COLOR_ONE_SIDED;
     }
-
     // Two-sided: check for height differences between front/back sectors.
     if has_height_change(ld, level) {
         COLOR_HEIGHT_CHANGE
@@ -429,7 +373,6 @@ pub fn line_color(ld: &doom_map::Linedef, level: &Level) -> u8 {
         COLOR_TWO_SIDED
     }
 }
-
 /// Returns `true` if the front and back sectors of a two-sided linedef have
 /// different floor or ceiling heights.
 fn has_height_change(ld: &doom_map::Linedef, level: &Level) -> bool {
@@ -441,7 +384,6 @@ fn has_height_change(ld: &doom_map::Linedef, level: &Level) -> bool {
         Some(sd) => sd,
         None => return false,
     };
-
     let right_sector = match level.sectors.get(right_sd.sector as usize) {
         Some(s) => s,
         None => return false,
@@ -450,15 +392,12 @@ fn has_height_change(ld: &doom_map::Linedef, level: &Level) -> bool {
         Some(s) => s,
         None => return false,
     };
-
     right_sector.floor_height != left_sector.floor_height
         || right_sector.ceil_height != left_sector.ceil_height
 }
-
 // ---------------------------------------------------------------------------
 // Player arrow (internal, for legacy API)
 // ---------------------------------------------------------------------------
-
 /// Draw a directional arrow at the player's screen position.
 ///
 /// The arrow is approximately 8 pixels long, pointing in `player_angle`.
@@ -470,32 +409,24 @@ fn draw_player_arrow_internal(fb: &mut Framebuffer, px: i32, py: i32, player_ang
     let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
     let cos_a = angle_rad.cos() as f32;
     let sin_a = angle_rad.sin() as f32;
-
     // Arrow dimensions (in screen pixels).
     let shaft_len: f32 = 8.0;
     let barb_len: f32 = 4.0;
-
     // Tip of the arrow (ahead of the player position).
     // Note: screen Y is flipped, so sin component is subtracted.
     let tip_x = px as f32 + cos_a * shaft_len;
     let tip_y = py as f32 - sin_a * shaft_len;
-
     // Tail of the arrow (behind the player position).
     let tail_x = px as f32 - cos_a * shaft_len;
     let tail_y = py as f32 + sin_a * shaft_len;
-
     // Barb angles: 135 degrees from the forward direction (each side).
     let barb_angle_offset = core::f64::consts::FRAC_PI_4 * 3.0; // 135 degrees
-
     let left_barb_angle = angle_rad + barb_angle_offset;
     let right_barb_angle = angle_rad - barb_angle_offset;
-
     let left_x = tip_x + (left_barb_angle.cos() as f32) * barb_len;
     let left_y = tip_y - (left_barb_angle.sin() as f32) * barb_len;
-
     let right_x = tip_x + (right_barb_angle.cos() as f32) * barb_len;
     let right_y = tip_y - (right_barb_angle.sin() as f32) * barb_len;
-
     // Draw shaft: tail -> tip
     draw_line_fb(
         fb,
@@ -524,23 +455,19 @@ fn draw_player_arrow_internal(fb: &mut Framebuffer, px: i32, py: i32, player_ang
         COLOR_PLAYER,
     );
 }
-
 // ---------------------------------------------------------------------------
 // Map bounds
 // ---------------------------------------------------------------------------
-
 /// Compute min/max world-coordinate bounds of all vertexes.
 ///
 /// Returns `None` if the level has no vertexes.
 fn map_bounds(level: &Level) -> Option<(i32, i32, i32, i32)> {
     let mut iter = level.vertexes.iter();
     let first = iter.next()?;
-
     let mut min_x = i32::from(first.x);
     let mut max_x = i32::from(first.x);
     let mut min_y = i32::from(first.y);
     let mut max_y = i32::from(first.y);
-
     for v in iter {
         let vx = i32::from(v.x);
         let vy = i32::from(v.y);
@@ -557,14 +484,11 @@ fn map_bounds(level: &Level) -> Option<(i32, i32, i32, i32)> {
             max_y = vy;
         }
     }
-
     Some((min_x, max_x, min_y, max_y))
 }
-
 // ---------------------------------------------------------------------------
 // Bresenham line rasteriser (framebuffer-direct)
 // ---------------------------------------------------------------------------
-
 /// Integer Bresenham line drawing directly onto a `Framebuffer`.
 ///
 /// Pixels outside `[0, 319] x [0, 199]` are silently skipped (no panic).
@@ -573,21 +497,17 @@ pub fn draw_line_fb(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, co
     let dy = (y1 - y0).abs();
     let sx: i32 = if x0 < x1 { 1 } else { -1 };
     let sy: i32 = if y0 < y1 { 1 } else { -1 };
-
     let mut x = x0;
     let mut y = y0;
     let mut err = dx - dy;
-
     loop {
         // Only plot pixels within screen bounds.
         if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
             fb.set_pixel(x as usize, y as usize, color);
         }
-
         if x == x1 && y == y1 {
             break;
         }
-
         let e2 = 2 * err;
         if e2 > -dy {
             err -= dy;
@@ -599,17 +519,15 @@ pub fn draw_line_fb(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, co
         }
     }
 }
-
 // Backward-compat alias used in old tests.
+#[allow(dead_code)]
 #[cfg(test)]
 fn draw_line(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: u8) {
     draw_line_fb(fb, x0, y0, x1, y1, color);
 }
-
 // ---------------------------------------------------------------------------
 // Coordinate transform helpers (public, for external use)
 // ---------------------------------------------------------------------------
-
 /// Convert map coordinates to screen coordinates using the given center and zoom.
 ///
 /// Doom Y increases upward; screen Y increases downward. The transform
@@ -625,12 +543,11 @@ pub fn map_to_screen(
     let sy = HALF_H - ((map_y - center_y) * zoom) as i32;
     (sx, sy)
 }
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
-
 #[cfg(test)]
+#[allow(clippy::module_inception)]
 mod tests {
     use super::*;
     use doom_game::AutomapState;
@@ -639,12 +556,11 @@ mod tests {
         Blockmap, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector, Thing as ThingRaw,
         Vertex as VxRaw,
     };
-
     // -----------------------------------------------------------------------
     // Minimal Level builder
     // -----------------------------------------------------------------------
-
     /// Build a `Level` with caller-supplied vertexes, linedefs, sidedefs, and
+    #[allow(dead_code)]
     /// sectors.  Provides sensible defaults for BSP data.
     fn make_level_full(
         vertexes: Vec<VxRaw>,
@@ -654,7 +570,7 @@ mod tests {
     ) -> Level {
         make_level_full_with_things(vertexes, linedefs, sidedefs, sectors, vec![])
     }
-
+    #[allow(dead_code)]
     fn make_level_full_with_things(
         vertexes: Vec<VxRaw>,
         linedefs: Vec<LdRaw>,
@@ -663,7 +579,6 @@ mod tests {
         things: Vec<ThingRaw>,
     ) -> Level {
         let n_sectors = sectors.len().max(1);
-
         // Ensure at least one sector for reject table sizing.
         let final_sectors = if sectors.is_empty() {
             vec![Sector {
@@ -678,12 +593,10 @@ mod tests {
         } else {
             sectors
         };
-
         let ssector = Ssector {
             seg_count: 0,
             first_seg: 0,
         };
-
         let mut bm_bytes = vec![0u8; 8 + 2 + 4];
         bm_bytes[0..2].copy_from_slice(&0i16.to_le_bytes());
         bm_bytes[2..4].copy_from_slice(&0i16.to_le_bytes());
@@ -693,10 +606,8 @@ mod tests {
         bm_bytes[10..12].copy_from_slice(&0u16.to_le_bytes());
         bm_bytes[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
         let blockmap = Blockmap::parse_lump(&bm_bytes).expect("blockmap parse");
-
         let reject_size = (n_sectors * n_sectors).div_ceil(8);
         let reject = Reject::parse_lump(&vec![0u8; reject_size], n_sectors).expect("reject parse");
-
         Level {
             name: "TEST".to_owned(),
             things,
@@ -711,12 +622,12 @@ mod tests {
             blockmap,
         }
     }
-
+    #[allow(dead_code)]
     /// Build a simple level with only vertexes and linedefs (no sidedefs/sectors).
     fn make_level(vertexes: Vec<VxRaw>, linedefs: Vec<LdRaw>) -> Level {
         make_level_full(vertexes, linedefs, vec![], vec![])
     }
-
+    #[allow(dead_code)]
     /// Helper to create a sidedef pointing at a given sector.
     fn make_sidedef(sector: u16) -> SdRaw {
         SdRaw {
@@ -728,7 +639,7 @@ mod tests {
             sector,
         }
     }
-
+    #[allow(dead_code)]
     fn make_thing(x: i16, y: i16, kind: u16) -> ThingRaw {
         ThingRaw {
             x,
@@ -738,10 +649,8 @@ mod tests {
             flags: 0,
         }
     }
-
     // =======================================================================
     // ---------------------------------------------------------------------------
-
     /// Automap canvas implementation that draws onto a [`Framebuffer`].
     ///
     /// Implements [`doom_game::AutomapCanvas`] so that `doom_game::draw_automap_full`
@@ -751,21 +660,18 @@ mod tests {
         /// Mutable reference to the target framebuffer.
         fb: &'a mut Framebuffer,
     }
-
     impl<'a> RendererAutomapCanvas<'a> {
         /// Wrap a mutable `Framebuffer` reference as an `AutomapCanvas`.
         pub fn new(fb: &'a mut Framebuffer) -> Self {
             Self { fb }
         }
     }
-
     impl AutomapCanvas for RendererAutomapCanvas<'_> {
         fn set_pixel(&mut self, x: i32, y: i32, color: u8) {
             if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
                 self.fb.set_pixel(x as usize, y as usize, color);
             }
         }
-
         fn get_pixel(&self, x: i32, y: i32) -> Option<u8> {
             if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
                 self.fb.get_pixel(x as usize, y as usize)
@@ -773,24 +679,19 @@ mod tests {
                 None
             }
         }
-
         fn clear(&mut self, color: u8) {
             self.fb.clear(color);
         }
-
         fn width(&self) -> i32 {
             SCREEN_W
         }
-
         fn height(&self) -> i32 {
             SCREEN_H
         }
     }
-
     // ---------------------------------------------------------------------------
     // render_automap -- full integration entry point
     // ---------------------------------------------------------------------------
-
     /// Render the automap overlay onto the framebuffer using the full game-side
     /// automap logic (visibility tracking, grid, thing markers, cheat flags).
     ///
@@ -827,10 +728,8 @@ mod tests {
             show_all_lines,
             show_all_things,
         };
-
         // Convert BAM angle to radians.
         let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
-
         let mut canvas = RendererAutomapCanvas::new(fb);
         doom_game::draw_automap_full(
             &mut canvas,
@@ -842,11 +741,9 @@ mod tests {
             angle_rad,
         );
     }
-
     // ---------------------------------------------------------------------------
     // Grid drawing (renderer-side, for standalone use)
     // ---------------------------------------------------------------------------
-
     /// Draw a grid overlay onto the framebuffer at the given map center and zoom.
     ///
     /// Grid lines are spaced at 128 map-unit intervals (the classic Doom grid).
@@ -858,34 +755,27 @@ mod tests {
         let mut canvas = RendererAutomapCanvas::new(fb);
         doom_game::draw_grid(&mut canvas, center_x, center_y, zoom);
     }
-
     /// Draw a directional player arrow onto the framebuffer at a screen position.
     ///
     /// The arrow is approximately 8 pixels long, pointing in `player_angle`.
     /// Uses [`automap_colors::PLAYER`] colour.
     pub fn draw_player_arrow_on_fb(fb: &mut Framebuffer, sx: i32, sy: i32, player_angle: Bam) {
         let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
-
         let cos_a = angle_rad.cos() as f32;
         let sin_a = angle_rad.sin() as f32;
-
         let shaft_len: f32 = 8.0;
         let barb_len: f32 = 4.0;
-
         let tip_x = sx as f32 + cos_a * shaft_len;
         let tip_y = sy as f32 - sin_a * shaft_len;
         let tail_x = sx as f32 - cos_a * shaft_len;
         let tail_y = sy as f32 + sin_a * shaft_len;
-
         let barb_angle_offset = core::f64::consts::FRAC_PI_4 * 3.0;
         let left_barb_angle = angle_rad + barb_angle_offset;
         let right_barb_angle = angle_rad - barb_angle_offset;
-
         let left_x = tip_x + (left_barb_angle.cos() as f32) * barb_len;
         let left_y = tip_y - (left_barb_angle.sin() as f32) * barb_len;
         let right_x = tip_x + (right_barb_angle.cos() as f32) * barb_len;
         let right_y = tip_y - (right_barb_angle.sin() as f32) * barb_len;
-
         draw_line_fb(
             fb,
             tail_x as i32,
@@ -911,14 +801,11 @@ mod tests {
             COLOR_PLAYER,
         );
     }
-
     // ---------------------------------------------------------------------------
     // ---------------------------------------------------------------------------
-
     // ---------------------------------------------------------------------------
     // Public API -- legacy (auto-fit) entry point
     // ---------------------------------------------------------------------------
-
     /// Render a 2D overhead automap of `level` into `fb` (legacy auto-fit mode).
     ///
     /// This is the backward-compatible entry point that auto-computes zoom and
@@ -937,38 +824,29 @@ mod tests {
     ) {
         // Fill background.
         fb.clear(COLOR_BACKGROUND);
-
         // Compute map bounds from vertexes.
         let Some((min_x, max_x, min_y, max_y)) = map_bounds(level) else {
             return;
         };
-
         let map_w = (max_x - min_x) as f32;
         let map_h = (max_y - min_y) as f32;
-
         if map_w < 1.0 || map_h < 1.0 {
             return;
         }
-
         let padded_w = map_w * (1.0 + 2.0 * PADDING_FRAC);
         let padded_h = map_h * (1.0 + 2.0 * PADDING_FRAC);
-
         let scale = (SCREEN_W as f32 / padded_w).min(SCREEN_H as f32 / padded_h);
-
         // Build an ephemeral AutomapState centered on the map.
         let mut state = AutomapState::new();
         state.center_x = (min_x as f32 + max_x as f32) / 2.0;
         state.center_y = (min_y as f32 + max_y as f32) / 2.0;
         state.zoom = scale;
-
         // Use the internal draw with this computed scale/center.
         draw_automap_internal(fb, level, &state, player_x, player_y, player_angle);
     }
-
     // ---------------------------------------------------------------------------
     // Public API -- stateful entry point
     // ---------------------------------------------------------------------------
-
     /// Render a 2D overhead automap using the interactive [`AutomapState`].
     ///
     /// This is the preferred entry point for interactive automap usage with
@@ -985,14 +863,11 @@ mod tests {
         player_angle: Bam,
     ) {
         fb.clear(COLOR_BACKGROUND);
-
         draw_automap_internal(fb, level, state, player_x, player_y, player_angle);
     }
-
     // ---------------------------------------------------------------------------
     // Internal rendering
     // ---------------------------------------------------------------------------
-
     /// Core automap rendering: draws linedefs + player arrow.
     fn draw_automap_internal(
         fb: &mut Framebuffer,
@@ -1005,7 +880,6 @@ mod tests {
         if level.vertexes.is_empty() {
             return;
         }
-
         let center_x = state.center_x;
         let center_y = state.center_y;
         let zoom = state.zoom;
@@ -1015,33 +889,26 @@ mod tests {
             let sy = HALF_H - ((wy - center_y) * zoom) as i32;
             (sx, sy)
         };
-
         // Draw all linedefs.
         for ld in &level.linedefs {
             let color = line_color(ld, level);
-
             let Some(v1) = level.vertexes.get(ld.from_vertex as usize) else {
                 continue;
             };
             let Some(v2) = level.vertexes.get(ld.to_vertex as usize) else {
                 continue;
             };
-
             let (x0, y0) = world_to_screen(v1.x as f32, v1.y as f32);
             let (x1, y1) = world_to_screen(v2.x as f32, v2.y as f32);
-
             draw_line_fb(fb, x0, y0, x1, y1, color);
         }
-
         // Draw player arrow.
         let (px, py) = world_to_screen(player_x as f32, player_y as f32);
         draw_player_arrow_internal(fb, px, py, player_angle);
     }
-
     // ---------------------------------------------------------------------------
     // Line colour classification
     // ---------------------------------------------------------------------------
-
     /// Choose an automap colour for a linedef based on its properties.
     ///
     /// Colour priority:
@@ -1054,11 +921,9 @@ mod tests {
         if ld.flags & FLAG_SECRET != 0 {
             return COLOR_SECRET;
         }
-
         if !ld.is_two_sided() {
             return COLOR_ONE_SIDED;
         }
-
         // Two-sided: check for height differences between front/back sectors.
         if has_height_change(ld, level) {
             COLOR_HEIGHT_CHANGE
@@ -1066,7 +931,6 @@ mod tests {
             COLOR_TWO_SIDED
         }
     }
-
     /// Returns `true` if the front and back sectors of a two-sided linedef have
     /// different floor or ceiling heights.
     fn has_height_change(ld: &doom_map::Linedef, level: &Level) -> bool {
@@ -1078,7 +942,6 @@ mod tests {
             Some(sd) => sd,
             None => return false,
         };
-
         let right_sector = match level.sectors.get(right_sd.sector as usize) {
             Some(s) => s,
             None => return false,
@@ -1087,15 +950,12 @@ mod tests {
             Some(s) => s,
             None => return false,
         };
-
         right_sector.floor_height != left_sector.floor_height
             || right_sector.ceil_height != left_sector.ceil_height
     }
-
     // ---------------------------------------------------------------------------
     // Player arrow (internal, for legacy API)
     // ---------------------------------------------------------------------------
-
     /// Draw a directional arrow at the player's screen position.
     ///
     /// The arrow is approximately 8 pixels long, pointing in `player_angle`.
@@ -1107,32 +967,24 @@ mod tests {
         let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
         let cos_a = angle_rad.cos() as f32;
         let sin_a = angle_rad.sin() as f32;
-
         // Arrow dimensions (in screen pixels).
         let shaft_len: f32 = 8.0;
         let barb_len: f32 = 4.0;
-
         // Tip of the arrow (ahead of the player position).
         // Note: screen Y is flipped, so sin component is subtracted.
         let tip_x = px as f32 + cos_a * shaft_len;
         let tip_y = py as f32 - sin_a * shaft_len;
-
         // Tail of the arrow (behind the player position).
         let tail_x = px as f32 - cos_a * shaft_len;
         let tail_y = py as f32 + sin_a * shaft_len;
-
         // Barb angles: 135 degrees from the forward direction (each side).
         let barb_angle_offset = core::f64::consts::FRAC_PI_4 * 3.0; // 135 degrees
-
         let left_barb_angle = angle_rad + barb_angle_offset;
         let right_barb_angle = angle_rad - barb_angle_offset;
-
         let left_x = tip_x + (left_barb_angle.cos() as f32) * barb_len;
         let left_y = tip_y - (left_barb_angle.sin() as f32) * barb_len;
-
         let right_x = tip_x + (right_barb_angle.cos() as f32) * barb_len;
         let right_y = tip_y - (right_barb_angle.sin() as f32) * barb_len;
-
         // Draw shaft: tail -> tip
         draw_line_fb(
             fb,
@@ -1161,23 +1013,19 @@ mod tests {
             COLOR_PLAYER,
         );
     }
-
     // ---------------------------------------------------------------------------
     // Map bounds
     // ---------------------------------------------------------------------------
-
     /// Compute min/max world-coordinate bounds of all vertexes.
     ///
     /// Returns `None` if the level has no vertexes.
     fn map_bounds(level: &Level) -> Option<(i32, i32, i32, i32)> {
         let mut iter = level.vertexes.iter();
         let first = iter.next()?;
-
         let mut min_x = i32::from(first.x);
         let mut max_x = i32::from(first.x);
         let mut min_y = i32::from(first.y);
         let mut max_y = i32::from(first.y);
-
         for v in iter {
             let vx = i32::from(v.x);
             let vy = i32::from(v.y);
@@ -1194,14 +1042,11 @@ mod tests {
                 max_y = vy;
             }
         }
-
         Some((min_x, max_x, min_y, max_y))
     }
-
     // ---------------------------------------------------------------------------
     // Bresenham line rasteriser (framebuffer-direct)
     // ---------------------------------------------------------------------------
-
     /// Integer Bresenham line drawing directly onto a `Framebuffer`.
     ///
     /// Pixels outside `[0, 319] x [0, 199]` are silently skipped (no panic).
@@ -1210,21 +1055,17 @@ mod tests {
         let dy = (y1 - y0).abs();
         let sx: i32 = if x0 < x1 { 1 } else { -1 };
         let sy: i32 = if y0 < y1 { 1 } else { -1 };
-
         let mut x = x0;
         let mut y = y0;
         let mut err = dx - dy;
-
         loop {
             // Only plot pixels within screen bounds.
             if (0..SCREEN_W).contains(&x) && (0..SCREEN_H).contains(&y) {
                 fb.set_pixel(x as usize, y as usize, color);
             }
-
             if x == x1 && y == y1 {
                 break;
             }
-
             let e2 = 2 * err;
             if e2 > -dy {
                 err -= dy;
@@ -1236,17 +1077,14 @@ mod tests {
             }
         }
     }
-
     // Backward-compat alias used in old tests.
     #[cfg(test)]
     fn draw_line(fb: &mut Framebuffer, x0: i32, y0: i32, x1: i32, y1: i32, color: u8) {
         draw_line_fb(fb, x0, y0, x1, y1, color);
     }
-
     // ---------------------------------------------------------------------------
     // Coordinate transform helpers (public, for external use)
     // ---------------------------------------------------------------------------
-
     /// Convert map coordinates to screen coordinates using the given center and zoom.
     ///
     /// Doom Y increases upward; screen Y increases downward. The transform
@@ -1262,12 +1100,11 @@ mod tests {
         let sy = HALF_H - ((map_y - center_y) * zoom) as i32;
         (sx, sy)
     }
-
     // ---------------------------------------------------------------------------
     // Tests
     // ---------------------------------------------------------------------------
-
     #[cfg(test)]
+    #[allow(clippy::module_inception)]
     mod tests {
         use super::*;
         use doom_game::AutomapState;
@@ -1276,11 +1113,9 @@ mod tests {
             Blockmap, FLAG_TWO_SIDED, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector,
             Thing as ThingRaw, Vertex as VxRaw,
         };
-
         // -----------------------------------------------------------------------
         // Minimal Level builder
         // -----------------------------------------------------------------------
-
         /// Build a `Level` with caller-supplied vertexes, linedefs, sidedefs, and
         /// sectors.  Provides sensible defaults for BSP data.
         fn make_level_full(
@@ -1291,7 +1126,6 @@ mod tests {
         ) -> Level {
             make_level_full_with_things(vertexes, linedefs, sidedefs, sectors, vec![])
         }
-
         fn make_level_full_with_things(
             vertexes: Vec<VxRaw>,
             linedefs: Vec<LdRaw>,
@@ -1300,7 +1134,6 @@ mod tests {
             things: Vec<ThingRaw>,
         ) -> Level {
             let n_sectors = sectors.len().max(1);
-
             // Ensure at least one sector for reject table sizing.
             let final_sectors = if sectors.is_empty() {
                 vec![Sector {
@@ -1315,12 +1148,10 @@ mod tests {
             } else {
                 sectors
             };
-
             let ssector = Ssector {
                 seg_count: 0,
                 first_seg: 0,
             };
-
             let mut bm_bytes = vec![0u8; 8 + 2 + 4];
             bm_bytes[0..2].copy_from_slice(&0i16.to_le_bytes());
             bm_bytes[2..4].copy_from_slice(&0i16.to_le_bytes());
@@ -1330,11 +1161,9 @@ mod tests {
             bm_bytes[10..12].copy_from_slice(&0u16.to_le_bytes());
             bm_bytes[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
             let blockmap = Blockmap::parse_lump(&bm_bytes).expect("blockmap parse");
-
             let reject_size = (n_sectors * n_sectors).div_ceil(8);
             let reject =
                 Reject::parse_lump(&vec![0u8; reject_size], n_sectors).expect("reject parse");
-
             Level {
                 name: "TEST".to_owned(),
                 things,
@@ -1349,12 +1178,10 @@ mod tests {
                 blockmap,
             }
         }
-
         /// Build a simple level with only vertexes and linedefs (no sidedefs/sectors).
         fn make_level(vertexes: Vec<VxRaw>, linedefs: Vec<LdRaw>) -> Level {
             make_level_full(vertexes, linedefs, vec![], vec![])
         }
-
         /// Helper to create a sidedef pointing at a given sector.
         fn make_sidedef(sector: u16) -> SdRaw {
             SdRaw {
@@ -1366,7 +1193,6 @@ mod tests {
                 sector,
             }
         }
-
         fn make_thing(x: i16, y: i16, kind: u16) -> ThingRaw {
             ThingRaw {
                 x,
@@ -1376,11 +1202,9 @@ mod tests {
                 flags: 0,
             }
         }
-
         // =======================================================================
         // Tests 1-8: AutomapState (renderer-side)
         // =======================================================================
-
         #[test]
         fn t01_automap_state_new_defaults() {
             let state = AutomapState::new();
@@ -1390,7 +1214,6 @@ mod tests {
             assert!((state.center_y - 0.0).abs() < f32::EPSILON);
             assert!(state.follow_player);
         }
-
         #[test]
         fn t02_toggle_flips_active() {
             let mut state = AutomapState::new();
@@ -1400,7 +1223,6 @@ mod tests {
             state.toggle();
             assert!(!state.active);
         }
-
         #[test]
         fn t03_zoom_in_increases_zoom() {
             let mut state = AutomapState::new();
@@ -1408,7 +1230,6 @@ mod tests {
             state.zoom_in();
             assert!(state.zoom > initial);
         }
-
         #[test]
         fn t04_zoom_out_decreases_zoom() {
             let mut state = AutomapState::new();
@@ -1416,7 +1237,6 @@ mod tests {
             state.zoom_out();
             assert!(state.zoom < initial);
         }
-
         #[test]
         fn t07_update_center_follows_player() {
             let mut state = AutomapState::new();
@@ -1425,7 +1245,6 @@ mod tests {
             assert!((state.center_x - 100.0).abs() < f32::EPSILON);
             assert!((state.center_y - 200.0).abs() < f32::EPSILON);
         }
-
         #[test]
         fn t08_update_center_ignores_when_follow_disabled() {
             let mut state = AutomapState::new();
@@ -1436,16 +1255,13 @@ mod tests {
             assert!((state.center_x - 42.0).abs() < f32::EPSILON);
             assert!((state.center_y - 99.0).abs() < f32::EPSILON);
         }
-
         // =======================================================================
         // Tests 9-14: Bresenham line drawing
         // =======================================================================
-
         #[test]
         fn t09_draw_line_horizontal() {
             let mut fb = Framebuffer::new();
             draw_line(&mut fb, 10, 50, 50, 50, 176);
-
             for x in 10..=50 {
                 assert_eq!(
                     fb.get_pixel(x, 50),
@@ -1456,12 +1272,10 @@ mod tests {
             assert_eq!(fb.get_pixel(9, 50), Some(0));
             assert_eq!(fb.get_pixel(51, 50), Some(0));
         }
-
         #[test]
         fn t10_draw_line_vertical() {
             let mut fb = Framebuffer::new();
             draw_line(&mut fb, 100, 20, 100, 80, 231);
-
             for y in 20..=80 {
                 assert_eq!(
                     fb.get_pixel(100, y),
@@ -1472,7 +1286,6 @@ mod tests {
             assert_eq!(fb.get_pixel(100, 19), Some(0));
             assert_eq!(fb.get_pixel(100, 81), Some(0));
         }
-
         #[test]
         fn t11_draw_line_diagonal() {
             let mut fb = Framebuffer::new();
@@ -1485,7 +1298,6 @@ mod tests {
                 );
             }
         }
-
         #[test]
         fn t12_draw_line_clips_to_bounds() {
             let mut fb = Framebuffer::new();
@@ -1495,14 +1307,12 @@ mod tests {
             // crosses [0,0] to [319,199]).
             assert_eq!(fb.get_pixel(0, 0), Some(255));
         }
-
         #[test]
         fn t13_draw_line_single_point() {
             let mut fb = Framebuffer::new();
             draw_line(&mut fb, 50, 50, 50, 50, 42);
             assert_eq!(fb.get_pixel(50, 50), Some(42));
         }
-
         #[test]
         fn t14_draw_line_from_origin_to_far_corner_stays_in_bounds() {
             let mut fb = Framebuffer::new();
@@ -1512,11 +1322,9 @@ mod tests {
             assert_eq!(fb.get_pixel(319, 199), Some(77));
             // No panic means no OOB writes.
         }
-
         // =======================================================================
         // Tests 15-18: Line colour classification
         // =======================================================================
-
         #[test]
         fn t15_line_color_one_sided() {
             let level = make_level(vec![], vec![]);
@@ -1531,7 +1339,6 @@ mod tests {
             };
             assert_eq!(line_color(&ld, &level), COLOR_ONE_SIDED);
         }
-
         #[test]
         fn t16_line_color_two_sided_same_height() {
             let sectors = vec![
@@ -1561,7 +1368,6 @@ mod tests {
                 sidedefs,
                 sectors,
             );
-
             let ld = LdRaw {
                 from_vertex: 0,
                 to_vertex: 1,
@@ -1573,7 +1379,6 @@ mod tests {
             };
             assert_eq!(line_color(&ld, &level), COLOR_TWO_SIDED);
         }
-
         #[test]
         fn t17_line_color_two_sided_height_change() {
             let sectors = vec![
@@ -1603,7 +1408,6 @@ mod tests {
                 sidedefs,
                 sectors,
             );
-
             let ld = LdRaw {
                 from_vertex: 0,
                 to_vertex: 1,
@@ -1615,7 +1419,6 @@ mod tests {
             };
             assert_eq!(line_color(&ld, &level), COLOR_HEIGHT_CHANGE);
         }
-
         #[test]
         fn t18_line_color_secret_overrides_two_sided() {
             let sectors = vec![
@@ -1645,7 +1448,6 @@ mod tests {
                 sidedefs,
                 sectors,
             );
-
             let ld = LdRaw {
                 from_vertex: 0,
                 to_vertex: 1,
@@ -1657,11 +1459,9 @@ mod tests {
             };
             assert_eq!(line_color(&ld, &level), COLOR_SECRET);
         }
-
         // =======================================================================
         // Tests 19-24: Legacy draw_automap / draw_automap_ex
         // =======================================================================
-
         #[test]
         fn t19_draw_automap_empty_level_does_not_panic() {
             let level = make_level(vec![], vec![]);
@@ -1670,7 +1470,6 @@ mod tests {
             draw_automap(&level, 0, 0, Bam(0), &mut fb, &palette);
             assert!(fb.data.iter().all(|&b| b == 0));
         }
-
         #[test]
         fn t20_draw_automap_ex_empty_level_does_not_panic() {
             let level = make_level(vec![], vec![]);
@@ -1679,7 +1478,6 @@ mod tests {
             draw_automap_ex(&mut fb, &level, &state, 0, 0, Bam(0));
             assert!(fb.data.iter().all(|&b| b == 0));
         }
-
         #[test]
         fn t21_draw_automap_single_linedef_marks_pixels() {
             let vertexes = vec![VxRaw { x: 0, y: 0 }, VxRaw { x: 100, y: 100 }];
@@ -1695,13 +1493,10 @@ mod tests {
             let level = make_level(vertexes, linedefs);
             let mut fb = Framebuffer::new();
             let palette = PaletteLut::grayscale();
-
             draw_automap(&level, 50, 50, Bam(0), &mut fb, &palette);
-
             let has_non_black = fb.data.iter().any(|&b| b != 0);
             assert!(has_non_black);
         }
-
         #[test]
         fn t22_draw_automap_ex_zoomed_draws_pixels() {
             let vertexes = vec![VxRaw { x: 0, y: 0 }, VxRaw { x: 200, y: 0 }];
@@ -1721,13 +1516,10 @@ mod tests {
             state.zoom = 1.0;
             state.center_x = 100.0;
             state.center_y = 0.0;
-
             draw_automap_ex(&mut fb, &level, &state, 100, 0, Bam(0));
-
             let has_non_black = fb.data.iter().any(|&b| b != 0);
             assert!(has_non_black, "zoomed automap should draw visible pixels");
         }
-
         #[test]
         fn t23_player_arrow_draws_pixels() {
             let mut fb = Framebuffer::new();
@@ -1735,7 +1527,6 @@ mod tests {
             let has_non_black = fb.data.iter().any(|&b| b != 0);
             assert!(has_non_black, "player arrow should draw visible pixels");
         }
-
         #[test]
         fn t24_automap_state_default_matches_new() {
             let from_new = AutomapState::new();
@@ -1746,27 +1537,22 @@ mod tests {
             assert!((from_new.center_y - from_default.center_y).abs() < f32::EPSILON);
             assert_eq!(from_new.follow_player, from_default.follow_player);
         }
-
         // =======================================================================
         // Tests 25-30: automap_colors constants
         // =======================================================================
-
         #[test]
         fn t26_wall_and_two_sided_have_different_colors() {
             assert_ne!(automap_colors::WALL, automap_colors::TWO_SIDED);
         }
-
         #[test]
         fn t27_secret_color_is_distinct() {
             assert_ne!(automap_colors::SECRET, automap_colors::WALL);
             assert_ne!(automap_colors::SECRET, automap_colors::TWO_SIDED);
         }
-
         #[test]
         fn t28_background_is_black() {
             assert_eq!(automap_colors::BACKGROUND, 0);
         }
-
         #[test]
         fn t29_grid_color_is_dim() {
             let grid = automap_colors::GRID;
@@ -1774,16 +1560,13 @@ mod tests {
             assert_ne!(grid, automap_colors::BACKGROUND);
             assert_ne!(grid, crosshair, "grid should remain visually distinct");
         }
-
         #[test]
         fn t30_player_color_is_not_background() {
             assert_ne!(automap_colors::PLAYER, automap_colors::BACKGROUND);
         }
-
         // =======================================================================
         // Tests 31-36: RendererAutomapCanvas trait implementation
         // =======================================================================
-
         #[test]
         fn t31_canvas_set_pixel_and_get_pixel() {
             let mut fb = Framebuffer::new();
@@ -1795,7 +1578,6 @@ mod tests {
             // Verify it wrote through to the framebuffer.
             assert_eq!(fb.get_pixel(10, 20), Some(42));
         }
-
         #[test]
         fn t32_canvas_out_of_bounds_set_does_not_panic() {
             let mut fb = Framebuffer::new();
@@ -1808,7 +1590,6 @@ mod tests {
             // Nothing should have changed.
             assert!(fb.data.iter().all(|&b| b == 0));
         }
-
         #[test]
         fn t33_canvas_out_of_bounds_get_returns_none() {
             let fb = Framebuffer::new();
@@ -1823,7 +1604,6 @@ mod tests {
             // Ensure fb is used (suppress warning).
             let _ = fb;
         }
-
         #[test]
         fn t34_canvas_clear_fills_entire_buffer() {
             let mut fb = Framebuffer::new();
@@ -1833,7 +1613,6 @@ mod tests {
             }
             assert!(fb.data.iter().all(|&b| b == 77));
         }
-
         #[test]
         fn t35_canvas_width_and_height() {
             let mut fb = Framebuffer::new();
@@ -1841,7 +1620,6 @@ mod tests {
             assert_eq!(canvas.width(), 320);
             assert_eq!(canvas.height(), 200);
         }
-
         #[test]
         fn t36_canvas_draw_line_produces_pixels() {
             let mut fb = Framebuffer::new();
@@ -1858,11 +1636,9 @@ mod tests {
                 );
             }
         }
-
         // =======================================================================
         // Tests 37-42: render_automap (full integration)
         // =======================================================================
-
         #[test]
         fn t37_render_automap_empty_level_does_not_panic() {
             let level = make_level(vec![], vec![]);
@@ -1871,7 +1647,6 @@ mod tests {
             // Background should be black (cleared).
             assert!(fb.data.iter().all(|&b| b == 0));
         }
-
         #[test]
         fn t38_render_automap_single_linedef_seen() {
             let vertexes = vec![VxRaw { x: 0, y: 0 }, VxRaw { x: 200, y: 0 }];
@@ -1887,13 +1662,10 @@ mod tests {
             let level = make_level(vertexes, linedefs);
             let mut fb = Framebuffer::new();
             let seen = vec![true]; // line 0 is seen
-
             render_automap(&mut fb, &level, 100, 0, Bam(0), 1.0, false, false, &seen);
-
             let has_non_black = fb.data.iter().any(|&b| b != 0);
             assert!(has_non_black, "seen linedef should produce visible pixels");
         }
-
         #[test]
         fn t39_render_automap_hidden_line_not_drawn_without_cheat() {
             let vertexes = vec![VxRaw { x: 0, y: 0 }, VxRaw { x: 200, y: 0 }];
@@ -1909,9 +1681,7 @@ mod tests {
             let level = make_level(vertexes, linedefs);
             let mut fb = Framebuffer::new();
             let seen = vec![false]; // line 0 is NOT seen
-
             render_automap(&mut fb, &level, 100, 0, Bam(0), 1.0, false, false, &seen);
-
             // The player arrow and grid will still draw some pixels, but
             // we count non-grid/non-arrow pixels specifically by checking
             // for the one-sided line color.
@@ -1921,7 +1691,6 @@ mod tests {
                 "hidden line should not produce one-sided wall colour pixels"
             );
         }
-
         #[test]
         fn t40_render_automap_show_all_lines_reveals_hidden() {
             let vertexes = vec![VxRaw { x: 0, y: 0 }, VxRaw { x: 200, y: 0 }];
@@ -1937,10 +1706,8 @@ mod tests {
             let level = make_level(vertexes, linedefs);
             let mut fb = Framebuffer::new();
             let seen = vec![false]; // line 0 is NOT seen
-
             // But show_all_lines is true.
             render_automap(&mut fb, &level, 100, 0, Bam(0), 1.0, true, false, &seen);
-
             // Should draw the line in UNSEEN colour (gray).
             let unseen_count = fb
                 .data
@@ -1952,19 +1719,15 @@ mod tests {
                 "show_all_lines should reveal hidden lines in unseen colour"
             );
         }
-
         #[test]
         fn t41_render_automap_clears_framebuffer() {
             let level = make_level(vec![], vec![]);
             let mut fb = Framebuffer::new();
             fb.clear(99); // Fill with non-zero.
-
             render_automap(&mut fb, &level, 0, 0, Bam(0), 0.5, false, false, &[]);
-
             // After render_automap, fb should be cleared to background.
             assert!(fb.data.iter().all(|&b| b == 0));
         }
-
         #[test]
         fn t42_render_automap_player_arrow_does_not_panic() {
             let level = make_level(
@@ -1980,7 +1743,6 @@ mod tests {
                 }],
             );
             let mut fb = Framebuffer::new();
-
             // Player at various angles.
             for angle in [0u32, u32::MAX / 4, u32::MAX / 2, u32::MAX] {
                 render_automap(
@@ -1997,18 +1759,15 @@ mod tests {
             }
             // No panic is success.
         }
-
         // =======================================================================
         // Tests 43-47: Coordinate transform
         // =======================================================================
-
         #[test]
         fn t43_map_to_screen_origin_returns_center() {
             let (sx, sy) = map_to_screen(0.0, 0.0, 0.0, 0.0, 1.0);
             assert_eq!(sx, HALF_W); // 160
             assert_eq!(sy, HALF_H); // 100
         }
-
         #[test]
         fn t44_map_to_screen_y_is_flipped() {
             // Positive Y in map space should map to SMALLER screen Y (upward).
@@ -2019,7 +1778,6 @@ mod tests {
                 "positive map Y should map to smaller screen Y"
             );
         }
-
         #[test]
         fn t45_map_to_screen_scale_affects_output() {
             let (sx_low, _) = map_to_screen(100.0, 0.0, 0.0, 0.0, 0.5);
@@ -2032,7 +1790,6 @@ mod tests {
                 "higher zoom should increase screen distance from center"
             );
         }
-
         #[test]
         fn t46_map_to_screen_different_center_offsets() {
             let (sx1, _) = map_to_screen(100.0, 0.0, 0.0, 0.0, 1.0);
@@ -2041,7 +1798,6 @@ mod tests {
             assert_eq!(sx2, HALF_W);
             assert_ne!(sx1, sx2);
         }
-
         #[test]
         fn t47_map_to_screen_negative_coords() {
             let (sx, sy) = map_to_screen(-100.0, -100.0, 0.0, 0.0, 1.0);
@@ -2049,11 +1805,9 @@ mod tests {
             assert!(sx < HALF_W);
             assert!(sy > HALF_H);
         }
-
         // =======================================================================
         // Tests 48-52: Grid and player arrow on framebuffer
         // =======================================================================
-
         #[test]
         fn t48_draw_grid_on_fb_does_not_panic() {
             let mut fb = Framebuffer::new();
@@ -2066,7 +1820,6 @@ mod tests {
                 .count();
             assert!(grid_count > 0, "grid should produce some pixels");
         }
-
         #[test]
         fn t49_draw_grid_on_fb_zero_zoom_does_not_panic() {
             let mut fb = Framebuffer::new();
@@ -2074,7 +1827,6 @@ mod tests {
             // Zero zoom should be a no-op (doom_game::draw_grid bails on zoom <= 0).
             assert!(fb.data.iter().all(|&b| b == 0));
         }
-
         #[test]
         fn t50_draw_player_arrow_on_fb_produces_pixels() {
             let mut fb = Framebuffer::new();
@@ -2082,7 +1834,6 @@ mod tests {
             let has_non_black = fb.data.iter().any(|&b| b != 0);
             assert!(has_non_black, "player arrow should draw visible pixels");
         }
-
         #[test]
         fn t51_draw_player_arrow_on_fb_at_various_angles() {
             for angle_frac in [0u32, 1, 2, 3, 4, 5, 6, 7] {
@@ -2096,7 +1847,6 @@ mod tests {
                 );
             }
         }
-
         #[test]
         fn t52_draw_player_arrow_on_fb_out_of_bounds_does_not_panic() {
             let mut fb = Framebuffer::new();
@@ -2105,11 +1855,9 @@ mod tests {
             draw_player_arrow_on_fb(&mut fb, 500, 500, Bam(0));
             // No panic is success.
         }
-
         // =======================================================================
         // Tests 53-56: render_automap with things
         // =======================================================================
-
         #[test]
         fn t53_render_automap_show_all_things_draws_markers() {
             let vertexes = vec![VxRaw { x: 0, y: 0 }, VxRaw { x: 200, y: 200 }];
@@ -2129,13 +1877,10 @@ mod tests {
             let level = make_level_full_with_things(vertexes, linedefs, vec![], vec![], things);
             let mut fb = Framebuffer::new();
             let seen = vec![true];
-
             render_automap(&mut fb, &level, 100, 100, Bam(0), 1.0, false, true, &seen);
-
             let has_non_black = fb.data.iter().any(|&b| b != 0);
             assert!(has_non_black, "things should produce visible markers");
         }
-
         #[test]
         fn t54_render_automap_without_show_things_hides_monsters() {
             let vertexes = vec![VxRaw { x: 0, y: 0 }, VxRaw { x: 200, y: 200 }];
@@ -2152,7 +1897,6 @@ mod tests {
                 make_thing(100, 100, 3001), // Imp (monster)
             ];
             let level = make_level_full_with_things(vertexes, linedefs, vec![], vec![], things);
-
             // With show_all_things = true
             let mut fb_with = Framebuffer::new();
             render_automap(
@@ -2166,7 +1910,6 @@ mod tests {
                 true,
                 &[true],
             );
-
             // Without show_all_things
             let mut fb_without = Framebuffer::new();
             render_automap(
@@ -2180,7 +1923,6 @@ mod tests {
                 false,
                 &[true],
             );
-
             // The version with things should have more non-zero pixels
             // (monster markers add pixels).
             let count_with = fb_with.data.iter().filter(|&&b| b != 0).count();
@@ -2190,7 +1932,6 @@ mod tests {
                 "show_all_things should draw more pixels ({count_with} vs {count_without})"
             );
         }
-
         #[test]
         fn t55_render_automap_player_starts_always_visible() {
             let vertexes = vec![VxRaw { x: 0, y: 0 }, VxRaw { x: 200, y: 200 }];
@@ -2208,10 +1949,8 @@ mod tests {
             ];
             let level = make_level_full_with_things(vertexes, linedefs, vec![], vec![], things);
             let mut fb = Framebuffer::new();
-
             // show_all_things = false, but player starts should still draw.
             render_automap(&mut fb, &level, 100, 100, Bam(0), 1.0, true, false, &[true]);
-
             // The player marker colour (from doom_game) should appear.
             let player_marker_count = fb
                 .data
@@ -2223,7 +1962,6 @@ mod tests {
                 "player start markers should always be visible"
             );
         }
-
         #[test]
         fn t56_render_automap_seen_lines_correctly_filters() {
             let vertexes = vec![
@@ -2252,7 +1990,6 @@ mod tests {
                 },
             ];
             let level = make_level(vertexes, linedefs);
-
             // Only first line is seen.
             let mut fb1 = Framebuffer::new();
             render_automap(
@@ -2267,7 +2004,6 @@ mod tests {
                 &[true, false],
             );
             let count1 = fb1.data.iter().filter(|&&b| b == COLOR_ONE_SIDED).count();
-
             // Both lines are seen.
             let mut fb2 = Framebuffer::new();
             render_automap(
@@ -2282,17 +2018,14 @@ mod tests {
                 &[true, true],
             );
             let count2 = fb2.data.iter().filter(|&&b| b == COLOR_ONE_SIDED).count();
-
             assert!(
                 count2 > count1,
                 "seeing more lines should produce more wall pixels ({count2} vs {count1})"
             );
         }
-
         // =======================================================================
         // Test 57: draw_line_fb public API
         // =======================================================================
-
         #[test]
         fn t57_draw_line_fb_public_api() {
             let mut fb = Framebuffer::new();
@@ -2301,11 +2034,9 @@ mod tests {
                 assert_eq!(fb.get_pixel(x, 0), Some(55));
             }
         }
-
         // =======================================================================
         // Test 58: render_automap grid is drawn
         // =======================================================================
-
         #[test]
         fn t58_render_automap_draws_grid() {
             let vertexes = vec![VxRaw { x: 0, y: 0 }, VxRaw { x: 1000, y: 1000 }];
@@ -2320,9 +2051,7 @@ mod tests {
             }];
             let level = make_level(vertexes, linedefs);
             let mut fb = Framebuffer::new();
-
             render_automap(&mut fb, &level, 500, 500, Bam(0), 0.5, true, false, &[true]);
-
             // Grid uses doom_game::COLOR_GRID.
             let grid_count = fb
                 .data

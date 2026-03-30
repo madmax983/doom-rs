@@ -104,11 +104,7 @@ pub use specials::{
     tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
     tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
-pub use state::{
-    CeilingMover, CeilingType, ConveyorBelt, DoomRng, ExitRequest, FloorMover, GameState,
-    LiftMover, LiftStatus, LightEffectType, LockedDoorColor, MoveDirection, PerpetualPlatform,
-    PlatformStatus, RNG_TABLE, ScrollingWall, SectorLightEffect, SoundRequest,
-};
+pub use state::{DoomRng, ExitRequest, GameState, LockedDoorColor, RNG_TABLE, SoundRequest};
 pub use states::STATES;
 pub use states::sprite_names;
 pub use switch::{

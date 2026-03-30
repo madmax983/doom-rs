@@ -100,55 +100,55 @@ impl core::fmt::Display for SaveError {
 
 /// A write cursor wrapping a `Vec<u8>` with typed little-endian writers.
 #[derive(Debug)]
-pub struct WriteCursor {
+pub(crate) struct WriteCursor {
     buf: Vec<u8>,
 }
 
 impl WriteCursor {
     /// Create a new cursor with the given initial capacity.
-    pub fn new(capacity: usize) -> Self {
+    pub(crate) fn new(capacity: usize) -> Self {
         Self {
             buf: Vec::with_capacity(capacity),
         }
     }
 
     /// Write a single byte.
-    pub fn write_u8(&mut self, v: u8) {
+    pub(crate) fn write_u8(&mut self, v: u8) {
         self.buf.push(v);
     }
 
     /// Write a signed 16-bit integer (little-endian).
-    pub fn write_i16(&mut self, v: i16) {
+    pub(crate) fn write_i16(&mut self, v: i16) {
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
 
     /// Write an unsigned 16-bit integer (little-endian).
-    pub fn write_u16(&mut self, v: u16) {
+    pub(crate) fn write_u16(&mut self, v: u16) {
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
 
     /// Write a signed 32-bit integer (little-endian).
-    pub fn write_i32(&mut self, v: i32) {
+    pub(crate) fn write_i32(&mut self, v: i32) {
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
 
     /// Write an unsigned 32-bit integer (little-endian).
-    pub fn write_u32(&mut self, v: u32) {
+    pub(crate) fn write_u32(&mut self, v: u32) {
         self.buf.extend_from_slice(&v.to_le_bytes());
     }
 
     /// Write a boolean as a single byte (0 or 1).
-    pub fn write_bool(&mut self, v: bool) {
+    pub(crate) fn write_bool(&mut self, v: bool) {
         self.buf.push(u8::from(v));
     }
 
     /// Write a raw byte slice.
-    pub fn write_bytes(&mut self, data: &[u8]) {
+    pub(crate) fn write_bytes(&mut self, data: &[u8]) {
         self.buf.extend_from_slice(data);
     }
 
     /// Consume the cursor and return the underlying buffer.
-    pub fn into_bytes(self) -> Vec<u8> {
+    pub(crate) fn into_bytes(self) -> Vec<u8> {
         self.buf
     }
 }
@@ -159,7 +159,7 @@ impl WriteCursor {
 
 /// A read cursor wrapping `&[u8]` with typed little-endian readers.
 #[derive(Debug)]
-pub struct ReadCursor<'a> {
+pub(crate) struct ReadCursor<'a> {
     data: &'a [u8],
     pos: usize,
 }
@@ -171,7 +171,7 @@ impl<'a> ReadCursor<'a> {
     }
 
     /// Read a single byte.
-    pub fn read_u8(&mut self) -> Result<u8, SaveError> {
+    pub(crate) fn read_u8(&mut self) -> Result<u8, SaveError> {
         if self.pos >= self.data.len() {
             return Err(SaveError::Truncated);
         }
@@ -181,7 +181,7 @@ impl<'a> ReadCursor<'a> {
     }
 
     /// Read a signed 16-bit integer (little-endian).
-    pub fn read_i16(&mut self) -> Result<i16, SaveError> {
+    pub(crate) fn read_i16(&mut self) -> Result<i16, SaveError> {
         if self.pos + 2 > self.data.len() {
             return Err(SaveError::Truncated);
         }
@@ -191,7 +191,7 @@ impl<'a> ReadCursor<'a> {
     }
 
     /// Read an unsigned 16-bit integer (little-endian).
-    pub fn read_u16(&mut self) -> Result<u16, SaveError> {
+    pub(crate) fn read_u16(&mut self) -> Result<u16, SaveError> {
         if self.pos + 2 > self.data.len() {
             return Err(SaveError::Truncated);
         }
@@ -201,7 +201,7 @@ impl<'a> ReadCursor<'a> {
     }
 
     /// Read a signed 32-bit integer (little-endian).
-    pub fn read_i32(&mut self) -> Result<i32, SaveError> {
+    pub(crate) fn read_i32(&mut self) -> Result<i32, SaveError> {
         if self.pos + 4 > self.data.len() {
             return Err(SaveError::Truncated);
         }
@@ -216,7 +216,7 @@ impl<'a> ReadCursor<'a> {
     }
 
     /// Read an unsigned 32-bit integer (little-endian).
-    pub fn read_u32(&mut self) -> Result<u32, SaveError> {
+    pub(crate) fn read_u32(&mut self) -> Result<u32, SaveError> {
         if self.pos + 4 > self.data.len() {
             return Err(SaveError::Truncated);
         }
@@ -231,12 +231,12 @@ impl<'a> ReadCursor<'a> {
     }
 
     /// Read a boolean from a single byte (0 = false, nonzero = true).
-    pub fn read_bool(&mut self) -> Result<bool, SaveError> {
+    pub(crate) fn read_bool(&mut self) -> Result<bool, SaveError> {
         Ok(self.read_u8()? != 0)
     }
 
     /// Read exactly `n` bytes into a fixed-size array.
-    pub fn read_bytes<const N: usize>(&mut self) -> Result<[u8; N], SaveError> {
+    pub(crate) fn read_bytes<const N: usize>(&mut self) -> Result<[u8; N], SaveError> {
         if self.pos + N > self.data.len() {
             return Err(SaveError::Truncated);
         }

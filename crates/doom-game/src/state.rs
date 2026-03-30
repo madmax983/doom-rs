@@ -94,7 +94,7 @@ pub enum ExitRequest {
 /// Added to `GameState::active_doors` when a door linedef is activated.
 /// Ticked each tic by `specials::tick_doors`.
 #[derive(Clone, Debug)]
-pub struct DoorMover {
+pub(crate) struct DoorMover {
     /// Index into `level.sectors`.
     pub sector: usize,
     /// Target ceiling height (doors) or floor height (floors).
@@ -121,14 +121,14 @@ pub struct DoorMover {
 
 /// Direction a ceiling or floor is currently moving.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum MoveDirection {
+pub(crate) enum MoveDirection {
     Up,
     Down,
 }
 
 /// The type of ceiling motion behavior.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum CeilingType {
+pub(crate) enum CeilingType {
     /// Lower ceiling to floor height.
     LowerToFloor,
     /// Perpetual: lower to floor+8, raise back, repeat.
@@ -149,7 +149,7 @@ pub enum CeilingType {
 /// Added to `GameState::active_ceilings` when a crusher linedef is activated.
 /// Ticked each tic by `specials::tick_ceilings`.
 #[derive(Clone, Debug)]
-pub struct CeilingMover {
+pub(crate) struct CeilingMover {
     /// Index into `level.sectors`.
     pub sector_index: usize,
     /// Original ceiling height (return position).
@@ -177,7 +177,7 @@ pub struct CeilingMover {
 
 /// The type of floor motion behavior.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum FloorType {
+pub(crate) enum FloorType {
     /// Lower floor to lowest adjacent floor.
     LowerToLowest,
     /// Lower floor to highest adjacent floor.
@@ -210,7 +210,7 @@ pub enum FloorType {
 /// Added to `GameState::active_floors` when activated.
 /// Ticked each tic by `specials::tick_floors`.
 #[derive(Clone, Debug)]
-pub struct FloorMover {
+pub(crate) struct FloorMover {
     /// Index into `level.sectors`.
     pub sector_index: usize,
     /// Destination floor height.
@@ -243,7 +243,7 @@ pub struct FloorMover {
 
 /// Current movement status of a perpetual platform.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PlatformStatus {
+pub(crate) enum PlatformStatus {
     /// Platform is moving upward.
     Up,
     /// Platform is moving downward.
@@ -258,7 +258,7 @@ pub enum PlatformStatus {
 /// Added to `GameState::active_platforms` when activated.
 /// Ticked each tic by `specials::tick_platforms`.
 #[derive(Clone, Debug)]
-pub struct PerpetualPlatform {
+pub(crate) struct PerpetualPlatform {
     /// Index into `level.sectors`.
     pub sector_index: usize,
     /// Lowest floor height (lowest adjacent floor).
@@ -283,7 +283,7 @@ pub struct PerpetualPlatform {
 
 /// Current movement status of a lift.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LiftStatus {
+pub(crate) enum LiftStatus {
     /// Lift floor is lowering toward `low_height`.
     Lowering,
     /// Lift is waiting at the bottom before raising.
@@ -299,7 +299,7 @@ pub enum LiftStatus {
 /// Added to `GameState::lifts` when a lift linedef is activated.
 /// Ticked each tic by `specials::tick_lifts`.
 #[derive(Clone, Debug)]
-pub struct LiftMover {
+pub(crate) struct LiftMover {
     /// Index into `level.sectors`.
     pub sector_index: usize,
     /// Lowest adjacent floor height (destination when lowering).
@@ -321,7 +321,7 @@ pub struct LiftMover {
 /// Added to `GameState::active_lights` by `specials::spawn_level_specials`.
 /// Ticked each tic by `specials::tick_lights`.
 #[derive(Clone, Debug)]
-pub struct LightSpecial {
+pub(crate) struct LightSpecial {
     /// Index into `level.sectors`.
     pub sector: usize,
     /// Timer counting down to next toggle.
@@ -342,7 +342,7 @@ pub struct LightSpecial {
 
 /// Type of light effect applied to a sector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum LightEffectType {
+pub(crate) enum LightEffectType {
     /// Special 1: Light oscillates between base and dark at random intervals.
     BlinkRandom,
     /// Special 2: Light blinks every ~17 tics.
@@ -364,7 +364,7 @@ pub enum LightEffectType {
 /// Created by `specials::init_sector_lights` from sector specials.
 /// Ticked each tic by `specials::tick_sector_lights`.
 #[derive(Debug, Clone)]
-pub struct SectorLightEffect {
+pub(crate) struct SectorLightEffect {
     /// Index into `level.sectors`.
     pub sector_index: usize,
     /// Type of light animation.
@@ -390,7 +390,7 @@ pub struct SectorLightEffect {
 /// Line type 48: scroll left (speed_x = 1, speed_y = 0).
 /// Line type 85: scroll right (speed_x = -1, speed_y = 0).
 #[derive(Clone, Debug)]
-pub struct ScrollingWall {
+pub(crate) struct ScrollingWall {
     /// Index into `level.linedefs` for the scrolling linedef.
     pub linedef_index: usize,
     /// Horizontal scroll speed in texels per tic (positive = scroll left).
@@ -413,7 +413,7 @@ pub struct ScrollingWall {
 /// Line type 254: scroll floor + push things + scroll wall.
 /// Line type 255: scroll wall using linedef offsets (generalized).
 #[derive(Clone, Debug)]
-pub struct ConveyorBelt {
+pub(crate) struct ConveyorBelt {
     /// Index into `level.sectors` for the conveyor sector.
     pub sector_index: usize,
     /// Push force X component (fixed-point or map units per tic).
@@ -531,26 +531,26 @@ pub struct GameState {
     pub total_secrets: u32,
 
     /// Active door/floor/ceiling movers (ticked by `specials::tick_doors`).
-    pub active_doors: Vec<DoorMover>,
+    pub(crate) active_doors: Vec<DoorMover>,
     /// Active light specials (ticked by `specials::tick_lights`).
-    pub active_lights: Vec<LightSpecial>,
+    pub(crate) active_lights: Vec<LightSpecial>,
     /// Active ceiling movers / crushers (ticked by `specials::tick_ceilings`).
-    pub active_ceilings: Vec<CeilingMover>,
+    pub(crate) active_ceilings: Vec<CeilingMover>,
     /// Active floor movers / lifts (ticked by `specials::tick_floors`).
-    pub active_floors: Vec<FloorMover>,
+    pub(crate) active_floors: Vec<FloorMover>,
     /// Active perpetual platforms (ticked by `specials::tick_platforms`).
-    pub active_platforms: Vec<PerpetualPlatform>,
+    pub(crate) active_platforms: Vec<PerpetualPlatform>,
     /// Active lifts (lower-wait-raise) (ticked by `specials::tick_lifts`).
-    pub lifts: Vec<LiftMover>,
+    pub(crate) lifts: Vec<LiftMover>,
 
     /// Extended sector light effects (ticked by `specials::tick_sector_lights`).
-    pub sector_lights: Vec<SectorLightEffect>,
+    pub(crate) sector_lights: Vec<SectorLightEffect>,
 
     /// Active scrolling wall textures (ticked by `specials::tick_scrollers`).
-    pub scrolling_walls: Vec<ScrollingWall>,
+    pub(crate) scrolling_walls: Vec<ScrollingWall>,
 
     /// Active conveyor belt sectors (ticked by `specials::tick_conveyors`).
-    pub conveyors: Vec<ConveyorBelt>,
+    pub(crate) conveyors: Vec<ConveyorBelt>,
 
     /// Level exit requested this tic (cleared to `None` at start of each tick).
     pub exit_request: Option<ExitRequest>,
