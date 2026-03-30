@@ -786,8 +786,8 @@ mod tests {
     use crate::player::{PlayerState, WeaponType, psprite_slots};
     use crate::state::GameState;
     use crate::states::ids;
-    use doom_types::{TicCmd, bt};
     use doom_types::{Bam, Fixed16_16};
+    use doom_types::{TicCmd, bt};
 
     /// Build a minimal GameState with a live player Mobj at the origin.
     ///

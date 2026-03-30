@@ -61,6 +61,7 @@ pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_
 pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
+pub use doom_types::{TicCmd, bt};
 pub use face::{FaceDir, FaceKind, FaceState, face_patch_name, health_tier};
 pub use intermission::{IntermissionStats, par_time};
 pub use linedef_dispatch::{
@@ -117,10 +118,9 @@ pub use switch::{
     toggle_switch_texture,
 };
 pub use tic::{
-    FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, p_set_mobj_state, tick_all_mobjs,
-    tick_player, tick_world,
+    FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, p_set_mobj_state, tick_all_mobjs, tick_player,
+    tick_world,
 };
-pub use doom_types::{TicCmd, bt};
 pub use trace::{TraceHit, TraceResult, trace_ray};
 pub use weapon_fire::{
     AMMO_PER_SHOT, fire_current_weapon, p_fire_bfg, p_fire_chaingun, p_fire_chainsaw, p_fire_fist,
