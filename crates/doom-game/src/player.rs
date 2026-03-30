@@ -385,9 +385,10 @@ impl PlayerState {
     /// Returns `true` if the player has at least 1 unit of ammo for `weapon`.
     pub fn has_ammo_for(&self, weapon: WeaponType) -> bool {
         let atype = WEAPON_AMMO[weapon as usize];
-        match atype {
-            AmmoType::None => true,
-            _ => self.ammo.get(atype as usize).copied().unwrap_or(0) > 0,
+        if atype == AmmoType::None {
+            true
+        } else {
+            self.ammo.get(atype as usize).copied().unwrap_or(0) > 0
         }
     }
 }
