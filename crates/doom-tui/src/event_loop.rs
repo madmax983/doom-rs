@@ -396,7 +396,7 @@ impl DoomEventLoop {
 
     /// Set up the terminal (raw mode, alternate screen) and return the event loop.
     ///
-    /// The `Terminal` handle is stored internally until [`run`] is called, at
+    /// The `Terminal` handle is stored internally until [`DoomEventLoop::run`] is called, at
     /// which point it is moved into the blit thread.
     pub fn new() -> Result<Self, EventLoopError> {
         enable_raw_mode().map_err(|e| EventLoopError::TerminalSetup(e.to_string()))?;
