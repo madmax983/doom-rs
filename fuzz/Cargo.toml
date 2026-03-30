@@ -37,6 +37,12 @@ test = false
 doc = false
 bench = false
 
+[dependencies.doom-map]
+path = "../crates/doom-map"
+
+[dependencies.doom-net]
+path = "../crates/doom-net"
+
 [dependencies.doom-game]
 path = "../crates/doom-game"
 
@@ -67,6 +73,27 @@ bench = false
 [[bin]]
 name = "fuzz_target_6"
 path = "fuzz_targets/fuzz_target_6.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "udmf"
+path = "fuzz_targets/udmf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "doom_net"
+path = "fuzz_targets/doom_net.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "savegame"
+path = "fuzz_targets/savegame.rs"
 test = false
 doc = false
 bench = false

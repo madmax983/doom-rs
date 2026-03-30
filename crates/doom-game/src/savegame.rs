@@ -1051,56 +1051,56 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Door movers ---
     let door_count = r.read_u32()? as usize;
-    let mut active_doors = Vec::with_capacity(door_count);
+    let mut active_doors = Vec::with_capacity(door_count.min(r.data.len() - r.pos));
     for _ in 0..door_count {
         active_doors.push(read_door_mover(&mut r)?);
     }
 
     // --- Light specials ---
     let light_count = r.read_u32()? as usize;
-    let mut active_lights = Vec::with_capacity(light_count);
+    let mut active_lights = Vec::with_capacity(light_count.min(r.data.len() - r.pos));
     for _ in 0..light_count {
         active_lights.push(read_light_special(&mut r)?);
     }
 
     // --- Ceiling movers ---
     let ceiling_count = r.read_u32()? as usize;
-    let mut active_ceilings = Vec::with_capacity(ceiling_count);
+    let mut active_ceilings = Vec::with_capacity(ceiling_count.min(r.data.len() - r.pos));
     for _ in 0..ceiling_count {
         active_ceilings.push(read_ceiling_mover(&mut r)?);
     }
 
     // --- Floor movers ---
     let floor_count = r.read_u32()? as usize;
-    let mut active_floors = Vec::with_capacity(floor_count);
+    let mut active_floors = Vec::with_capacity(floor_count.min(r.data.len() - r.pos));
     for _ in 0..floor_count {
         active_floors.push(read_floor_mover(&mut r)?);
     }
 
     // --- Perpetual platforms ---
     let platform_count = r.read_u32()? as usize;
-    let mut active_platforms = Vec::with_capacity(platform_count);
+    let mut active_platforms = Vec::with_capacity(platform_count.min(r.data.len() - r.pos));
     for _ in 0..platform_count {
         active_platforms.push(read_perpetual_platform(&mut r)?);
     }
 
     // --- Lifts ---
     let lift_count = r.read_u32()? as usize;
-    let mut lifts = Vec::with_capacity(lift_count);
+    let mut lifts = Vec::with_capacity(lift_count.min(r.data.len() - r.pos));
     for _ in 0..lift_count {
         lifts.push(read_lift_mover(&mut r)?);
     }
 
     // --- Scrolling walls ---
     let scroller_count = r.read_u32()? as usize;
-    let mut scrolling_walls = Vec::with_capacity(scroller_count);
+    let mut scrolling_walls = Vec::with_capacity(scroller_count.min(r.data.len() - r.pos));
     for _ in 0..scroller_count {
         scrolling_walls.push(read_scrolling_wall(&mut r)?);
     }
 
     // --- Conveyor belts ---
     let conveyor_count = r.read_u32()? as usize;
-    let mut conveyors = Vec::with_capacity(conveyor_count);
+    let mut conveyors = Vec::with_capacity(conveyor_count.min(r.data.len() - r.pos));
     for _ in 0..conveyor_count {
         conveyors.push(read_conveyor_belt(&mut r)?);
     }
@@ -1780,5 +1780,83 @@ mod tests {
             loaded.state.player.extra_light, 2,
             "player extra_light must survive save/load so weapon flash lighting stays deterministic"
         );
+    }
+
+    #[test]
+    fn havoc_oom_door_count_mitigated() {
+        let mut r = WriteCursor::new(1024);
+
+        // Header
+        r.write_bytes(SAVE_MAGIC.as_ref());
+        r.write_u32(SAVE_VERSION);
+        r.write_bytes(b"E1M1\0\0\0\0");
+        r.write_u8(1);
+        r.write_u32(0);
+        r.write_bytes(&[0; 24]);
+
+        // PlayerState (mock)
+        r.write_u32(0);
+        r.write_u32(0); // handle
+        r.write_i32(100);
+        r.write_i32(0);
+        r.write_u8(0);
+        for _ in 0..4 {
+            r.write_u32(0);
+        } // ammo (NUM_AMMO is 4)
+        for _ in 0..4 {
+            r.write_u32(0);
+        } // max_ammo
+        for _ in 0..9 {
+            r.write_bool(false);
+        } // weapons (NUM_WEAPONS is 9)
+        r.write_u8(0); // weapon
+        r.write_u8(0); // pending_weapon
+        r.write_u8(0); // refire
+        r.write_u8(0); // extra_light
+        for _ in 0..2 {
+            r.write_u16(0);
+            r.write_i32(0);
+            r.write_i32(0);
+            r.write_i32(0);
+        } // psprites
+        r.write_bool(false);
+        r.write_u8(0);
+        r.write_bool(false); // attack_down, attack_cooldown, use_down
+        for _ in 0..6 {
+            r.write_u32(0);
+        } // powers
+        r.write_u8(0); // keys
+        r.write_u32(0); // bonus_count
+        r.write_u32(0); // damage_count
+        r.write_u32(0);
+        r.write_u32(0);
+        r.write_u32(0); // kill, item, secret
+
+        // RNG
+        r.write_u32(0);
+
+        // Counters
+        r.write_u32(0);
+        r.write_u32(0);
+        r.write_u32(0);
+        r.write_u32(0);
+        r.write_u32(0);
+        r.write_u32(0);
+        r.write_u32(0);
+        r.write_u32(0);
+
+        // Level name
+        r.write_u32(4);
+        r.write_bytes(b"E1M1");
+
+        // Exit request
+        r.write_u8(0);
+
+        // DOOR COUNT - The attack
+        r.write_u32(0x7fffffff); // large allocation
+
+        let data = r.into_bytes();
+        let result = load_game(&data);
+        assert!(matches!(result, Err(SaveError::Truncated)));
     }
 }
