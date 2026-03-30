@@ -19,8 +19,8 @@ use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
 use doom_game::player::WeaponType;
 use doom_game::{
-    GamePhase, GamePhaseController, GameState, Skill, TicCmd, TitleScreen, init_conveyors,
-    init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
+    GamePhase, GamePhaseController, GameState, Skill, TicCmd, init_conveyors, init_scrolling_walls,
+    init_sector_lights, kind_to_doomed_type, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
@@ -222,8 +222,6 @@ pub(crate) struct DoomGame {
     wad_stack: WadStack,
     /// Mugshot face animation FSM.
     face_state: FaceState,
-    /// Title screen state. `Some` = still on title screen, `None` = in gameplay.
-    title_screen: Option<TitleScreen>,
     /// Optional plain-text debug event log (opened with --debug-log).
     debug_log: Option<std::fs::File>,
     /// SFX ID for the player pain sound (DSPLPAIN), resolved at startup.
@@ -283,12 +281,9 @@ impl DoomGame {
         let initial_health = gs.player.health();
 
         let mut menu = doom_game::menu::GameMenu::new(false); // false = Doom 1 mode
-        let title_screen = if show_title {
+        if show_title {
             menu.open();
-            Some(TitleScreen::new())
-        } else {
-            None
-        };
+        }
         let start_map = Self::map_id_from_level_name(gs.level_name.as_str());
         let phase_controller = if show_title {
             GamePhaseController::new_at_title()
@@ -324,7 +319,6 @@ impl DoomGame {
             wad_font: None,
             wad_stack: WadStack::new(),
             face_state: FaceState::new(),
-            title_screen,
             debug_log,
             pain_sfx_id,
             sfx_lookup,
@@ -338,7 +332,7 @@ impl DoomGame {
 
         game.reset_weapon_anim();
 
-        if game.title_screen.is_none() {
+        if !matches!(game.phase_controller.phase(), GamePhase::TitleScreen { .. }) {
             game.start_level_music();
         }
 
@@ -398,7 +392,6 @@ impl DoomGame {
     }
 
     fn enter_title_screen(&mut self) {
-        self.title_screen = Some(TitleScreen::new());
         self.menu = doom_game::menu::GameMenu::new(false);
         self.menu.open();
         self.intermission_renderer = None;
@@ -781,8 +774,8 @@ impl DoomApp for DoomGame {
         // --- Title screen mode ---
         // While the title screen is showing, route input to the menu and skip
         // all game simulation.  StartGame dismisses the title screen.
-        if let Some(ref mut ts) = self.title_screen {
-            ts.tick();
+        if matches!(self.phase_controller.phase(), GamePhase::TitleScreen { .. }) {
+            self.phase_controller.tick(&mut self.gs);
             self.menu.tick();
 
             // Edge-triggered navigation: Up/Down arrows, Escape = back.
@@ -817,13 +810,11 @@ impl DoomApp for DoomGame {
                                 ));
                             self.intermission_renderer = None;
                             self.menu.close();
-                            self.title_screen = None;
                             self.start_level_music();
                         }
                         doom_game::menu::MenuResult::Quit => {
                             // Can't stop the event loop from here; just close the menu.
                             self.menu.close();
-                            self.title_screen = None;
                         }
                         _ => {}
                     }
@@ -836,6 +827,7 @@ impl DoomApp for DoomGame {
         }
 
         match self.phase_controller.phase() {
+            GamePhase::TitleScreen { .. } => unreachable!(),
             GamePhase::Intermission { .. } => {
                 if let Some(renderer) = self.intermission_renderer.as_mut() {
                     if transition_pressed {
@@ -861,12 +853,12 @@ impl DoomApp for DoomGame {
                     self.phase_controller.request_skip();
                 }
                 self.phase_controller.tick(&mut self.gs);
-                if matches!(self.phase_controller.phase(), GamePhase::TitleScreen) {
+                if matches!(self.phase_controller.phase(), GamePhase::TitleScreen { .. }) {
                     self.enter_title_screen();
                 }
                 return;
             }
-            GamePhase::TitleScreen | GamePhase::Playing => {}
+            GamePhase::Playing => {}
         }
 
         // Tick menu skull animation each tic regardless of menu state.
@@ -1128,10 +1120,10 @@ impl DoomApp for DoomGame {
 
     fn render(&mut self, fb: &mut Framebuffer) {
         // Title screen mode: draw the title/credits screen + menu overlay.
-        if let Some(ref ts) = self.title_screen {
+        if let GamePhase::TitleScreen { screen } = self.phase_controller.phase() {
             draw_title_screen_wad(
                 fb,
-                ts,
+                screen,
                 &mut self.patch_cache,
                 &self.wad_stack,
                 &self.bitmap_font,
@@ -1147,6 +1139,7 @@ impl DoomApp for DoomGame {
         }
 
         match self.phase_controller.phase() {
+            GamePhase::TitleScreen { .. } => unreachable!(),
             GamePhase::Intermission { .. } => {
                 if let Some(renderer) = self.intermission_renderer.as_ref() {
                     if self.wad_stack.lump_data("WIOSTK").is_some() {
@@ -1179,10 +1172,6 @@ impl DoomApp for DoomGame {
                     fb.clear(0);
                     draw_mini_string(fb, 96, "THE END", 176);
                 }
-                return;
-            }
-            GamePhase::TitleScreen => {
-                fb.clear(0);
                 return;
             }
             GamePhase::Playing => {}
@@ -1355,7 +1344,7 @@ impl DoomApp for DoomGame {
 
     fn render_cogmind(&mut self, term_w: u16, term_h: u16) -> Option<doom_tui::CogmindFrame> {
         // Not available on the title screen.
-        if self.title_screen.is_some() {
+        if matches!(self.phase_controller.phase(), GamePhase::TitleScreen { .. }) {
             return None;
         }
 
@@ -1379,7 +1368,7 @@ impl DoomApp for DoomGame {
     }
 
     fn cogmind_hud(&self) -> Option<doom_tui::CogmindHud> {
-        if self.title_screen.is_some() {
+        if matches!(self.phase_controller.phase(), GamePhase::TitleScreen { .. }) {
             return None;
         }
         use doom_game::player::{
@@ -3329,7 +3318,7 @@ mod tests {
         }
 
         assert!(
-            game.title_screen.is_none(),
+            !matches!(game.phase_controller.phase(), GamePhase::TitleScreen { .. }),
             "title screen should be dismissed"
         );
         let audio = game.audio.as_ref().expect("audio must be present");

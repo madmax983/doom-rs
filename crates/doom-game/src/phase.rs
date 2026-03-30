@@ -7,6 +7,7 @@
 //! next map for both Doom 1 (ExMy) and Doom 2 (MAPxx) progression.
 
 use crate::intermission::{self, IntermissionStats};
+use crate::menu::TitleScreen;
 use crate::state::{ExitRequest, GameState};
 
 // ---------------------------------------------------------------------------
@@ -213,7 +214,10 @@ impl MapId {
 #[derive(Debug, Clone)]
 pub enum GamePhase {
     /// Title screen / demo playback.
-    TitleScreen,
+    TitleScreen {
+        /// The timing and state of the title screen sequence.
+        screen: TitleScreen,
+    },
     /// Active gameplay.
     Playing,
     /// Intermission tally screen between levels.
@@ -276,7 +280,9 @@ impl GamePhaseController {
     /// Create a new controller starting at the title screen.
     pub fn new_at_title() -> Self {
         Self {
-            phase: GamePhase::TitleScreen,
+            phase: GamePhase::TitleScreen {
+                screen: TitleScreen::new(),
+            },
             current_map: MapId::new(1, 1),
             phase_tic: 0,
             skip_requested: false,
@@ -287,6 +293,11 @@ impl GamePhaseController {
     /// Return a reference to the current game phase.
     pub fn phase(&self) -> &GamePhase {
         &self.phase
+    }
+
+    /// Return a mutable reference to the current game phase.
+    pub fn phase_mut(&mut self) -> &mut GamePhase {
+        &mut self.phase
     }
 
     /// Return the current (or most recent) map.
@@ -324,9 +335,15 @@ impl GamePhaseController {
             GamePhase::Finale { .. } => {
                 self.tick_finale();
             }
-            GamePhase::TitleScreen => {
-                // Title screen just waits; advance_to_playing() transitions out.
+            GamePhase::TitleScreen { .. } => {
+                // The title screen / demo loop is currently driven entirely by
+                // the outer app layer (DoomGame) sending events, but we tick the
+                // inner screen state here.
             }
+        }
+
+        if let GamePhase::TitleScreen { screen } = &mut self.phase {
+            screen.tick();
         }
     }
 
@@ -393,7 +410,9 @@ impl GamePhaseController {
         }
 
         if self.skip_requested || self.phase_tic >= FINALE_AUTO_ADVANCE_TICS {
-            self.phase = GamePhase::TitleScreen;
+            self.phase = GamePhase::TitleScreen {
+                screen: TitleScreen::new(),
+            };
             self.phase_tic = 0;
             self.skip_requested = false;
         }
@@ -405,7 +424,7 @@ impl GamePhaseController {
     /// so the caller knows to load that map.
     pub fn advance_to_playing(&mut self) {
         match &self.phase {
-            GamePhase::TitleScreen => {
+            GamePhase::TitleScreen { .. } => {
                 self.pending_load = Some(self.current_map);
                 self.phase = GamePhase::Playing;
                 self.phase_tic = 0;
@@ -771,7 +790,7 @@ mod tests {
     #[test]
     fn controller_starts_at_title() {
         let ctrl = GamePhaseController::new_at_title();
-        assert!(matches!(ctrl.phase(), GamePhase::TitleScreen));
+        assert!(matches!(ctrl.phase(), GamePhase::TitleScreen { .. }));
     }
 
     #[test]
@@ -919,7 +938,7 @@ mod tests {
         ctrl.request_skip();
         ctrl.tick(&mut gs); // -> TitleScreen
 
-        assert!(matches!(ctrl.phase(), GamePhase::TitleScreen));
+        assert!(matches!(ctrl.phase(), GamePhase::TitleScreen { .. }));
     }
 
     #[test]
@@ -996,7 +1015,7 @@ mod tests {
         }
 
         assert!(
-            matches!(ctrl.phase(), GamePhase::TitleScreen),
+            matches!(ctrl.phase(), GamePhase::TitleScreen { .. }),
             "should auto-advance to TitleScreen after threshold"
         );
     }

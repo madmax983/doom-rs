@@ -487,6 +487,7 @@ const CREDITS_DURATION: u32 = 200;
 /// The timer-driven loop currently cycles through `Title -> Credits -> Title`.
 /// `Demo(_)` remains representable for future real playback, but normal ticking
 /// intentionally stays out of demo phases until that playback path exists.
+#[derive(Debug, Clone)]
 pub struct TitleScreen {
     /// Current tic in the current phase.
     tic: u32,

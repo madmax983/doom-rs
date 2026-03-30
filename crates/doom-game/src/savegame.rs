@@ -1017,7 +1017,9 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     // --- Door movers ---
     let door_count = r.read_u32()? as usize;
     let max_doors = (r.data.len().saturating_sub(r.pos)) / 36;
-    if door_count > max_doors { return Err(SaveError::Truncated); }
+    if door_count > max_doors {
+        return Err(SaveError::Truncated);
+    }
     let mut active_doors = Vec::with_capacity(door_count);
     for _ in 0..door_count {
         active_doors.push(read_door_mover(&mut r)?);
@@ -1026,7 +1028,9 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     // --- Light specials ---
     let light_count = r.read_u32()? as usize;
     let max_lights = (r.data.len().saturating_sub(r.pos)) / 16;
-    if light_count > max_lights { return Err(SaveError::Truncated); }
+    if light_count > max_lights {
+        return Err(SaveError::Truncated);
+    }
     let mut active_lights = Vec::with_capacity(light_count);
     for _ in 0..light_count {
         active_lights.push(read_light_special(&mut r)?);
@@ -1035,7 +1039,9 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     // --- Ceiling movers ---
     let ceiling_count = r.read_u32()? as usize;
     let max_ceilings = (r.data.len().saturating_sub(r.pos)) / 36;
-    if ceiling_count > max_ceilings { return Err(SaveError::Truncated); }
+    if ceiling_count > max_ceilings {
+        return Err(SaveError::Truncated);
+    }
     let mut active_ceilings = Vec::with_capacity(ceiling_count);
     for _ in 0..ceiling_count {
         active_ceilings.push(read_ceiling_mover(&mut r)?);
@@ -1044,7 +1050,9 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     // --- Floor movers ---
     let floor_count = r.read_u32()? as usize;
     let max_floors = (r.data.len().saturating_sub(r.pos)) / 36;
-    if floor_count > max_floors { return Err(SaveError::Truncated); }
+    if floor_count > max_floors {
+        return Err(SaveError::Truncated);
+    }
     let mut active_floors = Vec::with_capacity(floor_count);
     for _ in 0..floor_count {
         active_floors.push(read_floor_mover(&mut r)?);
@@ -1053,7 +1061,9 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     // --- Perpetual platforms ---
     let platform_count = r.read_u32()? as usize;
     let max_platforms = (r.data.len().saturating_sub(r.pos)) / 28;
-    if platform_count > max_platforms { return Err(SaveError::Truncated); }
+    if platform_count > max_platforms {
+        return Err(SaveError::Truncated);
+    }
     let mut active_platforms = Vec::with_capacity(platform_count);
     for _ in 0..platform_count {
         active_platforms.push(read_perpetual_platform(&mut r)?);
@@ -1062,7 +1072,9 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     // --- Lifts ---
     let lift_count = r.read_u32()? as usize;
     let max_lifts = (r.data.len().saturating_sub(r.pos)) / 28;
-    if lift_count > max_lifts { return Err(SaveError::Truncated); }
+    if lift_count > max_lifts {
+        return Err(SaveError::Truncated);
+    }
     let mut lifts = Vec::with_capacity(lift_count);
     for _ in 0..lift_count {
         lifts.push(read_lift_mover(&mut r)?);
@@ -1071,7 +1083,9 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     // --- Scrolling walls ---
     let scroller_count = r.read_u32()? as usize;
     let max_scrollers = (r.data.len().saturating_sub(r.pos)) / 12;
-    if scroller_count > max_scrollers { return Err(SaveError::Truncated); }
+    if scroller_count > max_scrollers {
+        return Err(SaveError::Truncated);
+    }
     let mut scrolling_walls = Vec::with_capacity(scroller_count);
     for _ in 0..scroller_count {
         scrolling_walls.push(read_scrolling_wall(&mut r)?);
@@ -1080,7 +1094,9 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     // --- Conveyor belts ---
     let conveyor_count = r.read_u32()? as usize;
     let max_conveyors = (r.data.len().saturating_sub(r.pos)) / 12;
-    if conveyor_count > max_conveyors { return Err(SaveError::Truncated); }
+    if conveyor_count > max_conveyors {
+        return Err(SaveError::Truncated);
+    }
     let mut conveyors = Vec::with_capacity(conveyor_count);
     for _ in 0..conveyor_count {
         conveyors.push(read_conveyor_belt(&mut r)?);
