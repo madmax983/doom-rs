@@ -5,6 +5,7 @@
 //! - A simple per-column solid wall occlusion mask.
 //! - Row-wise clipping of visplane spans against per-column ceiling/floor clips.
 
+#[allow(dead_code)]
 const SCREEN_W: usize = 320;
 
 /// Clip a view-space seg to the near plane (`vx = 1`).
@@ -12,6 +13,7 @@ const SCREEN_W: usize = 320;
 /// Returns `None` if both endpoints are behind the near plane after clipping.
 /// Returns `Some((vx1, vy1, vx2, vy2))` with clipped coordinates otherwise.
 #[must_use]
+#[allow(dead_code)]
 pub fn clip_seg_to_near_plane(
     vx1: i64,
     vy1: i64,
@@ -116,6 +118,7 @@ pub fn clip_seg_to_view_frustum(
 /// viewport: once a column is marked solid, farther seg columns in that screen
 /// column are skipped.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SolidWallClipper {
     covered: [bool; SCREEN_W],
 }
@@ -128,6 +131,7 @@ impl Default for SolidWallClipper {
     }
 }
 
+#[allow(dead_code)]
 impl SolidWallClipper {
     #[must_use]
     pub fn new() -> Self {
@@ -174,6 +178,7 @@ impl SolidWallClipper {
 
 /// Plane type used for row-wise span clipping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[allow(dead_code)]
 pub enum PlaneClipKind {
     Ceiling,
     Floor,
@@ -183,6 +188,7 @@ pub enum PlaneClipKind {
 ///
 /// Returns visible sub-runs (inclusive ranges).
 #[must_use]
+#[allow(dead_code)]
 pub fn clip_plane_span_runs(
     y: i32,
     x1: usize,

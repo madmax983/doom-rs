@@ -638,7 +638,7 @@ mod tests {
     use super::*;
     use doom_game::AutomapState;
     use doom_map::Level;
-    use doom_map::lumps::{
+    use doom_map::{
         Blockmap, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector, Thing as ThingRaw,
         Vertex as VxRaw,
     };
@@ -1282,7 +1282,7 @@ mod tests {
         use super::*;
         use doom_game::AutomapState;
         use doom_map::Level;
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, FLAG_TWO_SIDED, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector,
             Thing as ThingRaw, Vertex as VxRaw,
         };
@@ -1960,7 +1960,7 @@ mod tests {
             let unseen_count = fb
                 .data
                 .iter()
-                .filter(|&&b| b == doom_game::automap::COLOR_UNSEEN)
+                .filter(|&&b| b == doom_game::COLOR_UNSEEN)
                 .count();
             assert!(
                 unseen_count > 0,
@@ -2231,7 +2231,7 @@ mod tests {
             let player_marker_count = fb
                 .data
                 .iter()
-                .filter(|&&b| b == doom_game::automap::COLOR_PLAYER_MARKER)
+                .filter(|&&b| b == doom_game::COLOR_PLAYER_MARKER)
                 .count();
             assert!(
                 player_marker_count > 0,
@@ -2342,7 +2342,7 @@ mod tests {
             let grid_count = fb
                 .data
                 .iter()
-                .filter(|&&b| b == doom_game::automap::COLOR_GRID)
+                .filter(|&&b| b == doom_game::COLOR_GRID)
                 .count();
             assert!(grid_count > 0, "render_automap should draw grid lines");
         }

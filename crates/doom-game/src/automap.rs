@@ -781,7 +781,7 @@ pub fn mark_lines_seen(seen_lines: &mut Vec<bool>, subsector_idx: usize, level: 
 mod tests {
     use super::*;
     use doom_map::Level;
-    use doom_map::lumps::{
+    use doom_map::{
         Blockmap, FLAG_TWO_SIDED, Linedef as LdRaw, Reject, Sector, Seg, Sidedef as SdRaw, Ssector,
         Thing as ThingRaw, Vertex as VxRaw,
     };

@@ -331,6 +331,7 @@ pub const HANDSHAKE_JOIN_SENDER: u8 = 0xFF;
 
 /// Create a "join" handshake packet sent by a client to request a slot.
 #[must_use]
+#[allow(dead_code)]
 pub fn make_join_packet() -> TicPacket {
     TicPacket {
         tic: HANDSHAKE_TIC,
@@ -362,6 +363,7 @@ pub const fn is_join_request(packet: &TicPacket) -> bool {
 
 /// Returns `true` if `packet` looks like a join response from the server.
 #[must_use]
+#[allow(dead_code)]
 pub const fn is_join_response(packet: &TicPacket) -> bool {
     packet.tic == HANDSHAKE_TIC && packet.sender != HANDSHAKE_JOIN_SENDER
 }

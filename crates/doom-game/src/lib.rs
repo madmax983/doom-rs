@@ -11,36 +11,36 @@
 //! - `player.ammo[i] ≤ MAX_AMMO[i]` for all i.
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
-pub mod actions;
-pub mod automap;
-pub mod cheats;
-pub mod combat;
-pub mod dehacked;
-pub mod face;
-pub mod intermission;
-pub mod linedef_dispatch;
-pub mod menu;
-pub mod mobj;
-pub mod mobjinfo;
-pub mod movement;
-pub mod phase;
-pub mod pickups;
-pub mod player;
-pub mod projectile;
-pub mod random;
-pub mod savegame;
-pub mod sight;
-pub mod snapshot;
-pub mod sound;
-pub mod spawn;
-pub mod specials;
-pub mod state;
-pub mod states;
-pub mod switch;
-pub mod tic;
-pub mod trace;
-pub mod weapon_fire;
-pub mod weapons;
+pub(crate) mod actions;
+pub(crate) mod automap;
+pub(crate) mod cheats;
+pub(crate) mod combat;
+pub(crate) mod dehacked;
+pub(crate) mod face;
+pub(crate) mod intermission;
+pub(crate) mod linedef_dispatch;
+pub(crate) mod menu;
+pub(crate) mod mobj;
+pub(crate) mod mobjinfo;
+pub(crate) mod movement;
+pub(crate) mod phase;
+pub(crate) mod pickups;
+pub(crate) mod player;
+pub(crate) mod projectile;
+pub(crate) mod random;
+pub(crate) mod savegame;
+pub(crate) mod sight;
+pub(crate) mod snapshot;
+pub(crate) mod sound;
+pub(crate) mod spawn;
+pub(crate) mod specials;
+pub(crate) mod state;
+pub(crate) mod states;
+pub(crate) mod switch;
+pub(crate) mod tic;
+pub(crate) mod trace;
+pub(crate) mod weapon_fire;
+pub(crate) mod weapons;
 
 pub use actions::{
     ACTION_BRAIN_AWAKE, ACTION_BRAIN_DIE, ACTION_BRAIN_EXPLODE, ACTION_BRAIN_SCREAM,
@@ -68,6 +68,7 @@ pub use linedef_dispatch::{
     linedef_effect,
 };
 pub use menu::{GameMenu, MenuAction, MenuItem, MenuPage, MenuResult, TitlePhase, TitleScreen};
+pub use mobj::MobjStateEntry;
 pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_slide_move, p_try_move};
@@ -75,7 +76,12 @@ pub use phase::{GamePhase, GamePhaseController, MapId};
 pub use pickups::{
     doomed_type_to_kind, kind_to_doomed_type, p_check_pickups, p_touch_special_thing,
 };
+pub use player::powers;
+pub use player::psprite_slots;
 pub use player::{AmmoType, PlayerState, WEAPON_AMMO, WeaponType};
+pub use player::{
+    KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD, KEY_YELLOW_SKULL,
+};
 pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
 };
@@ -110,6 +116,7 @@ pub use state::{
     PlatformStatus, RNG_TABLE, ScrollingWall, SectorLightEffect, SoundRequest,
 };
 pub use states::STATES;
+pub use states::ids;
 pub use states::sprite_names;
 pub use switch::{
     KeyType, SWITCH_PAIRS, clear_linedef_special, find_switch_opposite, player_has_key,
@@ -126,3 +133,7 @@ pub use weapon_fire::{
     select_next_weapon, weapon_ammo_cost,
 };
 pub use weapons::{fire_weapon, player_can_fire, setup_psprites, tick_psprites};
+pub mod game_cheats {
+    pub use crate::cheats::*;
+}
+pub use automap::{COLOR_GRID, COLOR_PLAYER_MARKER, COLOR_UNSEEN};

@@ -7,7 +7,7 @@
 //! Call `tick_face` once per tic after resolving damage.  Call `face_patch_name`
 //! to get the WAD lump name to render.
 
-use doom_types::angle::Bam;
+use doom_types::Bam;
 
 // ---------------------------------------------------------------------------
 // Face direction

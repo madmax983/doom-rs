@@ -8,7 +8,7 @@
 //! The flat row is `(yfrac >> 16) & 63`, column is `(xfrac >> 16) & 63`.
 
 use crate::framebuffer::Framebuffer;
-use doom_types::limits::{FB_WIDTH, FLAT_SIZE};
+use doom_types::{FB_WIDTH, FLAT_SIZE};
 
 /// Side length of a flat texture (64).
 pub const FLAT_DIM: usize = 64;

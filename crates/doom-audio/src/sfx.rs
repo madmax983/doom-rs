@@ -20,6 +20,7 @@ use crate::mixer::{Mixer, PcmSample};
 /// Used by Doom to decide which active sound to evict when all mixer channels
 /// are busy and a new, higher-priority sound needs to play.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[allow(dead_code)]
 pub struct SfxPriority(pub u8);
 
 // ---------------------------------------------------------------------------

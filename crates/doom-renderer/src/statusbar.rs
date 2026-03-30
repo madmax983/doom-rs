@@ -18,11 +18,11 @@
 
 use crate::framebuffer::Framebuffer;
 use crate::patch_cache::PatchCache;
-use doom_game::face::{FaceState, face_patch_name};
-use doom_game::player::{
+use doom_game::{
     AmmoType, KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD,
     KEY_YELLOW_SKULL, PlayerState, WEAPON_AMMO,
 };
+use doom_game::{FaceState, face_patch_name};
 use doom_wad::WadStack;
 
 // ---------------------------------------------------------------------------
@@ -264,6 +264,7 @@ const DIGIT_BITMAPS: [[u8; 9]; 10] = [
 /// Width of a large digit in pixels.
 pub const DIGIT_W: i32 = 7;
 /// Height of a large digit in pixels.
+#[allow(dead_code)]
 pub const DIGIT_H: i32 = 9;
 
 // ===========================================================================
@@ -538,6 +539,7 @@ const LETTER_BITMAPS: [[u8; 7]; 26] = [
 /// Width of a letter in pixels.
 pub const LETTER_W: i32 = 5;
 /// Height of a letter in pixels.
+#[allow(dead_code)]
 pub const LETTER_H: i32 = 7;
 
 // ===========================================================================
@@ -1225,7 +1227,7 @@ pub fn draw_status_bar_wad(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_game::player::PlayerState;
+    use doom_game::PlayerState;
 
     // Helper: a default (pistol-start) player.
     fn default_player() -> PlayerState {

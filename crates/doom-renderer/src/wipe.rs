@@ -8,7 +8,7 @@
 //! game's `P_Random`, matching vanilla Doom's `M_Random` usage for wipes.
 
 use crate::framebuffer::Framebuffer;
-use doom_types::limits::{FB_HEIGHT, FB_SIZE, FB_WIDTH};
+use doom_types::{FB_HEIGHT, FB_SIZE, FB_WIDTH};
 
 /// Independent PRNG for screen wipe stagger pattern.
 ///

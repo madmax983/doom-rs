@@ -4,7 +4,7 @@
 //! so solid-wall clipping can reject farther geometry early.
 
 use doom_map::Level;
-use doom_map::bsp::{BspChild, BspTree};
+use doom_map::{BspChild, BspTree};
 
 fn seg_sort_key(level: &Level, seg_idx: usize, player_x: i32, player_y: i32) -> i64 {
     let Some(seg) = level.segs.get(seg_idx) else {
@@ -88,7 +88,7 @@ pub fn collect_front_to_back_seg_indices(
                     continue;
                 };
 
-                // Same side test convention as doom_map::bsp::point_in_subsector.
+                // Same side test convention as doom_map::point_in_subsector.
                 let dx = node.dx as i32;
                 let dy = node.dy as i32;
                 let nx = node.x as i32;
@@ -130,7 +130,7 @@ fn ordered_subsector_segs(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_map::lumps::{
+    use doom_map::{
         Blockmap, Linedef, Node, NodeBBox, Reject, Sector, Seg, Sidedef, Ssector, Vertex,
     };
 

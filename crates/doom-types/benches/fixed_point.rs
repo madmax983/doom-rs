@@ -2,7 +2,7 @@
 //!
 //! Baseline numbers before any SIMD/LUT optimizations.
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
-use doom_types::fixed::Fixed16_16;
+use doom_types::Fixed16_16;
 
 fn bench_fixed_mul(c: &mut Criterion) {
     let a = Fixed16_16::from_int(1234);
@@ -25,7 +25,7 @@ fn bench_fixed_mul_chain(c: &mut Criterion) {
     let vals: Vec<Fixed16_16> = (1..=64).map(Fixed16_16::from_int).collect();
     c.bench_function("Fixed16_16::fixed_mul x64 chain", |bench| {
         bench.iter(|| {
-            vals.iter().fold(Fixed16_16::from_int(1), |acc, &v| {
+            vals.iter().fold(Fixed16_16::from_int(1) as Fixed16_16, |acc, &v| {
                 acc.fixed_mul(black_box(v))
             })
         });

@@ -409,7 +409,7 @@ impl Clone for Slot {
 ///
 /// # Usage
 /// ```
-/// use doom_game::mobj::{MobjSlab, Mobj, MobjHandle, MobjKind};
+/// use doom_game::{MobjSlab, Mobj, MobjHandle, MobjKind};
 /// use doom_types::{Fixed16_16, Bam};
 /// let mut slab = MobjSlab::new();
 /// let mobj = Mobj::new(MobjKind::Player, Fixed16_16::ZERO, Fixed16_16::ZERO, Bam::ZERO);

@@ -15,7 +15,7 @@
 //! 14 palettes × 256 colors × 3 bytes (R, G, B) = 10752 bytes
 //! ```
 
-use doom_types::limits::{PLAYPAL_COLORS, PLAYPAL_COUNT};
+use doom_types::{PLAYPAL_COLORS, PLAYPAL_COUNT};
 use thiserror::Error;
 
 /// Expected byte size of the PLAYPAL lump.

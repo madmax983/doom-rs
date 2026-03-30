@@ -36,6 +36,7 @@ pub const MAX_COLORMAP_INDEX: u8 = 31;
 pub const MIN_DISTANCE: f32 = 1.0;
 
 /// Assumed screen width for angular-falloff calculations.
+#[allow(dead_code)]
 pub const SCREEN_W: usize = 320;
 
 /// Half the screen width (float).

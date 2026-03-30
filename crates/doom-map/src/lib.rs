@@ -9,16 +9,14 @@
 //! - All sidedef sector refs in bounds
 //! - Reject size == `ceil(N_SECTORS² / 8)`
 
-pub mod bsp;
-pub mod level;
-pub mod lumps;
-pub mod svg;
-pub mod udmf;
+pub(crate) mod bsp;
+pub(crate) mod level;
+pub(crate) mod lumps;
+pub(crate) mod svg;
+pub(crate) mod udmf;
 
 pub use bsp::{BspChild, BspError, BspTree};
 pub use level::{Level, LevelError};
-pub use lumps::{
-    Blockmap, FLAG_TWO_SIDED, Linedef, LumpParseError, Node, NodeBBox, Reject, SIDEDEF_NONE,
-    Sector, Seg, Sidedef, Ssector, Thing, Vertex,
-};
+pub use lumps::*;
 pub use svg::export_map_to_svg;
+pub use udmf::UdmfMap;

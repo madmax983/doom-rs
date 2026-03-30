@@ -5,7 +5,7 @@
 //! This keeps the game sim and renderer free of any color-space concerns.
 
 use crate::texture_compose::PatchImage;
-use doom_types::limits::{FB_HEIGHT, FB_SIZE, FB_WIDTH};
+use doom_types::{FB_HEIGHT, FB_SIZE, FB_WIDTH};
 
 /// The primary render target: 320×200 palette-indexed pixels.
 ///

@@ -35,6 +35,7 @@ use doom_renderer::{Framebuffer, PaletteLut};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 
 /// Palette-aware Sixel widget for a Doom framebuffer.
+#[allow(dead_code)]
 pub struct DoomSixelWidget<'a> {
     pub data: &'a [u8],
     pub lut: &'a PaletteLut,
@@ -43,6 +44,7 @@ pub struct DoomSixelWidget<'a> {
     pub font_size: (u16, u16),
 }
 
+#[allow(dead_code)]
 impl<'a> DoomSixelWidget<'a> {
     pub fn new(
         fb: &'a Framebuffer,

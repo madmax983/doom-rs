@@ -1,6 +1,6 @@
 #![no_main]
 
-use doom_game::dehacked::DehPatch;
+use doom_game::DehPatch;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &str| {

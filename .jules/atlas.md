@@ -5,3 +5,7 @@
 **[Hide internal renderer modules]**
 **Tangle:** The `doom-renderer` crate leaked internal constant modules `automap_colors` and `menu_colors` as `pub mod`s in `automap.rs` and `menu_render.rs` and re-exported them in `lib.rs` even though they are only used internally within the renderer for the GUI.
 **Blueprint:** Altered the visibility of these modules to `pub(crate)` and removed them from the crate's `pub use` interface. Added `#[allow(dead_code)]` to bypass rustc warning of `pub` items missing callers since they are now module-private yet some constants are unimplemented but part of a well-defined palette standard. This ensures strict internal encapsulation.
+
+**[The Leaky Abstraction - Public Internal Modules]**
+**Tangle:** Across the workspace, almost every crate's `lib.rs` file was exposing its internal structural organization as public API by using `pub mod <module>;` declarations. This leaked the internal directory structure and implementation details, even though specific types and functions were already properly re-exported as part of a clean facade via `pub use <module>::<Item>;`.
+**Blueprint:** Altered all internal module declarations in `crates/*/src/lib.rs` from `pub mod` to `pub(crate) mod`. This enforces strict encapsulation, restricting the crate's public interface strictly to the items explicitly exposed via `pub use`, hiding the internal file hierarchy, and preventing external code from bypassing the intended abstraction layer.

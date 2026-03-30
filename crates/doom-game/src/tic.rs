@@ -1712,8 +1712,8 @@ mod tests {
 
     fn make_partition_step_level(right_floor: i16, left_floor: i16) -> doom_map::Level {
         use doom_map::{
-            Blockmap, FLAG_TWO_SIDED, Linedef, Node, NodeBBox, Reject, Sector, Seg, Sidedef,
-            Ssector, Vertex, lumps::NODE_SUBSECTOR_BIT,
+            Blockmap, FLAG_TWO_SIDED, Linedef, NODE_SUBSECTOR_BIT, Node, NodeBBox, Reject, Sector,
+            Seg, Sidedef, Ssector, Vertex,
         };
 
         let vertexes = vec![

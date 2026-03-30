@@ -16,7 +16,7 @@
 //! | LevelWarp  | `idclev`     | Level warp (caller reads digits)   |
 //! | MusicChange| `idmus`      | Change music (caller reads digits) |
 
-use doom_types::limits::MAX_AMMO;
+use doom_types::MAX_AMMO;
 
 use crate::player::powers;
 use crate::state::GameState;
@@ -351,7 +351,7 @@ pub fn cheat_message(code: CheatCode) -> &'static str {
 mod tests {
     use super::*;
     use crate::state::GameState;
-    use doom_types::limits::{MAX_AMMO, NUM_WEAPONS};
+    use doom_types::{MAX_AMMO, NUM_WEAPONS};
 
     // -- Helper: feed a string into a buffer ---
     fn feed(buf: &mut CheatBuffer, s: &[u8]) {
