@@ -1103,6 +1103,7 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     };
 
     let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
+    let mut intercepts = Vec::new();
     crate::combat::p_line_attack(
         gs,
         handle,
@@ -1110,6 +1111,7 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         crate::combat::MISSILERANGE,
         damage,
         level,
+        &mut intercepts,
     );
     let (sx, sy) = gs
         .mobjslab
@@ -1148,6 +1150,7 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
     // Spread: ~11.25° per step in 32-bit BAM space.
     let spread = Bam(0x0800_0000u32);
+    let mut intercepts = Vec::new();
     for i in 0u32..3 {
         // offsets: -spread, 0, +spread
         let offset = Bam(spread.0.wrapping_mul(i).wrapping_sub(spread.0));
@@ -1159,6 +1162,7 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
             crate::combat::MISSILERANGE,
             damage,
             level,
+            &mut intercepts,
         );
     }
     let (sx, sy) = gs
@@ -1348,6 +1352,7 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         .get(handle)
         .map(|mo| mo.kind)
         .unwrap_or(MobjKind::Trooper);
+    let mut intercepts = Vec::new();
     crate::combat::p_line_attack(
         gs,
         handle,
@@ -1355,6 +1360,7 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         crate::combat::MISSILERANGE,
         damage,
         level,
+        &mut intercepts,
     );
     let (sx, sy) = gs
         .mobjslab
@@ -1622,6 +1628,7 @@ fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let spread = crate::random::p_missile_angle_spread(gs);
     let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
     let damage = crate::random::p_damage_with_variance(gs, 3);
+    let mut intercepts = Vec::new();
     crate::combat::p_line_attack(
         gs,
         handle,
@@ -1629,6 +1636,7 @@ fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         crate::combat::MISSILERANGE,
         damage,
         level,
+        &mut intercepts,
     );
 }
 

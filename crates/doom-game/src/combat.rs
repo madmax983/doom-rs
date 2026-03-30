@@ -32,7 +32,7 @@ enum HitscanInterceptKind {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct HitscanIntercept {
+pub struct HitscanIntercept {
     frac: f32,
     kind: HitscanInterceptKind,
 }
@@ -100,8 +100,9 @@ fn collect_actor_hitscan_intercepts(
     sy: f32,
     rdx: f32,
     rdy: f32,
-) -> Vec<HitscanIntercept> {
-    let mut intercepts = Vec::new();
+    intercepts: &mut Vec<HitscanIntercept>,
+) {
+    intercepts.clear();
 
     for handle in gs.mobjslab.iter_handles() {
         if handle == source {
@@ -132,8 +133,6 @@ fn collect_actor_hitscan_intercepts(
             }
         }
     }
-
-    intercepts
 }
 
 fn sort_hitscan_intercepts(intercepts: &mut [HitscanIntercept]) {
@@ -302,6 +301,7 @@ pub(crate) fn p_line_attack_target(
     angle: Bam,
     range: Fixed16_16,
     level: Option<&Level>,
+    intercepts: &mut Vec<HitscanIntercept>,
 ) -> Option<MobjHandle> {
     let (sx, sy, shootz) = match gs.mobjslab.get(source) {
         Some(mo) => (
@@ -322,7 +322,7 @@ pub(crate) fn p_line_attack_target(
 
     let rdx = angle_cos * range_f;
     let rdy = angle_sin * range_f;
-    let mut intercepts = collect_actor_hitscan_intercepts(gs, source, sx, sy, rdx, rdy);
+    collect_actor_hitscan_intercepts(gs, source, sx, sy, rdx, rdy, intercepts);
 
     if let Some(lv) = level {
         for (linedef_idx, linedef) in lv.linedefs.iter().enumerate() {
@@ -353,12 +353,12 @@ pub(crate) fn p_line_attack_target(
         }
     }
 
-    sort_hitscan_intercepts(&mut intercepts);
+    sort_hitscan_intercepts(intercepts);
 
     let mut topslope = AUTOAIM_TOP_SLOPE;
     let mut bottomslope = AUTOAIM_BOTTOM_SLOPE;
 
-    for intercept in intercepts {
+    for intercept in intercepts.iter() {
         let dist = intercept.frac * range_f;
         if dist <= HITSCAN_EPSILON {
             continue;
@@ -430,8 +430,9 @@ pub fn p_line_attack(
     range: Fixed16_16,
     damage: i32,
     level: Option<&Level>,
+    intercepts: &mut Vec<HitscanIntercept>,
 ) -> Option<MobjHandle> {
-    let hit = p_line_attack_target(gs, source, angle, range, level)?;
+    let hit = p_line_attack_target(gs, source, angle, range, level, intercepts)?;
     damage_mobj(gs, hit, source, damage);
     Some(hit)
 }
@@ -886,7 +887,8 @@ mod tests {
         src.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
         let src_handle = gs.mobjslab.alloc(src);
 
-        let result = p_line_attack(&mut gs, src_handle, Bam::ZERO, MISSILERANGE, 10, None);
+        let mut intercepts = Vec::new();
+        let result = p_line_attack(&mut gs, src_handle, Bam::ZERO, MISSILERANGE, 10, None, &mut intercepts);
         assert!(result.is_none(), "must return None when no targets exist");
     }
 
@@ -897,7 +899,8 @@ mod tests {
         let mut gs = make_game_state();
         let _trooper = spawn_trooper(&mut gs, 100, 0);
         let src = gs.player.handle;
-        let result = p_line_attack(&mut gs, src, Bam::ZERO, Fixed16_16::from_int(500), 5, None);
+        let mut intercepts = Vec::new();
+        let result = p_line_attack(&mut gs, src, Bam::ZERO, Fixed16_16::from_int(500), 5, None, &mut intercepts);
         assert!(result.is_some(), "should hit actor directly ahead");
     }
 
@@ -912,7 +915,8 @@ mod tests {
         // Even if trig tables were initialized and the geometry lined up,
         // dead actors must be skipped.  With uninitialized tables, t=0 and
         // both the dead-check and t<=0 guard fire — None is the expected result.
-        let result = p_line_attack(&mut gs, src, Bam::ZERO, MISSILERANGE, 10, None);
+        let mut intercepts = Vec::new();
+        let result = p_line_attack(&mut gs, src, Bam::ZERO, MISSILERANGE, 10, None, &mut intercepts);
         assert!(result.is_none(), "dead actors must not be hit");
     }
 
@@ -928,7 +932,8 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 512, -21);
         let angle = Bam(((-8i32) << 18) as u32);
 
-        let result = p_line_attack(&mut gs, src, angle, Fixed16_16::from_int(1024), 5, None);
+        let mut intercepts = Vec::new();
+        let result = p_line_attack(&mut gs, src, angle, Fixed16_16::from_int(1024), 5, None, &mut intercepts);
 
         assert_eq!(result, Some(trooper));
         assert!(gs.mobjslab.get(trooper).unwrap().health < 20);
@@ -1209,6 +1214,7 @@ mod tests {
         // ray will have zero direction and return Nothing. We need to
         // test the blockmap path so we pass Some(&level).
         // Since trig tables return 0, the ray has zero direction — no hit.
+        let mut intercepts = Vec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1216,6 +1222,7 @@ mod tests {
             Fixed16_16::from_int(200),
             10,
             Some(&level),
+            &mut intercepts,
         );
         // Without trig tables, cos/sin = 0, so trace_ray gets zero direction.
         // This is expected behavior — the trig-table-dependent behavior
@@ -1247,6 +1254,7 @@ mod tests {
         // Trooper at (64, 100) — behind the wall at y=64.
         let trooper = spawn_trooper(&mut gs, 64, 100);
 
+        let mut intercepts = Vec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1254,6 +1262,7 @@ mod tests {
             Fixed16_16::from_int(200),
             10,
             Some(&level),
+            &mut intercepts,
         );
         assert!(result.is_none(), "wall should block hitscan");
         assert_eq!(
@@ -1283,6 +1292,7 @@ mod tests {
         // because the ray has zero direction (cos=sin=0).
         let trooper = spawn_trooper(&mut gs, 64, 1);
 
+        let mut intercepts = Vec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1290,6 +1300,7 @@ mod tests {
             Fixed16_16::from_int(10),
             5,
             Some(&level),
+            &mut intercepts,
         );
         // With uninitialized trig, result is None.
         assert!(result.is_none());
@@ -1314,6 +1325,7 @@ mod tests {
 
         let trooper = spawn_trooper(&mut gs, 64, 50);
 
+        let mut intercepts = Vec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1321,6 +1333,7 @@ mod tests {
             Fixed16_16::from_int(5), // very short range
             10,
             Some(&level),
+            &mut intercepts,
         );
         // Regardless of trig tables, short range = miss.
         assert!(result.is_none());
@@ -1350,6 +1363,7 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 512, -21);
         let angle = Bam(((-8i32) << 18) as u32);
 
+        let mut intercepts = Vec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1357,6 +1371,7 @@ mod tests {
             Fixed16_16::from_int(1024),
             5,
             Some(&level),
+            &mut intercepts,
         );
 
         assert_eq!(result, Some(trooper));
@@ -1378,6 +1393,7 @@ mod tests {
         let low_trooper = spawn_trooper(&mut gs, 128, 0);
         gs.mobjslab.get_mut(low_trooper).unwrap().z = Fixed16_16::ZERO;
 
+        let mut intercepts = Vec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1385,6 +1401,7 @@ mod tests {
             Fixed16_16::from_int(256),
             5,
             Some(&level),
+            &mut intercepts,
         );
 
         assert!(
@@ -1412,6 +1429,7 @@ mod tests {
         let high_far = spawn_trooper(&mut gs, 160, 0);
         gs.mobjslab.get_mut(high_far).unwrap().z = Fixed16_16::from_int(128);
 
+        let mut intercepts = Vec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1419,6 +1437,7 @@ mod tests {
             Fixed16_16::from_int(256),
             5,
             Some(&level),
+            &mut intercepts,
         );
 
         assert_eq!(
