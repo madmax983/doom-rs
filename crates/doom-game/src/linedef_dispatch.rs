@@ -1122,6 +1122,39 @@ mod tests {
     // Test helpers
     // -----------------------------------------------------------------------
 
+
+    #[test]
+    fn test_segments_intersect_basic() {
+        // Normal intersection (cross shape)
+        assert!(segments_intersect(
+            0, 50, 100, 50, // horizontal
+            50, 0, 50, 100  // vertical
+        ));
+
+        // No intersection (parallel)
+        assert!(!segments_intersect(
+            0, 0, 100, 0,
+            0, 10, 100, 10
+        ));
+
+        // No intersection (collinear but disjoint)
+        assert!(!segments_intersect(
+            0, 0, 50, 0,
+            60, 0, 100, 0
+        ));
+
+        // T-intersection (endpoint exactly on the line counts as false per trace cross logic - see above)
+        assert!(!segments_intersect(
+            0, 50, 100, 50, // horizontal
+            50, 50, 50, 100 // vertical starting on the line
+        ));
+
+        // Intersection very close to endpoint
+        assert!(segments_intersect(
+            0, 0, 100, 0,
+            99, -10, 99, 10
+        ));
+    }
     fn make_minimal_blockmap() -> doom_map::Blockmap {
         let mut bm_data = vec![0u8; 14];
         bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
