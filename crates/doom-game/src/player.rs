@@ -801,22 +801,19 @@ mod proptests {
     proptest! {
         #[test]
         fn havoc_player_health_heal_does_not_panic(start_health in i32::MIN..i32::MAX, amount in i32::MIN..i32::MAX) {
-            let mut p = PlayerState::default();
-            p.health = start_health;
+            let mut p = PlayerState { health: start_health, ..Default::default() };
             p.heal(amount);
         }
 
         #[test]
         fn havoc_player_health_heal_overheal_does_not_panic(start_health in i32::MIN..i32::MAX, amount in i32::MIN..i32::MAX, cap in i32::MIN..i32::MAX) {
-            let mut p = PlayerState::default();
-            p.health = start_health;
+            let mut p = PlayerState { health: start_health, ..Default::default() };
             p.heal_overheal(amount, cap);
         }
 
         #[test]
         fn havoc_player_health_damage_does_not_panic(start_health in i32::MIN..i32::MAX, amount in i32::MIN..i32::MAX) {
-            let mut p = PlayerState::default();
-            p.health = start_health;
+            let mut p = PlayerState { health: start_health, ..Default::default() };
             p.apply_damage(amount);
         }
     }
