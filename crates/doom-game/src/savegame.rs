@@ -388,6 +388,8 @@ fn mobj_kind_from_u16(v: u16) -> Option<MobjKind> {
         71 => Some(MobjKind::FatShot),
         72 => Some(MobjKind::InvulnerabilitySphere),
         73 => Some(MobjKind::Backpack),
+        74 => Some(MobjKind::VileFire),
+        75 => Some(MobjKind::BossCube),
         _ => None,
     }
 }
@@ -1286,8 +1288,8 @@ mod tests {
     fn mobj_kind_roundtrip() {
         // Enumerate over all valid discriminants and ensure they parse properly.
         // And also make sure we test out of bounds.
-        for disc in 0..=73 {
-            let kind = mobj_kind_from_u16(disc).expect("all 0..=73 must map to a MobjKind");
+        for disc in 0..=75 {
+            let kind = mobj_kind_from_u16(disc).expect("all 0..=75 must map to a MobjKind");
             let mut w = WriteCursor::new(2);
             write_mobj_kind(&mut w, kind);
             let mut r = ReadCursor::new(&w.buf);
@@ -1295,8 +1297,8 @@ mod tests {
             assert_eq!(parsed, kind);
         }
 
-        // 74 is out of bounds
-        assert!(mobj_kind_from_u16(74).is_none());
+        // 76 is out of bounds
+        assert!(mobj_kind_from_u16(76).is_none());
         assert!(mobj_kind_from_u16(999).is_none());
         assert!(mobj_kind_from_u16(0xFFFF).is_none());
     }
