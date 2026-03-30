@@ -801,13 +801,7 @@ impl DoomApp for DoomGame {
                     match result {
                         doom_game::menu::MenuResult::StartGame { episode: _, skill } => {
                             // Map skill index to Skill enum (0=Baby..4=Nightmare).
-                            let sk = match skill {
-                                0 => Skill::Baby,
-                                1 => Skill::Easy,
-                                3 => Skill::Hard,
-                                4 => Skill::Nightmare,
-                                _ => Skill::Medium,
-                            };
+                            let sk = Skill::from_num(skill).unwrap_or(Skill::Medium);
                             // Re-spawn the level with the chosen skill.
                             self.gs = GameState::new(&self.gs.level_name.clone());
                             spawn_level_things(&mut self.gs, &self.level, sk, false);
@@ -2024,13 +2018,11 @@ fn run_doom() -> Result<()> {
 
     // Create game state and spawn ALL level things (player, monsters, items, keys).
     let mut gs = GameState::new(warp_str);
-    let skill = match args.skill {
-        1 => Skill::Baby,
-        2 => Skill::Easy,
-        4 => Skill::Hard,
-        5 => Skill::Nightmare,
-        _ => Skill::Medium, // default: 3 = Hurt Me Plenty
-    };
+    let skill = args
+        .skill
+        .checked_sub(1)
+        .and_then(Skill::from_num)
+        .unwrap_or(Skill::Medium);
     spawn_level_things(&mut gs, &level, skill, false);
 
     // Apply DeHackEd patch if one was specified.
