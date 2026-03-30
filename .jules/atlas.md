@@ -5,3 +5,7 @@
 **[Hide internal renderer modules]**
 **Tangle:** The `doom-renderer` crate leaked internal constant modules `automap_colors` and `menu_colors` as `pub mod`s in `automap.rs` and `menu_render.rs` and re-exported them in `lib.rs` even though they are only used internally within the renderer for the GUI.
 **Blueprint:** Altered the visibility of these modules to `pub(crate)` and removed them from the crate's `pub use` interface. Added `#[allow(dead_code)]` to bypass rustc warning of `pub` items missing callers since they are now module-private yet some constants are unimplemented but part of a well-defined palette standard. This ensures strict internal encapsulation.
+
+**[Encapsulate internal game logic]**
+**Tangle:** The `doom-game` crate exposed almost 50 internal functions in `specials.rs` (like `ev_do_donut`, `ev_floor_raise_to_highest`, `tick_sector_specials`) that were leaking the internal state manipulation implementation details of the sector logic to the whole workspace. Similarly, `doom-renderer` exported `automap_colors` out of its internal module structure.
+**Blueprint:** Altered the visibility of these internal `specials` functions from `pub` to `pub(crate)` and removed them from the `lib.rs` exports. The public API is now constrained to the entry-points actually used by the main logic (e.g. `tick_doors`, `activate_linedef`, `init_conveyors`). For `doom-renderer`, `automap_colors` was made `pub(crate)` and hidden from the crate API boundary.
