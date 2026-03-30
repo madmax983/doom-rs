@@ -117,9 +117,10 @@ pub use switch::{
     toggle_switch_texture,
 };
 pub use tic::{
-    FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, TicCmd, bt, p_set_mobj_state, tick_all_mobjs,
+    FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, p_set_mobj_state, tick_all_mobjs,
     tick_player, tick_world,
 };
+pub use doom_types::{TicCmd, bt};
 pub use trace::{TraceHit, TraceResult, trace_ray};
 pub use weapon_fire::{
     AMMO_PER_SHOT, fire_current_weapon, p_fire_bfg, p_fire_chaingun, p_fire_chainsaw, p_fire_fist,
