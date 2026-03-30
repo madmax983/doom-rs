@@ -738,6 +738,7 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
     let damage_lo = info.damage_lo;
 
     // --- Hitscan: fire each pellet ---
+    let mut intercepts = Vec::new();
     for i in 0..pellets {
         // Compute per-pellet angle.
         // For single-pellet weapons spread=0, so this is just base_angle.
@@ -758,7 +759,7 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
         // Deterministic damage: vary by pellet index and tic_num.
         let damage = damage_lo + ((tic.wrapping_add(i as u32)) % damage_range) as i32;
 
-        p_line_attack(gs, handle, shot_angle, range, damage, level);
+        p_line_attack(gs, handle, shot_angle, range, damage, level, &mut intercepts);
     }
 }
 

@@ -123,6 +123,7 @@ fn bullet_autoaim_angle(
     handle: MobjHandle,
     base_angle: Bam,
     level: Option<&Level>,
+    intercepts: &mut Vec<crate::combat::HitscanIntercept>,
 ) -> Bam {
     let right_probe = Bam(base_angle.0.wrapping_add(BULLET_AUTOAIM_SIDE_PROBE));
     let left_probe = Bam(base_angle.0.wrapping_sub(BULLET_AUTOAIM_SIDE_PROBE));
@@ -130,7 +131,7 @@ fn bullet_autoaim_angle(
     [base_angle, right_probe, left_probe]
         .into_iter()
         .find(|angle| {
-            p_line_attack_target(gs, handle, *angle, BULLET_AUTOAIM_RANGE, level).is_some()
+            p_line_attack_target(gs, handle, *angle, BULLET_AUTOAIM_RANGE, level, intercepts).is_some()
         })
         .unwrap_or(base_angle)
 }
@@ -207,11 +208,12 @@ pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
         None => return,
     };
 
-    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level);
+    let mut intercepts = Vec::new();
+    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
     let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
     let damage = p_damage_with_variance(gs, 5);
 
-    p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level);
+    p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level, &mut intercepts);
 }
 
 /// Fire the shotgun: consume 1 Shell, fire 7 pellets.
@@ -227,13 +229,15 @@ pub fn p_fire_shotgun(gs: &mut GameState, level: Option<&Level>) {
         Some(a) => a,
         None => return,
     };
-    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level);
+
+    let mut intercepts = Vec::new();
+    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
 
     for _ in 0..7 {
         let spread = gs.p_subrandom() << 18;
         let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
         let damage = p_damage_with_variance(gs, 5);
-        p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level);
+        p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level, &mut intercepts);
     }
 }
 
@@ -251,13 +255,15 @@ pub fn p_fire_super_shotgun(gs: &mut GameState, level: Option<&Level>) {
         Some(a) => a,
         None => return,
     };
-    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level);
+
+    let mut intercepts = Vec::new();
+    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
 
     for _ in 0..20 {
         let spread = gs.p_subrandom() << 19;
         let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
         let damage = p_damage_with_variance(gs, 5);
-        p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level);
+        p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level, &mut intercepts);
     }
 }
 
@@ -276,11 +282,12 @@ pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
         None => return,
     };
 
-    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level);
+    let mut intercepts = Vec::new();
+    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
     let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
     let damage = p_damage_with_variance(gs, 5);
 
-    p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level);
+    p_line_attack(gs, handle, shot_angle, MISSILERANGE, damage, level, &mut intercepts);
 }
 
 // ---------------------------------------------------------------------------
@@ -308,7 +315,8 @@ pub fn p_fire_fist(gs: &mut GameState, level: Option<&Level>) {
     let spread = gs.p_subrandom() << 18;
     let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
 
-    let hit = p_line_attack(gs, handle, shot_angle, MELEERANGE, damage, level);
+    let mut intercepts = Vec::new();
+    let hit = p_line_attack(gs, handle, shot_angle, MELEERANGE, damage, level, &mut intercepts);
     if let Some(target_handle) = hit {
         snap_player_to_target(gs, target_handle);
     }
@@ -333,7 +341,8 @@ pub fn p_fire_chainsaw(gs: &mut GameState, level: Option<&Level>) {
     // MELEERANGE + 1 map unit for chainsaw (slightly longer reach).
     let chainsaw_range = Fixed16_16(MELEERANGE.0 + (1 << 16));
 
-    let hit = p_line_attack(gs, handle, shot_angle, chainsaw_range, damage, level);
+    let mut intercepts = Vec::new();
+    let hit = p_line_attack(gs, handle, shot_angle, chainsaw_range, damage, level, &mut intercepts);
 
     // Auto-aim snap: if we hit something, turn the player toward the target.
     if let Some(target_handle) = hit {
