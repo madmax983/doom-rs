@@ -11,8 +11,8 @@ members = [
     "crates/doom-net",
     "crates/doom-demo",
     "crates/doom-app",
-    "fuzz",
 ]
+exclude = ["fuzz"]
 
 [workspace.package]
 version = "0.1.0"
