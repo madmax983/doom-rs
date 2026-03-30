@@ -131,7 +131,8 @@ pub enum MoveDirection {
 }
 
 /// The type of ceiling motion behavior.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum CeilingType {
     /// Lower ceiling to floor height.
     LowerToFloor,
@@ -180,7 +181,8 @@ pub struct CeilingMover {
 }
 
 /// The type of floor motion behavior.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum FloorType {
     /// Lower floor to lowest adjacent floor.
     LowerToLowest,

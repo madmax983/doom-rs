@@ -613,27 +613,11 @@ fn read_light_special(r: &mut ReadCursor<'_>) -> Result<LightSpecial, SaveError>
 }
 
 fn write_ceiling_type(w: &mut WriteCursor, ct: CeilingType) {
-    let byte = match ct {
-        CeilingType::LowerToFloor => 0u8,
-        CeilingType::CrushAndRaise => 1u8,
-        CeilingType::LowerAndCrush => 2u8,
-        CeilingType::FastCrushAndRaise => 3u8,
-        CeilingType::SilentCrush => 4u8,
-        CeilingType::RaiseToHighest => 5u8,
-    };
-    w.write_u8(byte);
+    w.write_u8(ct as u8);
 }
 
 fn read_ceiling_type(r: &mut ReadCursor<'_>) -> Result<CeilingType, SaveError> {
-    match r.read_u8()? {
-        0 => Ok(CeilingType::LowerToFloor),
-        1 => Ok(CeilingType::CrushAndRaise),
-        2 => Ok(CeilingType::LowerAndCrush),
-        3 => Ok(CeilingType::FastCrushAndRaise),
-        4 => Ok(CeilingType::SilentCrush),
-        5 => Ok(CeilingType::RaiseToHighest),
-        _ => Err(SaveError::Truncated),
-    }
+    CeilingType::from_repr(r.read_u8()?).ok_or(SaveError::Truncated)
 }
 
 fn write_ceiling_mover(w: &mut WriteCursor, c: &CeilingMover) {
@@ -667,39 +651,11 @@ fn read_ceiling_mover(r: &mut ReadCursor<'_>) -> Result<CeilingMover, SaveError>
 }
 
 fn write_floor_type(w: &mut WriteCursor, ft: FloorType) {
-    let byte = match ft {
-        FloorType::LowerToLowest => 0u8,
-        FloorType::LowerToHighest => 1u8,
-        FloorType::LowerToNearest => 2u8,
-        FloorType::RaiseToHighest => 3u8,
-        FloorType::RaiseToNearest => 4u8,
-        FloorType::RaiseByTexture => 5u8,
-        FloorType::RaiseToCeiling => 6u8,
-        FloorType::LowerAndChange => 7u8,
-        FloorType::RaiseAndChange => 8u8,
-        FloorType::Raise24 => 9u8,
-        FloorType::Raise32 => 10u8,
-        FloorType::RaiseCrush => 11u8,
-    };
-    w.write_u8(byte);
+    w.write_u8(ft as u8);
 }
 
 fn read_floor_type(r: &mut ReadCursor<'_>) -> Result<FloorType, SaveError> {
-    match r.read_u8()? {
-        0 => Ok(FloorType::LowerToLowest),
-        1 => Ok(FloorType::LowerToHighest),
-        2 => Ok(FloorType::LowerToNearest),
-        3 => Ok(FloorType::RaiseToHighest),
-        4 => Ok(FloorType::RaiseToNearest),
-        5 => Ok(FloorType::RaiseByTexture),
-        6 => Ok(FloorType::RaiseToCeiling),
-        7 => Ok(FloorType::LowerAndChange),
-        8 => Ok(FloorType::RaiseAndChange),
-        9 => Ok(FloorType::Raise24),
-        10 => Ok(FloorType::Raise32),
-        11 => Ok(FloorType::RaiseCrush),
-        _ => Err(SaveError::Truncated),
-    }
+    FloorType::from_repr(r.read_u8()?).ok_or(SaveError::Truncated)
 }
 
 fn write_floor_mover(w: &mut WriteCursor, fm: &FloorMover) {
