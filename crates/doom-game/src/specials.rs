@@ -1207,16 +1207,15 @@ pub fn ev_floor_raise_to_ceiling(
 /// Return the indices of all linedefs whose **front** (right) sidedef references
 /// the given sector. This is used by stair builders, donut specials, and
 /// platform activation logic that need to walk adjacent sectors.
-pub fn sector_linedefs(level: &Level, sector_index: usize) -> Vec<usize> {
-    let mut result = Vec::new();
-    for (i, ld) in level.linedefs.iter().enumerate() {
-        if let Some(sd) = level.sidedefs.get(ld.right_sidedef as usize) {
-            if sd.sector as usize == sector_index {
-                result.push(i);
-            }
+pub fn sector_linedefs(level: &Level, sector_index: usize) -> impl Iterator<Item = usize> + '_ {
+    level.linedefs.iter().enumerate().filter_map(move |(i, ld)| {
+        let sd = level.sidedefs.get(ld.right_sidedef as usize)?;
+        if sd.sector as usize == sector_index {
+            Some(i)
+        } else {
+            None
         }
-    }
-    result
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1291,7 +1290,7 @@ pub fn ev_build_stairs(
 
         let mut found_next = false;
 
-        for &ld_idx in &ld_indices {
+        for ld_idx in ld_indices {
             let ld = &level.linedefs[ld_idx];
             // Must be two-sided.
             if ld.left_sidedef == SIDEDEF_NONE {
@@ -1369,7 +1368,7 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
 
     let mut count = 0;
 
-    for &ld_idx in &ld_indices {
+    for ld_idx in ld_indices {
         let ld = &level.linedefs[ld_idx];
         // Must be two-sided.
         if ld.left_sidedef == SIDEDEF_NONE {
@@ -1391,7 +1390,7 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
         let hole_ld_indices = sector_linedefs(level, hole_sector);
         let mut ring_floor: Option<i16> = None;
 
-        for &hole_ld in &hole_ld_indices {
+        for hole_ld in hole_ld_indices {
             let hld = &level.linedefs[hole_ld];
             if hld.left_sidedef == SIDEDEF_NONE {
                 continue;
@@ -6207,11 +6206,11 @@ mod tests {
     fn sector_linedefs_returns_correct_indices() {
         let level = make_stair_level(3, 0, 1);
         // Sector 0 fronts linedef 0 (right_sidedef=0 → sector 0).
-        let result = sector_linedefs(&level, 0);
+        let result: Vec<_> = sector_linedefs(&level, 0).collect();
         assert_eq!(result, vec![0], "sector 0 should front linedef 0");
 
         // Sector 1 fronts linedef 1 (right_sidedef=2 → sector 1).
-        let result = sector_linedefs(&level, 1);
+        let result: Vec<_> = sector_linedefs(&level, 1).collect();
         assert_eq!(result, vec![1], "sector 1 should front linedef 1");
     }
 
@@ -6221,7 +6220,7 @@ mod tests {
         // Sector 2's right sidedef is only on linedef 1 (right → sector 1).
         // Check that a non-existent sector returns empty.
         let level = make_stair_level(3, 0, 1);
-        let result = sector_linedefs(&level, 99);
+        let result: Vec<_> = sector_linedefs(&level, 99).collect();
         assert!(
             result.is_empty(),
             "non-existent sector must return empty vec"

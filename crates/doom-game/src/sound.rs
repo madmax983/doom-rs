@@ -77,40 +77,41 @@ pub fn clear_sound_targets(gs: &mut GameState) {
 /// included in the result.
 ///
 /// Returned indices are deduplicated but not sorted.
-pub fn adjacent_sectors(level: &Level, sector_index: usize) -> Vec<usize> {
-    let mut result = Vec::new();
+pub fn adjacent_sectors(level: &Level, sector_index: usize) -> impl Iterator<Item = usize> + '_ {
+    let mut seen = [0usize; 32];
+    let mut seen_count = 0;
 
-    for ld in &level.linedefs {
-        // Only two-sided linedefs connect sectors.
+    level.linedefs.iter().filter_map(move |ld| {
         if !ld.is_two_sided() {
-            continue;
+            return None;
         }
 
-        let right_sd = match level.sidedefs.get(ld.right_sidedef as usize) {
-            Some(sd) => sd,
-            None => continue,
-        };
-        let left_sd = match level.sidedefs.get(ld.left_sidedef as usize) {
-            Some(sd) => sd,
-            None => continue,
-        };
+        let right_sd = level.sidedefs.get(ld.right_sidedef as usize)?;
+        let left_sd = level.sidedefs.get(ld.left_sidedef as usize)?;
 
         let right_sector = right_sd.sector as usize;
         let left_sector = left_sd.sector as usize;
 
-        if right_sector == sector_index && left_sector != sector_index {
-            if !result.contains(&left_sector) {
-                result.push(left_sector);
-            }
-        } else if left_sector == sector_index
-            && right_sector != sector_index
-            && !result.contains(&right_sector)
-        {
-            result.push(right_sector);
-        }
-    }
+        let adjacent = if right_sector == sector_index && left_sector != sector_index {
+            Some(left_sector)
+        } else if left_sector == sector_index && right_sector != sector_index {
+            Some(right_sector)
+        } else {
+            None
+        };
 
-    result
+        if let Some(adj) = adjacent {
+            if seen_count < seen.len() {
+                if seen[..seen_count].contains(&adj) {
+                    return None;
+                }
+                seen[seen_count] = adj;
+                seen_count += 1;
+            }
+            return Some(adj);
+        }
+        None
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -652,15 +653,15 @@ mod tests {
         // 3 sectors: 0 <-> 1, 1 <-> 2
         let level = make_test_level(3, &[(0, 1, 0), (1, 2, 0)]);
 
-        let adj_0 = adjacent_sectors(&level, 0);
+        let adj_0: Vec<_> = adjacent_sectors(&level, 0).collect();
         assert_eq!(adj_0, vec![1]);
 
-        let adj_1 = adjacent_sectors(&level, 1);
+        let adj_1: Vec<_> = adjacent_sectors(&level, 1).collect();
         assert!(adj_1.contains(&0));
         assert!(adj_1.contains(&2));
         assert_eq!(adj_1.len(), 2);
 
-        let adj_2 = adjacent_sectors(&level, 2);
+        let adj_2: Vec<_> = adjacent_sectors(&level, 2).collect();
         assert_eq!(adj_2, vec![1]);
     }
 
@@ -669,7 +670,7 @@ mod tests {
         // 3 sectors, only 0 <-> 1 connected. Sector 2 is isolated.
         let level = make_test_level(3, &[(0, 1, 0)]);
 
-        let adj_2 = adjacent_sectors(&level, 2);
+        let adj_2: Vec<_> = adjacent_sectors(&level, 2).collect();
         assert!(adj_2.is_empty(), "isolated sector must have no adjacencies");
     }
 
@@ -1058,7 +1059,7 @@ mod tests {
         // Two linedefs both connecting sector 0 to sector 1.
         let level = make_test_level(2, &[(0, 1, 0), (0, 1, 0)]);
 
-        let adj = adjacent_sectors(&level, 0);
+        let adj: Vec<_> = adjacent_sectors(&level, 0).collect();
         // Should be deduplicated: only one entry for sector 1.
         assert_eq!(adj, vec![1]);
     }
