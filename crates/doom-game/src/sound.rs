@@ -99,16 +99,15 @@ pub fn adjacent_sectors(level: &Level, sector_index: usize) -> Vec<usize> {
         let left_sector = left_sd.sector as usize;
 
         if right_sector == sector_index && left_sector != sector_index {
-            if !result.contains(&left_sector) {
-                result.push(left_sector);
-            }
-        } else if left_sector == sector_index
-            && right_sector != sector_index
-            && !result.contains(&right_sector)
-        {
+            result.push(left_sector);
+        } else if left_sector == sector_index && right_sector != sector_index {
             result.push(right_sector);
         }
     }
+
+    // Deduplicate the result once at the end instead of O(N^2) `.contains()` calls
+    result.sort_unstable();
+    result.dedup();
 
     result
 }
