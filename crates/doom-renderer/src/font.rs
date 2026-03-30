@@ -912,7 +912,7 @@ impl BitmapFont {
     /// Calculate the pixel width of a string.
     #[inline]
     pub fn string_width(&self, text: &str) -> i32 {
-        text.len() as i32 * i32::from(self.char_width)
+        (text.len() as i32).saturating_mul(i32::from(self.char_width))
     }
 
     /// Draw a string centered horizontally on the 320-pixel-wide framebuffer.
@@ -932,6 +932,19 @@ impl Default for BitmapFont {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+
+    #[test]
+    fn test_font_string_width_overflow() {
+        let font = BitmapFont::new();
+        // A huge string causes an i32 overflow if simply multiplied
+        let s = "A".repeat(300_000_000);
+        let _w = font.string_width(&s);
+    }
+}
 
 #[cfg(test)]
 mod tests {
