@@ -388,6 +388,41 @@ mod tests {
     }
 
     #[test]
+    fn pain_without_attacker_angle() {
+        let mut face = make_face();
+        face.on_damage(5, Bam(0));
+        face.tick(95, false, false, None);
+        assert!(matches!(face.kind, FaceKind::Pain { .. }));
+    }
+
+    #[test]
+    fn ouch_without_attacker_angle() {
+        let mut face = make_face();
+        face.on_damage(20, Bam(0));
+        face.tick(80, false, false, None);
+        assert!(matches!(face.kind, FaceKind::Ouch { .. }));
+    }
+
+    #[test]
+    fn idle_glance_transitions() {
+        let mut face = make_face();
+        // Skip display tics
+        face.display_tics = 0;
+        face.idle_countdown = 0;
+        tick_simple(&mut face, 100);
+        assert!(matches!(
+            face.kind,
+            FaceKind::Normal {
+                dir: FaceDir::Right,
+                ..
+            } | FaceKind::Normal {
+                dir: FaceDir::Left,
+                ..
+            }
+        ));
+    }
+
+    #[test]
     fn evil_grin_on_new_weapon() {
         let mut face = make_face();
         face.on_new_weapon();

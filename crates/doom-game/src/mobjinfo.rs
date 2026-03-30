@@ -804,4 +804,9 @@ mod tests {
         assert_eq!(info.melee_state, StateNum(ids::S_TROO_ATK1));
         assert_eq!(info.missile_state, StateNum(ids::S_TROO_ATK1));
     }
+
+    #[test]
+    fn sn_creates_statenum() {
+        assert_eq!(sn(123), StateNum(123));
+    }
 }

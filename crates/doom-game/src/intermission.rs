@@ -247,6 +247,8 @@ mod tests {
     fn par_time_unknown_returns_zero() {
         assert_eq!(par_time("UNKNOWN"), 0);
         assert_eq!(par_time("E4M1"), 0);
+        assert_eq!(par_time("E1M0"), 0);
+        assert_eq!(par_time("E1M10"), 0);
         assert_eq!(par_time("MAP00"), 0);
         assert_eq!(par_time("MAP33"), 0);
         assert_eq!(par_time(""), 0);

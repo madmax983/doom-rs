@@ -653,6 +653,16 @@ mod tests {
     }
 
     #[test]
+    fn clone_slab_with_free_slots() {
+        let mut slab = MobjSlab::new();
+        let handle = slab.alloc(make_player_mobj());
+        slab.free(handle);
+        let slab2 = slab.clone();
+        assert!(slab2.get(handle).is_none());
+        assert_eq!(slab2.free_head, slab.free_head);
+    }
+
+    #[test]
     fn is_dead_and_shootable_flags() {
         let mut mo = make_player_mobj();
         assert!(!mo.is_dead());
