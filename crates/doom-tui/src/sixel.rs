@@ -382,3 +382,28 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod tests_havoc {
+    use super::*;
+    use doom_renderer::framebuffer::Framebuffer;
+    use doom_renderer::palette::PaletteLut;
+    use ratatui::layout::Rect;
+
+    #[test]
+    fn havoc_encode_sixel_zero_area_panic() {
+        let fb = Framebuffer::new();
+        let lut = PaletteLut::grayscale();
+        let area = Rect::new(0, 0, 0, 0); // Trigger division by zero
+        let _ = encode_doom_sixel(
+            fb.as_slice(),
+            &lut,
+            0,
+            Framebuffer::width(),
+            Framebuffer::height(),
+            0,
+            0,
+            area.width,
+        );
+    }
+}
