@@ -354,13 +354,17 @@ pub fn trace_ray(
 
     // Track which linedefs we've already tested to avoid duplicates
     // (linedefs can appear in multiple blockmap cells).
-    let mut tested_lines: Vec<bool> = vec![false; level.linedefs.len()];
+    // ⚡ Bolt: Using a small vector of visited indices instead of a level-sized
+    // boolean array saves massive allocations on large maps, as a ray typically
+    // tests fewer than 32 lines.
+    let mut tested_lines = Vec::with_capacity(32);
 
     // Maximum cells to visit (safety limit against infinite loops).
     let max_cells = (cols + rows) as usize * 2 + 4;
 
     // Buffer for actor overlap tests to avoid per-cell allocations.
-    let mut cell_actors = Vec::new();
+    // ⚡ Bolt: Pre-allocate a small capacity to avoid multiple reallocations.
+    let mut cell_actors = Vec::with_capacity(16);
 
     for _step in 0..max_cells {
         // Only process cells within the blockmap grid.
@@ -374,10 +378,10 @@ pub fn trace_ray(
                 if ld_idx >= level.linedefs.len() {
                     continue;
                 }
-                if tested_lines[ld_idx] {
+                if tested_lines.contains(&ld_idx) {
                     continue;
                 }
-                tested_lines[ld_idx] = true;
+                tested_lines.push(ld_idx);
 
                 let ld = &level.linedefs[ld_idx];
                 let v1 = &level.vertexes[ld.from_vertex as usize];
