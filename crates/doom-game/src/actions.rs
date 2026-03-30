@@ -1007,14 +1007,15 @@ fn set_mobj_state(gs: &mut GameState, handle: MobjHandle, state: crate::mobj::St
 /// Computes the angle from the monster's position to the target using
 /// a proper integer `atan2` approximation, yielding a full 32-bit BAM angle.
 fn a_face_target(gs: &mut GameState, handle: MobjHandle) {
-    let (target_handle, mo_x, mo_y) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.target, mo.x, mo.y),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
-    let (tx, ty) = match gs.mobjslab.get(target_handle) {
-        Some(t) => (t.x, t.y),
-        None => return,
+    let (target_handle, mo_x, mo_y) = (mo.target, mo.x, mo.y);
+
+    let Some(t) = gs.mobjslab.get(target_handle) else {
+        return;
     };
+    let (tx, ty) = (t.x, t.y);
 
     let dx = (tx - mo_x).to_int();
     let dy = (ty - mo_y).to_int();
@@ -1196,10 +1197,10 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
 
     a_face_target(gs, handle);
 
-    let (tx, ty) = match gs.mobjslab.get(target) {
-        Some(t) => (t.x, t.y),
-        None => return,
+    let Some(t) = gs.mobjslab.get(target) else {
+        return;
     };
+    let (tx, ty) = (t.x, t.y);
 
     let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
 
@@ -1237,10 +1238,10 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
         return;
     };
 
-    let (tx, ty) = match gs.mobjslab.get(target) {
-        Some(t) => (t.x, t.y),
-        None => return,
+    let Some(t) = gs.mobjslab.get(target) else {
+        return;
     };
+    let (tx, ty) = (t.x, t.y);
 
     let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
     if dist <= crate::combat::MELEERANGE.to_int() {
@@ -1453,9 +1454,8 @@ const FATSPREAD: u32 = 0x0400_0000;
 ///
 /// Helper shared by `a_fat_attack1`, `a_fat_attack2`, `a_fat_attack3`.
 fn fat_shoot(gs: &mut GameState, handle: MobjHandle, angle_offset: u32) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
+    let Some(target) = get_alive_target(gs, handle) else {
+        return;
     };
 
     // Spawn the missile aimed at target, then adjust its angle + momentum.
@@ -1547,18 +1547,9 @@ const SKULLSPEED: i32 = 20;
 ///
 /// Sets `MF_SKULLFLY` and computes momentum toward the target at `SKULLSPEED`.
 fn a_skull_attack(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    let target_alive = gs
-        .mobjslab
-        .get(target)
-        .map(|t| !t.is_dead())
-        .unwrap_or(false);
-    if !target_alive {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     // Set the skull-fly flag so the Lost Soul damages on contact.
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
@@ -1566,14 +1557,15 @@ fn a_skull_attack(gs: &mut GameState, handle: MobjHandle) {
     }
 
     // Read positions for velocity computation.
-    let (sx, sy) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.x, mo.y),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
-    let (tx, ty) = match gs.mobjslab.get(target) {
-        Some(mo) => (mo.x, mo.y),
-        None => return,
+    let (sx, sy) = (mo.x, mo.y);
+
+    let Some(t) = gs.mobjslab.get(target) else {
+        return;
     };
+    let (tx, ty) = (t.x, t.y);
 
     // Face the target.
     a_face_target(gs, handle);
@@ -1655,18 +1647,9 @@ const LOST_SOUL_MAX: usize = 21;
 /// Faces the target, then spawns a `LostSoul` if the current count of Lost
 /// Souls in the level is below `LOST_SOUL_MAX` (21).
 fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
-    if gs
-        .mobjslab
-        .get(target)
-        .map(|t| t.is_dead())
-        .unwrap_or(false)
-    {
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
-    }
+    };
 
     a_face_target(gs, handle);
 
@@ -1813,10 +1796,12 @@ fn a_vile_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 /// First attack frame: sets the Arch-Vile's tracer to its current target
 /// so `A_Fire` knows whom to track.
 fn a_vile_start(gs: &mut GameState, handle: MobjHandle) {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return,
-    };
+    let Some(mo) = gs.mobjslab.get(handle) else { return };
+    if mo.target == MobjHandle::NULL {
+        return;
+    }
+    let target = mo.target;
+
     a_face_target(gs, handle);
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.tracer = target;
@@ -1833,10 +1818,10 @@ fn a_vile_target(gs: &mut GameState, handle: MobjHandle) {
     };
     a_face_target(gs, handle);
 
-    let (tx, ty, tz) = match gs.mobjslab.get(target) {
-        Some(t) => (t.x, t.y, t.z),
-        None => return,
+    let Some(t) = gs.mobjslab.get(target) else {
+        return;
     };
+    let (tx, ty, tz) = (t.x, t.y, t.z);
 
     let mut fire = crate::mobj::Mobj::new(MobjKind::VileFire, tx, ty, Bam(0));
     fire.z = tz;
@@ -1884,14 +1869,16 @@ fn a_vile_attack(gs: &mut GameState, handle: MobjHandle) {
 /// Each tic the fire column tracks its tracer's position, staying at the
 /// target's feet. If the tracer handle is stale, the fire does nothing.
 fn a_fire(gs: &mut GameState, handle: MobjHandle) {
-    let tracer = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.tracer,
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
-    let (tx, ty) = match gs.mobjslab.get(tracer) {
-        Some(t) => (t.x, t.y),
-        None => return,
+    let tracer = mo.tracer;
+
+    let Some(t) = gs.mobjslab.get(tracer) else {
+        return;
     };
+    let (tx, ty) = (t.x, t.y);
+
     if let Some(fire) = gs.mobjslab.get_mut(handle) {
         fire.x = tx;
         fire.y = ty;
@@ -1981,19 +1968,19 @@ fn a_brain_spit(gs: &mut GameState, handle: MobjHandle) {
 /// removes the cube and spawns a `SpawnFire` fog effect.
 fn a_spawn_fly(gs: &mut GameState, handle: MobjHandle) {
     // Determine spawn position from the brain_targets list.
-    let target_idx = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.reactiontime as usize,
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let target_idx = mo.reactiontime as usize;
 
     let (dest_x, dest_y) = if target_idx < gs.brain_targets.len() {
         gs.brain_targets[target_idx]
     } else {
         // Fallback: use the cube's current position.
-        match gs.mobjslab.get(handle) {
-            Some(mo) => (mo.x, mo.y),
-            None => return,
-        }
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        (mo.x, mo.y)
     };
 
     // Random monster type selection.
