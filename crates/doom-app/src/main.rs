@@ -139,6 +139,10 @@ struct Args {
     #[arg(long, default_value = "auto")]
     renderer: String,
 
+    /// Enable turn-based simulation pacing (single-player only).
+    #[arg(long)]
+    turn_based: bool,
+
     /// Export the level layout to an SVG file and exit.
     #[arg(long)]
     export_svg: Option<std::path::PathBuf>,
@@ -1797,6 +1801,9 @@ fn validate_mode_args(args: &Args) -> std::result::Result<(), &'static str> {
     if args.connect.is_some() && args.playdemo.is_some() {
         return Err("--connect and --playdemo are mutually exclusive");
     }
+    if args.turn_based && (args.server.is_some() || args.connect.is_some()) {
+        return Err("--turn-based is only supported in single-player mode");
+    }
 
     Ok(())
 }
@@ -2105,6 +2112,7 @@ fn run_doom() -> Result<()> {
 
         let mut event_loop = DoomEventLoop::new()
             .map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
+        event_loop.set_turn_based_mode(args.turn_based);
         event_loop
             .run(&mut net_app, &blit_palette)
             .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
@@ -2114,11 +2122,16 @@ fn run_doom() -> Result<()> {
     // Start the terminal event loop and run until the user quits (Q or Esc).
     let mut event_loop =
         DoomEventLoop::new().map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
+    event_loop.set_turn_based_mode(args.turn_based);
 
     // Set renderer mode from --renderer flag.
     // "auto" = detect best graphics protocol; named modes set explicitly (with silent fallback).
     if args.renderer == "auto" {
-        event_loop.set_graphics_protocol(true);
+        if args.turn_based {
+            event_loop.set_renderer_mode(RendererMode::Cogmind);
+        } else {
+            event_loop.set_graphics_protocol(true);
+        }
     } else if let Some(mode) = RendererMode::from_str_loose(&args.renderer) {
         event_loop.set_renderer_mode(mode);
     } else {
@@ -3960,6 +3973,24 @@ mod tests {
         assert_eq!(
             validate_mode_args(&args).unwrap_err(),
             "--capture cannot be combined with --connect"
+        );
+    }
+
+    #[test]
+    fn mode_validation_rejects_turn_based_netplay() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--turn-based",
+            "--connect",
+            "127.0.0.1:5029",
+        ])
+        .expect("args with turn-based connect should parse");
+
+        assert_eq!(
+            validate_mode_args(&args).unwrap_err(),
+            "--turn-based is only supported in single-player mode"
         );
     }
 

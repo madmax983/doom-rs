@@ -65,6 +65,8 @@ pub struct TicInput {
     pub menu_down: bool,
     /// Enter pressed this tic — edge-triggered for menu selection.
     pub menu_select: bool,
+    /// Wait in place for one turn (turn-based mode only).
+    pub wait_pressed: bool,
 }
 
 /// Tracks which keys are currently held and produces `TicInput` on demand.
@@ -90,6 +92,8 @@ pub struct InputState {
     pending_menu_down: bool,
     /// Enter pressed this tic — edge-triggered menu select.
     pending_menu_select: bool,
+    /// Period key was pressed since the last tic (turn-based wait action).
+    pending_wait: bool,
 }
 
 impl InputState {
@@ -214,6 +218,11 @@ impl InputState {
         self.pending_menu_select = true;
     }
 
+    /// Signal that '.' (wait in place) was pressed.
+    pub fn push_wait(&mut self) {
+        self.pending_wait = true;
+    }
+
     /// Synthesize a `TicInput` from the current held state.
     ///
     /// This method takes `&mut self` so it can consume the pending
@@ -304,6 +313,7 @@ impl InputState {
         t.menu_up = std::mem::take(&mut self.pending_menu_up);
         t.menu_down = std::mem::take(&mut self.pending_menu_down);
         t.menu_select = std::mem::take(&mut self.pending_menu_select);
+        t.wait_pressed = std::mem::take(&mut self.pending_wait);
 
         t
     }
@@ -321,6 +331,7 @@ impl InputState {
         self.pending_menu_up = false;
         self.pending_menu_down = false;
         self.pending_menu_select = false;
+        self.pending_wait = false;
     }
 }
 
@@ -457,5 +468,13 @@ mod tests {
             !s.to_tic_input().tab_pressed,
             "tab_pressed must be false after being consumed"
         );
+    }
+
+    #[test]
+    fn wait_pressed_in_tic_input() {
+        let mut s = InputState::new();
+        s.push_wait();
+        assert!(s.to_tic_input().wait_pressed);
+        assert!(!s.to_tic_input().wait_pressed);
     }
 }

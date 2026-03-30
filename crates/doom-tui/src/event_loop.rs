@@ -353,6 +353,12 @@ pub struct DoomEventLoop {
     /// (microseconds).  Written by the blit thread; read by the main thread for
     /// status-bar display and `on_frame_timings`.
     blit_elapsed_us: Arc<AtomicU64>,
+    /// When true, simulation advances only in response to discrete actions.
+    turn_based_mode: bool,
+    /// Remaining simulated tics in the current recovery phase.
+    turn_recovery_tics: u32,
+    /// Prevent repeated turns while action keys remain held.
+    turn_waiting_for_release: bool,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -417,6 +423,61 @@ fn sampled_modifier_snapshot() -> ModifierSnapshot {
 // ─────────────────────────────────────────────────────────────────────────────
 
 impl DoomEventLoop {
+    fn tic_has_turn_action(input: &TicInput) -> bool {
+        input.wait_pressed
+            || input.forward_move != 0
+            || input.side_move != 0
+            || input.angle_turn != 0
+            || (input.buttons != 0)
+    }
+
+    fn turn_action_cost(input: &TicInput) -> u32 {
+        if input.wait_pressed {
+            6
+        } else if (input.buttons & crate::input::buttons::BT_ATTACK) != 0 {
+            8
+        } else if (input.buttons & crate::input::buttons::BT_USE) != 0 {
+            7
+        } else if (input.buttons & crate::input::buttons::BT_CHANGE) != 0 {
+            4
+        } else {
+            6
+        }
+    }
+
+    fn tick_turn_based<A: DoomApp>(&mut self, app: &mut A) {
+        if self.turn_recovery_tics > 0 {
+            app.tick(TicInput::default());
+            self.turn_recovery_tics -= 1;
+            return;
+        }
+
+        self.sync_sampled_modifiers();
+        let tic_input = self.input.to_tic_input();
+
+        let held_action = tic_input.forward_move != 0
+            || tic_input.side_move != 0
+            || tic_input.angle_turn != 0
+            || ((tic_input.buttons
+                & (crate::input::buttons::BT_ATTACK
+                    | crate::input::buttons::BT_USE
+                    | crate::input::buttons::BT_CHANGE))
+                != 0);
+
+        if self.turn_waiting_for_release {
+            if !held_action {
+                self.turn_waiting_for_release = false;
+            }
+            return;
+        }
+
+        if Self::tic_has_turn_action(&tic_input) {
+            app.tick(tic_input);
+            self.turn_recovery_tics = Self::turn_action_cost(&tic_input).saturating_sub(1);
+            self.turn_waiting_for_release = held_action;
+        }
+    }
+
     fn sync_sampled_modifiers(&mut self) {
         let snapshot = sampled_modifier_snapshot();
         self.input.sync_modifiers(snapshot.shift, snapshot.control);
@@ -487,6 +548,9 @@ impl DoomEventLoop {
             blit_tx: None,
             blit_thread: None,
             blit_elapsed_us: Arc::new(AtomicU64::new(0)),
+            turn_based_mode: false,
+            turn_recovery_tics: 0,
+            turn_waiting_for_release: false,
         })
     }
 
@@ -559,6 +623,15 @@ impl DoomEventLoop {
         self.scaling_mode = mode;
     }
 
+    /// Enable/disable turn-based execution.
+    pub fn set_turn_based_mode(&mut self, enabled: bool) {
+        self.turn_based_mode = enabled;
+        if !enabled {
+            self.turn_recovery_tics = 0;
+            self.turn_waiting_for_release = false;
+        }
+    }
+
     fn effective_renderer_mode(&self) -> RendererMode {
         match self.renderer_mode {
             RendererMode::Sixel if self.picker.protocol_type() != ProtocolType::Sixel => {
@@ -617,9 +690,13 @@ impl DoomEventLoop {
             self.poll_events();
 
             // ── Fixed-step tic simulation ────────────────────────────────────
-            self.tic_accumulator += elapsed;
             let t0 = Instant::now();
-            self.drain_ready_tics(app);
+            if self.turn_based_mode {
+                self.tick_turn_based(app);
+            } else {
+                self.tic_accumulator += elapsed;
+                self.drain_ready_tics(app);
+            }
             self.last_tick_us = t0.elapsed().as_micros() as u64;
 
             // ── Render ───────────────────────────────────────────────────────
@@ -695,6 +772,9 @@ impl DoomEventLoop {
                             }
                             if let KeyCode::Char(ch) = key.code {
                                 self.input.push_console_char(ch);
+                                if ch == '.' {
+                                    self.input.push_wait();
+                                }
                             } else if key.code == KeyCode::Enter {
                                 self.input.push_console_char('\n');
                             } else if key.code == KeyCode::Backspace {
@@ -938,6 +1018,9 @@ mod tests {
             blit_tx: None,
             blit_thread: None,
             blit_elapsed_us: Arc::new(AtomicU64::new(0)),
+            turn_based_mode: false,
+            turn_recovery_tics: 0,
+            turn_waiting_for_release: false,
         }
     }
 
@@ -1026,5 +1109,40 @@ mod tests {
     fn default_active_palette_is_zero() {
         let app = CountingApp { ticks: 0 };
         assert_eq!(app.active_palette(), 0);
+    }
+
+    #[test]
+    fn turn_based_wait_generates_recovery_tics() {
+        let mut loop_ = make_test_event_loop();
+        loop_.set_turn_based_mode(true);
+        loop_.input.push_wait();
+        let mut app = CountingApp { ticks: 0 };
+
+        loop_.tick_turn_based(&mut app);
+        assert_eq!(app.ticks, 1);
+        assert_eq!(loop_.turn_recovery_tics, 5);
+
+        loop_.tick_turn_based(&mut app);
+        assert_eq!(app.ticks, 2);
+        assert_eq!(loop_.turn_recovery_tics, 4);
+    }
+
+    #[test]
+    fn turn_based_held_action_waits_for_release() {
+        let mut loop_ = make_test_event_loop();
+        loop_.set_turn_based_mode(true);
+        loop_.input.key_down(KeyCode::Char('w'));
+        let mut app = CountingApp { ticks: 0 };
+
+        loop_.tick_turn_based(&mut app);
+        assert_eq!(app.ticks, 1);
+        loop_.turn_recovery_tics = 0;
+        loop_.tick_turn_based(&mut app);
+        assert_eq!(app.ticks, 1);
+
+        loop_.input.key_up(KeyCode::Char('w'));
+        loop_.tick_turn_based(&mut app);
+        assert_eq!(app.ticks, 1);
+        assert!(!loop_.turn_waiting_for_release);
     }
 }
