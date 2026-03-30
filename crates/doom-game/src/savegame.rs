@@ -235,6 +235,11 @@ impl<'a> ReadCursor<'a> {
         Ok(self.read_u8()? != 0)
     }
 
+    /// Return the number of bytes remaining to be read.
+    pub fn remaining(&self) -> usize {
+        self.data.len().saturating_sub(self.pos)
+    }
+
     /// Read exactly `n` bytes into a fixed-size array.
     pub fn read_bytes<const N: usize>(&mut self) -> Result<[u8; N], SaveError> {
         if self.pos + N > self.data.len() {
@@ -601,8 +606,12 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
     // Simpler: use set_health_capped with a very high cap to allow any value.
     // Actually health can be negative (dead player), so we need direct access.
     // Use apply_damage to get from MAX_HEALTH to the target value.
-    let diff = ps.health() - health;
-    ps.apply_damage(diff);
+    let diff = ps.health().saturating_sub(health);
+    if diff > 0 {
+        ps.apply_damage(diff);
+    } else if diff < 0 {
+        ps.heal_overheal(diff.saturating_neg(), 9999);
+    }
 
     // Set armor via give_armor. But give_armor only upgrades, so we need a
     // workaround. Since PlayerState starts with armor=0, give_armor(points, type)
@@ -1132,6 +1141,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Door movers ---
     let door_count = r.read_u32()? as usize;
+    if door_count > r.remaining() { return Err(SaveError::Truncated); }
     let mut active_doors = Vec::with_capacity(door_count);
     for _ in 0..door_count {
         active_doors.push(read_door_mover(&mut r)?);
@@ -1139,6 +1149,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Light specials ---
     let light_count = r.read_u32()? as usize;
+    if light_count > r.remaining() { return Err(SaveError::Truncated); }
     let mut active_lights = Vec::with_capacity(light_count);
     for _ in 0..light_count {
         active_lights.push(read_light_special(&mut r)?);
@@ -1146,6 +1157,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Ceiling movers ---
     let ceiling_count = r.read_u32()? as usize;
+    if ceiling_count > r.remaining() { return Err(SaveError::Truncated); }
     let mut active_ceilings = Vec::with_capacity(ceiling_count);
     for _ in 0..ceiling_count {
         active_ceilings.push(read_ceiling_mover(&mut r)?);
@@ -1153,6 +1165,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Floor movers ---
     let floor_count = r.read_u32()? as usize;
+    if floor_count > r.remaining() { return Err(SaveError::Truncated); }
     let mut active_floors = Vec::with_capacity(floor_count);
     for _ in 0..floor_count {
         active_floors.push(read_floor_mover(&mut r)?);
@@ -1160,6 +1173,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Perpetual platforms ---
     let platform_count = r.read_u32()? as usize;
+    if platform_count > r.remaining() { return Err(SaveError::Truncated); }
     let mut active_platforms = Vec::with_capacity(platform_count);
     for _ in 0..platform_count {
         active_platforms.push(read_perpetual_platform(&mut r)?);
@@ -1167,6 +1181,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Lifts ---
     let lift_count = r.read_u32()? as usize;
+    if lift_count > r.remaining() { return Err(SaveError::Truncated); }
     let mut lifts = Vec::with_capacity(lift_count);
     for _ in 0..lift_count {
         lifts.push(read_lift_mover(&mut r)?);
@@ -1174,6 +1189,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Scrolling walls ---
     let scroller_count = r.read_u32()? as usize;
+    if scroller_count > r.remaining() { return Err(SaveError::Truncated); }
     let mut scrolling_walls = Vec::with_capacity(scroller_count);
     for _ in 0..scroller_count {
         scrolling_walls.push(read_scrolling_wall(&mut r)?);
@@ -1181,6 +1197,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Conveyor belts ---
     let conveyor_count = r.read_u32()? as usize;
+    if conveyor_count > r.remaining() { return Err(SaveError::Truncated); }
     let mut conveyors = Vec::with_capacity(conveyor_count);
     for _ in 0..conveyor_count {
         conveyors.push(read_conveyor_belt(&mut r)?);
@@ -1858,5 +1875,13 @@ mod tests {
             loaded.state.player.extra_light, 2,
             "player extra_light must survive save/load so weapon flash lighting stays deterministic"
         );
+    }
+
+    #[test]
+    fn load_game_prevents_oom_from_corrupt_count() {
+        let crash_data = vec![68, 82, 83, 49, 3, 0, 0, 0, 0, 255, 255, 0, 185, 189, 189, 189, 189, 189, 189, 189, 189, 189, 189, 189, 189, 175, 189, 189, 189, 189, 189, 189, 189, 175, 175, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 212, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 175, 175, 175, 175, 175, 175, 175, 175, 175, 189, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 175, 175, 175, 175, 175, 175, 175, 175, 175, 189, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 189, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 175, 175, 175, 175, 175, 175, 175, 175, 175, 189, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 175, 175, 175, 175, 175, 175, 175, 175, 175, 189, 0, 0, 0];
+
+        let result = load_game(&crash_data);
+        assert!(matches!(result, Err(SaveError::Truncated)));
     }
 }
