@@ -1,11 +1,27 @@
 //! UDMF (Universal Doom Map Format) TEXTMAP parsing and conversion.
 //!
-//! Phase 1 support is intentionally narrow:
-//! - `namespace = "doom"` only
-//! - geometry comes from `vertex`, `linedef`, `sidedef`, `sector`, and `thing` blocks
-//! - BSP/collision lumps remain binary auxiliary lumps loaded by `Level::from_wad`
-//! - unknown fields are ignored
-//! - non-integral values for classic integer fields are rejected
+//! In the beginning, Doom levels were stored in a rigid, binary format. The maximum
+//! size of a level, the number of vertices, and the complexity of sectors were
+//! restricted by 16-bit integers and a fixed lump structure. Modders pushed these limits
+//! until they broke, leading to the creation of the Universal Doom Map Format (UDMF).
+//!
+//! UDMF represents levels as human-readable, flexible text files (`TEXTMAP` lumps) instead
+//! of rigid binary arrays. This module is the engine's interpreter for that text.
+//!
+//! # The Conversion Pipeline
+//!
+//! To understand this module, you must follow the data's journey:
+//! 1. **Parsing ([`UdmfMap::parse`])**: We read the raw UTF-8 bytes of a `TEXTMAP` and parse it into an Abstract Syntax Tree (AST). This is represented by [`UdmfMap`], containing raw [`UdmfBlock`]s and [`UdmfField`]s.
+//! 2. **Conversion ([`UdmfMap::into_level_data`])**: The engine doesn't want an AST; it wants flat, fast arrays of vertices, sectors, and sidedefs to render at 60 FPS. We convert the raw UDMF AST into [`UdmfLevelData`], which matches the classic binary shape the engine expects.
+//! 3. **Validation**: The rest of the engine (in [`crate::level::Level`]) takes this flat data and validates its BSP trees and geometry.
+//!
+//! # Limitations
+//! Phase 1 support is intentionally narrow. We are not a limit-removing source port yet:
+//! - `namespace = "doom"` only. We only understand classic Doom semantics.
+//! - Geometry comes from `vertex`, `linedef`, `sidedef`, `sector`, and `thing` blocks.
+//! - BSP/collision lumps remain binary auxiliary lumps loaded by `Level::from_wad`. UDMF does not replace nodebuilders.
+//! - Unknown fields are ignored.
+//! - Non-integral values for classic integer fields are rejected.
 
 use crate::lumps::{
     FLAG_BLOCKING, FLAG_BLOCKMONSTERS, FLAG_DONTPEGBOTTOM, FLAG_DONTPEGTOP, FLAG_TWO_SIDED,
@@ -42,107 +58,172 @@ pub enum UdmfValue {
 
 /// A single key = value assignment within a UDMF block.
 ///
-/// e.g. `x = 10.0;`
+/// A field is the smallest semantic unit in UDMF. For example, in the assignment `x = 10.0;`,
+/// the key is `"x"` and the value is `10.0`.
 #[derive(Debug, Clone)]
 pub struct UdmfField {
+    /// The property name (e.g., `"x"`, `"heightfloor"`, `"textureceiling"`).
     pub key: String,
+    /// The strongly-typed value (String, Integer, Float, or Boolean).
     pub value: UdmfValue,
 }
 
-/// A named block (e.g. `vertex { x = 10.0; y = 20.0; }`).
+/// A named block grouping several fields together.
 ///
-/// UDMF blocks contain properties mapped to key-value pairs.
+/// In the UDMF text format, blocks encapsulate entities. For example:
+/// ```text
+/// vertex { x = 10.0; y = 20.0; }
+/// ```
+/// The kind here is `"vertex"`, and it contains two [`UdmfField`]s.
 #[derive(Debug, Clone)]
 pub struct UdmfBlock {
+    /// The entity type identifier (e.g., `"vertex"`, `"linedef"`, `"sector"`, `"thing"`).
     pub kind: String,
+    /// All key-value properties defined inside the block.
     pub fields: Vec<UdmfField>,
 }
 
 /// The fully parsed TEXTMAP lump.
 ///
-/// This represents a raw, unvalidated AST of the `TEXTMAP` file.
-/// To convert this into usable map geometry, call [`UdmfMap::into_level_data`].
+/// This represents a raw, unvalidated AST (Abstract Syntax Tree) of the `TEXTMAP` file.
+/// It holds the exact structure of the text but doesn't yet mean anything to the Doom engine.
+/// To convert this AST into usable map geometry, you must "compile" it by calling [`UdmfMap::into_level_data`].
 #[derive(Debug, Clone)]
 pub struct UdmfMap {
-    /// The namespace declaration (first statement in the file).
+    /// The namespace declaration (the first statement in the file). We currently only support `"doom"`.
     pub namespace: String,
-    /// All top-level blocks in order.
+    /// All top-level blocks in the order they were defined in the file.
     pub blocks: Vec<UdmfBlock>,
 }
 
-/// Geometry converted from UDMF into the engine's classic `Level`-shaped arrays.
+/// Geometry converted from UDMF into the engine's classic [`crate::level::Level`]-shaped arrays.
 ///
 /// This provides the canonical flat arrays of vertexes, sectors, linedefs, etc.
-/// that the rest of the engine expects, identical in shape to what a classic
-/// binary Doom format WAD would provide.
+/// that the rest of the engine expects. It is identical in shape to what a classic
+/// binary Doom format WAD would provide, allowing the engine to be completely agnostic
+/// to how the map was loaded.
 #[derive(Debug)]
 pub struct UdmfLevelData {
+    /// Monsters, players, items, and decorations placed in the map.
     pub things: Vec<Thing>,
+    /// Line segments connecting two vertexes, defining the edges of sectors.
     pub linedefs: Vec<Linedef>,
+    /// Wall definitions that hold textures and point back to their owning sector.
     pub sidedefs: Vec<Sidedef>,
+    /// 2D points used to define the map geometry.
     pub vertexes: Vec<Vertex>,
+    /// Closed 2D polygonal areas that define floor/ceiling heights and flats.
     pub sectors: Vec<Sector>,
 }
 
-/// Parse errors from the UDMF TEXTMAP parser and converter.
+/// Parse errors from the UDMF `TEXTMAP` parser and converter.
+///
+/// This covers both syntax errors encountered while parsing the text into an AST,
+/// and semantic errors encountered when compiling the AST into classic arrays
+/// (like missing fields or overflowing limits).
 #[derive(Debug, thiserror::Error)]
 pub enum UdmfError {
+    /// The `TEXTMAP` lump must be valid UTF-8.
     #[error("UDMF TEXTMAP is not valid UTF-8")]
     InvalidUtf8(#[from] core::str::Utf8Error),
 
+    /// A syntax error occurred (like a missing brace or invalid token).
     #[error("UDMF parse error near offset {offset}: {message}")]
-    ParseFailed { offset: usize, message: String },
+    ParseFailed {
+        /// The byte offset in the input buffer where the failure occurred.
+        offset: usize,
+        /// The description of the syntax error.
+        message: String,
+    },
 
+    /// The required `namespace = "..."` declaration at the top of the file was missing.
     #[error("UDMF missing required namespace assignment")]
     MissingNamespace,
 
+    /// A namespace other than `"doom"` was declared. The engine is not ready for hexen or zdoom features yet.
     #[error("unsupported UDMF namespace '{0}'")]
     UnsupportedNamespace(String),
 
+    /// A required field within a block was missing.
+    ///
+    /// For instance, the classic format requires all sectors to have a `heightfloor`.
     #[error("UDMF {block}[{index}] missing required field '{field}'")]
     MissingField {
+        /// The type of block that failed (e.g., `"vertex"`, `"linedef"`).
         block: &'static str,
+        /// The 0-based index of this specific block inside the array of all blocks of the same type.
         index: usize,
+        /// The name of the missing field.
         field: &'static str,
     },
 
+    /// A field was provided with an incorrect value type.
+    ///
+    /// The classic format expects integers for coordinates, but we received a string or boolean instead.
     #[error("UDMF {block}[{index}] field '{field}' must be {expected}")]
     WrongType {
+        /// The type of block that failed.
         block: &'static str,
+        /// The 0-based index of this specific block.
         index: usize,
+        /// The name of the field.
         field: &'static str,
+        /// The expected type (e.g., `"integer"`).
         expected: &'static str,
     },
 
+    /// A field that requires an integer was provided with a fractional floating-point value.
     #[error("UDMF {block}[{index}] field '{field}' must be integral, got {value}")]
     NonIntegral {
+        /// The type of block that failed.
         block: &'static str,
+        /// The 0-based index of this specific block.
         index: usize,
+        /// The name of the field.
         field: &'static str,
+        /// The invalid fractional value provided in the textmap.
         value: f64,
     },
 
+    /// A numeric field's value falls outside the representable bounds.
+    ///
+    /// The classic Doom format only allocates 16 bits (`i16` or `u16`) for most geometry.
+    /// This happens when a `TEXTMAP` provides coordinates like `x = 75000;`.
     #[error("UDMF {block}[{index}] field '{field}' value {value} is out of range")]
     OutOfRange {
+        /// The type of block that failed.
         block: &'static str,
+        /// The 0-based index of this specific block.
         index: usize,
+        /// The name of the field.
         field: &'static str,
+        /// The stringified out-of-bounds value.
         value: String,
     },
 
+    /// A texture name or identifier exceeded the classic 8-character limit.
     #[error("UDMF {block}[{index}] field '{field}' texture/name '{value}' exceeds 8 characters")]
     NameTooLong {
+        /// The type of block that failed.
         block: &'static str,
+        /// The 0-based index of this specific block.
         index: usize,
+        /// The name of the field.
         field: &'static str,
+        /// The invalid name string.
         value: String,
     },
 
+    /// A texture name or identifier contained non-ASCII characters.
     #[error("UDMF {block}[{index}] field '{field}' texture/name '{value}' must be ASCII")]
     NameNotAscii {
+        /// The type of block that failed.
         block: &'static str,
+        /// The 0-based index of this specific block.
         index: usize,
+        /// The name of the field.
         field: &'static str,
+        /// The string containing invalid non-ASCII characters.
         value: String,
     },
 }
@@ -211,10 +292,20 @@ impl UdmfMap {
         Ok(Self { namespace, blocks })
     }
 
-    /// Convert parsed UDMF blocks into the engine's classic geometry arrays.
+    /// Convert the generic UDMF AST into classic flat geometry arrays.
+    ///
+    /// The engine was built to iterate over continuous blocks of memory at 60 FPS,
+    /// so the flexible, string-keyed properties of a `TEXTMAP` are far too slow.
+    /// This function acts as the "compiler"—it reads the raw [`UdmfMap`] AST and
+    /// squashes all those string properties down into the exact same packed binary
+    /// structs (like `Linedef` and `Sector`) that classic Doom WADs use.
+    ///
+    /// If a required field is missing (like a `sector` with no `heightfloor`),
+    /// or if a number exceeds the 16-bit limits of the classic format, the compilation
+    /// fails and returns an error.
     ///
     /// # Errors
-    /// Returns `UdmfError` when required fields are missing, malformed, or
+    /// Returns [`UdmfError`] when required fields are missing, malformed, or
     /// outside the classic Doom value ranges.
     ///
     /// # Examples
@@ -225,6 +316,8 @@ impl UdmfMap {
     /// namespace = "doom";
     /// vertex { x = 0; y = 0; }
     /// "#).unwrap();
+    ///
+    /// // The engine turns the flexible AST into fixed-size geometry arrays
     /// let level_data = map.into_level_data().unwrap();
     /// assert_eq!(level_data.vertexes.len(), 1);
     /// assert_eq!(level_data.vertexes[0].x, 0);
