@@ -114,6 +114,11 @@ struct Args {
     /// Example: --debug-log gameplay.log
     #[arg(long)]
     debug_log: Option<std::path::PathBuf>,
+
+    /// Exports the loaded map's geometry to an SVG file and exits immediately.
+    /// Example: --export-svg map.svg --warp E1M1
+    #[arg(long)]
+    export_svg: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -1737,6 +1742,14 @@ fn main() -> Result<()> {
     // Parse the requested level.
     let level = Level::from_wad_stack(&wad_stack, warp_str)
         .with_context(|| format!("Failed to load map {warp_str}"))?;
+
+    if let Some(ref export_path) = args.export_svg {
+        let svg_data = doom_map::export::export_svg(&level);
+        std::fs::write(export_path, svg_data)
+            .with_context(|| format!("Failed to write SVG to {}", export_path.display()))?;
+        println!("Exported map {} to {}", level.name, export_path.display());
+        return Ok(());
+    }
 
     // Create game state and spawn ALL level things (player, monsters, items, keys).
     let mut gs = GameState::new(warp_str);

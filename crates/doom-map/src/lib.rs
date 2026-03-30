@@ -10,6 +10,7 @@
 //! - Reject size == `ceil(N_SECTORS² / 8)`
 
 pub mod bsp;
+pub mod export;
 pub mod level;
 pub mod lumps;
 pub mod udmf;
