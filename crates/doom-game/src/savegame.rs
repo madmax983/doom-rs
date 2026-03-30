@@ -601,7 +601,7 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
     // Simpler: use set_health_capped with a very high cap to allow any value.
     // Actually health can be negative (dead player), so we need direct access.
     // Use apply_damage to get from MAX_HEALTH to the target value.
-    let diff = ps.health() - health;
+    let diff = ps.health().saturating_sub(health);
     ps.apply_damage(diff);
 
     // Set armor via give_armor. But give_armor only upgrades, so we need a
@@ -1130,8 +1130,12 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
         _ => return Err(SaveError::Truncated),
     };
 
+    // Cap to avoid OOM on maliciously large numbers from fuzzed data.
+    const MAX_ALLOC: usize = 100_000;
+
     // --- Door movers ---
     let door_count = r.read_u32()? as usize;
+    if door_count > MAX_ALLOC { return Err(SaveError::Truncated); }
     let mut active_doors = Vec::with_capacity(door_count);
     for _ in 0..door_count {
         active_doors.push(read_door_mover(&mut r)?);
@@ -1139,6 +1143,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Light specials ---
     let light_count = r.read_u32()? as usize;
+    if light_count > MAX_ALLOC { return Err(SaveError::Truncated); }
     let mut active_lights = Vec::with_capacity(light_count);
     for _ in 0..light_count {
         active_lights.push(read_light_special(&mut r)?);
@@ -1146,6 +1151,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Ceiling movers ---
     let ceiling_count = r.read_u32()? as usize;
+    if ceiling_count > MAX_ALLOC { return Err(SaveError::Truncated); }
     let mut active_ceilings = Vec::with_capacity(ceiling_count);
     for _ in 0..ceiling_count {
         active_ceilings.push(read_ceiling_mover(&mut r)?);
@@ -1153,6 +1159,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Floor movers ---
     let floor_count = r.read_u32()? as usize;
+    if floor_count > MAX_ALLOC { return Err(SaveError::Truncated); }
     let mut active_floors = Vec::with_capacity(floor_count);
     for _ in 0..floor_count {
         active_floors.push(read_floor_mover(&mut r)?);
@@ -1160,6 +1167,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Perpetual platforms ---
     let platform_count = r.read_u32()? as usize;
+    if platform_count > MAX_ALLOC { return Err(SaveError::Truncated); }
     let mut active_platforms = Vec::with_capacity(platform_count);
     for _ in 0..platform_count {
         active_platforms.push(read_perpetual_platform(&mut r)?);
@@ -1167,6 +1175,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Lifts ---
     let lift_count = r.read_u32()? as usize;
+    if lift_count > MAX_ALLOC { return Err(SaveError::Truncated); }
     let mut lifts = Vec::with_capacity(lift_count);
     for _ in 0..lift_count {
         lifts.push(read_lift_mover(&mut r)?);
@@ -1174,6 +1183,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Scrolling walls ---
     let scroller_count = r.read_u32()? as usize;
+    if scroller_count > MAX_ALLOC { return Err(SaveError::Truncated); }
     let mut scrolling_walls = Vec::with_capacity(scroller_count);
     for _ in 0..scroller_count {
         scrolling_walls.push(read_scrolling_wall(&mut r)?);
@@ -1181,6 +1191,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Conveyor belts ---
     let conveyor_count = r.read_u32()? as usize;
+    if conveyor_count > MAX_ALLOC { return Err(SaveError::Truncated); }
     let mut conveyors = Vec::with_capacity(conveyor_count);
     for _ in 0..conveyor_count {
         conveyors.push(read_conveyor_belt(&mut r)?);
@@ -1188,6 +1199,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Mobjs ---
     let mobj_count = r.read_u32()? as usize;
+    if mobj_count > MAX_ALLOC { return Err(SaveError::Truncated); }
     let mut mobjslab = MobjSlab::new();
 
     for _ in 0..mobj_count {
