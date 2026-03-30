@@ -249,6 +249,12 @@ fn ray_actor_intersection(
 ///
 /// # Returns
 /// The closest hit along the ray (wall, actor, or nothing).
+///
+/// # Optimization (Bolt ⚡)
+/// To avoid allocating per raycast (which can happen dozens of times per frame
+/// during explosions or BFG tracers), caller-provided `tested_lines` and
+/// `cell_actors` buffers are passed as mutable references and cleared on use.
+#[allow(clippy::too_many_arguments)]
 pub fn trace_ray(
     level: &Level,
     x1: i32,
@@ -259,6 +265,8 @@ pub fn trace_ray(
     check_actors: bool,
     shooter_index: Option<usize>,
     actor_positions: &[(i32, i32, i32, i32, bool)],
+    tested_lines: &mut Vec<usize>,
+    cell_actors: &mut Vec<usize>,
 ) -> TraceResult {
     // Zero-range ray can't hit anything.
     if max_range <= 0.0 {
@@ -354,13 +362,13 @@ pub fn trace_ray(
 
     // Track which linedefs we've already tested to avoid duplicates
     // (linedefs can appear in multiple blockmap cells).
-    let mut tested_lines: Vec<bool> = vec![false; level.linedefs.len()];
+    tested_lines.clear();
 
     // Maximum cells to visit (safety limit against infinite loops).
     let max_cells = (cols + rows) as usize * 2 + 4;
 
     // Buffer for actor overlap tests to avoid per-cell allocations.
-    let mut cell_actors = Vec::new();
+    cell_actors.clear();
 
     for _step in 0..max_cells {
         // Only process cells within the blockmap grid.
@@ -374,10 +382,10 @@ pub fn trace_ray(
                 if ld_idx >= level.linedefs.len() {
                     continue;
                 }
-                if tested_lines[ld_idx] {
+                if tested_lines.contains(&ld_idx) {
                     continue;
                 }
-                tested_lines[ld_idx] = true;
+                tested_lines.push(ld_idx);
 
                 let ld = &level.linedefs[ld_idx];
                 let v1 = &level.vertexes[ld.from_vertex as usize];
@@ -436,10 +444,10 @@ pub fn trace_ray(
                     origin_x,
                     origin_y,
                     actor_positions,
-                    &mut cell_actors,
+                    cell_actors,
                 );
 
-                for &actor_idx in &cell_actors {
+                for &actor_idx in cell_actors.iter() {
                     // Skip the shooter.
                     if shooter_index == Some(actor_idx) {
                         continue;
@@ -526,6 +534,34 @@ mod tests {
     // -----------------------------------------------------------------------
     // Helper: build a minimal level for testing
     // -----------------------------------------------------------------------
+
+    fn trace_ray_test(
+        level: &Level,
+        x1: i32,
+        y1: i32,
+        angle_cos: f32,
+        angle_sin: f32,
+        max_range: f32,
+        check_actors: bool,
+        shooter_index: Option<usize>,
+        actor_positions: &[(i32, i32, i32, i32, bool)],
+    ) -> TraceResult {
+        let mut tested_lines = Vec::new();
+        let mut cell_actors = Vec::new();
+        trace_ray(
+            level,
+            x1,
+            y1,
+            angle_cos,
+            angle_sin,
+            max_range,
+            check_actors,
+            shooter_index,
+            actor_positions,
+            &mut tested_lines,
+            &mut cell_actors,
+        )
+    }
 
     /// Build a minimal level with specified linedefs, vertices, sectors, and sidedefs.
     ///
@@ -964,7 +1000,7 @@ mod tests {
     fn ray_hits_one_sided_wall_directly_ahead() {
         let level = make_wall_level();
         // Ray from (64, 0) going north (up +y), wall at y=64.
-        let result = trace_ray(
+        let result = trace_ray_test(
             &level,
             64,
             0,
@@ -991,7 +1027,7 @@ mod tests {
     fn ray_misses_wall_off_to_the_side() {
         let level = make_wall_level();
         // Ray from (64, 0) going east (+x), wall at y=64 is horizontal.
-        let result = trace_ray(
+        let result = trace_ray_test(
             &level,
             64,
             0,
@@ -1031,7 +1067,7 @@ mod tests {
         let level = make_test_level(verts, lds, sds, secs, (0, 0), (1, 1), cells);
 
         // Ray from (64, 0) going north.
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, false, None, &[]);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 200.0, false, None, &[]);
         match &result.hit {
             TraceHit::Wall { linedef_index, .. } => {
                 assert_eq!(*linedef_index, 0, "should hit closer wall (ld0 at y=32)");
@@ -1060,7 +1096,7 @@ mod tests {
         let level = make_test_level(verts, lds, sds, secs, (0, 0), (2, 2), cells);
 
         // Ray from (64, 64) going east, max range 100. Wall is far away at (200,200).
-        let result = trace_ray(&level, 64, 64, 1.0, 0.0, 100.0, false, None, &[]);
+        let result = trace_ray_test(&level, 64, 64, 1.0, 0.0, 100.0, false, None, &[]);
         assert!(
             matches!(result.hit, TraceHit::Nothing),
             "should miss everything"
@@ -1070,7 +1106,7 @@ mod tests {
     #[test]
     fn ray_zero_range_returns_nothing() {
         let level = make_wall_level();
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 0.0, false, None, &[]);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 0.0, false, None, &[]);
         assert!(
             matches!(result.hit, TraceHit::Nothing),
             "zero range should return Nothing"
@@ -1094,7 +1130,7 @@ mod tests {
 
         let level = make_test_level(verts, lds, sds, secs, (0, 0), (1, 2), cells);
 
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 300.0, false, None, &[]);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 300.0, false, None, &[]);
         match &result.hit {
             TraceHit::Wall { linedef_index, .. } => {
                 assert_eq!(*linedef_index, 0);
@@ -1118,7 +1154,7 @@ mod tests {
         let cells = vec![vec![0u16]];
         let level = make_test_level(verts, lds, sds, secs, (0, 0), (1, 1), cells);
 
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, false, None, &[]);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 200.0, false, None, &[]);
         assert!(
             matches!(result.hit, TraceHit::Nothing),
             "ray should pass through open two-sided line"
@@ -1139,7 +1175,7 @@ mod tests {
         let cells = vec![vec![0u16]];
         let level = make_test_level(verts, lds, sds, secs, (0, 0), (1, 1), cells);
 
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, false, None, &[]);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 200.0, false, None, &[]);
         assert!(
             matches!(result.hit, TraceHit::Wall { .. }),
             "ray should be blocked by closed two-sided line"
@@ -1155,7 +1191,7 @@ mod tests {
         let level = make_wall_level(); // wall at y=64
         // Actor at (64, 32) with radius 10 — between shooter and wall.
         let actors = vec![(64, 32, 10, 56, true)];
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
         match &result.hit {
             TraceHit::Actor { actor_index, .. } => {
                 assert_eq!(*actor_index, 0, "should hit actor 0");
@@ -1169,7 +1205,7 @@ mod tests {
         let level = make_wall_level(); // wall at y=64
         // Actor at (64, 100) with radius 10 — behind the wall.
         let actors = vec![(64, 100, 10, 56, true)];
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
         match &result.hit {
             TraceHit::Wall { linedef_index, .. } => {
                 assert_eq!(*linedef_index, 0, "should hit wall before actor");
@@ -1186,7 +1222,7 @@ mod tests {
             (64, 0, 10, 56, true),  // actor 0: the shooter
             (64, 32, 10, 56, true), // actor 1: in the line of fire
         ];
-        let result = trace_ray(
+        let result = trace_ray_test(
             &level,
             64,
             0,
@@ -1210,7 +1246,7 @@ mod tests {
         let level = make_wall_level();
         // Actor with shootable=false.
         let actors = vec![(64, 32, 10, 56, false)];
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
         // Should pass through the non-shootable actor and hit the wall.
         assert!(
             matches!(result.hit, TraceHit::Wall { .. }),
@@ -1233,7 +1269,7 @@ mod tests {
         );
 
         let actors = vec![(64, 100, 20, 56, true)];
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
         match &result.hit {
             TraceHit::Actor { actor_index, .. } => {
                 assert_eq!(*actor_index, 0);
@@ -1257,7 +1293,7 @@ mod tests {
 
         // Actor at (64, 500) — beyond max_range of 200.
         let actors = vec![(64, 500, 20, 56, true)];
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
         assert!(
             matches!(result.hit, TraceHit::Nothing),
             "actor beyond max range should not be hit"
@@ -1281,7 +1317,7 @@ mod tests {
             (64, 100, 20, 56, true), // actor 0: farther
             (64, 50, 20, 56, true),  // actor 1: closer
         ];
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 200.0, true, None, &actors);
         match &result.hit {
             TraceHit::Actor { actor_index, .. } => {
                 assert_eq!(*actor_index, 1, "should hit the closer actor");
@@ -1349,7 +1385,7 @@ mod tests {
         // Ray from (0, 0) going at 45 degrees (northeast).
         let cos45 = std::f32::consts::FRAC_1_SQRT_2;
         let sin45 = std::f32::consts::FRAC_1_SQRT_2;
-        let result = trace_ray(&level, 0, 0, cos45, sin45, 200.0, false, None, &[]);
+        let result = trace_ray_test(&level, 0, 0, cos45, sin45, 200.0, false, None, &[]);
         match &result.hit {
             TraceHit::Wall { linedef_index, .. } => {
                 assert_eq!(*linedef_index, 0);
@@ -1367,7 +1403,7 @@ mod tests {
         // Wall at y=64 in cell (0,0).
         let level = make_wall_level();
         // Ray from (64, 128) going south (negative y).
-        let result = trace_ray(&level, 64, 128, 0.0, -1.0, 200.0, false, None, &[]);
+        let result = trace_ray_test(&level, 64, 128, 0.0, -1.0, 200.0, false, None, &[]);
         match &result.hit {
             TraceHit::Wall { linedef_index, .. } => {
                 assert_eq!(*linedef_index, 0);
@@ -1390,7 +1426,7 @@ mod tests {
         let level = make_test_level(verts, lds, sds, secs, (0, 0), (1, 1), cells);
 
         // Ray from (100, 64) going west (-x).
-        let result = trace_ray(&level, 100, 64, -1.0, 0.0, 200.0, false, None, &[]);
+        let result = trace_ray_test(&level, 100, 64, -1.0, 0.0, 200.0, false, None, &[]);
         match &result.hit {
             TraceHit::Wall { linedef_index, .. } => {
                 assert_eq!(*linedef_index, 0);
@@ -1418,7 +1454,7 @@ mod tests {
 
         let level = make_test_level(verts, lds, sds, secs, (0, 0), (8, 1), cells);
 
-        let result = trace_ray(&level, 0, 64, 1.0, 0.0, 1024.0, false, None, &[]);
+        let result = trace_ray_test(&level, 0, 64, 1.0, 0.0, 1024.0, false, None, &[]);
         match &result.hit {
             TraceHit::Wall { linedef_index, .. } => {
                 assert_eq!(*linedef_index, 0);
@@ -1431,7 +1467,7 @@ mod tests {
     fn ray_starting_outside_blockmap() {
         let level = make_wall_level(); // 2x2, origin (0,0)
         // Ray starts at (-100, 32), going east. Should eventually enter blockmap.
-        let result = trace_ray(&level, -100, 32, 1.0, 0.0, 300.0, false, None, &[]);
+        let result = trace_ray_test(&level, -100, 32, 1.0, 0.0, 300.0, false, None, &[]);
         // The wall is at y=64, ray goes east at y=32 — should miss.
         assert!(
             matches!(result.hit, TraceHit::Nothing),
@@ -1444,7 +1480,7 @@ mod tests {
         let level = make_wall_level();
         let actors = vec![(64, 32, 10, 56, true)];
         // check_actors=false should skip actor testing even though one is in path.
-        let result = trace_ray(&level, 64, 0, 0.0, 1.0, 200.0, false, None, &actors);
+        let result = trace_ray_test(&level, 64, 0, 0.0, 1.0, 200.0, false, None, &actors);
         // Should hit the wall at y=64 instead of the actor at y=32.
         match &result.hit {
             TraceHit::Wall { linedef_index, .. } => {
