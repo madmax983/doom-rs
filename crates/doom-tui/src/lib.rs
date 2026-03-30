@@ -9,15 +9,17 @@
 //! - [`InputState`] / [`TicInput`] — input synthesis from held keys
 //! - [`DoomApp`] — implement this trait to plug your game in
 
-pub mod charset;
-pub mod event_loop;
-pub mod input;
-pub mod scaler;
-pub mod sixel;
-pub mod widget;
+pub(crate) mod charset;
+pub(crate) mod event_loop;
+pub(crate) mod input;
+pub(crate) mod scaler;
+pub(crate) mod sixel;
+pub(crate) mod widget;
 
 pub use charset::{CharSet, RendererMode};
 pub use event_loop::{DoomApp, DoomEventLoop, EventLoopError, TIC_DURATION, TIC_RATE_HZ};
 pub use input::{InputState, TicInput, buttons};
 pub use scaler::{ScalingMode, sample_bilinear};
+pub use sixel::DoomSixelWidget;
+pub use sixel::encode_doom_sixel;
 pub use widget::DoomFramebufferWidget;
