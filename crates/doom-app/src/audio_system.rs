@@ -42,7 +42,7 @@ pub enum AudioEvent {
     /// Fields: (sfx_id, priority, volume 0‥1, pan -1‥1)
     PlaySfx(u16, SfxPriority, f32, f32, Option<doom_game::MobjHandle>),
     /// Start playing a MUS track.  `data` is the raw MUS lump bytes.
-    StartMusic(Vec<u8>),
+    StartMusic(std::sync::Arc<[u8]>),
     /// Stop current music (silences the OPL sequencer).
     StopMusic,
 }
@@ -212,7 +212,7 @@ impl AudioSystem {
     }
 
     /// Send a start-music command with raw MUS lump bytes.
-    pub fn start_music(&self, data: Vec<u8>) {
+    pub fn start_music(&self, data: std::sync::Arc<[u8]>) {
         let _ = self.sender.send(AudioEvent::StartMusic(data));
     }
 
@@ -295,9 +295,13 @@ fn audio_cmd_thread(
                             }
                         }
 
-                        if let Some(channel) =
-                            mixer.play(sfx_id, std::sync::Arc::clone(&sample.data), volume, pan, priority)
-                        {
+                        if let Some(channel) = mixer.play(
+                            sfx_id,
+                            std::sync::Arc::clone(&sample.data),
+                            volume,
+                            pan,
+                            priority,
+                        ) {
                             if let Some(previous_origin) = channel_origins[channel].take() {
                                 origin_channels.remove(&previous_origin);
                             }
@@ -621,7 +625,7 @@ mod tests {
         let system = AudioSystem::try_open_null().expect("null audio must succeed");
         // Fire-and-forget: none of these should panic.
         system.play_sfx(32, doom_audio::SfxPriority::Medium, 1.0, 0.0, None);
-        system.start_music(vec![0u8; 4]); // invalid MUS — audio thread logs and continues
+        system.start_music(std::sync::Arc::<[u8]>::from(vec![0u8; 4])); // invalid MUS — audio thread logs and continues
         system.stop_music();
     }
 
