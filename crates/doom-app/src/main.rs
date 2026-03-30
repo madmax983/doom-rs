@@ -44,7 +44,7 @@ use doom_wad::WadFile;
 use doom_renderer::SwitchList;
 
 use audio_system::{AudioSystem, music_lump_for_map, sound_request_sfx};
-use doom_audio::{SfxEmitter, SfxPriority, compute_spatial};
+use doom_audio::{GenmidiBank, MidiPlayer, MusScore, SfxEmitter, SfxPriority, compute_spatial};
 
 // ---------------------------------------------------------------------------
 // CLI args
@@ -150,6 +150,16 @@ struct Args {
     /// Export the level layout to a GeoJSON file and exit.
     #[arg(long)]
     export_geojson: Option<std::path::PathBuf>,
+
+    /// Export map music as a 16-bit PCM WAV file and exit.
+    ///
+    /// Uses MUS + GENMIDI + OPL synthesis for source-faithful Doom music.
+    #[arg(long)]
+    export_music_wav: Option<std::path::PathBuf>,
+
+    /// Number of full music loops to render when using --export-music-wav.
+    #[arg(long, default_value = "1")]
+    music_loops: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -1769,6 +1779,83 @@ fn default_warp_map(wad_stack: &WadStack) -> String {
     "E1M1".to_string()
 }
 
+fn score_total_ticks(score: &MusScore) -> u64 {
+    score
+        .events
+        .iter()
+        .map(|(delta, _)| u64::from(*delta))
+        .sum()
+}
+
+fn wav_from_f32_mono(samples: &[f32], sample_rate: u32) -> Vec<u8> {
+    let bits_per_sample: u16 = 16;
+    let channels: u16 = 1;
+    let block_align: u16 = channels * (bits_per_sample / 8);
+    let byte_rate: u32 = sample_rate * u32::from(block_align);
+    let data_bytes_len = (samples.len() * usize::from(block_align)) as u32;
+
+    let mut out = Vec::with_capacity(44 + data_bytes_len as usize);
+    out.extend_from_slice(b"RIFF");
+    out.extend_from_slice(&(36u32 + data_bytes_len).to_le_bytes());
+    out.extend_from_slice(b"WAVE");
+    out.extend_from_slice(b"fmt ");
+    out.extend_from_slice(&16u32.to_le_bytes());
+    out.extend_from_slice(&1u16.to_le_bytes()); // PCM
+    out.extend_from_slice(&channels.to_le_bytes());
+    out.extend_from_slice(&sample_rate.to_le_bytes());
+    out.extend_from_slice(&byte_rate.to_le_bytes());
+    out.extend_from_slice(&block_align.to_le_bytes());
+    out.extend_from_slice(&bits_per_sample.to_le_bytes());
+    out.extend_from_slice(b"data");
+    out.extend_from_slice(&data_bytes_len.to_le_bytes());
+
+    for s in samples {
+        let clamped = s.clamp(-1.0, 1.0);
+        let pcm = (clamped * i16::MAX as f32).round() as i16;
+        out.extend_from_slice(&pcm.to_le_bytes());
+    }
+
+    out
+}
+
+fn export_music_wav_for_map(
+    wad_stack: &WadStack,
+    map_name: &str,
+    loops: u32,
+    out_path: &std::path::Path,
+) -> Result<()> {
+    let loops = loops.max(1);
+    let sample_rate: u32 = 44_100;
+
+    let music_lump = music_lump_for_map(map_name)
+        .ok_or_else(|| anyhow::anyhow!("No music lump mapping for map {map_name}"))?;
+    let mus_data = wad_stack
+        .lump_data(&music_lump)
+        .ok_or_else(|| anyhow::anyhow!("Music lump {music_lump} not found in WAD stack"))?;
+    let score = MusScore::parse(mus_data)
+        .map_err(|e| anyhow::anyhow!("Failed to parse MUS lump {music_lump}: {e}"))?;
+
+    let mut player = MidiPlayer::new();
+    if let Some(genmidi_data) = wad_stack.lump_data("GENMIDI") {
+        if let Ok(bank) = GenmidiBank::parse(genmidi_data) {
+            player.load_genmidi(bank);
+        }
+    }
+
+    let total_ticks = score_total_ticks(&score).max(1);
+    let total_samples = ((total_ticks * u64::from(loops)) * u64::from(sample_rate)
+        / u64::from(player.ticks_per_sec)) as usize;
+
+    let mut rendered = vec![0.0f32; total_samples];
+    player.load_score(score);
+    player.advance_samples(total_samples, sample_rate, &mut rendered);
+
+    let wav_bytes = wav_from_f32_mono(&rendered, sample_rate);
+    std::fs::write(out_path, wav_bytes)
+        .with_context(|| format!("Failed to write WAV to {}", out_path.display()))?;
+    Ok(())
+}
+
 fn validate_mode_args(args: &Args) -> std::result::Result<(), &'static str> {
     if args.server.is_some() && args.connect.is_some() {
         return Err("--server and --connect are mutually exclusive");
@@ -1912,6 +1999,18 @@ fn run_doom() -> Result<()> {
             "🌟".green(),
             "Exported".green().bold(),
             obj_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
+
+    if let Some(ref wav_path) = args.export_music_wav {
+        export_music_wav_for_map(&wad_stack, warp_str, args.music_loops, wav_path)?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} music WAV to {}",
+            "🎵".green(),
+            "Exported".green().bold(),
+            wav_path.display().to_string().cyan()
         );
         return Ok(());
     }
@@ -2359,6 +2458,39 @@ mod tests {
 
     pub(crate) fn make_game_state() -> GameState {
         make_game_state_with_level("E1M1")
+    }
+
+    #[test]
+    fn wav_from_f32_mono_writes_valid_header_and_payload_len() {
+        let samples = [0.0_f32, 0.5_f32, -0.5_f32, 1.0_f32];
+        let wav = wav_from_f32_mono(&samples, 44_100);
+        assert_eq!(&wav[0..4], b"RIFF");
+        assert_eq!(&wav[8..12], b"WAVE");
+        assert_eq!(&wav[12..16], b"fmt ");
+        assert_eq!(&wav[36..40], b"data");
+        let data_len = u32::from_le_bytes([wav[40], wav[41], wav[42], wav[43]]);
+        assert_eq!(data_len, 8, "4 mono i16 samples should be 8 bytes");
+        assert_eq!(wav.len(), 44 + data_len as usize);
+    }
+
+    #[test]
+    fn score_total_ticks_sums_all_event_deltas() {
+        let score = MusScore {
+            header: doom_audio::mus::MusHeader {
+                score_length: 0,
+                score_start: 0,
+                primary_channels: 0,
+                secondary_channels: 0,
+                instrument_count: 0,
+            },
+            instruments: Vec::new(),
+            events: vec![
+                (0, doom_audio::MusEvent::MeasureEnd),
+                (7, doom_audio::MusEvent::MeasureEnd),
+                (9, doom_audio::MusEvent::ScoreEnd),
+            ],
+        };
+        assert_eq!(score_total_ticks(&score), 16);
     }
 
     pub(crate) fn make_doom_game() -> DoomGame {
