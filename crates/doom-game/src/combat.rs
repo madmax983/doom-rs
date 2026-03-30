@@ -472,6 +472,11 @@ pub fn p_radius_attack(
     let mut handles = Vec::with_capacity(gs.mobjslab.len());
     handles.extend(gs.mobjslab.iter_handles());
 
+    // Pre-allocate buffers for ray tracing to avoid allocations inside the hot loop.
+    let num_lines = level.map(|l| l.linedefs.len()).unwrap_or(0);
+    let mut tested_lines = Vec::with_capacity(num_lines);
+    let mut cell_actors = Vec::new();
+
     for handle in handles {
         if handle == source {
             continue;
@@ -506,7 +511,19 @@ pub fn p_radius_attack(
             let total_dist = dist_f.max(1.0);
             let cos_a = dx_f / total_dist;
             let sin_a = dy_f / total_dist;
-            let los = trace::trace_ray(lv, sx, sy, cos_a, sin_a, total_dist, false, None, &[]);
+            let los = trace::trace_ray(
+                lv,
+                sx,
+                sy,
+                cos_a,
+                sin_a,
+                total_dist,
+                false,
+                None,
+                &[],
+                &mut tested_lines,
+                &mut cell_actors,
+            );
             if matches!(los.hit, TraceHit::Wall { .. }) {
                 continue; // Wall blocks the blast.
             }
