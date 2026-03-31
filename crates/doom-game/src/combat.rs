@@ -888,7 +888,15 @@ mod tests {
         let src_handle = gs.mobjslab.alloc(src);
 
         let mut intercepts = Vec::new();
-        let result = p_line_attack(&mut gs, src_handle, Bam::ZERO, MISSILERANGE, 10, None, &mut intercepts);
+        let result = p_line_attack(
+            &mut gs,
+            src_handle,
+            Bam::ZERO,
+            MISSILERANGE,
+            10,
+            None,
+            &mut intercepts,
+        );
         assert!(result.is_none(), "must return None when no targets exist");
     }
 
@@ -900,7 +908,15 @@ mod tests {
         let _trooper = spawn_trooper(&mut gs, 100, 0);
         let src = gs.player.handle;
         let mut intercepts = Vec::new();
-        let result = p_line_attack(&mut gs, src, Bam::ZERO, Fixed16_16::from_int(500), 5, None, &mut intercepts);
+        let result = p_line_attack(
+            &mut gs,
+            src,
+            Bam::ZERO,
+            Fixed16_16::from_int(500),
+            5,
+            None,
+            &mut intercepts,
+        );
         assert!(result.is_some(), "should hit actor directly ahead");
     }
 
@@ -916,7 +932,15 @@ mod tests {
         // dead actors must be skipped.  With uninitialized tables, t=0 and
         // both the dead-check and t<=0 guard fire — None is the expected result.
         let mut intercepts = Vec::new();
-        let result = p_line_attack(&mut gs, src, Bam::ZERO, MISSILERANGE, 10, None, &mut intercepts);
+        let result = p_line_attack(
+            &mut gs,
+            src,
+            Bam::ZERO,
+            MISSILERANGE,
+            10,
+            None,
+            &mut intercepts,
+        );
         assert!(result.is_none(), "dead actors must not be hit");
     }
 
@@ -933,7 +957,15 @@ mod tests {
         let angle = Bam(((-8i32) << 18) as u32);
 
         let mut intercepts = Vec::new();
-        let result = p_line_attack(&mut gs, src, angle, Fixed16_16::from_int(1024), 5, None, &mut intercepts);
+        let result = p_line_attack(
+            &mut gs,
+            src,
+            angle,
+            Fixed16_16::from_int(1024),
+            5,
+            None,
+            &mut intercepts,
+        );
 
         assert_eq!(result, Some(trooper));
         assert!(gs.mobjslab.get(trooper).unwrap().health < 20);
