@@ -23,21 +23,21 @@ use super::visibility::{SectorVisibility, VisibilityMap};
 ///
 /// Caches the tile grid and visibility map for the current level, rebuilding
 /// them only when the level changes.
-pub struct CogmindState {
+pub(crate) struct CogmindState {
     /// Tile grid for the current level (lazily built).
-    pub tile_grid: Option<TileGrid>,
+    pub(crate) tile_grid: Option<TileGrid>,
     /// Per-sector visibility map (lazily built).
-    pub visibility: Option<VisibilityMap>,
+    pub(crate) visibility: Option<VisibilityMap>,
     /// Name of the level the cached grid was built for.
     cached_level_name: String,
     /// Particle effect layer (combat debris, projectile trails, dust).
-    pub effects: EffectLayer,
+    pub(crate) effects: EffectLayer,
 }
 
 impl CogmindState {
     /// Create a new state with no cached data.
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tile_grid: None,
             visibility: None,
@@ -50,7 +50,7 @@ impl CogmindState {
     ///
     /// If the level name matches the cached one, this is a no-op.  Otherwise
     /// the grid and visibility map are rebuilt from scratch.
-    pub fn ensure_grid(&mut self, level: &Level) {
+    pub(crate) fn ensure_grid(&mut self, level: &Level) {
         if self.tile_grid.is_some() && self.cached_level_name == level.name {
             return;
         }
@@ -64,7 +64,7 @@ impl CogmindState {
     ///
     /// Uses the level's REJECT table to determine which sectors are visible
     /// from the player's sector.
-    pub fn update_visibility(&mut self, player_sector: usize, level: &Level) {
+    pub(crate) fn update_visibility(&mut self, player_sector: usize, level: &Level) {
         let Some(vis) = self.visibility.as_mut() else {
             return;
         };
@@ -84,7 +84,7 @@ impl CogmindState {
     ///
     /// The viewport is centered on the player.  Each terminal cell maps to a
     /// `CELL_SIZE x CELL_SIZE` region of map space.
-    pub fn render_frame(
+    pub(crate) fn render_frame(
         &mut self,
         gs: &GameState,
         level: &Level,

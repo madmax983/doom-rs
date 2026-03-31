@@ -24,31 +24,31 @@ use std::path::Path;
 
 /// Fixed-layout header written at the start of every doom-rs save file.
 #[derive(Debug, bincode::Encode, bincode::Decode)]
-pub struct SaveHeader {
+pub(crate) struct SaveHeader {
     /// Magic bytes — must equal [`SaveHeader::MAGIC`] (`b"DOOM"`).
-    pub magic: [u8; 4],
+    pub(crate) magic: [u8; 4],
     /// Save file format version — must equal [`SaveHeader::VERSION`] (`1`).
-    pub version: u32,
+    pub(crate) version: u32,
     /// Save slot (0-7).
-    pub slot: u8,
+    pub(crate) slot: u8,
     /// Null-padded ASCII description string (max 23 visible characters).
-    pub description: [u8; 24],
+    pub(crate) description: [u8; 24],
     /// Game tic at the time the save was written.
-    pub tic_num: u32,
+    pub(crate) tic_num: u32,
 }
 
 impl SaveHeader {
     /// Magic bytes identifying a doom-rs save file.
-    pub const MAGIC: [u8; 4] = *b"DOOM";
+    pub(crate) const MAGIC: [u8; 4] = *b"DOOM";
 
     /// Current save file format version.
-    pub const VERSION: u32 = 1;
+    pub(crate) const VERSION: u32 = 1;
 
     /// Create a new header for the given slot and tic number.
     ///
     /// `desc` is truncated to 23 bytes if longer; the remainder is
     /// null-padded to fill the 24-byte fixed field.
-    pub fn new(slot: u8, tic_num: u32, desc: &str) -> Self {
+    pub(crate) fn new(slot: u8, tic_num: u32, desc: &str) -> Self {
         let mut description = [0u8; 24];
         let mut len = 0;
         for ch in desc.chars() {
@@ -72,7 +72,7 @@ impl SaveHeader {
     ///
     /// Returns `"?"` if the bytes are not valid UTF-8.
     #[cfg(test)]
-    pub fn description_str(&self) -> &str {
+    pub(crate) fn description_str(&self) -> &str {
         let end = self.description.iter().position(|&b| b == 0).unwrap_or(24);
         std::str::from_utf8(&self.description[..end]).unwrap_or("?")
     }
@@ -89,44 +89,44 @@ impl SaveHeader {
 /// the player directly experiences.  On load, the world is re-initialized to
 /// map defaults and only player inventory/position is restored.
 #[derive(Debug, bincode::Encode, bincode::Decode)]
-pub struct SavePayload {
+pub(crate) struct SavePayload {
     /// Game tic at save time (mirrors [`SaveHeader::tic_num`]).
-    pub tic_num: u32,
+    pub(crate) tic_num: u32,
 
     /// RNG table index (0-255) for deterministic replay continuation.
-    pub rng_index: u32,
+    pub(crate) rng_index: u32,
 
     // --- Player position (extracted from the player Mobj) ---
     /// Player X position in map units (truncated from Fixed16_16).
-    pub player_x: i32,
+    pub(crate) player_x: i32,
     /// Player Y position in map units (truncated from Fixed16_16).
-    pub player_y: i32,
+    pub(crate) player_y: i32,
     /// Player facing angle as a raw 32-bit BAM value.
-    pub player_angle: u32,
+    pub(crate) player_angle: u32,
 
     // --- Inventory ---
     /// Player health points.
-    pub player_health: i32,
+    pub(crate) player_health: i32,
     /// Player armor points.
-    pub player_armor: i32,
+    pub(crate) player_armor: i32,
     /// Armor type (0 = none, 1 = green, 2 = blue).
-    pub player_armor_type: u8,
+    pub(crate) player_armor_type: u8,
     /// Ammo pools: [Bullets, Shells, Cells, Rockets] (NUM_AMMO = 4).
-    pub player_ammo: [u32; 4],
+    pub(crate) player_ammo: [u32; 4],
     /// Bitmask of owned weapons (bit i = `weapons[i]` is true).
-    pub player_weapons: u64,
+    pub(crate) player_weapons: u64,
     /// Collected key bitmask.
-    pub player_keys: u8,
+    pub(crate) player_keys: u8,
     /// Currently active weapon index (as `WeaponType as u8`).
-    pub active_weapon: u8,
+    pub(crate) active_weapon: u8,
 
     // --- Statistics (placeholder) ---
     /// Kill count at save time.
-    pub kill_count: u32,
+    pub(crate) kill_count: u32,
     /// Item count at save time.
-    pub item_count: u32,
+    pub(crate) item_count: u32,
     /// Secret count at save time.
-    pub secret_count: u32,
+    pub(crate) secret_count: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -135,7 +135,7 @@ pub struct SavePayload {
 
 /// Errors that can occur during save/load operations.
 #[derive(Debug, thiserror::Error)]
-pub enum SaveError {
+pub(crate) enum SaveError {
     /// Underlying I/O error (file not found, permission denied, etc.).
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -169,7 +169,7 @@ pub enum SaveError {
 /// Returns [`SaveError::Io`] on file write failure.
 /// Returns [`SaveError::Encode`] if bincode encoding fails (should not happen
 /// for well-formed data).
-pub fn save_game(path: &Path, gs: &GameState, slot: u8) -> Result<(), SaveError> {
+pub(crate) fn save_game(path: &Path, gs: &GameState, slot: u8) -> Result<(), SaveError> {
     let header = SaveHeader::new(slot, gs.tic_num, &format!("Slot {slot}"));
     let payload = build_payload(gs);
 
@@ -198,7 +198,7 @@ pub fn save_game(path: &Path, gs: &GameState, slot: u8) -> Result<(), SaveError>
 /// Returns [`SaveError::Decode`] if the binary format is malformed.
 /// Returns [`SaveError::BadMagic`] if the file lacks the `b"DOOM"` signature.
 /// Returns [`SaveError::BadVersion`] for an unsupported version number.
-pub fn load_game(path: &Path) -> Result<(SaveHeader, SavePayload), SaveError> {
+pub(crate) fn load_game(path: &Path) -> Result<(SaveHeader, SavePayload), SaveError> {
     let data = std::fs::read(path)?;
     let config = bincode::config::standard();
 
@@ -231,7 +231,7 @@ pub fn load_game(path: &Path) -> Result<(SaveHeader, SavePayload), SaveError> {
 /// # Errors
 /// Currently always returns `Ok(())`.  The `Result` return is reserved for
 /// future validation (e.g. level mismatch checks).
-pub fn apply_save(gs: &mut GameState, payload: &SavePayload) -> Result<(), SaveError> {
+pub(crate) fn apply_save(gs: &mut GameState, payload: &SavePayload) -> Result<(), SaveError> {
     // Restore simulation state.
     gs.tic_num = payload.tic_num;
     gs.rng.set_index(payload.rng_index);

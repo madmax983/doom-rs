@@ -5,3 +5,6 @@
 **[Hide internal renderer modules]**
 **Tangle:** The `doom-renderer` crate leaked internal constant modules `automap_colors` and `menu_colors` as `pub mod`s in `automap.rs` and `menu_render.rs` and re-exported them in `lib.rs` even though they are only used internally within the renderer for the GUI.
 **Blueprint:** Altered the visibility of these modules to `pub(crate)` and removed them from the crate's `pub use` interface. Added `#[allow(dead_code)]` to bypass rustc warning of `pub` items missing callers since they are now module-private yet some constants are unimplemented but part of a well-defined palette standard. This ensures strict internal encapsulation.
+**[Title: Encapsulate `doom-app` public API]
+**Tangle:** The `doom-app` crate, which is the final executable binary, was exposing `pub` types, structs, enums, functions, and modules, acting like a library instead of an application boundary.
+**Blueprint:** Refactored all `pub` items to `pub(crate)` within `doom-app` to strictly enforce the domain boundary and prevent accidental external usage.

@@ -11,7 +11,7 @@ use doom_game::MobjKind;
 
 /// Classification of a map tile for rendering purposes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum TileKind {
+pub(crate) enum TileKind {
     Floor,
     Wall,
     DoorClosed,
@@ -31,10 +31,10 @@ pub type Rgb = (u8, u8, u8);
 
 /// A single tile's visual representation: character + foreground/background.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TileGlyph {
-    pub glyph: char,
-    pub fg: Rgb,
-    pub bg: Rgb,
+pub(crate) struct TileGlyph {
+    pub(crate) glyph: char,
+    pub(crate) fg: Rgb,
+    pub(crate) bg: Rgb,
 }
 
 // ---------------------------------------------------------------------------
@@ -43,7 +43,7 @@ pub struct TileGlyph {
 
 /// Return the base glyph for a map tile.
 #[must_use]
-pub fn tile_glyph(kind: TileKind) -> TileGlyph {
+pub(crate) fn tile_glyph(kind: TileKind) -> TileGlyph {
     match kind {
         TileKind::Floor | TileKind::DoorOpen => TileGlyph {
             glyph: '\u{00B7}', // ·
@@ -89,7 +89,7 @@ pub fn tile_glyph(kind: TileKind) -> TileGlyph {
 
 /// Returns `true` if the given `MobjKind` is a monster (not the player).
 #[must_use]
-pub fn is_monster(kind: MobjKind) -> bool {
+pub(crate) fn is_monster(kind: MobjKind) -> bool {
     matches!(
         kind,
         MobjKind::Trooper
@@ -123,7 +123,7 @@ pub fn is_monster(kind: MobjKind) -> bool {
 /// Dead monsters (health <= 0) display as corpses (`%`). The player is never
 /// treated as a "monster" corpse even when dead.
 #[must_use]
-pub fn entity_glyph(kind: MobjKind, health: i32) -> TileGlyph {
+pub(crate) fn entity_glyph(kind: MobjKind, health: i32) -> TileGlyph {
     // Dead monster corpse
     if health <= 0 && is_monster(kind) {
         return TileGlyph {
@@ -279,7 +279,7 @@ pub fn entity_glyph(kind: MobjKind, health: i32) -> TileGlyph {
 /// Bit layout: 0 = north, 1 = east, 2 = south, 3 = west.
 /// A set bit means the neighbor in that direction is also a wall.
 #[must_use]
-pub fn wall_glyph(neighbors: u8) -> char {
+pub(crate) fn wall_glyph(neighbors: u8) -> char {
     match neighbors & 0x0F {
         0b0000 => '\u{2588}', // █  isolated
         0b0001 => '\u{2551}', // ║  dead end north
@@ -307,7 +307,7 @@ pub fn wall_glyph(neighbors: u8) -> char {
 
 /// Scale an RGB color by a light level (0..=255).
 #[must_use]
-pub fn apply_light(color: Rgb, light: u8) -> Rgb {
+pub(crate) fn apply_light(color: Rgb, light: u8) -> Rgb {
     let l = u16::from(light);
     (
         (u16::from(color.0) * l / 255) as u8,
@@ -318,7 +318,7 @@ pub fn apply_light(color: Rgb, light: u8) -> Rgb {
 
 /// Desaturate and dim a color to ~40% brightness for "remembered" fog-of-war.
 #[must_use]
-pub fn dim_remembered(color: Rgb) -> Rgb {
+pub(crate) fn dim_remembered(color: Rgb) -> Rgb {
     // Convert to grayscale via luminance weights (approx ITU-R BT.601),
     // then scale to 40%.
     let gray = (u16::from(color.0) * 77 + u16::from(color.1) * 150 + u16::from(color.2) * 29) / 256;
@@ -332,7 +332,7 @@ pub fn dim_remembered(color: Rgb) -> Rgb {
 
 /// Classify a sector's floor type based on its `special` field.
 #[must_use]
-pub fn sector_floor_kind(special: u16) -> TileKind {
+pub(crate) fn sector_floor_kind(special: u16) -> TileKind {
     match special {
         5 | 7 | 16 => TileKind::Nukage,
         4 | 11 => TileKind::Lava,
