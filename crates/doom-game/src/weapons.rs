@@ -759,7 +759,15 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
         // Deterministic damage: vary by pellet index and tic_num.
         let damage = damage_lo + ((tic.wrapping_add(i as u32)) % damage_range) as i32;
 
-        p_line_attack(gs, handle, shot_angle, range, damage, level, &mut intercepts);
+        p_line_attack(
+            gs,
+            handle,
+            shot_angle,
+            range,
+            damage,
+            level,
+            &mut intercepts,
+        );
     }
 }
 

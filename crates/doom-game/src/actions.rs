@@ -1796,7 +1796,9 @@ fn a_vile_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 /// First attack frame: sets the Arch-Vile's tracer to its current target
 /// so `A_Fire` knows whom to track.
 fn a_vile_start(gs: &mut GameState, handle: MobjHandle) {
-    let Some(mo) = gs.mobjslab.get(handle) else { return };
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
+    };
     if mo.target == MobjHandle::NULL {
         return;
     }

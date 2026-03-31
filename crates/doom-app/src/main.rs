@@ -10,6 +10,8 @@ mod demo_mode;
 mod export_stats;
 mod net_mode;
 mod savegame;
+#[cfg(feature = "wad-explorer")]
+mod wad_explorer;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -169,6 +171,11 @@ struct Args {
     /// Export the total map statistics (kills, items, secrets, par time) to a JSON file and exit.
     #[arg(long)]
     export_map_stats: Option<std::path::PathBuf>,
+
+    /// Open the interactive TUI WAD Explorer.
+    #[cfg(feature = "wad-explorer")]
+    #[arg(long)]
+    explore_wad: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -1951,6 +1958,13 @@ fn run_doom() -> Result<()> {
     }
 
     // Build the PLAYPAL blit palette (for terminal RGB conversion).
+
+    #[cfg(feature = "wad-explorer")]
+    if args.explore_wad {
+        wad_explorer::run_explorer(&wad_stack)?;
+        return Ok(());
+    }
+
     let blit_palette = match wad_stack.lump_data("PLAYPAL") {
         Some(data) => PaletteLut::from_playpal(data).unwrap_or_else(|_| PaletteLut::grayscale()),
         None => PaletteLut::grayscale(),

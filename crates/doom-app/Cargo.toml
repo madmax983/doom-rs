@@ -8,8 +8,8 @@ name = "doom-app"
 path = "src/main.rs"
 
 [dependencies]
-ratatui = { workspace = true }
-crossterm = { workspace = true }
+ratatui = { workspace = true, optional = true }
+crossterm = { workspace = true, optional = true }
 doom-types    = { workspace = true }
 doom-wad      = { workspace = true }
 doom-map      = { workspace = true }
@@ -31,3 +31,4 @@ loom = "0.7"
 
 [features]
 loom = ["dep:loom", "doom-audio/loom"]
+wad-explorer = ["dep:ratatui", "dep:crossterm"]
