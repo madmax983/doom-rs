@@ -23,19 +23,35 @@ use super::visibility::{SectorVisibility, VisibilityMap};
 ///
 /// Caches the tile grid and visibility map for the current level, rebuilding
 /// them only when the level changes.
+#[doc(alias = "cogmind")]
+#[doc(alias = "roguelike")]
 pub struct CogmindState {
     /// Tile grid for the current level (lazily built).
+    #[doc(hidden)]
     pub tile_grid: Option<TileGrid>,
     /// Per-sector visibility map (lazily built).
+    #[doc(hidden)]
     pub visibility: Option<VisibilityMap>,
     /// Name of the level the cached grid was built for.
     cached_level_name: String,
     /// Particle effect layer (combat debris, projectile trails, dust).
+    #[doc(hidden)]
     pub effects: EffectLayer,
 }
 
 impl CogmindState {
     /// Create a new state with no cached data.
+    ///
+    /// The actual grid and visibility maps remain empty until the first time
+    /// [`CogmindState::ensure_grid`] is called with a loaded `Level`.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_app::cogmind::CogmindState;
+    ///
+    /// let state = CogmindState::new();
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -48,8 +64,37 @@ impl CogmindState {
 
     /// Ensure the tile grid and visibility map are built for the given level.
     ///
-    /// If the level name matches the cached one, this is a no-op.  Otherwise
-    /// the grid and visibility map are rebuilt from scratch.
+    /// Because BSP-to-grid rasterization is expensive, `CogmindState` caches the
+    /// results. If the provided `Level::name` matches the cached one, this is a no-op.
+    /// Otherwise, the previous grid is discarded and a new one is built from scratch.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// # use doom_app::cogmind::CogmindState;
+    /// # use doom_map::{Level, Blockmap, Reject};
+    /// # let mut bm_data = vec![0u8; 14];
+    /// # bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+    /// # bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+    /// # bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+    /// # bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+    /// # bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+    /// # let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+    /// # let reject = Reject::parse_lump(&[0u8], 0).unwrap();
+    /// # let level = Level {
+    /// #     name: "E1M1".to_string(),
+    /// #     things: vec![], linedefs: vec![], sidedefs: vec![], vertexes: vec![],
+    /// #     segs: vec![], ssectors: vec![], nodes: vec![], sectors: vec![],
+    /// #     reject, blockmap,
+    /// # };
+    /// let mut state = CogmindState::new();
+    ///
+    /// // First call builds the grid:
+    /// state.ensure_grid(&level);
+    ///
+    /// // Second call with the same level is instant:
+    /// state.ensure_grid(&level);
+    /// ```
     pub fn ensure_grid(&mut self, level: &Level) {
         if self.tile_grid.is_some() && self.cached_level_name == level.name {
             return;
@@ -63,7 +108,38 @@ impl CogmindState {
     /// Update the visibility map based on the player's current sector.
     ///
     /// Uses the level's REJECT table to determine which sectors are visible
-    /// from the player's sector.
+    /// from the player's sector. Visible sectors are fully lit based on their
+    /// `light_level`. Previously seen sectors are "remembered" and dimmed (Fog of War).
+    ///
+    /// ## Edge Cases
+    ///
+    /// Does nothing if [`CogmindState::ensure_grid`] has not been called yet.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// # use doom_app::cogmind::CogmindState;
+    /// # use doom_map::{Level, Blockmap, Reject};
+    /// # let mut bm_data = vec![0u8; 14];
+    /// # bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+    /// # bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+    /// # bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+    /// # bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+    /// # bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+    /// # let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+    /// # let reject = Reject::parse_lump(&[0u8], 0).unwrap();
+    /// # let level = Level {
+    /// #     name: "E1M1".to_string(),
+    /// #     things: vec![], linedefs: vec![], sidedefs: vec![], vertexes: vec![],
+    /// #     segs: vec![], ssectors: vec![], nodes: vec![], sectors: vec![],
+    /// #     reject, blockmap,
+    /// # };
+    /// let mut state = CogmindState::new();
+    /// state.ensure_grid(&level);
+    ///
+    /// // Mark sectors visible from sector index 0
+    /// state.update_visibility(0, &level);
+    /// ```
     pub fn update_visibility(&mut self, player_sector: usize, level: &Level) {
         let Some(vis) = self.visibility.as_mut() else {
             return;
@@ -82,8 +158,44 @@ impl CogmindState {
 
     /// Composite tiles, visibility, and entities into a [`CogmindFrame`].
     ///
-    /// The viewport is centered on the player.  Each terminal cell maps to a
-    /// `CELL_SIZE x CELL_SIZE` region of map space.
+    /// The viewport is automatically centered on the player. Each terminal cell
+    /// maps to a `CELL_SIZE x CELL_SIZE` region of map space. The resulting frame
+    /// can be directly drawn to the screen by a TUI driver.
+    ///
+    /// ## Returns
+    ///
+    /// A [`CogmindFrame`] populated with styled ASCII cells. If [`CogmindState::ensure_grid`]
+    /// hasn't been called, returns an empty (blank) frame of the requested dimensions.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// # use doom_app::cogmind::CogmindState;
+    /// # use doom_map::{Level, Blockmap, Reject};
+    /// # use doom_game::GameState;
+    /// # let mut bm_data = vec![0u8; 14];
+    /// # bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+    /// # bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+    /// # bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+    /// # bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+    /// # bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+    /// # let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+    /// # let reject = Reject::parse_lump(&[0u8], 0).unwrap();
+    /// # let level = Level {
+    /// #     name: "E1M1".to_string(),
+    /// #     things: vec![], linedefs: vec![], sidedefs: vec![], vertexes: vec![],
+    /// #     segs: vec![], ssectors: vec![], nodes: vec![], sectors: vec![],
+    /// #     reject, blockmap,
+    /// # };
+    /// # let gs = GameState::new("E1M1");
+    /// let mut state = CogmindState::new();
+    /// state.ensure_grid(&level);
+    ///
+    /// // Render a frame for a typical 80x24 terminal
+    /// let frame = state.render_frame(&gs, &level, 80, 24);
+    /// assert_eq!(frame.width(), 80);
+    /// assert_eq!(frame.height(), 24);
+    /// ```
     pub fn render_frame(
         &mut self,
         gs: &GameState,
