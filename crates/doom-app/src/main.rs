@@ -242,7 +242,7 @@ pub(crate) struct DoomGame {
     /// First-person weapon bob/raise/flash controller.
     weapon_anim: WeaponAnimState,
     /// Cogmind-mode rendering state (tile grid + visibility cache).
-    cogmind_state: cogmind::render::CogmindState,
+    cogmind_state: cogmind::CogmindState,
 }
 
 const DEAD_PLAYER_VIEW_HEIGHT: i32 = 6;
@@ -333,7 +333,7 @@ impl DoomGame {
             intermission_renderer: None,
             transition_buttons_down: 0,
             weapon_anim: WeaponAnimState::new(),
-            cogmind_state: cogmind::render::CogmindState::new(),
+            cogmind_state: cogmind::CogmindState::new(),
         };
 
         game.reset_weapon_anim();
