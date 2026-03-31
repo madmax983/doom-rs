@@ -674,15 +674,15 @@ impl DehPatch {
                 count += 1;
             }
             if let Some(sp) = patch.speed {
-                info.speed = Fixed16_16(sp << 16);
+                info.speed = Fixed16_16(sp.saturating_mul(65536));
                 count += 1;
             }
             if let Some(r) = patch.radius {
-                info.radius = Fixed16_16(r << 16);
+                info.radius = Fixed16_16(r.saturating_mul(65536));
                 count += 1;
             }
             if let Some(h) = patch.height {
-                info.height = Fixed16_16(h << 16);
+                info.height = Fixed16_16(h.saturating_mul(65536));
                 count += 1;
             }
             if let Some(m) = patch.mass {
@@ -1490,5 +1490,29 @@ mod proptests {
         fn parser_does_not_panic(s in "\\PC*") {
             let _ = DehPatch::parse(&s);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests_deh_havoc {
+    use super::*;
+    use crate::mobjinfo::MOBJINFO;
+    use crate::states::STATES;
+
+    #[test]
+    fn deh_apply_extreme_values_no_panic() {
+        let input = "Thing 1\nSpeed = 2147483647\nRadius = 2147483647\nHeight = 2147483647\n";
+        let patch = DehPatch::parse(input).expect("parse");
+
+        let mut mobjinfo: Vec<MobjInfo> = MOBJINFO.to_vec();
+        let mut states: Vec<MobjStateEntry> = STATES.to_vec();
+
+        // This should not panic due to overflow
+        patch.apply(&mut mobjinfo, &mut states).expect("apply");
+
+        // Values should be clamped using saturating_mul
+        assert_eq!(mobjinfo[0].speed.0, 2147483647i32.saturating_mul(65536));
+        assert_eq!(mobjinfo[0].radius.0, 2147483647i32.saturating_mul(65536));
+        assert_eq!(mobjinfo[0].height.0, 2147483647i32.saturating_mul(65536));
     }
 }
