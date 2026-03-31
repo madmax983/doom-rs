@@ -321,18 +321,11 @@ fn read_weapon_type(r: &mut ReadCursor<'_>) -> Result<WeaponType, SaveError> {
 }
 
 fn write_move_direction(w: &mut WriteCursor, d: MoveDirection) {
-    match d {
-        MoveDirection::Up => w.write_u8(0),
-        MoveDirection::Down => w.write_u8(1),
-    }
+    w.write_u8(d as u8);
 }
 
 fn read_move_direction(r: &mut ReadCursor<'_>) -> Result<MoveDirection, SaveError> {
-    match r.read_u8()? {
-        0 => Ok(MoveDirection::Up),
-        1 => Ok(MoveDirection::Down),
-        _ => Err(SaveError::Truncated),
-    }
+    MoveDirection::from_repr(r.read_u8()?).ok_or(SaveError::Truncated)
 }
 
 // ---------------------------------------------------------------------------
@@ -701,12 +694,7 @@ fn write_platform_status(w: &mut WriteCursor, status: PlatformStatus) {
 }
 
 fn read_platform_status(r: &mut ReadCursor<'_>) -> Result<PlatformStatus, SaveError> {
-    match r.read_u8()? {
-        0 => Ok(PlatformStatus::Up),
-        1 => Ok(PlatformStatus::Down),
-        2 => Ok(PlatformStatus::Waiting),
-        _ => Err(SaveError::Truncated),
-    }
+    PlatformStatus::from_repr(r.read_u8()?).ok_or(SaveError::Truncated)
 }
 
 fn write_perpetual_platform(w: &mut WriteCursor, p: &PerpetualPlatform) {
@@ -744,13 +732,7 @@ fn write_lift_status(w: &mut WriteCursor, status: LiftStatus) {
 }
 
 fn read_lift_status(r: &mut ReadCursor<'_>) -> Result<LiftStatus, SaveError> {
-    match r.read_u8()? {
-        0 => Ok(LiftStatus::Lowering),
-        1 => Ok(LiftStatus::Waiting),
-        2 => Ok(LiftStatus::Raising),
-        3 => Ok(LiftStatus::Done),
-        _ => Err(SaveError::Truncated),
-    }
+    LiftStatus::from_repr(r.read_u8()?).ok_or(SaveError::Truncated)
 }
 
 fn write_lift_mover(w: &mut WriteCursor, lm: &LiftMover) {
@@ -872,8 +854,7 @@ pub fn save_game(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &
     // --- Exit request ---
     match gs.exit_request {
         None => w.write_u8(0),
-        Some(ExitRequest::Normal) => w.write_u8(1),
-        Some(ExitRequest::Secret) => w.write_u8(2),
+        Some(req) => w.write_u8(req as u8 + 1),
     }
 
     // --- Door movers ---
@@ -1009,9 +990,7 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     // --- Exit request ---
     let exit_request = match r.read_u8()? {
         0 => None,
-        1 => Some(ExitRequest::Normal),
-        2 => Some(ExitRequest::Secret),
-        _ => return Err(SaveError::Truncated),
+        disc => Some(ExitRequest::from_repr(disc - 1).ok_or(SaveError::Truncated)?),
     };
 
     // --- Door movers ---

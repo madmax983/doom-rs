@@ -81,7 +81,8 @@ pub enum SoundRequest {
 /// Set by `activate_linedef` when a switch or walk-trigger exit line is
 /// activated.  Cleared to `None` at the start of each tick so the caller
 /// can observe it exactly once.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum ExitRequest {
     /// Normal exit (next sequential map).
     Normal,
@@ -124,7 +125,8 @@ pub struct DoorMover {
 // ---------------------------------------------------------------------------
 
 /// Direction a ceiling or floor is currently moving.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum MoveDirection {
     Up,
     Down,
@@ -248,7 +250,8 @@ pub struct FloorMover {
 // ---------------------------------------------------------------------------
 
 /// Current movement status of a perpetual platform.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum PlatformStatus {
     /// Platform is moving upward.
     Up,
@@ -288,7 +291,8 @@ pub struct PerpetualPlatform {
 // ---------------------------------------------------------------------------
 
 /// Current movement status of a lift.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
 pub enum LiftStatus {
     /// Lift floor is lowering toward `low_height`.
     Lowering,
