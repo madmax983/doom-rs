@@ -5,3 +5,7 @@
 **[Hide internal renderer modules]**
 **Tangle:** The `doom-renderer` crate leaked internal constant modules `automap_colors` and `menu_colors` as `pub mod`s in `automap.rs` and `menu_render.rs` and re-exported them in `lib.rs` even though they are only used internally within the renderer for the GUI.
 **Blueprint:** Altered the visibility of these modules to `pub(crate)` and removed them from the crate's `pub use` interface. Added `#[allow(dead_code)]` to bypass rustc warning of `pub` items missing callers since they are now module-private yet some constants are unimplemented but part of a well-defined palette standard. This ensures strict internal encapsulation.
+
+**[Enforce Crate Facade Boundaries]**
+**Tangle:** The `doom-demo` and `doom-wad` crates exposed their internal modules (`header`, `player`, `recorder`, `ticcmd` and `lump`, `stack`, `wad` respectively) using `pub mod`, potentially leaking internal implementations to other crates and encouraging tight coupling to internal structure rather than the intended public API.
+**Blueprint:** Altered the visibility of these internal modules from `pub mod` to `pub(crate) mod` in their respective `lib.rs` files. This enforces the "Facade" pattern, ensuring that external consumers can only access the types explicitly re-exported (`pub use`) at the crate root, thus preventing leaky abstractions and reducing cross-crate coupling.
