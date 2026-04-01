@@ -192,7 +192,18 @@ pub(crate) fn run_server(port: u16) -> Result<()> {
                     let items: Vec<ListItem> = logs
                         .iter()
                         .rev()
-                        .map(|msg| ListItem::new(Span::raw(msg)))
+                        .map(|msg| {
+                            let style = if msg.starts_with("Server poll error") {
+                                Style::default().fg(Color::Red)
+                            } else if msg.starts_with("Connected players") {
+                                Style::default().fg(Color::Cyan)
+                            } else if msg.starts_with("doom-rs relay server") {
+                                Style::default().fg(Color::Magenta)
+                            } else {
+                                Style::default()
+                            };
+                            ListItem::new(Span::styled(msg, style))
+                        })
                         .collect();
                     let list = List::new(items).block(
                         Block::default()

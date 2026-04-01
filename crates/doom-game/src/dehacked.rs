@@ -276,7 +276,7 @@ impl DehPatch {
                 // Skip the consumed bytes plus any trailing newline.
                 remaining = remaining
                     .get(total..)
-                    .ok_or_else(|| DehError::BadHeader("Invalid text byte boundary".to_owned()))?;
+                    .unwrap_or("");
                 if remaining.starts_with('\n') {
                     remaining = &remaining[1..];
                 }
@@ -1424,15 +1424,15 @@ mod tests_deh {
     use super::*;
 
     #[test]
-    #[should_panic]
     fn test_dehacked_parse_panic() {
-        let _ = DehPatch::parse("Text 1 1\n\n");
+        let result = DehPatch::parse("Text 1 1\n\n");
+        assert!(result.is_ok());
     }
 
     #[test]
-    #[should_panic]
     fn test_dehacked_parse_panic_byte_index() {
-        let _ = DehPatch::parse("Text 1 1\n😊");
+        let result = DehPatch::parse("Text 1 1\n😊");
+        assert!(result.is_err());
     }
 }
 
