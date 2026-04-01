@@ -4,10 +4,11 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-doom-types = { workspace = true }
-doom-wad   = { workspace = true }
-thiserror  = { workspace = true }
-nom        = { workspace = true }
+doom-types  = { workspace = true }
+doom-wad    = { workspace = true }
+thiserror   = { workspace = true }
+nom         = { workspace = true }
+comfy-table = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

@@ -51,11 +51,12 @@ crc32fast = "1"
 nom = "7"
 
 # Data / Error
-serde     = { version = "1", features = ["derive"] }
-thiserror = "2"
-anyhow    = "1"
-bytemuck  = { version = "1", features = ["derive"] }
-clap      = { version = "4", features = ["derive"] }
+serde       = { version = "1", features = ["derive"] }
+thiserror   = "2"
+anyhow      = "1"
+bytemuck    = { version = "1", features = ["derive"] }
+clap        = { version = "4", features = ["derive"] }
+comfy-table = "7"
 
 # Testing / Benchmarks
 proptest  = "1"

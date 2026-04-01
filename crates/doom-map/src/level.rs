@@ -455,23 +455,34 @@ impl Level {
             .position(|candidate| core::ptr::eq(candidate, ssector))
     }
 
-    /// Print a one-line geometry summary (used by the Phase 3 CLI gate).
+    /// Print a formatted geometry summary table to stdout.
     pub fn print_stats(&self) {
+        use comfy_table::modifiers::UTF8_ROUND_CORNERS;
+        use comfy_table::presets::UTF8_FULL;
+        use comfy_table::{Cell, Color, Table};
+
         let bsp = self.bsp();
-        println!(
-            "Level {}: {} things, {} linedefs, {} sidedefs, {} vertexes, \
-             {} sectors, {} segs, {} ssectors, {} nodes (BSP depth {})",
-            self.name,
-            self.things.len(),
-            self.linedefs.len(),
-            self.sidedefs.len(),
-            self.vertexes.len(),
-            self.sectors.len(),
-            self.segs.len(),
-            self.ssectors.len(),
-            self.nodes.len(),
-            bsp.max_depth(),
-        );
+
+        let mut table = Table::new();
+        table
+            .load_preset(UTF8_FULL)
+            .apply_modifier(UTF8_ROUND_CORNERS)
+            .set_header(vec![
+                Cell::new("Level Map").fg(Color::Cyan),
+                Cell::new(&self.name).fg(Color::White),
+            ]);
+
+        table.add_row(vec!["Things", &self.things.len().to_string()]);
+        table.add_row(vec!["Linedefs", &self.linedefs.len().to_string()]);
+        table.add_row(vec!["Sidedefs", &self.sidedefs.len().to_string()]);
+        table.add_row(vec!["Vertexes", &self.vertexes.len().to_string()]);
+        table.add_row(vec!["Sectors", &self.sectors.len().to_string()]);
+        table.add_row(vec!["Segs", &self.segs.len().to_string()]);
+        table.add_row(vec!["Ssectors", &self.ssectors.len().to_string()]);
+        table.add_row(vec!["Nodes", &self.nodes.len().to_string()]);
+        table.add_row(vec!["BSP Depth", &bsp.max_depth().to_string()]);
+
+        println!("{table}");
     }
 }
 
