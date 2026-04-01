@@ -22,8 +22,20 @@ pub enum SaveError {
     Io(#[from] std::io::Error),
 
     /// Failed to encode game state to bytes.
+    ///
+    /// This error could be raised when the internal logic fails to serialize
+    /// the game state properly into the deterministic binary format.
+    #[allow(dead_code)]
+    #[error("failed to encode save game")]
+    Encode,
 
     /// Failed to decode bytes into game state.
+    ///
+    /// The binary format might be malformed or it failed to reconstruct
+    /// valid engine structures from the byte stream.
+    #[allow(dead_code)]
+    #[error("failed to decode save game")]
+    Decode,
 
     /// File does not start with the `b"DRS1"` magic bytes.
     #[error("invalid save file magic")]
