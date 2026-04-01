@@ -231,6 +231,35 @@ impl core::fmt::Display for Bam {
 mod tests {
     use super::*;
 
+    static INIT: std::sync::Once = std::sync::Once::new();
+
+    fn ensure_trig_init() {
+        INIT.call_once(|| unsafe {
+            Bam::init_trig_tables();
+        });
+    }
+
+    #[test]
+    fn bam_raw_returns_internal_value() {
+        let a = Bam::from_raw(0xDEAD_BEEF);
+        assert_eq!(a.raw(), 0xDEAD_BEEF);
+    }
+
+    #[test]
+    fn sin_cos_before_and_after_init() {
+        // We can't guarantee before init because tests run in parallel,
+        // but we can ensure it returns something sane after init.
+        ensure_trig_init();
+        let sin90 = ANG90.sin();
+        assert_eq!(sin90.to_int(), 1); // sin(90) = 1.0
+
+        let cos0 = Bam::ZERO.cos();
+        assert_eq!(cos0.to_int(), 1); // cos(0) = 1.0
+
+        let cos180 = ANG180.cos();
+        assert_eq!(cos180.to_int(), -1); // cos(180) = -1.0
+    }
+
     #[test]
     fn ang90_plus_ang90_is_ang180() {
         assert_eq!(ANG90 + ANG90, ANG180);
