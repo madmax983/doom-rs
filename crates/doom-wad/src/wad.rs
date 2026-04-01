@@ -769,4 +769,60 @@ mod tests {
             .collect();
         assert_eq!(flats, vec!["FLAT1", "FLAT2"]);
     }
+
+    #[test]
+    fn parse_rejects_negative_lump_count() {
+        let mut data = make_iwad(&[]);
+        data[4..8].copy_from_slice(&(-1i32).to_le_bytes());
+        match WadFile::parse(data) {
+            Err(WadError::NegativeLumpCount(-1)) => {}
+            _ => panic!("Expected NegativeLumpCount"),
+        }
+    }
+
+    #[test]
+    fn parse_rejects_negative_directory_offset() {
+        let mut data = make_iwad(&[]);
+        data[8..12].copy_from_slice(&(-1i32).to_le_bytes());
+        match WadFile::parse(data) {
+            Err(WadError::DirectoryOutOfBounds { .. }) => {}
+            _ => panic!("Expected DirectoryOutOfBounds for negative offset"),
+        }
+    }
+
+    #[test]
+    fn parse_rejects_out_of_bounds_directory() {
+        let mut data = make_iwad(&[]);
+        data[8..12].copy_from_slice(&99999i32.to_le_bytes());
+        match WadFile::parse(data) {
+            Err(WadError::DirectoryOutOfBounds { offset: 99999, .. }) => {}
+            _ => panic!("Expected DirectoryOutOfBounds"),
+        }
+    }
+
+    #[test]
+    fn parse_rejects_out_of_bounds_lump() {
+        let mut data = make_iwad(&[("TEST", b"123")]);
+        let dir_offset = i32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
+        data[dir_offset..dir_offset + 4].copy_from_slice(&99999i32.to_le_bytes());
+        match WadFile::parse(data) {
+            Err(WadError::LumpOutOfBounds { name, .. }) => {
+                assert_eq!(name.as_str(), "TEST");
+            }
+            res => panic!("Expected LumpOutOfBounds, got {:?}", res),
+        }
+    }
+
+    #[test]
+    fn parse_rejects_malformed_lump() {
+        let mut data = make_iwad(&[("TEST", b"123")]);
+        let dir_offset = i32::from_le_bytes(data[8..12].try_into().unwrap()) as usize;
+        data[dir_offset..dir_offset + 4].copy_from_slice(&(-1i32).to_le_bytes());
+        match WadFile::parse(data) {
+            Err(WadError::LumpNegativeField { name, .. }) => {
+                assert_eq!(name.as_str(), "TEST");
+            }
+            res => panic!("Expected LumpNegativeField, got {:?}", res),
+        }
+    }
 }

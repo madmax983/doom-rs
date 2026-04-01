@@ -414,4 +414,53 @@ mod tests {
             _ => panic!("Expected Classic map lump group"),
         }
     }
+
+    #[test]
+    fn stack_wad_count() {
+        let mut stack = WadStack::new();
+        assert_eq!(stack.wad_count(), 0);
+        let iwad = make_wad(b"IWAD", &[("PLAYPAL", b"123")]);
+        stack.push_iwad(iwad).unwrap();
+        assert_eq!(stack.wad_count(), 1);
+    }
+
+    #[test]
+    fn stack_map_lump_group() {
+        let mut stack = WadStack::new();
+        let iwad = make_wad(
+            b"IWAD",
+            &[
+                ("E1M1", b""),
+                ("THINGS", b"abc"),
+                ("LINEDEFS", b"def"),
+                ("SIDEDEFS", b""),
+                ("VERTEXES", b""),
+                ("SEGS", b""),
+                ("SSECTORS", b""),
+                ("NODES", b""),
+                ("SECTORS", b""),
+                ("REJECT", b""),
+                ("BLOCKMAP", b""),
+            ],
+        );
+        stack.push_iwad(iwad).unwrap();
+
+        let group = stack.map_lump_group("E1M1").expect("should find map");
+
+        match group {
+            crate::wad::MapLumpGroup::Classic(c) => {
+                assert_eq!(c.lumps[0].name.as_str(), "THINGS");
+            }
+            _ => panic!("Expected Classic map lump group"),
+        }
+
+        assert!(stack.map_lump_group("E1M2").is_none());
+    }
+
+    #[test]
+    fn stack_default() {
+        let stack1 = WadStack::default();
+        let stack2 = WadStack::new();
+        assert_eq!(stack1.wad_count(), stack2.wad_count());
+    }
 }
