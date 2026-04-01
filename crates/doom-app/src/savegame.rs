@@ -1,8 +1,23 @@
-//! Save/load game state to/from disk.
+//! The Savegame Chronicles: Preserving the Demonic Timeline.
 //!
-//! Uses the single source of truth binary format from `doom_game::savegame`
-//! to fully serialize and deserialize the entire deterministic `GameState`.
-//! This removes the need for `bincode` or duplicate state extraction in the app layer.
+//! # The Abstract
+//! In a realm governed by strict deterministic rules, restarting a level after
+//! every tragic demise isn't merely punishing—it's demoralizing. We needed a way
+//! to freeze time, capture every bleeding demon and flying fireball, and etch it
+//! into the bedrock of the disk.
+//!
+//! Enter the `savegame` module. This isn't your grandpappy's `bincode` dump.
+//! By leveraging the engine's native binary format (`doom_game::savegame`),
+//! we serialize the entire deterministic [`GameState`] without duplicating state
+//! extraction logic in the app layer. It guarantees exact deterministic replay
+//! when you resume the slaughter.
+//!
+//! # The Fine Print
+//! This module handles the app-layer disk I/O, magic byte validation, and bridging
+//! the `doom_game` save state directly over our active simulation state.
+//!
+//! Be warned: Save files created with different engine versions or incompatible
+//! WADs may invite nasal demons and result in a [`SaveError::BadVersion`].
 
 use doom_game::{
     GameState,
@@ -14,26 +29,24 @@ use std::path::Path;
 // Error type
 // ---------------------------------------------------------------------------
 
-/// Errors that can occur during save/load operations.
+/// Errors that can occur during the delicate act of manipulating time (saving/loading).
 #[derive(Debug, thiserror::Error)]
 pub enum SaveError {
-    /// Underlying I/O error (file not found, permission denied, etc.).
+    /// The physical realm rejected our request (file not found, permission denied, etc.).
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
     /// Failed to encode game state to bytes.
 
-    /// Failed to decode bytes into game state.
-
-    /// File does not start with the `b"DRS1"` magic bytes.
+    /// File does not start with the `b"DRS1"` magic bytes. We don't read hieroglyphics.
     #[error("invalid save file magic")]
     BadMagic,
 
-    /// Save file has an unsupported version number.
+    /// Save file has an unsupported version number. Only modern sorcery is permitted.
     #[error("unsupported save version")]
     BadVersion,
 
-    /// The save payload was truncated.
+    /// The save payload was truncated. An incomplete incantation!
     #[error("save payload truncated")]
     Truncated,
 }
@@ -53,12 +66,29 @@ impl From<doom_game::savegame::SaveError> for SaveError {
 // save_game
 // ---------------------------------------------------------------------------
 
-/// Save the current game to `path` using slot number `slot`.
+/// Etches the current [`GameState`] into the disk at the given `path`.
 ///
-/// Overwrites any existing file at `path`.
+/// Overwrites any existing file at `path` without mercy.
+/// The game is saved into a specific `slot` for easy retrieval.
+///
+/// # The Hero's Journey
+///
+/// ```rust,no_run
+/// # use doom_app::savegame::save_game;
+/// # use doom_game::GameState;
+/// # use std::path::Path;
+/// let mut state = GameState::new("E1M1");
+///
+/// // The hero bravely conquers the first room...
+/// // state.player.health() -= 10;
+///
+/// // Time to rest at the campfire.
+/// let save_path = Path::new("save1.dsg");
+/// save_game(save_path, &state, 1).expect("Failed to write save file!");
+/// ```
 ///
 /// # Errors
-/// Returns [`SaveError::Io`] on file write failure.
+/// Returns [`SaveError::Io`] if the disk write fails (e.g., read-only filesystem).
 pub fn save_game(path: &Path, gs: &GameState, slot: u8) -> Result<(), SaveError> {
     // Generate an 8-byte padded level name.
     let mut level_name = [0u8; 8];
@@ -80,15 +110,33 @@ pub fn save_game(path: &Path, gs: &GameState, slot: u8) -> Result<(), SaveError>
 // load_game
 // ---------------------------------------------------------------------------
 
-/// Load a save file from `path`, returning the header and payload.
+/// Resurrects a fallen game state from the disk.
 ///
-/// Validates magic bytes and version before returning.
+/// Reads the save file at `path`, validating its magic bytes and version,
+/// before returning both the parsed header and the complete [`SaveGame`] payload.
+///
+/// # The Hero's Journey
+///
+/// ```rust,no_run
+/// # use doom_app::savegame::load_game;
+/// # use std::path::Path;
+/// let save_path = Path::new("save1.dsg");
+///
+/// // A tragic end... but we can try again!
+/// match load_game(save_path) {
+///     Ok((header, payload)) => {
+///         println!("Restoring: {}", core::str::from_utf8(&header.description).unwrap_or("Unknown"));
+///         // Now apply the payload to your GameState!
+///     }
+///     Err(e) => eprintln!("The save file is corrupted: {}", e),
+/// }
+/// ```
 ///
 /// # Errors
-/// Returns [`SaveError::Io`] if the file cannot be read.
-/// Returns [`SaveError::Decode`] if the binary format is malformed.
-/// Returns [`SaveError::BadMagic`] if the file lacks the `b"DRS1"` signature.
-/// Returns [`SaveError::BadVersion`] for an unsupported version number.
+/// * Returns [`SaveError::Io`] if the file cannot be read.
+/// * Returns [`SaveError::Truncated`] if the binary format is malformed or cut off.
+/// * Returns [`SaveError::BadMagic`] if the file lacks the `b"DRS1"` signature.
+/// * Returns [`SaveError::BadVersion`] for an unsupported version number.
 pub fn load_game(path: &Path) -> Result<(doom_game::savegame::SaveHeader, SaveGame), SaveError> {
     let data = std::fs::read(path)?;
     let save_game = engine_load(&data)?;
@@ -101,14 +149,30 @@ pub fn load_game(path: &Path) -> Result<(doom_game::savegame::SaveHeader, SaveGa
 // apply_save
 // ---------------------------------------------------------------------------
 
-/// Apply a loaded [`SaveGame`] to `gs`, restoring the full simulation state.
+/// Seamlessly overlays a loaded [`SaveGame`] onto the active [`GameState`].
 ///
-/// Unlike the old bincode system which only restored player inventory, this
-/// engine-native system restores the complete `GameState` including all Mobj
-/// handles, sector movers, and RNG state to guarantee exact deterministic replay.
+/// Unlike older systems which only restored player inventory, this engine-native
+/// system restores the *complete* simulation. Every Mobj, sector mover, and RNG
+/// index is brought back to the exact moment it was saved.
+///
+/// # The Hero's Journey
+///
+/// ```rust,no_run
+/// # use doom_app::savegame::{load_game, apply_save};
+/// # use doom_game::GameState;
+/// # use std::path::Path;
+/// let mut current_state = GameState::new("E1M1");
+/// let save_path = Path::new("save1.dsg");
+///
+/// if let Ok((_header, payload)) = load_game(save_path) {
+///     // Overwrite the current timeline with the saved one.
+///     apply_save(&mut current_state, &payload).expect("Failed to apply save!");
+/// }
+/// ```
 ///
 /// # Errors
-/// Currently always returns `Ok(())`.
+/// Currently always returns `Ok(())`, but exists as a `Result` for future-proofing
+/// validation logic.
 pub fn apply_save(gs: &mut GameState, payload: &SaveGame) -> Result<(), SaveError> {
     // Completely overwrite the current game state with the deserialized one.
     // This is valid because `GameState` implements `Clone` and owns all its data.

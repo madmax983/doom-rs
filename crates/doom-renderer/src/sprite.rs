@@ -2854,8 +2854,8 @@ mod tests {
         bottom.fill(120);
         bottom_depth.fill(256.0);
 
-        let mut bottom_history: Vec<Vec<crate::render::SpriteClipStep>> =
-            std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
+        let mut bottom_history: [Vec<crate::render::SpriteClipStep>; SCREEN_W] =
+            [const { Vec::new() }; SCREEN_W];
         for history in &mut bottom_history {
             history.push(crate::render::SpriteClipStep {
                 depth: 128.0,
@@ -2921,8 +2921,8 @@ mod tests {
         let bottom = [SCREEN_H as i32 - 1; SCREEN_W];
         let top_depth = [f32::MAX; SCREEN_W];
         let bottom_depth = [f32::MAX; SCREEN_W];
-        let mut bottom_history: Vec<Vec<crate::render::SpriteClipStep>> =
-            std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
+        let mut bottom_history: [Vec<crate::render::SpriteClipStep>; SCREEN_W] =
+            [const { Vec::new() }; SCREEN_W];
         for history in &mut bottom_history {
             history.push(crate::render::SpriteClipStep {
                 depth: 64.0,
@@ -2998,8 +2998,8 @@ mod tests {
         let bottom = [SCREEN_H as i32 - 1; SCREEN_W];
         let top_depth = [f32::MAX; SCREEN_W];
         let bottom_depth = [f32::MAX; SCREEN_W];
-        let mut top_history: Vec<Vec<crate::render::SpriteClipStep>> =
-            std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
+        let mut top_history: [Vec<crate::render::SpriteClipStep>; SCREEN_W] =
+            [const { Vec::new() }; SCREEN_W];
         for history in &mut top_history {
             history.push(crate::render::SpriteClipStep {
                 depth: 64.0,

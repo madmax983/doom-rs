@@ -224,6 +224,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn raw_methods_return_internal_value() {
+        let b = Brightness::new(128).unwrap();
+        assert_eq!(b.raw(), 128);
+
+        let s = SectorSpecial::NORMAL;
+        assert_eq!(s.raw(), 0);
+        let s2 = SectorSpecial::new(5).unwrap();
+        assert_eq!(s2.raw(), 5);
+
+        let skill = SkillLevel::UV;
+        assert_eq!(skill.raw(), 3);
+        let skill2 = SkillLevel::new(2).unwrap();
+        assert_eq!(skill2.raw(), 2);
+
+        let p = PlayerNum::new(2).unwrap();
+        assert_eq!(p.raw(), 2);
+    }
+
+    #[test]
+    fn coord_new_and_raw() {
+        let c = Coord::new(-1024);
+        assert_eq!(c.raw(), -1024);
+        let c2 = Coord::new(32767);
+        assert_eq!(c2.raw(), 32767);
+    }
+
+    #[test]
     fn sector_special_rejects_over_16() {
         assert!(SectorSpecial::new(17).is_none());
         assert!(SectorSpecial::new(16).is_some());
