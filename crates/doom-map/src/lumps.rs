@@ -505,6 +505,10 @@ impl Blockmap {
         let y_count = u16::from_le_bytes([data[6], data[7]]);
 
         let n_blocks = x_count as usize * y_count as usize;
+        let max_blocks = (data.len().saturating_sub(Self::HEADER_BYTES)) / 2;
+        if n_blocks > max_blocks {
+            return Err(LumpParseError::BlockmapTooShort(data.len()));
+        }
         let offsets_end = Self::HEADER_BYTES + n_blocks * 2;
 
         let mut offsets = Vec::with_capacity(n_blocks);
