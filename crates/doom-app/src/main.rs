@@ -2039,7 +2039,11 @@ fn run_doom() -> Result<()> {
   "total_secrets": {},
   "par_time_tics": {}
 }}"#,
-                warp_str, stats.total_kills, stats.total_items, stats.total_secrets, stats.par_time_tics
+                warp_str,
+                stats.total_kills,
+                stats.total_items,
+                stats.total_secrets,
+                stats.par_time_tics
             );
             println!("{json_data}");
         } else {
