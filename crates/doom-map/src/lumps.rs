@@ -507,7 +507,8 @@ impl Blockmap {
         let n_blocks = x_count as usize * y_count as usize;
         let offsets_end = Self::HEADER_BYTES + n_blocks * 2;
 
-        let mut offsets = Vec::with_capacity(n_blocks);
+        let available_blocks = data[Self::HEADER_BYTES..].len() / 2;
+        let mut offsets = Vec::with_capacity(n_blocks.min(available_blocks));
         let offset_bytes = &data[Self::HEADER_BYTES..offsets_end.min(data.len())];
         for chunk in offset_bytes.chunks_exact(2) {
             offsets.push(u16::from_le_bytes([chunk[0], chunk[1]]));
@@ -780,5 +781,20 @@ mod tests {
     #[test]
     fn bad_lump_length_errors() {
         assert!(Thing::parse_lump(&[0u8; 7]).is_err()); // 7 not divisible by 10
+    }
+
+    #[test]
+    fn test_blockmap_oom_capacity_limit() {
+        // Create an 8-byte valid Blockmap header but claiming 65535x65535 blocks.
+        // A naive Vec::with_capacity(n_blocks) would try to allocate ~8GB and abort.
+        let mut data = vec![0u8; 8];
+        data[4] = 0xFF; data[5] = 0xFF; // x_count
+        data[6] = 0xFF; data[7] = 0xFF; // y_count
+
+        let result = Blockmap::parse_lump(&data);
+        // The fix bounds the allocation so this will return gracefully (empty offsets),
+        // or panics/fails depending on whether it requires actual block data.
+        // In any case, it doesn't OOM!
+        assert!(result.is_ok(), "Must not OOM, should just parse empty offsets based on available bytes");
     }
 }

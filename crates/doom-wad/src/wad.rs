@@ -163,7 +163,8 @@ impl WadFile {
         // loaded from already-validated, caller-owned buffers).
         let dir_bytes = &data[dir_offset..dir_end];
 
-        let mut dir = Vec::with_capacity(numlumps);
+        let max_lumps = data.len().saturating_sub(dir_offset) / size_of::<RawLumpEntry>();
+        let mut dir = Vec::with_capacity(numlumps.min(max_lumps));
         for chunk in dir_bytes.chunks_exact(16) {
             let raw = RawLumpEntry {
                 filepos: i32::from_le_bytes(chunk[0..4].try_into().unwrap()),
@@ -455,6 +456,22 @@ mod prop_tests {
                 WadFile::parse(buf).is_err(),
                 "buffer of {len} bytes should be rejected (too short)"
             );
+        }
+
+        #[test]
+        fn parse_rejects_huge_numlumps_without_oom(
+            // Use maximum i32 value to try and trigger an OOM if allocated blindly.
+            numlumps in (i32::MAX - 1000)..i32::MAX,
+            infotableofs in 12i32..1000i32,
+        ) {
+            let mut data = Vec::new();
+            data.extend_from_slice(b"IWAD");
+            data.extend_from_slice(&numlumps.to_le_bytes());
+            data.extend_from_slice(&infotableofs.to_le_bytes());
+
+            // The function should cleanly reject this truncated directory without an OOM panic!
+            let res = WadFile::parse(data);
+            prop_assert!(res.is_err(), "parsed a truncated WAD with a huge numlumps without OOMing");
         }
 
         /// A buffer of exactly 12 bytes with a bad magic must produce
