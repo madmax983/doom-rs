@@ -504,6 +504,12 @@ pub fn p_radius_attack(
         // Euclidean distance.
         let dx_f = (ax - sx) as f32;
         let dy_f = (ay - sy) as f32;
+
+        // Box bounding check to avoid expensive .sqrt() for distant actors.
+        if dx_f.abs() >= radius_f || dy_f.abs() >= radius_f {
+            continue;
+        }
+
         let dist_f = (dx_f * dx_f + dy_f * dy_f).sqrt();
 
         if dist_f >= radius_f {

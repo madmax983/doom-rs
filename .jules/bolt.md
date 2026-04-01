@@ -11,3 +11,6 @@
 ## 2025-03-27 - MobjSlab len Optimization
 **Learning:** Computing `len()` on a generational arena by iterating over all slots `slots.iter().filter(...).count()` is O(N) and creates unnecessary overhead on hot paths where allocations or tick operations occur frequently. Adding a `live_count` field turns it into an O(1) read.
 **Action:** Track active elements with an explicit `live_count` in custom slab structures when `len()` is called frequently, ensuring to correctly maintain the count during `alloc`, `free`, and `clear` operations.
+**[AABB check before Euclidean .sqrt() in radial math]**
+**Learning:** Performing a `.sqrt()` calculation on every single actor in `p_radius_attack` creates unnecessary floating-point operations for actors far outside the explosion radius.
+**Action:** Adding an Axis-Aligned Bounding Box (AABB) early-out check (`dx.abs() >= radius || dy.abs() >= radius`) quickly skips actors out of range before computing the exact Euclidean distance, saving CPU cycles on the hot path.
