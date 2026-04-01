@@ -308,9 +308,9 @@ pub struct RenderOut<'a> {
     /// `f32::MAX` when no bottom clip has been applied for that column.
     pub clip_bot_depth: [f32; SCREEN_W],
     /// Monotone top-clip state changes for each screen column.
-    pub clip_top_history: Vec<Vec<SpriteClipStep>>,
+    pub clip_top_history: [Vec<SpriteClipStep>; SCREEN_W],
     /// Monotone bottom-clip state changes for each screen column.
-    pub clip_bot_history: Vec<Vec<SpriteClipStep>>,
+    pub clip_bot_history: [Vec<SpriteClipStep>; SCREEN_W],
     /// Deferred masked midtexture columns to interleave with sprite rendering.
     pub masked_columns: Vec<MaskedColumnDraw<'a>>,
 }
@@ -418,10 +418,10 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
     let mut wall_clip_bot = [SCREEN_H as i32 - 1; SCREEN_W];
     let mut wall_clip_top_depth = [f32::MAX; SCREEN_W];
     let mut wall_clip_bot_depth = [f32::MAX; SCREEN_W];
-    let mut wall_clip_top_history: Vec<Vec<SpriteClipStep>> =
-        std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
-    let mut wall_clip_bot_history: Vec<Vec<SpriteClipStep>> =
-        std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
+    let mut wall_clip_top_history: [Vec<SpriteClipStep>; SCREEN_W] =
+        [const { Vec::new() }; SCREEN_W];
+    let mut wall_clip_bot_history: [Vec<SpriteClipStep>; SCREEN_W] =
+        [const { Vec::new() }; SCREEN_W];
     let mut masked_columns = Vec::new();
 
     // Doom-style open column tracking for inline visplane emission.
