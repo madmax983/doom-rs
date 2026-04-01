@@ -333,6 +333,13 @@ mod tests {
             inputs[0].forward_move, 33,
             "prediction must repeat last known input"
         );
+
+        // Ask for tic 7, should also repeat tic 5
+        let inputs2 = rm.get_inputs(7);
+        assert_eq!(
+            inputs2[0].forward_move, 33,
+            "prediction must repeat last known input further in future"
+        );
     }
 
     #[test]

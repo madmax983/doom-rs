@@ -237,6 +237,7 @@ mod tests {
         assert_eq!(sender_slot, slot);
     }
 
+
     #[test]
     fn handshake_round_trip() {
         // Set up server and a raw transport simulating the client side.

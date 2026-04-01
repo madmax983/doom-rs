@@ -254,6 +254,8 @@ impl RelayServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::packet::TicCmd;
+    use crate::transport::make_join_packet;
 
     fn test_config() -> NetConfig {
         NetConfig {
@@ -395,6 +397,104 @@ mod tests {
         let recv1 = client1.recv_packet().unwrap();
         assert!(recv1.is_none(), "sender must be excluded from broadcast");
     }
+
+    #[test]
+    fn poll_once_ignores_join_when_full() {
+        let mut server = RelayServer::bind("127.0.0.1:0", NetConfig {
+            max_players: 1, // Only allow 1 player
+            ..test_config()
+        }).unwrap();
+
+        let mut t1 = NetTransport::bind("127.0.0.1:0").unwrap();
+        let mut t2 = NetTransport::bind("127.0.0.1:0").unwrap();
+        let server_addr = server.local_addr().unwrap();
+
+        // Join first player
+        for _ in 0..20 {
+            t1.send_raw(&make_join_packet().to_bytes(), &server_addr).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            let res1 = server.poll_once().unwrap();
+            assert!(res1.is_none()); // Server returns None for join requests as they are handled internally
+
+            if server.connected_count() == 1 {
+                break;
+            }
+        }
+        assert_eq!(server.connected_count(), 1, "Failed to connect first player");
+
+        // Verify t1 got a response
+        let mut got_resp = false;
+        for _ in 0..20 {
+            if t1.recv_packet().unwrap().is_some() {
+                got_resp = true;
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        assert!(got_resp, "First player did not receive join response");
+
+        // Join second player (should be ignored)
+        let initial_packets_received = server.transport().stats().packets_received;
+
+        // Loop sending the join packet until the transport level actually receives it
+        for _ in 0..20 {
+            t2.send_raw(&make_join_packet().to_bytes(), &server_addr).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+
+            // Pump the network to see if it received our packet
+            let res2 = server.poll_once().unwrap();
+            assert!(res2.is_none());
+
+            // If the transport layer counter went up, we know the server received it
+            // but didn't act on it (since res2 is None).
+            if server.transport().stats().packets_received > initial_packets_received {
+                break;
+            }
+        }
+
+        // Server's transport should have processed the new packet(s), but logic ignored it.
+        assert!(server.transport().stats().packets_received > initial_packets_received, "Server transport didn't receive the packet");
+        assert_eq!(server.connected_count(), 1); // Still 1
+
+        // Verify t2 did not
+        assert!(t2.recv_packet().unwrap().is_none(), "Second player should not have received a response");
+    }
+
+    #[test]
+    fn poll_once_ignores_unknown_sender() {
+        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
+        let mut client_t = NetTransport::bind("127.0.0.1:0").unwrap();
+        let server_addr = server.local_addr().unwrap();
+
+        let pkt = TicPacket {
+            tic: 10,
+            sender: 0,
+            ack_tic: 9,
+            state_checksum: 0xCAFE,
+            cmds: [TicCmd::default(); MAX_PLAYERS],
+        };
+
+        let initial_packets_received = server.transport().stats().packets_received;
+
+        // Client sends packet without joining multiple times
+        for _ in 0..20 {
+            client_t.send_raw(&pkt.to_bytes(), &server_addr).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(20));
+
+            // Pump network
+            let res = server.poll_once().unwrap();
+            assert!(res.is_none());
+
+            // If the transport layer counter went up, we know the server received it
+            // but didn't act on it (since res is None).
+            if server.transport().stats().packets_received > initial_packets_received {
+                break;
+            }
+        }
+
+        assert!(server.transport().stats().packets_received > initial_packets_received, "Server transport didn't receive the packet");
+    }
+
 
     #[test]
     fn check_timeouts_disconnects_stale_slots() {
