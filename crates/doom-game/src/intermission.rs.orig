@@ -83,9 +83,9 @@ pub fn par_time(level_name: &str) -> u32 {
     let name = level_name.trim().to_uppercase();
 
     // Doom 1 format: ExMy
-    if name.len() == 4 && name.as_bytes().first() == Some(&b'E') && name.as_bytes().get(2) == Some(&b'M') {
-        let ep = (*name.as_bytes().get(1).unwrap_or(&b'0') as char).to_digit(10);
-        let map = (*name.as_bytes().get(3).unwrap_or(&b'0') as char).to_digit(10);
+    if name.len() == 4 && name.as_bytes().get(0) == Some(&b'E') && name.as_bytes().get(2) == Some(&b'M') {
+        let ep = (*name.as_bytes().get(1).unwrap_or(&0) as char).to_digit(10);
+        let map = (*name.as_bytes().get(3).unwrap_or(&0) as char).to_digit(10);
         if let (Some(ep), Some(map)) = (ep, map) {
             let table = match ep {
                 1 => Some(&DOOM1_E1_PAR_SECS[..]),
