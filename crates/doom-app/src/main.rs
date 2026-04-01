@@ -2039,18 +2039,59 @@ fn run_doom() -> Result<()> {
   "total_secrets": {},
   "par_time_tics": {}
 }}"#,
-                warp_str, stats.total_kills, stats.total_items, stats.total_secrets, stats.par_time_tics
+                warp_str,
+                stats.total_kills,
+                stats.total_items,
+                stats.total_secrets,
+                stats.par_time_tics
             );
             println!("{json_data}");
         } else {
+            use crossterm::style::Stylize;
+            println!(
+                "{} {} Map Statistics for {}",
+                "🌟".green(),
+                "Analyzed".green().bold(),
+                warp_str.cyan()
+            );
+
             let mut table = comfy_table::Table::new();
             table
-                .set_header(vec!["Statistic", "Value"])
-                .add_row(vec!["Map", warp_str])
-                .add_row(vec!["Total Kills", &stats.total_kills.to_string()])
-                .add_row(vec!["Total Items", &stats.total_items.to_string()])
-                .add_row(vec!["Total Secrets", &stats.total_secrets.to_string()])
-                .add_row(vec!["Par Time (tics)", &stats.par_time_tics.to_string()]);
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+            table.set_header(vec![
+                comfy_table::Cell::new("Statistic")
+                    .fg(comfy_table::Color::Green)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new("Value")
+                    .fg(comfy_table::Color::Green)
+                    .add_attribute(comfy_table::Attribute::Bold),
+            ]);
+
+            table.add_row(vec![
+                comfy_table::Cell::new("Map"),
+                comfy_table::Cell::new(warp_str).fg(comfy_table::Color::Cyan),
+            ]);
+            table.add_row(vec![
+                comfy_table::Cell::new("Total Kills"),
+                comfy_table::Cell::new(stats.total_kills.to_string()).fg(comfy_table::Color::Cyan),
+            ]);
+            table.add_row(vec![
+                comfy_table::Cell::new("Total Items"),
+                comfy_table::Cell::new(stats.total_items.to_string()).fg(comfy_table::Color::Cyan),
+            ]);
+            table.add_row(vec![
+                comfy_table::Cell::new("Total Secrets"),
+                comfy_table::Cell::new(stats.total_secrets.to_string())
+                    .fg(comfy_table::Color::Cyan),
+            ]);
+            table.add_row(vec![
+                comfy_table::Cell::new("Par Time (tics)"),
+                comfy_table::Cell::new(stats.par_time_tics.to_string())
+                    .fg(comfy_table::Color::Cyan),
+            ]);
+
             println!("{table}");
         }
         return Ok(());
