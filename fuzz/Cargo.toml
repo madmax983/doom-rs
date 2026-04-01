@@ -77,3 +77,27 @@ path = "fuzz_targets/fuzz_target_15.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_target_7"
+path = "fuzz_targets/fuzz_target_7.rs"
+test = false
+doc = false
+
+[dependencies.doom-map]
+path = "../crates/doom-map"
+[[bin]]
+name = "fuzz_target_8"
+path = "fuzz_targets/fuzz_target_8.rs"
+test = false
+doc = false
+[[bin]]
+name = "fuzz_target_9"
+path = "fuzz_targets/fuzz_target_9.rs"
+test = false
+doc = false
+[[bin]]
+name = "fuzz_target_10"
+path = "fuzz_targets/fuzz_target_10.rs"
+test = false
+doc = false

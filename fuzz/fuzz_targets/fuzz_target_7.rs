@@ -1,7 +1,6 @@
 #![no_main]
-use doom_audio::mus::MusScore;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {
-    let _ = MusScore::parse(data);
+    let _ = doom_map::udmf::UdmfMap::parse(data);
 });
