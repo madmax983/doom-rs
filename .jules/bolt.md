@@ -1,13 +1,7 @@
-**Determinism and Slab Iteration**
-**Learning:** When attempting to remove `Vec::with_capacity().extend()` in hot paths that iterate over a Generational Arena (Slab) like `MobjSlab`, replacing it with live index-based iteration (`0..slot_count`) can introduce critical bugs. If the iteration loop mutates the slab (e.g., by freeing entities or spawning new ones), live index iteration may process newly spawned entities on the *same tick* they were created, breaking the precise deterministic tick order required by engines like Doom.
-**Action:** Always maintain a `Vec` snapshot of live handles (or another non-allocating snapshot mechanism) before ticking entities if the system allows mutations to the slab during iteration. Only use live index iteration for read-only passes (e.g., saving games or logging) where determinism is not at risk.
-## 2025-03-22 - Remove unnecessary allocations in sector specials
-**Learning:** `ev_floor_...` and `ev_teleport` were redundantly allocating intermediate vectors through `.collect()` on iterator pipelines before iterating over them.
-**Action:** Replace `collect()` in favor of direct chaining or iterator folding / lazy position matching (`.iter().position()`) for significant performance improvements across common game event checks, bypassing memory allocation altogether and avoiding fighting the borrow checker by separating read-only and mutating iterations correctly when NLL allows or by cloning only minimal identifiers.
-**[NLL Enables Zero-Allocation Iteration in Game State Modifiers]**
-**Learning:** Rust's Non-Lexical Lifetimes (NLL) allow us to disjointly borrow immutable components of a struct (e.g., `level.sectors`) while mutably passing another component (`gs`) into a function inside a loop. We do not need to `.collect::<Vec<_>>()` iterator results into an intermediate array just to appease the borrow checker in these cases.
-**Action:** When a game loop filters and processes entities from an immutable level definition to apply them to a mutable game state, move the iterator chain directly into the `for` loop, eliminating unnecessary heap allocations on the hot path.
+**Avoid `Vec::with_capacity` snapshot allocations when iterating over `MobjSlab` mutating operations**
+**Learning:** `Vec` allocations can be avoided entirely when mutating an arena structure by capturing `slot_count` and `next_generation` bounds before the loop.
+**Action:** Use the pattern `let initial_slot_count = slab.slot_count(); let initial_generation = slab.next_generation();` and check `handle.generation >= initial_generation` to safely iterate and mutate without intermediate vectors.
 
-## 2025-03-27 - MobjSlab len Optimization
-**Learning:** Computing `len()` on a generational arena by iterating over all slots `slots.iter().filter(...).count()` is O(N) and creates unnecessary overhead on hot paths where allocations or tick operations occur frequently. Adding a `live_count` field turns it into an O(1) read.
-**Action:** Track active elements with an explicit `live_count` in custom slab structures when `len()` is called frequently, ensuring to correctly maintain the count during `alloc`, `free`, and `clear` operations.
+**Avoid `Vec::with_capacity` snapshot allocations when iterating over `MobjSlab` mutating operations**
+**Learning:** `Vec` allocations can be avoided entirely when mutating an arena structure by capturing `slot_count` and `next_generation` bounds before the loop.
+**Action:** Use the pattern `let initial_slot_count = slab.slot_count(); let initial_generation = slab.next_generation();` and check `handle.generation >= initial_generation` to safely iterate and mutate without intermediate vectors.

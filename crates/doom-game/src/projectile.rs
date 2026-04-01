@@ -265,28 +265,25 @@ pub fn p_spawn_player_missile(
 /// 4. On hit: apply damage, remove projectile.  Rockets also do radius attack.
 /// 5. Otherwise: update position.
 pub fn p_move_projectiles(gs: &mut GameState, level: Option<&Level>) {
-    // Phase 1: collect all missile handles.
-    let missiles: Vec<MobjHandle> = gs
-        .mobjslab
-        .iter_handles()
-        .filter(|h| {
-            gs.mobjslab
-                .get(*h)
-                .map(|m| m.flags & flags::MF_MISSILE != 0)
-                .unwrap_or(false)
-        })
-        .collect();
+    let initial_slot_count = gs.mobjslab.slot_count();
+    let initial_generation = gs.mobjslab.next_generation();
 
-    // Phase 2: collect all potential targets (shootable, alive actors).
-    // We refresh this per-missile in case an earlier missile killed someone.
-    for missile_handle in missiles {
-        // Re-read missile data (it may have been freed by an earlier iteration).
+    for i in 0..initial_slot_count {
+        let Some(missile_handle) = gs.mobjslab.handle_at(i) else {
+            continue;
+        };
+
+        if missile_handle.generation >= initial_generation {
+            continue;
+        }
+
+        // Read missile data (it may have been freed by an earlier iteration).
         let (mx, my, mz, momx, momy, momz, m_radius, m_kind, m_source) =
             match gs.mobjslab.get(missile_handle) {
-                Some(m) => (
+                Some(m) if m.flags & flags::MF_MISSILE != 0 => (
                     m.x, m.y, m.z, m.momx, m.momy, m.momz, m.radius, m.kind, m.target,
                 ),
-                None => continue,
+                _ => continue,
             };
 
         let new_x = mx + momx;
