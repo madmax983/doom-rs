@@ -143,6 +143,10 @@ struct Args {
     #[arg(long)]
     turn_based: bool,
 
+    /// Export the level layout and statistics to a standalone HTML report and exit.
+    #[arg(long)]
+    export_html: Option<std::path::PathBuf>,
+
     /// Export the level layout to an SVG file and exit.
     #[arg(long)]
     export_svg: Option<std::path::PathBuf>,
@@ -1970,6 +1974,20 @@ fn run_doom() -> Result<()> {
     // Parse the requested level.
     let level = Level::from_wad_stack(&wad_stack, warp_str)
         .with_context(|| format!("Failed to load map {warp_str}"))?;
+
+    if let Some(ref html_path) = args.export_html {
+        let html_data = doom_map::export_map_to_html(&level);
+        std::fs::write(html_path, html_data)
+            .with_context(|| format!("Failed to write HTML to {}", html_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} HTML report to {}",
+            "🌟".green(),
+            "Exported".green().bold(),
+            html_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
 
     if let Some(ref svg_path) = args.export_svg {
         let svg_data = doom_map::export_map_to_svg(&level);
