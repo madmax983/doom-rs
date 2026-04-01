@@ -1,7 +1,41 @@
 //! OPL2 FM register model and synthesis.
 //!
-//! Models the Yamaha OPL2 (YM3812) chip's register state, decoded per-channel
-//! parameters, and FM audio synthesis.
+//! Welcome to the digital foundry! This module models the iconic Yamaha OPL2
+//! (YM3812) chip. It translates raw register writes into the glorious frequency
+//! modulation (FM) audio that gave Doom its unmistakable heavy metal soundtrack.
+//!
+//! The [`OplChip`] acts as the core synthesizer. It maintains a shadow copy of
+//! the 256 hardware registers, decodes them into operator and channel states
+//! ([`OplOperator`] and [`OplChannel`]), and performs the actual math to
+//! generate waveforms when `synthesize` is called.
+//!
+//! ## Examples
+//!
+//! ```
+//! use doom_audio::opl::OplChip;
+//!
+//! // 1. Boot up the chip
+//! let mut chip = OplChip::new();
+//!
+//! // 2. Set up a basic sine wave instrument on Channel 0
+//! chip.write(0x20, 0x01); // Modulator: MULT=1
+//! chip.write(0x23, 0x01); // Carrier: MULT=1
+//! chip.write(0x60, 0xF0); // Modulator: Fast attack, no decay
+//! chip.write(0x63, 0xF0); // Carrier: Fast attack, no decay
+//! chip.write(0x40, 0x00); // Modulator: Max volume
+//! chip.write(0x43, 0x00); // Carrier: Max volume
+//!
+//! // 3. Trigger a note (~440Hz, Block 4)
+//! chip.write(0xA0, 172);  // F-Number low byte
+//! chip.write(0xB0, (4 << 2) | 0x20); // Block 4, Key On bit (0x20)
+//!
+//! // 4. Synthesize some audio!
+//! let mut buffer = vec![0.0f32; 256];
+//! chip.synthesize(&mut buffer, 44100);
+//!
+//! // The buffer now contains the heavy metal.
+//! assert!(buffer.iter().any(|&s| s != 0.0));
+//! ```
 
 // ---------------------------------------------------------------------------
 // OPL2 operator slot mapping: register-offset → (channel index, operator index)
@@ -159,6 +193,16 @@ fn opl_waveform(waveform: u8, phase: u32) -> f32 {
 
 impl OplChip {
     /// Create a new, silent OPL2 chip (all registers zeroed).
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_audio::opl::OplChip;
+    ///
+    /// let chip = OplChip::new();
+    /// // A newly created chip is silent by default.
+    /// assert!(!chip.channel(0).key_on);
+    /// ```
     pub fn new() -> Self {
         Self {
             regs: [0u8; 256],
@@ -168,6 +212,17 @@ impl OplChip {
     }
 
     /// Write `val` to OPL2 register `reg`, keeping decoded channel state in sync.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_audio::opl::OplChip;
+    ///
+    /// let mut chip = OplChip::new();
+    /// // Write 0x42 to register 0xA0 (Channel 0 F-Number low byte)
+    /// chip.write(0xA0, 0x42);
+    /// assert_eq!(chip.read(0xA0), 0x42);
+    /// ```
     pub fn write(&mut self, reg: u8, val: u8) {
         self.regs[reg as usize] = val;
 
@@ -251,6 +306,16 @@ impl OplChip {
     }
 
     /// Read the raw register byte at `reg` (shadow copy, not real hardware).
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_audio::opl::OplChip;
+    ///
+    /// let mut chip = OplChip::new();
+    /// chip.write(0x20, 0x01);
+    /// assert_eq!(chip.read(0x20), 0x01);
+    /// ```
     #[must_use]
     pub fn read(&self, reg: u8) -> u8 {
         self.regs[reg as usize]
@@ -260,6 +325,20 @@ impl OplChip {
     ///
     /// # Panics
     /// Panics if `ch >= 9`.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_audio::opl::OplChip;
+    ///
+    /// let mut chip = OplChip::new();
+    /// // Set the low bits of the frequency for channel 0
+    /// chip.write(0xA0, 0xAA);
+    ///
+    /// let ch0 = chip.channel(0);
+    /// assert_eq!(ch0.freq_low, 0xAA);
+    /// assert!(!ch0.key_on);
+    /// ```
     #[must_use]
     pub fn channel(&self, ch: usize) -> &OplChannel {
         &self.channels[ch]
@@ -269,6 +348,29 @@ impl OplChip {
     ///
     /// Advances ADSR envelopes and phase accumulators for all 9 channels,
     /// then mixes their outputs into `buf`.  Output range: approximately [-1.0, 1.0].
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_audio::opl::OplChip;
+    ///
+    /// let mut chip = OplChip::new();
+    /// // Configure a basic tone on channel 0
+    /// chip.write(0x20, 0x01); // MULT=1 (modulator)
+    /// chip.write(0x23, 0x01); // MULT=1 (carrier)
+    /// chip.write(0x60, 0xF0); // Fast attack, no decay (modulator)
+    /// chip.write(0x63, 0xF0); // Fast attack, no decay (carrier)
+    /// chip.write(0x40, 0x00); // Max volume (modulator)
+    /// chip.write(0x43, 0x00); // Max volume (carrier)
+    /// chip.write(0xA0, 172);  // ~440 Hz F-Number low byte
+    /// chip.write(0xB0, (4 << 2) | 0x20); // Block 4, Key On
+    ///
+    /// let mut buf = vec![0.0f32; 128];
+    /// chip.synthesize(&mut buf, 44100);
+    ///
+    /// // The buffer should now contain synthesized audio data.
+    /// assert!(buf.iter().any(|&s| s != 0.0));
+    /// ```
     pub fn synthesize(&mut self, buf: &mut [f32], sample_rate: u32) {
         let sr = sample_rate as f32;
 
