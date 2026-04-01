@@ -769,4 +769,109 @@ mod tests {
             .collect();
         assert_eq!(flats, vec!["FLAT1", "FLAT2"]);
     }
+
+    #[test]
+    fn wad_error_display() {
+        let err1 = WadError::TooShort(10);
+        assert_eq!(err1.to_string(), "WAD file too short: 10 bytes (minimum 12)");
+
+        let err2 = WadError::InvalidMagic(*b"ABCD");
+        assert_eq!(err2.to_string(), "invalid WAD magic: expected IWAD or PWAD, got [65, 66, 67, 68]");
+
+        let err3 = WadError::ExpectedIwad;
+        assert_eq!(err3.to_string(), "expected an IWAD as the base WAD, but found a PWAD");
+
+        let err4 = WadError::NegativeLumpCount(-5);
+        assert_eq!(err4.to_string(), "WAD lump count is negative: -5");
+
+        let err5 = WadError::DirectoryOutOfBounds {
+            offset: 100,
+            dir_size: 50,
+            file_len: 120,
+        };
+        assert_eq!(err5.to_string(), "WAD directory offset 100 + directory size 50 exceeds file length 120");
+
+        let err6 = WadError::LumpOutOfBounds {
+            name: "TEST".to_string(),
+            offset: 100,
+            end: 150,
+            file_len: 120,
+        };
+        assert_eq!(err6.to_string(), "lump TEST at [100, 150) exceeds file length 120");
+
+        let err7 = WadError::LumpNegativeField { name: "TEST".to_string() };
+        assert_eq!(err7.to_string(), "lump TEST has negative filepos or size");
+    }
+
+    #[test]
+    fn wad_dir_from_lumps_and_methods() {
+        let def1 = LumpDef {
+            name: LumpName::from_str("TEST1"),
+            offset: 100,
+            size: 50,
+        };
+        let def2 = LumpDef {
+            name: LumpName::from_str("TEST2"),
+            offset: 150,
+            size: 50,
+        };
+
+        let dir = WadDir::from_lumps(vec![def1, def2]);
+        assert_eq!(dir.len(), 2);
+        assert!(!dir.is_empty());
+        assert_eq!(dir.lumps().len(), 2);
+        assert!(dir.find("TEST1").is_some());
+        assert!(dir.find("MISSING").is_none());
+
+        let empty_dir = WadDir::default();
+        assert!(empty_dir.is_empty());
+    }
+
+    #[test]
+    fn parse_negative_lump_count() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&(-1i32).to_le_bytes()); // numlumps = -1
+        data[8..12].copy_from_slice(&12i32.to_le_bytes());
+        assert!(matches!(WadFile::parse(data), Err(WadError::NegativeLumpCount(-1))));
+    }
+
+    #[test]
+    fn parse_directory_out_of_bounds() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes()); // numlumps = 1
+        data[8..12].copy_from_slice(&100i32.to_le_bytes()); // dir offset = 100 (out of bounds)
+        assert!(matches!(WadFile::parse(data), Err(WadError::DirectoryOutOfBounds{..})));
+    }
+
+    #[test]
+    fn parse_lump_out_of_bounds() {
+        let mut data = vec![0u8; 28]; // 12 header + 16 dir entry
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes()); // numlumps = 1
+        data[8..12].copy_from_slice(&12i32.to_le_bytes()); // dir offset = 12
+
+        // dir entry: filepos=100 (out of bounds), size=10, name="TEST"
+        data[12..16].copy_from_slice(&100i32.to_le_bytes());
+        data[16..20].copy_from_slice(&10i32.to_le_bytes());
+        data[20..28].copy_from_slice(b"TEST\0\0\0\0");
+
+        assert!(matches!(WadFile::parse(data), Err(WadError::LumpOutOfBounds{..})));
+    }
+
+    #[test]
+    fn parse_lump_negative_field() {
+        let mut data = vec![0u8; 28]; // 12 header + 16 dir entry
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes()); // numlumps = 1
+        data[8..12].copy_from_slice(&12i32.to_le_bytes()); // dir offset = 12
+
+        // dir entry: filepos=-1 (invalid), size=10, name="TEST"
+        data[12..16].copy_from_slice(&(-1i32).to_le_bytes());
+        data[16..20].copy_from_slice(&10i32.to_le_bytes());
+        data[20..28].copy_from_slice(b"TEST\0\0\0\0");
+
+        assert!(matches!(WadFile::parse(data), Err(WadError::LumpNegativeField{..})));
+    }
 }
