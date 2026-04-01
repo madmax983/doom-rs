@@ -241,6 +241,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn fixed_raw_returns_internal_value() {
+        let f = Fixed16_16::from_int(1);
+        assert_eq!(f.raw(), 65536);
+        let f2 = Fixed16_16::from_raw(0xABCD);
+        assert_eq!(f2.raw(), 0xABCD);
+    }
+
+    #[test]
     fn from_int_roundtrip() {
         for n in -32768_i32..=32767 {
             assert_eq!(Fixed16_16::from_int(n).to_int(), n);

@@ -7,7 +7,6 @@ mod cheats;
 mod cogmind;
 mod console;
 mod demo_mode;
-mod export_stats;
 mod net_mode;
 mod savegame;
 #[cfg(feature = "wad-explorer")]
@@ -168,7 +167,7 @@ struct Args {
     #[arg(long, default_value = "1")]
     music_loops: u32,
 
-    /// Export the total map statistics (kills, items, secrets, par time) to a JSON file and exit.
+    /// Compute the total map statistics (kills, items, secrets, par time) and print them to the console.
     #[arg(long)]
     export_map_stats: Option<std::path::PathBuf>,
 
@@ -176,6 +175,11 @@ struct Args {
     #[cfg(feature = "wad-explorer")]
     #[arg(long)]
     explore_wad: bool,
+    map_stats: bool,
+
+    /// Print the map statistics as raw JSON. Only valid when combined with --map-stats.
+    #[arg(long)]
+    json: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2036,20 +2040,34 @@ fn run_doom() -> Result<()> {
         return Ok(());
     }
 
-    if let Some(ref stats_path) = args.export_map_stats {
+    if args.map_stats {
         let mut gs = GameState::new(warp_str);
         doom_game::spawn_level_things(&mut gs, &level, Skill::Medium, false);
         let stats = gs.compute_intermission_stats();
-        let json_data = export_stats::export_map_stats_to_json(warp_str, &stats);
-        std::fs::write(stats_path, json_data)
-            .with_context(|| format!("Failed to write map stats to {}", stats_path.display()))?;
-        use crossterm::style::Stylize;
-        println!(
-            "{} {} map stats to {}",
-            "🌟".green(),
-            "Exported".green().bold(),
-            stats_path.display().to_string().cyan()
-        );
+
+        if args.json {
+            let json_data = format!(
+                r#"{{
+  "map": "{}",
+  "total_kills": {},
+  "total_items": {},
+  "total_secrets": {},
+  "par_time_tics": {}
+}}"#,
+                warp_str, stats.total_kills, stats.total_items, stats.total_secrets, stats.par_time_tics
+            );
+            println!("{json_data}");
+        } else {
+            let mut table = comfy_table::Table::new();
+            table
+                .set_header(vec!["Statistic", "Value"])
+                .add_row(vec!["Map", warp_str])
+                .add_row(vec!["Total Kills", &stats.total_kills.to_string()])
+                .add_row(vec!["Total Items", &stats.total_items.to_string()])
+                .add_row(vec!["Total Secrets", &stats.total_secrets.to_string()])
+                .add_row(vec!["Par Time (tics)", &stats.par_time_tics.to_string()]);
+            println!("{table}");
+        }
         return Ok(());
     }
 

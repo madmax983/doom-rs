@@ -685,12 +685,7 @@ fn read_floor_mover(r: &mut ReadCursor<'_>) -> Result<FloorMover, SaveError> {
 }
 
 fn write_platform_status(w: &mut WriteCursor, status: PlatformStatus) {
-    let byte = match status {
-        PlatformStatus::Up => 0u8,
-        PlatformStatus::Down => 1u8,
-        PlatformStatus::Waiting => 2u8,
-    };
-    w.write_u8(byte);
+    w.write_u8(status as u8);
 }
 
 fn read_platform_status(r: &mut ReadCursor<'_>) -> Result<PlatformStatus, SaveError> {
@@ -722,13 +717,7 @@ fn read_perpetual_platform(r: &mut ReadCursor<'_>) -> Result<PerpetualPlatform, 
 }
 
 fn write_lift_status(w: &mut WriteCursor, status: LiftStatus) {
-    let byte = match status {
-        LiftStatus::Lowering => 0u8,
-        LiftStatus::Waiting => 1u8,
-        LiftStatus::Raising => 2u8,
-        LiftStatus::Done => 3u8,
-    };
-    w.write_u8(byte);
+    w.write_u8(status as u8);
 }
 
 fn read_lift_status(r: &mut ReadCursor<'_>) -> Result<LiftStatus, SaveError> {
