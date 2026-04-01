@@ -418,4 +418,32 @@ mod tests {
             "stale slot must be disconnected after timeout"
         );
     }
+
+    #[test]
+    fn check_timeouts_keeps_active_slots() {
+        let config = NetConfig {
+            timeout_ms: 1000, // 1000ms timeout for fast testing
+            ..test_config()
+        };
+        let mut server = RelayServer::bind("127.0.0.1:0", config).unwrap();
+
+        let addr: SocketAddr = "127.0.0.1:10001".parse().unwrap();
+        server.accept_connection(addr);
+        assert_eq!(server.connected_count(), 1);
+
+        server.check_timeouts();
+        assert_eq!(
+            server.connected_count(),
+            1,
+            "active slot must be kept before timeout"
+        );
+    }
+
+    #[test]
+    fn relay_server_bind_failure() {
+        let config = NetConfig::default();
+        // Bind to an invalid address
+        let server = RelayServer::bind("256.256.256.256:0", config);
+        assert!(server.is_err());
+    }
 }
