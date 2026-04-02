@@ -2067,12 +2067,40 @@ fn run_doom() -> Result<()> {
         } else {
             let mut table = comfy_table::Table::new();
             table
-                .set_header(vec!["Statistic", "Value"])
-                .add_row(vec!["Map", warp_str])
-                .add_row(vec!["Total Kills", &stats.total_kills.to_string()])
-                .add_row(vec!["Total Items", &stats.total_items.to_string()])
-                .add_row(vec!["Total Secrets", &stats.total_secrets.to_string()])
-                .add_row(vec!["Par Time (tics)", &stats.par_time_tics.to_string()]);
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_header(vec![
+                    comfy_table::Cell::new("Statistic")
+                        .fg(comfy_table::Color::Cyan)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new("Value")
+                        .fg(comfy_table::Color::Cyan)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("🗺️  Map"),
+                    comfy_table::Cell::new(warp_str.to_string()).fg(comfy_table::Color::Yellow),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("💀 Total Kills"),
+                    comfy_table::Cell::new(stats.total_kills.to_string())
+                        .fg(comfy_table::Color::Red),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("📦 Total Items"),
+                    comfy_table::Cell::new(stats.total_items.to_string())
+                        .fg(comfy_table::Color::Green),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("🕵️  Total Secrets"),
+                    comfy_table::Cell::new(stats.total_secrets.to_string())
+                        .fg(comfy_table::Color::Magenta),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("⏱️  Par Time (tics)"),
+                    comfy_table::Cell::new(stats.par_time_tics.to_string())
+                        .fg(comfy_table::Color::Blue),
+                ]);
             println!("{table}");
         }
         return Ok(());
