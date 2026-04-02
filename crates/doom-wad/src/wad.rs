@@ -218,6 +218,21 @@ impl WadFile {
     /// of the directory. This respects the engine's "last defined wins" rule.
     ///
     /// Returns `None` if no lump with that name exists.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::WadFile;
+    ///
+    /// // A WAD with two lumps named "TEST", the last one containing "SECOND".
+    /// // Header: 12 bytes
+    /// // 1st lump entry: offset 12+16+16=44, size 5, name "TEST"
+    /// // 2nd lump entry: offset 44+5=49, size 6, name "TEST"
+    /// let wad_bytes = b"IWAD\x02\0\0\0\x0C\0\0\0\x2C\0\0\0\x05\0\0\0TEST\0\0\0\0\x31\0\0\0\x06\0\0\0TEST\0\0\0\0FIRSTSECOND".to_vec();
+    /// let wad = WadFile::parse(wad_bytes).unwrap();
+    ///
+    /// let lump = wad.find_lump("TEST").unwrap();
+    /// assert_eq!(wad.lump_data(lump), b"SECOND");
+    /// ```
     pub fn find_lump(&self, name: &str) -> Option<&LumpDef> {
         let key = LumpName::from_str(name);
         self.dir.iter().rev().find(|l| l.name == key)
@@ -234,6 +249,17 @@ impl WadFile {
     /// Convenience: find a lump by name and return its data.
     ///
     /// Returns `None` if the lump doesn't exist.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::WadFile;
+    ///
+    /// let wad_bytes = b"IWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0TEST\0\0\0\0DATA".to_vec();
+    /// let wad = WadFile::parse(wad_bytes).unwrap();
+    ///
+    /// assert_eq!(wad.find_lump_data("test").unwrap(), b"DATA"); // Search is case-insensitive
+    /// assert!(wad.find_lump_data("MISSING").is_none());
+    /// ```
     pub fn find_lump_data(&self, name: &str) -> Option<&[u8]> {
         let lump = self.find_lump(name)?.clone();
         Some(self.lump_data(&lump))
@@ -243,6 +269,18 @@ impl WadFile {
     ///
     /// Returns an iterator over lumps that appear strictly between the
     /// last occurrence of `start_marker` and the next `end_marker`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::WadFile;
+    ///
+    /// // A WAD with marker lumps
+    /// let wad_bytes = b"IWAD\x04\0\0\0\x0C\0\0\0\x4C\0\0\0\x00\0\0\0F_START\0\x4C\0\0\0\x00\0\0\0FLAT1\0\0\0\x4C\0\0\0\x00\0\0\0FLAT2\0\0\0\x4C\0\0\0\x00\0\0\0F_END\0\0\0".to_vec();
+    /// let wad = WadFile::parse(wad_bytes).unwrap();
+    ///
+    /// let flats: Vec<_> = wad.lumps_between("F_START", "F_END").map(|l| l.name.as_str()).collect();
+    /// assert_eq!(flats, vec!["FLAT1", "FLAT2"]);
+    /// ```
     pub fn lumps_between<'a>(
         &'a self,
         start: &str,
@@ -336,6 +374,22 @@ impl WadFile {
     ///
     /// Returns `None` if the map marker isn't present or any required lump
     /// is missing from the expected position after the marker.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::{WadFile, MapLumpGroup};
+    ///
+    /// // A WAD with a valid classic map requires 10 specific lumps after the marker.
+    /// // (The binary representation here is shortened for illustration.)
+    /// let wad_bytes = b"IWAD\x0B\0\0\0\x0C\0\0\0\xBC\0\0\0\x00\0\0\0MAP01\0\0\0\xBC\0\0\0\x00\0\0\0THINGS\0\0\xBC\0\0\0\x00\0\0\0LINEDEFS\xBC\0\0\0\x00\0\0\0SIDEDEFS\xBC\0\0\0\x00\0\0\0VERTEXES\xBC\0\0\0\x00\0\0\0SEGS\0\0\0\0\xBC\0\0\0\x00\0\0\0SSECTORS\xBC\0\0\0\x00\0\0\0NODES\0\0\0\xBC\0\0\0\x00\0\0\0SECTORS\0\xBC\0\0\0\x00\0\0\0REJECT\0\0\xBC\0\0\0\x00\0\0\0BLOCKMAP".to_vec();
+    /// let wad = WadFile::parse(wad_bytes).unwrap();
+    ///
+    /// if let Some(MapLumpGroup::Classic(map)) = wad.map_lump_group("MAP01") {
+    ///     assert_eq!(map.marker.name.as_str(), "MAP01");
+    ///     assert_eq!(map.lumps[0].name.as_str(), "THINGS");
+    ///     // ... and so on for all 10 required lumps
+    /// }
+    /// ```
     pub fn map_lump_group<'a>(&'a self, map_name: &str) -> Option<MapLumpGroup<'a>> {
         let marker_idx = self.find_map_marker(map_name)?;
         let marker = &self.dir[marker_idx];
