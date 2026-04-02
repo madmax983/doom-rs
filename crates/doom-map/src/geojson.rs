@@ -6,6 +6,83 @@
 use crate::Level;
 
 /// Exports a `Level` to a GeoJSON string containing LineStrings and Points.
+///
+/// # Panics
+///
+/// Panics if a linedef references a vertex index (`from_vertex` or `to_vertex`) that
+/// is out of bounds for the level's `vertexes` array.
+///
+/// # Examples
+///
+/// ```
+/// use doom_map::{Level, lumps::{Blockmap, Linedef, Reject, Sector, Sidedef, Thing, Vertex}};
+///
+/// let reject = Reject::parse_lump(&[0u8], 1).unwrap();
+/// let mut bm_data = vec![0u8; 14];
+/// bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+/// bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+/// bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+/// bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+/// bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+/// let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+///
+/// let level = Level {
+///     name: "TEST".to_owned(),
+///     things: vec![Thing {
+///         x: 32,
+///         y: 32,
+///         angle: 0,
+///         kind: 1,
+///         flags: 0,
+///     }],
+///     vertexes: vec![
+///         Vertex { x: 0, y: 0 },
+///         Vertex { x: 64, y: 0 },
+///     ],
+///     linedefs: vec![
+///         Linedef {
+///             from_vertex: 0,
+///             to_vertex: 1,
+///             flags: 0,
+///             special: 0,
+///             tag: 0,
+///             right_sidedef: 0,
+///             left_sidedef: 0xFFFF,
+///         },
+///     ],
+///     sidedefs: vec![
+///         Sidedef {
+///             x_offset: 0,
+///             y_offset: 0,
+///             upper_texture: *b"WALL1\0\0\0",
+///             lower_texture: *b"WALL2\0\0\0",
+///             middle_texture: *b"WALL3\0\0\0",
+///             sector: 0,
+///         },
+///     ],
+///     sectors: vec![Sector {
+///         floor_height: 0,
+///         ceil_height: 128,
+///         floor_flat: *b"FLAT1\0\0\0",
+///         ceil_flat: *b"FLAT2\0\0\0",
+///         light_level: 192,
+///         special: 0,
+///         tag: 0,
+///     }],
+///     segs: vec![],
+///     ssectors: vec![],
+///     nodes: vec![],
+///     reject,
+///     blockmap,
+/// };
+///
+/// let geojson = doom_map::export_map_to_geojson(&level);
+/// assert!(geojson.contains(r#""type": "FeatureCollection""#));
+/// assert!(geojson.contains(r#""type": "LineString""#));
+/// assert!(geojson.contains(r#"[[0, 0], [64, 0]]"#));
+/// assert!(geojson.contains(r#""type": "Point""#));
+/// assert!(geojson.contains(r#"[32, 32]"#));
+/// ```
 pub fn export_map_to_geojson(level: &Level) -> String {
     let mut features = Vec::new();
 

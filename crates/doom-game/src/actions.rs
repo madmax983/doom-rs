@@ -526,12 +526,12 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let is_ambush = mo_flags & flags::MF_AMBUSH != 0;
 
     // --- Step 1: Check sound targets ---
+    // --- Step 1: Check sound targets ---
     if let Some(lv) = level {
         // Resolve the monster's sector from its current position, but keep a
         // subsector fallback for synthetic/unit-test maps.
-        if let Some(actor_sector) =
-            crate::sight::sector_from_position_or_subsector(lv, mo_x, mo_y, mo_subsector)
-        {
+        let actor_sector = crate::sight::sector_from_position_or_subsector(lv, mo_x, mo_y, mo_subsector);
+        if let Some(actor_sector) = actor_sector {
             if let Some(sound_target) = crate::sound::get_sound_target(gs, actor_sector) {
                 // Verify the sound target is alive.
                 let target_alive = gs
@@ -540,20 +540,9 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
                     .map(|t| !t.is_dead())
                     .unwrap_or(false);
 
-                if target_alive {
-                    if is_ambush {
-                        // Ambush monsters only react to sound if they have LOS.
-                        if crate::sight::p_check_sight(gs, lv, handle, sound_target) {
-                            // Has LOS — wake up and target the sound source.
-                            transition_to_see_state(gs, handle, mo_kind, sound_target);
-                            return;
-                        }
-                        // No LOS — fall through to visual check.
-                    } else {
-                        // Non-ambush: wake from sound alone.
-                        transition_to_see_state(gs, handle, mo_kind, sound_target);
-                        return;
-                    }
+                if target_alive && (!is_ambush || crate::sight::p_check_sight(gs, lv, handle, sound_target)) {
+                    transition_to_see_state(gs, handle, mo_kind, sound_target);
+                    return;
                 }
             }
         }
@@ -828,18 +817,13 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     }
 
     // --- Gather monster data ---
-    let (target_handle, mo_kind, _movecount, mo_flags) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.target, mo.kind, mo.movecount, mo.flags),
+    let (mo_kind, _movecount, mo_flags) = match gs.mobjslab.get(handle) {
+        Some(mo) => (mo.kind, mo.movecount, mo.flags),
         None => return,
     };
 
     // --- Step 2: Check target still exists and is alive ---
-    let target_alive = match gs.mobjslab.get(target_handle) {
-        Some(t) => !t.is_dead(),
-        None => false,
-    };
-
-    if !target_alive || target_handle == MobjHandle::NULL {
+    if get_alive_target(gs, handle).is_none() {
         // Try to find a new target via A_Look logic.
         // First clear the old target.
         if let Some(mo) = gs.mobjslab.get_mut(handle) {

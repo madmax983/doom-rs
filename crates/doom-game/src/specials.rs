@@ -314,15 +314,8 @@ pub fn ev_teleport(gs: &mut GameState, level: &Level, tag: u16, mobj_handle: Mob
 /// Call this once after loading a level, before the first tic.
 pub fn init_sector_lights(gs: &mut GameState, level: &Level) {
     for (i, sector) in level.sectors.iter().enumerate() {
-        let effect_type = match sector.special {
-            1 => LightEffectType::BlinkRandom,
-            2 => LightEffectType::Blink05s,
-            3 => LightEffectType::Blink1s,
-            8 => LightEffectType::Oscillate,
-            12 => LightEffectType::BlinkSync05s,
-            13 => LightEffectType::BlinkSync1s,
-            17 => LightEffectType::FireFlicker,
-            _ => continue,
+        let Some(effect_type) = LightEffectType::from_repr(sector.special) else {
+            continue;
         };
 
         let min_light = match effect_type {
@@ -561,8 +554,12 @@ pub fn tick_lights(gs: &mut GameState, level: &mut Level) {
 /// Call this once after loading a level, before the first tic.
 pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
     for (i, sector) in level.sectors.iter().enumerate() {
-        match sector.special {
-            1 => {
+        let Some(effect_type) = LightEffectType::from_repr(sector.special) else {
+            continue;
+        };
+
+        match effect_type {
+            LightEffectType::BlinkRandom => {
                 // Random off: slow blink, goes dark.
                 gs.movers.active_lights.push(LightSpecial {
                     sector: i,
@@ -573,7 +570,7 @@ pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
                     is_bright: true,
                 });
             }
-            2 => {
+            LightEffectType::Blink05s => {
                 // Fast strobe.
                 gs.movers.active_lights.push(LightSpecial {
                     sector: i,
@@ -584,7 +581,7 @@ pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
                     is_bright: true,
                 });
             }
-            3 => {
+            LightEffectType::Blink1s => {
                 // Slow strobe: dim but not fully dark.
                 gs.movers.active_lights.push(LightSpecial {
                     sector: i,

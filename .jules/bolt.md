@@ -18,3 +18,6 @@
 **[Iterator Contracts and Deduplication Constraints]**
 **Learning:** Before changing a function to return an `impl Iterator` instead of a `Vec` to avoid allocations (like `adjacent_sectors`), it is critical to verify the original implementation does not guarantee properties that require a full collection, such as `.dedup()` or `.sort_unstable()`. Altering this contract can introduce subtle logical bugs.
 **Action:** If a function's return values must be unique and deduplication is required, it is generally safer to keep the `Vec` allocation or explicitly push to a `HashSet`/`BitSet` instead of blindly returning a lazy iterator, unless the uniqueness guarantee can be reliably delegated to all callers.
+**[AABB check before Euclidean .sqrt() in radial math]**
+**Learning:** Performing a `.sqrt()` calculation on every single actor in `p_radius_attack` creates unnecessary floating-point operations for actors far outside the explosion radius.
+**Action:** Adding an Axis-Aligned Bounding Box (AABB) early-out check (`dx.abs() >= radius || dy.abs() >= radius`) quickly skips actors out of range before computing the exact Euclidean distance, saving CPU cycles on the hot path.
