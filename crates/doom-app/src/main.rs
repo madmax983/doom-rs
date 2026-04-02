@@ -159,6 +159,10 @@ struct Args {
     #[arg(long)]
     export_geojson: Option<std::path::PathBuf>,
 
+    /// Export the sector topological graph to a Graphviz DOT file and exit.
+    #[arg(long)]
+    export_dot: Option<std::path::PathBuf>,
+
     /// Export map music as a 16-bit PCM WAV file and exit.
     ///
     /// Uses MUS + GENMIDI + OPL synthesis for source-faithful Doom music.
@@ -2013,6 +2017,20 @@ fn run_doom() -> Result<()> {
             "🌟".green(),
             "Exported".green().bold(),
             geojson_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
+
+    if let Some(ref dot_path) = args.export_dot {
+        let graph = doom_map::SectorGraph::build(&level);
+        std::fs::write(dot_path, graph.to_dot())
+            .with_context(|| format!("Failed to write DOT to {}", dot_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} Graphviz DOT to {}",
+            "🌟".green(),
+            "Exported".green().bold(),
+            dot_path.display().to_string().cyan()
         );
         return Ok(());
     }

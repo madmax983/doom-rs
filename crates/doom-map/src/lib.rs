@@ -11,6 +11,7 @@
 
 pub mod bsp;
 pub mod geojson;
+pub mod graph;
 pub mod html;
 pub mod level;
 pub mod lumps;
@@ -20,6 +21,7 @@ pub mod udmf;
 
 pub use bsp::{BspChild, BspError, BspTree};
 pub use geojson::export_map_to_geojson;
+pub use graph::SectorGraph;
 pub use html::export_map_to_html;
 pub use level::{Level, LevelError};
 pub use lumps::{
