@@ -14,3 +14,6 @@
 **[AABB check before Euclidean .sqrt() in radial math]**
 **Learning:** Performing a `.sqrt()` calculation on every single actor in `p_radius_attack` creates unnecessary floating-point operations for actors far outside the explosion radius.
 **Action:** Adding an Axis-Aligned Bounding Box (AABB) early-out check (`dx.abs() >= radius || dy.abs() >= radius`) quickly skips actors out of range before computing the exact Euclidean distance, saving CPU cycles on the hot path.
+**[Eliminated intermediate collection in wad lump scanning]**
+**Learning:** `Vec::collect()` intermediate collections over iterators just to iterate over them again later via `.into_iter()` is wasteful. We can preserve an `impl Iterator` to process items continuously and eliminate the initial `Vec` buffer entirely, avoiding temporary allocation overhead at startup.
+**Action:** When filtering or mapping data from an underlying collection to form a list that will be consumed downstream, prefer returning a lifetime-bound `impl Iterator` instead of a full `Vec` wherever the call chain allows for lazy iteration.
