@@ -13,3 +13,6 @@
 ## 2026-03-30 - Prevent panic on out-of-bounds rendering of CogmindFrame
 **Learning:** Direct slice indexing `self.cells[idx]` within `CogmindFrame::get` caused a panic if `Widget::render` queried out of bounds due to structural or manual bugs elsewhere.
 **Action:** Use safe safe `.get(idx)` instead, which resolves to `None` gracefully.
+## 2024-04-03 - [Testing Parsing Boundaries in doom-wad]
+**Learning:** Found uncovered edge cases related to directory parsing where `infotableofs` could be negative, causing unexpected cast bugs or errors. In `doom-wad`, testing parsing logic requires explicitly feeding negative metadata offsets and validating `thiserror` types.
+**Action:** Always check array bounds casts and offsets in parsing headers. Use `matches!(result, Err(WadError::DirectoryOutOfBounds { .. }))` for checking struct enum variants with fields.

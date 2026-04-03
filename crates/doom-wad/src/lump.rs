@@ -192,10 +192,30 @@ mod tests {
     #[test]
     fn lump_def_is_marker() {
         let name = LumpName::from_str("F_START");
-        let def1 = LumpDef { name, offset: 0, size: 0 };
+        let def1 = LumpDef {
+            name,
+            offset: 0,
+            size: 0,
+        };
         assert!(def1.is_marker());
 
-        let def2 = LumpDef { name, offset: 0, size: 10 };
+        let def2 = LumpDef {
+            name,
+            offset: 0,
+            size: 10,
+        };
         assert!(!def2.is_marker());
+    }
+
+    #[test]
+    fn lump_name_debug() {
+        let name = LumpName::from_str("TEST");
+        assert_eq!(format!("{:?}", name), "LumpName(\"TEST\")");
+    }
+
+    #[test]
+    fn lump_name_display() {
+        let name = LumpName::from_str("TEST");
+        assert_eq!(format!("{}", name), "TEST");
     }
 }
