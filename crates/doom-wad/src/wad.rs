@@ -832,10 +832,7 @@ mod tests {
         data[8..12].copy_from_slice(&(-1i32).to_le_bytes()); // Negative directory offset
 
         let result = WadFile::parse(data);
-        assert!(matches!(
-            result,
-            Err(WadError::DirectoryOutOfBounds { .. })
-        ));
+        assert!(matches!(result, Err(WadError::DirectoryOutOfBounds { .. })));
     }
 
     #[test]
@@ -846,10 +843,7 @@ mod tests {
         data[8..12].copy_from_slice(&100i32.to_le_bytes()); // Offset far past end
 
         let result = WadFile::parse(data);
-        assert!(matches!(
-            result,
-            Err(WadError::DirectoryOutOfBounds { .. })
-        ));
+        assert!(matches!(result, Err(WadError::DirectoryOutOfBounds { .. })));
     }
 
     #[test]
@@ -893,8 +887,16 @@ mod tests {
     #[test]
     fn wad_dir_getters() {
         let dir = WadDir::from_lumps(vec![
-            LumpDef { name: LumpName::from_str("LUMP1"), offset: 0, size: 0 },
-            LumpDef { name: LumpName::from_str("LUMP2"), offset: 0, size: 0 },
+            LumpDef {
+                name: LumpName::from_str("LUMP1"),
+                offset: 0,
+                size: 0,
+            },
+            LumpDef {
+                name: LumpName::from_str("LUMP2"),
+                offset: 0,
+                size: 0,
+            },
         ]);
 
         assert_eq!(dir.len(), 2);
@@ -903,5 +905,93 @@ mod tests {
 
         let empty_dir = WadDir::from_lumps(vec![]);
         assert!(empty_dir.is_empty());
+    }
+
+    #[test]
+    fn parse_negative_lump_count() {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&(-1i32).to_le_bytes()); // numlumps
+        data.extend_from_slice(&12i32.to_le_bytes()); // infotableofs
+
+        let result = WadFile::parse(data);
+        assert!(matches!(result, Err(WadError::NegativeLumpCount(-1))));
+    }
+
+    #[test]
+    fn parse_directory_out_of_bounds_negative_infotableofs() {
+        let mut data = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&1i32.to_le_bytes()); // numlumps
+        data.extend_from_slice(&(-1i32).to_le_bytes()); // infotableofs
+
+        let result = WadFile::parse(data);
+        assert!(matches!(result, Err(WadError::DirectoryOutOfBounds { .. })));
+    }
+
+    #[test]
+    fn wad_dir_find() {
+        let dir = WadDir::from_lumps(vec![
+            LumpDef {
+                name: LumpName::from_str("LUMP1"),
+                offset: 0,
+                size: 0,
+            },
+            LumpDef {
+                name: LumpName::from_str("LUMP2"),
+                offset: 0,
+                size: 0,
+            },
+            LumpDef {
+                name: LumpName::from_str("LUMP1"),
+                offset: 10,
+                size: 10,
+            },
+        ]);
+
+        let found = dir.find("LUMP1").unwrap();
+        assert_eq!(found.size, 10);
+        assert!(dir.find("LUMP3").is_none());
+    }
+
+    #[test]
+    fn map_lump_group_wrong_lump_name_returns_none() {
+        let mut lumps = vec![("MAP01", b"".as_slice())];
+        // 10 valid lumps, but the first is WRONG instead of THINGS
+        lumps.push(("WRONG", b""));
+        lumps.push(("LINEDEFS", b""));
+        lumps.push(("SIDEDEFS", b""));
+        lumps.push(("VERTEXES", b""));
+        lumps.push(("SEGS", b""));
+        lumps.push(("SSECTORS", b""));
+        lumps.push(("NODES", b""));
+        lumps.push(("SECTORS", b""));
+        lumps.push(("REJECT", b""));
+        lumps.push(("BLOCKMAP", b""));
+
+        let wad_bytes = make_iwad(&lumps);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        assert!(wad.map_lump_group("MAP01").is_none());
+    }
+
+    #[test]
+    fn udmf_map_lump_group_methods() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("TEXTMAP", b""),
+            ("ZNODES", b""),
+            ("ENDMAP", b""),
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+
+        match wad.map_lump_group("MAP01").unwrap() {
+            MapLumpGroup::Udmf(udmf) => {
+                assert_eq!(udmf.aux_lumps().len(), 1);
+                assert_eq!(udmf.aux_lumps()[0].name.as_str(), "ZNODES");
+                assert_eq!(udmf.find_lump("ZNODES").unwrap().name.as_str(), "ZNODES");
+                assert!(udmf.find_lump("NONEXISTENT").is_none());
+            }
+            _ => panic!("Expected UDMF"),
+        }
     }
 }
