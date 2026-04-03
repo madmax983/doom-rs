@@ -530,7 +530,8 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     if let Some(lv) = level {
         // Resolve the monster's sector from its current position, but keep a
         // subsector fallback for synthetic/unit-test maps.
-        let actor_sector = crate::sight::sector_from_position_or_subsector(lv, mo_x, mo_y, mo_subsector);
+        let actor_sector =
+            crate::sight::sector_from_position_or_subsector(lv, mo_x, mo_y, mo_subsector);
         if let Some(actor_sector) = actor_sector {
             if let Some(sound_target) = crate::sound::get_sound_target(gs, actor_sector) {
                 // Verify the sound target is alive.
@@ -540,7 +541,9 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
                     .map(|t| !t.is_dead())
                     .unwrap_or(false);
 
-                if target_alive && (!is_ambush || crate::sight::p_check_sight(gs, lv, handle, sound_target)) {
+                if target_alive
+                    && (!is_ambush || crate::sight::p_check_sight(gs, lv, handle, sound_target))
+                {
                     transition_to_see_state(gs, handle, mo_kind, sound_target);
                     return;
                 }
