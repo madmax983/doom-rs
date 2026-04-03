@@ -823,4 +823,85 @@ mod tests {
             .collect();
         assert_eq!(flats, vec!["FLAT1", "FLAT2"]);
     }
+
+    #[test]
+    fn parse_directory_out_of_bounds_negative() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes()); // 1 lump
+        data[8..12].copy_from_slice(&(-1i32).to_le_bytes()); // Negative directory offset
+
+        let result = WadFile::parse(data);
+        assert!(matches!(
+            result,
+            Err(WadError::DirectoryOutOfBounds { .. })
+        ));
+    }
+
+    #[test]
+    fn parse_directory_out_of_bounds_past_end() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes()); // 1 lump
+        data[8..12].copy_from_slice(&100i32.to_le_bytes()); // Offset far past end
+
+        let result = WadFile::parse(data);
+        assert!(matches!(
+            result,
+            Err(WadError::DirectoryOutOfBounds { .. })
+        ));
+    }
+
+    #[test]
+    fn parse_lump_negative_field() {
+        let mut data = vec![0u8; 28]; // Header (12) + 1 Lump Entry (16)
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes()); // 1 lump
+        data[8..12].copy_from_slice(&12i32.to_le_bytes()); // Directory at offset 12
+
+        // Lump Entry 1
+        data[12..16].copy_from_slice(&(-1i32).to_le_bytes()); // Negative filepos
+        data[16..20].copy_from_slice(&10i32.to_le_bytes()); // size
+        data[20..28].copy_from_slice(b"TEST\0\0\0\0"); // name
+
+        let result = WadFile::parse(data);
+        assert!(matches!(
+            result,
+            Err(WadError::LumpNegativeField { name }) if name == "TEST"
+        ));
+    }
+
+    #[test]
+    fn parse_lump_out_of_bounds() {
+        let mut data = vec![0u8; 28]; // Header (12) + 1 Lump Entry (16)
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes()); // 1 lump
+        data[8..12].copy_from_slice(&12i32.to_le_bytes()); // Directory at offset 12
+
+        // Lump Entry 1
+        data[12..16].copy_from_slice(&100i32.to_le_bytes()); // filepos far past end
+        data[16..20].copy_from_slice(&10i32.to_le_bytes()); // size
+        data[20..28].copy_from_slice(b"TEST\0\0\0\0"); // name
+
+        let result = WadFile::parse(data);
+        assert!(matches!(
+            result,
+            Err(WadError::LumpOutOfBounds { name, .. }) if name == "TEST"
+        ));
+    }
+
+    #[test]
+    fn wad_dir_getters() {
+        let dir = WadDir::from_lumps(vec![
+            LumpDef { name: LumpName::from_str("LUMP1"), offset: 0, size: 0 },
+            LumpDef { name: LumpName::from_str("LUMP2"), offset: 0, size: 0 },
+        ]);
+
+        assert_eq!(dir.len(), 2);
+        assert!(!dir.is_empty());
+        assert_eq!(dir.lumps().len(), 2);
+
+        let empty_dir = WadDir::from_lumps(vec![]);
+        assert!(empty_dir.is_empty());
+    }
 }

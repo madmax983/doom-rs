@@ -414,4 +414,37 @@ mod tests {
             _ => panic!("Expected Classic map lump group"),
         }
     }
+
+    #[test]
+    fn stack_wad_count() {
+        let mut stack = WadStack::new();
+        assert_eq!(stack.wad_count(), 0);
+
+        // Mock WAD with valid basic structure.
+        let mut iwad_data = vec![0u8; 12];
+        iwad_data[0..4].copy_from_slice(b"IWAD");
+        iwad_data[4..8].copy_from_slice(&0i32.to_le_bytes()); // 0 lumps
+        iwad_data[8..12].copy_from_slice(&12i32.to_le_bytes()); // offset 12
+
+        stack.push_iwad(iwad_data).unwrap();
+        assert_eq!(stack.wad_count(), 1);
+    }
+
+    #[test]
+    fn stack_map_lump_group_none() {
+        let mut stack = WadStack::new();
+        let mut iwad_data = vec![0u8; 12];
+        iwad_data[0..4].copy_from_slice(b"IWAD");
+        iwad_data[4..8].copy_from_slice(&0i32.to_le_bytes()); // 0 lumps
+        iwad_data[8..12].copy_from_slice(&12i32.to_le_bytes()); // offset 12
+        stack.push_iwad(iwad_data).unwrap();
+
+        assert!(stack.map_lump_group("E1M1").is_none());
+    }
+
+    #[test]
+    fn stack_default() {
+        let stack: WadStack = Default::default();
+        assert_eq!(stack.wad_count(), 0);
+    }
 }
