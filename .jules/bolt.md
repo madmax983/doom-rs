@@ -14,3 +14,7 @@
 **[AABB check before Euclidean .sqrt() in radial math]**
 **Learning:** Performing a `.sqrt()` calculation on every single actor in `p_radius_attack` creates unnecessary floating-point operations for actors far outside the explosion radius.
 **Action:** Adding an Axis-Aligned Bounding Box (AABB) early-out check (`dx.abs() >= radius || dy.abs() >= radius`) quickly skips actors out of range before computing the exact Euclidean distance, saving CPU cycles on the hot path.
+
+**[doom-game: Remove Iterator Collects on Hot Path]
+**Learning:** In code executed per-frame, mapping and collecting iterators into intermediate `Vec` collections solely to fuel immediately subsequent loops creates wasteful heap allocations.
+**Action:** When the iterator source and the destination mutations borrow disjoint sets of state (enforced safely by NLL), directly feed iterators into `for` loops without using `.collect()` to uphold the zero-cost abstraction philosophy and eliminate dynamic heap allocations.
