@@ -1,3 +1,10 @@
+//! A topological graph representing the connectivity of sectors in a map.
+//!
+//! This module provides a `SectorGraph` which builds an adjacency list of sectors,
+//! primarily useful for pathfinding, topological sorting, and mapping sector relationships.
+//! It establishes connections by finding two-sided linedefs that connect one sector
+//! to another via their front and back sidedefs.
+
 use crate::Level;
 use std::collections::{HashMap, HashSet, VecDeque};
 

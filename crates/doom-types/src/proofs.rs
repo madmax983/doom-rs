@@ -1,12 +1,13 @@
-// Verus spine proofs for doom-types.
-//
-// These proofs are verified with the Verus verifier (verus.exe), NOT rustc.
-// Compilation: verus --crate-type lib crates/doom-types/src/proofs.rs
-//
-// The proof file uses #[cfg(verus_keep_ghost)] to be ignored by rustc
-// but processed by verus.
-//
-// See: https://verus-lang.github.io/verus/
+//! Verus proofs for core numeric operations.
+//!
+//! This module contains formal mathematical proofs using the Verus verifier.
+//! It verifies the safety and correctness of core doom-types numeric operations,
+//! such as fixed-point math (`Fixed16_16`) and Binary Angle Measurement (`Bam`)
+//! arithmetic, ensuring that overflows do not occur and operations remain within
+//! correct bounds.
+//!
+//! These proofs are verified with the Verus verifier (`verus.exe`), NOT `rustc`.
+//! Run `verus --crate-type lib crates/doom-types/src/proofs.rs` to verify.
 
 // Only compiled when verus processes this file.
 #![cfg(verus_keep_ghost)]

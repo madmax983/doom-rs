@@ -16,3 +16,6 @@
 ## 2024-07-28 - [Clarified WAD lump discovery behavior]
 **Confusion:** The documentation for `WadFile::find_lump` and `WadFile::lumps_between` lacked examples demonstrating the "last defined wins" principle and how markers like `F_START`/`F_END` actually encapsulate data. There were also no executable doc-tests showing case-insensitivity during WAD parsing or how `map_lump_group` pulls out a classic 10-lump map versus UDMF.
 **Clarification:** Added executable `## Examples` to `find_lump`, `find_lump_data`, `lumps_between`, and `map_lump_group` in `doom-wad`, highlighting how the parser handles multiple lumps with identical names and how to extract data bounds using marker lumps.
+## 2024-04-03 - [Missing Module Docs]
+**Confusion:** Module `doom-map::graph` and `doom-types::proofs` had no module-level documentation.
+**Clarification:** Add `//!` docstrings for missing modules.
