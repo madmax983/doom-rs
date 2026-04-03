@@ -3,6 +3,18 @@
 /// One tic of player input — the wire-compatible command struct.
 ///
 /// Layout is `repr(C)` with deterministic padding for netcode serialization.
+///
+/// ## Examples
+/// ```
+/// use doom_types::{TicCmd, bt};
+///
+/// let mut cmd = TicCmd::default();
+/// cmd.forward_move = 50;
+/// cmd.buttons |= bt::BT_ATTACK;
+///
+/// assert_eq!(cmd.forward_move, 50);
+/// assert_eq!(cmd.buttons, 1);
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[repr(C)]
 pub struct TicCmd {

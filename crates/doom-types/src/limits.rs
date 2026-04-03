@@ -7,9 +7,21 @@
 // ---------------------------------------------------------------------------
 
 /// Maximum number of visible things per frame (vanilla limit).
+///
+/// ## Examples
+/// ```
+/// use doom_types::limits::MAX_VISIBLE_THINGS;
+/// let mut visible = Vec::<i32>::with_capacity(MAX_VISIBLE_THINGS as usize);
+/// ```
 pub const MAX_VISIBLE_THINGS: u32 = 64;
 
 /// Maximum number of simultaneously active moving platforms.
+///
+/// ## Examples
+/// ```
+/// use doom_types::limits::MAX_ACTIVE_PLATS;
+/// assert_eq!(MAX_ACTIVE_PLATS, 30);
+/// ```
 pub const MAX_ACTIVE_PLATS: u32 = 30;
 
 /// Maximum scroll lines in a level.
