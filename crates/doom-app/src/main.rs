@@ -920,6 +920,7 @@ impl DoomApp for DoomGame {
                                 Ok((_header, payload)) => {
                                     if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
                                         self.console.print(format!("Load failed: {e}"));
+                                        self.hud_messages.push(format!("Load failed: {e}"), 105);
                                     } else {
                                         self.player_view_height = if self.gs.player.is_dead() {
                                             DEAD_PLAYER_VIEW_HEIGHT
@@ -927,11 +928,15 @@ impl DoomApp for DoomGame {
                                             PLAYER_HEIGHT
                                         };
                                         self.console.print("Game loaded.".to_string());
+                                        self.hud_messages.push("Game loaded.".to_string(), 105);
                                         self.start_level_music();
                                         self.menu.close();
                                     }
                                 }
-                                Err(e) => self.console.print(format!("Load failed: {e}")),
+                                Err(e) => {
+                                    self.console.print(format!("Load failed: {e}"));
+                                    self.hud_messages.push(format!("Load failed: {e}"), 105);
+                                }
                             }
                         }
                         doom_game::menu::MenuResult::SaveGame(slot) => {
@@ -940,8 +945,10 @@ impl DoomApp for DoomGame {
                                 savegame::save_game(std::path::Path::new(&path), &self.gs, slot)
                             {
                                 self.console.print(format!("Save failed: {e}"));
+                                self.hud_messages.push(format!("Save failed: {e}"), 105);
                             } else {
                                 self.console.print(format!("Saved to slot {slot}."));
+                                self.hud_messages.push(format!("Saved to slot {slot}."), 105);
                                 self.menu.close();
                             }
                         }
@@ -1014,8 +1021,10 @@ impl DoomApp for DoomGame {
         if input.f5_save {
             if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0) {
                 self.console.print(format!("Save failed: {e}"));
+                self.hud_messages.push(format!("Save failed: {e}"), 105);
             } else {
                 self.console.print("Game saved.".to_string());
+                self.hud_messages.push("Game saved.".to_string(), 105);
             }
         }
 
@@ -1025,14 +1034,17 @@ impl DoomApp for DoomGame {
                 Ok((_header, payload)) => {
                     if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
                         self.console.print(format!("Load failed: {e}"));
+                        self.hud_messages.push(format!("Load failed: {e}"), 105);
                     } else {
                         self.reset_weapon_anim();
                         self.console.print("Game loaded.".to_string());
+                        self.hud_messages.push("Game loaded.".to_string(), 105);
                         self.start_level_music();
                     }
                 }
                 Err(e) => {
                     self.console.print(format!("Load failed: {e}"));
+                    self.hud_messages.push(format!("Load failed: {e}"), 105);
                 }
             }
         }
