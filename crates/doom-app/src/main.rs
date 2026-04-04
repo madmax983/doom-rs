@@ -1067,6 +1067,13 @@ impl DoomApp for DoomGame {
         // with each other, matching Doom's original S_StartSound behaviour.
         {
             let events = std::mem::take(&mut self.gs.sound.sound_queue);
+
+            #[cfg(feature = "sound_ripples")]
+            if self.title_screen.is_none() {
+                self.cogmind_state
+                    .effects
+                    .spawn_sound_ripples(&events, &self.gs);
+            }
             self.handle_sound_events(events);
         }
 
@@ -4279,6 +4286,43 @@ mod tests {
             capture.framebuffer.get_pixel(0, 0),
             Some(4),
             "rendered framebuffer should contain the app's last rendered content"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 32: Sound Ripples Feature Integration
+    // -----------------------------------------------------------------------
+
+    #[test]
+    #[cfg(feature = "sound_ripples")]
+    fn sound_ripples_spawned_on_sound_events_in_tick() {
+        let mut game = make_doom_game();
+        game.title_screen = None; // Disable title screen so gameplay is active
+        game.phase_controller = doom_game::GamePhaseController::new(doom_game::MapId::new(1, 1)); // Ensure phase is Playing
+
+        // We just use the player's handle instead since it already exists.
+
+        // Enqueue a weapon fire sound.
+        game.gs
+            .sound
+            .sound_queue
+            .push(doom_game::SoundRequest::PlayerWeaponFire(
+                doom_game::player::WeaponType::Pistol,
+            ));
+
+        // Open menu to pause the game, so `gs.tick()` doesn't clear the sound queue we just pushed!
+        game.menu.open();
+
+        // Let the game tick process the sound queue.
+
+        game.tick(TicInput::default());
+
+        // Check if effects were spawned.
+
+        assert_eq!(
+            game.cogmind_state.effects.effects.len(),
+            9,
+            "sound ripples must spawn 9 particles"
         );
     }
 }

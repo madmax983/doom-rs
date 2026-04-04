@@ -32,3 +32,4 @@ loom = "0.7"
 
 [features]
 loom = ["dep:loom", "doom-audio/loom"]
+sound_ripples = []

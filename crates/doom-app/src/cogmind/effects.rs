@@ -245,6 +245,65 @@ impl EffectLayer {
         self.spawned_puffs
             .retain(|handle| gs.mobjslab.get(*handle).is_some());
     }
+
+    /// Spawn expanding particles for sound events.
+    #[cfg(feature = "sound_ripples")]
+    pub fn spawn_sound_ripples(&mut self, events: &[doom_game::SoundRequest], gs: &GameState) {
+        use doom_game::SoundRequest;
+
+        let rings: [(i32, i32, char); 9] = [
+            (0, 0, 'O'),
+            (1, 0, 'o'),
+            (-1, 0, 'o'),
+            (0, 1, 'o'),
+            (0, -1, 'o'),
+            (1, 1, '.'),
+            (-1, -1, '.'),
+            (1, -1, '.'),
+            (-1, 1, '.'),
+        ];
+
+        for ev in events {
+            let (origin_x, origin_y, is_player) = match ev {
+                SoundRequest::MonsterWake(_, _, x, y)
+                | SoundRequest::MonsterAttack(_, _, x, y)
+                | SoundRequest::MonsterDie(_, _, x, y) => (x.to_int(), y.to_int(), false),
+                SoundRequest::PlayerWeaponFire(_)
+                | SoundRequest::PlayerSuperShotgunOpen
+                | SoundRequest::PlayerSuperShotgunLoad
+                | SoundRequest::PlayerSuperShotgunClose
+                | SoundRequest::PlayerDie => {
+                    if let Some(player_mo) = gs.mobjslab.get(gs.player.handle) {
+                        (player_mo.x.to_int(), player_mo.y.to_int(), true)
+                    } else {
+                        continue;
+                    }
+                }
+                _ => continue,
+            };
+
+            let fg = if is_player {
+                (50, 150, 200)
+            } else {
+                (200, 50, 50)
+            };
+
+            for &(dx, dy, glyph) in rings.iter() {
+                let dist = dx.abs() + dy.abs();
+                let lifetime = 6 + (dist * 2) as u8; // Expand outward over time
+                self.push(Effect {
+                    x: origin_x + dx * super::tile_grid::CELL_SIZE,
+                    y: origin_y + dy * super::tile_grid::CELL_SIZE,
+                    glyph,
+                    fg,
+                    lifetime,
+                    max_lifetime: lifetime,
+                    fade: true,
+                    is_dust: false,
+                });
+            }
+        }
+    }
 }
 
 impl Default for EffectLayer {
