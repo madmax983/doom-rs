@@ -775,17 +775,15 @@ mod tests {
 
         let group = wad.map_lump_group("MAP01").expect("map group");
 
-        match group {
-            MapLumpGroup::Udmf(group) => {
-                assert_eq!(group.marker.name.as_str(), "MAP01");
-                assert_eq!(group.textmap.name.as_str(), "TEXTMAP");
-                assert_eq!(group.endmap.name.as_str(), "ENDMAP");
-                assert_eq!(
-                    group.find_lump("ZNODES").map(|lump| lump.name.as_str()),
-                    Some("ZNODES")
-                );
-            }
-            MapLumpGroup::Classic(_) => panic!("expected UDMF map group"),
+        assert!(matches!(group, MapLumpGroup::Udmf(_)));
+        if let MapLumpGroup::Udmf(group) = group {
+            assert_eq!(group.marker.name.as_str(), "MAP01");
+            assert_eq!(group.textmap.name.as_str(), "TEXTMAP");
+            assert_eq!(group.endmap.name.as_str(), "ENDMAP");
+            assert_eq!(
+                group.find_lump("ZNODES").map(|lump| lump.name.as_str()),
+                Some("ZNODES")
+            );
         }
     }
 
@@ -984,14 +982,13 @@ mod tests {
         ]);
         let wad = WadFile::parse(wad_bytes).unwrap();
 
-        match wad.map_lump_group("MAP01").unwrap() {
-            MapLumpGroup::Udmf(udmf) => {
-                assert_eq!(udmf.aux_lumps().len(), 1);
-                assert_eq!(udmf.aux_lumps()[0].name.as_str(), "ZNODES");
-                assert_eq!(udmf.find_lump("ZNODES").unwrap().name.as_str(), "ZNODES");
-                assert!(udmf.find_lump("NONEXISTENT").is_none());
-            }
-            _ => panic!("Expected UDMF"),
+        let group = wad.map_lump_group("MAP01").unwrap();
+        assert!(matches!(group, MapLumpGroup::Udmf(_)));
+        if let MapLumpGroup::Udmf(udmf) = group {
+            assert_eq!(udmf.aux_lumps().len(), 1);
+            assert_eq!(udmf.aux_lumps()[0].name.as_str(), "ZNODES");
+            assert_eq!(udmf.find_lump("ZNODES").unwrap().name.as_str(), "ZNODES");
+            assert!(udmf.find_lump("NONEXISTENT").is_none());
         }
     }
 }
