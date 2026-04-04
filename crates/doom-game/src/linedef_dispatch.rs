@@ -404,15 +404,15 @@ fn dispatch_doors(
     use LinedefEffect::*;
     match effect {
         DoorOpenWaitClose => {
-            door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenWaitClose, DoorSpeed::Normal);
             true
         }
         DoorOpen => {
-            door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenStay, DoorSpeed::Normal);
             true
         }
         DoorClose => {
-            close_door_by_tag_or_back(gs, level, linedef_index, tag, false);
+            close_door_by_tag_or_back(gs, level, linedef_index, tag, DoorSpeed::Normal);
             true
         }
         DoorCloseWaitOpen => {
@@ -440,15 +440,15 @@ fn dispatch_doors(
             true
         }
         DoorBlazeOpenWaitClose => {
-            door_by_tag_or_back(gs, level, linedef_index, tag, true, true);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenWaitClose, DoorSpeed::Blazing);
             true
         }
         DoorBlazeOpen => {
-            door_by_tag_or_back(gs, level, linedef_index, tag, false, true);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenStay, DoorSpeed::Blazing);
             true
         }
         DoorBlazeClose => {
-            close_door_by_tag_or_back(gs, level, linedef_index, tag, true);
+            close_door_by_tag_or_back(gs, level, linedef_index, tag, DoorSpeed::Blazing);
             true
         }
         _ => false,
@@ -472,7 +472,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Blue);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenWaitClose, DoorSpeed::Normal);
             true
         }
         DoorLockedRed => {
@@ -482,7 +482,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Red);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenWaitClose, DoorSpeed::Normal);
             true
         }
         DoorLockedYellow => {
@@ -492,7 +492,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Yellow);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenWaitClose, DoorSpeed::Normal);
             true
         }
         DoorLockedBlueOpen => {
@@ -502,7 +502,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Blue);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenStay, DoorSpeed::Normal);
             true
         }
         DoorLockedRedOpen => {
@@ -512,7 +512,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Red);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenStay, DoorSpeed::Normal);
             true
         }
         DoorLockedYellowOpen => {
@@ -522,7 +522,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Yellow);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenStay, DoorSpeed::Normal);
             true
         }
         _ => false,
@@ -751,9 +751,23 @@ fn queue_locked_door_feedback(gs: &mut GameState, activator: MobjHandle, color: 
     }
 }
 
+
 // ---------------------------------------------------------------------------
 // Door helpers
 // ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DoorBehavior {
+    OpenWaitClose,
+    OpenStay,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DoorSpeed {
+    Normal,
+    Blazing,
+}
+
 
 /// Open a door on the back sector of a linedef, or by tag.
 ///
@@ -764,9 +778,10 @@ fn door_by_tag_or_back(
     level: &mut Level,
     linedef_index: usize,
     tag: u16,
-    auto_close: bool,
-    blazing: bool,
+    behavior: DoorBehavior,
+    speed: DoorSpeed,
 ) {
+    let auto_close = behavior == DoorBehavior::OpenWaitClose;
     if tag == 0 {
         // Direct sector: use the back sidedef.
         let ld = match level.linedefs.get(linedef_index) {
@@ -781,7 +796,7 @@ fn door_by_tag_or_back(
             Some(sd) => sd.sector as usize,
             None => return,
         };
-        if blazing {
+        if speed == DoorSpeed::Blazing {
             open_blazing_door_helper(gs, level, sector_idx, auto_close);
         } else {
             open_door_helper(gs, level, sector_idx, auto_close);
@@ -789,7 +804,7 @@ fn door_by_tag_or_back(
     } else {
         let indices = sectors_by_tag(level, tag);
         for idx in indices {
-            if blazing {
+            if speed == DoorSpeed::Blazing {
                 open_blazing_door_helper(gs, level, idx, auto_close);
             } else {
                 open_door_helper(gs, level, idx, auto_close);
@@ -804,7 +819,7 @@ fn close_door_by_tag_or_back(
     level: &mut Level,
     linedef_index: usize,
     tag: u16,
-    blazing: bool,
+    speed: DoorSpeed,
 ) {
     if tag == 0 {
         let ld = match level.linedefs.get(linedef_index) {
@@ -819,7 +834,7 @@ fn close_door_by_tag_or_back(
             Some(sd) => sd.sector as usize,
             None => return,
         };
-        if blazing {
+        if speed == DoorSpeed::Blazing {
             close_blazing_door_helper(gs, level, sector_idx);
         } else {
             close_door_helper(gs, level, sector_idx);
@@ -827,7 +842,7 @@ fn close_door_by_tag_or_back(
     } else {
         let indices = sectors_by_tag(level, tag);
         for idx in indices {
-            if blazing {
+            if speed == DoorSpeed::Blazing {
                 close_blazing_door_helper(gs, level, idx);
             } else {
                 close_door_helper(gs, level, idx);
