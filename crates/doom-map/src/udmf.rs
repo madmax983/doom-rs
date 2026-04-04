@@ -1012,6 +1012,74 @@ mod tests {
     use super::*;
 
     #[test]
+    fn parse_rejects_non_string_namespace() {
+        let err = UdmfMap::parse(b"namespace = 123;").unwrap_err();
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "namespace must be a quoted string")
+        );
+    }
+
+    #[test]
+    fn parse_rejects_missing_namespace() {
+        let err = UdmfMap::parse(b"vertex { x = 0; }").unwrap_err();
+        assert!(matches!(err, UdmfError::MissingNamespace));
+    }
+
+    #[test]
+    fn parse_rejects_bare_identifier_at_root() {
+        let err = UdmfMap::parse(b"namespace").unwrap_err();
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "expected '=' or '{' after identifier")
+        );
+    }
+
+    #[test]
+    fn parse_bare_true_false_values() {
+        let map = UdmfMap::parse(b"namespace = \"doom\"; vertex { is_cool = true; bad = false; }")
+            .unwrap();
+        assert!(matches!(
+            map.blocks[0].fields[0].value,
+            UdmfValue::Bool(true)
+        ));
+        assert!(matches!(
+            map.blocks[0].fields[1].value,
+            UdmfValue::Bool(false)
+        ));
+    }
+
+    #[test]
+    fn parse_rejects_bare_identifier_value() {
+        let err = UdmfMap::parse(b"namespace = \"doom\"; vertex { x = foo; }").unwrap_err();
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "unexpected bare identifier 'foo'")
+        );
+    }
+
+    #[test]
+    fn parse_rejects_invalid_value_start() {
+        let err = UdmfMap::parse(b"namespace = \"doom\"; vertex { x = @; }").unwrap_err();
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "expected value")
+        );
+    }
+
+    #[test]
+    fn parse_rejects_unterminated_string_literal() {
+        let err = UdmfMap::parse(b"namespace = \"doom").unwrap_err();
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "unterminated string literal")
+        );
+    }
+
+    #[test]
+    fn parse_rejects_unterminated_string_escape() {
+        let err = UdmfMap::parse(b"namespace = \"doom\\").unwrap_err();
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "unterminated string escape")
+        );
+    }
+
+    #[test]
     fn parse_textmap_smoke() {
         let map = UdmfMap::parse(
             br#"
