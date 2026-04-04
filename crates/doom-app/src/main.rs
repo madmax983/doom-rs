@@ -147,6 +147,10 @@ struct Args {
     #[arg(long)]
     export_html: Option<std::path::PathBuf>,
 
+    /// Export the level layout and statistics to a standalone JSON file and exit.
+    #[arg(long)]
+    export_json: Option<std::path::PathBuf>,
+
     /// Export the level layout to an SVG file and exit.
     #[arg(long)]
     export_svg: Option<std::path::PathBuf>,
@@ -1989,6 +1993,20 @@ fn run_doom() -> Result<()> {
             "🌟".green(),
             "Exported".green().bold(),
             html_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
+
+    if let Some(ref json_path) = args.export_json {
+        let json_data = doom_map::export_map_to_json(&level);
+        std::fs::write(json_path, json_data)
+            .with_context(|| format!("Failed to write JSON to {}", json_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} JSON report to {}",
+            "🌟".green(),
+            "Exported".green().bold(),
+            json_path.display().to_string().cyan()
         );
         return Ok(());
     }
