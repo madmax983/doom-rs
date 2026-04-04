@@ -1,3 +1,14 @@
+//! Topological sector connectivity and traversal.
+//!
+//! In Doom, the map is not a uniform grid. It is composed of arbitrary polygons
+//! called **sectors**. Sectors are connected to each other via **two-sided linedefs**,
+//! which act as portals or doorways.
+//!
+//! This module provides the [`SectorGraph`] which parses a level's geometry and
+//! builds a topological graph of these connections. This is useful for AI pathfinding
+//! (e.g., sound propagation, monsters opening doors) and for exporting map data to
+//! visualization tools like Graphviz.
+
 use crate::Level;
 use std::collections::{HashMap, HashSet, VecDeque};
 
