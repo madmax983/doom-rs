@@ -679,6 +679,21 @@ pub fn render_actors_ex(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Core actor rendering function with extended support for masked columns (middle textures).
+///
+/// Doom renders scenes by first drawing all opaque walls front-to-back using a BSP tree.
+/// Once the solid world is laid down, "things" (sprites) and transparent middle textures
+/// must be drawn back-to-front to ensure proper occlusion.
+///
+/// This function takes a list of `ActorRenderInfo` structs, sorts them by distance,
+/// clips them against the 1D solid wall occlusion array, and then projects their 2D
+/// patches into the framebuffer.
+///
+/// ## Examples
+/// ```text
+/// // Internal usage inside `doom-renderer` requires passing the current framebuffer
+/// // and a Z-buffer used to cull masked geometry against solid walls.
+/// ```
 pub fn render_actors_with_masked_ex<'a>(
     actors: &[crate::sprite_lookup::ActorRenderInfo],
     level: &doom_map::Level,
