@@ -2036,7 +2036,7 @@ fn run_doom() -> Result<()> {
     }
 
     if let Some(ref obj_path) = args.export_obj {
-        let obj_data = doom_map::obj::export_map_to_obj(&level);
+        let obj_data = doom_map::export_map_to_obj(&level);
         std::fs::write(obj_path, obj_data)
             .with_context(|| format!("Failed to write OBJ to {}", obj_path.display()))?;
         use crossterm::style::Stylize;

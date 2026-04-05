@@ -5,3 +5,6 @@
 **[Hide internal renderer modules]**
 **Tangle:** The `doom-renderer` crate leaked internal constant modules `automap_colors` and `menu_colors` as `pub mod`s in `automap.rs` and `menu_render.rs` and re-exported them in `lib.rs` even though they are only used internally within the renderer for the GUI.
 **Blueprint:** Altered the visibility of these modules to `pub(crate)` and removed them from the crate's `pub use` interface. Added `#[allow(dead_code)]` to bypass rustc warning of `pub` items missing callers since they are now module-private yet some constants are unimplemented but part of a well-defined palette standard. This ensures strict internal encapsulation.
+**[Map Export Encapsulation]**
+**Tangle:** The `doom-map` crate exposed four internal export modules (`geojson`, `html`, `obj`, `svg`) as `pub mod` directly in its root `lib.rs`, leading to a cluttered public API and exposing internal module structures that shouldn't be relied upon directly by consumers.
+**Blueprint:** Created an `export` module directory and moved the export-related files into it. Changed their visibility to `pub(crate)` and exposed a unified facade through `export/mod.rs` using `pub use`. `lib.rs` then re-exports the specific functions to maintain the existing flat API surface while hiding the internal module hierarchy.
