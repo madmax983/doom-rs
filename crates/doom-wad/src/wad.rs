@@ -802,6 +802,40 @@ mod tests {
     }
 
     #[test]
+    fn map_lump_group_classic_returns_classic_group() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("THINGS", b""),
+            ("LINEDEFS", b""),
+            ("SIDEDEFS", b""),
+            ("VERTEXES", b""),
+            ("SEGS", b""),
+            ("SSECTORS", b""),
+            ("NODES", b""),
+            ("SECTORS", b""),
+            ("REJECT", b""),
+            ("BLOCKMAP", b""),
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        match wad.map_lump_group("MAP01").unwrap() {
+            MapLumpGroup::Classic(c) => {
+                assert_eq!(c.marker.name.as_str(), "MAP01");
+                assert_eq!(c.lumps[0].name.as_str(), "THINGS");
+                assert_eq!(c.lumps[1].name.as_str(), "LINEDEFS");
+                assert_eq!(c.lumps[2].name.as_str(), "SIDEDEFS");
+                assert_eq!(c.lumps[3].name.as_str(), "VERTEXES");
+                assert_eq!(c.lumps[4].name.as_str(), "SEGS");
+                assert_eq!(c.lumps[5].name.as_str(), "SSECTORS");
+                assert_eq!(c.lumps[6].name.as_str(), "NODES");
+                assert_eq!(c.lumps[7].name.as_str(), "SECTORS");
+                assert_eq!(c.lumps[8].name.as_str(), "REJECT");
+                assert_eq!(c.lumps[9].name.as_str(), "BLOCKMAP");
+            }
+            _ => panic!("Expected Classic"),
+        }
+    }
+
+    #[test]
     fn find_lump_data_returns_none_if_missing() {
         let wad_bytes = make_iwad(&[("TEST", b"data")]);
         let wad = WadFile::parse(wad_bytes).unwrap();
