@@ -173,6 +173,14 @@ struct Args {
     #[arg(long, default_value = "1")]
     music_loops: u32,
 
+    /// Export a specific sound effect lump as a 16-bit PCM WAV file and exit.
+    #[arg(long, requires = "sfx_name")]
+    export_sfx_wav: Option<std::path::PathBuf>,
+
+    /// The name of the SFX lump to export (e.g. DSPISTOL) when using --export-sfx-wav.
+    #[arg(long, requires = "export_sfx_wav")]
+    sfx_name: Option<String>,
+
     /// Compute the total map statistics (kills, items, secrets, par time) and print them to the console.
     #[arg(long)]
     map_stats: bool,
@@ -1833,6 +1841,33 @@ fn wav_from_f32_mono(samples: &[f32], sample_rate: u32) -> Vec<u8> {
     out
 }
 
+fn export_sfx_wav_for_name(
+    wad_stack: &WadStack,
+    sfx_name: &str,
+    out_path: &std::path::Path,
+) -> Result<()> {
+    let sfx_lump = wad_stack
+        .lump_data(sfx_name)
+        .ok_or_else(|| anyhow::anyhow!("SFX lump {} not found in WAD stack", sfx_name))?;
+
+    let sfx_sample = doom_audio::mixer::PcmSample::parse_sfx_lump(sfx_lump)
+        .map_err(|e| anyhow::anyhow!("Failed to parse SFX lump {}: {}", sfx_name, e))?;
+
+    let mut samples_i16 = Vec::with_capacity(sfx_sample.data.len());
+    for &byte in sfx_sample.data.iter() {
+        // Convert 8-bit unsigned DOOM PCM (128 = silence) to normalized 32-bit float, then 16-bit signed
+        let s = (byte as i32 - 128) as f32 / 127.0;
+        let s_clamped = s.clamp(-1.0, 1.0);
+        let pcm = (s_clamped * i16::MAX as f32).round() as i16;
+        samples_i16.push(pcm);
+    }
+
+    let wav_bytes = doom_audio::wav::encode_pcm16_wav_mono(sfx_sample.sample_rate, &samples_i16);
+    std::fs::write(out_path, wav_bytes)
+        .with_context(|| format!("Failed to write WAV to {}", out_path.display()))?;
+    Ok(())
+}
+
 fn export_music_wav_for_map(
     wad_stack: &WadStack,
     map_name: &str,
@@ -2057,6 +2092,21 @@ fn run_doom() -> Result<()> {
             "🎵".green(),
             "Exported".green().bold(),
             wav_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
+
+    if let Some(ref sfx_wav_path) = args.export_sfx_wav {
+        let sfx_name = args.sfx_name.as_deref().ok_or_else(|| {
+            anyhow::anyhow!("--sfx-name is required when using --export-sfx-wav")
+        })?;
+        export_sfx_wav_for_name(&wad_stack, sfx_name, sfx_wav_path)?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} SFX WAV to {}",
+            "🔊".green(),
+            "Exported".green().bold(),
+            sfx_wav_path.display().to_string().cyan()
         );
         return Ok(());
     }
@@ -4215,6 +4265,49 @@ mod tests {
             validate_mode_args(&args).unwrap_err(),
             "--capture cannot be combined with --connect"
         );
+    }
+
+    #[test]
+    fn cli_args_parse_export_sfx_wav() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--export-sfx-wav",
+            "pistol.wav",
+            "--sfx-name",
+            "DSPISTOL",
+        ]);
+        assert!(args.is_ok(), "args with --export-sfx-wav must parse successfully");
+        let args = args.unwrap();
+        assert_eq!(
+            args.export_sfx_wav,
+            Some(std::path::PathBuf::from("pistol.wav"))
+        );
+        assert_eq!(args.sfx_name, Some("DSPISTOL".to_string()));
+    }
+
+    #[test]
+    fn export_sfx_wav_for_name_generates_valid_wav() {
+        let mut sfx_data = Vec::new();
+        sfx_data.extend_from_slice(&3u16.to_le_bytes()); // format
+        sfx_data.extend_from_slice(&11_025u16.to_le_bytes()); // sample_rate
+        sfx_data.extend_from_slice(&100u32.to_le_bytes()); // sample_count
+        sfx_data.extend(vec![128u8; 100]); // 100 samples of silence
+
+        let stack = build_test_wad_stack_from_lumps(vec![(*b"DSPISTOL", sfx_data.clone())], vec![]);
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let out_path = temp_dir.path().join("pistol.wav");
+
+        let result = export_sfx_wav_for_name(&stack, "DSPISTOL", &out_path);
+        assert!(result.is_ok(), "SFX export should succeed");
+
+        let wav_data = std::fs::read(&out_path).unwrap();
+        // RIFF + 36 byte format/data headers + 100*2 bytes of 16-bit PCM = 244 bytes
+        assert_eq!(wav_data[0..4], *b"RIFF");
+        assert_eq!(wav_data[8..12], *b"WAVE");
+        assert_eq!(wav_data.len(), 44 + 200);
     }
 
     #[test]
