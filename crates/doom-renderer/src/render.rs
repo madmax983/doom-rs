@@ -261,6 +261,19 @@ fn record_sprite_clip_step(
     });
 }
 
+/// Draws a batch of masked vertical columns onto the framebuffer.
+///
+/// In Doom's renderer, solid walls and floors are drawn first. Then, "masked" geometry
+/// (like sprites, middle textures on 2-sided lines, and translucent elements) are sorted
+/// and drawn back-to-front. This function takes a batch of such columns and composites them
+/// onto the screen, applying the current colormap to handle lighting.
+///
+/// ## Examples
+/// ```text
+/// // This function is typically called internally by the sprite or wall renderer.
+/// // To render a masked column, you must provide its source patch data, Y offsets,
+/// // and lighting parameters wrapped in a `MaskedColumnDraw` struct.
+/// ```
 pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw<'_>]) {
     for column in columns {
         draw_masked_column(

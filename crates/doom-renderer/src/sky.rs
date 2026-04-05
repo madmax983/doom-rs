@@ -45,6 +45,14 @@ pub struct SkyCoverage {
 }
 
 impl SkyCoverage {
+    /// Creates a new, empty `SkyCoverage` mask buffer, clearing all sky pixels to `false`.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sky::SkyCoverage;
+    /// let mask = SkyCoverage::new();
+    /// assert_eq!(mask.contains(10, 10), false);
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -52,6 +60,19 @@ impl SkyCoverage {
         }
     }
 
+    /// Records a vertical span of the sky as visible in the mask buffer using fast bitwise OR operations.
+    ///
+    /// Instead of rendering the complex sky texture during BSP traversal (which would be slow and might suffer overdraw),
+    /// we just flip bits in this 1D array of 64-bit integers. Once the solid geometry is finished, we do a single
+    /// pass over the screen, drawing sky pixels only where these bits are set.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sky::SkyCoverage;
+    /// let mut mask = SkyCoverage::new();
+    /// mask.record_span(150, 0, 100); // Sky is visible in column 150 from top of screen to y=100
+    /// assert!(mask.contains(150, 50));
+    /// ```
     pub fn record_span(&mut self, x: usize, top: i32, bot: i32) {
         if x >= SCREEN_W {
             return;
@@ -93,6 +114,9 @@ impl SkyCoverage {
         self.columns[x][end_word] |= tail_mask;
     }
 
+    /// Queries the bitmask to check if the specific screen pixel `(x, y)` requires sky rendering.
+    ///
+    /// Used by the final composition pass to determine whether to write a sky texel or leave the pixel alone.
     #[must_use]
     pub fn contains(&self, x: usize, y: usize) -> bool {
         if x >= SCREEN_W || y >= SCREEN_H {

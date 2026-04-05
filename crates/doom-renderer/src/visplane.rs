@@ -10,24 +10,41 @@ const UNUSED: i16 = -1;
 /// Distinguishes ceiling and floor visplanes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PlaneKind {
+    /// A ceiling plane.
     Ceiling,
+    /// A floor plane.
     Floor,
 }
 
 /// One allocated visplane.
 #[derive(Debug, Clone)]
 pub struct Visplane {
+    /// Whether this is a ceiling or floor plane.
     pub kind: PlaneKind,
+    /// The world Z height of the plane.
     pub height: i32,
+    /// The 8-character ASCII name of the flat texture.
     pub flat_name: [u8; 8],
+    /// The light level of the sector owning this plane.
     pub light_level: u8,
+    /// The leftmost column coordinate spanned by this plane.
     pub min_x: usize,
+    /// The rightmost column coordinate spanned by this plane.
     pub max_x: usize,
     top: [i16; SCREEN_W],
     bottom: [i16; SCREEN_W],
 }
 
 impl Visplane {
+    /// Creates a new `Visplane` initialized with empty per-column bounds.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::visplane::{Visplane, PlaneKind};
+    /// let flat = *b"FLOOR4_8";
+    /// let plane = Visplane::new(PlaneKind::Floor, 0, flat, 128);
+    /// assert!(plane.is_empty());
+    /// ```
     #[must_use]
     pub fn new(kind: PlaneKind, height: i32, flat_name: [u8; 8], light_level: u8) -> Self {
         Self {
@@ -42,11 +59,13 @@ impl Visplane {
         }
     }
 
+    /// Returns `true` if the plane spans the given screen column `x`.
     #[must_use]
     pub fn has_column(&self, x: usize) -> bool {
         x < SCREEN_W && self.top[x] != UNUSED
     }
 
+    /// Returns the screen-space vertical bounds `(top, bottom)` for the plane at column `x`.
     #[must_use]
     pub fn column_bounds(&self, x: usize) -> Option<(i16, i16)> {
         if !self.has_column(x) {
@@ -65,6 +84,7 @@ impl Visplane {
         self.max_x = self.max_x.max(x);
     }
 
+    /// Returns `true` if this visplane contains no columns.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.min_x >= SCREEN_W
@@ -74,8 +94,11 @@ impl Visplane {
 /// Horizontal run on a single screen row.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct SpanRun {
+    /// The Y coordinate of the screen row.
     pub y: usize,
+    /// The starting (left) X coordinate.
     pub x1: usize,
+    /// The ending (right) X coordinate.
     pub x2: usize,
 }
 
@@ -127,17 +150,31 @@ pub struct VisplaneSet {
 }
 
 impl VisplaneSet {
+    /// Creates a new, empty `VisplaneSet` for a new frame.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::visplane::VisplaneSet;
+    /// let planes = VisplaneSet::new();
+    /// assert_eq!(planes.planes().len(), 0);
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Returns a reference to the active slice of visplanes.
     #[must_use]
     pub fn planes(&self) -> &[Visplane] {
         &self.planes
     }
 
     /// Doom-style `R_FindPlane`: find or allocate by key.
+    ///
+    /// To optimize flood-filling flats, Doom groups adjacent sectors with identical floor/ceiling properties
+    /// into a single `Visplane`. This method searches the existing active planes. If it finds one with matching
+    /// properties (height, texture, light) that is horizontally contiguous, it returns its index so new columns
+    /// can be merged in. Otherwise, it allocates a fresh `Visplane`.
     pub fn r_find_plane(
         &mut self,
         kind: PlaneKind,

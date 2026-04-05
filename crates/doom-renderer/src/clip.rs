@@ -129,11 +129,40 @@ impl Default for SolidWallClipper {
 }
 
 impl SolidWallClipper {
+    /// Prepares a fresh clipper for a new rendered frame.
+    ///
+    /// This is called once per frame by the renderer before BSP traversal begins,
+    /// ensuring the virtual screen starts completely unoccluded.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::clip::SolidWallClipper;
+    ///
+    /// let clipper = SolidWallClipper::new();
+    /// assert_eq!(clipper.uncovered_runs(0, 319).len(), 1);
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Seals a specific screen column from receiving further draw commands.
+    ///
+    /// Doom's engine draws front-to-back. When a completely opaque wall section (like a middle
+    /// texture on a 1-sided linedef) is rendered in column `x`, we mark it here.
+    /// Any geometry physically behind this wall will be culled by `uncovered_runs`,
+    /// saving vast amounts of overdraw.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::clip::SolidWallClipper;
+    ///
+    /// let mut clipper = SolidWallClipper::new();
+    /// clipper.mark_column(150);
+    /// // A wall behind column 150 will no longer be drawn.
+    /// let runs = clipper.uncovered_runs(149, 151);
+    /// assert_eq!(runs, vec![(149, 149), (151, 151)]);
+    /// ```
     pub fn mark_column(&mut self, x: usize) {
         if x < SCREEN_W {
             self.covered[x] = true;
@@ -175,7 +204,9 @@ impl SolidWallClipper {
 /// Plane type used for row-wise span clipping.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PlaneClipKind {
+    /// The ceiling plane. When rendering, ceilings shrink the visible window from the top down.
     Ceiling,
+    /// The floor plane. When rendering, floors shrink the visible window from the bottom up.
     Floor,
 }
 
