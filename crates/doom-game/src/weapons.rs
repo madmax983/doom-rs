@@ -738,8 +738,11 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
     let damage_lo = info.damage_lo;
 
     // --- Hitscan: fire each pellet ---
-    let mut intercepts = Vec::new();
+    // **Performance:** Pre-allocate the intercepts vector and reuse it across all pellets
+    // to avoid multiple heap allocations per weapon fire event.
+    let mut intercepts = Vec::with_capacity(32);
     for i in 0..pellets {
+        intercepts.clear();
         // Compute per-pellet angle.
         // For single-pellet weapons spread=0, so this is just base_angle.
         // For multi-pellet (shotgun): center the spread around base_angle.

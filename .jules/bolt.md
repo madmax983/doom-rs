@@ -14,3 +14,6 @@
 **[AABB check before Euclidean .sqrt() in radial math]**
 **Learning:** Performing a `.sqrt()` calculation on every single actor in `p_radius_attack` creates unnecessary floating-point operations for actors far outside the explosion radius.
 **Action:** Adding an Axis-Aligned Bounding Box (AABB) early-out check (`dx.abs() >= radius || dy.abs() >= radius`) quickly skips actors out of range before computing the exact Euclidean distance, saving CPU cycles on the hot path.
+**Doc comments on local let bindings**
+**Learning:** In Rust, applying an outer doc comment (`///`) to a local statement (such as a `let` binding) inside a function body causes a rustdoc compilation error (`error[E0585]: found a documentation comment that doesn't document anything`).
+**Action:** Use standard comments (`//`) instead for inline explanations within functions, even if prompted to "add doc comments (`///`) explaining why the optimization matters" (apply this rule only to item definitions like structs, functions, modules, etc., not inline logic).

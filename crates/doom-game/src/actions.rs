@@ -1138,8 +1138,11 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
     // Spread: ~11.25° per step in 32-bit BAM space.
     let spread = Bam(0x0800_0000u32);
-    let mut intercepts = Vec::new();
+    // **Performance:** Pre-allocate the intercepts vector and reuse it across all pellets
+    // to avoid multiple heap allocations per weapon fire event.
+    let mut intercepts = Vec::with_capacity(32);
     for i in 0u32..3 {
+        intercepts.clear();
         // offsets: -spread, 0, +spread
         let offset = Bam(spread.0.wrapping_mul(i).wrapping_sub(spread.0));
         let shot_angle = Bam(angle.0.wrapping_add(offset.0));
