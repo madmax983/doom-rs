@@ -919,7 +919,9 @@ impl DoomApp for DoomGame {
                             match savegame::load_game(std::path::Path::new(&path)) {
                                 Ok((_header, payload)) => {
                                     if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                                        self.console.print(format!("Load failed: {e}"));
+                                        let msg = format!("Load failed: {e}");
+                                        self.console.print(msg.clone());
+                                        self.hud_messages.push(msg, 105);
                                     } else {
                                         self.player_view_height = if self.gs.player.is_dead() {
                                             DEAD_PLAYER_VIEW_HEIGHT
@@ -927,11 +929,16 @@ impl DoomApp for DoomGame {
                                             PLAYER_HEIGHT
                                         };
                                         self.console.print("Game loaded.".to_string());
+                                        self.hud_messages.push("Game loaded.".to_string(), 105);
                                         self.start_level_music();
                                         self.menu.close();
                                     }
                                 }
-                                Err(e) => self.console.print(format!("Load failed: {e}")),
+                                Err(e) => {
+                                    let msg = format!("Load failed: {e}");
+                                    self.console.print(msg.clone());
+                                    self.hud_messages.push(msg, 105);
+                                }
                             }
                         }
                         doom_game::menu::MenuResult::SaveGame(slot) => {
@@ -939,9 +946,13 @@ impl DoomApp for DoomGame {
                             if let Err(e) =
                                 savegame::save_game(std::path::Path::new(&path), &self.gs, slot)
                             {
-                                self.console.print(format!("Save failed: {e}"));
+                                let msg = format!("Save failed: {e}");
+                                self.console.print(msg.clone());
+                                self.hud_messages.push(msg, 105);
                             } else {
-                                self.console.print(format!("Saved to slot {slot}."));
+                                let msg = format!("Saved to slot {slot}.");
+                                self.console.print(msg.clone());
+                                self.hud_messages.push(msg, 105);
                                 self.menu.close();
                             }
                         }
@@ -1013,9 +1024,12 @@ impl DoomApp for DoomGame {
         // Quick save (F5).
         if input.f5_save {
             if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0) {
-                self.console.print(format!("Save failed: {e}"));
+                let msg = format!("Save failed: {e}");
+                self.console.print(msg.clone());
+                self.hud_messages.push(msg, 105);
             } else {
                 self.console.print("Game saved.".to_string());
+                self.hud_messages.push("Game saved.".to_string(), 105);
             }
         }
 
@@ -1024,15 +1038,20 @@ impl DoomApp for DoomGame {
             match savegame::load_game(&self.save_path) {
                 Ok((_header, payload)) => {
                     if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                        self.console.print(format!("Load failed: {e}"));
+                        let msg = format!("Load failed: {e}");
+                        self.console.print(msg.clone());
+                        self.hud_messages.push(msg, 105);
                     } else {
                         self.reset_weapon_anim();
                         self.console.print("Game loaded.".to_string());
+                        self.hud_messages.push("Game loaded.".to_string(), 105);
                         self.start_level_music();
                     }
                 }
                 Err(e) => {
-                    self.console.print(format!("Load failed: {e}"));
+                    let msg = format!("Load failed: {e}");
+                    self.console.print(msg.clone());
+                    self.hud_messages.push(msg, 105);
                 }
             }
         }
