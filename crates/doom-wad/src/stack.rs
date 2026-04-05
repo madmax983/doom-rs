@@ -457,6 +457,47 @@ mod tests {
     }
 
     #[test]
+    fn map_lump_group_searches_pwads_first_udmf() {
+        // Build IWAD with MAP01
+        let iwad = make_wad(
+            b"IWAD",
+            &[
+                ("MAP01", b""),
+                ("TEXTMAP", b"iwad_textmap"),
+                ("ZNODES", b"iwad_znodes"),
+                ("ENDMAP", b""),
+            ],
+        );
+        // Build PWAD that completely replaces MAP01
+        let pwad = make_wad(
+            b"PWAD",
+            &[
+                ("MAP01", b""),
+                ("TEXTMAP", b"pwad_textmap"),
+                ("ZNODES", b"pwad_znodes"),
+                ("ENDMAP", b""),
+            ],
+        );
+
+        let mut stack = WadStack::new();
+        stack.push_iwad(iwad).unwrap();
+        stack.push_pwad(pwad).unwrap();
+
+        let (wad, group) = stack.find_map_lump_group("MAP01").unwrap();
+
+        // Ensure the WAD returned is the PWAD.
+        assert_eq!(wad.kind(), WadKind::Pwad);
+
+        match group {
+            crate::wad::MapLumpGroup::Udmf(u) => {
+                // Check that we got the PWAD lumps, not the IWAD ones.
+                assert_eq!(wad.lump_data(u.textmap), b"pwad_textmap");
+            }
+            _ => panic!("Expected UDMF map lump group"),
+        }
+    }
+
+    #[test]
     fn stack_wad_count() {
         let mut stack = WadStack::new();
         assert_eq!(stack.wad_count(), 0);
