@@ -154,7 +154,8 @@ mod tests {
         let cmd = DemoTicCmd {
             forward_move: 50,
             side_move: -10,
-            angle_turn: 300,
+            angle_turn: 3,
+            buttons: 0x1f,
         };
         rec.record_tic_cmds(&[cmd]);
         let lmp = rec.finish();
@@ -200,11 +201,13 @@ mod tests {
             forward_move: 10,
             side_move: 0,
             angle_turn: 0,
+            buttons: 1,
         };
         let p2 = DemoTicCmd {
             forward_move: 20,
             side_move: 0,
             angle_turn: 0,
+            buttons: 2,
         };
         rec.record_tic_cmds(&[p1, p2]);
         let lmp = rec.to_lmp();

@@ -202,6 +202,7 @@ mod tests {
     use crate::header::LmpHeader;
     use crate::recorder::DemoRecorder;
     use crate::ticcmd::DemoTicCmd;
+    use doom_game::bt;
 
     /// Build a minimal LMP from a recorder with N tics (single player, all
     /// default commands).
@@ -240,6 +241,7 @@ mod tests {
                 forward_move: i * 10,
                 side_move: 0,
                 angle_turn: 0,
+                buttons: 0,
             }]);
         }
         let lmp = rec.to_lmp();
@@ -328,7 +330,8 @@ mod tests {
         rec.record_tic_cmds(&[DemoTicCmd {
             forward_move: 42,
             side_move: -7,
-            angle_turn: 1234,
+            angle_turn: 0x12,
+            buttons: bt::BT_ATTACK | bt::BT_USE,
         }]);
         let lmp = rec.to_lmp();
         let mut player = DemoPlayer::from_lmp(&lmp).unwrap();
@@ -336,8 +339,8 @@ mod tests {
         let cmd: TicCmd = player.next_tic().unwrap();
         assert_eq!(cmd.forward_move, 42);
         assert_eq!(cmd.side_move, -7);
-        assert_eq!(cmd.angle_turn, 1234);
-        assert_eq!(cmd.buttons, 0);
+        assert_eq!(cmd.angle_turn, 0x1200);
+        assert_eq!(cmd.buttons, bt::BT_ATTACK | bt::BT_USE);
     }
 
     #[test]
