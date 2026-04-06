@@ -406,12 +406,94 @@ mod tests {
         // Ensure the WAD returned is the PWAD.
         assert_eq!(wad.kind(), WadKind::Pwad);
 
+        assert!(matches!(group, crate::wad::MapLumpGroup::Classic(_)));
+        if let crate::wad::MapLumpGroup::Classic(c) = group {
+            // Check that we got the PWAD lumps, not the IWAD ones.
+            assert_eq!(wad.lump_data(c.lumps[0]), b"pwad_things");
+        }
+    }
+
+    #[test]
+    fn map_lump_group_searches_pwads_first_udmf() {
+        let iwad = make_wad(
+            b"IWAD",
+            &[
+                ("MAP01", b""),
+                ("THINGS", b"iwad_things"),
+                ("LINEDEFS", b"iwad_linedefs"),
+                ("SIDEDEFS", b"iwad_sidedefs"),
+                ("VERTEXES", b"iwad_vertexes"),
+                ("SEGS", b"iwad_segs"),
+                ("SSECTORS", b"iwad_ssectors"),
+                ("NODES", b"iwad_nodes"),
+                ("SECTORS", b"iwad_sectors"),
+                ("REJECT", b"iwad_reject"),
+                ("BLOCKMAP", b"iwad_blockmap"),
+            ],
+        );
+        let pwad = make_wad(
+            b"PWAD",
+            &[
+                ("MAP01", b""),
+                ("TEXTMAP", br#"namespace = "doom";"#),
+                ("ZNODES", b""),
+                ("ENDMAP", b""),
+            ],
+        );
+
+        let mut stack = WadStack::new();
+        stack.push_iwad(iwad).unwrap();
+        stack.push_pwad(pwad).unwrap();
+
+        let (wad, group) = stack.find_map_lump_group("MAP01").unwrap();
+
+        assert_eq!(wad.kind(), WadKind::Pwad);
+
+        assert!(matches!(group, crate::wad::MapLumpGroup::Udmf(_)));
+        if let crate::wad::MapLumpGroup::Udmf(u) = group {
+            assert_eq!(u.marker.name.as_str(), "MAP01");
+            assert_eq!(u.textmap.name.as_str(), "TEXTMAP");
+        }
+    }
+
+    #[test]
+    fn map_lump_group_searches_pwads_first_udmf() {
+        // Build IWAD with MAP01
+        let iwad = make_wad(
+            b"IWAD",
+            &[
+                ("MAP01", b""),
+                ("TEXTMAP", b"iwad_textmap"),
+                ("ZNODES", b"iwad_znodes"),
+                ("ENDMAP", b""),
+            ],
+        );
+        // Build PWAD that completely replaces MAP01
+        let pwad = make_wad(
+            b"PWAD",
+            &[
+                ("MAP01", b""),
+                ("TEXTMAP", b"pwad_textmap"),
+                ("ZNODES", b"pwad_znodes"),
+                ("ENDMAP", b""),
+            ],
+        );
+
+        let mut stack = WadStack::new();
+        stack.push_iwad(iwad).unwrap();
+        stack.push_pwad(pwad).unwrap();
+
+        let (wad, group) = stack.find_map_lump_group("MAP01").unwrap();
+
+        // Ensure the WAD returned is the PWAD.
+        assert_eq!(wad.kind(), WadKind::Pwad);
+
         match group {
-            crate::wad::MapLumpGroup::Classic(c) => {
+            crate::wad::MapLumpGroup::Udmf(u) => {
                 // Check that we got the PWAD lumps, not the IWAD ones.
-                assert_eq!(wad.lump_data(c.lumps[0]), b"pwad_things");
+                assert_eq!(wad.lump_data(u.textmap), b"pwad_textmap");
             }
-            _ => panic!("Expected Classic map lump group"),
+            _ => panic!("Expected UDMF map lump group"),
         }
     }
 

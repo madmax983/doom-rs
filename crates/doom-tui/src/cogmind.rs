@@ -157,12 +157,30 @@ impl Widget for CogmindWidget<'_> {
 
 /// Player vitals for the cogmind-mode HUD bar.
 ///
-/// Passed across the `DoomApp` trait boundary as plain values so that
-/// `doom-tui` never needs to depend on `doom-game`.
+/// This struct acts as a Data Transfer Object (DTO) crossing the `DoomApp` trait boundary.
+/// To maintain strict decoupling, the terminal UI crate (`doom-tui`) knows absolutely nothing about
+/// the internal game state (`doom-game`). Instead, the main loop populates this struct and hands
+/// it to the renderer.
+///
+/// ## Examples
+/// ```
+/// use doom_tui::cogmind::CogmindHud;
+/// let hud = CogmindHud {
+///     health: 100,
+///     max_health: 100,
+///     armor: 50,
+///     weapon_name: "SG",
+///     ..Default::default()
+/// };
+/// assert_eq!(hud.health, 100);
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct CogmindHud {
+    /// The player's current health.
     pub health: i32,
+    /// The player's maximum health (typically 100 or 200).
     pub max_health: i32,
+    /// The player's current armor value.
     pub armor: i32,
     /// Current weapon's ammo count, or `None` for melee weapons.
     pub ammo: Option<u32>,
@@ -172,7 +190,9 @@ pub struct CogmindHud {
     pub weapon_name: &'static str,
     /// Which of the 6 key slots the player holds (B/Y/R cards + skulls).
     pub keys: [bool; 6],
+    /// The number of monsters killed by the player in the current level.
     pub kill_count: u32,
+    /// The total number of monsters present in the current level.
     pub total_monsters: u32,
     /// Level name (e.g. "E1M3" or "MAP07").
     pub level_name: String,
@@ -268,6 +288,14 @@ pub struct CogmindHudWidget<'a> {
 }
 
 impl<'a> CogmindHudWidget<'a> {
+    /// Creates a new widget adapter to render the HUD via `ratatui`.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_tui::cogmind::{CogmindHud, CogmindHudWidget};
+    /// let hud = CogmindHud::default();
+    /// let widget = CogmindHudWidget::new(&hud);
+    /// ```
     #[must_use]
     pub fn new(hud: &'a CogmindHud) -> Self {
         Self { hud }

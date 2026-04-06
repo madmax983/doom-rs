@@ -601,23 +601,15 @@ pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
 // Adjacent sector height helpers
 // ---------------------------------------------------------------------------
 
-/// Find the lowest floor height among all sectors adjacent to `sector_index`.
-///
-/// Adjacent means: the sector shares a two-sided linedef with the given sector.
-/// If the sector has no adjacent sectors, returns the sector's own floor height.
-pub fn lowest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
-    let own_floor = level
-        .sectors
-        .get(sector_index)
-        .map(|s| s.floor_height)
-        .unwrap_or(0);
-    let mut lowest = i16::MAX;
-    let mut found = false;
-
-    for ld in &level.linedefs {
-        // Only two-sided linedefs connect sectors.
+/// Returns an iterator over all sectors adjacent to `sector_index`.
+/// Yields `(adjacent_sector_index, &Sector)`.
+fn adjacent_sectors<'a>(
+    level: &'a Level,
+    sector_index: usize,
+) -> impl Iterator<Item = (usize, &'a doom_map::Sector)> + 'a {
+    level.linedefs.iter().filter_map(move |ld| {
         if ld.left_sidedef == SIDEDEF_NONE {
-            continue;
+            return None;
         }
         let right_sector = level
             .sidedefs
@@ -633,20 +625,28 @@ pub fn lowest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
         } else if left_sector == Some(sector_index) {
             right_sector
         } else {
-            continue;
+            None
         };
 
-        if let Some(other_idx) = other {
-            if let Some(other_sec) = level.sectors.get(other_idx) {
-                found = true;
-                if other_sec.floor_height < lowest {
-                    lowest = other_sec.floor_height;
-                }
-            }
-        }
-    }
+        other.and_then(|idx| level.sectors.get(idx).map(|s| (idx, s)))
+    })
+}
 
-    if found { lowest } else { own_floor }
+/// Find the lowest floor height among all sectors adjacent to `sector_index`.
+///
+/// Adjacent means: the sector shares a two-sided linedef with the given sector.
+/// If the sector has no adjacent sectors, returns the sector's own floor height.
+pub fn lowest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
+    let own_floor = level
+        .sectors
+        .get(sector_index)
+        .map(|s| s.floor_height)
+        .unwrap_or(0);
+
+    adjacent_sectors(level, sector_index)
+        .map(|(_, s)| s.floor_height)
+        .min()
+        .unwrap_or(own_floor)
 }
 
 /// Find the highest floor height among all sectors adjacent to `sector_index`.
@@ -659,41 +659,11 @@ pub fn highest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
         .get(sector_index)
         .map(|s| s.floor_height)
         .unwrap_or(0);
-    let mut highest = i16::MIN;
-    let mut found = false;
 
-    for ld in &level.linedefs {
-        if ld.left_sidedef == SIDEDEF_NONE {
-            continue;
-        }
-        let right_sector = level
-            .sidedefs
-            .get(ld.right_sidedef as usize)
-            .map(|s| s.sector as usize);
-        let left_sector = level
-            .sidedefs
-            .get(ld.left_sidedef as usize)
-            .map(|s| s.sector as usize);
-
-        let other = if right_sector == Some(sector_index) {
-            left_sector
-        } else if left_sector == Some(sector_index) {
-            right_sector
-        } else {
-            continue;
-        };
-
-        if let Some(other_idx) = other {
-            if let Some(other_sec) = level.sectors.get(other_idx) {
-                found = true;
-                if other_sec.floor_height > highest {
-                    highest = other_sec.floor_height;
-                }
-            }
-        }
-    }
-
-    if found { highest } else { own_floor }
+    adjacent_sectors(level, sector_index)
+        .map(|(_, s)| s.floor_height)
+        .max()
+        .unwrap_or(own_floor)
 }
 
 /// Find the next floor height above the current sector's floor among adjacent sectors.
@@ -707,41 +677,12 @@ pub fn next_highest_floor(level: &Level, sector_index: usize) -> i16 {
         .get(sector_index)
         .map(|s| s.floor_height)
         .unwrap_or(0);
-    let mut next = i16::MAX;
-    let mut found = false;
 
-    for ld in &level.linedefs {
-        if ld.left_sidedef == SIDEDEF_NONE {
-            continue;
-        }
-        let right_sector = level
-            .sidedefs
-            .get(ld.right_sidedef as usize)
-            .map(|s| s.sector as usize);
-        let left_sector = level
-            .sidedefs
-            .get(ld.left_sidedef as usize)
-            .map(|s| s.sector as usize);
-
-        let other = if right_sector == Some(sector_index) {
-            left_sector
-        } else if left_sector == Some(sector_index) {
-            right_sector
-        } else {
-            continue;
-        };
-
-        if let Some(other_idx) = other {
-            if let Some(other_sec) = level.sectors.get(other_idx) {
-                if other_sec.floor_height > own_floor && other_sec.floor_height < next {
-                    found = true;
-                    next = other_sec.floor_height;
-                }
-            }
-        }
-    }
-
-    if found { next } else { own_floor }
+    adjacent_sectors(level, sector_index)
+        .map(|(_, s)| s.floor_height)
+        .filter(|&h| h > own_floor)
+        .min()
+        .unwrap_or(own_floor)
 }
 
 /// Find the lowest ceiling height among all sectors adjacent to `sector_index`.
@@ -754,41 +695,11 @@ pub fn lowest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
         .get(sector_index)
         .map(|s| s.ceil_height)
         .unwrap_or(0);
-    let mut lowest = i16::MAX;
-    let mut found = false;
 
-    for ld in &level.linedefs {
-        if ld.left_sidedef == SIDEDEF_NONE {
-            continue;
-        }
-        let right_sector = level
-            .sidedefs
-            .get(ld.right_sidedef as usize)
-            .map(|s| s.sector as usize);
-        let left_sector = level
-            .sidedefs
-            .get(ld.left_sidedef as usize)
-            .map(|s| s.sector as usize);
-
-        let other = if right_sector == Some(sector_index) {
-            left_sector
-        } else if left_sector == Some(sector_index) {
-            right_sector
-        } else {
-            continue;
-        };
-
-        if let Some(other_idx) = other {
-            if let Some(other_sec) = level.sectors.get(other_idx) {
-                found = true;
-                if other_sec.ceil_height < lowest {
-                    lowest = other_sec.ceil_height;
-                }
-            }
-        }
-    }
-
-    if found { lowest } else { own_ceil }
+    adjacent_sectors(level, sector_index)
+        .map(|(_, s)| s.ceil_height)
+        .min()
+        .unwrap_or(own_ceil)
 }
 
 /// Find the highest ceiling height among all sectors adjacent to `sector_index`.
@@ -801,41 +712,11 @@ pub fn highest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
         .get(sector_index)
         .map(|s| s.ceil_height)
         .unwrap_or(0);
-    let mut highest = i16::MIN;
-    let mut found = false;
 
-    for ld in &level.linedefs {
-        if ld.left_sidedef == SIDEDEF_NONE {
-            continue;
-        }
-        let right_sector = level
-            .sidedefs
-            .get(ld.right_sidedef as usize)
-            .map(|s| s.sector as usize);
-        let left_sector = level
-            .sidedefs
-            .get(ld.left_sidedef as usize)
-            .map(|s| s.sector as usize);
-
-        let other = if right_sector == Some(sector_index) {
-            left_sector
-        } else if left_sector == Some(sector_index) {
-            right_sector
-        } else {
-            continue;
-        };
-
-        if let Some(other_idx) = other {
-            if let Some(other_sec) = level.sectors.get(other_idx) {
-                found = true;
-                if other_sec.ceil_height > highest {
-                    highest = other_sec.ceil_height;
-                }
-            }
-        }
-    }
-
-    if found { highest } else { own_ceil }
+    adjacent_sectors(level, sector_index)
+        .map(|(_, s)| s.ceil_height)
+        .max()
+        .unwrap_or(own_ceil)
 }
 
 /// Find the next floor height above `current_height` among adjacent sectors.
@@ -847,41 +728,11 @@ pub fn highest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
 /// This variant accepts an explicit `current_height` parameter, unlike the
 /// zero-arg `next_highest_floor` which uses the sector's own floor height.
 pub fn next_highest_floor_above(level: &Level, sector_index: usize, current_height: i16) -> i16 {
-    let mut next = i16::MAX;
-    let mut found = false;
-
-    for ld in &level.linedefs {
-        if ld.left_sidedef == SIDEDEF_NONE {
-            continue;
-        }
-        let right_sector = level
-            .sidedefs
-            .get(ld.right_sidedef as usize)
-            .map(|s| s.sector as usize);
-        let left_sector = level
-            .sidedefs
-            .get(ld.left_sidedef as usize)
-            .map(|s| s.sector as usize);
-
-        let other = if right_sector == Some(sector_index) {
-            left_sector
-        } else if left_sector == Some(sector_index) {
-            right_sector
-        } else {
-            continue;
-        };
-
-        if let Some(other_idx) = other {
-            if let Some(other_sec) = level.sectors.get(other_idx) {
-                if other_sec.floor_height > current_height && other_sec.floor_height < next {
-                    found = true;
-                    next = other_sec.floor_height;
-                }
-            }
-        }
-    }
-
-    if found { next } else { current_height }
+    adjacent_sectors(level, sector_index)
+        .map(|(_, s)| s.floor_height)
+        .filter(|&h| h > current_height)
+        .min()
+        .unwrap_or(current_height)
 }
 
 /// Find the shortest lower texture height among linedefs bounding the sector.
@@ -895,55 +746,38 @@ pub fn next_highest_floor_above(level: &Level, sector_index: usize, current_heig
 ///
 /// For simplicity, if no lower textures are found, returns 0 (no raise).
 pub fn shortest_lower_texture(level: &Level, sector_index: usize) -> i16 {
-    let mut shortest = i16::MAX;
-    let mut found = false;
-
-    for ld in &level.linedefs {
-        // Check both sides of the linedef for references to the sector.
-        let right_sd_idx = ld.right_sidedef;
-        let left_sd_idx = ld.left_sidedef;
-
-        // We need the sidedef that faces INTO the sector (front side).
-        let sd = if let Some(sd) = level.sidedefs.get(right_sd_idx as usize) {
-            if sd.sector as usize == sector_index {
-                sd
-            } else if left_sd_idx != SIDEDEF_NONE {
-                if let Some(lsd) = level.sidedefs.get(left_sd_idx as usize) {
-                    if lsd.sector as usize == sector_index {
-                        lsd
-                    } else {
-                        continue;
-                    }
-                } else {
-                    continue;
-                }
+    level
+        .linedefs
+        .iter()
+        .filter_map(|ld| {
+            let right_sd = level.sidedefs.get(ld.right_sidedef as usize);
+            let left_sd = if ld.left_sidedef != SIDEDEF_NONE {
+                level.sidedefs.get(ld.left_sidedef as usize)
             } else {
-                continue;
+                None
+            };
+
+            let sd = right_sd
+                .filter(|sd| sd.sector as usize == sector_index)
+                .or_else(|| left_sd.filter(|lsd| lsd.sector as usize == sector_index));
+
+            let sd = sd?;
+
+            let has_lower = sd.lower_texture.iter().any(|&b| b != 0);
+            if !has_lower {
+                return None;
             }
-        } else {
-            continue;
-        };
 
-        // Check if the lower texture is non-empty (not all zeros/nulls).
-        let has_lower = sd.lower_texture.iter().any(|&b| b != 0);
-        if !has_lower {
-            continue;
-        }
+            let height = if sd.y_offset != 0 {
+                sd.y_offset.abs()
+            } else {
+                128
+            };
 
-        // Use y_offset as texture height proxy; default to 128 if 0.
-        let height = if sd.y_offset != 0 {
-            sd.y_offset.abs()
-        } else {
-            128
-        };
-
-        if height < shortest {
-            shortest = height;
-            found = true;
-        }
-    }
-
-    if found { shortest } else { 0 }
+            Some(height)
+        })
+        .min()
+        .unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -1007,37 +841,12 @@ pub fn ev_floor_lower_to_nearest(gs: &mut GameState, level: &Level, tag: u16, sp
         .map(|(i, s)| {
             // Find the highest adjacent floor strictly below our floor.
             let own_floor = s.floor_height;
-            let mut best = i16::MIN;
-            let mut found = false;
-            for ld in &level.linedefs {
-                if ld.left_sidedef == SIDEDEF_NONE {
-                    continue;
-                }
-                let right_sector = level
-                    .sidedefs
-                    .get(ld.right_sidedef as usize)
-                    .map(|sd| sd.sector as usize);
-                let left_sector = level
-                    .sidedefs
-                    .get(ld.left_sidedef as usize)
-                    .map(|sd| sd.sector as usize);
-                let other = if right_sector == Some(i) {
-                    left_sector
-                } else if left_sector == Some(i) {
-                    right_sector
-                } else {
-                    continue;
-                };
-                if let Some(oi) = other {
-                    if let Some(os) = level.sectors.get(oi) {
-                        if os.floor_height < own_floor && os.floor_height > best {
-                            best = os.floor_height;
-                            found = true;
-                        }
-                    }
-                }
-            }
-            (i, if found { best } else { own_floor })
+            let target = adjacent_sectors(level, i)
+                .map(|(_, adj_s)| adj_s.floor_height)
+                .filter(|&h| h < own_floor)
+                .max()
+                .unwrap_or(own_floor);
+            (i, target)
         })
         .collect();
     for (idx, target) in per_sector {

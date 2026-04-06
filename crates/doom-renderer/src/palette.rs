@@ -25,25 +25,56 @@ pub const PLAYPAL_SIZE: usize = PLAYPAL_COUNT * PLAYPAL_COLORS * 3;
 #[derive(Debug, Error)]
 pub enum PaletteError {
     #[error("PLAYPAL lump is {actual} bytes; expected {PLAYPAL_SIZE}")]
-    WrongSize { actual: usize },
+    /// The `PLAYPAL` lump did not match the expected size of 10,752 bytes.
+    ///
+    /// Doom expects exactly 14 palettes, each with 256 RGB tuples (14 * 256 * 3 = 10,752).
+    /// If this fails, the WAD is likely corrupted or uses a different palette specification.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::palette::{PaletteError, PaletteLut};
+    /// let bad_data = vec![0u8; 100];
+    /// assert!(matches!(PaletteLut::from_playpal(&bad_data), Err(PaletteError::WrongSize { actual: 100 })));
+    /// ```
+    WrongSize {
+        /// The actual size of the parsed lump.
+        actual: usize
+    },
 }
 
 /// RGB color triple.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Rgb {
+    /// The red channel component (0-255).
     pub r: u8,
+    /// The green channel component (0-255).
     pub g: u8,
+    /// The blue channel component (0-255).
     pub b: u8,
 }
 
 impl Rgb {
+    /// Pure black color constant.
+    ///
+    /// Used frequently as a fallback color for unmapped indices or void rendering.
     pub const BLACK: Self = Self { r: 0, g: 0, b: 0 };
+    /// Pure white color constant.
     pub const WHITE: Self = Self {
         r: 255,
         g: 255,
         b: 255,
     };
 
+    /// Creates a new `Rgb` color from the given red, green, and blue components.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::palette::Rgb;
+    /// let purple = Rgb::new(128, 0, 128);
+    /// assert_eq!(purple.r, 128);
+    /// assert_eq!(purple.g, 0);
+    /// assert_eq!(purple.b, 128);
+    /// ```
     #[inline]
     pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }

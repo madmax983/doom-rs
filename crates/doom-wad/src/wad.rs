@@ -775,17 +775,15 @@ mod tests {
 
         let group = wad.map_lump_group("MAP01").expect("map group");
 
-        match group {
-            MapLumpGroup::Udmf(group) => {
-                assert_eq!(group.marker.name.as_str(), "MAP01");
-                assert_eq!(group.textmap.name.as_str(), "TEXTMAP");
-                assert_eq!(group.endmap.name.as_str(), "ENDMAP");
-                assert_eq!(
-                    group.find_lump("ZNODES").map(|lump| lump.name.as_str()),
-                    Some("ZNODES")
-                );
-            }
-            MapLumpGroup::Classic(_) => panic!("expected UDMF map group"),
+        assert!(matches!(group, MapLumpGroup::Udmf(_)));
+        if let MapLumpGroup::Udmf(group) = group {
+            assert_eq!(group.marker.name.as_str(), "MAP01");
+            assert_eq!(group.textmap.name.as_str(), "TEXTMAP");
+            assert_eq!(group.endmap.name.as_str(), "ENDMAP");
+            assert_eq!(
+                group.find_lump("ZNODES").map(|lump| lump.name.as_str()),
+                Some("ZNODES")
+            );
         }
     }
 
@@ -799,6 +797,40 @@ mod tests {
         ]);
         let wad = WadFile::parse(wad_bytes).unwrap();
         assert!(wad.map_lump_group("MAP01").is_none());
+    }
+
+    #[test]
+    fn map_lump_group_classic_returns_classic_group() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("THINGS", b""),
+            ("LINEDEFS", b""),
+            ("SIDEDEFS", b""),
+            ("VERTEXES", b""),
+            ("SEGS", b""),
+            ("SSECTORS", b""),
+            ("NODES", b""),
+            ("SECTORS", b""),
+            ("REJECT", b""),
+            ("BLOCKMAP", b""),
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        match wad.map_lump_group("MAP01").unwrap() {
+            MapLumpGroup::Classic(c) => {
+                assert_eq!(c.marker.name.as_str(), "MAP01");
+                assert_eq!(c.lumps[0].name.as_str(), "THINGS");
+                assert_eq!(c.lumps[1].name.as_str(), "LINEDEFS");
+                assert_eq!(c.lumps[2].name.as_str(), "SIDEDEFS");
+                assert_eq!(c.lumps[3].name.as_str(), "VERTEXES");
+                assert_eq!(c.lumps[4].name.as_str(), "SEGS");
+                assert_eq!(c.lumps[5].name.as_str(), "SSECTORS");
+                assert_eq!(c.lumps[6].name.as_str(), "NODES");
+                assert_eq!(c.lumps[7].name.as_str(), "SECTORS");
+                assert_eq!(c.lumps[8].name.as_str(), "REJECT");
+                assert_eq!(c.lumps[9].name.as_str(), "BLOCKMAP");
+            }
+            _ => panic!("Expected Classic"),
+        }
     }
 
     #[test]
@@ -984,14 +1016,13 @@ mod tests {
         ]);
         let wad = WadFile::parse(wad_bytes).unwrap();
 
-        match wad.map_lump_group("MAP01").unwrap() {
-            MapLumpGroup::Udmf(udmf) => {
-                assert_eq!(udmf.aux_lumps().len(), 1);
-                assert_eq!(udmf.aux_lumps()[0].name.as_str(), "ZNODES");
-                assert_eq!(udmf.find_lump("ZNODES").unwrap().name.as_str(), "ZNODES");
-                assert!(udmf.find_lump("NONEXISTENT").is_none());
-            }
-            _ => panic!("Expected UDMF"),
+        let group = wad.map_lump_group("MAP01").unwrap();
+        assert!(matches!(group, MapLumpGroup::Udmf(_)));
+        if let MapLumpGroup::Udmf(udmf) = group {
+            assert_eq!(udmf.aux_lumps().len(), 1);
+            assert_eq!(udmf.aux_lumps()[0].name.as_str(), "ZNODES");
+            assert_eq!(udmf.find_lump("ZNODES").unwrap().name.as_str(), "ZNODES");
+            assert!(udmf.find_lump("NONEXISTENT").is_none());
         }
     }
 }

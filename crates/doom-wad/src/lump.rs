@@ -33,6 +33,17 @@ impl RawLumpEntry {
     /// Byte range `[filepos, filepos + size)` as `usize` pair.
     ///
     /// Returns `None` if either field is negative (malformed WAD).
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::lump::RawLumpEntry;
+    ///
+    /// let entry = RawLumpEntry { filepos: 100, size: 50, name: [0; 8] };
+    /// assert_eq!(entry.byte_range(), Some((100, 150)));
+    ///
+    /// let invalid = RawLumpEntry { filepos: -1, size: 50, name: [0; 8] };
+    /// assert_eq!(invalid.byte_range(), None);
+    /// ```
     pub fn byte_range(self) -> Option<(usize, usize)> {
         if self.filepos < 0 || self.size < 0 {
             return None;
@@ -52,6 +63,18 @@ pub struct LumpName([u8; 8]);
 
 impl LumpName {
     /// Construct from a raw name field, uppercasing ASCII letters.
+    ///
+    /// Any bytes following the first null byte are zero-filled.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::lump::LumpName;
+    ///
+    /// let mut raw = [0u8; 8];
+    /// raw[..8].copy_from_slice(b"playpal\0");
+    /// let name = LumpName::from_raw(raw);
+    /// assert_eq!(name.as_str(), "PLAYPAL");
+    /// ```
     pub fn from_raw(raw: [u8; 8]) -> Self {
         let mut buf = raw;
         let mut seen_null = false;
@@ -69,6 +92,20 @@ impl LumpName {
     }
 
     /// Construct from a string slice (must be ≤ 8 ASCII chars).
+    ///
+    /// Names longer than 8 characters will be silently truncated.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::lump::LumpName;
+    ///
+    /// let name = LumpName::from_str("e1m1");
+    /// assert_eq!(name.as_str(), "E1M1");
+    ///
+    /// // Truncation happens automatically at 8 characters
+    /// let long_name = LumpName::from_str("TOOLONGNAME");
+    /// assert_eq!(long_name.as_str(), "TOOLONGN");
+    /// ```
     #[allow(clippy::should_implement_trait)]
     pub fn from_str(s: &str) -> Self {
         let mut buf = [0u8; 8];
@@ -124,6 +161,25 @@ impl LumpDef {
     }
 
     /// Returns `true` if this lump is a marker (zero-size).
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::lump::{LumpDef, LumpName};
+    ///
+    /// let marker = LumpDef {
+    ///     name: LumpName::from_str("F_START"),
+    ///     offset: 0,
+    ///     size: 0,
+    /// };
+    /// assert!(marker.is_marker());
+    ///
+    /// let data_lump = LumpDef {
+    ///     name: LumpName::from_str("PLAYPAL"),
+    ///     offset: 12,
+    ///     size: 1024,
+    /// };
+    /// assert!(!data_lump.is_marker());
+    /// ```
     #[inline]
     pub fn is_marker(&self) -> bool {
         self.size == 0

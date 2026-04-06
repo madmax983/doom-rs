@@ -13,6 +13,7 @@ pub mod bsp;
 pub mod geojson;
 pub mod graph;
 pub mod html;
+pub mod json;
 pub mod level;
 pub mod lumps;
 pub mod obj;
@@ -23,6 +24,7 @@ pub use bsp::{BspChild, BspError, BspTree};
 pub use geojson::export_map_to_geojson;
 pub use graph::SectorGraph;
 pub use html::export_map_to_html;
+pub use json::export_map_to_json;
 pub use level::{Level, LevelError};
 pub use lumps::{
     Blockmap, FLAG_TWO_SIDED, Linedef, LumpParseError, Node, NodeBBox, Reject, SIDEDEF_NONE,

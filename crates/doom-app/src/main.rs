@@ -147,6 +147,10 @@ struct Args {
     #[arg(long)]
     export_html: Option<std::path::PathBuf>,
 
+    /// Export the level layout and statistics to a standalone JSON file and exit.
+    #[arg(long)]
+    export_json: Option<std::path::PathBuf>,
+
     /// Export the level layout to an SVG file and exit.
     #[arg(long)]
     export_svg: Option<std::path::PathBuf>,
@@ -172,6 +176,14 @@ struct Args {
     /// Number of full music loops to render when using --export-music-wav.
     #[arg(long, default_value = "1")]
     music_loops: u32,
+
+    /// Export a specific sound effect lump as a 16-bit PCM WAV file and exit.
+    #[arg(long, requires = "sfx_name")]
+    export_sfx_wav: Option<std::path::PathBuf>,
+
+    /// The name of the SFX lump to export (e.g. DSPISTOL) when using --export-sfx-wav.
+    #[arg(long, requires = "export_sfx_wav")]
+    sfx_name: Option<String>,
 
     /// Compute the total map statistics (kills, items, secrets, par time) and print them to the console.
     #[arg(long)]
@@ -920,6 +932,7 @@ impl DoomApp for DoomGame {
                                 Ok((_header, payload)) => {
                                     if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
                                         self.console.print(format!("Load failed: {e}"));
+                                        self.hud_messages.push(format!("Load failed: {e}"), 105);
                                     } else {
                                         self.player_view_height = if self.gs.player.is_dead() {
                                             DEAD_PLAYER_VIEW_HEIGHT
@@ -927,11 +940,15 @@ impl DoomApp for DoomGame {
                                             PLAYER_HEIGHT
                                         };
                                         self.console.print("Game loaded.".to_string());
+                                        self.hud_messages.push("Game loaded.".to_string(), 105);
                                         self.start_level_music();
                                         self.menu.close();
                                     }
                                 }
-                                Err(e) => self.console.print(format!("Load failed: {e}")),
+                                Err(e) => {
+                                    self.console.print(format!("Load failed: {e}"));
+                                    self.hud_messages.push(format!("Load failed: {e}"), 105);
+                                }
                             }
                         }
                         doom_game::menu::MenuResult::SaveGame(slot) => {
@@ -940,8 +957,10 @@ impl DoomApp for DoomGame {
                                 savegame::save_game(std::path::Path::new(&path), &self.gs, slot)
                             {
                                 self.console.print(format!("Save failed: {e}"));
+                                self.hud_messages.push(format!("Save failed: {e}"), 105);
                             } else {
                                 self.console.print(format!("Saved to slot {slot}."));
+                                self.hud_messages.push(format!("Saved to slot {slot}."), 105);
                                 self.menu.close();
                             }
                         }
@@ -1014,8 +1033,10 @@ impl DoomApp for DoomGame {
         if input.f5_save {
             if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0) {
                 self.console.print(format!("Save failed: {e}"));
+                self.hud_messages.push(format!("Save failed: {e}"), 105);
             } else {
                 self.console.print("Game saved.".to_string());
+                self.hud_messages.push("Game saved.".to_string(), 105);
             }
         }
 
@@ -1025,14 +1046,17 @@ impl DoomApp for DoomGame {
                 Ok((_header, payload)) => {
                     if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
                         self.console.print(format!("Load failed: {e}"));
+                        self.hud_messages.push(format!("Load failed: {e}"), 105);
                     } else {
                         self.reset_weapon_anim();
                         self.console.print("Game loaded.".to_string());
+                        self.hud_messages.push("Game loaded.".to_string(), 105);
                         self.start_level_music();
                     }
                 }
                 Err(e) => {
                     self.console.print(format!("Load failed: {e}"));
+                    self.hud_messages.push(format!("Load failed: {e}"), 105);
                 }
             }
         }
@@ -1067,6 +1091,13 @@ impl DoomApp for DoomGame {
         // with each other, matching Doom's original S_StartSound behaviour.
         {
             let events = std::mem::take(&mut self.gs.sound.sound_queue);
+
+            #[cfg(feature = "sound_ripples")]
+            if self.title_screen.is_none() {
+                self.cogmind_state
+                    .effects
+                    .spawn_sound_ripples(&events, &self.gs);
+            }
             self.handle_sound_events(events);
         }
 
@@ -1833,6 +1864,33 @@ fn wav_from_f32_mono(samples: &[f32], sample_rate: u32) -> Vec<u8> {
     out
 }
 
+fn export_sfx_wav_for_name(
+    wad_stack: &WadStack,
+    sfx_name: &str,
+    out_path: &std::path::Path,
+) -> Result<()> {
+    let sfx_lump = wad_stack
+        .lump_data(sfx_name)
+        .ok_or_else(|| anyhow::anyhow!("SFX lump {} not found in WAD stack", sfx_name))?;
+
+    let sfx_sample = doom_audio::mixer::PcmSample::parse_sfx_lump(sfx_lump)
+        .map_err(|e| anyhow::anyhow!("Failed to parse SFX lump {}: {}", sfx_name, e))?;
+
+    let mut samples_i16 = Vec::with_capacity(sfx_sample.data.len());
+    for &byte in sfx_sample.data.iter() {
+        // Convert 8-bit unsigned DOOM PCM (128 = silence) to normalized 32-bit float, then 16-bit signed
+        let s = (byte as i32 - 128) as f32 / 127.0;
+        let s_clamped = s.clamp(-1.0, 1.0);
+        let pcm = (s_clamped * i16::MAX as f32).round() as i16;
+        samples_i16.push(pcm);
+    }
+
+    let wav_bytes = doom_audio::wav::encode_pcm16_wav_mono(sfx_sample.sample_rate, &samples_i16);
+    std::fs::write(out_path, wav_bytes)
+        .with_context(|| format!("Failed to write WAV to {}", out_path.display()))?;
+    Ok(())
+}
+
 fn export_music_wav_for_map(
     wad_stack: &WadStack,
     map_name: &str,
@@ -1993,6 +2051,20 @@ fn run_doom() -> Result<()> {
         return Ok(());
     }
 
+    if let Some(ref json_path) = args.export_json {
+        let json_data = doom_map::export_map_to_json(&level);
+        std::fs::write(json_path, json_data)
+            .with_context(|| format!("Failed to write JSON to {}", json_path.display()))?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} JSON report to {}",
+            "🌟".green(),
+            "Exported".green().bold(),
+            json_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
+
     if let Some(ref svg_path) = args.export_svg {
         let svg_data = doom_map::export_map_to_svg(&level);
         std::fs::write(svg_path, svg_data)
@@ -2061,6 +2133,21 @@ fn run_doom() -> Result<()> {
         return Ok(());
     }
 
+    if let Some(ref sfx_wav_path) = args.export_sfx_wav {
+        let sfx_name = args.sfx_name.as_deref().ok_or_else(|| {
+            anyhow::anyhow!("--sfx-name is required when using --export-sfx-wav")
+        })?;
+        export_sfx_wav_for_name(&wad_stack, sfx_name, sfx_wav_path)?;
+        use crossterm::style::Stylize;
+        println!(
+            "{} {} SFX WAV to {}",
+            "🔊".green(),
+            "Exported".green().bold(),
+            sfx_wav_path.display().to_string().cyan()
+        );
+        return Ok(());
+    }
+
     if args.map_stats {
         let mut gs = GameState::new(warp_str);
         doom_game::spawn_level_things(&mut gs, &level, Skill::Medium, false);
@@ -2081,7 +2168,32 @@ fn run_doom() -> Result<()> {
                 stats.total_secrets,
                 stats.par_time_tics
             );
-            println!("{json_data}");
+            use std::io::IsTerminal;
+            if std::io::stdout().is_terminal() {
+                use crossterm::style::Stylize;
+                let formatted_json = format!(
+                    r#"{{
+  {}: "{}",
+  {}: {},
+  {}: {},
+  {}: {},
+  {}: {}
+}}"#,
+                    r#""map""#.cyan().bold(),
+                    warp_str.yellow(),
+                    r#""total_kills""#.cyan().bold(),
+                    stats.total_kills.to_string().red(),
+                    r#""total_items""#.cyan().bold(),
+                    stats.total_items.to_string().green(),
+                    r#""total_secrets""#.cyan().bold(),
+                    stats.total_secrets.to_string().magenta(),
+                    r#""par_time_tics""#.cyan().bold(),
+                    stats.par_time_tics.to_string().blue()
+                );
+                println!("{formatted_json}");
+            } else {
+                println!("{json_data}");
+            }
         } else {
             let mut table = comfy_table::Table::new();
             table
@@ -4218,6 +4330,49 @@ mod tests {
     }
 
     #[test]
+    fn cli_args_parse_export_sfx_wav() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--export-sfx-wav",
+            "pistol.wav",
+            "--sfx-name",
+            "DSPISTOL",
+        ]);
+        assert!(args.is_ok(), "args with --export-sfx-wav must parse successfully");
+        let args = args.unwrap();
+        assert_eq!(
+            args.export_sfx_wav,
+            Some(std::path::PathBuf::from("pistol.wav"))
+        );
+        assert_eq!(args.sfx_name, Some("DSPISTOL".to_string()));
+    }
+
+    #[test]
+    fn export_sfx_wav_for_name_generates_valid_wav() {
+        let mut sfx_data = Vec::new();
+        sfx_data.extend_from_slice(&3u16.to_le_bytes()); // format
+        sfx_data.extend_from_slice(&11_025u16.to_le_bytes()); // sample_rate
+        sfx_data.extend_from_slice(&100u32.to_le_bytes()); // sample_count
+        sfx_data.extend(vec![128u8; 100]); // 100 samples of silence
+
+        let stack = build_test_wad_stack_from_lumps(vec![(*b"DSPISTOL", sfx_data.clone())], vec![]);
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let out_path = temp_dir.path().join("pistol.wav");
+
+        let result = export_sfx_wav_for_name(&stack, "DSPISTOL", &out_path);
+        assert!(result.is_ok(), "SFX export should succeed");
+
+        let wav_data = std::fs::read(&out_path).unwrap();
+        // RIFF + 36 byte format/data headers + 100*2 bytes of 16-bit PCM = 244 bytes
+        assert_eq!(wav_data[0..4], *b"RIFF");
+        assert_eq!(wav_data[8..12], *b"WAVE");
+        assert_eq!(wav_data.len(), 44 + 200);
+    }
+
+    #[test]
     fn mode_validation_rejects_turn_based_netplay() {
         let args = Args::try_parse_from([
             "doom-app",
@@ -4254,6 +4409,43 @@ mod tests {
             capture.framebuffer.get_pixel(0, 0),
             Some(4),
             "rendered framebuffer should contain the app's last rendered content"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Test 32: Sound Ripples Feature Integration
+    // -----------------------------------------------------------------------
+
+    #[test]
+    #[cfg(feature = "sound_ripples")]
+    fn sound_ripples_spawned_on_sound_events_in_tick() {
+        let mut game = make_doom_game();
+        game.title_screen = None; // Disable title screen so gameplay is active
+        game.phase_controller = doom_game::GamePhaseController::new(doom_game::MapId::new(1, 1)); // Ensure phase is Playing
+
+        // We just use the player's handle instead since it already exists.
+
+        // Enqueue a weapon fire sound.
+        game.gs
+            .sound
+            .sound_queue
+            .push(doom_game::SoundRequest::PlayerWeaponFire(
+                doom_game::player::WeaponType::Pistol,
+            ));
+
+        // Open menu to pause the game, so `gs.tick()` doesn't clear the sound queue we just pushed!
+        game.menu.open();
+
+        // Let the game tick process the sound queue.
+
+        game.tick(TicInput::default());
+
+        // Check if effects were spawned.
+
+        assert_eq!(
+            game.cogmind_state.effects.effects.len(),
+            9,
+            "sound ripples must spawn 9 particles"
         );
     }
 }

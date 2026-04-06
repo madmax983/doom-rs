@@ -182,7 +182,11 @@ impl<'a> ReadCursor<'a> {
 
     /// Read a signed 16-bit integer (little-endian).
     pub fn read_i16(&mut self) -> Result<i16, SaveError> {
-        if self.pos + 2 > self.data.len() {
+        if self
+            .pos
+            .checked_add(2)
+            .is_none_or(|end| end > self.data.len())
+        {
             return Err(SaveError::Truncated);
         }
         let v = i16::from_le_bytes([self.data[self.pos], self.data[self.pos + 1]]);
@@ -202,7 +206,11 @@ impl<'a> ReadCursor<'a> {
 
     /// Read a signed 32-bit integer (little-endian).
     pub fn read_i32(&mut self) -> Result<i32, SaveError> {
-        if self.pos + 4 > self.data.len() {
+        if self
+            .pos
+            .checked_add(4)
+            .is_none_or(|end| end > self.data.len())
+        {
             return Err(SaveError::Truncated);
         }
         let v = i32::from_le_bytes([
@@ -237,7 +245,11 @@ impl<'a> ReadCursor<'a> {
 
     /// Read exactly `n` bytes into a fixed-size array.
     pub fn read_bytes<const N: usize>(&mut self) -> Result<[u8; N], SaveError> {
-        if self.pos + N > self.data.len() {
+        if self
+            .pos
+            .checked_add(N)
+            .is_none_or(|end| end > self.data.len())
+        {
             return Err(SaveError::Truncated);
         }
         let mut arr = [0u8; N];
@@ -967,7 +979,10 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Level name (string) ---
     let name_len = r.read_u32()? as usize;
-    if r.pos + name_len > r.data.len() {
+    if r.pos
+        .checked_add(name_len)
+        .is_none_or(|end| end > r.data.len())
+    {
         return Err(SaveError::Truncated);
     }
     let level_name_str = {
@@ -1759,5 +1774,30 @@ mod tests {
             loaded.state.player.extra_light, 2,
             "player extra_light must survive save/load so weapon flash lighting stays deterministic"
         );
+    }
+
+    // --- Test 33: Havoc malicious string size ---
+    #[test]
+    fn load_game_malicious_string_length() {
+        let gs = test_game_state();
+        let mut data = save_game(&gs, &test_level_name(), 2, "havoc");
+
+        for i in 0..(data.len() - 4) {
+            // Find the string length
+            if data[i] == 4 && data[i + 1] == 0 && data[i + 2] == 0 && data[i + 3] == 0 {
+                // Confirm it's followed by E1M1
+                if &data[i + 4..i + 8] == b"E1M1" {
+                    // Set length to u32::MAX
+                    data[i] = 0xFF;
+                    data[i + 1] = 0xFF;
+                    data[i + 2] = 0xFF;
+                    data[i + 3] = 0xFF;
+                    break;
+                }
+            }
+        }
+
+        let res = load_game(&data);
+        assert_eq!(res.unwrap_err(), SaveError::Truncated);
     }
 }

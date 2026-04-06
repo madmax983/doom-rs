@@ -17,3 +17,6 @@
 **Doc comments on local let bindings**
 **Learning:** In Rust, applying an outer doc comment (`///`) to a local statement (such as a `let` binding) inside a function body causes a rustdoc compilation error (`error[E0585]: found a documentation comment that doesn't document anything`).
 **Action:** Use standard comments (`//`) instead for inline explanations within functions, even if prompted to "add doc comments (`///`) explaining why the optimization matters" (apply this rule only to item definitions like structs, functions, modules, etc., not inline logic).
+**[Eliminated intermediate collection in wad lump scanning]**
+**Learning:** `Vec::collect()` intermediate collections over iterators just to iterate over them again later via `.into_iter()` is wasteful. We can preserve an `impl Iterator` to process items continuously and eliminate the initial `Vec` buffer entirely, avoiding temporary allocation overhead at startup.
+**Action:** When filtering or mapping data from an underlying collection to form a list that will be consumed downstream, prefer returning a lifetime-bound `impl Iterator` instead of a full `Vec` wherever the call chain allows for lazy iteration.
