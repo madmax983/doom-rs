@@ -46,7 +46,17 @@ impl FlatCache {
 
     /// Load all flat textures from a WAD stack using last-loaded override semantics.
     pub fn load_from_stack(wad_stack: &WadStack) -> Self {
-        Self::load_from_stack_with_profile(wad_stack, CompatibilityProfile::Extended)
+        Self::load_from_stack_extended(wad_stack)
+    }
+
+    /// Load flats with extended stacked-marker support (`FF_START`/`FF_END`).
+    pub fn load_from_stack_extended(wad_stack: &WadStack) -> Self {
+        Self::load_from_stack_impl(wad_stack, true)
+    }
+
+    /// Load flats using only vanilla-style `F_START`/`F_END` sections.
+    pub fn load_from_stack_strict(wad_stack: &WadStack) -> Self {
+        Self::load_from_stack_impl(wad_stack, false)
     }
 
     /// Load all flat textures from a WAD stack with an explicit compatibility
@@ -55,31 +65,42 @@ impl FlatCache {
         wad_stack: &WadStack,
         compat: CompatibilityProfile,
     ) -> Self {
+        match compat {
+            CompatibilityProfile::Extended => Self::load_from_stack_extended(wad_stack),
+            CompatibilityProfile::VanillaStrict => Self::load_from_stack_strict(wad_stack),
+        }
+    }
+
+    fn load_from_stack_impl(wad_stack: &WadStack, allow_ff_markers: bool) -> Self {
         let mut flats: HashMap<String, Box<[u8; FLAT_SIZE]>> = HashMap::new();
         let mut in_flat_section = false;
 
-        match compat {
-            CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
-                for (wad, lump) in wad_stack.all_lumps() {
-                    match lump.name.as_str() {
-                        "F_START" | "FF_START" => {
-                            in_flat_section = true;
-                            continue;
-                        }
-                        "F_END" | "FF_END" => {
-                            in_flat_section = false;
-                            continue;
-                        }
-                        _ => {}
-                    }
-
-                    if !in_flat_section {
-                        continue;
-                    }
-
-                    Self::insert_flat(&mut flats, wad, lump);
+        for (wad, lump) in wad_stack.all_lumps() {
+            match lump.name.as_str() {
+                "F_START" => {
+                    in_flat_section = true;
+                    continue;
                 }
+                "F_END" => {
+                    in_flat_section = false;
+                    continue;
+                }
+                "FF_START" if allow_ff_markers => {
+                    in_flat_section = true;
+                    continue;
+                }
+                "FF_END" if allow_ff_markers => {
+                    in_flat_section = false;
+                    continue;
+                }
+                _ => {}
             }
+
+            if !in_flat_section {
+                continue;
+            }
+
+            Self::insert_flat(&mut flats, wad, lump);
         }
 
         Self {
@@ -317,5 +338,53 @@ mod tests {
 
         let cache = FlatCache::load_from_stack(&stack);
         assert_eq!(cache.get(b"NUKAGE1\0")[0], 9);
+    }
+
+    #[test]
+    fn test_flat_cache_stack_extended_honors_ff_markers() {
+        let iwad_bytes = make_iwad(&[
+            ("F_START", b""),
+            ("NUKAGE1", &vec![1u8; FLAT_SIZE]),
+            ("F_END", b""),
+        ]);
+        let pwad_bytes = make_wad(
+            b"PWAD",
+            &[
+                ("FF_START", b""),
+                ("NUKAGE1", &vec![9u8; FLAT_SIZE]),
+                ("FF_END", b""),
+            ],
+        );
+
+        let mut stack = WadStack::new();
+        stack.push_iwad(iwad_bytes).expect("IWAD push must succeed");
+        stack.push_pwad(pwad_bytes).expect("PWAD push must succeed");
+
+        let cache = FlatCache::load_from_stack_extended(&stack);
+        assert_eq!(cache.get(b"NUKAGE1\0")[0], 9);
+    }
+
+    #[test]
+    fn test_flat_cache_stack_strict_ignores_ff_markers() {
+        let iwad_bytes = make_iwad(&[
+            ("F_START", b""),
+            ("NUKAGE1", &vec![1u8; FLAT_SIZE]),
+            ("F_END", b""),
+        ]);
+        let pwad_bytes = make_wad(
+            b"PWAD",
+            &[
+                ("FF_START", b""),
+                ("NUKAGE1", &vec![9u8; FLAT_SIZE]),
+                ("FF_END", b""),
+            ],
+        );
+
+        let mut stack = WadStack::new();
+        stack.push_iwad(iwad_bytes).expect("IWAD push must succeed");
+        stack.push_pwad(pwad_bytes).expect("PWAD push must succeed");
+
+        let cache = FlatCache::load_from_stack_strict(&stack);
+        assert_eq!(cache.get(b"NUKAGE1\0")[0], 1);
     }
 }

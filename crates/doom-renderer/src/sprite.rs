@@ -81,7 +81,17 @@ impl SpriteCache {
 
     /// Load all sprite lumps between sprite markers from a WAD stack.
     pub fn load_from_stack(wad_stack: &WadStack) -> Self {
-        Self::load_from_stack_with_profile(wad_stack, CompatibilityProfile::Extended)
+        Self::load_from_stack_extended(wad_stack)
+    }
+
+    /// Load sprites with extended stacked-marker support (`SS_START`/`SS_END`).
+    pub fn load_from_stack_extended(wad_stack: &WadStack) -> Self {
+        Self::load_from_stack_impl(wad_stack, true)
+    }
+
+    /// Load sprites using only vanilla-style `S_START`/`S_END` sections.
+    pub fn load_from_stack_strict(wad_stack: &WadStack) -> Self {
+        Self::load_from_stack_impl(wad_stack, false)
     }
 
     /// Load all sprite lumps between sprite markers from a WAD stack with an
@@ -90,31 +100,42 @@ impl SpriteCache {
         wad_stack: &WadStack,
         compat: CompatibilityProfile,
     ) -> Self {
+        match compat {
+            CompatibilityProfile::Extended => Self::load_from_stack_extended(wad_stack),
+            CompatibilityProfile::VanillaStrict => Self::load_from_stack_strict(wad_stack),
+        }
+    }
+
+    fn load_from_stack_impl(wad_stack: &WadStack, allow_ss_markers: bool) -> Self {
         let mut frames = HashMap::new();
         let mut in_sprite_section = false;
 
-        match compat {
-            CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
-                for (wad, lump) in wad_stack.all_lumps() {
-                    match lump.name.as_str() {
-                        "S_START" | "SS_START" => {
-                            in_sprite_section = true;
-                            continue;
-                        }
-                        "S_END" | "SS_END" => {
-                            in_sprite_section = false;
-                            continue;
-                        }
-                        _ => {}
-                    }
-
-                    if !in_sprite_section {
-                        continue;
-                    }
-
-                    Self::insert_frame(&mut frames, wad, lump);
+        for (wad, lump) in wad_stack.all_lumps() {
+            match lump.name.as_str() {
+                "S_START" => {
+                    in_sprite_section = true;
+                    continue;
                 }
+                "S_END" => {
+                    in_sprite_section = false;
+                    continue;
+                }
+                "SS_START" if allow_ss_markers => {
+                    in_sprite_section = true;
+                    continue;
+                }
+                "SS_END" if allow_ss_markers => {
+                    in_sprite_section = false;
+                    continue;
+                }
+                _ => {}
             }
+
+            if !in_sprite_section {
+                continue;
+            }
+
+            Self::insert_frame(&mut frames, wad, lump);
         }
 
         Self { frames }
@@ -1451,7 +1472,7 @@ mod tests {
     ///   [15]    pixel    = 7
     ///   [16]    _pad     = 0
     ///   [17]    topdelta = 0xFF  (end of column)
-    fn minimal_picture() -> Vec<u8> {
+    fn picture_with_pixel(pixel: u8) -> Vec<u8> {
         let mut data = Vec::new();
         data.extend_from_slice(&1u16.to_le_bytes()); // width = 1
         data.extend_from_slice(&1u16.to_le_bytes()); // height = 1
@@ -1460,8 +1481,12 @@ mod tests {
         let col_offset: u32 = 12; // header(8) + col_offsets(1×4) = 12
         data.extend_from_slice(&col_offset.to_le_bytes());
         // Post: topdelta=0, length=1, padding, pixel=7, padding, end-marker
-        data.extend_from_slice(&[0, 1, 0, 7, 0, 0xFF]);
+        data.extend_from_slice(&[0, 1, 0, pixel, 0, 0xFF]);
         data
+    }
+
+    fn minimal_picture() -> Vec<u8> {
+        picture_with_pixel(7)
     }
 
     /// Build a minimal valid IWAD with zero lumps.
@@ -1473,10 +1498,9 @@ mod tests {
         data
     }
 
-    /// Build a minimal IWAD with the specified named lumps.
-    fn wad_with_lumps(lumps: &[(&str, &[u8])]) -> Vec<u8> {
+    fn wad_with_lumps_kind(kind: &[u8; 4], lumps: &[(&str, &[u8])]) -> Vec<u8> {
         let mut data: Vec<u8> = Vec::new();
-        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(kind);
         data.extend_from_slice(&(lumps.len() as i32).to_le_bytes());
         data.extend_from_slice(&0i32.to_le_bytes()); // dir offset placeholder
 
@@ -1502,6 +1526,11 @@ mod tests {
         }
 
         data
+    }
+
+    /// Build a minimal IWAD with the specified named lumps.
+    fn wad_with_lumps(lumps: &[(&str, &[u8])]) -> Vec<u8> {
+        wad_with_lumps_kind(b"IWAD", lumps)
     }
 
     // ------------------------------------------------------------------
@@ -1735,6 +1764,56 @@ mod tests {
         let frame = cache.get(b"PISGA0\0\0");
         assert!(frame.is_some(), "PISGA0 should be in cache");
         assert_eq!(frame.unwrap().pixels[0], Some(7));
+    }
+
+    #[test]
+    fn test_sprite_cache_stack_extended_honors_ss_markers() {
+        let iwad_bytes = wad_with_lumps(&[
+            ("S_START", &[]),
+            ("PISGA0", &picture_with_pixel(1)),
+            ("S_END", &[]),
+        ]);
+        let pwad_bytes = wad_with_lumps_kind(
+            b"PWAD",
+            &[
+                ("SS_START", &[]),
+                ("PISGA0", &picture_with_pixel(9)),
+                ("SS_END", &[]),
+            ],
+        );
+
+        let mut stack = WadStack::new();
+        stack.push_iwad(iwad_bytes).expect("iwad push");
+        stack.push_pwad(pwad_bytes).expect("pwad push");
+
+        let cache = SpriteCache::load_from_stack_extended(&stack);
+        let frame = cache.get(b"PISGA0\0\0").expect("sprite should load");
+        assert_eq!(frame.pixels[0], Some(9));
+    }
+
+    #[test]
+    fn test_sprite_cache_stack_strict_ignores_ss_markers() {
+        let iwad_bytes = wad_with_lumps(&[
+            ("S_START", &[]),
+            ("PISGA0", &picture_with_pixel(1)),
+            ("S_END", &[]),
+        ]);
+        let pwad_bytes = wad_with_lumps_kind(
+            b"PWAD",
+            &[
+                ("SS_START", &[]),
+                ("PISGA0", &picture_with_pixel(9)),
+                ("SS_END", &[]),
+            ],
+        );
+
+        let mut stack = WadStack::new();
+        stack.push_iwad(iwad_bytes).expect("iwad push");
+        stack.push_pwad(pwad_bytes).expect("pwad push");
+
+        let cache = SpriteCache::load_from_stack_strict(&stack);
+        let frame = cache.get(b"PISGA0\0\0").expect("sprite should load");
+        assert_eq!(frame.pixels[0], Some(1));
     }
 
     // ------------------------------------------------------------------
