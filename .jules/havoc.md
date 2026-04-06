@@ -1,0 +1,3 @@
+## YYYY-MM-DD - Out Of Memory in Blockmap parsing
+**The Trigger:** A malformed blockmap header declaring extremely large values for `x_count` and `y_count` caused `n_blocks` to reach over 4.2 billion. The allocation `Vec::with_capacity(n_blocks)` attempted to allocate around 8.5 GB, causing a libFuzzer out-of-memory crash.
+**The Fix:** Used `data.len().saturating_sub(Self::HEADER_BYTES) / 2` to safely determine the maximum possible `n_blocks` that the available byte slice could hold, and bounded the capacity allocation with `n_blocks.min(max_elements)`. This guarantees allocations match available data, preventing resource exhaustion vectors.

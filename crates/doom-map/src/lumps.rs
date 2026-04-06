@@ -507,7 +507,8 @@ impl Blockmap {
         let n_blocks = x_count as usize * y_count as usize;
         let offsets_end = Self::HEADER_BYTES + n_blocks * 2;
 
-        let mut offsets = Vec::with_capacity(n_blocks);
+        let max_elements = data.len().saturating_sub(Self::HEADER_BYTES) / 2;
+        let mut offsets = Vec::with_capacity(n_blocks.min(max_elements));
         let offset_bytes = &data[Self::HEADER_BYTES..offsets_end.min(data.len())];
         for chunk in offset_bytes.chunks_exact(2) {
             offsets.push(u16::from_le_bytes([chunk[0], chunk[1]]));
@@ -777,8 +778,24 @@ mod tests {
         assert!(Reject::parse_lump(&data, 4).is_err()); // expects 2 bytes
     }
 
+
     #[test]
     fn bad_lump_length_errors() {
         assert!(Thing::parse_lump(&[0u8; 7]).is_err()); // 7 not divisible by 10
     }
+
+    #[test]
+    fn blockmap_oom_prevention() {
+        let mut data = vec![0; 8];
+        // x_count = 65535
+        data[4] = 255;
+        data[5] = 255;
+        // y_count = 65535
+        data[6] = 255;
+        data[7] = 255;
+
+        // This should not panic
+        let _ = Blockmap::parse_lump(&data);
+    }
+
 }
