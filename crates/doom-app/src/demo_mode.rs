@@ -25,6 +25,7 @@ pub struct DemoRecordingWrapper {
     inner: DoomGame,
     recorder: DemoRecorder,
     save_path: std::path::PathBuf,
+    compat: CompatibilityProfile,
 }
 
 impl DemoRecordingWrapper {
@@ -38,23 +39,33 @@ impl DemoRecordingWrapper {
         inner: DoomGame,
         recorder: DemoRecorder,
         save_path: std::path::PathBuf,
-        _compat: CompatibilityProfile,
+        compat: CompatibilityProfile,
     ) -> Self {
         Self {
             inner,
             recorder,
             save_path,
+            compat,
         }
+    }
+
+    /// Return the compatibility profile used when constructing the wrapper.
+    pub const fn compat_profile(&self) -> CompatibilityProfile {
+        self.compat
     }
 }
 
 impl DoomApp for DemoRecordingWrapper {
     fn tick(&mut self, input: TicInput) {
-        // Convert the live input to a TicCmd and record it BEFORE advancing
-        // the simulation, matching vanilla Doom's record ordering.
-        let cmd = ticinput_to_ticcmd(input);
-        self.recorder.record_tic(&cmd);
-        self.inner.tick(input);
+        match self.compat {
+            CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
+                // Demo behavior is intentionally shared across profiles for now.
+                // The profile is still threaded here so the seam stays explicit.
+                let cmd = ticinput_to_ticcmd(input);
+                self.recorder.record_tic(&cmd);
+                self.inner.tick(input);
+            }
+        }
     }
 
     fn render(&mut self, fb: &mut Framebuffer) {
@@ -93,6 +104,7 @@ impl Drop for DemoRecordingWrapper {
 pub struct DemoPlaybackApp {
     inner: DoomGame,
     player: DemoPlayer,
+    compat: CompatibilityProfile,
 }
 
 impl DemoPlaybackApp {
@@ -105,12 +117,18 @@ impl DemoPlaybackApp {
     pub fn new_with_compat(
         inner: DoomGame,
         player: DemoPlayer,
-        _compat: CompatibilityProfile,
+        compat: CompatibilityProfile,
     ) -> Self {
         Self {
             inner,
             player,
+            compat,
         }
+    }
+
+    /// Return the compatibility profile used when constructing the wrapper.
+    pub const fn compat_profile(&self) -> CompatibilityProfile {
+        self.compat
     }
 
     /// Feed a single [`TicCmd`] directly to the inner game state, bypassing the
@@ -133,9 +151,14 @@ impl DemoPlaybackApp {
 
 impl DoomApp for DemoPlaybackApp {
     fn tick(&mut self, _live_input: TicInput) {
-        // Use recorded input instead of live keyboard input.
-        if let Some(cmd) = self.player.next_tic() {
-            self.tick_cmd(cmd);
+        match self.compat {
+            CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
+                // Demo behavior is intentionally shared across profiles for now.
+                // The profile is still threaded here so the seam stays explicit.
+                if let Some(cmd) = self.player.next_tic() {
+                    self.tick_cmd(cmd);
+                }
+            }
         }
         // Demo exhausted: last frame stays frozen — nothing to do.
     }
@@ -203,10 +226,11 @@ fn make_test_level() -> doom_map::Level {
 mod tests {
     use super::*;
     use doom_demo::{DemoRecorder, LmpHeader};
-    use doom_game::{GameState, Mobj, MobjKind, PlayerState, bt, flags};
+    use doom_game::{GameState, Mobj, MobjKind, PlayerState, TicCmd, flags};
     use doom_types::{Bam, Fixed16_16};
     use doom_types::CompatibilityProfile;
     use std::env;
+    use std::sync::Once;
 
     // -----------------------------------------------------------------------
     // Helpers
@@ -269,6 +293,13 @@ mod tests {
 
     fn make_player_from_bytes(bytes: &[u8]) -> DemoPlayer {
         DemoPlayer::parse(bytes).expect("parse must succeed")
+    }
+
+    fn init_trig_tables_once() {
+        static INIT: Once = Once::new();
+        INIT.call_once(|| unsafe {
+            Bam::init_trig_tables();
+        });
     }
 
     // -----------------------------------------------------------------------
@@ -413,7 +444,7 @@ mod tests {
     fn playback_app_preserves_attack_button_into_game_logic() {
         let game = make_doom_game();
         let player = make_player_from_bytes(&[
-            109, 3, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 251, 0x12, bt::BT_ATTACK, 0x80,
+            109, 3, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 251, 0x12, 0x01, 0x80,
         ]);
         let mut app =
             DemoPlaybackApp::new_with_compat(game, player, CompatibilityProfile::VanillaStrict);
@@ -430,7 +461,7 @@ mod tests {
     fn playback_app_preserves_use_button_into_game_logic() {
         let game = make_doom_game();
         let player = make_player_from_bytes(&[
-            109, 3, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 251, 0x12, bt::BT_USE, 0x80,
+            109, 3, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 251, 0x12, 0x02, 0x80,
         ]);
         let mut app =
             DemoPlaybackApp::new_with_compat(game, player, CompatibilityProfile::VanillaStrict);
@@ -441,6 +472,70 @@ mod tests {
             app.inner.gs.player.use_down,
             "BT_USE must reach the game state during playback"
         );
+    }
+
+    #[test]
+    fn playback_app_preserves_movement_and_turn_expansion_into_game_state() {
+        init_trig_tables_once();
+
+        let bytes = [
+            109, 3, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 16, 4, 0x34, 0x00, 0x80,
+        ];
+        let expected_cmd = TicCmd {
+            forward_move: 16,
+            side_move: 4,
+            angle_turn: 0x3400,
+            buttons: 0x00,
+            ..Default::default()
+        };
+
+        let baseline_game = make_doom_game();
+        let playback_game = make_doom_game();
+        let mut baseline = baseline_game;
+        let mut app = DemoPlaybackApp::new_with_compat(
+            playback_game,
+            DemoPlayer::from_lmp(&bytes).expect("parse must succeed"),
+            CompatibilityProfile::VanillaStrict,
+        );
+
+        baseline
+            .gs
+            .tick(expected_cmd, Some(&mut baseline.level));
+        app.tick(TicInput::default());
+
+        let baseline_mobj = baseline
+            .gs
+            .mobjslab
+            .get(baseline.gs.player.handle)
+            .expect("baseline player mobj must exist");
+        let playback_mobj = app
+            .inner
+            .gs
+            .mobjslab
+            .get(app.inner.gs.player.handle)
+            .expect("playback player mobj must exist");
+
+        assert_eq!(app.compat_profile(), CompatibilityProfile::VanillaStrict);
+        assert_eq!(playback_mobj.x, baseline_mobj.x);
+        assert_eq!(playback_mobj.y, baseline_mobj.y);
+        assert_eq!(playback_mobj.angle, baseline_mobj.angle);
+        assert_eq!(playback_mobj.momx, baseline_mobj.momx);
+        assert_eq!(playback_mobj.momy, baseline_mobj.momy);
+    }
+
+    #[test]
+    fn recording_wrapper_keeps_compat_profile() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let game = make_doom_game();
+        let recorder = make_recorder(0);
+        let wrapper = DemoRecordingWrapper::new_with_compat(
+            game,
+            recorder,
+            dir.path().join("doom_rs_unused_recording_wrapper_profile.lmp"),
+            CompatibilityProfile::VanillaStrict,
+        );
+
+        assert_eq!(wrapper.compat_profile(), CompatibilityProfile::VanillaStrict);
     }
 
     // -----------------------------------------------------------------------
