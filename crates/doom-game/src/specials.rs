@@ -832,24 +832,22 @@ pub fn ev_floor_lower_to_highest(gs: &mut GameState, level: &Level, tag: u16, sp
 ///
 /// "Next lowest" means: find the highest adjacent floor that is still below
 /// the sector's current floor. If none, no mover is created.
+/// ⚡ Bolt Optimization:
+/// Avoids intermediate `.collect::<Vec<_>>()` by processing sectors inline.
 pub fn ev_floor_lower_to_nearest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    let per_sector: Vec<(usize, i16)> = level
+    for (idx, s) in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
-        .map(|(i, s)| {
-            // Find the highest adjacent floor strictly below our floor.
-            let own_floor = s.floor_height;
-            let target = adjacent_sectors(level, i)
-                .map(|(_, adj_s)| adj_s.floor_height)
-                .filter(|&h| h < own_floor)
-                .max()
-                .unwrap_or(own_floor);
-            (i, target)
-        })
-        .collect();
-    for (idx, target) in per_sector {
+    {
+        // Find the highest adjacent floor strictly below our floor.
+        let own_floor = s.floor_height;
+        let target = adjacent_sectors(level, idx)
+            .map(|(_, adj_s)| adj_s.floor_height)
+            .filter(|&h| h < own_floor)
+            .max()
+            .unwrap_or(own_floor);
         activate_floor_lower_single_typed(
             gs,
             level,
