@@ -10,6 +10,7 @@
 //! ```
 
 use doom_types::limits::FLAT_SIZE;
+use doom_types::CompatibilityProfile;
 use doom_wad::{LumpDef, WadFile, WadStack};
 use std::collections::HashMap;
 
@@ -45,27 +46,40 @@ impl FlatCache {
 
     /// Load all flat textures from a WAD stack using last-loaded override semantics.
     pub fn load_from_stack(wad_stack: &WadStack) -> Self {
+        Self::load_from_stack_with_profile(wad_stack, CompatibilityProfile::Extended)
+    }
+
+    /// Load all flat textures from a WAD stack with an explicit compatibility
+    /// profile.
+    pub fn load_from_stack_with_profile(
+        wad_stack: &WadStack,
+        compat: CompatibilityProfile,
+    ) -> Self {
         let mut flats: HashMap<String, Box<[u8; FLAT_SIZE]>> = HashMap::new();
         let mut in_flat_section = false;
 
-        for (wad, lump) in wad_stack.all_lumps() {
-            match lump.name.as_str() {
-                "F_START" | "FF_START" => {
-                    in_flat_section = true;
-                    continue;
-                }
-                "F_END" | "FF_END" => {
-                    in_flat_section = false;
-                    continue;
-                }
-                _ => {}
-            }
+        match compat {
+            CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
+                for (wad, lump) in wad_stack.all_lumps() {
+                    match lump.name.as_str() {
+                        "F_START" | "FF_START" => {
+                            in_flat_section = true;
+                            continue;
+                        }
+                        "F_END" | "FF_END" => {
+                            in_flat_section = false;
+                            continue;
+                        }
+                        _ => {}
+                    }
 
-            if !in_flat_section {
-                continue;
-            }
+                    if !in_flat_section {
+                        continue;
+                    }
 
-            Self::insert_flat(&mut flats, wad, lump);
+                    Self::insert_flat(&mut flats, wad, lump);
+                }
+            }
         }
 
         Self {

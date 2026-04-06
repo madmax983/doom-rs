@@ -19,6 +19,7 @@
 //! lump is missing the cache falls back to 34 identity rows so rendering
 //! still works (everything will appear full-bright).
 
+use doom_types::CompatibilityProfile;
 use doom_wad::{WadFile, WadStack};
 
 /// Number of rows in the COLORMAP lump (34 total; 32 light levels + 2 special).
@@ -43,12 +44,31 @@ impl ColormapCache {
     /// If the lump is missing or has fewer bytes than expected, the cache
     /// falls back to identity mapping (0, 1, 2, … 255 repeated for each row).
     pub fn load(wad: &WadStack) -> Self {
-        Self::from_bytes(wad.lump_data("COLORMAP"))
+        Self::load_with_profile(wad, CompatibilityProfile::Extended)
+    }
+
+    /// Load from the `COLORMAP` lump in the WAD stack with an explicit
+    /// compatibility profile.
+    pub fn load_with_profile(wad: &WadStack, compat: CompatibilityProfile) -> Self {
+        match compat {
+            CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
+                Self::from_bytes(wad.lump_data("COLORMAP"))
+            }
+        }
     }
 
     /// Load from a raw `WadFile` (convenience wrapper around `from_bytes`).
     pub fn from_wad_file(wad: &WadFile) -> Self {
-        Self::from_bytes(wad.find_lump_data("COLORMAP"))
+        Self::from_wad_file_with_profile(wad, CompatibilityProfile::Extended)
+    }
+
+    /// Load from a raw `WadFile` with an explicit compatibility profile.
+    pub fn from_wad_file_with_profile(wad: &WadFile, compat: CompatibilityProfile) -> Self {
+        match compat {
+            CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
+                Self::from_bytes(wad.find_lump_data("COLORMAP"))
+            }
+        }
     }
 
     /// Build from optional raw lump bytes.

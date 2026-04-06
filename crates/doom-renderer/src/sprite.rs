@@ -26,6 +26,7 @@
 use std::collections::HashMap;
 
 use doom_wad::{LumpDef, WadFile, WadStack};
+use doom_types::CompatibilityProfile;
 
 use crate::colormap::ColormapCache;
 use crate::framebuffer::Framebuffer;
@@ -80,27 +81,40 @@ impl SpriteCache {
 
     /// Load all sprite lumps between sprite markers from a WAD stack.
     pub fn load_from_stack(wad_stack: &WadStack) -> Self {
+        Self::load_from_stack_with_profile(wad_stack, CompatibilityProfile::Extended)
+    }
+
+    /// Load all sprite lumps between sprite markers from a WAD stack with an
+    /// explicit compatibility profile.
+    pub fn load_from_stack_with_profile(
+        wad_stack: &WadStack,
+        compat: CompatibilityProfile,
+    ) -> Self {
         let mut frames = HashMap::new();
         let mut in_sprite_section = false;
 
-        for (wad, lump) in wad_stack.all_lumps() {
-            match lump.name.as_str() {
-                "S_START" | "SS_START" => {
-                    in_sprite_section = true;
-                    continue;
-                }
-                "S_END" | "SS_END" => {
-                    in_sprite_section = false;
-                    continue;
-                }
-                _ => {}
-            }
+        match compat {
+            CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
+                for (wad, lump) in wad_stack.all_lumps() {
+                    match lump.name.as_str() {
+                        "S_START" | "SS_START" => {
+                            in_sprite_section = true;
+                            continue;
+                        }
+                        "S_END" | "SS_END" => {
+                            in_sprite_section = false;
+                            continue;
+                        }
+                        _ => {}
+                    }
 
-            if !in_sprite_section {
-                continue;
-            }
+                    if !in_sprite_section {
+                        continue;
+                    }
 
-            Self::insert_frame(&mut frames, wad, lump);
+                    Self::insert_frame(&mut frames, wad, lump);
+                }
+            }
         }
 
         Self { frames }

@@ -9,6 +9,7 @@ use doom_demo::{DemoPlayer, DemoRecorder};
 use doom_game::TicCmd;
 use doom_renderer::Framebuffer;
 use doom_tui::{DoomApp, TicInput};
+use doom_types::CompatibilityProfile;
 
 use crate::DoomGame;
 use crate::net_mode::ticinput_to_ticcmd;
@@ -24,26 +25,42 @@ pub struct DemoRecordingWrapper {
     inner: DoomGame,
     recorder: DemoRecorder,
     save_path: std::path::PathBuf,
+    compat: CompatibilityProfile,
 }
 
 impl DemoRecordingWrapper {
     /// Create a new recording wrapper.
     pub fn new(inner: DoomGame, recorder: DemoRecorder, save_path: std::path::PathBuf) -> Self {
+        Self::new_with_compat(inner, recorder, save_path, CompatibilityProfile::Extended)
+    }
+
+    /// Create a new recording wrapper with an explicit compatibility profile.
+    pub fn new_with_compat(
+        inner: DoomGame,
+        recorder: DemoRecorder,
+        save_path: std::path::PathBuf,
+        compat: CompatibilityProfile,
+    ) -> Self {
         Self {
             inner,
             recorder,
             save_path,
+            compat,
         }
     }
 }
 
 impl DoomApp for DemoRecordingWrapper {
     fn tick(&mut self, input: TicInput) {
-        // Convert the live input to a TicCmd and record it BEFORE advancing
-        // the simulation, matching vanilla Doom's record ordering.
-        let cmd = ticinput_to_ticcmd(input);
-        self.recorder.record_tic(&cmd);
-        self.inner.tick(input);
+        match self.compat {
+            CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
+                // Convert the live input to a TicCmd and record it BEFORE advancing
+                // the simulation, matching vanilla Doom's record ordering.
+                let cmd = ticinput_to_ticcmd(input);
+                self.recorder.record_tic(&cmd);
+                self.inner.tick(input);
+            }
+        }
     }
 
     fn render(&mut self, fb: &mut Framebuffer) {
@@ -82,12 +99,26 @@ impl Drop for DemoRecordingWrapper {
 pub struct DemoPlaybackApp {
     inner: DoomGame,
     player: DemoPlayer,
+    compat: CompatibilityProfile,
 }
 
 impl DemoPlaybackApp {
     /// Create a new playback app backed by `inner` and `player`.
     pub fn new(inner: DoomGame, player: DemoPlayer) -> Self {
-        Self { inner, player }
+        Self::new_with_compat(inner, player, CompatibilityProfile::Extended)
+    }
+
+    /// Create a new playback app with an explicit compatibility profile.
+    pub fn new_with_compat(
+        inner: DoomGame,
+        player: DemoPlayer,
+        compat: CompatibilityProfile,
+    ) -> Self {
+        Self {
+            inner,
+            player,
+            compat,
+        }
     }
 
     /// Feed a single [`TicCmd`] directly to the inner game state, bypassing the
@@ -110,9 +141,13 @@ impl DemoPlaybackApp {
 
 impl DoomApp for DemoPlaybackApp {
     fn tick(&mut self, _live_input: TicInput) {
-        // Use recorded input instead of live keyboard input.
-        if let Some(cmd) = self.player.next_tic() {
-            self.tick_cmd(cmd);
+        match self.compat {
+            CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
+                // Use recorded input instead of live keyboard input.
+                if let Some(cmd) = self.player.next_tic() {
+                    self.tick_cmd(cmd);
+                }
+            }
         }
         // Demo exhausted: last frame stays frozen — nothing to do.
     }

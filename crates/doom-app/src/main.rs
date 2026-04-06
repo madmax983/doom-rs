@@ -34,7 +34,7 @@ use doom_renderer::{
     render_flag_from_state, render_level_with_view_height_and_extra_light, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, RendererMode, TicInput};
-use doom_types::{Bam, Fixed16_16};
+use doom_types::{Bam, CompatibilityProfile, Fixed16_16};
 use doom_wad::WadStack;
 
 #[cfg(test)]
@@ -62,6 +62,10 @@ fn cli_styles() -> clap::builder::styling::Styles {
         .invalid(AnsiColor::Yellow.on_default() | Effects::BOLD)
 }
 
+fn parse_compatibility_profile(value: &str) -> Result<CompatibilityProfile, &'static str> {
+    value.parse()
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "doom-app", about = "Doom engine (doom-rs)", styles = cli_styles())]
 struct Args {
@@ -80,6 +84,10 @@ struct Args {
     /// Skill level 1-5 (1=ITYTD, 2=HNTR, 3=HMP, 4=UV, 5=NM). Defaults to 3.
     #[arg(long, default_value = "3")]
     skill: u8,
+
+    /// Compatibility profile for vanilla strictness versus extended behavior.
+    #[arg(long, default_value = "extended", value_parser = parse_compatibility_profile)]
+    compat: CompatibilityProfile,
 
     /// Record gameplay to a .lmp demo file (e.g. --record my.lmp)
     #[arg(long)]
@@ -1983,6 +1991,7 @@ fn run_doom() -> Result<()> {
     }
 
     let args = Args::parse();
+    let compat = args.compat;
 
     let iwad_bytes = std::fs::read(&args.iwad)
         .with_context(|| format!("Failed to read IWAD file: {}", args.iwad.display()))?;
@@ -2313,7 +2322,7 @@ fn run_doom() -> Result<()> {
     }
 
     // Load flat texture cache (floor/ceiling textures between F_START and F_END).
-    let flat_cache = FlatCache::load_from_stack(&wad_stack);
+    let flat_cache = FlatCache::load_from_stack_with_profile(&wad_stack, compat);
     let flat_cache = if flat_cache.is_empty() {
         None
     } else {
@@ -2328,12 +2337,12 @@ fn run_doom() -> Result<()> {
 
     // Load sprite cache (sprite frames between S_START and S_END).
     let sprite_cache = {
-        let cache = SpriteCache::load_from_stack(&wad_stack);
+        let cache = SpriteCache::load_from_stack_with_profile(&wad_stack, compat);
         if cache.is_empty() { None } else { Some(cache) }
     };
 
     // Load colormap cache (COLORMAP lump: 34 × 256 bytes, light-level shading).
-    let colormap_cache = Some(ColormapCache::load(&wad_stack));
+    let colormap_cache = Some(ColormapCache::load_with_profile(&wad_stack, compat));
 
     // Try to open the audio subsystem.  Returns None in headless/CI environments.
     let audio = AudioSystem::try_open(&wad_stack);
@@ -2401,7 +2410,7 @@ fn run_doom() -> Result<()> {
         use std::time::Instant;
 
         let player = load_demo_player(timedemo_path)?;
-        let mut playback_app = demo_mode::DemoPlaybackApp::new(app, player);
+        let mut playback_app = demo_mode::DemoPlaybackApp::new_with_compat(app, player, compat);
         let mut framebuffer = Framebuffer::new();
 
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
@@ -2452,7 +2461,7 @@ fn run_doom() -> Result<()> {
     if let Some(ref capture_path) = args.capture {
         let capture = if let Some(ref demo_path) = args.playdemo {
             let player = load_demo_player(demo_path)?;
-            let mut playback_app = demo_mode::DemoPlaybackApp::new(app, player);
+            let mut playback_app = demo_mode::DemoPlaybackApp::new_with_compat(app, player, compat);
             capture_headless_frame(&mut playback_app, args.capture_frames)
         } else {
             let mut app = app;
@@ -2536,7 +2545,7 @@ fn run_doom() -> Result<()> {
     if let Some(demo_path) = args.playdemo {
         // Load and parse the demo file.
         let player = load_demo_player(&demo_path)?;
-        let mut playback_app = demo_mode::DemoPlaybackApp::new(app, player);
+        let mut playback_app = demo_mode::DemoPlaybackApp::new_with_compat(app, player, compat);
         event_loop
             .run(&mut playback_app, &blit_palette)
             .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
@@ -2547,7 +2556,8 @@ fn run_doom() -> Result<()> {
         let skill = args.skill.saturating_sub(1).min(4);
         let header = LmpHeader::new_singleplayer(skill, episode, map);
         let recorder = DemoRecorder::new(header);
-        let mut recording_app = demo_mode::DemoRecordingWrapper::new(app, recorder, record_path);
+        let mut recording_app =
+            demo_mode::DemoRecordingWrapper::new_with_compat(app, recorder, record_path, compat);
         event_loop
             .run(&mut recording_app, &blit_palette)
             .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
@@ -2713,7 +2723,7 @@ mod tests {
         }
     }
     use doom_renderer::{Framebuffer, StatusBarData};
-    use doom_types::{Bam, Fixed16_16};
+    use doom_types::{Bam, CompatibilityProfile, Fixed16_16};
     use std::path::PathBuf;
 
     // -----------------------------------------------------------------------
@@ -4341,6 +4351,51 @@ mod tests {
         assert!(args.is_ok());
         let args = args.unwrap();
         assert!(args.connect.is_none(), "--connect must default to None");
+    }
+
+    #[test]
+    fn cli_args_compat_defaults_to_extended() {
+        let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]);
+        assert!(args.is_ok());
+        let args = args.unwrap();
+        assert_eq!(
+            args.compat,
+            CompatibilityProfile::Extended,
+            "--compat must default to extended"
+        );
+    }
+
+    #[test]
+    fn cli_args_compat_parses_vanilla_strict() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--compat",
+            "vanilla-strict",
+        ]);
+        assert!(args.is_ok());
+        let args = args.unwrap();
+        assert_eq!(
+            args.compat,
+            CompatibilityProfile::VanillaStrict,
+            "--compat vanilla-strict must parse"
+        );
+    }
+
+    #[test]
+    fn cli_args_compat_rejects_invalid_value() {
+        let err = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--compat",
+            "banana",
+        ])
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(msg.contains("invalid value"), "{msg}");
+        assert!(msg.contains("banana"), "{msg}");
     }
 
     #[test]
