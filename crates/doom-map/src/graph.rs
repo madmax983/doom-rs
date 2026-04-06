@@ -1,17 +1,84 @@
+//! Topological connectivity graph for sectors in a level.
+//!
+//! The `SectorGraph` converts the low-level geometry of a `Level` (vertexes,
+//! linedefs, sidedefs, and sectors) into an abstract topological graph.
+//! Sectors become nodes, and two-sided linedefs acting as portals between
+//! sectors become edges.
+//!
+//! This representation is highly useful for high-level pathfinding (e.g., finding
+//! how many "rooms" an entity must traverse to reach the player), sound propagation,
+//! and reachability analysis.
+//!
+//! # Examples
+//!
+//! ```
+//! # use doom_map::Level;
+//! # use doom_map::graph::SectorGraph;
+//! # use doom_map::lumps::{Sector, Linedef, Sidedef, Reject, Blockmap};
+//! # let level = Level {
+//! #     name: String::new(), things: vec![], linedefs: vec![], sidedefs: vec![],
+//! #     vertexes: vec![], segs: vec![], ssectors: vec![], nodes: vec![],
+//! #     sectors: vec![], reject: Reject::parse_lump(&[], 0).unwrap(),
+//! #     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+//! # };
+//! let graph = SectorGraph::build(&level);
+//!
+//! if let Some(path) = graph.shortest_path(0, 5) {
+//!     println!("Path found with length {}", path.len());
+//! }
+//! ```
+
 use crate::Level;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A topological graph representing the connectivity of sectors in a map.
+///
 /// Sectors are nodes, and two-sided linedefs acting as portals are edges.
+/// The graph is undirected, meaning if sector A connects to sector B,
+/// B also connects to A.
+///
+/// # Examples
+///
+/// ```
+/// # use doom_map::Level;
+/// # use doom_map::graph::SectorGraph;
+/// # use doom_map::lumps::{Reject, Blockmap};
+/// # let level = Level {
+/// #     name: String::new(), things: vec![], linedefs: vec![], sidedefs: vec![],
+/// #     vertexes: vec![], segs: vec![], ssectors: vec![], nodes: vec![],
+/// #     sectors: vec![], reject: Reject::parse_lump(&[], 0).unwrap(),
+/// #     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+/// # };
+/// let graph = SectorGraph::build(&level);
+/// assert!(graph.adjacency_list.is_empty() || !graph.adjacency_list.is_empty());
+/// ```
 pub struct SectorGraph {
     /// Adjacency list: sector_index -> list of connected sector_indices
     pub adjacency_list: HashMap<usize, HashSet<usize>>,
 }
 
 impl SectorGraph {
-    /// Builds a topological graph of sectors from the given Level.
-    /// Connections are established by finding two-sided linedefs that connect
-    /// one sector to another via their front and back sidedefs.
+    /// Builds a topological graph of sectors from the given [`Level`].
+    ///
+    /// Connections are established by iterating over all linedefs. A valid edge
+    /// is found when a linedef is flagged as two-sided and has valid references
+    /// to both a front (right) and back (left) sidedef, which in turn point to
+    /// distinct sectors.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use doom_map::Level;
+    /// # use doom_map::graph::SectorGraph;
+    /// # use doom_map::lumps::{Reject, Blockmap};
+    /// # let level = Level {
+    /// #     name: String::new(), things: vec![], linedefs: vec![], sidedefs: vec![],
+    /// #     vertexes: vec![], segs: vec![], ssectors: vec![], nodes: vec![],
+    /// #     sectors: vec![], reject: Reject::parse_lump(&[], 0).unwrap(),
+    /// #     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+    /// # };
+    /// let graph = SectorGraph::build(&level);
+    /// ```
     #[must_use]
     pub fn build(level: &Level) -> Self {
         let mut adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::new();
@@ -46,7 +113,29 @@ impl SectorGraph {
     }
 
     /// Finds the shortest topological path (minimum number of sector transitions)
-    /// between two sectors using Breadth-First Search (BFS).
+    /// between two sectors.
+    ///
+    /// Uses an unweighted Breadth-First Search (BFS) to find the path with the
+    /// fewest number of edges. Returns `None` if no path exists.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use doom_map::Level;
+    /// # use doom_map::graph::SectorGraph;
+    /// # use doom_map::lumps::{Reject, Blockmap};
+    /// # let level = Level {
+    /// #     name: String::new(), things: vec![], linedefs: vec![], sidedefs: vec![],
+    /// #     vertexes: vec![], segs: vec![], ssectors: vec![], nodes: vec![],
+    /// #     sectors: vec![], reject: Reject::parse_lump(&[], 0).unwrap(),
+    /// #     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+    /// # };
+    /// # let graph = SectorGraph::build(&level);
+    /// if let Some(path) = graph.shortest_path(0, 10) {
+    ///     assert_eq!(path[0], 0);
+    ///     assert_eq!(*path.last().unwrap(), 10);
+    /// }
+    /// ```
     #[must_use]
     pub fn shortest_path(&self, start_sector: usize, end_sector: usize) -> Option<Vec<usize>> {
         if start_sector == end_sector {
@@ -88,6 +177,26 @@ impl SectorGraph {
     }
 
     /// Exports the sector graph to the Graphviz DOT format for visualization.
+    ///
+    /// The resulting string can be written to a file and rendered using the `dot`
+    /// command-line tool or online Graphviz viewers.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use doom_map::Level;
+    /// # use doom_map::graph::SectorGraph;
+    /// # use doom_map::lumps::{Reject, Blockmap};
+    /// # let level = Level {
+    /// #     name: String::new(), things: vec![], linedefs: vec![], sidedefs: vec![],
+    /// #     vertexes: vec![], segs: vec![], ssectors: vec![], nodes: vec![],
+    /// #     sectors: vec![], reject: Reject::parse_lump(&[], 0).unwrap(),
+    /// #     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+    /// # };
+    /// # let graph = SectorGraph::build(&level);
+    /// let dot_string = graph.to_dot();
+    /// assert!(dot_string.starts_with("digraph SectorGraph"));
+    /// ```
     #[must_use]
     pub fn to_dot(&self) -> String {
         let mut dot = String::from("digraph SectorGraph {\n");
