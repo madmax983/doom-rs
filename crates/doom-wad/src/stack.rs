@@ -414,7 +414,7 @@ mod tests {
     }
 
     #[test]
-    fn map_lump_group_searches_pwads_first_udmf() {
+    fn map_lump_group_searches_pwads_first_udmf_replaces_iwad() {
         let iwad = make_wad(
             b"IWAD",
             &[
