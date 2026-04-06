@@ -18,3 +18,6 @@
 **[doom-game: Remove Iterator Collects on Hot Path]
 **Learning:** In code executed per-frame, mapping and collecting iterators into intermediate `Vec` collections solely to fuel immediately subsequent loops creates wasteful heap allocations.
 **Action:** When the iterator source and the destination mutations borrow disjoint sets of state (enforced safely by NLL), directly feed iterators into `for` loops without using `.collect()` to uphold the zero-cost abstraction philosophy and eliminate dynamic heap allocations.
+**[Eliminated intermediate collection in wad lump scanning]**
+**Learning:** `Vec::collect()` intermediate collections over iterators just to iterate over them again later via `.into_iter()` is wasteful. We can preserve an `impl Iterator` to process items continuously and eliminate the initial `Vec` buffer entirely, avoiding temporary allocation overhead at startup.
+**Action:** When filtering or mapping data from an underlying collection to form a list that will be consumed downstream, prefer returning a lifetime-bound `impl Iterator` instead of a full `Vec` wherever the call chain allows for lazy iteration.

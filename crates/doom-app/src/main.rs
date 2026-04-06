@@ -2081,7 +2081,32 @@ fn run_doom() -> Result<()> {
                 stats.total_secrets,
                 stats.par_time_tics
             );
-            println!("{json_data}");
+            use std::io::IsTerminal;
+            if std::io::stdout().is_terminal() {
+                use crossterm::style::Stylize;
+                let formatted_json = format!(
+                    r#"{{
+  {}: "{}",
+  {}: {},
+  {}: {},
+  {}: {},
+  {}: {}
+}}"#,
+                    r#""map""#.cyan().bold(),
+                    warp_str.yellow(),
+                    r#""total_kills""#.cyan().bold(),
+                    stats.total_kills.to_string().red(),
+                    r#""total_items""#.cyan().bold(),
+                    stats.total_items.to_string().green(),
+                    r#""total_secrets""#.cyan().bold(),
+                    stats.total_secrets.to_string().magenta(),
+                    r#""par_time_tics""#.cyan().bold(),
+                    stats.par_time_tics.to_string().blue()
+                );
+                println!("{formatted_json}");
+            } else {
+                println!("{json_data}");
+            }
         } else {
             let mut table = comfy_table::Table::new();
             table
