@@ -677,7 +677,7 @@ pub fn render_actors_ex(
     colormap: Option<&ColormapCache>,
     sprite_clip: Option<SpriteClip<'_>>,
 ) {
-    render_actors_with_masked_ex(
+    render_actors_with_masked_and_fixed_colormap_ex(
         actors,
         level,
         player_x,
@@ -688,6 +688,7 @@ pub fn render_actors_ex(
         z_buffer,
         colormap,
         sprite_clip,
+        None,
         None,
     );
 }
@@ -723,6 +724,37 @@ pub fn render_actors_with_masked_ex<'a>(
     // bleeding through two-sided window frames.
     sprite_clip: Option<SpriteClip<'_>>,
     masked_columns: Option<&'a [crate::render::MaskedColumnDraw<'a>]>,
+) {
+    render_actors_with_masked_and_fixed_colormap_ex(
+        actors,
+        level,
+        player_x,
+        player_y,
+        player_angle,
+        fb,
+        cache,
+        z_buffer,
+        colormap,
+        sprite_clip,
+        masked_columns,
+        None,
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn render_actors_with_masked_and_fixed_colormap_ex<'a>(
+    actors: &[crate::sprite_lookup::ActorRenderInfo],
+    level: &doom_map::Level,
+    player_x: doom_types::Fixed16_16,
+    player_y: doom_types::Fixed16_16,
+    player_angle: doom_types::Bam,
+    fb: &mut Framebuffer,
+    cache: &SpriteCache,
+    z_buffer: Option<&[f32; SCREEN_W]>,
+    colormap: Option<&ColormapCache>,
+    sprite_clip: Option<SpriteClip<'_>>,
+    masked_columns: Option<&'a [crate::render::MaskedColumnDraw<'a>]>,
+    fixed_colormap: Option<&[u8; 256]>,
 ) {
     use doom_game::states::sprite_names;
 
@@ -893,8 +925,11 @@ pub fn render_actors_with_masked_ex<'a>(
             LightParams::new(255, true)
         };
 
-        let sprite_colormap: Option<&[u8; 256]> =
-            colormap.map(|cm| light_params.get_colormap(vx, cm));
+        let sprite_colormap: Option<&[u8; 256]> = if let Some(override_cm) = fixed_colormap {
+            Some(override_cm)
+        } else {
+            colormap.map(|cm| light_params.get_colormap(vx, cm))
+        };
         let sy_top_clamped = screen_y_top.max(0);
         let sy_bot_clamped = screen_y_bot.min(SCREEN_H as i32 - 1);
         let sx_start = screen_x_left.max(0);
@@ -935,6 +970,12 @@ pub fn render_actors_with_masked_ex<'a>(
                 let sy_bot_u = col_bot.min(SCREEN_H as i32 - 1) as usize;
                 if sy_top_u <= sy_bot_u {
                     draw_fuzz_column(fb, sx as usize, sy_top_u, sy_bot_u, &mut fuzz_pos, colormap);
+                    if let Some(override_cm) = fixed_colormap {
+                        for sy in sy_top_u..=sy_bot_u {
+                            let idx = sy * SCREEN_W + sx as usize;
+                            fb.data[idx] = override_cm[fb.data[idx] as usize];
+                        }
+                    }
                 }
                 continue;
             }
@@ -2598,6 +2639,61 @@ mod tests {
         assert!(
             sunk_rows.1 > floor_rows.1,
             "smaller top_offset should also lower the actor sprite bottom edge"
+        );
+    }
+
+    #[test]
+    fn render_actors_fixed_colormap_override_tints_sprite_pixels() {
+        let level = make_test_level(vec![]);
+        let player_x = doom_types::Fixed16_16::from_int(-96);
+        let player_y = doom_types::Fixed16_16::from_int(32);
+        let actor = crate::sprite_lookup::ActorRenderInfo {
+            x: doom_types::Fixed16_16::from_int(32).raw(),
+            y: doom_types::Fixed16_16::from_int(32).raw(),
+            z: doom_types::Fixed16_16::from_int(0).raw(),
+            angle: 0,
+            sprite: doom_game::states::sprite_names::SPR_NONE,
+            frame: 0,
+            height: doom_types::Fixed16_16::from_int(8).raw(),
+            render_flag: RenderFlag::Normal,
+            fallback_prefix: Some(*b"BAR1"),
+        };
+
+        let mut cache = SpriteCache::empty();
+        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 8, 71));
+
+        let mut data = vec![0u8; COLORMAP_ROWS * COLORMAP_SIZE];
+        for row in 0..COLORMAP_ROWS {
+            let start = row * COLORMAP_SIZE;
+            data[start..start + COLORMAP_SIZE].fill(row as u8);
+        }
+        let row32 = 32 * COLORMAP_SIZE;
+        data[row32..row32 + COLORMAP_SIZE].fill(0xA5);
+        let cm = ColormapCache::from_test_data(data);
+
+        let mut fb = Framebuffer::new();
+        render_actors_with_masked_and_fixed_colormap_ex(
+            &[actor],
+            &level,
+            player_x,
+            player_y,
+            doom_types::Bam::ZERO,
+            &mut fb,
+            &cache,
+            None,
+            Some(&cm),
+            Some(full_screen_sprite_clip()),
+            None,
+            Some(cm.special_row(32)),
+        );
+
+        assert!(
+            fb.data.contains(&0xA5),
+            "fixed colormap override should remap visible sprite pixels through row 32"
+        );
+        assert!(
+            !fb.data.contains(&71),
+            "raw sprite palette indices should not survive the fixed override"
         );
     }
 

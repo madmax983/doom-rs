@@ -2,8 +2,8 @@
 //!
 //! COLORMAP is 34 × 256 bytes. Row 0 = full bright (identity mapping),
 //! row 31 = darkest (heavily remapped to dark colours).
-//! Rows 32-33 are special (invulnerability palette, etc.) and are not
-//! used by this cache.
+//! Rows 32-33 are special (invulnerability palette, etc.) and are available
+//! through explicit special-row APIs.
 //!
 //! `ColormapCache::get(light_index)` returns a reference to the 256-byte
 //! row for the given light index, clamped to `[0, 31]`.
@@ -86,18 +86,36 @@ impl ColormapCache {
         }
     }
 
+    #[inline]
+    fn row(&self, row: usize) -> &[u8; 256] {
+        let offset = row * COLORMAP_SIZE;
+        // SAFETY: `data` is always `COLORMAP_ROWS * COLORMAP_SIZE` bytes and
+        // `row` is clamped by the public entry points, so `offset + 256 <= data.len()`.
+        self.data[offset..offset + COLORMAP_SIZE]
+            .try_into()
+            .expect("colormap row is always 256 bytes")
+    }
+
     /// Return a reference to the 256-byte colormap row for `light_index`.
     ///
     /// `light_index` is clamped to `[0, 31]` automatically so callers may
     /// pass raw sector-light-derived values without range-checking.
     pub fn get(&self, light_index: u8) -> &[u8; 256] {
-        let row = (light_index as usize).min(31);
-        let offset = row * COLORMAP_SIZE;
-        // SAFETY: `data` is always `COLORMAP_ROWS * COLORMAP_SIZE` bytes and
-        // `row` is clamped to 31, so `offset + 256 <= data.len()`.
-        self.data[offset..offset + COLORMAP_SIZE]
-            .try_into()
-            .expect("colormap row is always 256 bytes")
+        self.row((light_index as usize).min(31))
+    }
+
+    /// Return one of the special COLORMAP rows without clamping it into the
+    /// normal 0..31 lighting range.
+    pub fn special_row(&self, row: u8) -> &[u8; 256] {
+        self.row((row as usize).min(COLORMAP_ROWS - 1))
+    }
+
+    /// Return the colormap used for invulnerability under the given profile.
+    pub fn invulnerability_row(&self, compat: CompatibilityProfile) -> &[u8; 256] {
+        match compat {
+            CompatibilityProfile::Extended => &INVULN_COLORMAP,
+            CompatibilityProfile::VanillaStrict => self.special_row(32),
+        }
     }
 
     /// Construct from raw data (for testing).
@@ -192,6 +210,7 @@ impl core::fmt::Debug for ColormapCache {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use doom_types::CompatibilityProfile;
 
     #[test]
     fn identity_fallback_has_correct_rows() {
@@ -246,6 +265,43 @@ mod tests {
         // Index 32 and 33 should be clamped to row 31.
         assert!(cache.get(32).iter().all(|&b| b == 31));
         assert!(cache.get(33).iter().all(|&b| b == 31));
+    }
+
+    #[test]
+    fn special_row_can_access_row_32_without_light_clamp() {
+        let mut data = vec![0u8; COLORMAP_ROWS * COLORMAP_SIZE];
+        data[32 * COLORMAP_SIZE] = 0xA5;
+        let cache = ColormapCache::from_test_data(data);
+
+        let row = cache.special_row(32);
+        assert_eq!(row[0], 0xA5, "special-row access must preserve row 32");
+    }
+
+    #[test]
+    fn invulnerability_row_uses_row_32_in_vanilla_strict() {
+        let mut data = vec![0u8; COLORMAP_ROWS * COLORMAP_SIZE];
+        data[32 * COLORMAP_SIZE] = 0xA5;
+        let cache = ColormapCache::from_test_data(data);
+
+        let row = cache.invulnerability_row(CompatibilityProfile::VanillaStrict);
+        assert_eq!(row[0], 0xA5, "strict mode must use the WAD's special row 32");
+    }
+
+    #[test]
+    fn invulnerability_row_keeps_extended_grayscale_fallback() {
+        let mut data = vec![0u8; COLORMAP_ROWS * COLORMAP_SIZE];
+        data[32 * COLORMAP_SIZE] = 0xA5;
+        let cache = ColormapCache::from_test_data(data);
+
+        let row = cache.invulnerability_row(CompatibilityProfile::Extended);
+        assert_eq!(
+            row[0], INVULN_COLORMAP[0],
+            "extended mode should keep the synthetic grayscale fallback"
+        );
+        assert_ne!(
+            row[0], 0xA5,
+            "extended mode should not blindly use WAD row 32"
+        );
     }
 
     #[test]

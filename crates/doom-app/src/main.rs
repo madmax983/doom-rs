@@ -30,8 +30,9 @@ use doom_renderer::{
     IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, PatchCache, RenderOut,
     SpriteCache, SpriteClip, TextureCache, WadFont, WeaponAnimState, draw_automap_ex,
     draw_finale_wad, draw_intermission, draw_intermission_wad, draw_menu_wad, draw_status_bar_wad,
-    draw_title_screen_wad, draw_weapon_animated, render_actors_with_masked_ex,
-    render_flag_from_state, render_level_with_view_height_and_extra_light, thing_sprite_prefix,
+    draw_title_screen_wad, draw_weapon_animated_with_override,
+    render_actors_with_masked_and_fixed_colormap_ex, render_flag_from_state,
+    render_level_with_view_height_and_extra_light_and_fixed_colormap, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, RendererMode, TicInput};
 use doom_types::{Bam, CompatibilityProfile, Fixed16_16};
@@ -235,6 +236,8 @@ pub(crate) struct DoomGame {
     sprite_cache: Option<SpriteCache>,
     /// Colormap cache (COLORMAP lump, 34 × 256 bytes for light-level shading).
     colormap_cache: Option<ColormapCache>,
+    /// Compatibility profile selected at startup.
+    compat: CompatibilityProfile,
     /// Animated texture state (flat + wall animation sequences, ticked per tic).
     anim_state: AnimState,
     /// Palette flash controller (pain/pickup/rad-suit full-screen tints).
@@ -295,6 +298,38 @@ fn next_player_view_height(current: i32, player_dead: bool) -> i32 {
 impl DoomGame {
     #[allow(clippy::too_many_arguments)]
     fn new(
+        gs: GameState,
+        level: Level,
+        audio: Option<AudioSystem>,
+        music_library: std::collections::HashMap<String, std::sync::Arc<[u8]>>,
+        flat_cache: Option<FlatCache>,
+        tex_cache: Option<TextureCache>,
+        sprite_cache: Option<SpriteCache>,
+        colormap_cache: Option<ColormapCache>,
+        show_title: bool,
+        debug_log: Option<std::fs::File>,
+        pain_sfx_id: Option<u16>,
+        sfx_lookup: std::collections::HashMap<String, u16>,
+    ) -> Self {
+        Self::new_with_compat(
+            gs,
+            level,
+            audio,
+            music_library,
+            flat_cache,
+            tex_cache,
+            sprite_cache,
+            colormap_cache,
+            show_title,
+            debug_log,
+            pain_sfx_id,
+            sfx_lookup,
+            CompatibilityProfile::Extended,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn new_with_compat(
         mut gs: GameState,
         level: Level,
         audio: Option<AudioSystem>,
@@ -307,6 +342,7 @@ impl DoomGame {
         debug_log: Option<std::fs::File>,
         pain_sfx_id: Option<u16>,
         sfx_lookup: std::collections::HashMap<String, u16>,
+        compat: CompatibilityProfile,
     ) -> Self {
         // Initialize scrolling wall and conveyor belt specials from level linedefs.
         init_scrolling_walls(&mut gs, &level);
@@ -348,6 +384,7 @@ impl DoomGame {
             tex_cache,
             sprite_cache,
             colormap_cache,
+            compat,
             anim_state: AnimState::new(),
             palette_flash: PaletteFlash::new(),
             #[cfg(test)]
@@ -1250,6 +1287,12 @@ impl DoomApp for DoomGame {
         };
 
         let palette = PaletteLut::grayscale();
+        let is_invulnerable =
+            self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+        let colormap_cache = self.colormap_cache.as_ref();
+        let fixed_colormap = colormap_cache.and_then(|cache| {
+            is_invulnerable.then_some(cache.invulnerability_row(self.compat))
+        });
 
         if self.automap.active {
             // Draw the overhead automap using the stateful AutomapState
@@ -1273,7 +1316,7 @@ impl DoomApp for DoomGame {
             // Draw the first-person 3D view.
             // We pass a grayscale palette; render_level currently ignores it
             // (wall colors are derived from light levels only).
-            let render_out = render_level_with_view_height_and_extra_light(
+            let render_out = render_level_with_view_height_and_extra_light_and_fixed_colormap(
                 &self.level,
                 px,
                 py,
@@ -1283,9 +1326,10 @@ impl DoomApp for DoomGame {
                 &palette,
                 self.flat_cache.as_ref(),
                 self.tex_cache.as_ref(),
-                self.colormap_cache.as_ref(),
+                colormap_cache,
                 None,
                 false,
+                fixed_colormap,
                 self.gs.player.extra_light,
             );
 
@@ -1342,7 +1386,7 @@ impl DoomApp for DoomGame {
                         })
                     })
                     .collect();
-                render_actors_with_masked_ex(
+                render_actors_with_masked_and_fixed_colormap_ex(
                     &actors,
                     &self.level,
                     Fixed16_16::from_int(px),
@@ -1351,7 +1395,7 @@ impl DoomApp for DoomGame {
                     fb,
                     cache,
                     Some(&z_buf),
-                    self.colormap_cache.as_ref(),
+                    colormap_cache,
                     Some(SpriteClip {
                         top: &clip_top,
                         bottom: &clip_bot,
@@ -1361,6 +1405,7 @@ impl DoomApp for DoomGame {
                         bottom_history: Some(&clip_bot_history),
                     }),
                     Some(&masked_columns),
+                    fixed_colormap,
                 );
             }
 
@@ -1368,7 +1413,13 @@ impl DoomApp for DoomGame {
             if let Some(ref cache) = self.sprite_cache
                 && !self.gs.player.is_dead()
             {
-                draw_weapon_animated(fb, &self.weapon_anim, cache, &IDENTITY_COLORMAP);
+                draw_weapon_animated_with_override(
+                    fb,
+                    &self.weapon_anim,
+                    cache,
+                    &IDENTITY_COLORMAP,
+                    fixed_colormap,
+                );
             }
 
             // Draw HUD status bar over the bottom 32 rows.
@@ -2384,7 +2435,7 @@ fn run_doom() -> Result<()> {
     // Resolve player pain SFX (DSPLPAIN) once at startup so we can fire it cheaply.
     let pain_sfx_id = sfx_lookup.get("DSPLPAIN").copied();
 
-    let mut app = DoomGame::new(
+    let mut app = DoomGame::new_with_compat(
         gs,
         level,
         audio,
@@ -2397,6 +2448,7 @@ fn run_doom() -> Result<()> {
         debug_log,
         pain_sfx_id,
         sfx_lookup,
+        compat,
     );
     app.attach_wad_for_transitions(skill, wad_stack);
 
