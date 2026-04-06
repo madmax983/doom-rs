@@ -49,7 +49,11 @@ impl PcmSample {
         let sample_rate = u32::from(u16::from_le_bytes([data[2], data[3]]));
         let sample_count = u32::from_le_bytes([data[4], data[5], data[6], data[7]]) as usize;
 
-        let end = 8 + sample_count;
+        let end = 8_usize
+            .checked_add(sample_count)
+            .ok_or(AudioError::InvalidSfx(
+                "lump too short for declared sample count",
+            ))?;
         if data.len() < end {
             return Err(AudioError::InvalidSfx(
                 "lump too short for declared sample count",
