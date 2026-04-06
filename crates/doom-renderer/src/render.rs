@@ -434,6 +434,43 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
     is_fullbright: bool,
     extra_light: u8,
 ) -> RenderOut<'a> {
+    render_level_with_view_height_and_extra_light_and_fixed_colormap(
+        level,
+        player_x,
+        player_y,
+        player_angle,
+        player_view_height,
+        fb,
+        _palette,
+        flat_cache,
+        tex_cache,
+        colormap,
+        anim,
+        is_fullbright,
+        None,
+        extra_light,
+    )
+}
+
+/// Render a Doom level using an explicit player view height, optional fixed
+/// colormap override, and player extra-light bonus.
+#[allow(clippy::too_many_arguments)]
+pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
+    level: &Level,
+    player_x: i32,
+    player_y: i32,
+    player_angle: Bam,
+    player_view_height: i32,
+    fb: &mut Framebuffer,
+    _palette: &PaletteLut,
+    flat_cache: Option<&FlatCache>,
+    tex_cache: Option<&'a TextureCache>,
+    colormap: Option<&ColormapCache>,
+    anim: Option<&AnimState>,
+    is_fullbright: bool,
+    fixed_colormap: Option<&[u8; 256]>,
+    extra_light: u8,
+) -> RenderOut<'a> {
     // ------------------------------------------------------------------
     // Step 1: Draw background (ceiling top half, floor bottom half)
     // ------------------------------------------------------------------
@@ -919,9 +956,13 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                 {
                     // Per-column colormap: front sector light + distance attenuation.
                     let col_dist = depth_i32 as f32;
-                    let wall_cm: &[u8; 256] = colormap
-                        .map(|c| light_params.get_wall_colormap(col_dist, x, c))
-                        .unwrap_or(&IDENTITY_COLORMAP);
+                    let wall_cm: &[u8; 256] = if let Some(override_cm) = fixed_colormap {
+                        override_cm
+                    } else {
+                        colormap
+                            .map(|c| light_params.get_wall_colormap(col_dist, x, c))
+                            .unwrap_or(&IDENTITY_COLORMAP)
+                    };
 
                     if let Some(cache) = tex_cache {
                         let upper_name = anim.map_or(sidedef.upper_texture, |a| {
@@ -986,9 +1027,13 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                 {
                     // Per-column colormap: front sector light + distance attenuation.
                     let col_dist = depth_i32 as f32;
-                    let wall_cm: &[u8; 256] = colormap
-                        .map(|c| light_params.get_wall_colormap(col_dist, x, c))
-                        .unwrap_or(&IDENTITY_COLORMAP);
+                    let wall_cm: &[u8; 256] = if let Some(override_cm) = fixed_colormap {
+                        override_cm
+                    } else {
+                        colormap
+                            .map(|c| light_params.get_wall_colormap(col_dist, x, c))
+                            .unwrap_or(&IDENTITY_COLORMAP)
+                    };
 
                     if let Some(cache) = tex_cache {
                         let lower_name = anim.map_or(sidedef.lower_texture, |a| {
@@ -1034,9 +1079,14 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                     } else {
                         // No tex_cache — flat-shade fallback.
                         let base_color = 32u8;
-                        let shaded = colormap
-                            .map(|c| light_params.get_wall_colormap(col_dist, x, c))
-                            .unwrap_or(&IDENTITY_COLORMAP)[base_color as usize];
+                        let wall_cm: &[u8; 256] = if let Some(override_cm) = fixed_colormap {
+                            override_cm
+                        } else {
+                            colormap
+                                .map(|c| light_params.get_wall_colormap(col_dist, x, c))
+                                .unwrap_or(&IDENTITY_COLORMAP)
+                        };
+                        let shaded = wall_cm[base_color as usize];
                         fb.draw_column(x, lower_draw_top as usize, lower_draw_bot as usize, shaded);
                     }
                 }
@@ -1049,9 +1099,13 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
                 let mid_draw_bot = w_bot.min(clip_bot);
                 if !is_no_texture(&mid_name) && mid_draw_top <= mid_draw_bot {
                     let col_dist = depth_i32 as f32;
-                    let wall_cm: &[u8; 256] = colormap
-                        .map(|c| light_params.get_wall_colormap(col_dist, x, c))
-                        .unwrap_or(&IDENTITY_COLORMAP);
+                    let wall_cm: &[u8; 256] = if let Some(override_cm) = fixed_colormap {
+                        override_cm
+                    } else {
+                        colormap
+                            .map(|c| light_params.get_wall_colormap(col_dist, x, c))
+                            .unwrap_or(&IDENTITY_COLORMAP)
+                    };
                     if let Some(cache) = tex_cache
                         && let Some(tex) = cache.get(&mid_name)
                     {
@@ -1171,9 +1225,13 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
 
                 // Per-column colormap: distance-attenuated from sector light.
                 let col_dist = depth_f32;
-                let wall_cm: &[u8; 256] = colormap
-                    .map(|c| light_params.get_wall_colormap(col_dist, x, c))
-                    .unwrap_or(&IDENTITY_COLORMAP);
+                let wall_cm: &[u8; 256] = if let Some(override_cm) = fixed_colormap {
+                    override_cm
+                } else {
+                    colormap
+                        .map(|c| light_params.get_wall_colormap(col_dist, x, c))
+                        .unwrap_or(&IDENTITY_COLORMAP)
+                };
 
                 // Draw the wall column — textured if a TextureCache is available.
                 let mut drew_textured = false;
@@ -1332,9 +1390,13 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
             let base_xfrac = init_xfrac.wrapping_add(xstep_u.wrapping_mul(steps));
             let base_yfrac = init_yfrac.wrapping_add(ystep_u.wrapping_mul(steps));
 
-            let span_cm: &[u8; 256] = colormap
-                .map(|c| flat_lp.get_flat_colormap(dist as f32, c))
-                .unwrap_or(&IDENTITY_COLORMAP);
+            let span_cm: &[u8; 256] = if let Some(override_cm) = fixed_colormap {
+                override_cm
+            } else {
+                colormap
+                    .map(|c| flat_lp.get_flat_colormap(dist as f32, c))
+                    .unwrap_or(&IDENTITY_COLORMAP)
+            };
 
             let params = DrawSpanParams {
                 y: span.y,
@@ -5057,6 +5119,18 @@ mod tests {
         ColormapCache::from_test_data(data)
     }
 
+    fn make_special_row_test_colormap(value: u8) -> ColormapCache {
+        use crate::colormap::{COLORMAP_ROWS, COLORMAP_SIZE};
+        let mut data = vec![0u8; COLORMAP_ROWS * COLORMAP_SIZE];
+        for row in 0..COLORMAP_ROWS {
+            let start = row * COLORMAP_SIZE;
+            data[start..start + COLORMAP_SIZE].fill(row as u8);
+        }
+        let row32 = 32 * COLORMAP_SIZE;
+        data[row32..row32 + COLORMAP_SIZE].fill(value);
+        ColormapCache::from_test_data(data)
+    }
+
     /// Build a ColormapCache where row 0 is identity and row N darkens
     /// (maps value `v` to `v.saturating_sub(N * 4)`).
     fn make_darkening_colormap() -> ColormapCache {
@@ -5358,6 +5432,37 @@ mod tests {
         assert!(
             boosted_avg < base_avg,
             "player extra-light should use brighter colormap rows (base={base_avg}, boosted={boosted_avg})"
+        );
+    }
+
+    #[test]
+    fn fixed_colormap_override_uses_special_row_for_world_rendering() {
+        init_trig();
+        let palette = PaletteLut::grayscale();
+        let cm = make_special_row_test_colormap(0xA5);
+        let level = make_level_with_light(0);
+        let mut fb = Framebuffer::new();
+
+        render_level_with_view_height_and_extra_light_and_fixed_colormap(
+            &level,
+            64,
+            0,
+            doom_types::ANG90,
+            PLAYER_HEIGHT,
+            &mut fb,
+            &palette,
+            None,
+            None,
+            Some(&cm),
+            None,
+            false,
+            Some(cm.special_row(32)),
+            0,
+        );
+
+        assert!(
+            fb.data.contains(&0xA5),
+            "fixed special-row colormap should tint visible world pixels through row 32"
         );
     }
 

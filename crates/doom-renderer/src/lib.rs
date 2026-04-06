@@ -66,6 +66,7 @@ pub use patch_cache::PatchCache;
 pub use render::{
     MaskedColumnDraw, PLAYER_HEIGHT, RenderOut, draw_masked_columns, render_level,
     render_level_with_view_height, render_level_with_view_height_and_extra_light,
+    render_level_with_view_height_and_extra_light_and_fixed_colormap,
 };
 pub use render_flags::RenderFlag;
 pub use sky::{
@@ -75,9 +76,9 @@ pub use sky::{
 pub use span::{DrawSpanParams, FLAT_DIM, FLAT_MASK, draw_span, draw_span_solid};
 pub use sprite::{
     SpriteCache, SpriteClip, SpriteFrame, compute_sprite_rotation, draw_sprite, draw_sprite_ex,
-    draw_weapon_sprite, render_actors_ex, render_actors_with_masked_ex, render_flag_for_thing,
-    render_things, render_things_ex, sector_for_point, sprite_lump_name, thing_has_rotations,
-    thing_sprite_prefix,
+    draw_weapon_sprite, render_actors_ex, render_actors_with_masked_and_fixed_colormap_ex,
+    render_actors_with_masked_ex, render_flag_for_thing, render_things, render_things_ex,
+    sector_for_point, sprite_lump_name, thing_has_rotations, thing_sprite_prefix,
 };
 pub use sprite_lookup::{
     ActorRenderInfo, ResolvedSprite, compute_rotation, render_flag_from_state, resolve_sprite,
@@ -95,7 +96,8 @@ pub use texture_compose::{
 pub use wad_font::{GLYPH_GAP, SPACE_WIDTH, WadFont};
 pub use weapon_anim::{
     MAX_BOB, RAISE_SPEED, WEAPON_BASE_X, WEAPON_BASE_Y, WEAPON_BOTTOM, WEAPON_FLASH_LIGHT_BONUS,
-    WEAPON_TOP, WeaponAnimState, WeaponBob, WeaponSprite, draw_weapon_animated, draw_weapon_shaded,
-    get_weapon_light_params, weapon_light_bonus, weapon_sprite_name,
+    WEAPON_TOP, WeaponAnimState, WeaponBob, WeaponSprite, draw_weapon_animated,
+    draw_weapon_animated_with_override, draw_weapon_shaded, get_weapon_light_params,
+    weapon_light_bonus, weapon_sprite_name,
 };
 pub use wipe::ScreenWipe;

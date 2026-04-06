@@ -306,11 +306,25 @@ pub fn draw_weapon_animated(
     cache: &SpriteCache,
     colormap: &[u8; 256],
 ) {
+    draw_weapon_animated_with_override(fb, anim, cache, colormap, None);
+}
+
+/// Draw the weapon overlay using the current animation state, with an optional
+/// fixed colormap override for effects such as vanilla invulnerability.
+pub fn draw_weapon_animated_with_override(
+    fb: &mut Framebuffer,
+    anim: &WeaponAnimState,
+    cache: &SpriteCache,
+    colormap: &[u8; 256],
+    fixed_colormap: Option<&[u8; 256]>,
+) {
     let sx = anim.screen_x();
     let sy = anim.screen_y();
 
-    // Choose the colormap: full-bright during flash, otherwise caller's.
-    let main_colormap = if anim.current.full_bright {
+    // A fixed colormap override takes precedence over flash/fullbright behavior.
+    let main_colormap = if let Some(override_cm) = fixed_colormap {
+        override_cm
+    } else if anim.current.full_bright {
         &IDENTITY_COLORMAP
     } else {
         colormap
@@ -324,7 +338,13 @@ pub fn draw_weapon_animated(
     // Draw muzzle flash overlay at full brightness.
     if anim.current.flash_active {
         if let Some(flash_frame) = cache.get(&anim.current.flash_sprite) {
-            draw_weapon_frame(fb, flash_frame, sx, sy, &IDENTITY_COLORMAP);
+            draw_weapon_frame(
+                fb,
+                flash_frame,
+                sx,
+                sy,
+                fixed_colormap.unwrap_or(&IDENTITY_COLORMAP),
+            );
         }
     }
 }
@@ -743,6 +763,41 @@ mod tests {
         let cache = SpriteCache::empty();
         draw_weapon_animated(&mut fb, &state, &cache, &IDENTITY_COLORMAP);
         // Should not panic even with flash active and missing sprites.
+    }
+
+    #[test]
+    fn draw_weapon_animated_override_tints_weapon_pixels() {
+        let mut fb = Framebuffer::new();
+        let state = WeaponAnimState::new();
+        let mut cache = SpriteCache::empty();
+        cache.insert(
+            "PISGA0".to_string(),
+            crate::sprite::SpriteFrame {
+                width: 1,
+                height: 1,
+                left_offset: 0,
+                top_offset: 1,
+                pixels: vec![Some(9)],
+            },
+        );
+        let override_map = [0xA5; 256];
+
+        draw_weapon_animated_with_override(
+            &mut fb,
+            &state,
+            &cache,
+            &IDENTITY_COLORMAP,
+            Some(&override_map),
+        );
+
+        assert!(
+            fb.data.contains(&0xA5),
+            "fixed colormap override should tint the weapon sprite"
+        );
+        assert!(
+            !fb.data.contains(&9),
+            "raw weapon palette indices should not survive the override"
+        );
     }
 
     // ------------------------------------------------------------------
