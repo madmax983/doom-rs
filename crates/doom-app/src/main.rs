@@ -1984,12 +1984,16 @@ fn run_doom() -> Result<()> {
         std::fs::write(html_path, html_data)
             .with_context(|| format!("Failed to write HTML to {}", html_path.display()))?;
         use crossterm::style::Stylize;
-        println!(
-            "{} {} HTML report to {}",
-            "🌟".green(),
-            "Exported".green().bold(),
-            html_path.display().to_string().cyan()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} HTML report to {}",
+                "🌟".green(),
+                "Exported".green().bold(),
+                html_path.display().to_string().cyan()
+            );
+        } else {
+            println!("Exported HTML report to {}", html_path.display());
+        }
         return Ok(());
     }
 
@@ -1998,12 +2002,16 @@ fn run_doom() -> Result<()> {
         std::fs::write(svg_path, svg_data)
             .with_context(|| format!("Failed to write SVG to {}", svg_path.display()))?;
         use crossterm::style::Stylize;
-        println!(
-            "{} {} layout to {}",
-            "🌟".green(),
-            "Exported".green().bold(),
-            svg_path.display().to_string().cyan()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} layout to {}",
+                "🌟".green(),
+                "Exported".green().bold(),
+                svg_path.display().to_string().cyan()
+            );
+        } else {
+            println!("Exported layout to {}", svg_path.display());
+        }
         return Ok(());
     }
 
@@ -2012,12 +2020,16 @@ fn run_doom() -> Result<()> {
         std::fs::write(geojson_path, geojson_data)
             .with_context(|| format!("Failed to write GeoJSON to {}", geojson_path.display()))?;
         use crossterm::style::Stylize;
-        println!(
-            "{} {} GeoJSON to {}",
-            "🌟".green(),
-            "Exported".green().bold(),
-            geojson_path.display().to_string().cyan()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} GeoJSON to {}",
+                "🌟".green(),
+                "Exported".green().bold(),
+                geojson_path.display().to_string().cyan()
+            );
+        } else {
+            println!("Exported GeoJSON to {}", geojson_path.display());
+        }
         return Ok(());
     }
 
@@ -2026,12 +2038,16 @@ fn run_doom() -> Result<()> {
         std::fs::write(dot_path, graph.to_dot())
             .with_context(|| format!("Failed to write DOT to {}", dot_path.display()))?;
         use crossterm::style::Stylize;
-        println!(
-            "{} {} Graphviz DOT to {}",
-            "🌟".green(),
-            "Exported".green().bold(),
-            dot_path.display().to_string().cyan()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} Graphviz DOT to {}",
+                "🌟".green(),
+                "Exported".green().bold(),
+                dot_path.display().to_string().cyan()
+            );
+        } else {
+            println!("Exported Graphviz DOT to {}", dot_path.display());
+        }
         return Ok(());
     }
 
@@ -2040,24 +2056,32 @@ fn run_doom() -> Result<()> {
         std::fs::write(obj_path, obj_data)
             .with_context(|| format!("Failed to write OBJ to {}", obj_path.display()))?;
         use crossterm::style::Stylize;
-        println!(
-            "{} {} 3D model to {}",
-            "🌟".green(),
-            "Exported".green().bold(),
-            obj_path.display().to_string().cyan()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} 3D model to {}",
+                "🌟".green(),
+                "Exported".green().bold(),
+                obj_path.display().to_string().cyan()
+            );
+        } else {
+            println!("Exported 3D model to {}", obj_path.display());
+        }
         return Ok(());
     }
 
     if let Some(ref wav_path) = args.export_music_wav {
         export_music_wav_for_map(&wad_stack, warp_str, args.music_loops, wav_path)?;
         use crossterm::style::Stylize;
-        println!(
-            "{} {} music WAV to {}",
-            "🎵".green(),
-            "Exported".green().bold(),
-            wav_path.display().to_string().cyan()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} music WAV to {}",
+                "🎵".green(),
+                "Exported".green().bold(),
+                wav_path.display().to_string().cyan()
+            );
+        } else {
+            println!("Exported music WAV to {}", wav_path.display());
+        }
         return Ok(());
     }
 
@@ -2083,11 +2107,14 @@ fn run_doom() -> Result<()> {
             );
             println!("{json_data}");
         } else {
+            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
             let mut table = comfy_table::Table::new();
             table
                 .load_preset(comfy_table::presets::UTF8_FULL)
-                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
-                .set_header(vec![
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+
+            if is_tty {
+                table.set_header(vec![
                     comfy_table::Cell::new("Statistic")
                         .fg(comfy_table::Color::Cyan)
                         .add_attribute(comfy_table::Attribute::Bold),
@@ -2119,6 +2146,32 @@ fn run_doom() -> Result<()> {
                     comfy_table::Cell::new(stats.par_time_tics.to_string())
                         .fg(comfy_table::Color::Blue),
                 ]);
+            } else {
+                table.set_header(vec![
+                    comfy_table::Cell::new("Statistic"),
+                    comfy_table::Cell::new("Value"),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("Map"),
+                    comfy_table::Cell::new(warp_str.to_string()),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("Total Kills"),
+                    comfy_table::Cell::new(stats.total_kills.to_string()),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("Total Items"),
+                    comfy_table::Cell::new(stats.total_items.to_string()),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("Total Secrets"),
+                    comfy_table::Cell::new(stats.total_secrets.to_string()),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("Par Time (tics)"),
+                    comfy_table::Cell::new(stats.par_time_tics.to_string()),
+                ]);
+            }
             println!("{table}");
         }
         return Ok(());
@@ -2145,13 +2198,17 @@ fn run_doom() -> Result<()> {
             .apply(&mut mobjinfo_vec, &mut states_vec)
             .map_err(|e| anyhow::anyhow!("DeHackEd apply error: {e}"))?;
         use crossterm::style::Stylize;
-        println!(
-            "{} {} applied {} modification(s) from {}",
-            "⚙️".green(),
-            "DeHackEd:".green().bold(),
-            count.to_string().cyan(),
-            deh_path.as_str().yellow()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} applied {} modification(s) from {}",
+                "⚙️".green(),
+                "DeHackEd:".green().bold(),
+                count.to_string().cyan(),
+                deh_path.as_str().yellow()
+            );
+        } else {
+            println!("DeHackEd: applied {} modification(s) from {}", count, deh_path.as_str());
+        }
     }
 
     // Load flat texture cache (floor/ceiling textures between F_START and F_END).
@@ -2200,12 +2257,20 @@ fn run_doom() -> Result<()> {
             Ok(f) => Some(f),
             Err(e) => {
                 use crossterm::style::Stylize;
-                eprintln!(
-                    "⚠️ {}: could not open debug log '{}': {}",
-                    "Warning".yellow().bold(),
-                    p.display(),
-                    e
-                );
+                if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+                    eprintln!(
+                        "⚠️ {}: could not open debug log '{}': {}",
+                        "Warning".yellow().bold(),
+                        p.display(),
+                        e
+                    );
+                } else {
+                    eprintln!(
+                        "Warning: could not open debug log '{}': {}",
+                        p.display(),
+                        e
+                    );
+                }
                 None
             }
         });
@@ -2242,12 +2307,16 @@ fn run_doom() -> Result<()> {
         let mut playback_app = demo_mode::DemoPlaybackApp::new(app, player);
         let mut framebuffer = Framebuffer::new();
 
-        println!(
-            "{} {} timedemo from {}",
-            "🚀".cyan(),
-            "Starting".cyan().bold(),
-            timedemo_path.display().to_string().cyan()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} timedemo from {}",
+                "🚀".cyan(),
+                "Starting".cyan().bold(),
+                timedemo_path.display().to_string().cyan()
+            );
+        } else {
+            println!("Starting timedemo from {}", timedemo_path.display());
+        }
 
         let start = Instant::now();
         let mut actual_tics = 0;
@@ -2261,14 +2330,18 @@ fn run_doom() -> Result<()> {
         let duration = start.elapsed();
         let fps = (actual_tics as f64) / duration.as_secs_f64();
 
-        println!(
-            "{} {} timedemo: {} tics in {:.2} seconds ({:.2} fps)",
-            "✅".green(),
-            "Finished".green().bold(),
-            actual_tics.to_string().yellow(),
-            duration.as_secs_f64(),
-            fps.to_string().green().bold()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} timedemo: {} tics in {:.2} seconds ({:.2} fps)",
+                "✅".green(),
+                "Finished".green().bold(),
+                actual_tics.to_string().yellow(),
+                duration.as_secs_f64(),
+                fps.to_string().green().bold()
+            );
+        } else {
+            println!("Finished timedemo: {} tics in {:.2} seconds ({:.2} fps)", actual_tics, duration.as_secs_f64(), fps);
+        }
 
         return Ok(());
     }
@@ -2293,13 +2366,17 @@ fn run_doom() -> Result<()> {
         )
         .with_context(|| format!("Failed to write capture: {}", capture_path.display()))?;
         use crossterm::style::Stylize;
-        println!(
-            "{} {} frame {} to {}",
-            "✅".green(),
-            "Captured".green().bold(),
-            args.capture_frames.to_string().cyan(),
-            capture_path.display().to_string().yellow()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} frame {} to {}",
+                "✅".green(),
+                "Captured".green().bold(),
+                args.capture_frames.to_string().cyan(),
+                capture_path.display().to_string().yellow()
+            );
+        } else {
+            println!("Captured frame {} to {}", args.capture_frames, capture_path.display());
+        }
         return Ok(());
     }
 
@@ -2335,11 +2412,18 @@ fn run_doom() -> Result<()> {
         event_loop.set_renderer_mode(mode);
     } else {
         use crossterm::style::Stylize;
-        eprintln!(
-            "⚠️ {}: unknown --renderer {:?}, using auto-detect",
-            "Warning".yellow().bold(),
-            args.renderer
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+            eprintln!(
+                "⚠️ {}: unknown --renderer {:?}, using auto-detect",
+                "Warning".yellow().bold(),
+                args.renderer
+            );
+        } else {
+            eprintln!(
+                "Warning: unknown --renderer {:?}, using auto-detect",
+                args.renderer
+            );
+        }
         event_loop.set_graphics_protocol(true);
     }
 
@@ -2374,16 +2458,28 @@ fn run_doom() -> Result<()> {
 fn main() {
     if let Err(err) = run_doom() {
         use crossterm::style::Stylize;
-        eprintln!("\n❌ {}: {}", "Fatal Error".red().bold(), err);
+        if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+            eprintln!("\n❌ {}: {}", "Fatal Error".red().bold(), err);
 
-        let mut causes = err.chain().skip(1).peekable();
-        if causes.peek().is_some() {
-            eprintln!("\n↳ {}:", "Caused by".yellow().bold());
-            for cause in causes {
-                eprintln!("    {}", cause);
+            let mut causes = err.chain().skip(1).peekable();
+            if causes.peek().is_some() {
+                eprintln!("\n↳ {}:", "Caused by".yellow().bold());
+                for cause in causes {
+                    eprintln!("    {}", cause);
+                }
+            }
+            eprintln!();
+        } else {
+            eprintln!("Fatal Error: {}", err);
+
+            let mut causes = err.chain().skip(1).peekable();
+            if causes.peek().is_some() {
+                eprintln!("Caused by:");
+                for cause in causes {
+                    eprintln!("    {}", cause);
+                }
             }
         }
-        eprintln!();
         std::process::exit(1);
     }
 }
