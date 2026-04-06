@@ -166,14 +166,15 @@ pub const ACTION_LIGHT2: u8 = 54;
 /// Helper to get a valid, alive target for a monster.
 /// Returns the target handle if it exists and is not dead.
 fn get_alive_target(gs: &GameState, handle: MobjHandle) -> Option<MobjHandle> {
-    let target = match gs.mobjslab.get(handle) {
-        Some(mo) if mo.target != MobjHandle::NULL => mo.target,
-        _ => return None,
-    };
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let mo = gs.mobjslab.get(handle)?;
+    if mo.target == MobjHandle::NULL {
         return None;
     }
-    Some(target)
+    let target_mo = gs.mobjslab.get(mo.target)?;
+    if target_mo.is_dead() {
+        return None;
+    }
+    Some(mo.target)
 }
 
 /// Helper to get a valid, alive target along with the monster's current position.
