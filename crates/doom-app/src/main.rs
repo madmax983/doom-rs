@@ -418,6 +418,13 @@ impl DoomGame {
         game
     }
 
+    fn current_fixed_colormap(&self) -> Option<&[u8; 256]> {
+        let is_invulnerable =
+            self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+        let cache = self.colormap_cache.as_ref()?;
+        is_invulnerable.then_some(cache.invulnerability_row(self.compat))
+    }
+
     fn start_music_lump(&self, lump_name: &str) -> bool {
         let Some(audio) = &self.audio else {
             return false;
@@ -1288,12 +1295,8 @@ impl DoomApp for DoomGame {
         };
 
         let palette = PaletteLut::grayscale();
-        let is_invulnerable =
-            self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
         let colormap_cache = self.colormap_cache.as_ref();
-        let fixed_colormap = colormap_cache.and_then(|cache| {
-            is_invulnerable.then_some(cache.invulnerability_row(self.compat))
-        });
+        let fixed_colormap = self.current_fixed_colormap();
 
         if self.automap.active {
             // Draw the overhead automap using the stateful AutomapState
@@ -2885,6 +2888,96 @@ mod tests {
             None,
             std::collections::HashMap::new(),
         )
+    }
+
+    fn make_test_colormap_with_special_row_32(value: u8) -> ColormapCache {
+        let mut data = vec![0u8; doom_renderer::colormap::COLORMAP_ROWS * doom_renderer::colormap::COLORMAP_SIZE];
+        for row in 0..doom_renderer::colormap::COLORMAP_ROWS {
+            let start = row * doom_renderer::colormap::COLORMAP_SIZE;
+            data[start..start + doom_renderer::colormap::COLORMAP_SIZE].fill(row as u8);
+        }
+        let row_32 = 32 * doom_renderer::colormap::COLORMAP_SIZE;
+        data[row_32..row_32 + doom_renderer::colormap::COLORMAP_SIZE].fill(value);
+        ColormapCache::from_test_data(data)
+    }
+
+    #[test]
+    fn current_fixed_colormap_returns_none_without_invulnerability() {
+        let game = DoomGame::new_with_compat(
+            make_game_state(),
+            make_test_level(),
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+            Some(make_test_colormap_with_special_row_32(0xA5)),
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+            CompatibilityProfile::VanillaStrict,
+        );
+
+        assert!(
+            game.current_fixed_colormap().is_none(),
+            "no fixed colormap should be selected when invulnerability is inactive"
+        );
+    }
+
+    #[test]
+    fn current_fixed_colormap_uses_row_32_in_vanilla_strict() {
+        let mut game = DoomGame::new_with_compat(
+            make_game_state(),
+            make_test_level(),
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+            Some(make_test_colormap_with_special_row_32(0xA5)),
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+            CompatibilityProfile::VanillaStrict,
+        );
+        game.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] = 1;
+
+        let row = game
+            .current_fixed_colormap()
+            .expect("invulnerability should select a fixed colormap");
+        assert_eq!(row[0], 0xA5, "strict mode must use COLORMAP row 32");
+    }
+
+    #[test]
+    fn current_fixed_colormap_keeps_extended_fallback() {
+        let mut game = DoomGame::new_with_compat(
+            make_game_state(),
+            make_test_level(),
+            None,
+            std::collections::HashMap::new(),
+            None,
+            None,
+            None,
+            Some(make_test_colormap_with_special_row_32(0xA5)),
+            false,
+            None,
+            None,
+            std::collections::HashMap::new(),
+            CompatibilityProfile::Extended,
+        );
+        game.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] = 1;
+
+        let row = game
+            .current_fixed_colormap()
+            .expect("invulnerability should select a fixed colormap");
+        assert_eq!(
+            row[0],
+            doom_renderer::INVULN_COLORMAP[0],
+            "extended mode should keep the synthetic fallback"
+        );
+        assert_ne!(row[0], 0xA5, "extended mode must not use WAD row 32 directly");
     }
 
     fn make_minimal_blockmap() -> Blockmap {
