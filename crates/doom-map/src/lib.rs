@@ -32,3 +32,6 @@ pub use lumps::{
 };
 pub use obj::export_map_to_obj;
 pub use svg::export_map_to_svg;
+
+pub mod analyzer;
+pub use analyzer::MapAnalyzer;
