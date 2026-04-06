@@ -2,7 +2,7 @@
 //!
 //! Implements the vanilla Doom 1.9 LMP format:
 //! - 13-byte header (version, skill, episode, map, flags, player presence)
-//! - N x 4-byte tic entries per present player (forward, side, `angle_turn` LE16)
+//! - N x 4-byte tic entries per present player (forward, side, turn byte, buttons)
 //! - 1-byte `0x80` terminator
 //!
 //! # Modules
@@ -30,7 +30,6 @@ pub use ticcmd::{DEMO_TIC_SIZE, DemoTicCmd};
 mod tests {
     use super::*;
 
-    // Test 23: Record then playback produces identical tics
     #[test]
     fn roundtrip_single_player() {
         let header = LmpHeader::new_singleplayer(3, 1, 1);
@@ -40,22 +39,26 @@ mod tests {
             DemoTicCmd {
                 forward_move: 50,
                 side_move: -10,
-                angle_turn: 300,
+                angle_turn: 3,
+                buttons: 0x11,
             },
             DemoTicCmd {
                 forward_move: -20,
                 side_move: 30,
-                angle_turn: -500,
+                angle_turn: -5,
+                buttons: 0x22,
             },
             DemoTicCmd {
                 forward_move: 0,
                 side_move: 0,
                 angle_turn: 0,
+                buttons: 0,
             },
             DemoTicCmd {
                 forward_move: i8::MAX,
                 side_move: i8::MIN,
-                angle_turn: i16::MAX,
+                angle_turn: i8::MAX,
+                buttons: u8::MAX,
             },
         ];
 
@@ -78,7 +81,6 @@ mod tests {
         assert!(player.next_tic_cmds().is_none());
     }
 
-    // Test 24: Multi-player demo roundtrip (2 players)
     #[test]
     fn roundtrip_two_players() {
         let header = LmpHeader {
@@ -99,12 +101,14 @@ mod tests {
         let p1_cmd = DemoTicCmd {
             forward_move: 10,
             side_move: 5,
-            angle_turn: 100,
+            angle_turn: 1,
+            buttons: 0x01,
         };
         let p2_cmd = DemoTicCmd {
             forward_move: 20,
             side_move: -5,
-            angle_turn: -200,
+            angle_turn: -2,
+            buttons: 0x02,
         };
 
         rec.record_tic_cmds(&[p1_cmd, p2_cmd]);
@@ -113,11 +117,13 @@ mod tests {
                 forward_move: 30,
                 side_move: 0,
                 angle_turn: 0,
+                buttons: 0x03,
             },
             DemoTicCmd {
                 forward_move: 40,
                 side_move: 0,
                 angle_turn: 0,
+                buttons: 0x04,
             },
         ]);
 
@@ -140,7 +146,6 @@ mod tests {
         assert!(player.is_finished());
     }
 
-    // Test 25: Empty demo (0 tics) roundtrip
     #[test]
     fn roundtrip_empty_demo() {
         let header = LmpHeader::new_singleplayer(3, 1, 1);
@@ -161,7 +166,8 @@ mod tests {
         let cmd = DemoTicCmd {
             forward_move: 42,
             side_move: -7,
-            angle_turn: 1234,
+            angle_turn: 12,
+            buttons: 0x3f,
         };
         rec1.record_tic_cmds(&[cmd]);
         rec2.record_tic_cmds(&[cmd]);
@@ -191,6 +197,7 @@ mod tests {
                 forward_move: (i * 10) as i8,
                 side_move: 0,
                 angle_turn: 0,
+                buttons: i as u8,
             })
             .collect();
         rec.record_tic_cmds(&cmds);
@@ -211,7 +218,8 @@ mod tests {
         rec.record_tic_cmds(&[DemoTicCmd {
             forward_move: 50, // 0x32
             side_move: -10,   // 0xF6 as u8
-            angle_turn: 300,  // 0x012C LE = [0x2C, 0x01]
+            angle_turn: 0x12, // one-byte turn value
+            buttons: 0x1f,
         }]);
         let lmp = rec.to_lmp();
 
@@ -221,8 +229,8 @@ mod tests {
         // Check tic bytes at offset 13..17
         assert_eq!(lmp[13], 50u8); // forward_move
         assert_eq!(lmp[14], 0xF6u8); // side_move as u8
-        assert_eq!(lmp[15], 0x2Cu8); // angle_turn low byte
-        assert_eq!(lmp[16], 0x01u8); // angle_turn high byte
+        assert_eq!(lmp[15], 0x12u8); // angle_turn byte
+        assert_eq!(lmp[16], 0x1fu8); // buttons
 
         // Terminator
         assert_eq!(lmp[17], LMP_TERMINATOR);
