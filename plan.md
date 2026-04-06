@@ -1,48 +1,88 @@
-1. **Analyze performance opportunity**:
-   - `render_level_with_view_height_and_extra_light` in `crates/doom-renderer/src/render.rs` allocates `wall_clip_top_history` and `wall_clip_bot_history` per frame using `std::iter::repeat_with(Vec::new).take(SCREEN_W).collect()`.
-   - `SCREEN_W` is 320. This causes 640 small `Vec` allocations (and their eventual drops) per frame.
-   - For 35 FPS (Doom tick rate), that's `640 * 35 = 22,400` heap allocations per second for sprite clipping history alone.
+Plan:
+1. Examine `crates/doom-renderer/src/render.rs` lines 1282: `let cache = flat_cache.unwrap();`.
+`doom-renderer/src/render.rs:1282` expects `flat_cache` to be `Some(...)`. If `flat_cache` is `None` but we are rendering `visplanes`, it will panic! Oh wait! Let's check `doom-renderer/src/render.rs` line 1270. It checks `if flat_cache.is_none() { return; }` before unwrapping!
 
-2. **Optimization strategy**:
-   - Change `clip_top_history` and `clip_bot_history` to `[Vec<SpriteClipStep>; SCREEN_W]`.
-   - The array can be initialized with `std::array::from_fn(|_| Vec::new())`. Wait, `std::array::from_fn` still allocates `Vec::new()` per frame if done naively.
-   - We need to avoid allocations on the hot path. To reuse allocations, `clip_top_history` and `clip_bot_history` should be persisted across frames. However, `render_level` creates a new `RenderOut` every frame.
-   - Wait, `RenderOut` is constructed fresh every frame and holds these `Vec<Vec<...>>`. The history arrays are used by `render_actors_with_masked_ex`.
-   - If we just change the array initialization to `const { Vec::new() }`, it's still an allocation when elements are added. `Vec::new()` doesn't allocate until elements are pushed. But many columns might get elements pushed, so it still allocates frequently.
+Wait! What about `doom-renderer/src/menu_render.rs:364`?
+`unwrap_or(layout.item_ys.first().copied().unwrap_or(60))`
+If the menu is empty, `first().copied()` will be `None`, and it defaults to 60.
 
-Let's look at `masked_columns` and `visplanes`. The `VisplaneSet` reuses allocations internally? No, `VisplaneSet::new()` is created locally in `render_level`.
+What about `doom-game/src/savegame.rs`? `load_game(&save_game(gs, ...)).unwrap().state` - these are in tests!
 
-Wait, we are Bolt ⚡, we want to eliminate intermediate allocations.
-What if we replace `wall_clip_top_history: Vec<Vec<SpriteClipStep>>` with `[Vec<SpriteClipStep>; SCREEN_W]`? It avoids the outer `Vec` allocation but the inner `Vec`s still exist. The outer `Vec` allocation is 1 allocation of 320 elements. 2 allocations per frame. That's `2 * 35 = 70` allocs/sec.
-No, `std::iter::repeat_with(Vec::new).take(SCREEN_W).collect()` collects into a `Vec<Vec<...>>`. That's 1 outer allocation, but it also creates 320 inner `Vec`s. `Vec::new()` doesn't allocate, but when we push it allocates.
+Wait, `doom-game/src/dehacked.rs`:
+`let num_str = thing_part.split_whitespace().next().unwrap_or("");`
+This is completely safe.
 
-Actually, the exact same pattern is in `crates/doom-renderer/src/sprite.rs` inside `render_actors_ex`:
+Wait! I missed something! `crates/doom-map/src/lumps.rs` has `try_into().unwrap()`:
+
 ```rust
-        let mut bottom_history: Vec<Vec<crate::render::SpriteClipStep>> =
-            std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();
+impl Sidedef {
+    const BYTE_SIZE: usize = 30;
+
+    fn from_bytes(b: &[u8]) -> Self {
+        Self {
+            x_offset: i16::from_le_bytes([b[0], b[1]]),
+            y_offset: i16::from_le_bytes([b[2], b[3]]),
+            upper_texture: b[4..12].try_into().unwrap(),
+            lower_texture: b[12..20].try_into().unwrap(),
+            middle_texture: b[20..28].try_into().unwrap(),
+            sector: u16::from_le_bytes([b[28], b[29]]),
+        }
+    }
 ```
-In `sprite.rs` there are 3 instances of `std::iter::repeat_with(Vec::new).take(SCREEN_W).collect();`.
 
-Let's change `Vec<Vec<...>>` to an array `[Vec<...>; SCREEN_W]` where we use `std::array::from_fn` or `[const { Vec::new() }; SCREEN_W]`.
-Wait! `[const { Vec::new() }; SCREEN_W]` is valid Rust 1.79+! It creates an array of 320 empty Vecs. It does not allocate the outer array dynamically on the heap! The array lives on the stack. `[Vec<SpriteClipStep>; 320]` is `320 * 24 = 7680` bytes, which is perfectly fine for the stack.
+Wait, `b[4..12]` is exactly 8 bytes! So `try_into()` an array of 8 bytes `[u8; 8]` is mathematically guaranteed to work!
+But can I replace this `.unwrap()` with `[b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]]` or use a custom test to ensure Sentry is happy? Actually, the user specifically mentioned `.unwrap() on dynamic data`. Wait, Sentry philosophy: `unwrap() is a ticking time bomb—test the explosion or remove the fuse`. I should just remove the fuse by using `.try_into().unwrap_or_default()` or explicit byte array. But `unwrap_or_default` hides bugs.
 
-Let's check the size of `RenderOut`:
-`z_buf`: 320 * 4 = 1280
-`clip_top`: 320 * 4 = 1280
-`clip_bot`: 320 * 4 = 1280
-`clip_top_depth`: 320 * 4 = 1280
-`clip_bot_depth`: 320 * 4 = 1280
-`clip_top_history`: 320 * 24 = 7680
-`clip_bot_history`: 320 * 24 = 7680
-`masked_columns`: 24
-Total: ~22 KB. This is fine for stack return.
+Let's look at `doom-game/src/trace.rs`:
+```rust
+    #[test]
+    fn ray_hits_perpendicular_wall_at_midpoint() {
+        let t = ray_linedef_intersection(0.0, 0.0, 1.0, 0.0, 100.0, -50.0, 100.0, 50.0);
+        assert!(t.is_some(), "should hit perpendicular wall");
+        let t = t.unwrap();
+```
+Tests!
 
-Wait, `SpriteClipStep` size:
-`f32` (4), `i32` (4), `f32` (4) = 12 bytes.
-`Vec<T>` size = 24 bytes.
-320 * 24 = 7680 bytes.
+What about `doom-app/src/main.rs:4116`?
+```rust
+        let args = args.unwrap();
+```
+Tests!
 
-If we change `Vec<Vec<SpriteClipStep>>` to `[Vec<SpriteClipStep>; SCREEN_W]`, we remove 2 heap allocations per frame in `render_level` and up to 3 per frame in `sprite.rs`.
-Wait, there is an even better way to avoid allocations for the inner `Vec`s: SmallVec! But we are told "Adding any new crates to Cargo.toml" is ⚠️ Ask first. We can just use `[Vec; SCREEN_W]` which removes the outer allocation.
+Ah! Wait! Look at `doom-game/src/linedef_dispatch.rs`:
+```rust
+        let trigger = classify_trigger(special).unwrap();
+```
+This is NOT a test! It's in `dispatch_walk_lines` function!
+```rust
+fn dispatch_walk_lines(...) {
+    // ...
+    let mut walk_lines: Vec<(i64, i64, usize, u16)> = level
+        .linedefs
+        .iter()
+        .enumerate()
+        .filter_map(|(i, ld)| {
+            if ld.special == 0 {
+                return None;
+            }
+            match classify_trigger(ld.special) {
+                Some(TriggerType::WalkOnce) | Some(TriggerType::WalkRepeat) => {
+                    // ...
+                    Some((frac, dist, i, ld.special))
+                }
+                _ => None,
+            }
+        })
+        .collect();
 
-Is there any other low-hanging fruit with `collect::<Vec<_>>`?
+    // ...
+
+    for (_, _, ld_idx, special) in walk_lines.into_iter().rev() {
+        let trigger = classify_trigger(special).unwrap();
+        dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
+    }
+}
+```
+If we change `walk_lines` to `Vec<(i64, i64, usize, u16, TriggerType)>`, we can **remove the fuse** entirely!
+
+Let's do that!

@@ -1119,7 +1119,7 @@ pub fn check_cross_lines(
     // is accepted. We do not have the original spechit array here, so we use
     // crossed-line distance along the movement path as the closest deterministic
     // approximation and dispatch the farthest hit first.
-    let mut walk_lines: Vec<(i64, i64, usize, u16)> = level
+    let mut walk_lines: Vec<(i64, i64, usize, u16, TriggerType)> = level
         .linedefs
         .iter()
         .enumerate()
@@ -1128,7 +1128,7 @@ pub fn check_cross_lines(
                 return None;
             }
             match classify_trigger(ld.special) {
-                Some(TriggerType::WalkOnce) | Some(TriggerType::WalkRepeat) => {
+                Some(trigger) if matches!(trigger, TriggerType::WalkOnce | TriggerType::WalkRepeat) => {
                     let v1 = &level.vertexes[ld.from_vertex as usize];
                     let v2 = &level.vertexes[ld.to_vertex as usize];
                     segment_intersection_frac(
@@ -1141,7 +1141,7 @@ pub fn check_cross_lines(
                         v2.x as i32,
                         v2.y as i32,
                     )
-                    .map(|(num, denom)| (num, denom, i, ld.special))
+                    .map(|(num, denom)| (num, denom, i, ld.special, trigger))
                 }
                 _ => None,
             }
@@ -1154,8 +1154,7 @@ pub fn check_cross_lines(
         lhs.cmp(&rhs)
     });
 
-    for (_, _, ld_idx, special) in walk_lines.into_iter().rev() {
-        let trigger = classify_trigger(special).unwrap();
+    for (_, _, ld_idx, special, trigger) in walk_lines.into_iter().rev() {
         dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
     }
 }
@@ -2082,5 +2081,56 @@ mod tests {
             linedef_effect(125),
             Some(LinedefEffect::TeleportMonstersOnly)
         );
+    }
+
+
+
+
+
+
+    #[test]
+    fn test_check_cross_lines_skips_unmapped_specials_without_panic() {
+        let mut gs = GameState::new("E1M1");
+        let actor = gs.mobjslab.alloc(crate::mobj::Mobj::new(crate::mobj::MobjKind::Player, doom_types::Fixed16_16::ZERO, doom_types::Fixed16_16::ZERO, doom_types::Bam::ZERO));
+        gs.player.handle = actor;
+
+        let mut level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0,
+                special: 999, // invalid / unmapped trigger special
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 0xffff,
+            }],
+            sidedefs: vec![],
+            vertexes: vec![
+                doom_map::Vertex { x: -10, y: 0 },
+                doom_map::Vertex { x: 10, y: 0 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![],
+            reject: doom_map::Reject::parse_lump(&[], 0).unwrap(),
+            blockmap: doom_map::Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+        };
+
+        // This would panic before if the filter_map unwrap logic was flawed,
+        // but now it safely bypasses unmapped triggers via match.
+        check_cross_lines(
+            &mut gs,
+            &mut level,
+            actor,
+            0,
+            -100,
+            0,
+            100,
+        );
+
+        // Test passes if it didn't panic or do anything weird.
     }
 }

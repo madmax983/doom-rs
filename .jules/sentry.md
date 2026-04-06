@@ -16,3 +16,7 @@
 ## 2024-04-03 - [Testing Parsing Boundaries in doom-wad]
 **Learning:** Found uncovered edge cases related to directory parsing where `infotableofs` could be negative, causing unexpected cast bugs or errors. In `doom-wad`, testing parsing logic requires explicitly feeding negative metadata offsets and validating `thiserror` types.
 **Action:** Always check array bounds casts and offsets in parsing headers. Use `matches!(result, Err(WadError::DirectoryOutOfBounds { .. }))` for checking struct enum variants with fields.
+
+## 2026-04-06 - Remove unwrap from walkline trigger classification
+**Learning:** Found a `.unwrap()` panic risk inside `dispatch_walk_lines` where `classify_trigger` was called twice: once to filter, and again later where it was unwrapped. While the filter conceptually guaranteed `Some`, it's a "ticking time bomb" if the logic ever decoupled.
+**Action:** Instead of just testing the explosion, "removed the fuse" by extracting the `TriggerType` directly in the `filter_map` (using a pattern guard `Some(trigger) if matches!(...)`) and passing it through the tuple to the downstream consumer, avoiding the second lookup and the `unwrap()` entirely.
