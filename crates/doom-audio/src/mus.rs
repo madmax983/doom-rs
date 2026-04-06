@@ -53,7 +53,7 @@ pub enum MusEvent {
         /// The MIDI channel (0-15).
         channel: u8,
         /// The MIDI note number (0-127).
-        note: u8
+        note: u8,
     },
     /// Note-on for `note` on `channel`, with optional velocity override.
     PlayNote {
@@ -69,14 +69,14 @@ pub enum MusEvent {
         /// The MIDI channel (0-15).
         channel: u8,
         /// The pitch wheel value.
-        value: u8
+        value: u8,
     },
     /// System-level event on `channel`.
     SystemEvent {
         /// The MIDI channel (0-15).
         channel: u8,
         /// The system controller index.
-        controller: u8
+        controller: u8,
     },
     /// Controller change on `channel`.
     Controller {
