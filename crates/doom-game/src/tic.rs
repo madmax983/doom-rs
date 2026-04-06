@@ -1264,6 +1264,20 @@ mod tests {
     // =======================================================================
 
     #[test]
+    fn tick_mobj_invalid_state_transitions_to_null() {
+        let mut gs = make_game_state();
+        let invalid_state = StateNum(crate::states::STATES.len() as u16 + 100);
+        let trooper = make_trooper(invalid_state, 1);
+        let handle = gs.mobjslab.alloc(trooper);
+
+        let result = tick_mobj(&mut gs, handle, None);
+
+        // When transitioning to StateNum::NULL, p_set_mobj_state removes it and returns false,
+        // which makes tick_mobj return Remove.
+        assert!(matches!(result, TickMobjResult::Remove));
+    }
+
+    #[test]
     fn state_transition_run1_to_run2() {
         let mut gs = make_game_state();
         // S_POSS_RUN1: 4 tics, next = S_POSS_RUN2, action = A_Chase.

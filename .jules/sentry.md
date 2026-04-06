@@ -16,3 +16,7 @@
 ## 2024-04-03 - [Testing Parsing Boundaries in doom-wad]
 **Learning:** Found uncovered edge cases related to directory parsing where `infotableofs` could be negative, causing unexpected cast bugs or errors. In `doom-wad`, testing parsing logic requires explicitly feeding negative metadata offsets and validating `thiserror` types.
 **Action:** Always check array bounds casts and offsets in parsing headers. Use `matches!(result, Err(WadError::DirectoryOutOfBounds { .. }))` for checking struct enum variants with fields.
+## 2026-04-06 - Missing invalid state transitions to `StateNum::NULL` test
+
+**Learning:** `tick_mobj` handles transitioning a mobj's state when its tics reach zero. If the lookup for `next_state` returns `None` (e.g. invalid state index), it falls back to `StateNum::NULL`. The transition to `NULL` correctly removes the mobj because `p_set_mobj_state` returns `false` for `NULL`, but this fallback path was completely uncovered by tests.
+**Action:** When a fallback value like `StateNum::NULL` is provided in an `unwrap_or`, add a targeted unit test to ensure the fallback actually executes and does the right thing (e.g. removes the entity).
