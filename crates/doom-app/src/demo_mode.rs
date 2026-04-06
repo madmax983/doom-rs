@@ -10,7 +10,8 @@ use doom_game::TicCmd;
 use doom_renderer::Framebuffer;
 use doom_tui::{DoomApp, TicInput};
 
-use crate::{DoomGame, ticinput_to_ticcmd};
+use crate::DoomGame;
+use crate::net_mode::ticinput_to_ticcmd;
 
 // ---------------------------------------------------------------------------
 // DemoRecordingWrapper

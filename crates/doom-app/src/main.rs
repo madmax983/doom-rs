@@ -19,7 +19,7 @@ use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
 use doom_game::player::WeaponType;
 use doom_game::{
-    GamePhase, GamePhaseController, GameState, Skill, TicCmd, TitleScreen, init_conveyors,
+    GamePhase, GamePhaseController, GameState, Skill, TitleScreen, init_conveyors,
     init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
@@ -1037,7 +1037,7 @@ impl DoomApp for DoomGame {
             }
         }
 
-        let cmd = ticinput_to_ticcmd(input);
+        let cmd = crate::net_mode::ticinput_to_ticcmd(input);
 
         // Pause the game simulation while the menu is open during gameplay.
         // Title screen and intermission handle their own timing; only Playing
@@ -1721,25 +1721,6 @@ fn psprite_transition_flags(weapon: WeaponType, state: doom_game::StateNum) -> (
 
 // ---------------------------------------------------------------------------
 // Input conversion
-// ---------------------------------------------------------------------------
-
-/// Convert a `TicInput` from doom-tui to a `TicCmd` for doom-game.
-///
-/// Both structs have identical movement/button fields; this is a direct copy.
-pub(crate) fn ticinput_to_ticcmd(input: TicInput) -> TicCmd {
-    TicCmd {
-        forward_move: input.forward_move,
-        side_move: input.side_move,
-        angle_turn: input.angle_turn,
-        buttons: input.buttons,
-        chatchar: input.chatchar,
-        ..Default::default()
-    }
-}
-
-// `spawn_player` removed — replaced by `spawn_level_things` which spawns
-// ALL map things (player, monsters, items, decorations, keys).
-
 fn load_music_library(wad: &WadStack) -> std::collections::HashMap<String, std::sync::Arc<[u8]>> {
     let mut music_library = std::collections::HashMap::new();
 
