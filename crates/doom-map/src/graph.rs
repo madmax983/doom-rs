@@ -1,17 +1,67 @@
+//! Topological map analysis for spatial awareness.
+//!
+//! While [`crate::Level`] describes the exact geometric coordinates of walls and floors,
+//! game logic (like monster pathfinding or sound propagation) rarely cares about
+//! exact coordinates. Instead, it cares about *connectivity*: "Can I get from Room A to Room B?"
+//!
+//! The [`SectorGraph`] translates raw coordinate geometry into a clean graph of interconnected
+//! rooms. It discovers portals (two-sided linedefs) and builds an adjacency list.
+
 use crate::Level;
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A topological graph representing the connectivity of sectors in a map.
+///
 /// Sectors are nodes, and two-sided linedefs acting as portals are edges.
+/// This graph is entirely unweighted and undirected. If Sector A shares a two-sided
+/// linedef with Sector B, they are considered adjacent.
+///
+/// # Examples
+///
+/// ```
+/// use doom_map::{Level, lumps::{Blockmap, Linedef, Reject, Sector, Sidedef, Vertex}};
+/// use doom_map::graph::SectorGraph;
+///
+/// // Construct a minimal level with two connected sectors
+/// let reject = Reject::parse_lump(&[], 0).unwrap();
+/// let blockmap = Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap();
+/// let level = Level {
+///     name: "TEST".to_owned(),
+///     things: vec![],
+///     vertexes: vec![],
+///     linedefs: vec![
+///         // A two-sided linedef connecting Sector 0 and Sector 1
+///         Linedef {
+///             from_vertex: 0, to_vertex: 1, flags: 0x0004, special: 0, tag: 0,
+///             right_sidedef: 0, left_sidedef: 1,
+///         }
+///     ],
+///     sidedefs: vec![
+///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"        ", lower_texture: *b"        ", middle_texture: *b"        ", sector: 0 },
+///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"        ", lower_texture: *b"        ", middle_texture: *b"        ", sector: 1 },
+///     ],
+///     sectors: vec![
+///         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT1\0\0\0", light_level: 192, special: 0, tag: 0 },
+///         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT1\0\0\0", light_level: 192, special: 0, tag: 0 },
+///     ],
+///     segs: vec![], ssectors: vec![], nodes: vec![], reject, blockmap,
+/// };
+///
+/// let graph = SectorGraph::build(&level);
+/// assert!(graph.adjacency_list.get(&0).unwrap().contains(&1));
+/// assert!(graph.adjacency_list.get(&1).unwrap().contains(&0));
+/// ```
 pub struct SectorGraph {
     /// Adjacency list: sector_index -> list of connected sector_indices
     pub adjacency_list: HashMap<usize, HashSet<usize>>,
 }
 
 impl SectorGraph {
-    /// Builds a topological graph of sectors from the given Level.
-    /// Connections are established by finding two-sided linedefs that connect
-    /// one sector to another via their front and back sidedefs.
+    /// Scans a [`Level`] and builds a topological graph of its sectors.
+    ///
+    /// Connections are established exclusively by finding two-sided linedefs that connect
+    /// one sector to another via their front and back sidedefs. One-sided linedefs
+    /// are treated as solid walls and do not create connections.
     #[must_use]
     pub fn build(level: &Level) -> Self {
         let mut adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::new();
@@ -45,8 +95,46 @@ impl SectorGraph {
         Self { adjacency_list }
     }
 
-    /// Finds the shortest topological path (minimum number of sector transitions)
-    /// between two sectors using Breadth-First Search (BFS).
+    /// Finds the shortest topological path between two sectors.
+    ///
+    /// The path is represented as an ordered list of sector indices from start to end.
+    /// This uses Breadth-First Search (BFS) to find the path with the minimum number
+    /// of sector transitions.
+    ///
+    /// Returns `None` if there is no valid path (e.g., the map has isolated rooms).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_map::{Level, lumps::{Blockmap, Linedef, Reject, Sector, Sidedef, Vertex}};
+    /// use doom_map::graph::SectorGraph;
+    ///
+    /// let reject = Reject::parse_lump(&[], 0).unwrap();
+    /// let blockmap = Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap();
+    /// let level = Level {
+    ///     name: "TEST".to_owned(),
+    ///     things: vec![], vertexes: vec![], segs: vec![], ssectors: vec![], nodes: vec![],
+    ///     linedefs: vec![
+    ///         Linedef { from_vertex: 0, to_vertex: 0, flags: 0x0004, special: 0, tag: 0, right_sidedef: 0, left_sidedef: 1 },
+    ///         Linedef { from_vertex: 0, to_vertex: 0, flags: 0x0004, special: 0, tag: 0, right_sidedef: 1, left_sidedef: 2 },
+    ///     ],
+    ///     sidedefs: vec![
+    ///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"        ", lower_texture: *b"        ", middle_texture: *b"        ", sector: 0 },
+    ///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"        ", lower_texture: *b"        ", middle_texture: *b"        ", sector: 1 },
+    ///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"        ", lower_texture: *b"        ", middle_texture: *b"        ", sector: 2 },
+    ///     ],
+    ///     sectors: vec![
+    ///         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT1\0\0\0", light_level: 192, special: 0, tag: 0 },
+    ///         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT1\0\0\0", light_level: 192, special: 0, tag: 0 },
+    ///         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT1\0\0\0", light_level: 192, special: 0, tag: 0 },
+    ///     ],
+    ///     reject, blockmap,
+    /// };
+    ///
+    /// let graph = SectorGraph::build(&level);
+    /// let path = graph.shortest_path(0, 2).unwrap();
+    /// assert_eq!(path, vec![0, 1, 2]);
+    /// ```
     #[must_use]
     pub fn shortest_path(&self, start_sector: usize, end_sector: usize) -> Option<Vec<usize>> {
         if start_sector == end_sector {
@@ -87,7 +175,10 @@ impl SectorGraph {
         None
     }
 
-    /// Exports the sector graph to the Graphviz DOT format for visualization.
+    /// Exports the sector graph to the Graphviz `DOT` format for visualization.
+    ///
+    /// This is an incredible debugging tool! You can pipe the output into `dot -Tpng > graph.png`
+    /// to get a visual flowchart of how rooms are connected in your level.
     #[must_use]
     pub fn to_dot(&self) -> String {
         let mut dot = String::from("digraph SectorGraph {\n");
