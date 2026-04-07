@@ -198,6 +198,10 @@ struct Args {
     #[arg(long)]
     map_stats: bool,
 
+    /// Run tactical analysis on the map topology and print chokepoints and isolated areas.
+    #[arg(long)]
+    analyze: bool,
+
     /// Print the map statistics as raw JSON. Only valid when combined with --map-stats.
     #[arg(long)]
     json: bool,
@@ -296,6 +300,7 @@ fn next_player_view_height(current: i32, player_dead: bool) -> i32 {
 }
 
 impl DoomGame {
+    #[allow(dead_code)]
     #[allow(clippy::too_many_arguments)]
     fn new(
         gs: GameState,
@@ -2225,6 +2230,102 @@ fn run_doom() -> Result<()> {
             );
         } else {
             println!("Exported SFX WAV to {}", sfx_wav_path.display());
+        }
+        return Ok(());
+    }
+
+    if args.analyze {
+        let graph = doom_map::SectorGraph::build(&level);
+        let analyzer = doom_map::MapAnalyzer::new(&graph);
+        let chokepoints = analyzer.chokepoints();
+        let areas = analyzer.isolated_areas();
+
+        if args.json {
+            let chokepoints_json = format!(
+                "[{}]",
+                chokepoints
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+            let areas_json = format!(
+                "[{}]",
+                areas
+                    .iter()
+                    .map(|a| {
+                        format!(
+                            "[{}]",
+                            a.iter()
+                                .map(|s| s.to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+
+            let json_data = format!(
+                r#"{{
+  "map": "{}",
+  "chokepoints": {},
+  "isolated_areas": {}
+}}"#,
+                warp_str, chokepoints_json, areas_json
+            );
+            println!("{}", json_data);
+        } else {
+            use crossterm::style::Stylize;
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                println!(
+                    "{} {} tactical analysis for {}",
+                    "🌟".green(),
+                    "Completed".green().bold(),
+                    warp_str.cyan()
+                );
+            } else {
+                println!("Completed tactical analysis for {}", warp_str);
+            }
+
+            let mut table = comfy_table::Table::new();
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                table
+                    .load_preset(comfy_table::presets::UTF8_FULL)
+                    .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+                table.set_header(vec![
+                    comfy_table::Cell::new("Feature")
+                        .fg(comfy_table::Color::Cyan)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new("Data")
+                        .fg(comfy_table::Color::Cyan)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                ]);
+                table.add_row(vec![
+                    comfy_table::Cell::new("Chokepoints"),
+                    comfy_table::Cell::new(format!("{:?}", chokepoints))
+                        .fg(comfy_table::Color::Red),
+                ]);
+                table.add_row(vec![
+                    comfy_table::Cell::new("Isolated Areas"),
+                    comfy_table::Cell::new(format!("{} areas", areas.len()))
+                        .fg(comfy_table::Color::Magenta),
+                ]);
+            } else {
+                table.set_header(vec![
+                    comfy_table::Cell::new("Feature"),
+                    comfy_table::Cell::new("Data"),
+                ]);
+                table.add_row(vec![
+                    comfy_table::Cell::new("Chokepoints"),
+                    comfy_table::Cell::new(format!("{:?}", chokepoints)),
+                ]);
+                table.add_row(vec![
+                    comfy_table::Cell::new("Isolated Areas"),
+                    comfy_table::Cell::new(format!("{} areas", areas.len())),
+                ]);
+            }
+            println!("{table}");
         }
         return Ok(());
     }
@@ -4752,5 +4853,13 @@ mod tests {
             9,
             "sound ripples must spawn 9 particles"
         );
+    }
+
+    #[test]
+    fn cli_args_parse_analyze() {
+        let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--analyze"]);
+        assert!(args.is_ok(), "args with --analyze must parse successfully");
+        let args = args.unwrap();
+        assert!(args.analyze);
     }
 }
