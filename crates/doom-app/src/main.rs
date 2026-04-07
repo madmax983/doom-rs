@@ -2206,9 +2206,10 @@ fn run_doom() -> Result<()> {
     }
 
     if let Some(ref sfx_wav_path) = args.export_sfx_wav {
-        let sfx_name = args.sfx_name.as_deref().ok_or_else(|| {
-            anyhow::anyhow!("--sfx-name is required when using --export-sfx-wav")
-        })?;
+        let sfx_name = args
+            .sfx_name
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("--sfx-name is required when using --export-sfx-wav"))?;
         export_sfx_wav_for_name(&wad_stack, sfx_name, sfx_wav_path)?;
         use crossterm::style::Stylize;
         println!(
@@ -2274,63 +2275,65 @@ fn run_doom() -> Result<()> {
                 .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
 
             if is_tty {
-                table.set_header(vec![
-                    comfy_table::Cell::new("Statistic")
-                        .fg(comfy_table::Color::Cyan)
-                        .add_attribute(comfy_table::Attribute::Bold),
-                    comfy_table::Cell::new("Value")
-                        .fg(comfy_table::Color::Cyan)
-                        .add_attribute(comfy_table::Attribute::Bold),
-                ])
-                .add_row(vec![
-                    comfy_table::Cell::new("🗺️  Map"),
-                    comfy_table::Cell::new(warp_str.to_string()).fg(comfy_table::Color::Yellow),
-                ])
-                .add_row(vec![
-                    comfy_table::Cell::new("💀 Total Kills"),
-                    comfy_table::Cell::new(stats.total_kills.to_string())
-                        .fg(comfy_table::Color::Red),
-                ])
-                .add_row(vec![
-                    comfy_table::Cell::new("📦 Total Items"),
-                    comfy_table::Cell::new(stats.total_items.to_string())
-                        .fg(comfy_table::Color::Green),
-                ])
-                .add_row(vec![
-                    comfy_table::Cell::new("🕵️  Total Secrets"),
-                    comfy_table::Cell::new(stats.total_secrets.to_string())
-                        .fg(comfy_table::Color::Magenta),
-                ])
-                .add_row(vec![
-                    comfy_table::Cell::new("⏱️  Par Time (tics)"),
-                    comfy_table::Cell::new(stats.par_time_tics.to_string())
-                        .fg(comfy_table::Color::Blue),
-                ]);
+                table
+                    .set_header(vec![
+                        comfy_table::Cell::new("Statistic")
+                            .fg(comfy_table::Color::Cyan)
+                            .add_attribute(comfy_table::Attribute::Bold),
+                        comfy_table::Cell::new("Value")
+                            .fg(comfy_table::Color::Cyan)
+                            .add_attribute(comfy_table::Attribute::Bold),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("🗺️  Map"),
+                        comfy_table::Cell::new(warp_str.to_string()).fg(comfy_table::Color::Yellow),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("💀 Total Kills"),
+                        comfy_table::Cell::new(stats.total_kills.to_string())
+                            .fg(comfy_table::Color::Red),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("📦 Total Items"),
+                        comfy_table::Cell::new(stats.total_items.to_string())
+                            .fg(comfy_table::Color::Green),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("🕵️  Total Secrets"),
+                        comfy_table::Cell::new(stats.total_secrets.to_string())
+                            .fg(comfy_table::Color::Magenta),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("⏱️  Par Time (tics)"),
+                        comfy_table::Cell::new(stats.par_time_tics.to_string())
+                            .fg(comfy_table::Color::Blue),
+                    ]);
             } else {
-                table.set_header(vec![
-                    comfy_table::Cell::new("Statistic"),
-                    comfy_table::Cell::new("Value"),
-                ])
-                .add_row(vec![
-                    comfy_table::Cell::new("Map"),
-                    comfy_table::Cell::new(warp_str.to_string()),
-                ])
-                .add_row(vec![
-                    comfy_table::Cell::new("Total Kills"),
-                    comfy_table::Cell::new(stats.total_kills.to_string()),
-                ])
-                .add_row(vec![
-                    comfy_table::Cell::new("Total Items"),
-                    comfy_table::Cell::new(stats.total_items.to_string()),
-                ])
-                .add_row(vec![
-                    comfy_table::Cell::new("Total Secrets"),
-                    comfy_table::Cell::new(stats.total_secrets.to_string()),
-                ])
-                .add_row(vec![
-                    comfy_table::Cell::new("Par Time (tics)"),
-                    comfy_table::Cell::new(stats.par_time_tics.to_string()),
-                ]);
+                table
+                    .set_header(vec![
+                        comfy_table::Cell::new("Statistic"),
+                        comfy_table::Cell::new("Value"),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("Map"),
+                        comfy_table::Cell::new(warp_str.to_string()),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("Total Kills"),
+                        comfy_table::Cell::new(stats.total_kills.to_string()),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("Total Items"),
+                        comfy_table::Cell::new(stats.total_items.to_string()),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("Total Secrets"),
+                        comfy_table::Cell::new(stats.total_secrets.to_string()),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("Par Time (tics)"),
+                        comfy_table::Cell::new(stats.par_time_tics.to_string()),
+                    ]);
             }
             println!("{table}");
         }
@@ -2367,7 +2370,11 @@ fn run_doom() -> Result<()> {
                 deh_path.as_str().yellow()
             );
         } else {
-            println!("DeHackEd: applied {} modification(s) from {}", count, deh_path.as_str());
+            println!(
+                "DeHackEd: applied {} modification(s) from {}",
+                count,
+                deh_path.as_str()
+            );
         }
     }
 
@@ -2425,11 +2432,7 @@ fn run_doom() -> Result<()> {
                         e
                     );
                 } else {
-                    eprintln!(
-                        "Warning: could not open debug log '{}': {}",
-                        p.display(),
-                        e
-                    );
+                    eprintln!("Warning: could not open debug log '{}': {}", p.display(), e);
                 }
                 None
             }
@@ -2501,7 +2504,12 @@ fn run_doom() -> Result<()> {
                 fps.to_string().green().bold()
             );
         } else {
-            println!("Finished timedemo: {} tics in {:.2} seconds ({:.2} fps)", actual_tics, duration.as_secs_f64(), fps);
+            println!(
+                "Finished timedemo: {} tics in {:.2} seconds ({:.2} fps)",
+                actual_tics,
+                duration.as_secs_f64(),
+                fps
+            );
         }
 
         return Ok(());
@@ -2536,7 +2544,11 @@ fn run_doom() -> Result<()> {
                 capture_path.display().to_string().yellow()
             );
         } else {
-            println!("Captured frame {} to {}", args.capture_frames, capture_path.display());
+            println!(
+                "Captured frame {} to {}",
+                args.capture_frames,
+                capture_path.display()
+            );
         }
         return Ok(());
     }
@@ -2882,7 +2894,11 @@ mod tests {
     }
 
     fn make_test_colormap_with_special_row_32(value: u8) -> ColormapCache {
-        let mut data = vec![0u8; doom_renderer::colormap::COLORMAP_ROWS * doom_renderer::colormap::COLORMAP_SIZE];
+        let mut data = vec![
+            0u8;
+            doom_renderer::colormap::COLORMAP_ROWS
+                * doom_renderer::colormap::COLORMAP_SIZE
+        ];
         for row in 0..doom_renderer::colormap::COLORMAP_ROWS {
             let start = row * doom_renderer::colormap::COLORMAP_SIZE;
             data[start..start + doom_renderer::colormap::COLORMAP_SIZE].fill(row as u8);
@@ -2968,7 +2984,10 @@ mod tests {
             doom_renderer::INVULN_COLORMAP[0],
             "extended mode should keep the synthetic fallback"
         );
-        assert_ne!(row[0], 0xA5, "extended mode must not use WAD row 32 directly");
+        assert_ne!(
+            row[0], 0xA5,
+            "extended mode must not use WAD row 32 directly"
+        );
     }
 
     fn make_minimal_blockmap() -> Blockmap {
@@ -4521,14 +4540,8 @@ mod tests {
 
     #[test]
     fn cli_args_compat_rejects_invalid_value() {
-        let err = Args::try_parse_from([
-            "doom-app",
-            "--wad",
-            "doom1.wad",
-            "--compat",
-            "banana",
-        ])
-        .unwrap_err();
+        let err = Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--compat", "banana"])
+            .unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("invalid value"), "{msg}");
         assert!(msg.contains("banana"), "{msg}");
@@ -4621,7 +4634,10 @@ mod tests {
             "--sfx-name",
             "DSPISTOL",
         ]);
-        assert!(args.is_ok(), "args with --export-sfx-wav must parse successfully");
+        assert!(
+            args.is_ok(),
+            "args with --export-sfx-wav must parse successfully"
+        );
         let args = args.unwrap();
         assert_eq!(
             args.export_sfx_wav,
