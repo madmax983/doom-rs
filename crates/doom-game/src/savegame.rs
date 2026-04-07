@@ -211,7 +211,11 @@ impl<'a> ReadCursor<'a> {
 
     /// Read an unsigned 16-bit integer (little-endian).
     pub fn read_u16(&mut self) -> Result<u16, SaveError> {
-        if self.pos + 2 > self.data.len() {
+        if self
+            .pos
+            .checked_add(2)
+            .is_none_or(|end| end > self.data.len())
+        {
             return Err(SaveError::Truncated);
         }
         let v = u16::from_le_bytes([self.data[self.pos], self.data[self.pos + 1]]);
@@ -240,7 +244,11 @@ impl<'a> ReadCursor<'a> {
 
     /// Read an unsigned 32-bit integer (little-endian).
     pub fn read_u32(&mut self) -> Result<u32, SaveError> {
-        if self.pos + 4 > self.data.len() {
+        if self
+            .pos
+            .checked_add(4)
+            .is_none_or(|end| end > self.data.len())
+        {
             return Err(SaveError::Truncated);
         }
         let v = u32::from_le_bytes([
