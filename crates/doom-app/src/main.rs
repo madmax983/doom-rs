@@ -2241,29 +2241,44 @@ fn run_doom() -> Result<()> {
         let areas = analyzer.isolated_areas();
 
         if args.json {
+            // ⚡ Bolt Optimization:
+            // Formats the JSON array inline directly into a single `String` buffer.
+            // This completely eliminates intermediate `.collect::<Vec<_>>()` chains
+            // and intermediate inner string allocations that previously happened per-area,
+            // saving ~3 heap allocations per JSON generation loop.
             let chokepoints_json = format!(
                 "[{}]",
                 chokepoints
                     .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                    .enumerate()
+                    .fold(String::new(), |mut acc, (i, s)| {
+                        if i > 0 {
+                            acc.push_str(", ");
+                        }
+                        acc.push_str(&s.to_string());
+                        acc
+                    })
             );
             let areas_json = format!(
                 "[{}]",
                 areas
                     .iter()
-                    .map(|a| {
-                        format!(
-                            "[{}]",
-                            a.iter()
-                                .map(|s| s.to_string())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )
+                    .enumerate()
+                    .fold(String::new(), |mut acc_outer, (i, a)| {
+                        if i > 0 {
+                            acc_outer.push_str(", ");
+                        }
+                        acc_outer.push('[');
+                        a.iter().enumerate().fold(&mut acc_outer, |acc, (j, s)| {
+                            if j > 0 {
+                                acc.push_str(", ");
+                            }
+                            acc.push_str(&s.to_string());
+                            acc
+                        });
+                        acc_outer.push(']');
+                        acc_outer
                     })
-                    .collect::<Vec<_>>()
-                    .join(", ")
             );
 
             let json_data = format!(
