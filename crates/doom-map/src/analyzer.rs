@@ -1,3 +1,34 @@
+//! Map topology analysis tools.
+//!
+//! This module provides the [`MapAnalyzer`] utility, which performs topological
+//! graph analysis on a [`SectorGraph`] to identify tactical features.
+//!
+//! # Features
+//! - **Chokepoints**: Identifies articulation points in the map—sectors that, if
+//!   removed, would split the map into separate, disconnected areas. These are
+//!   often critical doorways or hallways.
+//! - **Isolated Areas**: Finds distinct disconnected clusters of sectors within the map.
+//!
+//! # Examples
+//! ```
+//! use doom_map::SectorGraph;
+//! use doom_map::analyzer::MapAnalyzer;
+//! use std::collections::{HashMap, HashSet};
+//!
+//! // Construct a manual graph where sector 2 connects {0, 1} and {3}
+//! let mut adj = HashMap::new();
+//! adj.insert(0, HashSet::from([1, 2]));
+//! adj.insert(1, HashSet::from([0, 2]));
+//! adj.insert(2, HashSet::from([0, 1, 3]));
+//! adj.insert(3, HashSet::from([2]));
+//! let graph = SectorGraph { adjacency_list: adj };
+//!
+//! let analyzer = MapAnalyzer::new(&graph);
+//!
+//! // Sector 2 is a chokepoint because its removal disconnects {0, 1} from {3}
+//! assert_eq!(analyzer.chokepoints(), vec![2]);
+//! ```
+
 use crate::graph::SectorGraph;
 use std::collections::{HashMap, HashSet};
 
