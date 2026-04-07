@@ -227,8 +227,8 @@ mod tests {
     use super::*;
     use doom_demo::{DemoRecorder, LmpHeader};
     use doom_game::{GameState, Mobj, MobjKind, PlayerState, TicCmd, flags};
-    use doom_types::{Bam, Fixed16_16};
     use doom_types::CompatibilityProfile;
+    use doom_types::{Bam, Fixed16_16};
     use std::env;
     use std::sync::Once;
 
@@ -498,9 +498,7 @@ mod tests {
             CompatibilityProfile::VanillaStrict,
         );
 
-        baseline
-            .gs
-            .tick(expected_cmd, Some(&mut baseline.level));
+        baseline.gs.tick(expected_cmd, Some(&mut baseline.level));
         app.tick(TicInput::default());
 
         let baseline_mobj = baseline
@@ -531,11 +529,15 @@ mod tests {
         let wrapper = DemoRecordingWrapper::new_with_compat(
             game,
             recorder,
-            dir.path().join("doom_rs_unused_recording_wrapper_profile.lmp"),
+            dir.path()
+                .join("doom_rs_unused_recording_wrapper_profile.lmp"),
             CompatibilityProfile::VanillaStrict,
         );
 
-        assert_eq!(wrapper.compat_profile(), CompatibilityProfile::VanillaStrict);
+        assert_eq!(
+            wrapper.compat_profile(),
+            CompatibilityProfile::VanillaStrict
+        );
     }
 
     // -----------------------------------------------------------------------

@@ -25,8 +25,8 @@
 
 use std::collections::HashMap;
 
-use doom_wad::{LumpDef, WadFile, WadStack};
 use doom_types::CompatibilityProfile;
+use doom_wad::{LumpDef, WadFile, WadStack};
 
 use crate::colormap::ColormapCache;
 use crate::framebuffer::Framebuffer;

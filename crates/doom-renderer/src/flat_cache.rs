@@ -9,8 +9,8 @@
 //! let texels: &[u8; 4096] = cache.get(b"FLOOR4_8");
 //! ```
 
-use doom_types::limits::FLAT_SIZE;
 use doom_types::CompatibilityProfile;
+use doom_types::limits::FLAT_SIZE;
 use doom_wad::{LumpDef, WadFile, WadStack};
 use std::collections::HashMap;
 

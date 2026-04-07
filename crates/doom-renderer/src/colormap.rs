@@ -284,7 +284,10 @@ mod tests {
         let cache = ColormapCache::from_test_data(data);
 
         let row = cache.invulnerability_row(CompatibilityProfile::VanillaStrict);
-        assert_eq!(row[0], 0xA5, "strict mode must use the WAD's special row 32");
+        assert_eq!(
+            row[0], 0xA5,
+            "strict mode must use the WAD's special row 32"
+        );
     }
 
     #[test]
