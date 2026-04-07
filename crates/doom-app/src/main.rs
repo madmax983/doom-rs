@@ -980,7 +980,7 @@ impl DoomApp for DoomGame {
                         }
                         doom_game::menu::MenuResult::LoadGame(slot) => {
                             let path = format!("doom_save_{slot}.bin");
-                            match savegame::load_game(std::path::Path::new(&path)) {
+                            match savegame::load_game(std::path::Path::new(&path), self.compat) {
                                 Ok((_header, payload)) => {
                                     if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
                                         self.console.print(format!("Load failed: {e}"));
@@ -1005,14 +1005,18 @@ impl DoomApp for DoomGame {
                         }
                         doom_game::menu::MenuResult::SaveGame(slot) => {
                             let path = format!("doom_save_{slot}.bin");
-                            if let Err(e) =
-                                savegame::save_game(std::path::Path::new(&path), &self.gs, slot)
-                            {
+                            if let Err(e) = savegame::save_game(
+                                std::path::Path::new(&path),
+                                &self.gs,
+                                slot,
+                                self.compat,
+                            ) {
                                 self.console.print(format!("Save failed: {e}"));
                                 self.hud_messages.push(format!("Save failed: {e}"), 105);
                             } else {
                                 self.console.print(format!("Saved to slot {slot}."));
-                                self.hud_messages.push(format!("Saved to slot {slot}."), 105);
+                                self.hud_messages
+                                    .push(format!("Saved to slot {slot}."), 105);
                                 self.menu.close();
                             }
                         }
@@ -1083,7 +1087,7 @@ impl DoomApp for DoomGame {
 
         // Quick save (F5).
         if input.f5_save {
-            if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0) {
+            if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0, self.compat) {
                 self.console.print(format!("Save failed: {e}"));
                 self.hud_messages.push(format!("Save failed: {e}"), 105);
             } else {
@@ -1094,7 +1098,7 @@ impl DoomApp for DoomGame {
 
         // Quick load (F9).
         if input.f9_load {
-            match savegame::load_game(&self.save_path) {
+            match savegame::load_game(&self.save_path, self.compat) {
                 Ok((_header, payload)) => {
                     if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
                         self.console.print(format!("Load failed: {e}"));

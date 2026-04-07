@@ -13,6 +13,7 @@ use doom_types::{Bam, Fixed16_16};
 
 use crate::mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum};
 use crate::player::{NUM_POWERS, NUM_PSPRITES, PlayerState, PspriteState, WeaponType};
+use crate::savegame_vanilla;
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoomRng, DoorMover, ExitRequest, FloorMover,
     FloorType, GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
@@ -31,6 +32,13 @@ pub const MAX_SAVE_SLOTS: usize = 6;
 
 /// Current save format version.
 const SAVE_VERSION: u32 = 3;
+
+/// Supported binary savegame formats.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveFormat {
+    DoomRs,
+    VanillaDsg,
+}
 
 // ---------------------------------------------------------------------------
 // SaveHeader
@@ -75,21 +83,26 @@ pub struct SaveGame {
 pub enum SaveError {
     /// Input data is too short to contain even a header.
     TooShort,
-    /// Magic bytes do not match `SAVE_MAGIC`.
+    /// Save data does not match any recognized header.
     BadMagic,
     /// Format version is not supported.
     BadVersion,
     /// Data ended before all fields could be read.
     Truncated,
+    /// Vanilla DSG payload support is not implemented yet.
+    UnsupportedVanillaDsg,
 }
 
 impl core::fmt::Display for SaveError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
             SaveError::TooShort => write!(f, "save data too short for header"),
-            SaveError::BadMagic => write!(f, "bad magic bytes in save data"),
+            SaveError::BadMagic => write!(f, "unrecognized save file header"),
             SaveError::BadVersion => write!(f, "unsupported save format version"),
             SaveError::Truncated => write!(f, "save data truncated"),
+            SaveError::UnsupportedVanillaDsg => {
+                write!(f, "vanilla DSG payload support is not implemented yet")
+            }
         }
     }
 }
@@ -806,11 +819,43 @@ fn read_conveyor_belt(r: &mut ReadCursor<'_>) -> Result<ConveyorBelt, SaveError>
 // Top-level save/load
 // ---------------------------------------------------------------------------
 
+/// Detect which savegame format a blob uses.
+pub fn detect_save_format(data: &[u8]) -> Result<SaveFormat, SaveError> {
+    if data.len() >= SAVE_MAGIC.len() && data[..SAVE_MAGIC.len()] == SAVE_MAGIC {
+        return Ok(SaveFormat::DoomRs);
+    }
+    if savegame_vanilla::looks_like_vanilla_dsg(data) {
+        return Ok(SaveFormat::VanillaDsg);
+    }
+    if data.len() < savegame_vanilla::VANILLA_HEADER_LEN {
+        return Err(SaveError::TooShort);
+    }
+    Err(SaveError::BadMagic)
+}
+
 /// Serialize a `GameState` to a binary save blob.
 ///
 /// The resulting `Vec<u8>` can be written to disk or transmitted over the
 /// network.  Use `load_game` to deserialize it back.
 pub fn save_game(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &str) -> Vec<u8> {
+    save_game_doomrs(gs, level_name, skill, description)
+}
+
+/// Serialize a `GameState` using an explicit binary format.
+pub fn save_game_with_format(
+    gs: &GameState,
+    level_name: &[u8; 8],
+    skill: u8,
+    description: &str,
+    format: SaveFormat,
+) -> Result<Vec<u8>, SaveError> {
+    match format {
+        SaveFormat::DoomRs => Ok(save_game_doomrs(gs, level_name, skill, description)),
+        SaveFormat::VanillaDsg => savegame_vanilla::save_game(gs, level_name, skill, description),
+    }
+}
+
+fn save_game_doomrs(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &str) -> Vec<u8> {
     let mut w = WriteCursor::new(4096);
 
     // --- Header ---
@@ -928,6 +973,13 @@ pub fn save_game(gs: &GameState, level_name: &[u8; 8], skill: u8, description: &
 ///
 /// Returns `SaveError` if the data is malformed or truncated.
 pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
+    match detect_save_format(data)? {
+        SaveFormat::DoomRs => load_game_doomrs(data),
+        SaveFormat::VanillaDsg => savegame_vanilla::load_game(data),
+    }
+}
+
+fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
     // Minimum header size: 4 (magic) + 4 (version) + 8 (level_name) + 1 (skill) + 4 (level_time) + 24 (desc) = 45
     const HEADER_SIZE: usize = 4 + 4 + 8 + 1 + 4 + 24;
     if data.len() < HEADER_SIZE {
@@ -1193,6 +1245,54 @@ mod tests {
         let mut name = [0u8; 8];
         name[..4].copy_from_slice(b"E1M1");
         name
+    }
+
+    fn vanilla_header_bytes() -> Vec<u8> {
+        let mut data = Vec::new();
+        let mut description = [0u8; 24];
+        description[..12].copy_from_slice(b"Vanilla test");
+        data.extend_from_slice(&description);
+
+        let mut version = [0u8; 16];
+        version[..11].copy_from_slice(b"version 109");
+        data.extend_from_slice(&version);
+
+        data.push(2);
+        data.push(1);
+        data.push(1);
+        data.extend_from_slice(&[1, 0, 0, 0]);
+        data.extend_from_slice(&[0x23, 0x01, 0x00]);
+        data
+    }
+
+    #[test]
+    fn detect_save_format_distinguishes_doomrs_and_vanilla_headers() {
+        let gs = test_game_state();
+        let doomrs = save_game(&gs, &test_level_name(), 2, "format test");
+        assert_eq!(detect_save_format(&doomrs).unwrap(), SaveFormat::DoomRs);
+
+        let vanilla = vanilla_header_bytes();
+        assert_eq!(
+            detect_save_format(&vanilla).unwrap(),
+            SaveFormat::VanillaDsg
+        );
+    }
+
+    #[test]
+    fn explicit_vanilla_save_does_not_route_through_doomrs_serializer() {
+        let gs = test_game_state();
+        let result =
+            save_game_with_format(&gs, &test_level_name(), 2, "strict", SaveFormat::VanillaDsg);
+
+        assert_eq!(result.unwrap_err(), SaveError::UnsupportedVanillaDsg);
+    }
+
+    #[test]
+    fn explicit_vanilla_load_fails_with_unsupported_error() {
+        let vanilla = vanilla_header_bytes();
+
+        let err = load_game(&vanilla).expect_err("vanilla boundary should reject payload load");
+        assert_eq!(err, SaveError::UnsupportedVanillaDsg);
     }
 
     #[test]
