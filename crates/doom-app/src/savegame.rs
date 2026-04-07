@@ -79,6 +79,7 @@ impl From<doom_game::savegame::SaveError> for SaveError {
     }
 }
 
+/// Map an app-level compatibility profile to the required on-disk save format.
 #[must_use]
 pub const fn save_format_for_compat(compat: CompatibilityProfile) -> SaveFormat {
     match compat {
@@ -116,6 +117,8 @@ pub const fn save_format_for_compat(compat: CompatibilityProfile) -> SaveFormat 
 ///
 /// # Errors
 /// Returns [`SaveError::Io`] if the disk write fails (e.g., read-only filesystem).
+/// Returns [`SaveError::UnsupportedVanillaDsg`] when strict compatibility is
+/// selected before vanilla payload support exists.
 pub fn save_game(
     path: &Path,
     gs: &GameState,
@@ -125,6 +128,7 @@ pub fn save_game(
     save_game_with_format(path, gs, slot, save_format_for_compat(compat))
 }
 
+/// Save the current game using an explicit on-disk format, bypassing profile mapping.
 pub fn save_game_with_format(
     path: &Path,
     gs: &GameState,
@@ -191,6 +195,7 @@ pub fn load_game(
     load_game_with_format(path, save_format_for_compat(compat))
 }
 
+/// Load a game while requiring a specific detected on-disk format.
 pub fn load_game_with_format(
     path: &Path,
     expected_format: SaveFormat,
