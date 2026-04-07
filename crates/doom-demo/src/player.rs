@@ -3,7 +3,7 @@
 //! The [`DemoPlayer`] parses an LMP file into its header and tic data, then
 //! provides an iterator-like interface to step through tics one at a time.
 
-use doom_game::TicCmd;
+use doom_types::TicCmd;
 
 use crate::header::{LMP_HEADER_SIZE, LMP_TERMINATOR, LmpHeader};
 use crate::ticcmd::DemoTicCmd;

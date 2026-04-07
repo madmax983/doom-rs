@@ -9,3 +9,7 @@
 **[Deduplicate ticinput_to_ticcmd helper]**
 **Tangle:** The `doom-app` crate contained duplicate implementations of the `ticinput_to_ticcmd` helper function in `src/main.rs` and `src/net_mode.rs`.
 **Blueprint:** Removed the duplicate implementation from `src/main.rs` and updated references in `main.rs` and `demo_mode.rs` to use the single source of truth at `crate::net_mode::ticinput_to_ticcmd`, removing a DRY violation and ensuring better code maintainability.
+
+**[Decouple Demo from Game]**
+**Tangle:** `doom-demo` depended on the heavy `doom-game` crate just to import `TicCmd`, unnecessarily coupling demo parsing with the full game simulation loop.
+**Blueprint:** Replaced the `doom-game` dependency in `doom-demo` with `doom-types` and updated imports to `doom_types::TicCmd`. This breaks the dependency, adhering to the principle that primitive data structures should reside in a common primitives crate.

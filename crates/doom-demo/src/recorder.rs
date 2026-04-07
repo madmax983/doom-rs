@@ -4,7 +4,7 @@
 //! consists of a 13-byte header, followed by 4 bytes per player per tic,
 //! terminated by a `0x80` sentinel byte.
 
-use doom_game::TicCmd;
+use doom_types::TicCmd;
 
 use crate::header::{LMP_TERMINATOR, LmpHeader};
 use crate::ticcmd::DemoTicCmd;
