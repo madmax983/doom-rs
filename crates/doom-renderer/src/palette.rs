@@ -38,7 +38,7 @@ pub enum PaletteError {
     /// ```
     WrongSize {
         /// The actual size of the parsed lump.
-        actual: usize
+        actual: usize,
     },
 }
 
