@@ -19,3 +19,7 @@
 ## 2024-04-03 - [Missing Module Docs]
 **Confusion:** Module `doom-map::graph` and `doom-types::proofs` had no module-level documentation.
 **Clarification:** Add `//!` docstrings for missing modules.
+
+## 2026-04-07 - [Internal modules showing up as broken links]
+**Confusion:** Rustdoc throws warnings when public items link to `pub(crate)` modules or items via intra-doc links. Making those internal items `pub` with `#[doc(hidden)]` is an anti-pattern as it still exposes internal logic to the public API programmatically.
+**Clarification:** To resolve private intra-doc link warnings while strictly keeping the public API clean, remove the intra-doc brackets (`[ ]`) and just use regular backticked markdown code formatting (e.g. `` `module_name` ``) for internal items in public docs.
