@@ -21,7 +21,6 @@ doom-net      = { workspace = true }
 doom-demo     = { workspace = true }
 clap          = { workspace = true }
 anyhow        = { workspace = true }
-tokio         = { workspace = true }
 thiserror     = { workspace = true }
 loom          = { version = "0.7", optional = true }
 log = "0.4.29"
