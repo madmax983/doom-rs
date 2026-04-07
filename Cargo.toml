@@ -43,7 +43,6 @@ crossterm = "0.29.0"
 cpal = "0.15"
 
 # Networking
-tokio     = { version = "1", features = ["full"] }
 bincode   = "2"
 crc32fast = "1"
 
