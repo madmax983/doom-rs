@@ -2894,7 +2894,11 @@ mod tests {
     }
 
     fn make_test_colormap_with_special_row_32(value: u8) -> ColormapCache {
-        let mut data = vec![0u8; doom_renderer::colormap::COLORMAP_ROWS * doom_renderer::colormap::COLORMAP_SIZE];
+        let mut data = vec![
+            0u8;
+            doom_renderer::colormap::COLORMAP_ROWS
+                * doom_renderer::colormap::COLORMAP_SIZE
+        ];
         for row in 0..doom_renderer::colormap::COLORMAP_ROWS {
             let start = row * doom_renderer::colormap::COLORMAP_SIZE;
             data[start..start + doom_renderer::colormap::COLORMAP_SIZE].fill(row as u8);
@@ -2980,7 +2984,10 @@ mod tests {
             doom_renderer::INVULN_COLORMAP[0],
             "extended mode should keep the synthetic fallback"
         );
-        assert_ne!(row[0], 0xA5, "extended mode must not use WAD row 32 directly");
+        assert_ne!(
+            row[0], 0xA5,
+            "extended mode must not use WAD row 32 directly"
+        );
     }
 
     fn make_minimal_blockmap() -> Blockmap {
@@ -4533,14 +4540,8 @@ mod tests {
 
     #[test]
     fn cli_args_compat_rejects_invalid_value() {
-        let err = Args::try_parse_from([
-            "doom-app",
-            "--wad",
-            "doom1.wad",
-            "--compat",
-            "banana",
-        ])
-        .unwrap_err();
+        let err = Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--compat", "banana"])
+            .unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("invalid value"), "{msg}");
         assert!(msg.contains("banana"), "{msg}");
