@@ -2108,12 +2108,16 @@ fn run_doom() -> Result<()> {
         std::fs::write(json_path, json_data)
             .with_context(|| format!("Failed to write JSON to {}", json_path.display()))?;
         use crossterm::style::Stylize;
-        println!(
-            "{} {} JSON report to {}",
-            "🌟".green(),
-            "Exported".green().bold(),
-            json_path.display().to_string().cyan()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} JSON report to {}",
+                "🌟".green(),
+                "Exported".green().bold(),
+                json_path.display().to_string().cyan()
+            );
+        } else {
+            println!("Exported JSON report to {}", json_path.display());
+        }
         return Ok(());
     }
 
@@ -2212,12 +2216,16 @@ fn run_doom() -> Result<()> {
             .ok_or_else(|| anyhow::anyhow!("--sfx-name is required when using --export-sfx-wav"))?;
         export_sfx_wav_for_name(&wad_stack, sfx_name, sfx_wav_path)?;
         use crossterm::style::Stylize;
-        println!(
-            "{} {} SFX WAV to {}",
-            "🔊".green(),
-            "Exported".green().bold(),
-            sfx_wav_path.display().to_string().cyan()
-        );
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} SFX WAV to {}",
+                "🔊".green(),
+                "Exported".green().bold(),
+                sfx_wav_path.display().to_string().cyan()
+            );
+        } else {
+            println!("Exported SFX WAV to {}", sfx_wav_path.display());
+        }
         return Ok(());
     }
 
