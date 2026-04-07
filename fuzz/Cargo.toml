@@ -87,3 +87,10 @@ bench = false
 
 [dependencies.doom-map]
 path = "../crates/doom-map"
+
+[[bin]]
+name = "fuzz_target_savegame"
+path = "fuzz_targets/fuzz_target_savegame.rs"
+test = false
+doc = false
+bench = false
