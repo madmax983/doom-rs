@@ -1,3 +1,35 @@
+//! JSON export functionality for map layouts.
+//!
+//! This module provides the [`export_map_to_json`] function, which
+//! serializes a high-level summary of a [`Level`]'s statistics
+//! and composition into a JSON string.
+//!
+//! # Examples
+//! ```
+//! use doom_map::Level;
+//! use doom_map::json::export_map_to_json;
+//! use doom_map::lumps::{Blockmap, Reject};
+//!
+//! // Create a minimal empty level
+//! let level = Level {
+//!     name: "E1M1".to_string(),
+//!     things: vec![],
+//!     linedefs: vec![],
+//!     sidedefs: vec![],
+//!     vertexes: vec![],
+//!     segs: vec![],
+//!     ssectors: vec![],
+//!     nodes: vec![],
+//!     sectors: vec![],
+//!     reject: Reject::parse_lump(&[], 0).unwrap(),
+//!     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+//! };
+//!
+//! let json_output = export_map_to_json(&level);
+//! assert!(json_output.contains(r#""name": "E1M1""#));
+//! assert!(json_output.contains(r#""sectors": 0"#));
+//! ```
+
 use crate::Level;
 
 /// Exports the level's basic layout and statistics to a JSON string.
