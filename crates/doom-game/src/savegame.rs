@@ -36,7 +36,9 @@ const SAVE_VERSION: u32 = 3;
 /// Supported binary savegame formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SaveFormat {
+    /// The project-native `DRS1` save format.
     DoomRs,
+    /// A vanilla Doom `.dsg` save header/payload boundary.
     VanillaDsg,
 }
 

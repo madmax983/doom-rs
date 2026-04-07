@@ -18,12 +18,19 @@ const SUPPORTED_VERSION: &str = "version 109";
 /// Parsed vanilla savegame header fields.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VanillaSaveHeader {
+    /// User-facing save description, null-padded to 24 bytes.
     pub description: [u8; DESCRIPTION_LEN],
+    /// Version string, typically `version 109`, null-padded to 16 bytes.
     pub version: [u8; VERSION_LEN],
+    /// Doom skill level encoded in the save header.
     pub skill: u8,
+    /// Episode number for shareware/Ultimate Doom style maps.
     pub episode: u8,
+    /// Map number within the episode.
     pub map: u8,
+    /// Per-player active flags from the fixed vanilla header.
     pub players_in_game: [u8; 4],
+    /// Elapsed level time stored as a 24-bit little-endian counter.
     pub level_time: u32,
 }
 

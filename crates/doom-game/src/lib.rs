@@ -29,7 +29,7 @@ pub mod player;
 pub mod projectile;
 pub mod random;
 pub mod savegame;
-pub mod savegame_vanilla;
+mod savegame_vanilla;
 pub mod sight;
 pub mod snapshot;
 pub mod sound;
