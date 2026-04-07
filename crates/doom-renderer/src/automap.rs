@@ -17,7 +17,7 @@
 //!   grid overlay, and thing markers via the [`AutomapCanvas`] trait bridge.
 //!
 //! # Automap colour palette
-//! The [`automap_colors`] module exposes classic Doom automap palette indices
+//! The `automap_colors` module exposes classic Doom automap palette indices
 //! as public constants.
 
 use doom_game::AutomapCanvas;
@@ -229,7 +229,7 @@ pub fn render_automap(
 /// Draw a grid overlay onto the framebuffer at the given map center and zoom.
 ///
 /// Grid lines are spaced at 128 map-unit intervals (the classic Doom grid).
-/// Uses [`automap_colors::GRID`] colour.
+/// Uses `automap_colors::GRID` colour.
 ///
 /// This is a standalone renderer-side helper; [`render_automap`] already draws
 /// a grid via the game-side logic.
@@ -241,7 +241,7 @@ pub fn draw_grid_on_fb(fb: &mut Framebuffer, center_x: f32, center_y: f32, zoom:
 /// Draw a directional player arrow onto the framebuffer at a screen position.
 ///
 /// The arrow is approximately 8 pixels long, pointing in `player_angle`.
-/// Uses [`automap_colors::PLAYER`] colour.
+/// Uses `automap_colors::PLAYER` colour.
 ///
 /// # Examples
 /// ```
@@ -901,7 +901,7 @@ mod tests {
     /// Draw a grid overlay onto the framebuffer at the given map center and zoom.
     ///
     /// Grid lines are spaced at 128 map-unit intervals (the classic Doom grid).
-    /// Uses [`automap_colors::GRID`] colour.
+    /// Uses `automap_colors::GRID` colour.
     ///
     /// This is a standalone renderer-side helper; [`render_automap`] already draws
     /// a grid via the game-side logic.
@@ -913,7 +913,7 @@ mod tests {
     /// Draw a directional player arrow onto the framebuffer at a screen position.
     ///
     /// The arrow is approximately 8 pixels long, pointing in `player_angle`.
-    /// Uses [`automap_colors::PLAYER`] colour.
+    /// Uses `automap_colors::PLAYER` colour.
     pub fn draw_player_arrow_on_fb(fb: &mut Framebuffer, sx: i32, sy: i32, player_angle: Bam) {
         let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
 
