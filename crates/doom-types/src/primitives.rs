@@ -127,6 +127,21 @@ impl SectorSpecial {
 pub struct SkillLevel(u8);
 
 impl SkillLevel {
+    /// Validates and constructs a `SkillLevel`.
+    ///
+    /// The Doom engine requires skill levels to be strictly bounded between 0 and 4.
+    /// This prevents out-of-bounds array access when querying skill-dependent tables,
+    /// such as entity spawn flags or skill-specific modifications. Returns `None` if
+    /// the provided value falls outside the classic 0-4 range.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::SkillLevel;
+    ///
+    /// // Valid skill level.
+    /// let skill = SkillLevel::new(2).unwrap();
+    /// assert_eq!(skill.raw(), 2);
+    /// ```
     #[inline]
     pub const fn new(v: u8) -> Option<Self> {
         if v <= 4 { Some(Self(v)) } else { None }
@@ -143,10 +158,15 @@ impl SkillLevel {
         self.0
     }
 
+    /// "I'm Too Young To Die" - The easiest difficulty, featuring reduced damage and doubled ammo.
     pub const ITYTD: Self = Self(0);
+    /// "Hey, Not Too Rough" - A gentle introduction, equivalent to normal monster placement with standard ammo.
     pub const HNTR: Self = Self(1);
+    /// "Hurt Me Plenty" - The default Doom experience, offering a balanced challenge.
     pub const HMP: Self = Self(2);
+    /// "Ultra-Violence" - For seasoned players, maximizing monster spawns and aggressiveness.
     pub const UV: Self = Self(3);
+    /// "Nightmare!" - A brutal, fast-paced challenge with respawning monsters and double ammo.
     pub const NM: Self = Self(4);
 }
 
@@ -169,6 +189,20 @@ impl SkillLevel {
 pub struct PlayerNum(u8);
 
 impl PlayerNum {
+    /// Validates and constructs a `PlayerNum`.
+    ///
+    /// The classic Doom engine supports a maximum of 4 concurrent players, indexed 0 through 3.
+    /// By enforcing this constraint at construction time, networking and multiplayer logic can
+    /// safely assume a valid player target. Returns `None` if `v > 3`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::PlayerNum;
+    ///
+    /// // Creating the host player (Player 1, index 0).
+    /// let player = PlayerNum::new(0).unwrap();
+    /// assert_eq!(player.raw(), 0);
+    /// ```
     #[inline]
     pub const fn new(v: u8) -> Option<Self> {
         if v <= 3 { Some(Self(v)) } else { None }
@@ -202,6 +236,19 @@ impl PlayerNum {
 pub struct Coord(pub i16);
 
 impl Coord {
+    /// Constructs a vertex `Coord` in map space.
+    ///
+    /// Doom maps exist on a strictly defined 16-bit grid. By explicitly wrapping the primitive `i16`,
+    /// this type signals the intent that the coordinate is part of the map geometry space.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_types::primitives::Coord;
+    ///
+    /// // Map coordinates are public fields.
+    /// let coord = Coord::new(1024);
+    /// assert_eq!(coord.0, 1024);
+    /// ```
     #[inline]
     pub const fn new(v: i16) -> Self {
         Self(v)
