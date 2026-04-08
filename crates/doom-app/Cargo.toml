@@ -25,6 +25,7 @@ thiserror     = { workspace = true }
 loom          = { version = "0.7", optional = true }
 log = "0.4.29"
 comfy-table = "7.2.2"
+strum = "0.28.0"
 
 [dev-dependencies]
 loom = "0.7"
