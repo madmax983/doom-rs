@@ -20,3 +20,7 @@
 
 **Learning:** `tick_mobj` handles transitioning a mobj's state when its tics reach zero. If the lookup for `next_state` returns `None` (e.g. invalid state index), it falls back to `StateNum::NULL`. The transition to `NULL` correctly removes the mobj because `p_set_mobj_state` returns `false` for `NULL`, but this fallback path was completely uncovered by tests.
 **Action:** When a fallback value like `StateNum::NULL` is provided in an `unwrap_or`, add a targeted unit test to ensure the fallback actually executes and does the right thing (e.g. removes the entity).
+
+## 2024-04-08 - Added Missing `StateNum::NULL` test
+**Learning:** Found uncovered branches related to the fallback `StateNum::NULL` handling in `tic.rs` when `unwrap_or(StateNum::NULL)` defaults.
+**Action:** Added targeted test cases `tick_mobj_with_invalid_next_state_removes_entity` and `advance_mobj_state_with_invalid_state_holds_forever` in `tic.rs` to reach 100% test coverage on state transitions.
