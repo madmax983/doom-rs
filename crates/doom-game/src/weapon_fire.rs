@@ -102,7 +102,7 @@ fn consume_ammo(gs: &mut GameState, weapon: WeaponType) -> bool {
     gs.player.use_ammo(ammo_type as usize, cost)
 }
 
-/// Get the player actor's facing angle, or return `None` if the handle is
+/// Calculates the absolute facing angle of the player's actor. Returns `None` if the handle is
 /// invalid.
 fn player_angle(gs: &GameState) -> Option<Bam> {
     gs.mobjslab.get(gs.player.handle).map(|mo| mo.angle)

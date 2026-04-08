@@ -543,7 +543,7 @@ impl MobjSlab {
         self.next_generation
     }
 
-    /// Get the handle at a specific slot index, if it is occupied.
+    /// Retrieves the live actor handle assigned to a specific generation slot index, ensuring the slot has not been recycled.
     pub fn handle_at(&self, index: u32) -> Option<MobjHandle> {
         match self.slots.get(index as usize)? {
             Slot::Occupied { generation, .. } => Some(MobjHandle {

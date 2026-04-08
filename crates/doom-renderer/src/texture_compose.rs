@@ -396,7 +396,7 @@ impl TextureDirectory {
         self.textures.is_empty()
     }
 
-    /// Get the PNAMES array.
+    /// Provides access to the PNAMES array, which maps integer patch IDs to string WAD lump names for texture composition.
     pub fn pnames(&self) -> &[[u8; 8]] {
         &self.pnames
     }

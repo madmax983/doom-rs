@@ -152,7 +152,7 @@ impl<S: Clone> RollbackManager<S> {
         self.rollback_tic.take()
     }
 
-    /// Get the inputs for `tic`.
+    /// Retrieves the recorded player inputs for the specified game `tic`, utilized to replay history during state rollbacks.
     ///
     /// Returns authoritative inputs if available, otherwise predicts by
     /// repeating the last known input for each player.

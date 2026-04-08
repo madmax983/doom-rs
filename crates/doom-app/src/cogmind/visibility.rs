@@ -82,7 +82,7 @@ impl VisibilityMap {
         }
     }
 
-    /// Get the visibility state of a sector.  Returns `Unexplored` for
+    /// Evaluates the current visibility status of a map sector in the Cogmind renderer. Returns `Unexplored` for
     /// out-of-bounds indices.
     #[must_use]
     pub fn get(&self, sector_idx: usize) -> SectorVisibility {
