@@ -4,6 +4,7 @@
 //! map element and entity in the top-down ASCII view.
 
 use doom_game::MobjKind;
+#[cfg(test)]
 use strum::IntoEnumIterator;
 
 // ---------------------------------------------------------------------------

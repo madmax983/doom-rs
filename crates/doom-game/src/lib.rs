@@ -130,3 +130,5 @@ pub use weapon_fire::{
     select_next_weapon, weapon_ammo_cost,
 };
 pub use weapons::{fire_weapon, player_can_fire, setup_psprites, tick_psprites};
+pub mod achievements;
+pub use achievements::*;
