@@ -39,120 +39,124 @@ use crate::{mobjinfo, states};
 // Action index constants
 // ---------------------------------------------------------------------------
 
-/// No action — state entry is silent.
-pub const ACTION_NONE: u8 = 0;
-/// `A_Look`: search for the player and transition to `see_state`.
-pub const ACTION_LOOK: u8 = 1;
-/// `A_Chase`: move toward current target using 8-direction grid movement.
-pub const ACTION_CHASE: u8 = 2;
-/// `A_PosAttack`: Trooper hitscan attack.
-pub const ACTION_POS_ATTACK: u8 = 3;
-/// `A_SPosAttack`: Sergeant 3-pellet shotgun burst.
-pub const ACTION_SPOS_ATTACK: u8 = 4;
-/// `A_TroopAttack`: Imp melee-or-hitscan attack.
-pub const ACTION_TROO_ATTACK: u8 = 5;
-/// `A_SargAttack`: Demon melee-only attack.
-pub const ACTION_SARG_ATTACK: u8 = 6;
-/// `A_Fall`: clear MF_SOLID and MF_COUNTKILL so corpses are passable.
-pub const ACTION_FALL: u8 = 7;
-/// `A_HeadAttack`: Cacodemon fireball projectile.
-pub const ACTION_HEAD_ATTACK: u8 = 8;
-/// `A_BruisAttack`: Baron/Hell Knight plasma ball projectile.
-pub const ACTION_BRUIS_ATTACK: u8 = 9;
-/// `A_FaceTarget`: snap angle to face current target.
-pub const ACTION_FACE_TARGET: u8 = 10;
-/// `A_CPosAttack`: Chaingunner hitscan attack.
-pub const ACTION_CPOS_ATTACK: u8 = 11;
-/// `A_CyberAttack`: Cyberdemon spawns a Rocket projectile.
-pub const ACTION_CYBER_ATTACK: u8 = 12;
-/// `A_SkelMissile`: Revenant spawns a Tracer projectile.
-pub const ACTION_SKEL_MISSILE: u8 = 13;
-/// `A_FatAttack1`: Mancubus fireball spread #1 (+FATSPREAD).
-pub const ACTION_FAT_ATTACK1: u8 = 14;
-/// `A_FatAttack2`: Mancubus fireball spread #2 (−FATSPREAD).
-pub const ACTION_FAT_ATTACK2: u8 = 15;
-/// `A_FatAttack3`: Mancubus fireball spread #3 (±FATSPREAD/2).
-pub const ACTION_FAT_ATTACK3: u8 = 16;
-/// `A_SkullAttack`: Lost Soul charge attack.
-pub const ACTION_SKULL_ATTACK: u8 = 17;
-/// `A_BspiAttack`: Arachnotron spawns ArachnotronPlasma.
-pub const ACTION_BSPI_ATTACK: u8 = 18;
-/// `A_SpidAttack`: Spider Mastermind hitscan attack.
-pub const ACTION_SPID_ATTACK: u8 = 19;
-/// `A_PainAttack`: Pain Elemental spawns Lost Soul.
-pub const ACTION_PAIN_ATTACK: u8 = 20;
-/// `A_Scream`: Play monster death sound on first death frame.
-pub const ACTION_SCREAM: u8 = 21;
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Action {
+    /// No action — state entry is silent.
+    NoneAction = 0,
+    /// `A_Look`: search for the player and transition to `see_state`.
+    Look = 1,
+    /// `A_Chase`: move toward current target using 8-direction grid movement.
+    Chase = 2,
+    /// `A_PosAttack`: Trooper hitscan attack.
+    PosAttack = 3,
+    /// `A_SPosAttack`: Sergeant 3-pellet shotgun burst.
+    SposAttack = 4,
+    /// `A_TroopAttack`: Imp melee-or-hitscan attack.
+    TrooAttack = 5,
+    /// `A_SargAttack`: Demon melee-only attack.
+    SargAttack = 6,
+    /// `A_Fall`: clear MF_SOLID and MF_COUNTKILL so corpses are passable.
+    Fall = 7,
+    /// `A_HeadAttack`: Cacodemon fireball projectile.
+    HeadAttack = 8,
+    /// `A_BruisAttack`: Baron/Hell Knight plasma ball projectile.
+    BruisAttack = 9,
+    /// `A_FaceTarget`: snap angle to face current target.
+    FaceTarget = 10,
+    /// `A_CPosAttack`: Chaingunner hitscan attack.
+    CposAttack = 11,
+    /// `A_CyberAttack`: Cyberdemon spawns a Rocket projectile.
+    CyberAttack = 12,
+    /// `A_SkelMissile`: Revenant spawns a Tracer projectile.
+    SkelMissile = 13,
+    /// `A_FatAttack1`: Mancubus fireball spread #1 (+FATSPREAD).
+    FatAttack1 = 14,
+    /// `A_FatAttack2`: Mancubus fireball spread #2 (−FATSPREAD).
+    FatAttack2 = 15,
+    /// `A_FatAttack3`: Mancubus fireball spread #3 (±FATSPREAD/2).
+    FatAttack3 = 16,
+    /// `A_SkullAttack`: Lost Soul charge attack.
+    SkullAttack = 17,
+    /// `A_BspiAttack`: Arachnotron spawns ArachnotronPlasma.
+    BspiAttack = 18,
+    /// `A_SpidAttack`: Spider Mastermind hitscan attack.
+    SpidAttack = 19,
+    /// `A_PainAttack`: Pain Elemental spawns Lost Soul.
+    PainAttack = 20,
+    /// `A_Scream`: Play monster death sound on first death frame.
+    Scream = 21,
+    /// `A_VileChase`: Chase with resurrection scan.
+    VileChase = 22,
+    /// `A_VileStart`: Begin attack — set tracer to target.
+    VileStart = 23,
+    /// `A_VileTarget`: Spawn fire column at target's position.
+    VileTarget = 24,
+    /// `A_VileAttack`: Deal 20 direct + 70 blast damage and upward thrust.
+    VileAttack = 25,
+    /// `A_Fire`: Fire column tracks the target's position each tic.
+    Fire = 26,
+    /// `A_BrainAwake`: Set brain_awake flag and play alert sound.
+    BrainAwake = 27,
+    /// `A_BrainSpit`: Spawn a BossCube aimed at the next spawn spot.
+    BrainSpit = 28,
+    /// `A_SpawnFly`: Cube arrives — spawn a random monster at destination.
+    SpawnFly = 29,
+    /// `A_BrainDie`: Trigger level exit.
+    BrainDie = 30,
+    /// `A_BrainScream`: Spawn 20 explosions across the brain sprite.
+    BrainScream = 31,
+    /// `A_BrainExplode`: Spawn a single explosion at a random position.
+    BrainExplode = 32,
+    /// `A_WeaponReady`: bob-ready player weapon loop, handles fire/switch input.
+    WeaponReady = 33,
+    /// `A_Lower`: lower the current player weapon toward the bottom of the screen.
+    Lower = 34,
+    /// `A_Raise`: raise the pending/current player weapon toward the ready position.
+    Raise = 35,
+    /// `A_GunFlash`: start the weapon's muzzle flash psprite.
+    GunFlash = 36,
+    /// `A_Punch`: fist attack.
+    Punch = 37,
+    /// `A_FirePistol`: pistol attack.
+    FirePistol = 38,
+    /// `A_FireShotgun`: shotgun attack.
+    FireShotgun = 39,
+    /// `A_FireShotgun2`: super shotgun attack.
+    FireShotgun2 = 40,
+    /// `A_FireCGun`: chaingun attack.
+    FireCgun = 41,
+    /// `A_FireMissile`: rocket launcher attack.
+    FireMissile = 42,
+    /// `A_FirePlasma`: plasma rifle attack.
+    FirePlasma = 43,
+    /// `A_BFGSound`: play the BFG windup sound before the projectile launches.
+    BfgSound = 44,
+    /// `A_FireBFG`: BFG projectile launch.
+    FireBfg = 45,
+    /// `A_Saw`: chainsaw attack.
+    Saw = 46,
+    /// `A_ReFire`: continue firing when the attack button remains held.
+    Refire = 47,
+    /// `A_CheckReload`: lower the weapon if it no longer has enough ammo.
+    CheckReload = 48,
+    /// `A_OpenShotgun2`: play the super shotgun open sound.
+    OpenShotgun2 = 49,
+    /// `A_LoadShotgun2`: play the super shotgun load sound.
+    LoadShotgun2 = 50,
+    /// `A_CloseShotgun2`: play the super shotgun close sound and optionally refire.
+    CloseShotgun2 = 51,
+    /// `A_Light0`: clear the player's weapon flash light bonus.
+    Light0 = 52,
+    /// `A_Light1`: set the player's weapon flash light bonus to level 1.
+    Light1 = 53,
+    /// `A_Light2`: set the player's weapon flash light bonus to level 2.
+    Light2 = 54,
+}
 
 // --- Arch-Vile special actions ---
-/// `A_VileChase`: Chase with resurrection scan.
-pub const ACTION_VILE_CHASE: u8 = 22;
-/// `A_VileStart`: Begin attack — set tracer to target.
-pub const ACTION_VILE_START: u8 = 23;
-/// `A_VileTarget`: Spawn fire column at target's position.
-pub const ACTION_VILE_TARGET: u8 = 24;
-/// `A_VileAttack`: Deal 20 direct + 70 blast damage and upward thrust.
-pub const ACTION_VILE_ATTACK: u8 = 25;
-/// `A_Fire`: Fire column tracks the target's position each tic.
-pub const ACTION_FIRE: u8 = 26;
 
 // --- Boss Brain (Icon of Sin) actions ---
-/// `A_BrainAwake`: Set brain_awake flag and play alert sound.
-pub const ACTION_BRAIN_AWAKE: u8 = 27;
-/// `A_BrainSpit`: Spawn a BossCube aimed at the next spawn spot.
-pub const ACTION_BRAIN_SPIT: u8 = 28;
-/// `A_SpawnFly`: Cube arrives — spawn a random monster at destination.
-pub const ACTION_SPAWN_FLY: u8 = 29;
-/// `A_BrainDie`: Trigger level exit.
-pub const ACTION_BRAIN_DIE: u8 = 30;
-/// `A_BrainScream`: Spawn 20 explosions across the brain sprite.
-pub const ACTION_BRAIN_SCREAM: u8 = 31;
-/// `A_BrainExplode`: Spawn a single explosion at a random position.
-pub const ACTION_BRAIN_EXPLODE: u8 = 32;
-/// `A_WeaponReady`: bob-ready player weapon loop, handles fire/switch input.
-pub const ACTION_WEAPON_READY: u8 = 33;
-/// `A_Lower`: lower the current player weapon toward the bottom of the screen.
-pub const ACTION_LOWER: u8 = 34;
-/// `A_Raise`: raise the pending/current player weapon toward the ready position.
-pub const ACTION_RAISE: u8 = 35;
-/// `A_GunFlash`: start the weapon's muzzle flash psprite.
-pub const ACTION_GUN_FLASH: u8 = 36;
-/// `A_Punch`: fist attack.
-pub const ACTION_PUNCH: u8 = 37;
-/// `A_FirePistol`: pistol attack.
-pub const ACTION_FIRE_PISTOL: u8 = 38;
-/// `A_FireShotgun`: shotgun attack.
-pub const ACTION_FIRE_SHOTGUN: u8 = 39;
-/// `A_FireShotgun2`: super shotgun attack.
-pub const ACTION_FIRE_SHOTGUN2: u8 = 40;
-/// `A_FireCGun`: chaingun attack.
-pub const ACTION_FIRE_CGUN: u8 = 41;
-/// `A_FireMissile`: rocket launcher attack.
-pub const ACTION_FIRE_MISSILE: u8 = 42;
-/// `A_FirePlasma`: plasma rifle attack.
-pub const ACTION_FIRE_PLASMA: u8 = 43;
-/// `A_BFGSound`: play the BFG windup sound before the projectile launches.
-pub const ACTION_BFG_SOUND: u8 = 44;
-/// `A_FireBFG`: BFG projectile launch.
-pub const ACTION_FIRE_BFG: u8 = 45;
-/// `A_Saw`: chainsaw attack.
-pub const ACTION_SAW: u8 = 46;
-/// `A_ReFire`: continue firing when the attack button remains held.
-pub const ACTION_REFIRE: u8 = 47;
-/// `A_CheckReload`: lower the weapon if it no longer has enough ammo.
-pub const ACTION_CHECK_RELOAD: u8 = 48;
-/// `A_OpenShotgun2`: play the super shotgun open sound.
-pub const ACTION_OPEN_SHOTGUN2: u8 = 49;
-/// `A_LoadShotgun2`: play the super shotgun load sound.
-pub const ACTION_LOAD_SHOTGUN2: u8 = 50;
-/// `A_CloseShotgun2`: play the super shotgun close sound and optionally refire.
-pub const ACTION_CLOSE_SHOTGUN2: u8 = 51;
-/// `A_Light0`: clear the player's weapon flash light bonus.
-pub const ACTION_LIGHT0: u8 = 52;
-/// `A_Light1`: set the player's weapon flash light bonus to level 1.
-pub const ACTION_LIGHT1: u8 = 53;
-/// `A_Light2`: set the player's weapon flash light bonus to level 2.
-pub const ACTION_LIGHT2: u8 = 54;
 
 // ---------------------------------------------------------------------------
 // Public dispatcher
@@ -192,41 +196,46 @@ fn get_alive_target_with_pos(
     Some((target, mo_x, mo_y))
 }
 
-pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level: Option<&Level>) {
+pub fn dispatch_action(
+    gs: &mut GameState,
+    handle: MobjHandle,
+    action: Action,
+    level: Option<&Level>,
+) {
     match action {
-        ACTION_NONE => {}
-        ACTION_LOOK => a_look(gs, handle, level),
-        ACTION_CHASE => a_chase(gs, handle, level),
-        ACTION_POS_ATTACK => a_pos_attack(gs, handle, level),
-        ACTION_SPOS_ATTACK => a_spos_attack(gs, handle, level),
-        ACTION_TROO_ATTACK => a_troo_attack(gs, handle, level),
-        ACTION_SARG_ATTACK => a_sarg_attack(gs, handle),
-        ACTION_FALL => a_fall(gs, handle),
-        ACTION_HEAD_ATTACK => a_head_attack(gs, handle),
-        ACTION_BRUIS_ATTACK => a_bruis_attack(gs, handle),
-        ACTION_FACE_TARGET => a_face_target(gs, handle),
-        ACTION_CPOS_ATTACK => a_cpos_attack(gs, handle, level),
-        ACTION_CYBER_ATTACK => a_cyber_attack(gs, handle),
-        ACTION_SKEL_MISSILE => a_skel_missile(gs, handle),
-        ACTION_FAT_ATTACK1 => a_fat_attack1(gs, handle),
-        ACTION_FAT_ATTACK2 => a_fat_attack2(gs, handle),
-        ACTION_FAT_ATTACK3 => a_fat_attack3(gs, handle),
-        ACTION_SKULL_ATTACK => a_skull_attack(gs, handle),
-        ACTION_BSPI_ATTACK => a_bspi_attack(gs, handle),
-        ACTION_SPID_ATTACK => a_spid_attack(gs, handle, level),
-        ACTION_PAIN_ATTACK => a_pain_attack(gs, handle),
-        ACTION_SCREAM => a_scream(gs, handle),
-        ACTION_VILE_CHASE => a_vile_chase(gs, handle, level),
-        ACTION_VILE_START => a_vile_start(gs, handle),
-        ACTION_VILE_TARGET => a_vile_target(gs, handle),
-        ACTION_VILE_ATTACK => a_vile_attack(gs, handle),
-        ACTION_FIRE => a_fire(gs, handle),
-        ACTION_BRAIN_AWAKE => a_brain_awake(gs),
-        ACTION_BRAIN_SPIT => a_brain_spit(gs, handle),
-        ACTION_SPAWN_FLY => a_spawn_fly(gs, handle),
-        ACTION_BRAIN_DIE => a_brain_die(gs),
-        ACTION_BRAIN_SCREAM => a_brain_scream(gs, handle),
-        ACTION_BRAIN_EXPLODE => a_brain_explode(gs, handle),
+        Action::NoneAction => {}
+        Action::Look => a_look(gs, handle, level),
+        Action::Chase => a_chase(gs, handle, level),
+        Action::PosAttack => a_pos_attack(gs, handle, level),
+        Action::SposAttack => a_spos_attack(gs, handle, level),
+        Action::TrooAttack => a_troo_attack(gs, handle, level),
+        Action::SargAttack => a_sarg_attack(gs, handle),
+        Action::Fall => a_fall(gs, handle),
+        Action::HeadAttack => a_head_attack(gs, handle),
+        Action::BruisAttack => a_bruis_attack(gs, handle),
+        Action::FaceTarget => a_face_target(gs, handle),
+        Action::CposAttack => a_cpos_attack(gs, handle, level),
+        Action::CyberAttack => a_cyber_attack(gs, handle),
+        Action::SkelMissile => a_skel_missile(gs, handle),
+        Action::FatAttack1 => a_fat_attack1(gs, handle),
+        Action::FatAttack2 => a_fat_attack2(gs, handle),
+        Action::FatAttack3 => a_fat_attack3(gs, handle),
+        Action::SkullAttack => a_skull_attack(gs, handle),
+        Action::BspiAttack => a_bspi_attack(gs, handle),
+        Action::SpidAttack => a_spid_attack(gs, handle, level),
+        Action::PainAttack => a_pain_attack(gs, handle),
+        Action::Scream => a_scream(gs, handle),
+        Action::VileChase => a_vile_chase(gs, handle, level),
+        Action::VileStart => a_vile_start(gs, handle),
+        Action::VileTarget => a_vile_target(gs, handle),
+        Action::VileAttack => a_vile_attack(gs, handle),
+        Action::Fire => a_fire(gs, handle),
+        Action::BrainAwake => a_brain_awake(gs),
+        Action::BrainSpit => a_brain_spit(gs, handle),
+        Action::SpawnFly => a_spawn_fly(gs, handle),
+        Action::BrainDie => a_brain_die(gs),
+        Action::BrainScream => a_brain_scream(gs, handle),
+        Action::BrainExplode => a_brain_explode(gs, handle),
         _ => {}
     }
 }
@@ -2298,7 +2307,7 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 100, 0);
         let see_sn = mobjinfo::MOBJINFO[MobjKind::Trooper as usize].see_state;
 
-        dispatch_action(&mut gs, trooper, ACTION_LOOK, None);
+        dispatch_action(&mut gs, trooper, Action::Look, None);
 
         let mo = gs.mobjslab.get(trooper).unwrap();
         assert_eq!(mo.target, gs.player.handle);
@@ -2315,7 +2324,7 @@ mod tests {
         // Kill the player.
         gs.mobjslab.get_mut(gs.player.handle).unwrap().health = 0;
 
-        dispatch_action(&mut gs, trooper, ACTION_LOOK, None);
+        dispatch_action(&mut gs, trooper, Action::Look, None);
 
         let mo = gs.mobjslab.get(trooper).unwrap();
         assert_eq!(
@@ -2335,7 +2344,7 @@ mod tests {
         // to sector 0. Without a level, we can't resolve sectors, so we need
         // to test this with p_check_sight_local fallback path.
         // Instead, test the direct call without level (uses fallback LOS).
-        dispatch_action(&mut gs, trooper, ACTION_LOOK, None);
+        dispatch_action(&mut gs, trooper, Action::Look, None);
 
         let mo = gs.mobjslab.get(trooper).unwrap();
         assert_eq!(mo.state, see_sn, "trooper should wake from LOS");
@@ -2348,7 +2357,7 @@ mod tests {
         gs.mobjslab.free(trooper);
 
         // Should not panic.
-        dispatch_action(&mut gs, trooper, ACTION_LOOK, None);
+        dispatch_action(&mut gs, trooper, Action::Look, None);
     }
 
     // -----------------------------------------------------------------------
@@ -2987,13 +2996,13 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, -100, 0);
         gs.mobjslab.get_mut(trooper).unwrap().target = gs.player.handle;
 
-        dispatch_action(&mut gs, trooper, ACTION_FACE_TARGET, None);
+        dispatch_action(&mut gs, trooper, Action::FaceTarget, None);
 
         let mo = gs.mobjslab.get(trooper).unwrap();
         // Should have turned to face east.
         assert!(
             mo.angle.0 < 0x2000_0000 || mo.angle.0 > 0xE000_0000,
-            "should face east after ACTION_FACE_TARGET"
+            "should face east after Action::FaceTarget"
         );
     }
 
@@ -3071,7 +3080,7 @@ mod tests {
             "MF_SCREAMED must not be set before A_Scream"
         );
 
-        dispatch_action(&mut gs, trooper, ACTION_SCREAM, None);
+        dispatch_action(&mut gs, trooper, Action::Scream, None);
 
         assert_ne!(
             gs.mobjslab.get(trooper).unwrap().flags & flags::MF_SCREAMED,
@@ -3080,8 +3089,8 @@ mod tests {
         );
     }
 
-    /// Verify that each original monster's first death frame carries ACTION_SCREAM
-    /// and second death frame carries ACTION_FALL — matching the vanilla state table.
+    /// Verify that each original monster's first death frame carries Action::Scream
+    /// and second death frame carries Action::Fall — matching the vanilla state table.
     #[test]
     fn die1_and_die2_actions_correct_for_all_original_monsters() {
         use crate::states::STATES;
@@ -3100,12 +3109,14 @@ mod tests {
         ];
         for &(die1, die2, name) in cases {
             assert_eq!(
-                STATES[die1 as usize].action, ACTION_SCREAM,
-                "{name} DIE1 must have ACTION_SCREAM"
+                STATES[die1 as usize].action,
+                Action::Scream,
+                "{name} DIE1 must have Action::Scream"
             );
             assert_eq!(
-                STATES[die2 as usize].action, ACTION_FALL,
-                "{name} DIE2 must have ACTION_FALL"
+                STATES[die2 as usize].action,
+                Action::Fall,
+                "{name} DIE2 must have Action::Fall"
             );
         }
     }
@@ -3123,7 +3134,7 @@ mod tests {
         );
 
         // Dispatch A_Fall directly.
-        dispatch_action(&mut gs, trooper, ACTION_FALL, None);
+        dispatch_action(&mut gs, trooper, Action::Fall, None);
 
         let mo = gs.mobjslab.get(trooper).unwrap();
         assert_eq!(mo.flags & flags::MF_SOLID, 0, "a_fall must clear MF_SOLID");
@@ -3139,7 +3150,7 @@ mod tests {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
         // No target set — must not panic.
-        dispatch_action(&mut gs, trooper, ACTION_POS_ATTACK, None);
+        dispatch_action(&mut gs, trooper, Action::PosAttack, None);
         // Health unchanged since we have no target to shoot.
         let mo = gs.mobjslab.get(trooper).unwrap();
         assert_eq!(mo.health, 20, "no target → no effect");
@@ -3580,21 +3591,6 @@ mod tests {
     }
 
     #[test]
-    fn dispatch_action_unknown_index_does_nothing() {
-        let mut gs = make_game_state();
-        let trooper = spawn_trooper(&mut gs, 100, 0);
-        let health_before = gs.mobjslab.get(trooper).unwrap().health;
-
-        dispatch_action(&mut gs, trooper, 255, None);
-
-        let health_after = gs.mobjslab.get(trooper).unwrap().health;
-        assert_eq!(
-            health_before, health_after,
-            "unknown action should be no-op"
-        );
-    }
-
-    #[test]
     fn xmove_ymove_nodir_is_zero() {
         assert_eq!(XMOVE[DI_NODIR as usize], Fixed16_16::ZERO);
         assert_eq!(YMOVE[DI_NODIR as usize], Fixed16_16::ZERO);
@@ -3638,70 +3634,70 @@ mod tests {
     fn dispatch_cpos_attack_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::Sergeant, 100, 0, 30);
-        dispatch_action(&mut gs, h, ACTION_CPOS_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::CposAttack, None);
     }
 
     #[test]
     fn dispatch_cyber_attack_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::Cyberdemon, 200, 0, 4000);
-        dispatch_action(&mut gs, h, ACTION_CYBER_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::CyberAttack, None);
     }
 
     #[test]
     fn dispatch_skel_missile_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::Revenant, 200, 0, 300);
-        dispatch_action(&mut gs, h, ACTION_SKEL_MISSILE, None);
+        dispatch_action(&mut gs, h, Action::SkelMissile, None);
     }
 
     #[test]
     fn dispatch_fat_attack1_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::Mancubus, 200, 0, 600);
-        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK1, None);
+        dispatch_action(&mut gs, h, Action::FatAttack1, None);
     }
 
     #[test]
     fn dispatch_fat_attack2_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::Mancubus, 200, 0, 600);
-        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK2, None);
+        dispatch_action(&mut gs, h, Action::FatAttack2, None);
     }
 
     #[test]
     fn dispatch_fat_attack3_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::Mancubus, 200, 0, 600);
-        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK3, None);
+        dispatch_action(&mut gs, h, Action::FatAttack3, None);
     }
 
     #[test]
     fn dispatch_skull_attack_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::LostSoul, 200, 0, 100);
-        dispatch_action(&mut gs, h, ACTION_SKULL_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::SkullAttack, None);
     }
 
     #[test]
     fn dispatch_bspi_attack_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::Arachnotron, 200, 0, 500);
-        dispatch_action(&mut gs, h, ACTION_BSPI_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::BspiAttack, None);
     }
 
     #[test]
     fn dispatch_spid_attack_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::SpiderMastermind, 200, 0, 3000);
-        dispatch_action(&mut gs, h, ACTION_SPID_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::SpidAttack, None);
     }
 
     #[test]
     fn dispatch_pain_attack_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::PainElemental, 200, 0, 400);
-        dispatch_action(&mut gs, h, ACTION_PAIN_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::PainAttack, None);
     }
 
     // --- Cyberdemon spawns Rocket ---
@@ -4015,16 +4011,16 @@ mod tests {
         let h = gs.mobjslab.alloc(mo);
 
         // None of these should panic.
-        dispatch_action(&mut gs, h, ACTION_CPOS_ATTACK, None);
-        dispatch_action(&mut gs, h, ACTION_CYBER_ATTACK, None);
-        dispatch_action(&mut gs, h, ACTION_SKEL_MISSILE, None);
-        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK1, None);
-        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK2, None);
-        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK3, None);
-        dispatch_action(&mut gs, h, ACTION_SKULL_ATTACK, None);
-        dispatch_action(&mut gs, h, ACTION_BSPI_ATTACK, None);
-        dispatch_action(&mut gs, h, ACTION_SPID_ATTACK, None);
-        dispatch_action(&mut gs, h, ACTION_PAIN_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::CposAttack, None);
+        dispatch_action(&mut gs, h, Action::CyberAttack, None);
+        dispatch_action(&mut gs, h, Action::SkelMissile, None);
+        dispatch_action(&mut gs, h, Action::FatAttack1, None);
+        dispatch_action(&mut gs, h, Action::FatAttack2, None);
+        dispatch_action(&mut gs, h, Action::FatAttack3, None);
+        dispatch_action(&mut gs, h, Action::SkullAttack, None);
+        dispatch_action(&mut gs, h, Action::BspiAttack, None);
+        dispatch_action(&mut gs, h, Action::SpidAttack, None);
+        dispatch_action(&mut gs, h, Action::PainAttack, None);
     }
 
     #[test]
@@ -4036,7 +4032,7 @@ mod tests {
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::Cyberdemon, 200, 0, 4000);
 
         let slab_len_before = gs.mobjslab.len();
-        dispatch_action(&mut gs, h, ACTION_CYBER_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::CyberAttack, None);
         // Cyberdemon should NOT spawn a rocket when target is dead.
         assert_eq!(
             gs.mobjslab.len(),
@@ -4052,14 +4048,14 @@ mod tests {
         gs.mobjslab.free(h);
 
         // None should panic.
-        dispatch_action(&mut gs, h, ACTION_CPOS_ATTACK, None);
-        dispatch_action(&mut gs, h, ACTION_CYBER_ATTACK, None);
-        dispatch_action(&mut gs, h, ACTION_SKEL_MISSILE, None);
-        dispatch_action(&mut gs, h, ACTION_FAT_ATTACK1, None);
-        dispatch_action(&mut gs, h, ACTION_SKULL_ATTACK, None);
-        dispatch_action(&mut gs, h, ACTION_BSPI_ATTACK, None);
-        dispatch_action(&mut gs, h, ACTION_SPID_ATTACK, None);
-        dispatch_action(&mut gs, h, ACTION_PAIN_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::CposAttack, None);
+        dispatch_action(&mut gs, h, Action::CyberAttack, None);
+        dispatch_action(&mut gs, h, Action::SkelMissile, None);
+        dispatch_action(&mut gs, h, Action::FatAttack1, None);
+        dispatch_action(&mut gs, h, Action::SkullAttack, None);
+        dispatch_action(&mut gs, h, Action::BspiAttack, None);
+        dispatch_action(&mut gs, h, Action::SpidAttack, None);
+        dispatch_action(&mut gs, h, Action::PainAttack, None);
     }
 
     // --- Constants ---
@@ -4082,38 +4078,38 @@ mod tests {
     #[test]
     fn action_constants_are_unique() {
         let constants = [
-            ACTION_NONE,
-            ACTION_LOOK,
-            ACTION_CHASE,
-            ACTION_POS_ATTACK,
-            ACTION_SPOS_ATTACK,
-            ACTION_TROO_ATTACK,
-            ACTION_SARG_ATTACK,
-            ACTION_FALL,
-            ACTION_HEAD_ATTACK,
-            ACTION_BRUIS_ATTACK,
-            ACTION_FACE_TARGET,
-            ACTION_CPOS_ATTACK,
-            ACTION_CYBER_ATTACK,
-            ACTION_SKEL_MISSILE,
-            ACTION_FAT_ATTACK1,
-            ACTION_FAT_ATTACK2,
-            ACTION_FAT_ATTACK3,
-            ACTION_SKULL_ATTACK,
-            ACTION_BSPI_ATTACK,
-            ACTION_SPID_ATTACK,
-            ACTION_PAIN_ATTACK,
-            ACTION_VILE_CHASE,
-            ACTION_VILE_START,
-            ACTION_VILE_TARGET,
-            ACTION_VILE_ATTACK,
-            ACTION_FIRE,
-            ACTION_BRAIN_AWAKE,
-            ACTION_BRAIN_SPIT,
-            ACTION_SPAWN_FLY,
-            ACTION_BRAIN_DIE,
-            ACTION_BRAIN_SCREAM,
-            ACTION_BRAIN_EXPLODE,
+            Action::NoneAction,
+            Action::Look,
+            Action::Chase,
+            Action::PosAttack,
+            Action::SposAttack,
+            Action::TrooAttack,
+            Action::SargAttack,
+            Action::Fall,
+            Action::HeadAttack,
+            Action::BruisAttack,
+            Action::FaceTarget,
+            Action::CposAttack,
+            Action::CyberAttack,
+            Action::SkelMissile,
+            Action::FatAttack1,
+            Action::FatAttack2,
+            Action::FatAttack3,
+            Action::SkullAttack,
+            Action::BspiAttack,
+            Action::SpidAttack,
+            Action::PainAttack,
+            Action::VileChase,
+            Action::VileStart,
+            Action::VileTarget,
+            Action::VileAttack,
+            Action::Fire,
+            Action::BrainAwake,
+            Action::BrainSpit,
+            Action::SpawnFly,
+            Action::BrainDie,
+            Action::BrainScream,
+            Action::BrainExplode,
         ];
         for i in 0..constants.len() {
             for j in (i + 1)..constants.len() {
@@ -4133,28 +4129,28 @@ mod tests {
     fn dispatch_vile_chase_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
-        dispatch_action(&mut gs, h, ACTION_VILE_CHASE, None);
+        dispatch_action(&mut gs, h, Action::VileChase, None);
     }
 
     #[test]
     fn dispatch_vile_start_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
-        dispatch_action(&mut gs, h, ACTION_VILE_START, None);
+        dispatch_action(&mut gs, h, Action::VileStart, None);
     }
 
     #[test]
     fn dispatch_vile_target_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
-        dispatch_action(&mut gs, h, ACTION_VILE_TARGET, None);
+        dispatch_action(&mut gs, h, Action::VileTarget, None);
     }
 
     #[test]
     fn dispatch_vile_attack_does_not_panic() {
         let mut gs = make_game_state();
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
-        dispatch_action(&mut gs, h, ACTION_VILE_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::VileAttack, None);
     }
 
     #[test]
@@ -4170,7 +4166,7 @@ mod tests {
         fire.health = 1;
         fire.tracer = gs.player.handle;
         let h = gs.mobjslab.alloc(fire);
-        dispatch_action(&mut gs, h, ACTION_FIRE, None);
+        dispatch_action(&mut gs, h, Action::Fire, None);
     }
 
     #[test]
@@ -4582,7 +4578,7 @@ mod tests {
     fn dispatch_brain_awake_does_not_panic() {
         let mut gs = make_game_state();
         let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
-        dispatch_action(&mut gs, brain, ACTION_BRAIN_AWAKE, None);
+        dispatch_action(&mut gs, brain, Action::BrainAwake, None);
         assert!(gs.brain_awake);
     }
 
@@ -4590,28 +4586,28 @@ mod tests {
     fn dispatch_brain_spit_does_not_panic() {
         let mut gs = make_game_state();
         let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
-        dispatch_action(&mut gs, brain, ACTION_BRAIN_SPIT, None);
+        dispatch_action(&mut gs, brain, Action::BrainSpit, None);
     }
 
     #[test]
     fn dispatch_brain_die_does_not_panic() {
         let mut gs = make_game_state();
         let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
-        dispatch_action(&mut gs, brain, ACTION_BRAIN_DIE, None);
+        dispatch_action(&mut gs, brain, Action::BrainDie, None);
     }
 
     #[test]
     fn dispatch_brain_scream_does_not_panic() {
         let mut gs = make_game_state();
         let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
-        dispatch_action(&mut gs, brain, ACTION_BRAIN_SCREAM, None);
+        dispatch_action(&mut gs, brain, Action::BrainScream, None);
     }
 
     #[test]
     fn dispatch_brain_explode_does_not_panic() {
         let mut gs = make_game_state();
         let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
-        dispatch_action(&mut gs, brain, ACTION_BRAIN_EXPLODE, None);
+        dispatch_action(&mut gs, brain, Action::BrainExplode, None);
     }
 
     // --- New action no-target / stale-handle edge cases ---
@@ -4630,9 +4626,9 @@ mod tests {
         let h = gs.mobjslab.alloc(mo);
 
         // None of these should panic.
-        dispatch_action(&mut gs, h, ACTION_VILE_START, None);
-        dispatch_action(&mut gs, h, ACTION_VILE_TARGET, None);
-        dispatch_action(&mut gs, h, ACTION_VILE_ATTACK, None);
+        dispatch_action(&mut gs, h, Action::VileStart, None);
+        dispatch_action(&mut gs, h, Action::VileTarget, None);
+        dispatch_action(&mut gs, h, Action::VileAttack, None);
     }
 
     #[test]
@@ -4642,7 +4638,7 @@ mod tests {
         let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
 
         let count_before = gs.mobjslab.len();
-        dispatch_action(&mut gs, vile, ACTION_VILE_TARGET, None);
+        dispatch_action(&mut gs, vile, Action::VileTarget, None);
         assert_eq!(
             gs.mobjslab.len(),
             count_before,

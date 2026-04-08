@@ -237,7 +237,7 @@ pub struct MobjStateEntry {
     /// Next state when `tics` reaches zero.
     pub next_state: StateNum,
     /// Action function index (0 = none; dispatched in `actions.rs`).
-    pub action: u8,
+    pub action: crate::actions::Action,
 }
 
 impl MobjStateEntry {
@@ -250,7 +250,7 @@ impl MobjStateEntry {
         frame: 0,
         tics: -1,
         next_state: StateNum::NULL,
-        action: 0,
+        action: crate::actions::Action::NoneAction,
     };
 }
 
