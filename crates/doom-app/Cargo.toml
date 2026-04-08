@@ -29,6 +29,7 @@ comfy-table = "7.2.2"
 [dev-dependencies]
 loom = "0.7"
 tempfile = "3.10"
+strum = "0.28.0"
 
 [features]
 loom = ["dep:loom", "doom-audio/loom"]
