@@ -2212,4 +2212,32 @@ mod tests {
             "use_down must clear when the key is released"
         );
     }
+
+    #[test]
+    fn tick_mobj_with_invalid_next_state_removes_entity() {
+        let mut gs = make_game_state();
+        let trooper = make_trooper(crate::mobj::StateNum(65535), 1);
+        let handle = gs.mobjslab.alloc(trooper);
+
+        let result = super::tick_mobj(&mut gs, handle, None);
+        assert!(
+            matches!(result, super::TickMobjResult::Remove),
+            "invalid state fallback to StateNum::NULL must return Remove"
+        );
+    }
+
+    #[test]
+    fn advance_mobj_state_with_invalid_state_holds_forever() {
+        let mut gs = make_game_state();
+        let trooper = make_trooper(crate::mobj::StateNum(65535), 1);
+        let handle = gs.mobjslab.alloc(trooper);
+
+        gs.advance_mobj_state(handle, None);
+
+        let mo = gs.mobjslab.get(handle).unwrap();
+        assert_eq!(
+            mo.tics, -1,
+            "advance_mobj_state falling back to StateNum::NULL should hold the state forever (-1 tics)"
+        );
+    }
 }
