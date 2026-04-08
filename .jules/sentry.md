@@ -20,3 +20,6 @@
 
 **Learning:** `tick_mobj` handles transitioning a mobj's state when its tics reach zero. If the lookup for `next_state` returns `None` (e.g. invalid state index), it falls back to `StateNum::NULL`. The transition to `NULL` correctly removes the mobj because `p_set_mobj_state` returns `false` for `NULL`, but this fallback path was completely uncovered by tests.
 **Action:** When a fallback value like `StateNum::NULL` is provided in an `unwrap_or`, add a targeted unit test to ensure the fallback actually executes and does the right thing (e.g. removes the entity).
+## 2026-04-08 - Fix flaky modifier sampling tests in doom-tui
+**Learning:** In `doom-tui/src/event_loop.rs`, `MODIFIER_SAMPLE_COUNT` is a global atomic. Tests that trigger `sampled_modifier_snapshot` must acquire `MODIFIER_COUNT_LOCK` to prevent race conditions during parallel execution.
+**Action:** Always acquire `MODIFIER_COUNT_LOCK` in tests simulating tics (`tick_turn_based`, `drain_ready_tics`, `poll_events`) that read global modifier state.
