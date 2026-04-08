@@ -49,7 +49,7 @@ impl Framebuffer {
         }
     }
 
-    /// Get the palette index at `(x, y)`. Returns `None` if out of bounds.
+    /// Retrieves the mapped palette color index at the given coordinate. Returns `None` if the requested pixel falls outside the active rendering bounds.
     #[inline]
     pub fn get_pixel(&self, x: usize, y: usize) -> Option<u8> {
         if x < FB_WIDTH && y < FB_HEIGHT {

@@ -210,7 +210,7 @@ impl GenmidiBank {
         Ok(Self { instruments })
     }
 
-    /// Get the instrument for a GM program number (0–174).
+    /// Resolves the synthesizer instrument configuration associated with a standard General MIDI program number (0–174).
     ///
     /// Out-of-range indices are clamped to the last valid index (174) —
     /// this method never panics.

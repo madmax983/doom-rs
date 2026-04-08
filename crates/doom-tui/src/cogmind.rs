@@ -80,7 +80,7 @@ impl CogmindFrame {
         }
     }
 
-    /// Get the cell at `(x, y)`, or `None` if out of bounds.
+    /// Retrieves the glyph and styling of the cell at the provided grid coordinate. Returns `None` if out of bounds.
     #[must_use]
     pub fn get(&self, x: u16, y: u16) -> Option<&CogmindCell> {
         if x < self.width && y < self.height {

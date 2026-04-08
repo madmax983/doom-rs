@@ -182,7 +182,7 @@ pub trait AutomapCanvas {
     /// Coordinates outside the valid range should be silently ignored.
     fn set_pixel(&mut self, x: i32, y: i32, color: u8);
 
-    /// Get the pixel at `(x, y)`, or `None` if out of bounds.
+    /// Retrieves the color index of the pixel at the specified automap coordinate. Returns `None` if the coordinates are out of bounds.
     fn get_pixel(&self, x: i32, y: i32) -> Option<u8>;
 
     /// Fill the entire canvas with the given palette index.
