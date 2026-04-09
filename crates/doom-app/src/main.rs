@@ -198,6 +198,10 @@ struct Args {
     #[arg(long)]
     map_stats: bool,
 
+    /// Find the shortest topological path between two sectors. Provide as "START,END" (e.g. "0,5").
+    #[arg(long)]
+    pathfind: Option<String>,
+
     /// Run tactical analysis on the map topology and print chokepoints and isolated areas.
     #[arg(long)]
     analyze: bool,
@@ -2360,6 +2364,27 @@ fn run_doom() -> Result<()> {
                 ]);
             }
             println!("{table}");
+        }
+        return Ok(());
+    }
+
+    if let Some(path_str) = &args.pathfind {
+        let parts: Vec<&str> = path_str.split(',').collect();
+        if parts.len() == 2 {
+            if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+                let graph = doom_map::SectorGraph::build(&level);
+                if let Some(path) = graph.shortest_path(start, end) {
+                    println!("Path found: {:?}", path);
+                } else {
+                    println!("No path found between sector {} and sector {}", start, end);
+                }
+            } else {
+                println!(
+                    "Invalid sector indices. Please provide two integers separated by a comma."
+                );
+            }
+        } else {
+            println!("Invalid format. Please use START,END (e.g. 0,5).");
         }
         return Ok(());
     }
@@ -4888,6 +4913,14 @@ mod tests {
             9,
             "sound ripples must spawn 9 particles"
         );
+    }
+
+    #[test]
+    fn cli_args_parse_pathfind() {
+        let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--pathfind", "0,5"]);
+        assert!(args.is_ok(), "args with --pathfind must parse successfully");
+        let args = args.unwrap();
+        assert_eq!(args.pathfind.unwrap(), "0,5");
     }
 
     #[test]
