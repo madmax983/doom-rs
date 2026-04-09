@@ -1965,7 +1965,7 @@ fn activate_floor_lower_single_typed(
 // ---------------------------------------------------------------------------
 
 /// Enqueue a door mover that opens and optionally auto-closes.
-fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: bool) {
+pub fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, behavior: crate::linedef_dispatch::DoorBehavior) {
     let sector = match level.sectors.get(sector_idx) {
         Some(s) => s,
         None => return,
@@ -1989,7 +1989,7 @@ fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: b
         current_height: sector.ceil_height,
         speed: DOOR_SPEED,
         is_ceiling: true,
-        wait_tics: if auto_close { DOOR_WAIT } else { -1 },
+        wait_tics: if behavior == crate::linedef_dispatch::DoorBehavior::OpenWaitClose { DOOR_WAIT } else { -1 },
         countdown: -1,
         reopen_height: 0,
         reopen_countdown: -1,
@@ -2024,12 +2024,12 @@ pub fn monster_activate_door_linedef(
         return false;
     }
 
-    open_door(gs, level, sector_idx, auto_close);
+    open_door(gs, level, sector_idx, if auto_close { crate::linedef_dispatch::DoorBehavior::OpenWaitClose } else { crate::linedef_dispatch::DoorBehavior::OpenStay });
     true
 }
 
 /// Enqueue a door mover that closes a door.
-fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
+pub fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
     let sector = match level.sectors.get(sector_idx) {
         Some(s) => s,
         None => return,
@@ -2093,7 +2093,7 @@ fn close_wait_open_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
 /// Enqueue a blazing (fast) door mover that opens and optionally auto-closes.
 ///
 /// Same as `open_door` but with `BLAZING_DOOR_SPEED` (8 units/tic).
-fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: bool) {
+pub fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, behavior: crate::linedef_dispatch::DoorBehavior) {
     let sector = match level.sectors.get(sector_idx) {
         Some(s) => s,
         None => return,
@@ -2116,7 +2116,7 @@ fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_
         current_height: sector.ceil_height,
         speed: BLAZING_DOOR_SPEED,
         is_ceiling: true,
-        wait_tics: if auto_close { DOOR_WAIT } else { -1 },
+        wait_tics: if behavior == crate::linedef_dispatch::DoorBehavior::OpenWaitClose { DOOR_WAIT } else { -1 },
         countdown: -1,
         reopen_height: 0,
         reopen_countdown: -1,
@@ -2124,7 +2124,7 @@ fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_
 }
 
 /// Enqueue a blazing (fast) door mover that closes a door.
-fn close_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
+pub fn close_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
     let sector = match level.sectors.get(sector_idx) {
         Some(s) => s,
         None => return,
@@ -2316,7 +2316,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 return;
             };
             let sector_idx = sd.sector as usize;
-            open_door(gs, level, sector_idx, false);
+            open_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenStay);
         }
 
         // --- Type 29: close door (animated) ---
@@ -2347,7 +2347,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, true);
+                open_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenWaitClose);
             }
         }
         27 => {
@@ -2359,7 +2359,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, true);
+                open_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenWaitClose);
             }
         }
         28 => {
@@ -2371,7 +2371,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, true);
+                open_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenWaitClose);
             }
         }
 
@@ -2385,7 +2385,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
             {
-                open_door(gs, level, idx, false);
+                open_door(gs, level, idx, crate::linedef_dispatch::DoorBehavior::OpenStay);
             }
         }
 
@@ -3014,7 +3014,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
             {
-                open_blazing_door(gs, level, idx, true);
+                open_blazing_door(gs, level, idx, crate::linedef_dispatch::DoorBehavior::OpenWaitClose);
             }
         }
 
@@ -3028,7 +3028,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
             {
-                open_blazing_door(gs, level, idx, false);
+                open_blazing_door(gs, level, idx, crate::linedef_dispatch::DoorBehavior::OpenStay);
             }
         }
 
@@ -3052,7 +3052,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 return;
             };
             let sector_idx = sd.sector as usize;
-            open_blazing_door(gs, level, sector_idx, true);
+            open_blazing_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenWaitClose);
         }
 
         // Type 109: W1 Blazing door open-stay.
@@ -3061,7 +3061,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 return;
             };
             let sector_idx = sd.sector as usize;
-            open_blazing_door(gs, level, sector_idx, false);
+            open_blazing_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenStay);
         }
 
         // Type 110: W1 Blazing door close.
@@ -3086,7 +3086,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, false);
+                open_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenStay);
             }
         }
 
@@ -3099,7 +3099,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_blazing_door(gs, level, sector_idx, false);
+                open_blazing_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenStay);
             }
         }
 
@@ -3112,7 +3112,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, false);
+                open_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenStay);
             }
         }
 
@@ -3125,7 +3125,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_blazing_door(gs, level, sector_idx, false);
+                open_blazing_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenStay);
             }
         }
 
@@ -3138,7 +3138,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, false);
+                open_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenStay);
             }
         }
 
@@ -3151,7 +3151,7 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_blazing_door(gs, level, sector_idx, false);
+                open_blazing_door(gs, level, sector_idx, crate::linedef_dispatch::DoorBehavior::OpenStay);
             }
         }
 

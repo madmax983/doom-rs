@@ -871,15 +871,15 @@ fn door_by_tag_or_back(
             None => return,
         };
         match speed {
-            DoorSpeed::Blazing => open_blazing_door_helper(gs, level, sector_idx, behavior),
-            DoorSpeed::Normal => open_door_helper(gs, level, sector_idx, behavior),
+            DoorSpeed::Blazing => crate::specials::open_blazing_door(gs, level, sector_idx, behavior),
+            DoorSpeed::Normal => crate::specials::open_door(gs, level, sector_idx, behavior),
         }
     } else {
         let indices = sectors_by_tag(level, tag);
         for idx in indices {
             match speed {
-                DoorSpeed::Blazing => open_blazing_door_helper(gs, level, idx, behavior),
-                DoorSpeed::Normal => open_door_helper(gs, level, idx, behavior),
+                DoorSpeed::Blazing => crate::specials::open_blazing_door(gs, level, idx, behavior),
+                DoorSpeed::Normal => crate::specials::open_door(gs, level, idx, behavior),
             }
         }
     }
@@ -907,16 +907,16 @@ fn close_door_by_tag_or_back(
             None => return,
         };
         if speed == DoorSpeed::Blazing {
-            close_blazing_door_helper(gs, level, sector_idx);
+            crate::specials::close_blazing_door(gs, level, sector_idx);
         } else {
-            close_door_helper(gs, level, sector_idx);
+            crate::specials::close_door(gs, level, sector_idx);
         }
     } else {
         let indices = sectors_by_tag(level, tag);
         for idx in indices {
             match speed {
-                DoorSpeed::Blazing => close_blazing_door_helper(gs, level, idx),
-                DoorSpeed::Normal => close_door_helper(gs, level, idx),
+                DoorSpeed::Blazing => crate::specials::close_blazing_door(gs, level, idx),
+                DoorSpeed::Normal => crate::specials::close_door(gs, level, idx),
             }
         }
     }
@@ -928,68 +928,6 @@ fn close_door_by_tag_or_back(
 
 /// Door speed in map units per tic.
 const DOOR_SPEED: i16 = 2;
-/// Blazing door speed.
-const BLAZING_DOOR_SPEED: i16 = 8;
-/// Door wait time (tics).
-const DOOR_WAIT: i32 = 120;
-
-fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavior: DoorBehavior) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
-    };
-    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
-    if gs
-        .movers
-        .active_doors
-        .iter()
-        .any(|d| d.sector == sector_idx)
-    {
-        return;
-    }
-    gs.movers.active_doors.push(crate::state::DoorMover {
-        sector: sector_idx,
-        target_height: target,
-        current_height: sector.ceil_height,
-        speed: DOOR_SPEED,
-        is_ceiling: true,
-        wait_tics: if behavior == DoorBehavior::OpenWaitClose {
-            DOOR_WAIT
-        } else {
-            -1
-        },
-        countdown: -1,
-        reopen_height: 0,
-        reopen_countdown: -1,
-    });
-}
-
-fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
-    };
-    let target = sector.floor_height;
-    if gs
-        .movers
-        .active_doors
-        .iter()
-        .any(|d| d.sector == sector_idx)
-    {
-        return;
-    }
-    gs.movers.active_doors.push(crate::state::DoorMover {
-        sector: sector_idx,
-        target_height: target,
-        current_height: sector.ceil_height,
-        speed: -DOOR_SPEED,
-        is_ceiling: true,
-        wait_tics: -1,
-        countdown: -1,
-        reopen_height: 0,
-        reopen_countdown: -1,
-    });
-}
 
 /// Close a door then reopen it after 30 s (types 16 / 76).
 fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
@@ -1015,69 +953,6 @@ fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) 
         wait_tics: -1,
         countdown: -1,
         reopen_height: reopen_h,
-        reopen_countdown: -1,
-    });
-}
-
-fn open_blazing_door_helper(
-    gs: &mut GameState,
-    level: &Level,
-    sector_idx: usize,
-    behavior: DoorBehavior,
-) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
-    };
-    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
-    if gs
-        .movers
-        .active_doors
-        .iter()
-        .any(|d| d.sector == sector_idx)
-    {
-        return;
-    }
-    gs.movers.active_doors.push(crate::state::DoorMover {
-        sector: sector_idx,
-        target_height: target,
-        current_height: sector.ceil_height,
-        speed: BLAZING_DOOR_SPEED,
-        is_ceiling: true,
-        wait_tics: if behavior == DoorBehavior::OpenWaitClose {
-            DOOR_WAIT
-        } else {
-            -1
-        },
-        countdown: -1,
-        reopen_height: 0,
-        reopen_countdown: -1,
-    });
-}
-
-fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
-    };
-    let target = sector.floor_height;
-    if gs
-        .movers
-        .active_doors
-        .iter()
-        .any(|d| d.sector == sector_idx)
-    {
-        return;
-    }
-    gs.movers.active_doors.push(crate::state::DoorMover {
-        sector: sector_idx,
-        target_height: target,
-        current_height: sector.ceil_height,
-        speed: -BLAZING_DOOR_SPEED,
-        is_ceiling: true,
-        wait_tics: -1,
-        countdown: -1,
-        reopen_height: 0,
         reopen_countdown: -1,
     });
 }
