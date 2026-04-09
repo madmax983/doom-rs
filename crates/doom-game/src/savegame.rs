@@ -1195,6 +1195,11 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
         found
     };
 
+    // Havoc 👺: Defend against corrupted player_handle!
+    if mobjslab.get(player_handle).is_none() {
+        return Err(SaveError::Truncated);
+    }
+
     // Build the GameState.
     let mut state = GameState::new(&level_name_str);
     state.tic_num = tic_num;
