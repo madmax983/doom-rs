@@ -25,6 +25,53 @@ pub enum LockedDoorColor {
     Yellow,
 }
 
+#[test]
+fn test_locked_door_color_variants() {
+    assert_eq!(LockedDoorColor::Blue, LockedDoorColor::Blue);
+    assert_eq!(LockedDoorColor::Red, LockedDoorColor::Red);
+    assert_eq!(LockedDoorColor::Yellow, LockedDoorColor::Yellow);
+}
+
+#[test]
+fn test_sound_request_variants() {
+    let handle = MobjHandle {
+        index: 1,
+        generation: 1,
+    };
+    let coord1 = doom_types::Fixed16_16::from_int(10);
+    let coord2 = doom_types::Fixed16_16::from_int(20);
+
+    let wake = SoundRequest::MonsterWake(MobjKind::Imp, handle, coord1, coord2);
+    assert!(matches!(wake, SoundRequest::MonsterWake(..)));
+
+    let die = SoundRequest::MonsterDie(MobjKind::Demon, handle, coord1, coord2);
+    assert!(matches!(die, SoundRequest::MonsterDie(..)));
+
+    let attack = SoundRequest::MonsterAttack(MobjKind::Cacodemon, handle, coord1, coord2);
+    assert!(matches!(attack, SoundRequest::MonsterAttack(..)));
+
+    let fire = SoundRequest::PlayerWeaponFire(crate::player::WeaponType::Shotgun);
+    assert!(matches!(fire, SoundRequest::PlayerWeaponFire(..)));
+
+    let open = SoundRequest::PlayerSuperShotgunOpen;
+    assert!(matches!(open, SoundRequest::PlayerSuperShotgunOpen));
+
+    let load = SoundRequest::PlayerSuperShotgunLoad;
+    assert!(matches!(load, SoundRequest::PlayerSuperShotgunLoad));
+
+    let close = SoundRequest::PlayerSuperShotgunClose;
+    assert!(matches!(close, SoundRequest::PlayerSuperShotgunClose));
+
+    let pdie = SoundRequest::PlayerDie;
+    assert!(matches!(pdie, SoundRequest::PlayerDie));
+
+    let fail = SoundRequest::PlayerUseFail;
+    assert!(matches!(fail, SoundRequest::PlayerUseFail));
+
+    let locked = SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red);
+    assert!(matches!(locked, SoundRequest::PlayerUseLockedDoor(..)));
+}
+
 /// A sound event emitted by the game simulation.
 ///
 /// The app (doom-app) drains `GameState::sound_queue` each tic and maps each
@@ -971,5 +1018,52 @@ mod tests {
             }
         }
         assert!(found_neg && found_pos);
+    }
+
+    #[test]
+    fn test_locked_door_color_variants() {
+        assert_eq!(LockedDoorColor::Blue, LockedDoorColor::Blue);
+        assert_eq!(LockedDoorColor::Red, LockedDoorColor::Red);
+        assert_eq!(LockedDoorColor::Yellow, LockedDoorColor::Yellow);
+    }
+
+    #[test]
+    fn test_sound_request_variants() {
+        let handle = MobjHandle {
+            index: 1,
+            generation: 1,
+        };
+        let coord1 = doom_types::Fixed16_16::from_int(10);
+        let coord2 = doom_types::Fixed16_16::from_int(20);
+
+        let wake = SoundRequest::MonsterWake(MobjKind::Imp, handle, coord1, coord2);
+        assert!(matches!(wake, SoundRequest::MonsterWake(..)));
+
+        let die = SoundRequest::MonsterDie(MobjKind::Demon, handle, coord1, coord2);
+        assert!(matches!(die, SoundRequest::MonsterDie(..)));
+
+        let attack = SoundRequest::MonsterAttack(MobjKind::Cacodemon, handle, coord1, coord2);
+        assert!(matches!(attack, SoundRequest::MonsterAttack(..)));
+
+        let fire = SoundRequest::PlayerWeaponFire(crate::player::WeaponType::Shotgun);
+        assert!(matches!(fire, SoundRequest::PlayerWeaponFire(..)));
+
+        let open = SoundRequest::PlayerSuperShotgunOpen;
+        assert!(matches!(open, SoundRequest::PlayerSuperShotgunOpen));
+
+        let load = SoundRequest::PlayerSuperShotgunLoad;
+        assert!(matches!(load, SoundRequest::PlayerSuperShotgunLoad));
+
+        let close = SoundRequest::PlayerSuperShotgunClose;
+        assert!(matches!(close, SoundRequest::PlayerSuperShotgunClose));
+
+        let pdie = SoundRequest::PlayerDie;
+        assert!(matches!(pdie, SoundRequest::PlayerDie));
+
+        let fail = SoundRequest::PlayerUseFail;
+        assert!(matches!(fail, SoundRequest::PlayerUseFail));
+
+        let locked = SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red);
+        assert!(matches!(locked, SoundRequest::PlayerUseLockedDoor(..)));
     }
 }

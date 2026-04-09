@@ -4,7 +4,6 @@
 //! map element and entity in the top-down ASCII view.
 
 use doom_game::MobjKind;
-use strum::IntoEnumIterator;
 
 // ---------------------------------------------------------------------------
 // Tile types
@@ -642,6 +641,7 @@ mod tests {
 
     #[test]
     fn all_mobj_kinds_have_glyphs() {
+        use strum::IntoEnumIterator;
         // Ensure every MobjKind variant produces a glyph without panicking.
         for kind in MobjKind::iter() {
             let _g = entity_glyph(kind, 100);
