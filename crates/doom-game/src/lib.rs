@@ -62,6 +62,7 @@ pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_
 pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
+pub use doom_types::mobj_kind::MobjKind;
 pub use doom_types::{TicCmd, bt};
 pub use face::{FaceDir, FaceKind, FaceState, face_patch_name, health_tier};
 pub use intermission::{IntermissionStats, par_time};
@@ -70,7 +71,7 @@ pub use linedef_dispatch::{
     linedef_effect,
 };
 pub use menu::{GameMenu, MenuAction, MenuItem, MenuPage, MenuResult, TitlePhase, TitleScreen};
-pub use mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum, flags};
+pub use mobj::{Mobj, MobjHandle, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_slide_move, p_try_move};
 pub use phase::{GamePhase, GamePhaseController, MapId};

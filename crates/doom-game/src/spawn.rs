@@ -7,12 +7,13 @@
 use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
 
-use crate::mobj::{Mobj, MobjHandle, MobjKind, flags};
+use crate::mobj::{Mobj, MobjHandle, flags};
 use crate::mobjinfo::MOBJINFO;
 use crate::pickups::doomed_type_to_kind;
 use crate::player::PlayerState;
 use crate::state::GameState;
 use crate::states::STATES;
+use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
 // Skill level

@@ -2878,8 +2878,9 @@ fn parse_warp_episode_map(warp: &str) -> (u8, u8) {
 mod tests {
     use super::*;
     use doom_game::cheats as game_cheats;
-    use doom_game::{GameState, Mobj, MobjKind, PlayerState, flags};
+    use doom_game::{GameState, Mobj, PlayerState, flags};
     use doom_map::{Blockmap, Level, Reject, Sector};
+    use doom_types::mobj_kind::MobjKind;
 
     #[derive(Default)]
     struct FakeCaptureApp {

@@ -272,9 +272,10 @@ pub fn monster_should_wake(gs: &GameState, level: &Level, actor_handle: MobjHand
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjHandle, MobjKind, flags};
+    use crate::mobj::{Mobj, MobjHandle, flags};
     use doom_map::Level;
     use doom_map::lumps::*;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     // -- Test helpers -------------------------------------------------------

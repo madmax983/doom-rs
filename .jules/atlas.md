@@ -9,3 +9,7 @@
 **[Deduplicate ticinput_to_ticcmd helper]**
 **Tangle:** The `doom-app` crate contained duplicate implementations of the `ticinput_to_ticcmd` helper function in `src/main.rs` and `src/net_mode.rs`.
 **Blueprint:** Removed the duplicate implementation from `src/main.rs` and updated references in `main.rs` and `demo_mode.rs` to use the single source of truth at `crate::net_mode::ticinput_to_ticcmd`, removing a DRY violation and ensuring better code maintainability.
+
+**[Extract MobjKind to Shared Primitives]**
+**Tangle:** The `MobjKind` enum was defined in `doom-game`, but widely used in presentation crates like `doom-app` for rendering glyphs and managing audio playback. This caused UI components to depend directly on the entire game engine crate just for a basic enum definition, creating tight coupling between rendering and core game state.
+**Blueprint:** Extracted `MobjKind` into `doom-types/src/mobj_kind.rs` and added its dependencies (`strum`, `strum_macros`) to `doom-types/Cargo.toml`. `doom-game` and `doom-app` imports were updated to reference the primitive from the shared types crate, creating a clean dependency hierarchy where both presentation and logic rely on foundational types.

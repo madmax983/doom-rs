@@ -285,7 +285,8 @@ mod tests {
     // -----------------------------------------------------------------------
 
     fn make_test_gs() -> GameState {
-        use doom_game::{Mobj, MobjKind, PlayerState};
+        use doom_game::{Mobj, PlayerState};
+        use doom_types::mobj_kind::MobjKind;
         use doom_types::{Bam, Fixed16_16};
 
         let mut gs = GameState::new("E1M1");

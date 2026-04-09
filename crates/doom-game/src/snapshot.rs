@@ -152,7 +152,8 @@ mod prop_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind};
+    use crate::mobj::Mobj;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     #[test]

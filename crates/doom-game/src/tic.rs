@@ -593,9 +593,10 @@ fn p_thrust(mo: &mut crate::mobj::Mobj, angle: Bam, move_units: i8) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, flags};
+    use crate::mobj::{Mobj, flags};
     use crate::player::{AmmoType, PlayerState, WeaponType};
     use crate::states::ids;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16, TicCmd, bt};
 
     /// Construct a game state with a live player Mobj at the origin.
