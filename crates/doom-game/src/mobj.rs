@@ -43,7 +43,9 @@ impl MobjHandle {
 /// Species / type of a map object.
 ///
 /// Values are stable (`repr u16`) for wire serialization and demo compatibility.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, strum_macros::FromRepr, strum_macros::EnumIter)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Hash, strum_macros::FromRepr, strum_macros::EnumIter,
+)]
 #[repr(u16)]
 pub enum MobjKind {
     // Players

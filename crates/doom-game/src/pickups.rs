@@ -223,19 +223,27 @@ pub fn p_check_pickups(gs: &mut GameState) {
         None => return,
     };
 
-    // Collect all MF_SPECIAL actor handles (to avoid borrow conflicts).
-    let specials: Vec<MobjHandle> = gs
-        .mobjslab
-        .iter_handles()
-        .filter(|&h| {
-            gs.mobjslab
-                .get(h)
-                .map(|mo| mo.flags & flags::MF_SPECIAL != 0)
-                .unwrap_or(false)
-        })
-        .collect();
+    // ⚡ Bolt: Iterate over the MobjSlab by index to avoid a per-frame `Vec`
+    // heap allocation that would otherwise collect all MF_SPECIAL handles.
+    let initial_slot_count = gs.mobjslab.slot_count();
+    let initial_generation = gs.mobjslab.next_generation();
 
-    for handle in specials {
+    for i in 0..initial_slot_count {
+        let Some(handle) = gs.mobjslab.handle_at(i) else {
+            continue;
+        };
+        if handle.generation >= initial_generation {
+            continue;
+        }
+
+        if !gs
+            .mobjslab
+            .get(handle)
+            .map(|mo| mo.flags & flags::MF_SPECIAL != 0)
+            .unwrap_or(false)
+        {
+            continue;
+        }
         // Skip the player's own mobj if it somehow has MF_SPECIAL.
         if handle == gs.player.handle {
             continue;
