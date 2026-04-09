@@ -140,7 +140,7 @@ impl DemoPlaybackApp {
     /// and process cheats/saves).
     fn tick_cmd(&mut self, cmd: TicCmd) {
         self.inner.gs.tick(cmd, Some(&mut self.inner.level));
-        self.inner.player_view_height = super::next_player_view_height(
+        self.inner.player_view_height = crate::app::next_player_view_height(
             self.inner.player_view_height,
             self.inner.gs.player.is_dead(),
         );

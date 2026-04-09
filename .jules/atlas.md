@@ -9,3 +9,7 @@
 **[Deduplicate ticinput_to_ticcmd helper]**
 **Tangle:** The `doom-app` crate contained duplicate implementations of the `ticinput_to_ticcmd` helper function in `src/main.rs` and `src/net_mode.rs`.
 **Blueprint:** Removed the duplicate implementation from `src/main.rs` and updated references in `main.rs` and `demo_mode.rs` to use the single source of truth at `crate::net_mode::ticinput_to_ticcmd`, removing a DRY violation and ensuring better code maintainability.
+
+**[Extract DoomGame to dedicated module]**
+**Tangle:** The `main.rs` file was a massive 4,800+ line Blob containing both the entrypoint/CLI parsing and the core `DoomGame` application struct logic, mixing concerns and violating module boundaries.
+**Blueprint:** Extracted `pub(crate) struct DoomGame`, its direct methods, and `impl DoomApp for DoomGame` into a dedicated `app.rs` module to enforce better separation of concerns, leaving `main.rs` focused on bootstrapping, CLI args, and WAD loading.
