@@ -472,8 +472,9 @@ mod tests {
     use super::*;
     use doom_game::mobj::flags;
     use doom_game::player::PlayerState;
-    use doom_game::{GameState, Mobj, MobjKind};
+    use doom_game::{GameState, Mobj};
     use doom_map::{Blockmap, Reject, Sector, Seg, Sidedef, Ssector};
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     /// Build a minimal level with valid BSP data (0 nodes, 1 ssector, 1 seg).

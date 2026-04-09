@@ -5,8 +5,9 @@
 
 use std::collections::HashSet;
 
+use doom_game::GameState;
 use doom_game::mobj::MobjHandle;
-use doom_game::{GameState, MobjKind};
+use doom_types::mobj_kind::MobjKind;
 
 use super::glyphs::Rgb;
 use super::lighting::cosm_rand;

@@ -9,11 +9,12 @@ use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
 
 use crate::combat::{MISSILERANGE, p_line_attack};
-use crate::mobj::{MobjHandle, MobjKind, StateNum};
+use crate::mobj::{MobjHandle, StateNum};
 use crate::player::{AmmoType, PlayerState, PspriteState, WeaponType, psprite_slots};
 use crate::projectile::p_spawn_player_missile;
 use crate::state::{GameState, SoundRequest};
 use crate::states::{STATES, ids, sprite_names};
+use doom_types::mobj_kind::MobjKind;
 use doom_types::{TicCmd, bt};
 
 // ---------------------------------------------------------------------------
@@ -791,10 +792,11 @@ pub fn player_can_fire(gs: &GameState) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, flags};
+    use crate::mobj::{Mobj, flags};
     use crate::player::{PlayerState, WeaponType, psprite_slots};
     use crate::state::GameState;
     use crate::states::ids;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
     use doom_types::{TicCmd, bt};
 

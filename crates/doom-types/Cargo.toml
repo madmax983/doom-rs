@@ -9,6 +9,8 @@ default = ["std"]
 std     = []
 
 [dependencies]
+strum = "0.28.0"
+strum_macros = "0.28.0"
 
 [dev-dependencies]
 proptest  = { workspace = true }

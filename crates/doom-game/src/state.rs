@@ -6,9 +6,10 @@
 
 use doom_types::Fixed16_16;
 
-use crate::mobj::{MobjHandle, MobjKind, MobjSlab};
+use crate::mobj::{MobjHandle, MobjSlab};
 use crate::player::PlayerState;
 use crate::spawn::Skill;
+use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
 // Sound events
@@ -824,7 +825,7 @@ mod tests {
     fn setup_player_gs() -> GameState {
         let mut gs = GameState::new("E1M1");
         let mut player_mo = crate::mobj::Mobj::new(
-            crate::mobj::MobjKind::Player,
+            doom_types::mobj_kind::MobjKind::Player,
             doom_types::Fixed16_16::ZERO,
             doom_types::Fixed16_16::ZERO,
             doom_types::Bam::ZERO,

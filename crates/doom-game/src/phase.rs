@@ -461,8 +461,9 @@ impl GamePhaseController {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind};
+    use crate::mobj::Mobj;
     use crate::player::PlayerState;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     // =======================================================================

@@ -3393,8 +3393,9 @@ pub fn tick_conveyors(gs: &mut GameState, level: Option<&Level>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind};
+    use crate::mobj::Mobj;
     use crate::state::GameState;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{ANG45, Bam, Fixed16_16};
 
     // -----------------------------------------------------------------------
@@ -5554,7 +5555,7 @@ mod tests {
     fn ev_teleport_clears_momentum() {
         let mut gs = GameState::new("TEST");
         let mut mo = crate::mobj::Mobj::new(
-            crate::mobj::MobjKind::Player,
+            doom_types::mobj_kind::MobjKind::Player,
             doom_types::Fixed16_16::ZERO,
             doom_types::Fixed16_16::ZERO,
             doom_types::Bam::ZERO,
@@ -8038,10 +8039,11 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn save_load_roundtrip_lift_mover() {
-        use crate::mobj::{Mobj, MobjKind, flags};
+        use crate::mobj::{Mobj, flags};
         use crate::player::PlayerState;
         use crate::savegame::{load_game, save_game};
         use crate::state::{LiftMover, LiftStatus};
+        use doom_types::mobj_kind::MobjKind;
 
         let mut gs = GameState::new("E1M1");
         let mut mo = Mobj::new(

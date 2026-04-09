@@ -540,11 +540,12 @@ pub fn p_radius_attack(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind};
+    use crate::mobj::Mobj;
     use crate::player::PlayerState;
     use crate::state::GameState;
     use crate::states::ids;
     use doom_types::TicCmd;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     // -----------------------------------------------------------------------
@@ -567,9 +568,9 @@ mod tests {
     }
 
     fn spawn_trooper(gs: &mut GameState, x: i32, y: i32) -> MobjHandle {
-        use crate::mobj::MobjKind;
         use crate::mobjinfo::MOBJINFO;
         use crate::states::STATES;
+        use doom_types::mobj_kind::MobjKind;
         let kind = MobjKind::Trooper;
         let spawn_sn = MOBJINFO[kind as usize].spawn_state;
         let mut mo = Mobj::new(
@@ -1003,9 +1004,9 @@ mod tests {
 
     /// Spawn a Wolf SS (kind 17): has pain_chance=170 but pain_state=S_NULL.
     fn spawn_wolfss(gs: &mut GameState, x: i32, y: i32) -> MobjHandle {
-        use crate::mobj::MobjKind;
         use crate::mobjinfo::MOBJINFO;
         use crate::states::STATES;
+        use doom_types::mobj_kind::MobjKind;
         let kind = MobjKind::WolfSS;
         let spawn_sn = MOBJINFO[kind as usize].spawn_state;
         let mut mo = Mobj::new(

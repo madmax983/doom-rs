@@ -710,7 +710,7 @@ pub static MOBJINFO: [MobjInfo; 76] = [
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::MobjKind;
+    use doom_types::mobj_kind::MobjKind;
 
     #[test]
     fn table_covers_all_kinds() {

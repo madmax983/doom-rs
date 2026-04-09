@@ -7,9 +7,10 @@
 //! Items that cannot be picked up (e.g. health when already full) are
 //! left in the world -- `p_touch_special_thing` returns `false`.
 
-use crate::mobj::{MobjHandle, MobjKind, flags};
+use crate::mobj::{MobjHandle, flags};
 use crate::player::{self, AmmoType, WeaponType, powers};
 use crate::state::GameState;
+use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
 // Power-up duration constants (in tics, 35 tics = 1 second)
@@ -508,8 +509,9 @@ fn give_weapon(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, flags};
+    use crate::mobj::{Mobj, flags};
     use crate::player::PlayerState;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     /// Construct a game state with a live player Mobj at the origin.

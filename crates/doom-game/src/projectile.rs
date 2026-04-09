@@ -13,8 +13,9 @@ use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
 
 use crate::combat;
-use crate::mobj::{Mobj, MobjHandle, MobjKind, flags};
+use crate::mobj::{Mobj, MobjHandle, flags};
 use crate::state::GameState;
+use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
 // ProjectileInfo — template data for each projectile kind
@@ -386,11 +387,12 @@ pub fn p_move_projectiles(gs: &mut GameState, level: Option<&Level>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, StateNum, flags};
+    use crate::mobj::{Mobj, StateNum, flags};
     use crate::mobjinfo::MOBJINFO;
     use crate::player::PlayerState;
     use crate::state::GameState;
     use crate::states::{STATES, ids};
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     /// Build a minimal GameState with a live player at the origin.

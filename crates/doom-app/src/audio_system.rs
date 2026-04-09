@@ -422,8 +422,8 @@ fn sfx_candidate_names<'a>(wad: &'a WadStack) -> impl Iterator<Item = String> + 
 /// Return the Doom DS* lump name for a monster's wake (see) sound.
 ///
 /// Returns `""` for kinds that have no wake sound (projectiles, pickups, etc.).
-pub fn monster_wake_lump(kind: doom_game::MobjKind) -> &'static str {
-    use doom_game::MobjKind;
+pub fn monster_wake_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str {
+    use doom_types::mobj_kind::MobjKind;
     match kind {
         MobjKind::Trooper => "DSPOSSIT",
         MobjKind::Sergeant => "DSSGTSIT",
@@ -448,8 +448,8 @@ pub fn monster_wake_lump(kind: doom_game::MobjKind) -> &'static str {
 /// Return the Doom DS* lump name for a monster's attack sound.
 ///
 /// Returns `""` for kinds that have no dedicated attack sound.
-pub fn monster_attack_lump(kind: doom_game::MobjKind) -> &'static str {
-    use doom_game::MobjKind;
+pub fn monster_attack_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str {
+    use doom_types::mobj_kind::MobjKind;
     match kind {
         MobjKind::Trooper | MobjKind::WolfSS => "DSPISTOL",
         MobjKind::Sergeant => "DSSHOTGN",
@@ -470,8 +470,8 @@ pub fn monster_attack_lump(kind: doom_game::MobjKind) -> &'static str {
 /// Return the Doom DS* lump name for a monster's death sound.
 ///
 /// Returns `""` for kinds that have no death sound.
-pub fn monster_death_lump(kind: doom_game::MobjKind) -> &'static str {
-    use doom_game::MobjKind;
+pub fn monster_death_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str {
+    use doom_types::mobj_kind::MobjKind;
     match kind {
         MobjKind::Trooper | MobjKind::WolfSS => "DSPODTH1",
         MobjKind::Sergeant => "DSSGTDTH",
