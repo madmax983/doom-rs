@@ -2306,37 +2306,45 @@ fn run_doom() -> Result<()> {
             let chokepoints_str = if chokepoints.is_empty() {
                 "None".to_string()
             } else {
-                chokepoints.iter().enumerate().fold(String::new(), |mut acc, (i, s)| {
-                    if i > 0 { acc.push_str(", "); }
-                    acc.push_str(&s.to_string());
-                    acc
-                })
+                chokepoints
+                    .iter()
+                    .enumerate()
+                    .fold(String::new(), |mut acc, (i, s)| {
+                        if i > 0 {
+                            acc.push_str(", ");
+                        }
+                        acc.push_str(&s.to_string());
+                        acc
+                    })
             };
 
-            let areas_str = format!("{} area{}", areas.len(), if areas.len() == 1 { "" } else { "s" });
+            let areas_str = format!(
+                "{} area{}",
+                areas.len(),
+                if areas.len() == 1 { "" } else { "s" }
+            );
 
             let mut table = comfy_table::Table::new();
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+
             if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-                table
-                    .load_preset(comfy_table::presets::UTF8_FULL)
-                    .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
                 table.set_header(vec![
-                    comfy_table::Cell::new("Feature")
+                    comfy_table::Cell::new("🗺️  Feature")
                         .fg(comfy_table::Color::Cyan)
                         .add_attribute(comfy_table::Attribute::Bold),
-                    comfy_table::Cell::new("Data")
+                    comfy_table::Cell::new("📊 Data")
                         .fg(comfy_table::Color::Cyan)
                         .add_attribute(comfy_table::Attribute::Bold),
                 ]);
                 table.add_row(vec![
-                    comfy_table::Cell::new("Chokepoints"),
-                    comfy_table::Cell::new(&chokepoints_str)
-                        .fg(comfy_table::Color::Red),
+                    comfy_table::Cell::new("⚠️  Chokepoints"),
+                    comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Red),
                 ]);
                 table.add_row(vec![
-                    comfy_table::Cell::new("Isolated Areas"),
-                    comfy_table::Cell::new(&areas_str)
-                        .fg(comfy_table::Color::Magenta),
+                    comfy_table::Cell::new("🏝️  Isolated Areas"),
+                    comfy_table::Cell::new(&areas_str).fg(comfy_table::Color::Magenta),
                 ]);
             } else {
                 table.set_header(vec![
