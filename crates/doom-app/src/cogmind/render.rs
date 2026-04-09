@@ -144,15 +144,11 @@ impl CogmindState {
         let Some(vis) = self.visibility.as_mut() else {
             return;
         };
-        let sector_lights: Vec<u8> = level
-            .sectors
-            .iter()
-            .map(|s| s.light_level.clamp(0, 255) as u8)
-            .collect();
         vis.update(
             player_sector,
+            level.sectors.len(),
             |a, b| level.reject.visible(a, b),
-            &sector_lights,
+            |i| level.sectors[i].light_level.clamp(0, 255) as u8,
         );
     }
 
