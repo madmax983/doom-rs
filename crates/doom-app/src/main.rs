@@ -2306,14 +2306,23 @@ fn run_doom() -> Result<()> {
             let chokepoints_str = if chokepoints.is_empty() {
                 "None".to_string()
             } else {
-                chokepoints.iter().enumerate().fold(String::new(), |mut acc, (i, s)| {
-                    if i > 0 { acc.push_str(", "); }
-                    acc.push_str(&s.to_string());
-                    acc
-                })
+                chokepoints
+                    .iter()
+                    .enumerate()
+                    .fold(String::new(), |mut acc, (i, s)| {
+                        if i > 0 {
+                            acc.push_str(", ");
+                        }
+                        acc.push_str(&s.to_string());
+                        acc
+                    })
             };
 
-            let areas_str = format!("{} area{}", areas.len(), if areas.len() == 1 { "" } else { "s" });
+            let areas_str = format!(
+                "{} area{}",
+                areas.len(),
+                if areas.len() == 1 { "" } else { "s" }
+            );
 
             let mut table = comfy_table::Table::new();
             if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
@@ -2330,13 +2339,11 @@ fn run_doom() -> Result<()> {
                 ]);
                 table.add_row(vec![
                     comfy_table::Cell::new("Chokepoints"),
-                    comfy_table::Cell::new(&chokepoints_str)
-                        .fg(comfy_table::Color::Red),
+                    comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Red),
                 ]);
                 table.add_row(vec![
                     comfy_table::Cell::new("Isolated Areas"),
-                    comfy_table::Cell::new(&areas_str)
-                        .fg(comfy_table::Color::Magenta),
+                    comfy_table::Cell::new(&areas_str).fg(comfy_table::Color::Magenta),
                 ]);
             } else {
                 table.set_header(vec![
