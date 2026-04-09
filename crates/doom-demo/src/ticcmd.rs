@@ -4,7 +4,7 @@
 //! and `buttons` per player per tic. The full game [`TicCmd`] also carries
 //! `chatchar`, but that field is not part of the LMP wire format.
 
-use doom_game::TicCmd;
+use doom_types::TicCmd;
 
 /// Size of a single demo tic command in the LMP wire format.
 pub const DEMO_TIC_SIZE: usize = 4;
@@ -100,7 +100,7 @@ impl DemoTicCmd {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_game::{TicCmd, bt};
+    use doom_types::{TicCmd, bt};
 
     #[test]
     fn to_bytes_produces_4_bytes() {

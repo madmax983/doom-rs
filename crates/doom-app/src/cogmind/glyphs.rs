@@ -4,7 +4,6 @@
 //! map element and entity in the top-down ASCII view.
 
 use doom_game::MobjKind;
-use strum::IntoEnumIterator;
 
 // ---------------------------------------------------------------------------
 // Tile types
@@ -376,6 +375,7 @@ fn pickup_key(fg: Rgb) -> TileGlyph {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use strum::IntoEnumIterator;
 
     // -- entity_glyph --
 
