@@ -507,7 +507,12 @@ impl Blockmap {
         let n_blocks = x_count as usize * y_count as usize;
         let offsets_end = Self::HEADER_BYTES + n_blocks * 2;
 
-        let mut offsets = Vec::with_capacity(n_blocks);
+        // Havoc: Prevent OOM on untrusted large x_count/y_count inputs
+        // by clamping capacity to the maximum number of blocks that can actually
+        // fit into the remaining bytes of the provided lump buffer.
+        let max_possible = data.len().saturating_sub(Self::HEADER_BYTES) / 2;
+        let mut offsets = Vec::with_capacity(n_blocks.min(max_possible));
+
         let offset_bytes = &data[Self::HEADER_BYTES..offsets_end.min(data.len())];
         for chunk in offset_bytes.chunks_exact(2) {
             offsets.push(u16::from_le_bytes([chunk[0], chunk[1]]));
@@ -586,6 +591,20 @@ mod prop_tests {
     use proptest::prelude::*;
 
     proptest! {
+        /// Havoc: Feed arbitrary data into Blockmap parser to trigger OOM.
+        #[test]
+        fn blockmap_parse_rejects_oom(
+            x_count in 0xFFFFu16..=0xFFFF,
+            y_count in 0xFFFFu16..=0xFFFF,
+        ) {
+            let mut data = vec![0u8; 8];
+            data[4..6].copy_from_slice(&x_count.to_le_bytes());
+            data[6..8].copy_from_slice(&y_count.to_le_bytes());
+            let _ = Blockmap::parse_lump(&data);
+        }
+
+
+
         /// For an all-zero reject table (everything visible), `visible(a, b)`
         /// must equal `visible(b, a)` — the relation is symmetric.
         ///
