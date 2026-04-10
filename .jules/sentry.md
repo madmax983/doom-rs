@@ -20,3 +20,12 @@
 
 **Learning:** `tick_mobj` handles transitioning a mobj's state when its tics reach zero. If the lookup for `next_state` returns `None` (e.g. invalid state index), it falls back to `StateNum::NULL`. The transition to `NULL` correctly removes the mobj because `p_set_mobj_state` returns `false` for `NULL`, but this fallback path was completely uncovered by tests.
 **Action:** When a fallback value like `StateNum::NULL` is provided in an `unwrap_or`, add a targeted unit test to ensure the fallback actually executes and does the right thing (e.g. removes the entity).
+## 2026-04-10 - Concurrent modifiers state check in tui tests
+
+**Learning:** Tests interacting with `DoomEventLoop` simulation routines (`drain_ready_tics` and `tick_turn_based`) implicitly poll `sampled_modifier_snapshot()`, modifying the shared testing counter `MODIFIER_SAMPLE_COUNT` and leading to flaky concurrency failures.
+**Action:** When a test touches UI or event loops containing global modifier sample counting, ensure that it uses `MODIFIER_COUNT_LOCK` before executing loop code.
+
+## 2026-04-10 - Uncovered fallback logic in WadFile::lumps_between
+
+**Learning:** When retrieving `WadFile::lumps_between`, missing markers cause `.unwrap_or(0)` and `.unwrap_or(self.dir.len())` boundaries to act as defaults. These silent path overrides were previously unverified.
+**Action:** When a fallback value like `unwrap_or` provides range indices or safety bounds in array iteration, explicitly test the boundary conditions when the query parameters are omitted or wrong.

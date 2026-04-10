@@ -764,6 +764,31 @@ mod tests {
     }
 
     #[test]
+    fn map_lump_group_detects_udmf_group_missing_endmap() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("TEXTMAP", b""),
+            ("ZNODES", b""),
+            // Missing ENDMAP
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        // Since there is no ENDMAP, find_lump_data will return None, but map_lump_group returns None?
+        assert!(wad.map_lump_group("MAP01").is_none());
+    }
+
+    #[test]
+    fn map_lump_group_classic_missing_required_lumps() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("THINGS", b""),
+            ("LINEDEFS", b""),
+            // 8 lumps missing here
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        assert!(wad.map_lump_group("MAP01").is_none());
+    }
+
+    #[test]
     fn map_lump_group_detects_udmf_group() {
         let wad_bytes = make_iwad(&[
             ("MAP01", b""),
@@ -849,6 +874,23 @@ mod tests {
             ("F_END", b""),
         ]);
         let wad = WadFile::parse(wad_bytes).unwrap();
+        let flats: Vec<_> = wad
+            .lumps_between("F_START", "F_END")
+            .map(|l| l.name.as_str().to_string())
+            .collect();
+        assert_eq!(flats, vec!["FLAT1", "FLAT2"]);
+    }
+
+    #[test]
+    fn lumps_between_missing_markers_returns_all_or_remaining() {
+        let wad_bytes = make_iwad(&[
+            ("FLAT1", b"flat1_data"),
+            ("FLAT2", b"flat2_data"),
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+
+        // Missing start marker defaults to 0 (beginning).
+        // Missing end marker defaults to dir.len() (end).
         let flats: Vec<_> = wad
             .lumps_between("F_START", "F_END")
             .map(|l| l.name.as_str().to_string())

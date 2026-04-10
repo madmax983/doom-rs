@@ -1116,6 +1116,7 @@ mod tests {
 
     #[test]
     fn turn_based_wait_generates_recovery_tics() {
+        let _guard = MODIFIER_COUNT_LOCK.lock().unwrap();
         let mut loop_ = make_test_event_loop();
         loop_.set_turn_based_mode(true);
         loop_.input.push_wait();
@@ -1132,6 +1133,7 @@ mod tests {
 
     #[test]
     fn turn_based_held_action_waits_for_release() {
+        let _guard = MODIFIER_COUNT_LOCK.lock().unwrap();
         let mut loop_ = make_test_event_loop();
         loop_.set_turn_based_mode(true);
         loop_.input.key_down(KeyCode::Char('w'));
