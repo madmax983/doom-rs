@@ -275,7 +275,7 @@ fn set_psprite_state(
         gs.player.psprites[slot].state = state;
         gs.player.psprites[slot].tics = i32::from(entry.tics);
 
-        if entry.action != crate::actions::ACTION_NONE {
+        if entry.action != crate::actions::Action::NoAction as u8 {
             dispatch_psprite_action(gs, entry.action, cmd, level);
             if gs.player.psprites[slot].state != state {
                 return;
@@ -588,30 +588,32 @@ fn a_saw(gs: &mut GameState, _cmd: TicCmd, level: Option<&Level>) {
 }
 
 fn dispatch_psprite_action(gs: &mut GameState, action: u8, cmd: TicCmd, level: Option<&Level>) {
-    match action {
-        crate::actions::ACTION_WEAPON_READY => a_weapon_ready(gs, cmd, level),
-        crate::actions::ACTION_LOWER => a_lower(gs),
-        crate::actions::ACTION_RAISE => a_raise(gs, cmd, level),
-        crate::actions::ACTION_GUN_FLASH => a_gun_flash(gs, cmd, level),
-        crate::actions::ACTION_PUNCH => a_punch(gs, cmd, level),
-        crate::actions::ACTION_FIRE_PISTOL => a_fire_pistol(gs, cmd, level),
-        crate::actions::ACTION_FIRE_SHOTGUN => a_fire_shotgun(gs, cmd, level),
-        crate::actions::ACTION_FIRE_SHOTGUN2 => a_fire_shotgun2(gs, cmd, level),
-        crate::actions::ACTION_FIRE_CGUN => a_fire_cgun(gs, cmd, level),
-        crate::actions::ACTION_FIRE_MISSILE => a_fire_missile(gs, cmd, level),
-        crate::actions::ACTION_FIRE_PLASMA => a_fire_plasma(gs, cmd, level),
-        crate::actions::ACTION_BFG_SOUND => a_bfg_sound(gs, cmd, level),
-        crate::actions::ACTION_FIRE_BFG => a_fire_bfg(gs, cmd, level),
-        crate::actions::ACTION_SAW => a_saw(gs, cmd, level),
-        crate::actions::ACTION_REFIRE => a_refire(gs, cmd, level),
-        crate::actions::ACTION_CHECK_RELOAD => a_check_reload(gs, cmd, level),
-        crate::actions::ACTION_OPEN_SHOTGUN2 => a_open_shotgun2(gs),
-        crate::actions::ACTION_LOAD_SHOTGUN2 => a_load_shotgun2(gs),
-        crate::actions::ACTION_CLOSE_SHOTGUN2 => a_close_shotgun2(gs, cmd, level),
-        crate::actions::ACTION_LIGHT0 => a_light0(gs),
-        crate::actions::ACTION_LIGHT1 => a_light1(gs),
-        crate::actions::ACTION_LIGHT2 => a_light2(gs),
-        _ => {}
+    if let Some(a) = crate::actions::Action::from_repr(action) {
+        match a {
+            crate::actions::Action::WeaponReady => a_weapon_ready(gs, cmd, level),
+            crate::actions::Action::Lower => a_lower(gs),
+            crate::actions::Action::Raise => a_raise(gs, cmd, level),
+            crate::actions::Action::GunFlash => a_gun_flash(gs, cmd, level),
+            crate::actions::Action::Punch => a_punch(gs, cmd, level),
+            crate::actions::Action::FirePistol => a_fire_pistol(gs, cmd, level),
+            crate::actions::Action::FireShotgun => a_fire_shotgun(gs, cmd, level),
+            crate::actions::Action::FireShotgun2 => a_fire_shotgun2(gs, cmd, level),
+            crate::actions::Action::FireCgun => a_fire_cgun(gs, cmd, level),
+            crate::actions::Action::FireMissile => a_fire_missile(gs, cmd, level),
+            crate::actions::Action::FirePlasma => a_fire_plasma(gs, cmd, level),
+            crate::actions::Action::BfgSound => a_bfg_sound(gs, cmd, level),
+            crate::actions::Action::FireBfg => a_fire_bfg(gs, cmd, level),
+            crate::actions::Action::Saw => a_saw(gs, cmd, level),
+            crate::actions::Action::Refire => a_refire(gs, cmd, level),
+            crate::actions::Action::CheckReload => a_check_reload(gs, cmd, level),
+            crate::actions::Action::OpenShotgun2 => a_open_shotgun2(gs),
+            crate::actions::Action::LoadShotgun2 => a_load_shotgun2(gs),
+            crate::actions::Action::CloseShotgun2 => a_close_shotgun2(gs, cmd, level),
+            crate::actions::Action::Light0 => a_light0(gs),
+            crate::actions::Action::Light1 => a_light1(gs),
+            crate::actions::Action::Light2 => a_light2(gs),
+            _ => {}
+        }
     }
 }
 

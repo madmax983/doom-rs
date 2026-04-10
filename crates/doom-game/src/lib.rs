@@ -42,15 +42,7 @@ pub mod trace;
 pub mod weapon_fire;
 pub mod weapons;
 
-pub use actions::{
-    ACTION_BRAIN_AWAKE, ACTION_BRAIN_DIE, ACTION_BRAIN_EXPLODE, ACTION_BRAIN_SCREAM,
-    ACTION_BRAIN_SPIT, ACTION_BRUIS_ATTACK, ACTION_BSPI_ATTACK, ACTION_CHASE, ACTION_CPOS_ATTACK,
-    ACTION_CYBER_ATTACK, ACTION_FACE_TARGET, ACTION_FAT_ATTACK1, ACTION_FAT_ATTACK2,
-    ACTION_FAT_ATTACK3, ACTION_FIRE, ACTION_HEAD_ATTACK, ACTION_LOOK, ACTION_NONE,
-    ACTION_PAIN_ATTACK, ACTION_SKEL_MISSILE, ACTION_SKULL_ATTACK, ACTION_SPAWN_FLY,
-    ACTION_SPID_ATTACK, ACTION_VILE_ATTACK, ACTION_VILE_CHASE, ACTION_VILE_START,
-    ACTION_VILE_TARGET, dispatch_action, p_move, p_new_chase_dir,
-};
+pub use actions::{Action, dispatch_action, p_move, p_new_chase_dir};
 pub use automap::{
     AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
     draw_grid, draw_line, draw_thing_marker, init_seen_lines, line_color, mark_lines_seen,
