@@ -77,10 +77,10 @@ pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandl
             continue;
         }
 
-        let dmg: i32 = match sector.special {
-            5 => 10,  // lava
-            7 => 5,   // nukage
-            16 => 20, // acid
+        let dmg: i32 = match crate::state::SectorDamageType::from_repr(sector.special) {
+            Some(crate::state::SectorDamageType::Hellslime) => 10, // lava
+            Some(crate::state::SectorDamageType::Nukage) => 5,     // nukage
+            Some(crate::state::SectorDamageType::SuperHellslime) => 20, // acid
             _ => continue,
         };
 
@@ -144,26 +144,30 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
             continue;
         }
 
-        match sector.special {
-            4 => {
+        let Some(damage_type) = crate::state::SectorDamageType::from_repr(sector.special) else {
+            continue;
+        };
+
+        match damage_type {
+            crate::state::SectorDamageType::NukageBlink => {
                 // Nukage, blink 0.5s — ~5 damage per period.
                 if !has_radsuit {
                     apply_sector_damage(gs, handle, 5);
                 }
             }
-            5 => {
+            crate::state::SectorDamageType::Hellslime => {
                 // Hellslime — ~5 damage per period.
                 if !has_radsuit {
                     apply_sector_damage(gs, handle, 5);
                 }
             }
-            7 => {
+            crate::state::SectorDamageType::Nukage => {
                 // Nukage, no blink — ~2 damage per period.
                 if !has_radsuit {
                     apply_sector_damage(gs, handle, 2);
                 }
             }
-            11 => {
+            crate::state::SectorDamageType::GodExit => {
                 // God exit — ~20 damage per period, RadSuit does NOT protect.
                 apply_sector_damage(gs, handle, 20);
                 // Check if health is low enough to trigger exit.
@@ -173,13 +177,12 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
                     }
                 }
             }
-            16 => {
+            crate::state::SectorDamageType::SuperHellslime => {
                 // Super hellslime — ~20 damage per period.
                 if !has_radsuit {
                     apply_sector_damage(gs, handle, 20);
                 }
             }
-            _ => continue,
         }
 
         // Only apply one sector's damage per period (first match wins).
