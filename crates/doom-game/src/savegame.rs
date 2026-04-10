@@ -71,27 +71,20 @@ pub struct SaveGame {
 // ---------------------------------------------------------------------------
 
 /// Errors that can occur during `load_game`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SaveError {
     /// Input data is too short to contain even a header.
+    #[error("input data too short")]
     TooShort,
     /// Magic bytes do not match `SAVE_MAGIC`.
+    #[error("bad magic")]
     BadMagic,
     /// Format version is not supported.
+    #[error("bad version")]
     BadVersion,
     /// Data ended before all fields could be read.
+    #[error("data truncated")]
     Truncated,
-}
-
-impl core::fmt::Display for SaveError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            SaveError::TooShort => write!(f, "save data too short for header"),
-            SaveError::BadMagic => write!(f, "bad magic bytes in save data"),
-            SaveError::BadVersion => write!(f, "unsupported save format version"),
-            SaveError::Truncated => write!(f, "save data truncated"),
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

@@ -36,30 +36,9 @@ pub enum SaveError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// Failed to encode game state to bytes.
-
-    /// File does not start with the `b"DRS1"` magic bytes. We don't read hieroglyphics.
-    #[error("invalid save file magic")]
-    BadMagic,
-
-    /// Save file has an unsupported version number. Only modern sorcery is permitted.
-    #[error("unsupported save version")]
-    BadVersion,
-
-    /// The save payload was truncated. An incomplete incantation!
-    #[error("save payload truncated")]
-    Truncated,
-}
-
-impl From<doom_game::savegame::SaveError> for SaveError {
-    fn from(err: doom_game::savegame::SaveError) -> Self {
-        match err {
-            doom_game::savegame::SaveError::TooShort => SaveError::Truncated,
-            doom_game::savegame::SaveError::BadMagic => SaveError::BadMagic,
-            doom_game::savegame::SaveError::BadVersion => SaveError::BadVersion,
-            doom_game::savegame::SaveError::Truncated => SaveError::Truncated,
-        }
-    }
+    /// An error occurred within the core game engine during save or load.
+    #[error("engine save error: {0}")]
+    Engine(#[from] doom_game::savegame::SaveError),
 }
 
 // ---------------------------------------------------------------------------
