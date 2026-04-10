@@ -38,6 +38,29 @@ pub struct MapAnalyzer<'a> {
 }
 
 impl<'a> MapAnalyzer<'a> {
+    /// The MapAnalyzer is the cartographer's lens for finding tactical advantages.
+    ///
+    /// By supplying a `SectorGraph`, this struct can traverse the connections between
+    /// map areas to discover chokepoints and isolated zones. This is vital for
+    /// understanding the flow of a map and predicting where players might get trapped.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_map::SectorGraph;
+    /// use doom_map::analyzer::MapAnalyzer;
+    /// use std::collections::{HashMap, HashSet};
+    ///
+    /// // A simple linear map: 0 <-> 1 <-> 2
+    /// let mut adj = HashMap::new();
+    /// adj.insert(0, HashSet::from([1]));
+    /// adj.insert(1, HashSet::from([0, 2]));
+    /// adj.insert(2, HashSet::from([1]));
+    /// let graph = SectorGraph { adjacency_list: adj };
+    ///
+    /// let analyzer = MapAnalyzer::new(&graph);
+    /// assert_eq!(analyzer.chokepoints(), vec![1]); // Sector 1 is a chokepoint!
+    /// ```
     pub fn new(graph: &'a SectorGraph) -> Self {
         Self { graph }
     }

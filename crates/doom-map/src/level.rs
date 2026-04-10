@@ -37,47 +37,83 @@ pub enum LevelError {
 
     /// Required lump is missing or in the wrong position.
     #[error("map '{map}': required lump {lump} missing")]
-    MissingLump { map: String, lump: &'static str },
+    MissingLump {
+        /// The name of the map.
+        map: String,
+        /// The name of the missing lump.
+        lump: &'static str,
+    },
 
     /// A lump failed to parse.
     #[error("map '{map}': lump parse error: {source}")]
-    ParseError { map: String, source: LumpParseError },
+    ParseError {
+        /// The name of the map.
+        map: String,
+        /// The underlying parse error.
+        source: LumpParseError,
+    },
 
     /// BSP structural validation failed.
     #[error("map '{map}': BSP validation failed: {source}")]
-    BspInvalid { map: String, source: BspError },
+    BspInvalid {
+        /// The name of the map.
+        map: String,
+        /// The underlying BSP validation error.
+        source: BspError,
+    },
 
     /// UDMF parsing or conversion failed.
     #[error("map '{map}': UDMF error: {source}")]
-    Udmf { map: String, source: UdmfError },
+    Udmf {
+        /// The name of the map.
+        map: String,
+        /// The underlying UDMF error.
+        source: UdmfError,
+    },
 
     /// The UDMF namespace requires features this engine does not support yet.
     #[error("map '{map}': unsupported UDMF namespace '{namespace}': {detail}")]
     UnsupportedUdmfNamespace {
+        /// The name of the map.
         map: String,
+        /// The unsupported namespace.
         namespace: String,
+        /// Further details about the error.
         detail: String,
     },
 
     /// A linedef references a vertex index that's out of range.
     #[error("map '{map}': linedef {idx} references vertex {v} >= N_VERTEXES ({n})")]
     LindefVertexOutOfBounds {
+        /// The name of the map.
         map: String,
+        /// The index of the linedef.
         idx: usize,
+        /// The invalid vertex index.
         v: usize,
+        /// The total number of vertexes.
         n: usize,
     },
 
     /// A linedef has the two-sided flag but is missing a left sidedef.
     #[error("map '{map}': linedef {idx} is two-sided but left_sidedef is 0xFFFF")]
-    TwoSidedMissingLeft { map: String, idx: usize },
+    TwoSidedMissingLeft {
+        /// The name of the map.
+        map: String,
+        /// The index of the linedef.
+        idx: usize,
+    },
 
     /// A sidedef references a sector that's out of range.
     #[error("map '{map}': sidedef {idx} references sector {s} >= N_SECTORS ({n})")]
     SidedefSectorOutOfBounds {
+        /// The name of the map.
         map: String,
+        /// The index of the sidedef.
         idx: usize,
+        /// The invalid sector index.
         s: usize,
+        /// The total number of sectors.
         n: usize,
     },
 }
@@ -90,15 +126,25 @@ pub enum LevelError {
 pub struct Level {
     /// Map name (e.g. "E1M1").
     pub name: String,
+    /// The `THINGS` lump: all the monsters, weapons, keys, and decorations waiting to be spawned.
     pub things: Vec<Thing>,
+    /// The `LINEDEFS` lump: the 2D line segments that construct walls and trigger actions.
     pub linedefs: Vec<Linedef>,
+    /// The `SIDEDEFS` lump: textures and offsets for the front and back of each linedef.
     pub sidedefs: Vec<Sidedef>,
+    /// The `VERTEXES` lump: the (x, y) points that connect all geometry.
     pub vertexes: Vec<Vertex>,
+    /// The `SEGS` lump: rendered line segments that make up the walls of subsectors.
     pub segs: Vec<Seg>,
+    /// The `SSECTORS` lump: convex polygons that form the leaves of the BSP tree, drawn back-to-front.
     pub ssectors: Vec<Ssector>,
+    /// The `NODES` lump: the internal nodes of the BSP tree used to quickly determine drawing order.
     pub nodes: Vec<Node>,
+    /// The `SECTORS` lump: distinct areas defined by floor/ceiling heights, flats, and lighting.
     pub sectors: Vec<Sector>,
+    /// The `REJECT` lump: an optimized lookup table to skip line-of-sight checks between sectors.
     pub reject: Reject,
+    /// The `BLOCKMAP` lump: a spatial grid for fast collision detection between actors and walls.
     pub blockmap: Blockmap,
 }
 

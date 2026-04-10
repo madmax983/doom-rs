@@ -23,40 +23,61 @@ use thiserror::Error;
 pub enum BspError {
     /// The leaf-count invariant is violated.
     #[error("BSP invariant violated: N_SSECTORS ({ssectors}) != N_NODES ({nodes}) + 1")]
-    LeafCountMismatch { nodes: usize, ssectors: usize },
+    LeafCountMismatch {
+        /// The number of nodes in the BSP tree.
+        nodes: usize,
+        /// The number of subsectors in the BSP tree.
+        ssectors: usize,
+    },
 
     /// A child pointer has a leaf bit but the index exceeds N_SSECTORS.
     #[error("BSP node {node_idx}: leaf child index {child_idx} >= N_SSECTORS ({n_ssectors})")]
     LeafChildOutOfBounds {
+        /// The index of the BSP node.
         node_idx: usize,
+        /// The out-of-bounds child index.
         child_idx: usize,
+        /// The total number of subsectors.
         n_ssectors: usize,
     },
 
     /// A child pointer has no leaf bit but the index exceeds N_NODES.
     #[error("BSP node {node_idx}: node child index {child_idx} >= N_NODES ({n_nodes})")]
     NodeChildOutOfBounds {
+        /// The index of the BSP node.
         node_idx: usize,
+        /// The out-of-bounds child index.
         child_idx: usize,
+        /// The total number of nodes.
         n_nodes: usize,
     },
 
     /// A node bounding box is degenerate (ymax < ymin or xmax < xmin).
     #[error("BSP node {node_idx}: bounding box is degenerate")]
-    DegenerateBBox { node_idx: usize },
+    DegenerateBBox {
+        /// The index of the BSP node with the degenerate bounding box.
+        node_idx: usize,
+    },
 
     /// A subsector has zero segs.
     #[error("BSP subsector {ss_idx}: seg_count is 0")]
-    EmptySubsector { ss_idx: usize },
+    EmptySubsector {
+        /// The index of the empty subsector.
+        ss_idx: usize,
+    },
 
     /// A subsector's seg range exceeds N_SEGS.
     #[error(
         "BSP subsector {ss_idx}: first_seg({first_seg}) + seg_count({seg_count}) > N_SEGS({n_segs})"
     )]
     SubsectorSegsOutOfBounds {
+        /// The index of the subsector.
         ss_idx: usize,
+        /// The index of the first seg.
         first_seg: usize,
+        /// The number of segs in the subsector.
         seg_count: usize,
+        /// The total number of segs in the map.
         n_segs: usize,
     },
 }

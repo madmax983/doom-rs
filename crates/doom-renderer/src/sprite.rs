@@ -762,6 +762,9 @@ pub fn render_actors_with_masked_ex<'a>(
     );
 }
 
+/// Renders actors with masked columns and a fixed colormap.
+/// Used to handle Arch-vile fire overlays and other special effects that need
+/// explicit control over the fullbright state or colormap.
 #[allow(clippy::too_many_arguments)]
 pub fn render_actors_with_masked_and_fixed_colormap_ex<'a>(
     actors: &[crate::sprite_lookup::ActorRenderInfo],

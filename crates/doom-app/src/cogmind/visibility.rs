@@ -60,8 +60,13 @@ impl VisibilityMap {
     /// 2. Marks the player's sector as visible.
     /// 3. For every other sector, if `reject_visible_fn(player_sector, i)` is
     ///    true, marks it visible with the given light level.
-    pub fn update<F, L>(&mut self, player_sector: usize, num_sectors: usize, reject_visible_fn: F, light_fn: L)
-    where
+    pub fn update<F, L>(
+        &mut self,
+        player_sector: usize,
+        num_sectors: usize,
+        reject_visible_fn: F,
+        light_fn: L,
+    ) where
         F: Fn(usize, usize) -> bool,
         L: Fn(usize) -> u8,
     {
@@ -144,7 +149,12 @@ mod tests {
         let lights = [100, 150, 200, 50];
 
         // Player in sector 0; sectors 1 and 3 are visible per reject table.
-        map.update(0, lights.len(), |_player, other| other == 1 || other == 3, |i| lights[i]);
+        map.update(
+            0,
+            lights.len(),
+            |_player, other| other == 1 || other == 3,
+            |i| lights[i],
+        );
 
         assert_eq!(map.get(0), SectorVisibility::Visible(100));
         assert_eq!(map.get(1), SectorVisibility::Visible(150));
