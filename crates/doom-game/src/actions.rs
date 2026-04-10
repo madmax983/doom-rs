@@ -606,16 +606,13 @@ fn transition_to_see_state(
     mo.tics = new_tics;
 
     // Emit wake sound event with emitter position for spatial attenuation.
-    let (mo_x, mo_y) = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y))
-        .unwrap_or_default();
-    gs.sound
-        .sound_queue
-        .push(crate::state::SoundRequest::MonsterWake(
-            kind, handle, mo_x, mo_y,
-        ));
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterWake(
+                kind, handle, mo.x, mo.y,
+            ));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1103,20 +1100,16 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         level,
         &mut intercepts,
     );
-    let (sx, sy) = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y))
-        .unwrap_or_default();
-
-    gs.sound
-        .sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(
-            MobjKind::Trooper,
-            handle,
-            sx,
-            sy,
-        ));
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                MobjKind::Trooper,
+                handle,
+                mo.x,
+                mo.y,
+            ));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1155,20 +1148,16 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
             &mut intercepts,
         );
     }
-    let (sx, sy) = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y))
-        .unwrap_or_default();
-
-    gs.sound
-        .sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(
-            MobjKind::Sergeant,
-            handle,
-            sx,
-            sy,
-        ));
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                MobjKind::Sergeant,
+                handle,
+                mo.x,
+                mo.y,
+            ));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1199,20 +1188,16 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
     } else {
         crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::ImpFireball);
     }
-    let (sx, sy) = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y))
-        .unwrap_or_default();
-
-    gs.sound
-        .sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(
-            MobjKind::Imp,
-            handle,
-            sx,
-            sy,
-        ));
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                MobjKind::Imp,
+                handle,
+                mo.x,
+                mo.y,
+            ));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1236,20 +1221,16 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
     if dist <= crate::combat::MELEERANGE.to_int() {
         let damage = ((gs.tic_num % 3) + 1) as i32 * 4;
         crate::combat::damage_mobj(gs, target, handle, damage);
-        let (sx, sy) = gs
-            .mobjslab
-            .get(handle)
-            .map(|mo| (mo.x, mo.y))
-            .unwrap_or_default();
-
-        gs.sound
-            .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
-                MobjKind::Demon,
-                handle,
-                sx,
-                sy,
-            ));
+        if let Some(mo) = gs.mobjslab.get(handle) {
+            gs.sound
+                .sound_queue
+                .push(crate::state::SoundRequest::MonsterAttack(
+                    MobjKind::Demon,
+                    handle,
+                    mo.x,
+                    mo.y,
+                ));
+        }
     }
 }
 
@@ -1267,20 +1248,16 @@ fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::CacoFireball);
-    let (sx, sy) = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y))
-        .unwrap_or_default();
-
-    gs.sound
-        .sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(
-            MobjKind::Cacodemon,
-            handle,
-            sx,
-            sy,
-        ));
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                MobjKind::Cacodemon,
+                handle,
+                mo.x,
+                mo.y,
+            ));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1302,17 +1279,13 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
         .map(|mo| mo.kind)
         .unwrap_or(MobjKind::BaronOfHell);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::BaronBall);
-    let (sx, sy) = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y))
-        .unwrap_or_default();
-
-    gs.sound
-        .sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(
-            bruis_kind, handle, sx, sy,
-        ));
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                bruis_kind, handle, mo.x, mo.y,
+            ));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1352,17 +1325,13 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
         level,
         &mut intercepts,
     );
-    let (sx, sy) = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y))
-        .unwrap_or_default();
-
-    gs.sound
-        .sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(
-            cpos_kind, handle, sx, sy,
-        ));
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                cpos_kind, handle, mo.x, mo.y,
+            ));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1379,20 +1348,16 @@ fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::Rocket);
-    let (sx, sy) = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y))
-        .unwrap_or_default();
-
-    gs.sound
-        .sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(
-            MobjKind::Cyberdemon,
-            handle,
-            sx,
-            sy,
-        ));
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                MobjKind::Cyberdemon,
+                handle,
+                mo.x,
+                mo.y,
+            ));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1409,20 +1374,16 @@ fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
 
     a_face_target(gs, handle);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::Tracer);
-    let (sx, sy) = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y))
-        .unwrap_or_default();
-
-    gs.sound
-        .sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(
-            MobjKind::Revenant,
-            handle,
-            sx,
-            sy,
-        ));
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                MobjKind::Revenant,
+                handle,
+                mo.x,
+                mo.y,
+            ));
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1481,20 +1442,16 @@ fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
     a_face_target(gs, handle);
     fat_shoot(gs, handle, FATSPREAD);
     fat_shoot(gs, handle, 0);
-    let (sx, sy) = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y))
-        .unwrap_or_default();
-
-    gs.sound
-        .sound_queue
-        .push(crate::state::SoundRequest::MonsterAttack(
-            MobjKind::Mancubus,
-            handle,
-            sx,
-            sy,
-        ));
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                MobjKind::Mancubus,
+                handle,
+                mo.x,
+                mo.y,
+            ));
+    }
 }
 
 /// Port of `A_FatAttack2` from Doom's `p_enemy.c`.
