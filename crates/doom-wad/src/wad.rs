@@ -119,15 +119,25 @@ impl WadFile {
         }
 
         // Identify WAD kind.
-        let magic: [u8; 4] = data[0..4].try_into().unwrap();
+        let magic: [u8; 4] = data[0..4]
+            .try_into()
+            .expect("slice of len 4 must fit into [u8; 4]");
         let kind = match &magic {
             b"IWAD" => WadKind::Iwad,
             b"PWAD" => WadKind::Pwad,
             _ => return Err(WadError::InvalidMagic(magic)),
         };
 
-        let numlumps = i32::from_le_bytes(data[4..8].try_into().unwrap());
-        let infotableofs = i32::from_le_bytes(data[8..12].try_into().unwrap());
+        let numlumps = i32::from_le_bytes(
+            data[4..8]
+                .try_into()
+                .expect("slice of len 4 must fit into [u8; 4]"),
+        );
+        let infotableofs = i32::from_le_bytes(
+            data[8..12]
+                .try_into()
+                .expect("slice of len 4 must fit into [u8; 4]"),
+        );
 
         if numlumps < 0 {
             return Err(WadError::NegativeLumpCount(numlumps));
@@ -166,9 +176,9 @@ impl WadFile {
         let mut dir = Vec::with_capacity(numlumps);
         for chunk in dir_bytes.chunks_exact(16) {
             let raw = RawLumpEntry {
-                filepos: i32::from_le_bytes(chunk[0..4].try_into().unwrap()),
-                size: i32::from_le_bytes(chunk[4..8].try_into().unwrap()),
-                name: chunk[8..16].try_into().unwrap(),
+                filepos: i32::from_le_bytes(chunk[0..4].try_into().expect("chunk 0..4 is 4 bytes")),
+                size: i32::from_le_bytes(chunk[4..8].try_into().expect("chunk 4..8 is 4 bytes")),
+                name: chunk[8..16].try_into().expect("chunk 8..16 is 8 bytes"),
             };
             let name = LumpName::from_raw(raw.name);
             let (offset, end) = raw

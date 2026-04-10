@@ -4053,7 +4053,7 @@ mod tests {
         game.gs
             .mobjslab
             .get_mut(game.gs.player.handle)
-            .unwrap()
+            .expect("player mobj should exist")
             .momx = Fixed16_16::from_int(40);
 
         game.tick(TicInput {
@@ -4106,7 +4106,7 @@ mod tests {
         game.gs
             .mobjslab
             .get_mut(game.gs.player.handle)
-            .unwrap()
+            .expect("player mobj should exist")
             .momx = Fixed16_16::from_int(40);
 
         wait_for_music_requests(game.audio.as_ref().expect("audio must be present"), 1);
@@ -4157,7 +4157,7 @@ mod tests {
         game.gs
             .mobjslab
             .get_mut(game.gs.player.handle)
-            .unwrap()
+            .expect("player mobj should exist")
             .momx = Fixed16_16::from_int(40);
 
         game.tick(TicInput::default());
@@ -4193,7 +4193,7 @@ mod tests {
         game.gs
             .mobjslab
             .get_mut(game.gs.player.handle)
-            .unwrap()
+            .expect("player mobj should exist")
             .momx = Fixed16_16::from_int(40);
 
         game.tick(TicInput::default());
@@ -4230,7 +4230,7 @@ mod tests {
         game.gs
             .mobjslab
             .get_mut(game.gs.player.handle)
-            .unwrap()
+            .expect("player mobj should exist")
             .momx = Fixed16_16::from_int(40);
 
         game.tick(TicInput::default());
@@ -4533,7 +4533,7 @@ mod tests {
         let args =
             Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--deh", "my_patch.deh"]);
         assert!(args.is_ok(), "args with --deh must parse successfully");
-        let args = args.unwrap();
+        let args = args.expect("args parse must succeed");
         assert_eq!(args.deh.as_deref(), Some("my_patch.deh"));
     }
 
@@ -4590,7 +4590,7 @@ mod tests {
     fn cli_args_parse_server_flag() {
         let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--server", "5029"]);
         assert!(args.is_ok(), "args with --server must parse successfully");
-        let args = args.unwrap();
+        let args = args.expect("args parse must succeed");
         assert_eq!(args.server, Some(5029));
     }
 
@@ -4608,7 +4608,7 @@ mod tests {
             "127.0.0.1:5029",
         ]);
         assert!(args.is_ok(), "args with --connect must parse successfully");
-        let args = args.unwrap();
+        let args = args.expect("args parse must succeed");
         assert_eq!(args.connect.as_deref(), Some("127.0.0.1:5029"));
     }
 
@@ -4636,7 +4636,7 @@ mod tests {
         let patch_text = "Thing 1\nHit points = 200\n";
         let patch = DehPatch::parse(patch_text);
         assert!(patch.is_ok(), "DehPatch::parse must succeed on valid input");
-        let patch = patch.unwrap();
+        let patch = patch.expect("patch must parse");
         assert_eq!(patch.things.len(), 1);
         assert_eq!(patch.things[0].hit_points, Some(200));
     }
@@ -4649,7 +4649,7 @@ mod tests {
     fn cli_args_deh_defaults_to_none() {
         let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]);
         assert!(args.is_ok());
-        let args = args.unwrap();
+        let args = args.expect("args parse must succeed");
         assert!(args.deh.is_none(), "--deh must default to None");
     }
 
@@ -4661,7 +4661,7 @@ mod tests {
     fn cli_args_server_defaults_to_none() {
         let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]);
         assert!(args.is_ok());
-        let args = args.unwrap();
+        let args = args.expect("args parse must succeed");
         assert!(args.server.is_none(), "--server must default to None");
     }
 
@@ -4673,7 +4673,7 @@ mod tests {
     fn cli_args_connect_defaults_to_none() {
         let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]);
         assert!(args.is_ok());
-        let args = args.unwrap();
+        let args = args.expect("args parse must succeed");
         assert!(args.connect.is_none(), "--connect must default to None");
     }
 
@@ -4681,7 +4681,7 @@ mod tests {
     fn cli_args_compat_defaults_to_extended() {
         let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]);
         assert!(args.is_ok());
-        let args = args.unwrap();
+        let args = args.expect("args parse must succeed");
         assert_eq!(
             args.compat,
             CompatibilityProfile::Extended,
@@ -4699,7 +4699,7 @@ mod tests {
             "vanilla-strict",
         ]);
         assert!(args.is_ok());
-        let args = args.unwrap();
+        let args = args.expect("args parse must succeed");
         assert_eq!(
             args.compat,
             CompatibilityProfile::VanillaStrict,
@@ -4807,7 +4807,7 @@ mod tests {
             args.is_ok(),
             "args with --export-sfx-wav must parse successfully"
         );
-        let args = args.unwrap();
+        let args = args.expect("args parse must succeed");
         assert_eq!(
             args.export_sfx_wav,
             Some(std::path::PathBuf::from("pistol.wav"))
@@ -4825,13 +4825,13 @@ mod tests {
 
         let stack = build_test_wad_stack_from_lumps(vec![(*b"DSPISTOL", sfx_data.clone())], vec![]);
 
-        let temp_dir = tempfile::tempdir().unwrap();
+        let temp_dir = tempfile::tempdir().expect("tempdir must succeed");
         let out_path = temp_dir.path().join("pistol.wav");
 
         let result = export_sfx_wav_for_name(&stack, "DSPISTOL", &out_path);
         assert!(result.is_ok(), "SFX export should succeed");
 
-        let wav_data = std::fs::read(&out_path).unwrap();
+        let wav_data = std::fs::read(&out_path).expect("read must succeed");
         // RIFF + 36 byte format/data headers + 100*2 bytes of 16-bit PCM = 244 bytes
         assert_eq!(wav_data[0..4], *b"RIFF");
         assert_eq!(wav_data[8..12], *b"WAVE");
@@ -4919,15 +4919,15 @@ mod tests {
     fn cli_args_parse_pathfind() {
         let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--pathfind", "0,5"]);
         assert!(args.is_ok(), "args with --pathfind must parse successfully");
-        let args = args.unwrap();
-        assert_eq!(args.pathfind.unwrap(), "0,5");
+        let args = args.expect("args parse must succeed");
+        assert_eq!(args.pathfind.expect("pathfind must exist"), "0,5");
     }
 
     #[test]
     fn cli_args_parse_analyze() {
         let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--analyze"]);
         assert!(args.is_ok(), "args with --analyze must parse successfully");
-        let args = args.unwrap();
+        let args = args.expect("args parse must succeed");
         assert!(args.analyze);
     }
 }

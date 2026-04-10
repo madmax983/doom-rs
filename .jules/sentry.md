@@ -24,3 +24,6 @@
 ## 2024-04-08 - Added Missing `StateNum::NULL` test
 **Learning:** Found uncovered branches related to the fallback `StateNum::NULL` handling in `tic.rs` when `unwrap_or(StateNum::NULL)` defaults.
 **Action:** Added targeted test cases `tick_mobj_with_invalid_next_state_removes_entity` and `advance_mobj_state_with_invalid_state_holds_forever` in `tic.rs` to reach 100% test coverage on state transitions.
+## 2026-04-10 - Replace unwrap() with expect()
+**Learning:** Removing unwrap() reduces panic points and gives better crash context via panic messages, especially in file parsing logic.
+**Action:** Replaced unwrap() with expect() in wad.rs, main.rs, savegame.rs, and net_mode.rs.
