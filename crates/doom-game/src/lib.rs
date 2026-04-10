@@ -37,6 +37,8 @@ pub mod spawn;
 pub mod specials;
 pub mod state;
 pub mod states;
+#[cfg(feature = "style_meter")]
+pub mod style;
 pub mod switch;
 pub mod tic;
 pub mod trace;
@@ -107,6 +109,8 @@ pub use state::{
 };
 pub use states::STATES;
 pub use states::sprite_names;
+#[cfg(feature = "style_meter")]
+pub use style::{StyleMeter, StyleRank};
 pub use switch::{
     KeyType, SWITCH_PAIRS, clear_linedef_special, find_switch_opposite, player_has_key,
     toggle_switch_texture,
