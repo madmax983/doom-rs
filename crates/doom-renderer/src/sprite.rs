@@ -679,6 +679,36 @@ pub fn render_actors_ex(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Rasterizes sprites interleaved with masked mid-textures (like fences/grates).
+///
+/// This is the final pass of the rendering pipeline. Both sprites and transparent
+/// wall columns rely on a painter's algorithm to resolve depth correctly. This
+/// function collects all the opaque sprites and the deferred masked columns
+/// recorded during the BSP traversal, sorts them strictly by their distance from
+/// the camera (`z`), and draws them back-to-front.
+///
+/// This ensures a fireball flying *through* an open window correctly overlays
+/// the wall frame behind it, but is itself obscured by the near window sill.
+///
+/// ## Examples
+/// ```ignore
+/// use doom_renderer::framebuffer::Framebuffer;
+/// use doom_renderer::sprite::{render_actors_with_masked_ex, SpriteCache};
+/// use doom_renderer::render::MaskedColumnDraw;
+/// use doom_types::{Fixed16_16, Bam};
+///
+///
+/// let mut fb = Framebuffer::new();
+/// let cache = SpriteCache::empty();
+///
+/// // Pass empty slices when no sprites or masked columns are visible.
+/// render_actors_with_masked_ex(
+///     &[],
+///     &level,
+///     Fixed16_16::ZERO, Fixed16_16::ZERO, Bam::ZERO,
+///     &mut fb, &cache, None, None, None, Some(&[])
+/// );
+/// ```
 pub fn render_actors_with_masked_ex<'a>(
     actors: &[crate::sprite_lookup::ActorRenderInfo],
     level: &doom_map::Level,

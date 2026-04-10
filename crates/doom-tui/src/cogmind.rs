@@ -269,6 +269,21 @@ pub struct CogmindHudWidget<'a> {
 
 impl<'a> CogmindHudWidget<'a> {
     #[must_use]
+    /// Wraps the internal `CogmindHud` state to be drawn by `ratatui`.
+    ///
+    /// The `doom-tui` engine treats the HUD as a standard widget in its terminal
+    /// render pipeline. This wrapper takes a reference to the active HUD data
+    /// (health, ammo, armor) and implements the `ratatui::Widget` trait so
+    /// it can be blitted onto the bottom of the screen during `Terminal::draw`.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_tui::cogmind::{CogmindHud, CogmindHudWidget};
+    ///
+    /// let hud = CogmindHud::default();
+    /// let widget = CogmindHudWidget::new(&hud);
+    /// // frame.render_widget(widget, area);
+    /// ```
     pub fn new(hud: &'a CogmindHud) -> Self {
         Self { hud }
     }

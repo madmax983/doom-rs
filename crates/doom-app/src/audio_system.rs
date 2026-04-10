@@ -222,6 +222,22 @@ impl AudioSystem {
     }
 
     #[cfg(test)]
+    /// Inspects the internal counter tracking how many times MIDI music has been started.
+    ///
+    /// In integration tests, it's impossible to "hear" the `cpal` output stream.
+    /// To verify that level transitions or menu actions correctly trigger music
+    /// playback commands, this diagnostic counter exposes the number of times
+    /// the engine attempted to initialize a new MIDI sequence.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_app::audio_system::AudioSystem;
+    ///
+    /// let audio = AudioSystem::null();
+    /// let initial = audio.debug_music_start_count();
+    /// // ... trigger level load ...
+    /// // assert!(audio.debug_music_start_count() > initial);
+    /// ```
     pub fn debug_music_start_count(&self) -> usize {
         self.music_start_count.load(Ordering::SeqCst)
     }

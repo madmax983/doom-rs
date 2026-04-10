@@ -261,6 +261,32 @@ fn record_sprite_clip_step(
     });
 }
 
+/// Rasterizes deferred, masked mid-texture columns (like grates or fences).
+///
+/// Unlike solid walls which perfectly occlude geometry behind them, transparent
+/// textures use a painter's algorithm. During the main BSP traversal, whenever
+/// a 2-sided segment with a middle texture is encountered, we defer drawing it.
+/// Instead, we record its depth and texture coordinates into a `MaskedColumnDraw`.
+///
+/// After all solid geometry is drawn, these masked columns are sorted back-to-front
+/// alongside sprites and drawn last. This ensures that a monster standing behind a
+/// grate is correctly obscured by the metal bars, but visible through the holes.
+///
+/// ## Examples
+/// ```
+/// use doom_renderer::framebuffer::Framebuffer;
+/// use doom_renderer::render::{draw_masked_columns, MaskedColumnDraw};
+///
+/// let mut fb = Framebuffer::new();
+/// let grate_tex = vec![0, 31, 0, 31]; // 0 is transparent index.
+/// let colormap = [0; 256];
+///
+/// let column = MaskedColumnDraw {
+///     depth: 100.0, x: 160, y_top: 50, y_bot: 100,
+///     frac: 0, fracstep: 1 << 16, source: &grate_tex, colormap
+/// };
+/// draw_masked_columns(&mut fb, &[column]);
+/// ```
 pub fn draw_masked_columns(fb: &mut Framebuffer, columns: &[MaskedColumnDraw<'_>]) {
     for column in columns {
         draw_masked_column(

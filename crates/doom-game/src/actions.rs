@@ -191,6 +191,25 @@ fn get_alive_target_with_pos(
     Some((target, mo_x, mo_y))
 }
 
+/// Executes the hardcoded logic for a monster's state transition (Code Pointers).
+///
+/// When a mob (Mobj) advances to a new state frame (e.g. from walking to attacking),
+/// that frame often defines an `action` ID corresponding to classic Doom code pointers
+/// like `A_Look`, `A_Chase`, or `A_FireMissile`. This gigantic dispatcher routes
+/// the ID to the appropriate behavior implementation.
+///
+/// This is the beating heart of Doom's monster AI and weapon logic. Without it,
+/// enemies would merely animate in place helplessly.
+///
+/// ## Examples
+/// ```ignore
+/// use doom_game::{GameState, actions};
+/// use doom_game::states::ACTION_LOOK;
+///
+/// // Assuming `handle` is a valid `MobjHandle` and `gs` is a mutable `GameState`:
+/// // Force a monster to scan its surroundings for a player immediately.
+/// actions::dispatch_action(&mut gs, handle, ACTION_LOOK, None);
+/// ```
 pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level: Option<&Level>) {
     match action {
         ACTION_NONE => {}

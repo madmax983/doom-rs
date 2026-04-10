@@ -45,6 +45,21 @@ pub struct SkyCoverage {
 }
 
 impl SkyCoverage {
+    /// Initializes a blank canvas for the sky to bleed through.
+    ///
+    /// By default, a sector assumes it is enclosed by solid walls and a flat ceiling.
+    /// This coverage mask starts entirely opaque (`0`). As the renderer processes
+    /// `F_SKY1` ceilings, it carves out transparent vertical spans in this mask,
+    /// revealing the parallax sky dome behind the level geometry.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sky::SkyCoverage;
+    ///
+    /// let mut sky = SkyCoverage::new();
+    /// // Initially, the sky is completely blocked by the ceiling.
+    /// assert!(!sky.contains(160, 100));
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self {
@@ -52,6 +67,30 @@ impl SkyCoverage {
         }
     }
 
+    /// Tears a hole in the ceiling to reveal the sky dome.
+    ///
+    /// Unlike standard visplanes which track a single `[top, bottom]` interval
+    /// per screen column, the sky can be visible through multiple disjoint vertical
+    /// windows in the same column (e.g. peering through a sequence of increasingly
+    /// lower outdoor arches). This method records a newly discovered visible span
+    /// `[top..=bot]` in the column `x`, merging it with any previously recorded
+    /// sky spans via a bitmask.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sky::SkyCoverage;
+    ///
+    /// let mut sky = SkyCoverage::new();
+    /// // We see sky through a high window...
+    /// sky.record_span(160, 10, 20);
+    /// // ...and also under a low arch in the same column!
+    /// sky.record_span(160, 80, 90);
+    ///
+    /// assert!(sky.contains(160, 15));
+    /// assert!(sky.contains(160, 85));
+    /// // The solid wall between them blocks the sky.
+    /// assert!(!sky.contains(160, 50));
+    /// ```
     pub fn record_span(&mut self, x: usize, top: i32, bot: i32) {
         if x >= SCREEN_W {
             return;
@@ -93,6 +132,22 @@ impl SkyCoverage {
         self.columns[x][end_word] |= tail_mask;
     }
 
+    /// Queries whether the sky is visible at a specific screen coordinate.
+    ///
+    /// Once the BSP traversal is complete and all walls/ceilings are drawn, the
+    /// renderer does a final post-pass. It asks this mask: "For pixel `(x, y)`,
+    /// did any sector's `F_SKY1` ceiling leave a hole here?" If `true`, the
+    /// parallax sky texture is sampled and drawn over the background.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sky::SkyCoverage;
+    ///
+    /// let mut sky = SkyCoverage::new();
+    /// sky.record_span(0, 0, 10);
+    /// assert!(sky.contains(0, 5));
+    /// assert!(!sky.contains(0, 11));
+    /// ```
     #[must_use]
     pub fn contains(&self, x: usize, y: usize) -> bool {
         if x >= SCREEN_W || y >= SCREEN_H {

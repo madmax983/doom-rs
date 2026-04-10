@@ -28,6 +28,20 @@ pub struct Visplane {
 }
 
 impl Visplane {
+    /// Forges a new, empty visplane with a unique material identity.
+    ///
+    /// A `Visplane` represents a collection of floor or ceiling fragments that share
+    /// the exact same height, texture (`flat_name`), and lighting. By grouping them,
+    /// Doom can render the floor of a complex, non-convex room as a single continuous
+    /// surface spanning multiple columns, dramatically improving performance.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::visplane::{Visplane, PlaneKind};
+    ///
+    /// let floor = Visplane::new(PlaneKind::Floor, 0, *b"FLAT1\0\0\0", 255);
+    /// assert!(floor.is_empty());
+    /// ```
     #[must_use]
     pub fn new(kind: PlaneKind, height: i32, flat_name: [u8; 8], light_level: u8) -> Self {
         Self {
@@ -42,11 +56,48 @@ impl Visplane {
         }
     }
 
+    /// Checks if this visplane spans across the given screen column.
+    ///
+    /// Because a visplane merges geometry from a single sector, it might not
+    /// cover the entire horizontal screen. It only exists in columns where a
+    /// segment of that sector was actually drawn.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::visplane::{VisplaneSet, PlaneKind};
+    ///
+    /// let mut set = VisplaneSet::new();
+    /// let idx = set.r_find_plane(PlaneKind::Floor, 0, *b"FLAT1\0\0\0", 255);
+    /// // Record a visible floor segment from column 10 to 20.
+    /// set.r_check_plane(idx, 10, 20, 100, 120);
+    ///
+    /// let plane = &set.planes()[0];
+    /// assert!(plane.has_column(15));
+    /// assert!(!plane.has_column(5));
+    /// ```
     #[must_use]
     pub fn has_column(&self, x: usize) -> bool {
         x < SCREEN_W && self.top[x] != UNUSED
     }
 
+    /// Retrieves the vertical window `(top_y, bottom_y)` this plane occupies in column `x`.
+    ///
+    /// As the renderer traverses the BSP tree, it projects the sector's ceiling
+    /// and floor heights into screen space. These vertical bounds dictate where
+    /// the textured spans will ultimately be drawn.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::visplane::{VisplaneSet, PlaneKind};
+    ///
+    /// let mut set = VisplaneSet::new();
+    /// let idx = set.r_find_plane(PlaneKind::Floor, 0, *b"FLAT1\0\0\0", 255);
+    /// set.r_check_plane(idx, 160, 160, 100, 150);
+    ///
+    /// let plane = &set.planes()[0];
+    /// assert_eq!(plane.column_bounds(160), Some((100, 150)));
+    /// assert_eq!(plane.column_bounds(0), None);
+    /// ```
     #[must_use]
     pub fn column_bounds(&self, x: usize) -> Option<(i16, i16)> {
         if !self.has_column(x) {
@@ -65,6 +116,19 @@ impl Visplane {
         self.max_x = self.max_x.max(x);
     }
 
+    /// Determines if this visplane was allocated but never actually drawn to.
+    ///
+    /// An empty visplane occurs when a plane is requested via `R_FindPlane`
+    /// but is completely occluded by nearer geometry before `R_CheckPlane`
+    /// can assign any column spans to it.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::visplane::{Visplane, PlaneKind};
+    ///
+    /// let floor = Visplane::new(PlaneKind::Floor, 0, *b"FLAT1\0\0\0", 255);
+    /// assert!(floor.is_empty());
+    /// ```
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.min_x >= SCREEN_W
@@ -127,11 +191,41 @@ pub struct VisplaneSet {
 }
 
 impl VisplaneSet {
+    /// Initializes a fresh allocator for the current frame's visplanes.
+    ///
+    /// Doom builds a completely new set of visplanes every single frame.
+    /// As the BSP is traversed front-to-back, this set dynamically grows
+    /// to merge adjacent sector fragments or split them when occlusion
+    /// breaks their continuity.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::visplane::VisplaneSet;
+    ///
+    /// let set = VisplaneSet::new();
+    /// assert_eq!(set.planes().len(), 0);
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Exposes the final roster of visplanes ready to be rasterized.
+    ///
+    /// After the wall pass completes, the renderer iterates over this slice,
+    /// converting the vertical column bounds of each visplane into horizontal
+    /// row spans (`SpanRun`) for perspective-correct texture mapping.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::visplane::{VisplaneSet, PlaneKind};
+    ///
+    /// let mut set = VisplaneSet::new();
+    /// set.r_find_plane(PlaneKind::Ceiling, 128, *b"CEIL1\0\0\0", 255);
+    ///
+    /// assert_eq!(set.planes().len(), 1);
+    /// assert_eq!(set.planes()[0].kind, PlaneKind::Ceiling);
+    /// ```
     #[must_use]
     pub fn planes(&self) -> &[Visplane] {
         &self.planes

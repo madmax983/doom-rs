@@ -129,11 +129,46 @@ impl Default for SolidWallClipper {
 }
 
 impl SolidWallClipper {
+    /// Prepares a fresh occlusion buffer for the current frame.
+    ///
+    /// To prevent rendering distant rooms that are completely hidden behind
+    /// nearer walls, we track which of the 320 screen columns have been fully
+    /// blocked by solid, one-sided geometry. This starts with all columns open.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::clip::SolidWallClipper;
+    ///
+    /// let clipper = SolidWallClipper::new();
+    /// // Initially, the entire screen is visible.
+    /// assert_eq!(clipper.uncovered_runs(0, 319), vec![(0, 319)]);
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Seals a screen column, blocking all geometry behind it.
+    ///
+    /// When a one-sided (solid) wall is drawn into column `x`, it perfectly
+    /// occludes anything further away in that vertical strip. By marking it
+    /// here, the renderer can aggressively cull subsequent BSP nodes that
+    /// project entirely into covered columns, saving precious CPU cycles.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::clip::SolidWallClipper;
+    ///
+    /// let mut clipper = SolidWallClipper::new();
+    /// // A solid pillar blocks the center of the screen.
+    /// for x in 150..=170 {
+    ///     clipper.mark_column(x);
+    /// }
+    ///
+    /// // Only the left and right sides of the screen remain visible.
+    /// let runs = clipper.uncovered_runs(100, 200);
+    /// assert_eq!(runs, vec![(100, 149), (171, 200)]);
+    /// ```
     pub fn mark_column(&mut self, x: usize) {
         if x < SCREEN_W {
             self.covered[x] = true;
