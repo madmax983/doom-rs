@@ -336,7 +336,7 @@ mod tests {
         };
         let server = RelayServer::bind("127.0.0.1:0", config);
         assert!(server.is_ok(), "RelayServer must bind successfully");
-        let s = server.unwrap();
+        let s = server.expect("server bind must succeed");
         assert_eq!(
             s.connected_count(),
             0,
@@ -365,9 +365,10 @@ mod tests {
             port: 0,
             ..NetConfig::default()
         };
-        let server = RelayServer::bind("127.0.0.1:0", config).unwrap();
-        let server_addr = server.local_addr().unwrap();
-        let client = NetClient::connect(&server_addr.to_string(), 0).unwrap();
+        let server = RelayServer::bind("127.0.0.1:0", config).expect("server bind must succeed");
+        let server_addr = server.local_addr().expect("server must have local addr");
+        let client =
+            NetClient::connect(&server_addr.to_string(), 0).expect("client connect must succeed");
 
         let net_app = NetGameApp::new(game, client);
 
@@ -390,9 +391,10 @@ mod tests {
             port: 0,
             ..NetConfig::default()
         };
-        let server = RelayServer::bind("127.0.0.1:0", config).unwrap();
-        let server_addr = server.local_addr().unwrap();
-        let client = NetClient::connect(&server_addr.to_string(), 0).unwrap();
+        let server = RelayServer::bind("127.0.0.1:0", config).expect("server bind must succeed");
+        let server_addr = server.local_addr().expect("server must have local addr");
+        let client =
+            NetClient::connect(&server_addr.to_string(), 0).expect("client connect must succeed");
 
         let mut net_app = NetGameApp::new(game, client);
         assert_eq!(net_app.tic(), 0);
@@ -411,9 +413,10 @@ mod tests {
             port: 0,
             ..NetConfig::default()
         };
-        let server = RelayServer::bind("127.0.0.1:0", config).unwrap();
-        let server_addr = server.local_addr().unwrap();
-        let client = NetClient::connect(&server_addr.to_string(), 0).unwrap();
+        let server = RelayServer::bind("127.0.0.1:0", config).expect("server bind must succeed");
+        let server_addr = server.local_addr().expect("server must have local addr");
+        let client =
+            NetClient::connect(&server_addr.to_string(), 0).expect("client connect must succeed");
 
         let net_app = NetGameApp::new(game, client);
         assert_eq!(
@@ -430,9 +433,10 @@ mod tests {
             port: 0,
             ..NetConfig::default()
         };
-        let server = RelayServer::bind("127.0.0.1:0", config).unwrap();
-        let server_addr = server.local_addr().unwrap();
-        let client = NetClient::connect(&server_addr.to_string(), 0).unwrap();
+        let server = RelayServer::bind("127.0.0.1:0", config).expect("server bind must succeed");
+        let server_addr = server.local_addr().expect("server must have local addr");
+        let client =
+            NetClient::connect(&server_addr.to_string(), 0).expect("client connect must succeed");
 
         let mut net_app = NetGameApp::new(game, client);
         let mut fb = Framebuffer::new();

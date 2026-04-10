@@ -390,7 +390,7 @@ mod tests {
         );
         // Description starts with 'Slot 3'.
         let desc = core::str::from_utf8(&header.description)
-            .unwrap()
+            .expect("description must be valid utf8")
             .trim_matches('\0');
         assert_eq!(desc, "Slot 3", "slot must round-trip via description");
 
@@ -438,7 +438,7 @@ mod tests {
     #[test]
     fn load_empty_file_errors() {
         let path = temp_path("doom_rs_test_empty.bin");
-        std::fs::write(&path, b"").unwrap();
+        std::fs::write(&path, b"").expect("write must succeed");
 
         let result = load_game(&path, CompatibilityProfile::Extended);
         assert!(result.is_err(), "loading an empty file must return Err");
