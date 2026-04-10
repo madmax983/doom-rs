@@ -71,7 +71,12 @@ pub struct MenuItem {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuResult {
     /// Start a new game with the given episode and skill.
-    StartGame { episode: u8, skill: u8 },
+    StartGame {
+        /// Episode index (0-3).
+        episode: u8,
+        /// Skill level index (0-4).
+        skill: u8,
+    },
     /// Load from save slot.
     LoadGame(u8),
     /// Save to save slot.

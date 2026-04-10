@@ -129,7 +129,9 @@ pub struct DoorMover {
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum MoveDirection {
+    /// Moving vertically upward.
     Up,
+    /// Moving vertically downward.
     Down,
 }
 
@@ -531,8 +533,11 @@ impl DoomRng {
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {
+    /// Number of monsters killed by the player so far.
     pub kill_count: u32,
+    /// Number of special items collected by the player.
     pub item_count: u32,
+    /// Number of secret areas discovered.
     pub secret_count: u32,
     /// Total killable monsters in the map (for percentage display).
     pub total_kills: u32,
@@ -608,10 +613,13 @@ pub struct GameState {
     /// Current level identifier (e.g. `"E1M1"`).
     pub level_name: String,
 
+    /// Player statistics tracking for the end-of-level intermission screen.
     pub stats: LevelStats,
 
+    /// Manager for active doors, lifts, ceilings, and crushers.
     pub movers: SectorMovers,
 
+    /// Sound emission and propagation state (blockmap sound zones).
     pub sound: SoundPropagation,
 
     /// Level exit requested this tic (cleared to `None` at start of each tick).
