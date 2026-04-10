@@ -95,7 +95,13 @@ pub fn parse_pnames(data: &[u8]) -> Vec<[u8; 8]> {
         return Vec::new();
     }
     let count = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
-    let mut names = Vec::with_capacity(count);
+
+    // Havoc 👺: Defend against OOM from fuzzed PNAMES lump count.
+    // Max entries is based on remaining bytes.
+    let max_names = data.len().saturating_sub(4) / 8;
+    let safe_capacity = count.min(max_names);
+
+    let mut names = Vec::with_capacity(safe_capacity);
     for i in 0..count {
         let off = 4 + i * 8;
         if off + 8 > data.len() {
@@ -120,7 +126,14 @@ pub fn parse_texture_lump(data: &[u8]) -> Vec<TextureDef> {
         return Vec::new();
     }
     let num_textures = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
-    let mut defs = Vec::with_capacity(num_textures);
+
+    // Havoc 👺: Defend against OOM and huge allocations from fuzzed lengths.
+    // Doom's executable and standard WAD sizes are reasonable, so an allocation for
+    // billions of textures is obviously malicious or corrupt data.
+    // If the requested capacity is absurdly large (e.g. larger than the whole data slice length),
+    // clamp or error. We'll clamp the initial capacity to avoid OOM while still parsing what we can.
+    let safe_capacity = num_textures.min(data.len() / 4);
+    let mut defs = Vec::with_capacity(safe_capacity);
 
     for i in 0..num_textures {
         let off_idx = 4 + i * 4;
@@ -151,7 +164,14 @@ pub fn parse_texture_lump(data: &[u8]) -> Vec<TextureDef> {
             u16::from_le_bytes([data[tex_offset + 20], data[tex_offset + 21]]) as usize;
 
         let patches_start = tex_offset + 22;
-        let mut patches = Vec::with_capacity(patch_count);
+
+        // Havoc 👺: Defend against OOM and huge allocations from fuzzed lengths.
+        // Each patch is 10 bytes. The patch_count could be corrupted to 65535.
+        // If data.len() is small, this would allocate too much. Limit the capacity.
+        let max_patches_in_data = data.len().saturating_sub(patches_start) / 10;
+        let safe_patch_capacity = patch_count.min(max_patches_in_data);
+
+        let mut patches = Vec::with_capacity(safe_patch_capacity);
         for p in 0..patch_count {
             let poff = patches_start + p * 10;
             if poff + 10 > data.len() {
