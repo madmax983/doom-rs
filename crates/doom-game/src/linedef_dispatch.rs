@@ -15,6 +15,19 @@ use crate::mobj::MobjHandle;
 use crate::state::{ExitRequest, GameState, LockedDoorColor, SoundRequest};
 use crate::switch::KeyType;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DoorBehavior {
+    OpenWaitClose,
+    Open,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DoorSpeed {
+    Normal,
+    Blazing,
+}
+
+
 // ---------------------------------------------------------------------------
 // Trigger types
 // ---------------------------------------------------------------------------
@@ -404,15 +417,15 @@ fn dispatch_doors(
     use LinedefEffect::*;
     match effect {
         DoorOpenWaitClose => {
-            door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenWaitClose, DoorSpeed::Normal);
             true
         }
         DoorOpen => {
-            door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::Open, DoorSpeed::Normal);
             true
         }
         DoorClose => {
-            close_door_by_tag_or_back(gs, level, linedef_index, tag, false);
+            close_door_by_tag_or_back(gs, level, linedef_index, tag, DoorSpeed::Normal);
             true
         }
         DoorCloseWaitOpen => {
@@ -440,15 +453,15 @@ fn dispatch_doors(
             true
         }
         DoorBlazeOpenWaitClose => {
-            door_by_tag_or_back(gs, level, linedef_index, tag, true, true);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenWaitClose, DoorSpeed::Blazing);
             true
         }
         DoorBlazeOpen => {
-            door_by_tag_or_back(gs, level, linedef_index, tag, false, true);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::Open, DoorSpeed::Blazing);
             true
         }
         DoorBlazeClose => {
-            close_door_by_tag_or_back(gs, level, linedef_index, tag, true);
+            close_door_by_tag_or_back(gs, level, linedef_index, tag, DoorSpeed::Blazing);
             true
         }
         _ => false,
@@ -472,7 +485,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Blue);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenWaitClose, DoorSpeed::Normal);
             true
         }
         DoorLockedRed => {
@@ -482,7 +495,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Red);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenWaitClose, DoorSpeed::Normal);
             true
         }
         DoorLockedYellow => {
@@ -492,7 +505,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Yellow);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, true, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::OpenWaitClose, DoorSpeed::Normal);
             true
         }
         DoorLockedBlueOpen => {
@@ -502,7 +515,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Blue);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::Open, DoorSpeed::Normal);
             true
         }
         DoorLockedRedOpen => {
@@ -512,7 +525,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Red);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::Open, DoorSpeed::Normal);
             true
         }
         DoorLockedYellowOpen => {
@@ -522,7 +535,7 @@ fn dispatch_locked_doors(
                 queue_locked_door_feedback(gs, activator, LockedDoorColor::Yellow);
                 return false;
             }
-            door_by_tag_or_back(gs, level, linedef_index, tag, false, false);
+            door_by_tag_or_back(gs, level, linedef_index, tag, DoorBehavior::Open, DoorSpeed::Normal);
             true
         }
         _ => false,
@@ -764,8 +777,8 @@ fn door_by_tag_or_back(
     level: &mut Level,
     linedef_index: usize,
     tag: u16,
-    auto_close: bool,
-    blazing: bool,
+    behavior: DoorBehavior,
+    speed: DoorSpeed,
 ) {
     if tag == 0 {
         // Direct sector: use the back sidedef.
@@ -781,18 +794,18 @@ fn door_by_tag_or_back(
             Some(sd) => sd.sector as usize,
             None => return,
         };
-        if blazing {
-            open_blazing_door_helper(gs, level, sector_idx, auto_close);
+        if speed == DoorSpeed::Blazing {
+            open_blazing_door_helper(gs, level, sector_idx, behavior);
         } else {
-            open_door_helper(gs, level, sector_idx, auto_close);
+            open_door_helper(gs, level, sector_idx, behavior);
         }
     } else {
         let indices = sectors_by_tag(level, tag);
         for idx in indices {
-            if blazing {
-                open_blazing_door_helper(gs, level, idx, auto_close);
+            if speed == DoorSpeed::Blazing {
+                open_blazing_door_helper(gs, level, idx, behavior);
             } else {
-                open_door_helper(gs, level, idx, auto_close);
+                open_door_helper(gs, level, idx, behavior);
             }
         }
     }
@@ -804,7 +817,7 @@ fn close_door_by_tag_or_back(
     level: &mut Level,
     linedef_index: usize,
     tag: u16,
-    blazing: bool,
+    speed: DoorSpeed,
 ) {
     if tag == 0 {
         let ld = match level.linedefs.get(linedef_index) {
@@ -819,7 +832,7 @@ fn close_door_by_tag_or_back(
             Some(sd) => sd.sector as usize,
             None => return,
         };
-        if blazing {
+        if speed == DoorSpeed::Blazing {
             close_blazing_door_helper(gs, level, sector_idx);
         } else {
             close_door_helper(gs, level, sector_idx);
@@ -827,7 +840,7 @@ fn close_door_by_tag_or_back(
     } else {
         let indices = sectors_by_tag(level, tag);
         for idx in indices {
-            if blazing {
+            if speed == DoorSpeed::Blazing {
                 close_blazing_door_helper(gs, level, idx);
             } else {
                 close_door_helper(gs, level, idx);
@@ -847,7 +860,7 @@ const BLAZING_DOOR_SPEED: i16 = 8;
 /// Door wait time (tics).
 const DOOR_WAIT: i32 = 120;
 
-fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: bool) {
+fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavior: DoorBehavior) {
     let sector = match level.sectors.get(sector_idx) {
         Some(s) => s,
         None => return,
@@ -867,7 +880,7 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, auto_c
         current_height: sector.ceil_height,
         speed: DOOR_SPEED,
         is_ceiling: true,
-        wait_tics: if auto_close { DOOR_WAIT } else { -1 },
+        wait_tics: if behavior == DoorBehavior::OpenWaitClose { DOOR_WAIT } else { -1 },
         countdown: -1,
         reopen_height: 0,
         reopen_countdown: -1,
@@ -933,7 +946,7 @@ fn open_blazing_door_helper(
     gs: &mut GameState,
     level: &Level,
     sector_idx: usize,
-    auto_close: bool,
+    behavior: DoorBehavior,
 ) {
     let sector = match level.sectors.get(sector_idx) {
         Some(s) => s,
@@ -954,7 +967,7 @@ fn open_blazing_door_helper(
         current_height: sector.ceil_height,
         speed: BLAZING_DOOR_SPEED,
         is_ceiling: true,
-        wait_tics: if auto_close { DOOR_WAIT } else { -1 },
+        wait_tics: if behavior == DoorBehavior::OpenWaitClose { DOOR_WAIT } else { -1 },
         countdown: -1,
         reopen_height: 0,
         reopen_countdown: -1,
