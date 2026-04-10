@@ -8,10 +8,10 @@
 //!   into the game loop for client-side netplay.
 
 use anyhow::Result;
-use doom_game::TicCmd;
 use doom_net::{MAX_PLAYERS, NetClient, NetConfig, RelayServer, TicPacket};
 use doom_renderer::Framebuffer;
 use doom_tui::{DoomApp, TicInput};
+use doom_types::TicCmd;
 use std::time::{Duration, Instant};
 
 use crate::DoomGame;

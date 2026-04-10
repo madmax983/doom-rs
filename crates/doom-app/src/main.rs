@@ -635,7 +635,7 @@ impl DoomGame {
     }
 
     fn transition_input_pressed(&mut self, input: &TicInput) -> bool {
-        let button_mask = input.buttons & (doom_game::bt::BT_ATTACK | doom_game::bt::BT_USE);
+        let button_mask = input.buttons & (doom_types::bt::BT_ATTACK | doom_types::bt::BT_USE);
         let button_pressed = button_mask != 0 && self.transition_buttons_down == 0;
         self.transition_buttons_down = button_mask;
         input.menu_select || input.escape_pressed || button_pressed
@@ -3607,7 +3607,7 @@ mod tests {
         }
 
         game.tick(TicInput {
-            buttons: doom_game::bt::BT_ATTACK,
+            buttons: doom_types::bt::BT_ATTACK,
             ..TicInput::default()
         });
 
@@ -3647,7 +3647,7 @@ mod tests {
         }
 
         game.tick(TicInput {
-            buttons: doom_game::bt::BT_CHANGE | (2u8 << 3),
+            buttons: doom_types::bt::BT_CHANGE | (2u8 << 3),
             ..TicInput::default()
         });
 
@@ -4057,11 +4057,11 @@ mod tests {
             .momx = Fixed16_16::from_int(40);
 
         game.tick(TicInput {
-            buttons: doom_game::bt::BT_ATTACK,
+            buttons: doom_types::bt::BT_ATTACK,
             ..TicInput::default()
         });
         game.tick(TicInput {
-            buttons: doom_game::bt::BT_ATTACK,
+            buttons: doom_types::bt::BT_ATTACK,
             ..TicInput::default()
         });
 

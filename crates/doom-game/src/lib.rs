@@ -63,7 +63,6 @@ pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
 pub use doom_types::mobj_kind::MobjKind;
-pub use doom_types::{TicCmd, bt};
 pub use face::{FaceDir, FaceKind, FaceState, face_patch_name, health_tier};
 pub use intermission::{IntermissionStats, par_time};
 pub use linedef_dispatch::{

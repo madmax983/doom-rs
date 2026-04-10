@@ -3,7 +3,7 @@
 //! The [`DemoPlayer`] parses an LMP file into its header and tic data, then
 //! provides an iterator-like interface to step through tics one at a time.
 
-use doom_game::TicCmd;
+use doom_types::TicCmd;
 
 use crate::header::{LMP_HEADER_SIZE, LMP_TERMINATOR, LmpHeader};
 use crate::ticcmd::DemoTicCmd;
@@ -202,7 +202,7 @@ mod tests {
     use crate::header::LmpHeader;
     use crate::recorder::DemoRecorder;
     use crate::ticcmd::DemoTicCmd;
-    use doom_game::bt;
+    use doom_types::bt;
 
     /// Build a minimal LMP from a recorder with N tics (single player, all
     /// default commands).

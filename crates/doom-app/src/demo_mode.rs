@@ -6,10 +6,10 @@
 //!   [`DemoPlayer`] instead of consuming live keyboard input.
 
 use doom_demo::{DemoPlayer, DemoRecorder};
-use doom_game::TicCmd;
 use doom_renderer::Framebuffer;
 use doom_tui::{DoomApp, TicInput};
 use doom_types::CompatibilityProfile;
+use doom_types::TicCmd;
 
 use crate::DoomGame;
 use crate::net_mode::ticinput_to_ticcmd;
@@ -230,8 +230,9 @@ fn make_test_level() -> doom_map::Level {
 mod tests {
     use super::*;
     use doom_demo::{DemoRecorder, LmpHeader};
-    use doom_game::{GameState, Mobj, PlayerState, TicCmd, flags};
+    use doom_game::{GameState, Mobj, PlayerState, flags};
     use doom_types::CompatibilityProfile;
+    use doom_types::TicCmd;
     use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
     use std::env;

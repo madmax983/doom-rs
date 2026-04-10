@@ -13,3 +13,7 @@
 **[Extract MobjKind to Shared Primitives]**
 **Tangle:** The `MobjKind` enum was defined in `doom-game`, but widely used in presentation crates like `doom-app` for rendering glyphs and managing audio playback. This caused UI components to depend directly on the entire game engine crate just for a basic enum definition, creating tight coupling between rendering and core game state.
 **Blueprint:** Extracted `MobjKind` into `doom-types/src/mobj_kind.rs` and added its dependencies (`strum`, `strum_macros`) to `doom-types/Cargo.toml`. `doom-game` and `doom-app` imports were updated to reference the primitive from the shared types crate, creating a clean dependency hierarchy where both presentation and logic rely on foundational types.
+
+**[Stop TicCmd Re-export Leak]**
+**Tangle:** `doom-game/src/lib.rs` was unnecessarily re-exporting `doom_types::{TicCmd, bt}` via `pub use`. This caused presentation and utility crates like `doom-app` and `doom-demo` to depend on the game engine `doom-game` just to use basic shared data types. This violated the boundary isolation.
+**Blueprint:** Removed the re-export from `doom-game` and updated `doom-demo` and `doom-app` to import `TicCmd` and `bt` constants directly from the foundational `doom-types` crate. This enforces cleaner dependency arrows where higher-level crates fetch domain primitives directly from the shared types crate rather than pulling them through the game logic.
