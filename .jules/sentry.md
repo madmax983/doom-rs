@@ -20,3 +20,7 @@
 
 **Learning:** `tick_mobj` handles transitioning a mobj's state when its tics reach zero. If the lookup for `next_state` returns `None` (e.g. invalid state index), it falls back to `StateNum::NULL`. The transition to `NULL` correctly removes the mobj because `p_set_mobj_state` returns `false` for `NULL`, but this fallback path was completely uncovered by tests.
 **Action:** When a fallback value like `StateNum::NULL` is provided in an `unwrap_or`, add a targeted unit test to ensure the fallback actually executes and does the right thing (e.g. removes the entity).
+
+## 2026-04-07 - [trace.rs raycasting edge case coverage]
+**Learning:** Found several edge cases in `trace_ray` and `ray_actor_intersection` that were previously uncovered, including early returns for zero-direction rays, vertical/horizontal ray bounds checks missing actors, duplicate linedefs spanning multiple cells, and safety fallbacks for missing blockmap cells or invalid two-sided back sectors.
+**Action:** Write focused unit tests that deliberately trigger these specific edge conditions to increase branch coverage and prevent regressions in fundamental math and blockmap traversal algorithms.
