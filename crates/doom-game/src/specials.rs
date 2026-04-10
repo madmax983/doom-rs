@@ -434,50 +434,49 @@ pub fn tick_sector_lights(gs: &mut GameState, level: &mut Level) {
 pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
     const CLOSE_WAIT_OPEN_DELAY: i32 = 1050; // 30 s at 35 Hz
 
-    let mut i = 0;
-    while i < gs.movers.active_doors.len() {
-        let sector_idx = gs.movers.active_doors[i].sector;
+    let mut active_doors = std::mem::take(&mut gs.movers.active_doors);
+
+    active_doors.retain_mut(|door| {
+        let sector_idx = door.sector;
 
         // ── Close-wait-open: waiting at closed position before reopening ──
-        if gs.movers.active_doors[i].reopen_countdown > 0 {
-            gs.movers.active_doors[i].reopen_countdown -= 1;
-            i += 1;
-            continue;
+        if door.reopen_countdown > 0 {
+            door.reopen_countdown -= 1;
+            return true;
         }
-        if gs.movers.active_doors[i].reopen_countdown == 0 {
+        if door.reopen_countdown == 0 {
             // Delay expired — start reopening.
-            let rh = gs.movers.active_doors[i].reopen_height;
-            gs.movers.active_doors[i].target_height = rh;
-            gs.movers.active_doors[i].speed = DOOR_SPEED; // positive = opening
-            gs.movers.active_doors[i].reopen_height = 0;
-            gs.movers.active_doors[i].reopen_countdown = -1;
+            let rh = door.reopen_height;
+            door.target_height = rh;
+            door.speed = DOOR_SPEED; // positive = opening
+            door.reopen_height = 0;
+            door.reopen_countdown = -1;
             // Fall through to movement logic.
         }
 
         // ── Standard open-wait-close countdown ──
-        let countdown = gs.movers.active_doors[i].countdown;
-        let speed_abs = gs.movers.active_doors[i].speed.abs();
+        let countdown = door.countdown;
+        let speed_abs = door.speed.abs();
 
         if countdown > 0 {
-            gs.movers.active_doors[i].countdown -= 1;
-            i += 1;
-            continue;
+            door.countdown -= 1;
+            return true;
         }
         if countdown == 0 {
             // Start closing — negate speed so it moves downward.
-            gs.movers.active_doors[i].speed = -speed_abs;
+            door.speed = -speed_abs;
             if let Some(sector) = level.sectors.get(sector_idx) {
-                gs.movers.active_doors[i].target_height = sector.floor_height;
+                door.target_height = sector.floor_height;
             }
-            gs.movers.active_doors[i].countdown = -1;
+            door.countdown = -1;
         }
 
         // ── Move toward target ──
-        let speed = gs.movers.active_doors[i].speed;
-        let target = gs.movers.active_doors[i].target_height;
-        let is_ceiling = gs.movers.active_doors[i].is_ceiling;
-        let reopen_height = gs.movers.active_doors[i].reopen_height;
-        let wait_tics = gs.movers.active_doors[i].wait_tics;
+        let speed = door.speed;
+        let target = door.target_height;
+        let is_ceiling = door.is_ceiling;
+        let reopen_height = door.reopen_height;
+        let wait_tics = door.wait_tics;
 
         if sector_idx < level.sectors.len() {
             let sector = &mut level.sectors[sector_idx];
@@ -496,34 +495,33 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
 
             if reached {
                 *height = target;
-                gs.movers.active_doors[i].current_height = target;
+                door.current_height = target;
 
                 if speed > 0 && wait_tics > 0 {
-                    gs.movers.active_doors[i].countdown = wait_tics;
-                    i += 1;
-                    continue;
+                    door.countdown = wait_tics;
+                    return true;
                 }
 
                 // Close-wait-open: start the reopen delay instead of removing.
                 if speed < 0 && reopen_height != 0 {
-                    gs.movers.active_doors[i].reopen_countdown = CLOSE_WAIT_OPEN_DELAY;
-                    i += 1;
-                    continue;
+                    door.reopen_countdown = CLOSE_WAIT_OPEN_DELAY;
+                    return true;
                 }
 
-                gs.movers.active_doors.remove(i);
-                continue;
+                return false;
             }
             let new_h = if is_ceiling {
                 level.sectors[sector_idx].ceil_height
             } else {
                 level.sectors[sector_idx].floor_height
             };
-            gs.movers.active_doors[i].current_height = new_h;
+            door.current_height = new_h;
         }
 
-        i += 1;
-    }
+        true
+    });
+
+    gs.movers.active_doors = active_doors;
 }
 
 // ---------------------------------------------------------------------------
@@ -1392,21 +1390,21 @@ pub fn tick_platforms(gs: &mut GameState, level: &mut Level) {
 /// 3. If moving Up and reaches `top_height`: reverse to Down (perpetual)
 ///    or remove (one-shot).
 pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
-    let mut i = 0;
-    while i < gs.movers.active_ceilings.len() {
-        let sector_idx = gs.movers.active_ceilings[i].sector_index;
-        let speed = gs.movers.active_ceilings[i].speed;
-        let direction = gs.movers.active_ceilings[i].direction;
-        let top = gs.movers.active_ceilings[i].top_height;
-        let bottom = gs.movers.active_ceilings[i].bottom_height;
-        let crush_dmg = gs.movers.active_ceilings[i].crush_damage;
-        let remove_when_done = gs.movers.active_ceilings[i].remove_when_done;
-        let normal_speed = gs.movers.active_ceilings[i].normal_speed;
-        let ceiling_type = gs.movers.active_ceilings[i].ceiling_type;
+    let mut active_ceilings = std::mem::take(&mut gs.movers.active_ceilings);
+
+    active_ceilings.retain_mut(|ceiling| {
+        let sector_idx = ceiling.sector_index;
+        let speed = ceiling.speed;
+        let direction = ceiling.direction;
+        let top = ceiling.top_height;
+        let bottom = ceiling.bottom_height;
+        let crush_dmg = ceiling.crush_damage;
+        let remove_when_done = ceiling.remove_when_done;
+        let normal_speed = ceiling.normal_speed;
+        let ceiling_type = ceiling.ceiling_type;
 
         if sector_idx >= level.sectors.len() {
-            gs.movers.active_ceilings.remove(i);
-            continue;
+            return false;
         }
 
         match direction {
@@ -1430,7 +1428,7 @@ pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
                     // Slow down to speed 1 when crushing (CrushAndRaise / SilentCrush).
                     match ceiling_type {
                         CeilingType::CrushAndRaise | CeilingType::SilentCrush => {
-                            gs.movers.active_ceilings[i].speed = 1;
+                            ceiling.speed = 1;
                         }
                         _ => {}
                     }
@@ -1441,19 +1439,18 @@ pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
                     match ceiling_type {
                         CeilingType::LowerToFloor | CeilingType::LowerAndCrush => {
                             // One-shot types: remove when done.
-                            gs.movers.active_ceilings.remove(i);
-                            continue;
+                            return false;
                         }
                         _ => {
                             // Perpetual types: reverse to Up.
-                            gs.movers.active_ceilings[i].direction = MoveDirection::Up;
+                            ceiling.direction = MoveDirection::Up;
                         }
                     }
                 }
             }
             MoveDirection::Up => {
                 // Resume normal speed when going up.
-                gs.movers.active_ceilings[i].speed = normal_speed;
+                ceiling.speed = normal_speed;
 
                 level.sectors[sector_idx].ceil_height += normal_speed;
                 let ceil = level.sectors[sector_idx].ceil_height;
@@ -1461,17 +1458,18 @@ pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
                 if ceil >= top {
                     level.sectors[sector_idx].ceil_height = top;
                     if remove_when_done {
-                        gs.movers.active_ceilings.remove(i);
-                        continue;
+                        return false;
                     }
                     // Perpetual: reverse back to Down.
-                    gs.movers.active_ceilings[i].direction = MoveDirection::Down;
+                    ceiling.direction = MoveDirection::Down;
                 }
             }
         }
 
-        i += 1;
-    }
+        true
+    });
+
+    gs.movers.active_ceilings = active_ceilings;
 }
 
 // ---------------------------------------------------------------------------
@@ -1492,32 +1490,31 @@ pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
 /// 1. Floor moves to target_height.
 /// 2. Removed when target reached.
 pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
-    let mut i = 0;
-    while i < gs.movers.active_floors.len() {
-        let sector_idx = gs.movers.active_floors[i].sector_index;
+    let mut active_floors = std::mem::take(&mut gs.movers.active_floors);
+
+    active_floors.retain_mut(|floor_mover| {
+        let sector_idx = floor_mover.sector_index;
         if sector_idx >= level.sectors.len() {
-            gs.movers.active_floors.remove(i);
-            continue;
+            return false;
         }
 
         // Waiting phase.
-        if gs.movers.active_floors[i].waiting {
-            gs.movers.active_floors[i].wait_remaining -= 1;
-            if gs.movers.active_floors[i].wait_remaining <= 0 {
+        if floor_mover.waiting {
+            floor_mover.wait_remaining -= 1;
+            if floor_mover.wait_remaining <= 0 {
                 // Wait over — reverse direction to return.
-                gs.movers.active_floors[i].waiting = false;
-                gs.movers.active_floors[i].direction = MoveDirection::Up;
-                gs.movers.active_floors[i].target_height = gs.movers.active_floors[i].return_height;
+                floor_mover.waiting = false;
+                floor_mover.direction = MoveDirection::Up;
+                floor_mover.target_height = floor_mover.return_height;
             }
-            i += 1;
-            continue;
+            return true;
         }
 
-        let speed = gs.movers.active_floors[i].speed;
-        let direction = gs.movers.active_floors[i].direction;
-        let target = gs.movers.active_floors[i].target_height;
-        let wait_tics = gs.movers.active_floors[i].wait_tics;
-        let crush = gs.movers.active_floors[i].crush;
+        let speed = floor_mover.speed;
+        let direction = floor_mover.direction;
+        let target = floor_mover.target_height;
+        let wait_tics = floor_mover.wait_tics;
+        let crush = floor_mover.crush;
         let crush_dmg: i32 = if crush { 10 } else { 0 };
 
         match direction {
@@ -1529,12 +1526,11 @@ pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
                     level.sectors[sector_idx].floor_height = target;
                     if wait_tics > 0 {
                         // Enter wait phase (e.g., lift at bottom).
-                        gs.movers.active_floors[i].waiting = true;
-                        gs.movers.active_floors[i].wait_remaining = wait_tics;
+                        floor_mover.waiting = true;
+                        floor_mover.wait_remaining = wait_tics;
                     } else {
                         // One-shot: remove.
-                        gs.movers.active_floors.remove(i);
-                        continue;
+                        return false;
                     }
                 }
             }
@@ -1557,20 +1553,20 @@ pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
 
                 if floor >= target {
                     level.sectors[sector_idx].floor_height = target;
-                    if wait_tics > 0 && gs.movers.active_floors[i].return_height != target {
+                    if wait_tics > 0 && floor_mover.return_height != target {
                         // Returning phase complete — remove.
-                        gs.movers.active_floors.remove(i);
-                        continue;
+                        return false;
                     }
                     // One-shot raiser: remove.
-                    gs.movers.active_floors.remove(i);
-                    continue;
+                    return false;
                 }
             }
         }
 
-        i += 1;
-    }
+        true
+    });
+
+    gs.movers.active_floors = active_floors;
 }
 
 // ---------------------------------------------------------------------------
@@ -1844,48 +1840,49 @@ pub fn ev_do_lift(
 ///    snap to `high_height`, transition to `Done`.
 /// 4. `Done`: remove from active list.
 pub fn tick_lifts(gs: &mut GameState, level: &mut Level) {
-    let mut i = 0;
-    while i < gs.movers.lifts.len() {
-        let sector_idx = gs.movers.lifts[i].sector_index;
+    let mut lifts = std::mem::take(&mut gs.movers.lifts);
+
+    lifts.retain_mut(|lift| {
+        let sector_idx = lift.sector_index;
         if sector_idx >= level.sectors.len() {
-            gs.movers.lifts.remove(i);
-            continue;
+            return false;
         }
 
-        match gs.movers.lifts[i].status {
+        match lift.status {
             LiftStatus::Lowering => {
-                let speed = gs.movers.lifts[i].speed;
-                let low = gs.movers.lifts[i].low_height;
+                let speed = lift.speed;
+                let low = lift.low_height;
                 level.sectors[sector_idx].floor_height -= speed;
                 if level.sectors[sector_idx].floor_height <= low {
                     level.sectors[sector_idx].floor_height = low;
-                    gs.movers.lifts[i].status = LiftStatus::Waiting;
-                    gs.movers.lifts[i].wait_remaining = gs.movers.lifts[i].wait_tics;
+                    lift.status = LiftStatus::Waiting;
+                    lift.wait_remaining = lift.wait_tics;
                 }
             }
             LiftStatus::Waiting => {
-                gs.movers.lifts[i].wait_remaining -= 1;
-                if gs.movers.lifts[i].wait_remaining <= 0 {
-                    gs.movers.lifts[i].status = LiftStatus::Raising;
+                lift.wait_remaining -= 1;
+                if lift.wait_remaining <= 0 {
+                    lift.status = LiftStatus::Raising;
                 }
             }
             LiftStatus::Raising => {
-                let speed = gs.movers.lifts[i].speed;
-                let high = gs.movers.lifts[i].high_height;
+                let speed = lift.speed;
+                let high = lift.high_height;
                 level.sectors[sector_idx].floor_height += speed;
                 if level.sectors[sector_idx].floor_height >= high {
                     level.sectors[sector_idx].floor_height = high;
-                    gs.movers.lifts[i].status = LiftStatus::Done;
+                    lift.status = LiftStatus::Done;
                 }
             }
             LiftStatus::Done => {
-                gs.movers.lifts.remove(i);
-                continue;
+                return false;
             }
         }
 
-        i += 1;
-    }
+        true
+    });
+
+    gs.movers.lifts = lifts;
 }
 
 /// Activate a floor raiser (one-shot, no wait) on a single sector with an
