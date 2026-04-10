@@ -2290,6 +2290,52 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
     }
 
     match special {
+        // Doors
+        1 | 2 | 29 | 16 | 76 | 26 | 27 | 28 | 63 | 105 | 106 | 107 | 108 | 109 | 110 | 99 | 133
+        | 134 | 135 | 136 | 137 => {
+            activate_doors(gs, level, special, left_sidedef as i16, linedef_idx)
+        }
+        // Exits
+        11 | 51 | 52 | 124 => activate_exits(gs, level, special, left_sidedef as i16, linedef_idx),
+        // Ceilings
+        6 | 25 | 44 | 49 | 57 | 72 | 73 | 74 | 141 => {
+            activate_ceilings(gs, level, special, left_sidedef as i16, linedef_idx)
+        }
+        // Lifts
+        62 | 66 | 10 | 21 | 88 | 121 | 120 | 122 | 123 => {
+            activate_lifts(gs, level, special, left_sidedef as i16, linedef_idx)
+        }
+        // Floors
+        5 | 14 | 15 | 18 | 20 | 22 | 24 | 30 | 56 | 58 | 59 | 64 | 65 | 67 | 68 | 91 | 92 | 93
+        | 94 | 95 | 96 | 19 | 23 | 36 | 37 | 38 | 45 | 60 | 69 | 70 | 71 | 82 | 83 | 84 | 98
+        | 102 => activate_floors(gs, level, special, left_sidedef as i16, linedef_idx),
+        // Stairs
+        7 | 8 | 100 | 127 => activate_stairs(gs, level, special, left_sidedef as i16, linedef_idx),
+        // Platforms
+        53 | 54 | 87 | 89 => {
+            activate_platforms(gs, level, special, left_sidedef as i16, linedef_idx)
+        }
+        // Teleports
+        39 | 97 | 125 | 126 => {
+            activate_teleports(gs, level, special, left_sidedef as i16, linedef_idx)
+        }
+        // Misc
+        9 | 146 => activate_misc(gs, level, special, left_sidedef as i16, linedef_idx),
+        _ => {
+            // Unknown special — silently ignored.
+        }
+    }
+}
+
+#[allow(unused_variables)]
+fn activate_doors(
+    gs: &mut GameState,
+    level: &mut Level,
+    special: u16,
+    left_sidedef: i16,
+    linedef_idx: usize,
+) {
+    match special {
         // --- Type 1: toggle door (immediate, for backward compatibility with existing tests) ---
         1 => {
             let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
@@ -2389,6 +2435,173 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             }
         }
 
+        // -----------------------------------------------------------------
+        // Blazing doors (fast doors, speed=8)
+        // -----------------------------------------------------------------
+
+        // Type 105: WR Blazing door open-close.
+        105 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            for idx in level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+            {
+                open_blazing_door(gs, level, idx, true);
+            }
+        }
+
+        // Type 106: WR Blazing door open-stay.
+        106 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            for idx in level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+            {
+                open_blazing_door(gs, level, idx, false);
+            }
+        }
+
+        // Type 107: WR Blazing door close.
+        107 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            for idx in level
+                .sectors
+                .iter()
+                .enumerate()
+                .filter(|(_, s)| s.tag == tag)
+                .map(|(i, _)| i)
+            {
+                close_blazing_door(gs, level, idx);
+            }
+        }
+
+        // Type 108: W1 Blazing door open-close.
+        108 => {
+            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
+                return;
+            };
+            let sector_idx = sd.sector as usize;
+            open_blazing_door(gs, level, sector_idx, true);
+        }
+
+        // Type 109: W1 Blazing door open-stay.
+        109 => {
+            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
+                return;
+            };
+            let sector_idx = sd.sector as usize;
+            open_blazing_door(gs, level, sector_idx, false);
+        }
+
+        // Type 110: W1 Blazing door close.
+        110 => {
+            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
+                return;
+            };
+            let sector_idx = sd.sector as usize;
+            close_blazing_door(gs, level, sector_idx);
+        }
+
+        // -----------------------------------------------------------------
+        // Additional keyed door line types
+        // -----------------------------------------------------------------
+
+        // Type 99: SR Blue key door open-stay.
+        99 => {
+            if gs.player.has_key(crate::player::KEY_BLUE_CARD)
+                || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
+            {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
+                    return;
+                };
+                let sector_idx = sd.sector as usize;
+                open_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // Type 133: S1 Blue key door open-stay (blazing).
+        133 => {
+            if gs.player.has_key(crate::player::KEY_BLUE_CARD)
+                || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
+            {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
+                    return;
+                };
+                let sector_idx = sd.sector as usize;
+                open_blazing_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // Type 134: SR Red key door open-stay.
+        134 => {
+            if gs.player.has_key(crate::player::KEY_RED_CARD)
+                || gs.player.has_key(crate::player::KEY_RED_SKULL)
+            {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
+                    return;
+                };
+                let sector_idx = sd.sector as usize;
+                open_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // Type 135: S1 Red key door open-stay (blazing).
+        135 => {
+            if gs.player.has_key(crate::player::KEY_RED_CARD)
+                || gs.player.has_key(crate::player::KEY_RED_SKULL)
+            {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
+                    return;
+                };
+                let sector_idx = sd.sector as usize;
+                open_blazing_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // Type 136: SR Yellow key door open-stay.
+        136 => {
+            if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
+                || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
+            {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
+                    return;
+                };
+                let sector_idx = sd.sector as usize;
+                open_door(gs, level, sector_idx, false);
+            }
+        }
+
+        // Type 137: S1 Yellow key door open-stay (blazing).
+        137 => {
+            if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
+                || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
+            {
+                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
+                    return;
+                };
+                let sector_idx = sd.sector as usize;
+                open_blazing_door(gs, level, sector_idx, false);
+            }
+        }
+        _ => {}
+    }
+}
+
+#[allow(unused_variables)]
+fn activate_exits(
+    gs: &mut GameState,
+    level: &mut Level,
+    special: u16,
+    left_sidedef: i16,
+    linedef_idx: usize,
+) {
+    match special {
         // --- Type 11: S1 Exit (normal) ---
         11 => {
             gs.exit_request = Some(ExitRequest::Normal);
@@ -2408,7 +2621,19 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
         124 => {
             gs.exit_request = Some(ExitRequest::Secret);
         }
+        _ => {}
+    }
+}
 
+#[allow(unused_variables)]
+fn activate_ceilings(
+    gs: &mut GameState,
+    level: &mut Level,
+    special: u16,
+    left_sidedef: i16,
+    linedef_idx: usize,
+) {
+    match special {
         // -----------------------------------------------------------------
         // Crushers
         // -----------------------------------------------------------------
@@ -2475,7 +2700,19 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             let tag = level.linedefs[linedef_idx].tag;
             activate_crusher(gs, level, tag, 2, 10, true, false, CeilingType::SilentCrush);
         }
+        _ => {}
+    }
+}
 
+#[allow(unused_variables)]
+fn activate_lifts(
+    gs: &mut GameState,
+    level: &mut Level,
+    special: u16,
+    left_sidedef: i16,
+    linedef_idx: usize,
+) {
+    match special {
         // -----------------------------------------------------------------
         // Lifts (lower-wait-raise)
         // -----------------------------------------------------------------
@@ -2516,6 +2753,40 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             activate_lift(gs, level, tag, 8);
         }
 
+        // -----------------------------------------------------------------
+        // Additional lift line types (using LiftMover)
+        // -----------------------------------------------------------------
+
+        // Type 120: WR Lift blazing (speed 8, wait 105).
+        120 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
+        }
+
+        // Type 122: S1 Lift blazing (speed 8, wait 105).
+        122 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
+        }
+
+        // Type 123: SR Lift blazing (speed 8, wait 105).
+        123 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
+        }
+        _ => {}
+    }
+}
+
+#[allow(unused_variables)]
+fn activate_floors(
+    gs: &mut GameState,
+    level: &mut Level,
+    special: u16,
+    left_sidedef: i16,
+    linedef_idx: usize,
+) {
+    match special {
         // -----------------------------------------------------------------
         // Floor raisers
         // -----------------------------------------------------------------
@@ -2846,7 +3117,19 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
             let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_highest(gs, level, tag, 1);
         }
+        _ => {}
+    }
+}
 
+#[allow(unused_variables)]
+fn activate_stairs(
+    gs: &mut GameState,
+    level: &mut Level,
+    special: u16,
+    left_sidedef: i16,
+    linedef_idx: usize,
+) {
+    match special {
         // -----------------------------------------------------------------
         // Teleporters
         // -----------------------------------------------------------------
@@ -2910,7 +3193,100 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 ev_build_stairs(gs, level, idx, StairType::Turbo16, false);
             }
         }
+        _ => {}
+    }
+}
 
+#[allow(unused_variables)]
+fn activate_platforms(
+    gs: &mut GameState,
+    level: &mut Level,
+    special: u16,
+    left_sidedef: i16,
+    linedef_idx: usize,
+) {
+    match special {
+        // -----------------------------------------------------------------
+        // Perpetual platforms
+        // -----------------------------------------------------------------
+
+        // Type 53: S1 Perpetual platform (speed 1).
+        53 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_perpetual_platform(gs, level, tag, 1);
+        }
+
+        // Type 54: W1 Stop platform (by tag).
+        54 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            gs.movers.active_platforms.retain(|p| p.tag != tag);
+        }
+
+        // Type 87: WR Perpetual platform (speed 1).
+        87 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            ev_perpetual_platform(gs, level, tag, 1);
+        }
+
+        // Type 89: WR Stop platform (by tag).
+        89 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            gs.movers.active_platforms.retain(|p| p.tag != tag);
+        }
+        _ => {}
+    }
+}
+
+#[allow(unused_variables)]
+fn activate_teleports(
+    gs: &mut GameState,
+    level: &mut Level,
+    special: u16,
+    left_sidedef: i16,
+    linedef_idx: usize,
+) {
+    match special {
+        // -----------------------------------------------------------------
+        // Teleporters
+        // -----------------------------------------------------------------
+
+        // Type 39: W1 Teleport (walk trigger, one-shot).
+        39 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let handle = gs.player.handle;
+            ev_teleport(gs, level, tag, handle);
+        }
+
+        // Type 97: WR Teleport (walk trigger, repeatable).
+        97 => {
+            let tag = level.linedefs[linedef_idx].tag;
+            let handle = gs.player.handle;
+            ev_teleport(gs, level, tag, handle);
+        }
+
+        // Type 125: W1 Teleport Monsters Only.
+        125 => {
+            // Monsters-only teleport — no-op for player activation.
+            // In a full implementation, this would only teleport monster actors.
+        }
+
+        // Type 126: WR Teleport Monsters Only (repeatable).
+        126 => {
+            // Monsters-only teleport — no-op for player activation.
+        }
+        _ => {}
+    }
+}
+
+#[allow(unused_variables)]
+fn activate_misc(
+    gs: &mut GameState,
+    level: &mut Level,
+    special: u16,
+    left_sidedef: i16,
+    linedef_idx: usize,
+) {
+    match special {
         // -----------------------------------------------------------------
         // Donut specials
         // -----------------------------------------------------------------
@@ -2942,250 +3318,9 @@ pub fn activate_linedef(gs: &mut GameState, level: &mut Level, linedef_idx: usiz
                 ev_do_donut(gs, level, idx);
             }
         }
-
-        // -----------------------------------------------------------------
-        // Perpetual platforms
-        // -----------------------------------------------------------------
-
-        // Type 53: S1 Perpetual platform (speed 1).
-        53 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            ev_perpetual_platform(gs, level, tag, 1);
-        }
-
-        // Type 54: W1 Stop platform (by tag).
-        54 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            gs.movers.active_platforms.retain(|p| p.tag != tag);
-        }
-
-        // Type 87: WR Perpetual platform (speed 1).
-        87 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            ev_perpetual_platform(gs, level, tag, 1);
-        }
-
-        // Type 89: WR Stop platform (by tag).
-        89 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            gs.movers.active_platforms.retain(|p| p.tag != tag);
-        }
-
-        // -----------------------------------------------------------------
-        // Teleporters
-        // -----------------------------------------------------------------
-
-        // Type 39: W1 Teleport (walk trigger, one-shot).
-        39 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            let handle = gs.player.handle;
-            ev_teleport(gs, level, tag, handle);
-        }
-
-        // Type 97: WR Teleport (walk trigger, repeatable).
-        97 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            let handle = gs.player.handle;
-            ev_teleport(gs, level, tag, handle);
-        }
-
-        // Type 125: W1 Teleport Monsters Only.
-        125 => {
-            // Monsters-only teleport — no-op for player activation.
-            // In a full implementation, this would only teleport monster actors.
-        }
-
-        // Type 126: WR Teleport Monsters Only (repeatable).
-        126 => {
-            // Monsters-only teleport — no-op for player activation.
-        }
-
-        // -----------------------------------------------------------------
-        // Blazing doors (fast doors, speed=8)
-        // -----------------------------------------------------------------
-
-        // Type 105: WR Blazing door open-close.
-        105 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
-                open_blazing_door(gs, level, idx, true);
-            }
-        }
-
-        // Type 106: WR Blazing door open-stay.
-        106 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
-                open_blazing_door(gs, level, idx, false);
-            }
-        }
-
-        // Type 107: WR Blazing door close.
-        107 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
-                close_blazing_door(gs, level, idx);
-            }
-        }
-
-        // Type 108: W1 Blazing door open-close.
-        108 => {
-            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
-                return;
-            };
-            let sector_idx = sd.sector as usize;
-            open_blazing_door(gs, level, sector_idx, true);
-        }
-
-        // Type 109: W1 Blazing door open-stay.
-        109 => {
-            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
-                return;
-            };
-            let sector_idx = sd.sector as usize;
-            open_blazing_door(gs, level, sector_idx, false);
-        }
-
-        // Type 110: W1 Blazing door close.
-        110 => {
-            let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
-                return;
-            };
-            let sector_idx = sd.sector as usize;
-            close_blazing_door(gs, level, sector_idx);
-        }
-
-        // -----------------------------------------------------------------
-        // Additional keyed door line types
-        // -----------------------------------------------------------------
-
-        // Type 99: SR Blue key door open-stay.
-        99 => {
-            if gs.player.has_key(crate::player::KEY_BLUE_CARD)
-                || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
-            {
-                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
-                    return;
-                };
-                let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, false);
-            }
-        }
-
-        // Type 133: S1 Blue key door open-stay (blazing).
-        133 => {
-            if gs.player.has_key(crate::player::KEY_BLUE_CARD)
-                || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
-            {
-                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
-                    return;
-                };
-                let sector_idx = sd.sector as usize;
-                open_blazing_door(gs, level, sector_idx, false);
-            }
-        }
-
-        // Type 134: SR Red key door open-stay.
-        134 => {
-            if gs.player.has_key(crate::player::KEY_RED_CARD)
-                || gs.player.has_key(crate::player::KEY_RED_SKULL)
-            {
-                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
-                    return;
-                };
-                let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, false);
-            }
-        }
-
-        // Type 135: S1 Red key door open-stay (blazing).
-        135 => {
-            if gs.player.has_key(crate::player::KEY_RED_CARD)
-                || gs.player.has_key(crate::player::KEY_RED_SKULL)
-            {
-                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
-                    return;
-                };
-                let sector_idx = sd.sector as usize;
-                open_blazing_door(gs, level, sector_idx, false);
-            }
-        }
-
-        // Type 136: SR Yellow key door open-stay.
-        136 => {
-            if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
-                || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
-            {
-                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
-                    return;
-                };
-                let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, false);
-            }
-        }
-
-        // Type 137: S1 Yellow key door open-stay (blazing).
-        137 => {
-            if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
-                || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
-            {
-                let Some(sd) = level.sidedefs.get(left_sidedef as usize) else {
-                    return;
-                };
-                let sector_idx = sd.sector as usize;
-                open_blazing_door(gs, level, sector_idx, false);
-            }
-        }
-
-        // -----------------------------------------------------------------
-        // Additional lift line types (using LiftMover)
-        // -----------------------------------------------------------------
-
-        // Type 120: WR Lift blazing (speed 8, wait 105).
-        120 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
-        }
-
-        // Type 122: S1 Lift blazing (speed 8, wait 105).
-        122 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
-        }
-
-        // Type 123: SR Lift blazing (speed 8, wait 105).
-        123 => {
-            let tag = level.linedefs[linedef_idx].tag;
-            ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
-        }
-
-        _ => {
-            // Unknown special — silently ignored.
-        }
+        _ => {}
     }
 }
-
-// ---------------------------------------------------------------------------
-// Private helpers
-// ---------------------------------------------------------------------------
 
 /// Return the parametric fraction `t` along the segment from `(ax, ay)` to
 /// `(bx, by)` where it intersects the linedef segment `(lx1, ly1)` → `(lx2, ly2)`.
