@@ -35,16 +35,21 @@ pub struct TraceResult {
 pub enum TraceHit {
     /// Hit a wall (one-sided linedef or blocked two-sided).
     Wall {
+        /// The index of the specific linedef the ray collided with.
+        /// Useful for triggering linedef specials or spawning bullet puffs on walls.
         linedef_index: usize,
-        /// X coordinate of impact point.
+        /// X coordinate of the exact impact point in map space.
         hit_x: i32,
-        /// Y coordinate of impact point.
+        /// Y coordinate of the exact impact point in map space.
         hit_y: i32,
     },
     /// Hit an actor.
     Actor {
+        /// The index of the unfortunate actor in the `MobjSlab` that absorbed the hit.
         actor_index: usize,
+        /// X coordinate of the exact impact point.
         hit_x: i32,
+        /// Y coordinate of the exact impact point.
         hit_y: i32,
     },
     /// Ray reached max range without hitting anything.

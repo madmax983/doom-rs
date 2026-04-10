@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Mobj state machine table with sprite/frame data.
 //!
 //! Each `MobjStateEntry` carries `sprite` (index into `SPRITE_NAMES`),
