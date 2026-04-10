@@ -120,7 +120,12 @@ pub fn parse_texture_lump(data: &[u8]) -> Vec<TextureDef> {
         return Vec::new();
     }
     let num_textures = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
-    let mut defs = Vec::with_capacity(num_textures);
+    // Havoc 👺: Don't trust the WAD! A malicious lump can claim 4 billion textures
+    // and OOM the process in Vec::with_capacity.
+    // Each texture requires at least a 4-byte offset in the directory table.
+    let max_possible = data.len().saturating_sub(4) / 4;
+    let safe_capacity = num_textures.min(max_possible);
+    let mut defs = Vec::with_capacity(safe_capacity);
 
     for i in 0..num_textures {
         let off_idx = 4 + i * 4;
@@ -1425,5 +1430,16 @@ mod tests {
         data.extend_from_slice(&0u32.to_le_bytes());
         let defs = parse_texture_lump(&data);
         assert!(defs.is_empty());
+    }
+
+    #[test]
+    fn texture_lump_malicious_oom_prevention() {
+        // Havoc 👺: Try to allocate 4 billion textures in an 8-byte lump.
+        // Old behaviour: panic from Out-Of-Memory in Vec::with_capacity.
+        let mut data = Vec::new();
+        data.extend_from_slice(&u32::MAX.to_le_bytes()); // Count: 4,294,967,295
+        data.extend_from_slice(&[0, 0, 0, 0]); // One random offset
+        let defs = parse_texture_lump(&data);
+        assert!(defs.is_empty(), "Should not crash, should return empty or gracefully abort");
     }
 }

@@ -77,3 +77,110 @@ path = "fuzz_targets/fuzz_target_15.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_wad"
+path = "fuzz_targets/fuzz_wad.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_udmf"
+path = "fuzz_targets/fuzz_udmf.rs"
+test = false
+doc = false
+bench = false
+
+[dependencies.doom-map]
+path = "../crates/doom-map"
+
+[[bin]]
+name = "fuzz_dehacked"
+path = "fuzz_targets/fuzz_dehacked.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_demo"
+path = "fuzz_targets/fuzz_demo.rs"
+test = false
+doc = false
+bench = false
+
+[dependencies.doom-demo]
+path = "../crates/doom-demo"
+
+[[bin]]
+name = "fuzz_midi"
+path = "fuzz_targets/fuzz_midi.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_mus"
+path = "fuzz_targets/fuzz_mus.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_colormap"
+path = "fuzz_targets/fuzz_colormap.rs"
+test = false
+doc = false
+bench = false
+
+[dependencies.doom-renderer]
+path = "../crates/doom-renderer"
+
+[[bin]]
+name = "fuzz_palette"
+path = "fuzz_targets/fuzz_palette.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_wadt"
+path = "fuzz_targets/fuzz_wadt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_mus_audio"
+path = "fuzz_targets/fuzz_mus_audio.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_midi_audio"
+path = "fuzz_targets/fuzz_midi_audio.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_sound"
+path = "fuzz_targets/fuzz_sound.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_mixer"
+path = "fuzz_targets/fuzz_mixer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_texture"
+path = "fuzz_targets/fuzz_texture.rs"
+test = false
+doc = false
+bench = false
