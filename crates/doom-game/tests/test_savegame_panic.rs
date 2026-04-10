@@ -8,7 +8,7 @@ fn load_game_panic() {
         doom_game::MobjKind::Imp,
         doom_types::Fixed16_16::from_int(100),
         doom_types::Fixed16_16::from_int(100),
-        doom_types::Bam::ZERO
+        doom_types::Bam::ZERO,
     );
     gs.mobjslab.alloc(mobj);
 
