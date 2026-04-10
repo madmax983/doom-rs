@@ -642,11 +642,13 @@ mod tests {
     #[test]
     fn all_mobj_kinds_have_glyphs() {
         // Ensure every MobjKind variant produces a glyph without panicking.
-        for i in 0..=75_u16 {
-            // Safety: MobjKind is repr(u16) with contiguous values 0..=75.
-            let kind: MobjKind = unsafe { std::mem::transmute(i) };
-            let _g = entity_glyph(kind, 100);
-            let _g_dead = entity_glyph(kind, 0);
+        // Iterate over all possible u16 values and safely convert to MobjKind.
+        // This avoids hardcoding the maximum variant number (e.g. 75) and uses safe rust.
+        for i in 0..=u16::MAX {
+            if let Some(kind) = MobjKind::from_repr(i) {
+                let _g = entity_glyph(kind, 100);
+                let _g_dead = entity_glyph(kind, 0);
+            }
         }
     }
 }
