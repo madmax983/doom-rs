@@ -11,7 +11,7 @@
 use doom_types::limits::{NUM_AMMO, NUM_WEAPONS};
 use doom_types::{Bam, Fixed16_16};
 
-use crate::mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum};
+use crate::mobj::{Mobj, MobjHandle, MobjSlab, StateNum};
 use crate::player::{NUM_POWERS, NUM_PSPRITES, PlayerState, PspriteState, WeaponType};
 use crate::savegame_vanilla;
 use crate::state::{
@@ -19,6 +19,7 @@ use crate::state::{
     FloorType, GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
     PlatformStatus, ScrollingWall,
 };
+use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -1195,6 +1196,11 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
         found
     };
 
+    // Havoc 👺: Defend against corrupted player_handle!
+    if mobjslab.get(player_handle).is_none() {
+        return Err(SaveError::Truncated);
+    }
+
     // Build the GameState.
     let mut state = GameState::new(&level_name_str);
     state.tic_num = tic_num;
@@ -1234,7 +1240,8 @@ pub fn save_slot_filename(slot: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, flags};
+    use crate::mobj::{Mobj, flags};
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     /// Helper: create a default GameState with a player mobj.

@@ -172,8 +172,9 @@ pub fn clear_linedef_special(level: &mut doom_map::Level, linedef_index: usize) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind};
+    use crate::mobj::Mobj;
     use crate::state::GameState;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     fn make_gs_with_player() -> GameState {

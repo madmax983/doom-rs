@@ -481,9 +481,10 @@ fn bbox_straddles_line(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, MobjSlab};
+    use crate::mobj::{Mobj, MobjSlab};
     use doom_map::{Node, NodeBBox, lumps::NODE_SUBSECTOR_BIT};
     use doom_types::Bam;
+    use doom_types::mobj_kind::MobjKind;
 
     // -----------------------------------------------------------------------
     // Minimal Level builder — 1×1 blockmap, no linedefs

@@ -144,15 +144,11 @@ impl CogmindState {
         let Some(vis) = self.visibility.as_mut() else {
             return;
         };
-        let sector_lights: Vec<u8> = level
-            .sectors
-            .iter()
-            .map(|s| s.light_level.clamp(0, 255) as u8)
-            .collect();
         vis.update(
             player_sector,
+            level.sectors.len(),
             |a, b| level.reject.visible(a, b),
-            &sector_lights,
+            |i| level.sectors[i].light_level.clamp(0, 255) as u8,
         );
     }
 
@@ -472,8 +468,9 @@ mod tests {
     use super::*;
     use doom_game::mobj::flags;
     use doom_game::player::PlayerState;
-    use doom_game::{GameState, Mobj, MobjKind};
+    use doom_game::{GameState, Mobj};
     use doom_map::{Blockmap, Reject, Sector, Seg, Sidedef, Ssector};
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     /// Build a minimal level with valid BSP data (0 nodes, 1 ssector, 1 seg).

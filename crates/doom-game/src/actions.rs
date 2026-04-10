@@ -30,10 +30,11 @@
 use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
 
+use crate::mobj::MobjHandle;
 use crate::mobj::flags;
-use crate::mobj::{MobjHandle, MobjKind};
 use crate::state::GameState;
 use crate::{mobjinfo, states};
+use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
 // Action index constants
@@ -2075,10 +2076,11 @@ fn a_brain_explode(gs: &mut GameState, handle: MobjHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, StateNum, flags};
+    use crate::mobj::{Mobj, StateNum, flags};
     use crate::player::PlayerState;
     use crate::state::GameState;
     use doom_types::TicCmd;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     fn make_game_state() -> GameState {
@@ -2097,9 +2099,9 @@ mod tests {
     }
 
     fn spawn_trooper(gs: &mut GameState, x: i32, y: i32) -> MobjHandle {
-        use crate::mobj::MobjKind;
         use crate::mobjinfo::MOBJINFO;
         use crate::states::STATES;
+        use doom_types::mobj_kind::MobjKind;
         let kind = MobjKind::Trooper;
         let spawn_sn = MOBJINFO[kind as usize].spawn_state;
         let mut mo = Mobj::new(

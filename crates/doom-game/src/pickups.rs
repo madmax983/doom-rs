@@ -7,9 +7,10 @@
 //! Items that cannot be picked up (e.g. health when already full) are
 //! left in the world -- `p_touch_special_thing` returns `false`.
 
-use crate::mobj::{MobjHandle, MobjKind, flags};
+use crate::mobj::{MobjHandle, flags};
 use crate::player::{self, AmmoType, WeaponType, powers};
 use crate::state::GameState;
+use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
 // Power-up duration constants (in tics, 35 tics = 1 second)
@@ -211,6 +212,8 @@ pub fn kind_to_doomed_type(kind: MobjKind) -> Option<u16> {
 /// Items that are successfully picked up are freed (consumed).
 /// Items that cannot be picked up (e.g. health at max) are left in place.
 /// Dead players cannot pick up items.
+///
+/// Avoids intermediate `.collect::<Vec<_>>()` by processing generations directly.
 pub fn p_check_pickups(gs: &mut GameState) {
     // Dead players skip pickups (caller should guard, but double-check).
     if gs.player.is_dead() {
@@ -224,18 +227,27 @@ pub fn p_check_pickups(gs: &mut GameState) {
     };
 
     // Collect all MF_SPECIAL actor handles (to avoid borrow conflicts).
-    let specials: Vec<MobjHandle> = gs
-        .mobjslab
-        .iter_handles()
-        .filter(|&h| {
-            gs.mobjslab
-                .get(h)
-                .map(|mo| mo.flags & flags::MF_SPECIAL != 0)
-                .unwrap_or(false)
-        })
-        .collect();
+    // Avoid intermediate `Vec` allocation by iterating directly over generations.
+    // This prevents heap allocations on every tick.
+    let initial_slot_count = gs.mobjslab.slot_count();
+    let initial_generation = gs.mobjslab.next_generation();
 
-    for handle in specials {
+    for index in 0..initial_slot_count {
+        let Some(handle) = gs.mobjslab.handle_at(index) else {
+            continue;
+        };
+
+        if handle.generation >= initial_generation {
+            continue;
+        }
+
+        if gs
+            .mobjslab
+            .get(handle)
+            .is_none_or(|mo| mo.flags & flags::MF_SPECIAL == 0)
+        {
+            continue;
+        }
         // Skip the player's own mobj if it somehow has MF_SPECIAL.
         if handle == gs.player.handle {
             continue;
@@ -508,8 +520,9 @@ fn give_weapon(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, flags};
+    use crate::mobj::{Mobj, flags};
     use crate::player::PlayerState;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     /// Construct a game state with a live player Mobj at the origin.

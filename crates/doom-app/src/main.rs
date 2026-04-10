@@ -201,6 +201,10 @@ struct Args {
     #[arg(long)]
     map_stats: bool,
 
+    /// Find the shortest topological path between two sectors. Provide as "START,END" (e.g. "0,5").
+    #[arg(long)]
+    pathfind: Option<String>,
+
     /// Run tactical analysis on the map topology and print chokepoints and isolated areas.
     #[arg(long)]
     analyze: bool,
@@ -900,29 +904,44 @@ fn run_doom() -> Result<()> {
         let areas = analyzer.isolated_areas();
 
         if args.json {
+            // ⚡ Bolt Optimization:
+            // Formats the JSON array inline directly into a single `String` buffer.
+            // This completely eliminates intermediate `.collect::<Vec<_>>()` chains
+            // and intermediate inner string allocations that previously happened per-area,
+            // saving ~3 heap allocations per JSON generation loop.
             let chokepoints_json = format!(
                 "[{}]",
                 chokepoints
                     .iter()
-                    .map(|s| s.to_string())
-                    .collect::<Vec<_>>()
-                    .join(", ")
+                    .enumerate()
+                    .fold(String::new(), |mut acc, (i, s)| {
+                        if i > 0 {
+                            acc.push_str(", ");
+                        }
+                        acc.push_str(&s.to_string());
+                        acc
+                    })
             );
             let areas_json = format!(
                 "[{}]",
                 areas
                     .iter()
-                    .map(|a| {
-                        format!(
-                            "[{}]",
-                            a.iter()
-                                .map(|s| s.to_string())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )
+                    .enumerate()
+                    .fold(String::new(), |mut acc_outer, (i, a)| {
+                        if i > 0 {
+                            acc_outer.push_str(", ");
+                        }
+                        acc_outer.push('[');
+                        a.iter().enumerate().fold(&mut acc_outer, |acc, (j, s)| {
+                            if j > 0 {
+                                acc.push_str(", ");
+                            }
+                            acc.push_str(&s.to_string());
+                            acc
+                        });
+                        acc_outer.push(']');
+                        acc_outer
                     })
-                    .collect::<Vec<_>>()
-                    .join(", ")
             );
 
             let json_data = format!(
@@ -947,6 +966,27 @@ fn run_doom() -> Result<()> {
                 println!("Completed tactical analysis for {}", warp_str);
             }
 
+            let chokepoints_str = if chokepoints.is_empty() {
+                "None".to_string()
+            } else {
+                chokepoints
+                    .iter()
+                    .enumerate()
+                    .fold(String::new(), |mut acc, (i, s)| {
+                        if i > 0 {
+                            acc.push_str(", ");
+                        }
+                        acc.push_str(&s.to_string());
+                        acc
+                    })
+            };
+
+            let areas_str = format!(
+                "{} area{}",
+                areas.len(),
+                if areas.len() == 1 { "" } else { "s" }
+            );
+
             let mut table = comfy_table::Table::new();
             if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
                 table
@@ -962,13 +1002,11 @@ fn run_doom() -> Result<()> {
                 ]);
                 table.add_row(vec![
                     comfy_table::Cell::new("Chokepoints"),
-                    comfy_table::Cell::new(format!("{:?}", chokepoints))
-                        .fg(comfy_table::Color::Red),
+                    comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Red),
                 ]);
                 table.add_row(vec![
                     comfy_table::Cell::new("Isolated Areas"),
-                    comfy_table::Cell::new(format!("{} areas", areas.len()))
-                        .fg(comfy_table::Color::Magenta),
+                    comfy_table::Cell::new(&areas_str).fg(comfy_table::Color::Magenta),
                 ]);
             } else {
                 table.set_header(vec![
@@ -977,14 +1015,35 @@ fn run_doom() -> Result<()> {
                 ]);
                 table.add_row(vec![
                     comfy_table::Cell::new("Chokepoints"),
-                    comfy_table::Cell::new(format!("{:?}", chokepoints)),
+                    comfy_table::Cell::new(&chokepoints_str),
                 ]);
                 table.add_row(vec![
                     comfy_table::Cell::new("Isolated Areas"),
-                    comfy_table::Cell::new(format!("{} areas", areas.len())),
+                    comfy_table::Cell::new(&areas_str),
                 ]);
             }
             println!("{table}");
+        }
+        return Ok(());
+    }
+
+    if let Some(path_str) = &args.pathfind {
+        let parts: Vec<&str> = path_str.split(',').collect();
+        if parts.len() == 2 {
+            if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+                let graph = doom_map::SectorGraph::build(&level);
+                if let Some(path) = graph.shortest_path(start, end) {
+                    println!("Path found: {:?}", path);
+                } else {
+                    println!("No path found between sector {} and sector {}", start, end);
+                }
+            } else {
+                println!(
+                    "Invalid sector indices. Please provide two integers separated by a comma."
+                );
+            }
+        } else {
+            println!("Invalid format. Please use START,END (e.g. 0,5).");
         }
         return Ok(());
     }
@@ -1522,8 +1581,9 @@ fn parse_warp_episode_map(warp: &str) -> (u8, u8) {
 mod tests {
     use super::*;
     use doom_game::cheats as game_cheats;
-    use doom_game::{GameState, Mobj, MobjKind, PlayerState, flags};
+    use doom_game::{GameState, Mobj, PlayerState, flags};
     use doom_map::{Blockmap, Level, Reject, Sector};
+    use doom_types::mobj_kind::MobjKind;
 
     #[derive(Default)]
     struct FakeCaptureApp {
@@ -3513,6 +3573,14 @@ mod tests {
             9,
             "sound ripples must spawn 9 particles"
         );
+    }
+
+    #[test]
+    fn cli_args_parse_pathfind() {
+        let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--pathfind", "0,5"]);
+        assert!(args.is_ok(), "args with --pathfind must parse successfully");
+        let args = args.unwrap();
+        assert_eq!(args.pathfind.unwrap(), "0,5");
     }
 
     #[test]

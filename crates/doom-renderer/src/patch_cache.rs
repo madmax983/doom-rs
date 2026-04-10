@@ -22,7 +22,7 @@ impl PatchCache {
         }
     }
 
-    /// Get a patch by lump name, loading it from the WAD if not yet cached.
+    /// Retrieves a patch graphic by lump name, dynamically loading and caching it from the active WAD file on first request.
     ///
     /// Returns `None` if the lump doesn't exist or isn't a valid patch.
     pub fn get<'a>(&'a mut self, name: &str, wad: &WadStack) -> Option<&'a PatchImage> {

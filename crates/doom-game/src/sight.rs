@@ -442,10 +442,11 @@ fn bam_from_delta(dx: i32, dy: i32) -> Bam {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, flags};
+    use crate::mobj::{Mobj, flags};
     use crate::player::PlayerState;
     use crate::state::GameState;
     use doom_map::{Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex};
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     // -----------------------------------------------------------------------

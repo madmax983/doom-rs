@@ -17,3 +17,9 @@
 **[Eliminated intermediate collection in wad lump scanning]**
 **Learning:** `Vec::collect()` intermediate collections over iterators just to iterate over them again later via `.into_iter()` is wasteful. We can preserve an `impl Iterator` to process items continuously and eliminate the initial `Vec` buffer entirely, avoiding temporary allocation overhead at startup.
 **Action:** When filtering or mapping data from an underlying collection to form a list that will be consumed downstream, prefer returning a lifetime-bound `impl Iterator` instead of a full `Vec` wherever the call chain allows for lazy iteration.
+**Avoid Intermediate JSON Generation Vectors**
+**Learning:** `collect::<Vec<_>>().join(", ")` creates unnecessary intermediate heap vectors and allocations per-element for simple string joining. Using a functional `.fold` (e.g., `.enumerate().fold(...)`) constructs the final string directly in a single pass without extra intermediate storage. Ensure logic checks `if i > 0 { acc.push_str(", ") }` to avoid skipping commas when encountering empty strings.
+**Action:** Check for and refactor `collect::<Vec<_>>().join` in non-trivial serialization logic into simple `.fold` or `for` loops appending directly to a mutable String buffer. Ensure documentation avoids outer `///` in inner functional bodies to avoid rustdoc warnings.
+**[Eliminating intermediate Vec in p_check_pickups]
+**Learning:** Checking special items on the hot path in `p_check_pickups` used `.collect::<Vec<_>>()` which caused unnecessary heap allocations. Using `Option::is_none_or` alongside direct iteration via `handle_at` and generation checking safely and efficiently bypassed this issue.
+**Action:** Use `slot_count` and `next_generation` methods to do a non-allocating generation-aware loop over a generational arena when mutations on the arena are performed within the loop.

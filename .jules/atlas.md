@@ -13,3 +13,6 @@
 **[Extract DoomGame to dedicated module]**
 **Tangle:** The `main.rs` file was a massive 4,800+ line Blob containing both the entrypoint/CLI parsing and the core `DoomGame` application struct logic, mixing concerns and violating module boundaries.
 **Blueprint:** Extracted `pub(crate) struct DoomGame`, its direct methods, and `impl DoomApp for DoomGame` into a dedicated `app.rs` module to enforce better separation of concerns, leaving `main.rs` focused on bootstrapping, CLI args, and WAD loading.
+**[Extract MobjKind to Shared Primitives]**
+**Tangle:** The `MobjKind` enum was defined in `doom-game`, but widely used in presentation crates like `doom-app` for rendering glyphs and managing audio playback. This caused UI components to depend directly on the entire game engine crate just for a basic enum definition, creating tight coupling between rendering and core game state.
+**Blueprint:** Extracted `MobjKind` into `doom-types/src/mobj_kind.rs` and added its dependencies (`strum`, `strum_macros`) to `doom-types/Cargo.toml`. `doom-game` and `doom-app` imports were updated to reference the primitive from the shared types crate, creating a clean dependency hierarchy where both presentation and logic rely on foundational types.

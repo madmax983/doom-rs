@@ -11,12 +11,12 @@ use doom_types::{Bam, Fixed16_16};
 
 use crate::combat::{MELEERANGE, MISSILERANGE, p_line_attack, p_line_attack_target};
 use crate::mobj::MobjHandle;
-use crate::mobj::MobjKind;
 use crate::player::powers::PW_STRENGTH;
 use crate::player::{AmmoType, WeaponType};
 use crate::projectile::p_spawn_player_missile;
 use crate::random::p_damage_with_variance;
 use crate::state::{GameState, SoundRequest};
+use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
 // Ammo cost table
@@ -102,7 +102,7 @@ fn consume_ammo(gs: &mut GameState, weapon: WeaponType) -> bool {
     gs.player.use_ammo(ammo_type as usize, cost)
 }
 
-/// Get the player actor's facing angle, or return `None` if the handle is
+/// Calculates the absolute facing angle of the player's actor. Returns `None` if the handle is
 /// invalid.
 fn player_angle(gs: &GameState) -> Option<Bam> {
     gs.mobjslab.get(gs.player.handle).map(|mo| mo.angle)
@@ -485,12 +485,13 @@ pub fn fire_current_weapon(gs: &mut GameState, level: Option<&Level>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mobj::{Mobj, MobjKind, flags};
+    use crate::mobj::{Mobj, flags};
     use crate::player::PlayerState;
     use crate::sound::{get_sound_target, init_sound_state};
     use crate::state::{GameState, SoundRequest};
     use doom_map::lumps::{Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex};
     use doom_map::{Level, SIDEDEF_NONE};
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
     /// Build a minimal GameState with a live player Mobj at the origin.

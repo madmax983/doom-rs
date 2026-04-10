@@ -23,6 +23,7 @@ pub use ticcmd::{TicCmd, bt};
 pub use vec2::Vec2Fixed;
 
 // Verus spine proofs (only processed by verus, not rustc).
+pub mod mobj_kind;
 #[allow(unexpected_cfgs)]
 #[cfg(verus_keep_ghost)]
 mod proofs;

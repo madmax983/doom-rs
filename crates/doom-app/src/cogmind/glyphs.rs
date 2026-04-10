@@ -3,7 +3,7 @@
 //! Defines the visual vocabulary: which characters and colors represent each
 //! map element and entity in the top-down ASCII view.
 
-use doom_game::MobjKind;
+use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
 // Tile types
@@ -641,10 +641,9 @@ mod tests {
 
     #[test]
     fn all_mobj_kinds_have_glyphs() {
+        use strum::IntoEnumIterator;
         // Ensure every MobjKind variant produces a glyph without panicking.
-        for i in 0..=75_u16 {
-            // Safety: MobjKind is repr(u16) with contiguous values 0..=75.
-            let kind: MobjKind = unsafe { std::mem::transmute(i) };
+        for kind in MobjKind::iter() {
             let _g = entity_glyph(kind, 100);
             let _g_dead = entity_glyph(kind, 0);
         }

@@ -230,8 +230,9 @@ fn make_test_level() -> doom_map::Level {
 mod tests {
     use super::*;
     use doom_demo::{DemoRecorder, LmpHeader};
-    use doom_game::{GameState, Mobj, MobjKind, PlayerState, TicCmd, flags};
+    use doom_game::{GameState, Mobj, PlayerState, TicCmd, flags};
     use doom_types::CompatibilityProfile;
+    use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
     use std::env;
     use std::sync::Once;

@@ -126,7 +126,7 @@ impl FlatCache {
         flats.insert(name, texels);
     }
 
-    /// Get the flat texture data for a given 8-byte lump name.
+    /// Loads or retrieves cached flat texture data for the specified 8-byte lump name, allowing efficient reuse during rendering.
     ///
     /// The name is interpreted as a null-padded ASCII string (matching the WAD
     /// format). Lookup is case-insensitive. Returns the default (zeroed) flat
