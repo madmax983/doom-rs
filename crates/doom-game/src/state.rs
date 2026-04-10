@@ -8,7 +8,7 @@ use doom_types::Fixed16_16;
 
 use crate::mobj::{MobjHandle, MobjKind, MobjSlab};
 use crate::player::PlayerState;
-use crate::spawn::Skill;
+use crate::skill::Skill;
 
 // ---------------------------------------------------------------------------
 // Sound events

@@ -56,4 +56,4 @@ pub(crate) mod sight_line;
 pub(crate) mod tile_grid;
 pub(crate) mod visibility;
 
-pub use render::CogmindState;
+pub(crate) use render::CogmindState;

@@ -31,7 +31,7 @@ use std::path::Path;
 
 /// Errors that can occur during the delicate act of manipulating time (saving/loading).
 #[derive(Debug, thiserror::Error)]
-pub enum SaveError {
+pub(crate) enum SaveError {
     /// The physical realm rejected our request (file not found, permission denied, etc.).
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -89,7 +89,7 @@ impl From<doom_game::savegame::SaveError> for SaveError {
 ///
 /// # Errors
 /// Returns [`SaveError::Io`] if the disk write fails (e.g., read-only filesystem).
-pub fn save_game(path: &Path, gs: &GameState, slot: u8) -> Result<(), SaveError> {
+pub(crate) fn save_game(path: &Path, gs: &GameState, slot: u8) -> Result<(), SaveError> {
     // Generate an 8-byte padded level name.
     let mut level_name = [0u8; 8];
     let src_bytes = gs.level_name.as_bytes();
@@ -137,7 +137,9 @@ pub fn save_game(path: &Path, gs: &GameState, slot: u8) -> Result<(), SaveError>
 /// * Returns [`SaveError::Truncated`] if the binary format is malformed or cut off.
 /// * Returns [`SaveError::BadMagic`] if the file lacks the `b"DRS1"` signature.
 /// * Returns [`SaveError::BadVersion`] for an unsupported version number.
-pub fn load_game(path: &Path) -> Result<(doom_game::savegame::SaveHeader, SaveGame), SaveError> {
+pub(crate) fn load_game(
+    path: &Path,
+) -> Result<(doom_game::savegame::SaveHeader, SaveGame), SaveError> {
     let data = std::fs::read(path)?;
     let save_game = engine_load(&data)?;
     // We clone the header so we can return both. Note `SaveGame` already contains the header.
@@ -173,7 +175,7 @@ pub fn load_game(path: &Path) -> Result<(doom_game::savegame::SaveHeader, SaveGa
 /// # Errors
 /// Currently always returns `Ok(())`, but exists as a `Result` for future-proofing
 /// validation logic.
-pub fn apply_save(gs: &mut GameState, payload: &SaveGame) -> Result<(), SaveError> {
+pub(crate) fn apply_save(gs: &mut GameState, payload: &SaveGame) -> Result<(), SaveError> {
     // Completely overwrite the current game state with the deserialized one.
     // This is valid because `GameState` implements `Clone` and owns all its data.
     *gs = payload.state.clone();

@@ -13,7 +13,7 @@ use super::glyphs::{Rgb, TileKind, sector_floor_kind};
 // ---------------------------------------------------------------------------
 
 /// Map units per grid cell.
-pub const CELL_SIZE: i32 = 24;
+pub(crate) const CELL_SIZE: i32 = 24;
 
 // ---------------------------------------------------------------------------
 // Tile
@@ -21,7 +21,7 @@ pub const CELL_SIZE: i32 = 24;
 
 /// A single cell in the tile grid.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Tile {
+pub(crate) struct Tile {
     /// What kind of map element this cell represents.
     pub kind: TileKind,
     /// Index of the Doom sector that owns this cell, if any.
@@ -48,7 +48,7 @@ impl Default for Tile {
 // ---------------------------------------------------------------------------
 
 /// A 2-D grid of tiles covering the map bounding box.
-pub struct TileGrid {
+pub(crate) struct TileGrid {
     tiles: Vec<Tile>,
     /// Width of the grid in cells.
     pub grid_w: usize,
@@ -66,7 +66,7 @@ impl TileGrid {
     /// - Phase 1: for each cell, BSP-lookup the sector and classify the floor.
     /// - Phase 2: rasterize every linedef onto the grid (walls, doors, height changes).
     #[must_use]
-    pub fn from_level(level: &Level) -> Self {
+    pub(crate) fn from_level(level: &Level) -> Self {
         let (min_x, max_x, min_y, max_y) = vertex_bounds(level);
 
         // Pad by one cell on each side so edge geometry is captured.
@@ -158,7 +158,7 @@ impl TileGrid {
 
     /// Bounds-checked tile access.
     #[must_use]
-    pub fn get(&self, gx: usize, gy: usize) -> Option<&Tile> {
+    pub(crate) fn get(&self, gx: usize, gy: usize) -> Option<&Tile> {
         if gx < self.grid_w && gy < self.grid_h {
             Some(&self.tiles[gy * self.grid_w + gx])
         } else {
@@ -168,7 +168,7 @@ impl TileGrid {
 
     /// Convert map coordinates to grid coordinates.
     #[must_use]
-    pub fn map_to_grid(&self, map_x: i32, map_y: i32) -> (i32, i32) {
+    pub(crate) fn map_to_grid(&self, map_x: i32, map_y: i32) -> (i32, i32) {
         (
             (map_x - self.origin_x) / CELL_SIZE,
             (map_y - self.origin_y) / CELL_SIZE,
@@ -180,7 +180,7 @@ impl TileGrid {
     /// Bit layout: 0 = north, 1 = east, 2 = south, 3 = west.
     /// A set bit means the neighbor in that direction is also a wall.
     #[must_use]
-    pub fn wall_neighbors(&self, gx: usize, gy: usize) -> u8 {
+    pub(crate) fn wall_neighbors(&self, gx: usize, gy: usize) -> u8 {
         let mut mask: u8 = 0;
         // North (gy+1)
         if gy + 1 < self.grid_h && self.tiles[(gy + 1) * self.grid_w + gx].kind == TileKind::Wall {
@@ -347,7 +347,7 @@ fn classify_two_sided(level: &Level, linedef: &doom_map::Linedef) -> TileKind {
 ///
 /// Returns grid coordinates `(gx, gy)` for each cell the line crosses.
 /// Out-of-bounds cells are excluded.
-pub fn rasterize_line(
+pub(crate) fn rasterize_line(
     x1: i32,
     y1: i32,
     x2: i32,

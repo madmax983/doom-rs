@@ -30,6 +30,7 @@ pub mod projectile;
 pub mod random;
 pub mod savegame;
 pub mod sight;
+pub mod skill;
 pub mod snapshot;
 pub mod sound;
 pub mod spawn;
@@ -89,12 +90,13 @@ pub use sight::{
     p_aim_line_slope, p_check_sight, p_look_for_players, point_on_side, ray_crosses_linedef,
     sector_from_subsector,
 };
+pub use skill::Skill;
 pub use snapshot::Snapshot;
 pub use sound::{
     ML_SOUNDBLOCK, adjacent_sectors, clear_sound_targets, get_sound_target, init_sound_state,
     monster_should_wake, p_noise_alert,
 };
-pub use spawn::{Skill, spawn_level_things};
+pub use spawn::spawn_level_things;
 pub use specials::{
     StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_ceiling_crush_and_raise,
     ev_ceiling_crush_raise_fast, ev_ceiling_crush_stop, ev_ceiling_lower_and_crush,

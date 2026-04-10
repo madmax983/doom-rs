@@ -10,7 +10,7 @@
 
 /// Visibility state for a single sector.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SectorVisibility {
+pub(crate) enum SectorVisibility {
     /// Never seen by the player.
     Unexplored,
     /// Previously seen; rendered dimmed.  The `u8` is the last-known light level.
@@ -24,14 +24,14 @@ pub enum SectorVisibility {
 // ---------------------------------------------------------------------------
 
 /// Per-sector visibility state for the entire level.
-pub struct VisibilityMap {
+pub(crate) struct VisibilityMap {
     sectors: Vec<SectorVisibility>,
 }
 
 impl VisibilityMap {
     /// Create a new map with all sectors unexplored.
     #[must_use]
-    pub fn new(n: usize) -> Self {
+    pub(crate) fn new(n: usize) -> Self {
         Self {
             sectors: vec![SectorVisibility::Unexplored; n],
         }
@@ -39,7 +39,7 @@ impl VisibilityMap {
 
     /// Demote all `Visible` sectors to `Remembered`, preserving their light level.
     /// `Remembered` and `Unexplored` sectors are unchanged.
-    pub fn demote_all(&mut self) {
+    pub(crate) fn demote_all(&mut self) {
         for vis in &mut self.sectors {
             if let SectorVisibility::Visible(light) = *vis {
                 *vis = SectorVisibility::Remembered(light);
@@ -48,7 +48,7 @@ impl VisibilityMap {
     }
 
     /// Mark a sector as visible with the given light level.
-    pub fn mark_visible(&mut self, sector_idx: usize, light: u8) {
+    pub(crate) fn mark_visible(&mut self, sector_idx: usize, light: u8) {
         if let Some(vis) = self.sectors.get_mut(sector_idx) {
             *vis = SectorVisibility::Visible(light);
         }
@@ -60,8 +60,12 @@ impl VisibilityMap {
     /// 2. Marks the player's sector as visible.
     /// 3. For every other sector, if `reject_visible_fn(player_sector, i)` is
     ///    true, marks it visible with the given light level.
-    pub fn update<F>(&mut self, player_sector: usize, reject_visible_fn: F, sector_lights: &[u8])
-    where
+    pub(crate) fn update<F>(
+        &mut self,
+        player_sector: usize,
+        reject_visible_fn: F,
+        sector_lights: &[u8],
+    ) where
         F: Fn(usize, usize) -> bool,
     {
         self.demote_all();
@@ -85,7 +89,7 @@ impl VisibilityMap {
     /// Get the visibility state of a sector.  Returns `Unexplored` for
     /// out-of-bounds indices.
     #[must_use]
-    pub fn get(&self, sector_idx: usize) -> SectorVisibility {
+    pub(crate) fn get(&self, sector_idx: usize) -> SectorVisibility {
         self.sectors
             .get(sector_idx)
             .copied()

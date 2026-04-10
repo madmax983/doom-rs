@@ -19,7 +19,7 @@ use crate::{DoomGame, ticinput_to_ticcmd};
 /// Wraps [`DoomGame`] and records each tic's [`TicCmd`] to a [`DemoRecorder`].
 ///
 /// When the wrapper is dropped the accumulated demo is written to `save_path`.
-pub struct DemoRecordingWrapper {
+pub(crate) struct DemoRecordingWrapper {
     inner: DoomGame,
     recorder: DemoRecorder,
     save_path: std::path::PathBuf,
@@ -27,7 +27,11 @@ pub struct DemoRecordingWrapper {
 
 impl DemoRecordingWrapper {
     /// Create a new recording wrapper.
-    pub fn new(inner: DoomGame, recorder: DemoRecorder, save_path: std::path::PathBuf) -> Self {
+    pub(crate) fn new(
+        inner: DoomGame,
+        recorder: DemoRecorder,
+        save_path: std::path::PathBuf,
+    ) -> Self {
         Self {
             inner,
             recorder,
@@ -78,14 +82,14 @@ impl Drop for DemoRecordingWrapper {
 ///
 /// When the demo is exhausted the last rendered frame stays frozen until the
 /// user quits (Q/Esc via the event loop).
-pub struct DemoPlaybackApp {
+pub(crate) struct DemoPlaybackApp {
     inner: DoomGame,
     player: DemoPlayer,
 }
 
 impl DemoPlaybackApp {
     /// Create a new playback app backed by `inner` and `player`.
-    pub fn new(inner: DoomGame, player: DemoPlayer) -> Self {
+    pub(crate) fn new(inner: DoomGame, player: DemoPlayer) -> Self {
         Self { inner, player }
     }
 
@@ -102,7 +106,7 @@ impl DemoPlaybackApp {
     }
 
     /// Returns `true` if the demo has been completely replayed.
-    pub fn is_finished(&self) -> bool {
+    pub(crate) fn is_finished(&self) -> bool {
         self.player.is_finished()
     }
 }

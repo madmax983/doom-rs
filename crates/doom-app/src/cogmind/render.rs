@@ -25,7 +25,7 @@ use super::visibility::{SectorVisibility, VisibilityMap};
 /// them only when the level changes.
 #[doc(alias = "cogmind")]
 #[doc(alias = "roguelike")]
-pub struct CogmindState {
+pub(crate) struct CogmindState {
     /// Tile grid for the current level (lazily built).
     #[doc(hidden)]
     pub tile_grid: Option<TileGrid>,
@@ -53,7 +53,7 @@ impl CogmindState {
     /// let state = CogmindState::new();
     /// ```
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             tile_grid: None,
             visibility: None,
@@ -95,7 +95,7 @@ impl CogmindState {
     /// // Second call with the same level is instant:
     /// state.ensure_grid(&level);
     /// ```
-    pub fn ensure_grid(&mut self, level: &Level) {
+    pub(crate) fn ensure_grid(&mut self, level: &Level) {
         if self.tile_grid.is_some() && self.cached_level_name == level.name {
             return;
         }
@@ -140,7 +140,7 @@ impl CogmindState {
     /// // Mark sectors visible from sector index 0
     /// state.update_visibility(0, &level);
     /// ```
-    pub fn update_visibility(&mut self, player_sector: usize, level: &Level) {
+    pub(crate) fn update_visibility(&mut self, player_sector: usize, level: &Level) {
         let Some(vis) = self.visibility.as_mut() else {
             return;
         };
@@ -196,7 +196,7 @@ impl CogmindState {
     /// assert_eq!(frame.width(), 80);
     /// assert_eq!(frame.height(), 24);
     /// ```
-    pub fn render_frame(
+    pub(crate) fn render_frame(
         &mut self,
         gs: &GameState,
         level: &Level,
