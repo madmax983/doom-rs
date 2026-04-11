@@ -182,4 +182,49 @@ mod tests {
         };
         assert_eq!(entry.byte_range(), Some((200, 200)));
     }
+
+    #[test]
+    fn lump_name_raw() {
+        let name = LumpName::from_str("E1M1");
+        assert_eq!(name.raw(), b"E1M1\0\0\0\0");
+    }
+
+    #[test]
+    fn lump_name_debug_fmt() {
+        let name = LumpName::from_str("TEST");
+        assert_eq!(format!("{:?}", name), "LumpName(\"TEST\")");
+    }
+
+    #[test]
+    fn lump_name_display_fmt() {
+        let name = LumpName::from_str("TEST");
+        assert_eq!(format!("{}", name), "TEST");
+    }
+
+    #[test]
+    fn lump_def_end() {
+        let def = LumpDef {
+            name: LumpName::from_str("TEST"),
+            offset: 100,
+            size: 50,
+        };
+        assert_eq!(def.end(), 150);
+    }
+
+    #[test]
+    fn lump_def_is_marker() {
+        let marker = LumpDef {
+            name: LumpName::from_str("F_START"),
+            offset: 100,
+            size: 0,
+        };
+        assert!(marker.is_marker());
+
+        let not_marker = LumpDef {
+            name: LumpName::from_str("TEST"),
+            offset: 100,
+            size: 1,
+        };
+        assert!(!not_marker.is_marker());
+    }
 }

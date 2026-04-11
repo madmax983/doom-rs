@@ -414,4 +414,165 @@ mod tests {
             _ => panic!("Expected Classic map lump group"),
         }
     }
+
+    #[test]
+    fn stack_wad_count() {
+        let mut stack = WadStack::new();
+        assert_eq!(stack.wad_count(), 0);
+
+        let iwad_data = b"IWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0TEST\0\0\0\0DATA".to_vec();
+        stack.push_iwad(iwad_data).unwrap();
+
+        assert_eq!(stack.wad_count(), 1);
+    }
+
+    #[test]
+    fn stack_default() {
+        let stack: WadStack = Default::default();
+        assert_eq!(stack.wad_count(), 0);
+    }
+
+    #[test]
+    fn stack_map_lump_group() {
+        let mut stack = WadStack::new();
+
+        // Build minimal UDMF map
+        let mut iwad_data = b"IWAD\x03\0\0\0\x0C\0\0\0".to_vec(); // 3 lumps, dir at 12
+        iwad_data.extend_from_slice(b"data1data2data3");
+
+        let dir_offset = iwad_data.len() as i32;
+        iwad_data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+
+        // MAP01
+        iwad_data.extend_from_slice(&(12i32).to_le_bytes());
+        iwad_data.extend_from_slice(&(0i32).to_le_bytes());
+        iwad_data.extend_from_slice(b"MAP01\0\0\0");
+
+        // TEXTMAP
+        iwad_data.extend_from_slice(&(12i32).to_le_bytes());
+        iwad_data.extend_from_slice(&(0i32).to_le_bytes());
+        iwad_data.extend_from_slice(b"TEXTMAP\0");
+
+        // ENDMAP
+        iwad_data.extend_from_slice(&(12i32).to_le_bytes());
+        iwad_data.extend_from_slice(&(0i32).to_le_bytes());
+        iwad_data.extend_from_slice(b"ENDMAP\0\0");
+
+        stack.push_iwad(iwad_data).unwrap();
+
+        let group = stack.map_lump_group("MAP01").unwrap();
+        assert!(matches!(group, crate::wad::MapLumpGroup::Udmf(_)));
+
+        assert!(stack.map_lump_group("MAP02").is_none());
+    }
+
+    #[test]
+    fn stack_wad_count_more() {
+        let mut stack = WadStack::new();
+        assert_eq!(stack.wad_count(), 0);
+        assert_eq!(stack.total_lump_count(), 0);
+        assert_eq!(WadStack::default().wad_count(), 0);
+
+        let iwad_data = b"IWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0TEST\0\0\0\0DATA".to_vec();
+        stack.push_iwad(iwad_data).unwrap();
+
+        assert_eq!(stack.wad_count(), 1);
+        assert_eq!(stack.total_lump_count(), 1);
+
+        let pwad_data = b"PWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0TEST\0\0\0\0DATA".to_vec();
+        stack.push_pwad(pwad_data).unwrap();
+
+        assert_eq!(stack.wad_count(), 2);
+        assert_eq!(stack.total_lump_count(), 2);
+    }
+
+    #[test]
+    fn map_lump_group_not_found_returns_none() {
+        let mut stack = WadStack::new();
+        let iwad_data = b"IWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0TEST\0\0\0\0DATA".to_vec();
+        stack.push_iwad(iwad_data).unwrap();
+        assert!(stack.find_map_lump_group("MAP01").is_none());
+        assert!(stack.map_lump_group("MAP01").is_none());
+    }
+
+    #[test]
+    fn find_lump_not_found_returns_none() {
+        let stack = WadStack::new();
+        assert!(stack.find_lump("MAP01").is_none());
+    }
+
+    #[test]
+    fn test_find_lump() {
+        let stack = WadStack::new();
+        assert!(stack.find_lump("TEST").is_none());
+        assert!(stack.lump_data("TEST").is_none());
+
+        let mut stack = WadStack::new();
+        let iwad_data = b"IWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0TEST\0\0\0\0DATA".to_vec();
+        stack.push_iwad(iwad_data).unwrap();
+
+        assert!(stack.find_lump("TEST").is_some());
+        assert_eq!(stack.lump_data("TEST").unwrap(), b"DATA");
+    }
+
+    #[test]
+    fn test_all_lumps() {
+        let mut stack = WadStack::new();
+        let iwad_data = b"IWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0TEST\0\0\0\0DATA".to_vec();
+        stack.push_iwad(iwad_data).unwrap();
+
+        let all: Vec<_> = stack.all_lumps().collect();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].1.name.as_str(), "TEST");
+    }
+
+    #[test]
+    fn stack_expect_classic_on_classic() {
+        let mut stack = WadStack::new();
+
+        let mut iwad_data = b"IWAD\x0B\0\0\0\x0C\0\0\0".to_vec(); // 11 lumps, dir at 12
+        iwad_data.extend_from_slice(b"01234567890");
+
+        let dir_offset = iwad_data.len() as i32;
+        iwad_data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+
+        for name in &["MAP01\0\0\0", "THINGS\0\0", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SEGS\0\0\0\0", "SSECTORS", "NODES\0\0\0", "SECTORS\0", "REJECT\0\0", "BLOCKMAP"] {
+            iwad_data.extend_from_slice(&(12i32).to_le_bytes());
+            iwad_data.extend_from_slice(&(0i32).to_le_bytes());
+            iwad_data.extend_from_slice(name.as_bytes());
+        }
+
+        stack.push_iwad(iwad_data).unwrap();
+
+        let group = stack.map_lump_group("MAP01").unwrap();
+        assert!(matches!(group, crate::wad::MapLumpGroup::Classic(_)));
+    }
+
+    #[test]
+    fn stack_expect_udmf_on_udmf() {
+        let mut stack = WadStack::new();
+
+        let mut iwad_data = b"IWAD\x03\0\0\0\x0C\0\0\0".to_vec(); // 3 lumps, dir at 12
+        iwad_data.extend_from_slice(b"data1data2data3");
+
+        let dir_offset = iwad_data.len() as i32;
+        iwad_data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+
+        iwad_data.extend_from_slice(&(12i32).to_le_bytes());
+        iwad_data.extend_from_slice(&(0i32).to_le_bytes());
+        iwad_data.extend_from_slice(b"MAP01\0\0\0");
+
+        iwad_data.extend_from_slice(&(12i32).to_le_bytes());
+        iwad_data.extend_from_slice(&(0i32).to_le_bytes());
+        iwad_data.extend_from_slice(b"TEXTMAP\0");
+
+        iwad_data.extend_from_slice(&(12i32).to_le_bytes());
+        iwad_data.extend_from_slice(&(0i32).to_le_bytes());
+        iwad_data.extend_from_slice(b"ENDMAP\0\0");
+
+        stack.push_iwad(iwad_data).unwrap();
+
+        let group = stack.map_lump_group("MAP01").unwrap();
+        assert!(matches!(group, crate::wad::MapLumpGroup::Udmf(_)));
+    }
 }

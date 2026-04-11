@@ -769,4 +769,162 @@ mod tests {
             .collect();
         assert_eq!(flats, vec!["FLAT1", "FLAT2"]);
     }
+
+    #[test]
+    fn parse_negative_lump_count() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&(-1i32).to_le_bytes());
+        data[8..12].copy_from_slice(&12i32.to_le_bytes());
+        match WadFile::parse(data) {
+            Err(WadError::NegativeLumpCount(-1)) => (),
+            _ => panic!("Expected NegativeLumpCount"),
+        }
+    }
+
+    #[test]
+    fn parse_directory_out_of_bounds_negative() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes());
+        data[8..12].copy_from_slice(&(-1i32).to_le_bytes());
+        match WadFile::parse(data) {
+            Err(WadError::DirectoryOutOfBounds { .. }) => (),
+            _ => panic!("Expected DirectoryOutOfBounds"),
+        }
+    }
+
+    #[test]
+    fn parse_directory_out_of_bounds_large() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes());
+        data[8..12].copy_from_slice(&100i32.to_le_bytes());
+        match WadFile::parse(data) {
+            Err(WadError::DirectoryOutOfBounds { .. }) => (),
+            _ => panic!("Expected DirectoryOutOfBounds"),
+        }
+    }
+
+    #[test]
+    fn parse_lump_negative_field() {
+        let mut data = vec![0u8; 28];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes());
+        data[8..12].copy_from_slice(&12i32.to_le_bytes());
+        data[12..16].copy_from_slice(&(-1i32).to_le_bytes());
+        data[16..20].copy_from_slice(&0i32.to_le_bytes());
+        data[20..28].copy_from_slice(b"TEST\0\0\0\0");
+        match WadFile::parse(data) {
+            Err(WadError::LumpNegativeField { name }) if name == "TEST" => (),
+            _ => panic!("Expected LumpNegativeField"),
+        }
+    }
+
+    #[test]
+    fn parse_lump_out_of_bounds() {
+        let mut data = vec![0u8; 28];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes());
+        data[8..12].copy_from_slice(&12i32.to_le_bytes());
+        data[12..16].copy_from_slice(&100i32.to_le_bytes());
+        data[16..20].copy_from_slice(&10i32.to_le_bytes());
+        data[20..28].copy_from_slice(b"TEST\0\0\0\0");
+        match WadFile::parse(data) {
+            Err(WadError::LumpOutOfBounds { name, .. }) if name == "TEST" => (),
+            _ => panic!("Expected LumpOutOfBounds"),
+        }
+    }
+
+    #[test]
+    fn udmf_aux_lumps() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("TEXTMAP", br#"namespace = "doom";"#),
+            ("ZNODES", b"not_relevant_here"),
+            ("ENDMAP", b""),
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        let group = wad.map_lump_group("MAP01").unwrap();
+        match group {
+            MapLumpGroup::Udmf(g) => {
+                assert_eq!(g.aux_lumps().len(), 1);
+                assert_eq!(g.aux_lumps()[0].name.as_str(), "ZNODES");
+            }
+            _ => panic!("Expected UDMF"),
+        }
+    }
+
+    #[test]
+    fn waddir_len_and_is_empty() {
+        let dir = WadDir::default();
+        assert_eq!(dir.len(), 0);
+        assert!(dir.is_empty());
+
+        let dir = WadDir::from_lumps(vec![
+            LumpDef { name: LumpName::from_str("TEST"), offset: 0, size: 0 }
+        ]);
+        assert_eq!(dir.len(), 1);
+        assert!(!dir.is_empty());
+
+        // additional coverage for lumps()
+        assert_eq!(dir.lumps().len(), 1);
+        assert_eq!(dir.lumps()[0].name.as_str(), "TEST");
+    }
+
+    #[test]
+    fn expected_iwad_error_display() {
+        assert_eq!(
+            WadError::ExpectedIwad.to_string(),
+            "expected an IWAD as the base WAD, but found a PWAD"
+        );
+    }
+
+    #[test]
+    fn expect_classic_on_classic() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("THINGS", b"iwad_things"),
+            ("LINEDEFS", b"iwad_linedefs"),
+            ("SIDEDEFS", b"iwad_sidedefs"),
+            ("VERTEXES", b"iwad_vertexes"),
+            ("SEGS", b"iwad_segs"),
+            ("SSECTORS", b"iwad_ssectors"),
+            ("NODES", b"iwad_nodes"),
+            ("SECTORS", b"iwad_sectors"),
+            ("REJECT", b"iwad_reject"),
+            ("BLOCKMAP", b"iwad_blockmap"),
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        let group = wad.map_lump_group("MAP01").unwrap();
+        assert!(matches!(group, MapLumpGroup::Classic(_)));
+    }
+
+    #[test]
+    fn wad_dir_find() {
+        let dir = WadDir::from_lumps(vec![
+            LumpDef { name: LumpName::from_str("TEST1"), offset: 0, size: 0 },
+            LumpDef { name: LumpName::from_str("TEST2"), offset: 0, size: 0 },
+            LumpDef { name: LumpName::from_str("TEST1"), offset: 10, size: 10 },
+        ]);
+
+        assert_eq!(dir.find("TEST1").unwrap().offset, 10);
+        assert!(dir.find("TEST3").is_none());
+        assert_eq!(dir.lumps().len(), 3);
+
+        // more coverage
+        let empty_dir = WadDir::default();
+        assert!(empty_dir.find("TEST").is_none());
+    }
+
+    #[test]
+    fn map_lump_group_short_wad_returns_none() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("THINGS", b""),
+            ("LINEDEFS", b""),
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        assert!(wad.map_lump_group("MAP01").is_none());
+    }
 }
