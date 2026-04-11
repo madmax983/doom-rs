@@ -1822,6 +1822,24 @@ mod tests {
     }
 
     // --- Test 27: Header description is stored correctly ---
+
+    // --- Havoc Test: Description is invalid UTF-8 panics if unwrapped ---
+    #[test]
+    fn havoc_test_invalid_utf8_description() {
+        let gs = test_game_state();
+        let valid_data = save_game(&gs, &test_level_name(), 3, "My Cool Save");
+        let mut data = valid_data.clone();
+
+        let desc_start = 21; // offset of description
+        data[desc_start] = 0x80; // Invalid UTF-8 byte
+
+        let loaded = load_game(&data).expect("load must succeed");
+        let desc = &loaded.header.description;
+        // This is the vulnerable line
+        let desc_str = core::str::from_utf8(desc).unwrap_or("").trim_end_matches('\0');
+        assert_eq!(desc_str, "");
+    }
+
     #[test]
     fn save_header_description() {
         let gs = test_game_state();
@@ -1829,7 +1847,7 @@ mod tests {
         let loaded = load_game(&data).expect("load must succeed");
         // Description should start with "My Cool Save" then be null-padded.
         let desc = &loaded.header.description;
-        let desc_str = core::str::from_utf8(desc).unwrap().trim_end_matches('\0');
+        let desc_str = core::str::from_utf8(desc).unwrap_or("").trim_end_matches('\0');
         assert_eq!(desc_str, "My Cool Save");
         assert_eq!(loaded.header.skill, 3);
     }
