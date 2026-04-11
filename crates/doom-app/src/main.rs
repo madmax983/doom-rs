@@ -2370,21 +2370,82 @@ fn run_doom() -> Result<()> {
 
     if let Some(path_str) = &args.pathfind {
         let parts: Vec<&str> = path_str.split(',').collect();
+        let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+
         if parts.len() == 2 {
             if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
                 let graph = doom_map::SectorGraph::build(&level);
                 if let Some(path) = graph.shortest_path(start, end) {
-                    println!("Path found: {:?}", path);
+                    if is_tty {
+                        use crossterm::style::Stylize;
+                        println!(
+                            "{} {} path from sector {} to {}",
+                            "📍".green(),
+                            "Found".green().bold(),
+                            start.to_string().cyan(),
+                            end.to_string().cyan()
+                        );
+                        let path_formatted = path
+                            .iter()
+                            .map(|s| s.to_string().yellow().to_string())
+                            .collect::<Vec<_>>()
+                            .join(&" ➔ ".dark_grey().to_string());
+
+                        let mut table = comfy_table::Table::new();
+                        table
+                            .load_preset(comfy_table::presets::UTF8_FULL)
+                            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+
+                        table.set_header(vec![
+                            comfy_table::Cell::new("Steps").fg(comfy_table::Color::Cyan).add_attribute(comfy_table::Attribute::Bold),
+                            comfy_table::Cell::new("Route").fg(comfy_table::Color::Cyan).add_attribute(comfy_table::Attribute::Bold),
+                        ]);
+
+                        table.add_row(vec![
+                            comfy_table::Cell::new(path.len().saturating_sub(1).to_string()),
+                            comfy_table::Cell::new(path_formatted),
+                        ]);
+
+                        println!("{table}");
+                    } else {
+                        let path_str = path.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" -> ");
+                        println!("Path found: {}", path_str);
+                    }
                 } else {
-                    println!("No path found between sector {} and sector {}", start, end);
+                    if is_tty {
+                        use crossterm::style::Stylize;
+                        println!(
+                            "{} {} between sector {} and sector {}",
+                            "🚫".red(),
+                            "No path found".red().bold(),
+                            start.to_string().cyan(),
+                            end.to_string().cyan()
+                        );
+                    } else {
+                        println!("No path found between sector {} and sector {}", start, end);
+                    }
                 }
             } else {
-                println!(
-                    "Invalid sector indices. Please provide two integers separated by a comma."
-                );
+                if is_tty {
+                    use crossterm::style::Stylize;
+                    println!(
+                        "{} Invalid sector indices. Please provide two integers separated by a comma.",
+                        "⚠️".yellow().bold()
+                    );
+                } else {
+                    println!("Invalid sector indices. Please provide two integers separated by a comma.");
+                }
             }
         } else {
-            println!("Invalid format. Please use START,END (e.g. 0,5).");
+            if is_tty {
+                use crossterm::style::Stylize;
+                println!(
+                    "{} Invalid format. Please use START,END (e.g. 0,5).",
+                    "⚠️".yellow().bold()
+                );
+            } else {
+                println!("Invalid format. Please use START,END (e.g. 0,5).");
+            }
         }
         return Ok(());
     }
