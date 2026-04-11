@@ -257,7 +257,13 @@ const BAM_PER_DEGREE: u32 = (0x1_0000_0000u64 / 360) as u32;
 /// the destination's position, angle, and floor height.
 ///
 /// Returns `true` if a teleport destination was found and the actor was moved.
-pub fn ev_teleport(gs: &mut GameState, level: &Level, tag: u16, mobj_handle: MobjHandle) -> bool {
+#[allow(dead_code)]
+pub(crate) fn ev_teleport(
+    gs: &mut GameState,
+    level: &Level,
+    tag: u16,
+    mobj_handle: MobjHandle,
+) -> bool {
     // Collect sector indices matching the tag.
     let first_tagged_sector = level.sectors.iter().position(|s| s.tag == tag);
 
@@ -608,7 +614,8 @@ pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
 ///
 /// Adjacent means: the sector shares a two-sided linedef with the given sector.
 /// If the sector has no adjacent sectors, returns the sector's own floor height.
-pub fn lowest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
+#[allow(dead_code)]
+pub(crate) fn lowest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
     let own_floor = level
         .sectors
         .get(sector_index)
@@ -656,7 +663,8 @@ pub fn lowest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
 ///
 /// Used for "lower to highest adjacent floor" specials.
 /// If no adjacent sectors, returns the sector's own floor height.
-pub fn highest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
+#[allow(dead_code)]
+pub(crate) fn highest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
     let own_floor = level
         .sectors
         .get(sector_index)
@@ -704,7 +712,8 @@ pub fn highest_adjacent_floor(level: &Level, sector_index: usize) -> i16 {
 /// Scans all adjacent sector floors and returns the smallest one that is strictly
 /// greater than the current sector's floor height. If none is found, returns the
 /// sector's own floor height (no change).
-pub fn next_highest_floor(level: &Level, sector_index: usize) -> i16 {
+#[allow(dead_code)]
+pub(crate) fn next_highest_floor(level: &Level, sector_index: usize) -> i16 {
     let own_floor = level
         .sectors
         .get(sector_index)
@@ -751,7 +760,8 @@ pub fn next_highest_floor(level: &Level, sector_index: usize) -> i16 {
 ///
 /// Used for "raise floor to lowest adjacent ceiling" specials.
 /// If no adjacent sectors, returns the sector's own ceiling height.
-pub fn lowest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
+#[allow(dead_code)]
+pub(crate) fn lowest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
     let own_ceil = level
         .sectors
         .get(sector_index)
@@ -798,7 +808,8 @@ pub fn lowest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
 ///
 /// Used for ceiling raise specials.
 /// If no adjacent sectors, returns the sector's own ceiling height.
-pub fn highest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
+#[allow(dead_code)]
+pub(crate) fn highest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
     let own_ceil = level
         .sectors
         .get(sector_index)
@@ -849,7 +860,12 @@ pub fn highest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
 ///
 /// This variant accepts an explicit `current_height` parameter, unlike the
 /// zero-arg `next_highest_floor` which uses the sector's own floor height.
-pub fn next_highest_floor_above(level: &Level, sector_index: usize, current_height: i16) -> i16 {
+#[allow(dead_code)]
+pub(crate) fn next_highest_floor_above(
+    level: &Level,
+    sector_index: usize,
+    current_height: i16,
+) -> i16 {
     let mut next = i16::MAX;
     let mut found = false;
 
@@ -897,7 +913,8 @@ pub fn next_highest_floor_above(level: &Level, sector_index: usize, current_heig
 /// default of 128 when `y_offset == 0`).
 ///
 /// For simplicity, if no lower textures are found, returns 0 (no raise).
-pub fn shortest_lower_texture(level: &Level, sector_index: usize) -> i16 {
+#[allow(dead_code)]
+pub(crate) fn shortest_lower_texture(level: &Level, sector_index: usize) -> i16 {
     let mut shortest = i16::MAX;
     let mut found = false;
 
@@ -956,7 +973,8 @@ pub fn shortest_lower_texture(level: &Level, sector_index: usize) -> i16 {
 /// Lower floor to lowest adjacent floor on all sectors matching `tag`.
 ///
 /// Creates one `FloorMover` per matching sector.
-pub fn ev_floor_lower_to_lowest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_floor_lower_to_lowest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     for (idx, target) in level
         .sectors
         .iter()
@@ -977,7 +995,8 @@ pub fn ev_floor_lower_to_lowest(gs: &mut GameState, level: &Level, tag: u16, spe
 }
 
 /// Lower floor to highest adjacent floor on all sectors matching `tag`.
-pub fn ev_floor_lower_to_highest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_floor_lower_to_highest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     for (idx, target) in level
         .sectors
         .iter()
@@ -1001,7 +1020,8 @@ pub fn ev_floor_lower_to_highest(gs: &mut GameState, level: &Level, tag: u16, sp
 ///
 /// "Next lowest" means: find the highest adjacent floor that is still below
 /// the sector's current floor. If none, no mover is created.
-pub fn ev_floor_lower_to_nearest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_floor_lower_to_nearest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     let per_sector: Vec<(usize, i16)> = level
         .sectors
         .iter()
@@ -1057,7 +1077,8 @@ pub fn ev_floor_lower_to_nearest(gs: &mut GameState, level: &Level, tag: u16, sp
 }
 
 /// Raise floor to lowest adjacent ceiling on all sectors matching `tag`.
-pub fn ev_floor_raise_to_lowest_ceiling(
+#[allow(dead_code)]
+pub(crate) fn ev_floor_raise_to_lowest_ceiling(
     gs: &mut GameState,
     level: &Level,
     tag: u16,
@@ -1085,7 +1106,8 @@ pub fn ev_floor_raise_to_lowest_ceiling(
 }
 
 /// Raise floor to next highest adjacent floor on all sectors matching `tag`.
-pub fn ev_floor_raise_to_nearest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_floor_raise_to_nearest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     for (idx, target) in level
         .sectors
         .iter()
@@ -1107,7 +1129,8 @@ pub fn ev_floor_raise_to_nearest(gs: &mut GameState, level: &Level, tag: u16, sp
 }
 
 /// Raise floor by shortest lower texture height on all sectors matching `tag`.
-pub fn ev_floor_raise_by_texture(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_floor_raise_by_texture(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     for (idx, target) in level
         .sectors
         .iter()
@@ -1129,7 +1152,8 @@ pub fn ev_floor_raise_by_texture(gs: &mut GameState, level: &Level, tag: u16, sp
 }
 
 /// Raise floor by exactly 24 units on all sectors matching `tag`.
-pub fn ev_floor_raise_24(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_floor_raise_24(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     for (idx, target) in level
         .sectors
         .iter()
@@ -1151,7 +1175,8 @@ pub fn ev_floor_raise_24(gs: &mut GameState, level: &Level, tag: u16, speed: i16
 }
 
 /// Raise floor by exactly 32 units on all sectors matching `tag`.
-pub fn ev_floor_raise_32(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_floor_raise_32(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     for (idx, target) in level
         .sectors
         .iter()
@@ -1173,7 +1198,8 @@ pub fn ev_floor_raise_32(gs: &mut GameState, level: &Level, tag: u16, speed: i16
 }
 
 /// Raise floor to the sector's own ceiling on all sectors matching `tag`.
-pub fn ev_floor_raise_to_ceiling(
+#[allow(dead_code)]
+pub(crate) fn ev_floor_raise_to_ceiling(
     gs: &mut GameState,
     level: &Level,
     tag: u16,
@@ -1207,7 +1233,8 @@ pub fn ev_floor_raise_to_ceiling(
 /// Return the indices of all linedefs whose **front** (right) sidedef references
 /// the given sector. This is used by stair builders, donut specials, and
 /// platform activation logic that need to walk adjacent sectors.
-pub fn sector_linedefs(level: &Level, sector_index: usize) -> Vec<usize> {
+#[allow(dead_code)]
+pub(crate) fn sector_linedefs(level: &Level, sector_index: usize) -> Vec<usize> {
     let mut result = Vec::new();
     for (i, ld) in level.linedefs.iter().enumerate() {
         if let Some(sd) = level.sidedefs.get(ld.right_sidedef as usize) {
@@ -1242,7 +1269,8 @@ pub enum StairType {
 /// linedef whose front side is the current sector) that has the same floor
 /// flat texture. That becomes the next stair step. Repeat until no more
 /// matching adjacent sectors are found.
-pub fn ev_build_stairs(
+#[allow(dead_code)]
+pub(crate) fn ev_build_stairs(
     gs: &mut GameState,
     level: &Level,
     start_sector: usize,
@@ -1364,7 +1392,8 @@ pub fn ev_build_stairs(
 /// looking at the back side of linedefs fronting the trigger sector.
 ///
 /// Returns the number of floor movers created.
-pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> usize {
+#[allow(dead_code)]
+pub(crate) fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> usize {
     let ld_indices = sector_linedefs(level, trigger_sector);
 
     let mut count = 0;
@@ -1475,7 +1504,13 @@ const PLATFORM_WAIT: i32 = 105;
 /// current floor height.
 ///
 /// Returns the number of platforms created.
-pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed: i16) -> usize {
+#[allow(dead_code)]
+pub(crate) fn ev_perpetual_platform(
+    gs: &mut GameState,
+    level: &Level,
+    tag: u16,
+    speed: i16,
+) -> usize {
     let mut count = 0;
     for idx in level
         .sectors
@@ -1773,7 +1808,8 @@ const LIFT_WAIT: i32 = 105;
 ///
 /// Perpetual crusher: lowers to floor+8, reverses, raises to top, reverses, repeat.
 /// Deals 10 damage per tic when crushing.
-pub fn ev_ceiling_crush_and_raise(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_ceiling_crush_and_raise(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     activate_crusher(
         gs,
         level,
@@ -1789,7 +1825,8 @@ pub fn ev_ceiling_crush_and_raise(gs: &mut GameState, level: &Level, tag: u16, s
 /// Activate a LowerAndCrush ceiling on all sectors matching `tag`.
 ///
 /// One-shot: lowers to floor+8 then stops. No crush damage.
-pub fn ev_ceiling_lower_and_crush(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_ceiling_lower_and_crush(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     activate_crusher(
         gs,
         level,
@@ -1805,7 +1842,8 @@ pub fn ev_ceiling_lower_and_crush(gs: &mut GameState, level: &Level, tag: u16, s
 /// Activate a LowerToFloor ceiling on all sectors matching `tag`.
 ///
 /// One-shot: lowers to floor height then stops. No crush damage.
-pub fn ev_ceiling_lower_to_floor(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_ceiling_lower_to_floor(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     activate_crusher(
         gs,
         level,
@@ -1821,14 +1859,16 @@ pub fn ev_ceiling_lower_to_floor(gs: &mut GameState, level: &Level, tag: u16, sp
 /// Stop all crushers with matching `tag` by removing them.
 ///
 /// Used by line types 57 and 74.
-pub fn ev_ceiling_crush_stop(gs: &mut GameState, tag: u16) {
+#[allow(dead_code)]
+pub(crate) fn ev_ceiling_crush_stop(gs: &mut GameState, tag: u16) {
     stop_crushers(gs, tag);
 }
 
 /// Activate a FastCrushAndRaise ceiling on all sectors matching `tag`.
 ///
 /// Like CrushAndRaise but typically with higher speed. Deals 10 damage per tic.
-pub fn ev_ceiling_crush_raise_fast(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+#[allow(dead_code)]
+pub(crate) fn ev_ceiling_crush_raise_fast(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     activate_crusher(
         gs,
         level,
@@ -1845,7 +1885,8 @@ pub fn ev_ceiling_crush_raise_fast(gs: &mut GameState, level: &Level, tag: u16, 
 ///
 /// Creates a one-shot `CeilingMover` with `CeilingType::RaiseToHighest`.
 /// Linedef type 40 (W1 Raise ceiling to highest adjacent ceiling).
-pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) {
+#[allow(dead_code)]
+pub(crate) fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) {
     for sector_idx in 0..level.sectors.len() {
         let sector = &level.sectors[sector_idx];
         if sector.tag != tag {
@@ -1982,7 +2023,8 @@ fn activate_lift(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
 /// `LiftMover` starting in `Lowering` status.
 ///
 /// Returns the number of lifts created.
-pub fn ev_do_lift(
+#[allow(dead_code)]
+pub(crate) fn ev_do_lift(
     gs: &mut GameState,
     level: &Level,
     tag: u16,

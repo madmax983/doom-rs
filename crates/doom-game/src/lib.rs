@@ -96,14 +96,10 @@ pub use sound::{
 };
 pub use spawn::{Skill, spawn_level_things};
 pub use specials::{
-    StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_ceiling_crush_and_raise,
-    ev_ceiling_crush_raise_fast, ev_ceiling_crush_stop, ev_ceiling_lower_and_crush,
-    ev_ceiling_lower_to_floor, ev_ceiling_raise_to_highest, ev_do_donut, ev_do_lift,
-    ev_perpetual_platform, ev_teleport, highest_adjacent_ceiling, highest_adjacent_floor,
-    init_conveyors, init_scrolling_walls, init_sector_lights, lowest_adjacent_ceiling,
-    lowest_adjacent_floor, next_highest_floor, p_use_lines, player_sector_index, sector_linedefs,
-    tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
-    tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
+    StairType, USE_RANGE, activate_linedef, init_conveyors, init_scrolling_walls,
+    init_sector_lights, p_use_lines, player_sector_index, tick_ceilings, tick_conveyors,
+    tick_floors, tick_lifts, tick_platforms, tick_scrollers, tick_sector_damage,
+    tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
 pub use state::{
     CeilingMover, CeilingType, ConveyorBelt, DoomRng, ExitRequest, FloorMover, GameState,
