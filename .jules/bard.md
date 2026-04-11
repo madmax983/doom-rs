@@ -23,3 +23,6 @@
 ## 2026-04-07 - [Internal modules showing up as broken links]
 **Confusion:** Rustdoc throws warnings when public items link to `pub(crate)` modules or items via intra-doc links. Making those internal items `pub` with `#[doc(hidden)]` is an anti-pattern as it still exposes internal logic to the public API programmatically.
 **Clarification:** To resolve private intra-doc link warnings while strictly keeping the public API clean, remove the intra-doc brackets (`[ ]`) and just use regular backticked markdown code formatting (e.g. `` `module_name` ``) for internal items in public docs.
+## 2024-11-20 - [Clarified doom-app Orchestration and demo modes]
+**Confusion:** The `doom-app` crate root (`main.rs`) and the `demo_mode` structs (`DemoRecordingWrapper`, `DemoPlaybackApp`) lacked narrative documentation explaining how the decoupled components form the "Grand Assembly" and how they intercept the game loop.
+**Clarification:** Added a story-driven module-level `//!` block to `main.rs` detailing the application's orchestration role. Added executable `///` doc-tests to the demo wrappers to show how they initialize and pump the `DoomEventLoop` with `TicInput` without needing to trace into `demo_mode.rs`.
