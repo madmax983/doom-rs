@@ -10,3 +10,7 @@
 **Refactored `Mobj` coordinate extraction for sound emission in `doom-game/src/actions.rs`**
 **Learning:** Extracting `mo.x` and `mo.y` via `.map(|mo| (mo.x, mo.y)).unwrap_or_default()` when checking if an entity exists is unnecessarily verbose and causes Boolean Blindness by creating intermediate default values (0, 0) that are immediately consumed.
 **Action:** Use an idiomatic `if let Some(mo) = gs.mobjslab.get(handle)` block to directly access the entity's coordinates and embed the dependent logic (like pushing to a `sound_queue`) inside the block.
+
+**Flatten audio event dispatch**
+**Learning:** The background audio command loop contained deeply nested `if let` and `match` blocks (Pyramid of Doom), making the main event dispatch obscured by indentation.
+**Action:** Use guard clauses (`let Ok(x) = ... else { continue }`) to flatten deeply nested logic loops, significantly improving read flow without altering early-exit semantics.

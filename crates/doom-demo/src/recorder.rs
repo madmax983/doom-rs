@@ -18,6 +18,30 @@ use crate::ticcmd::DemoTicCmd;
 /// Call [`DemoRecorder::record_tic`] once per simulation tic (with one
 /// [`DemoTicCmd`] per present player), then [`DemoRecorder::to_lmp`] or
 /// [`DemoRecorder::finish`] to produce a byte-accurate LMP file.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_demo::{DemoRecorder, LmpHeader};
+/// use doom_types::TicCmd;
+///
+/// // Create a header for a single-player game on Hurt Me Plenty (skill 3), E1M1
+/// let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// let mut recorder = DemoRecorder::new(header);
+///
+/// // Record some player movement
+/// let mut cmd = TicCmd::default();
+/// cmd.forward_move = 50;
+/// recorder.record_tic(&cmd);
+///
+/// cmd.forward_move = 0;
+/// cmd.side_move = -25;
+/// recorder.record_tic(&cmd);
+///
+/// // Finalize the demo into a byte array
+/// let lmp_bytes = recorder.to_lmp();
+/// assert_eq!(recorder.tic_count(), 2);
+/// ```
 #[derive(Debug, Clone)]
 pub struct DemoRecorder {
     header: LmpHeader,

@@ -34,6 +34,33 @@ pub enum DemoError {
 ///
 /// Construct with [`DemoPlayer::from_lmp`], then call [`DemoPlayer::next_tic`]
 /// once per simulation tic until [`DemoPlayer::is_finished`] returns `true`.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// use doom_types::TicCmd;
+///
+/// # let mut recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// # let mut cmd = TicCmd::default();
+/// # cmd.forward_move = 50;
+/// # recorder.record_tic(&cmd);
+/// # let lmp_bytes = recorder.to_lmp();
+/// // Assume `lmp_bytes` contains the raw bytes of an LMP file
+/// let mut player = DemoPlayer::from_lmp(&lmp_bytes).expect("Valid LMP");
+///
+/// // Read the game information
+/// assert_eq!(player.header().skill, 3);
+/// assert_eq!(player.header().episode, 1);
+///
+/// // Stream tic commands until finished
+/// while let Some(cmd) = player.next_tic() {
+///     // Apply the command to the game simulation
+///     // println!("Forward move: {}", cmd.forward_move);
+/// }
+///
+/// assert!(player.is_finished());
+/// ```
 #[derive(Debug, Clone)]
 pub struct DemoPlayer {
     header: LmpHeader,

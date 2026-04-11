@@ -82,32 +82,23 @@ pub struct SaveGame {
 // ---------------------------------------------------------------------------
 
 /// Errors that can occur during `load_game`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
 pub enum SaveError {
     /// Input data is too short to contain even a header.
+    #[error("save data too short for header")]
     TooShort,
     /// Save data does not match any recognized header.
+    #[error("unrecognized save file header")]
     BadMagic,
     /// Format version is not supported.
+    #[error("unsupported save format version")]
     BadVersion,
     /// Data ended before all fields could be read.
+    #[error("save data truncated")]
     Truncated,
     /// Vanilla DSG payload support is not implemented yet.
+    #[error("vanilla DSG payload support is not implemented yet")]
     UnsupportedVanillaDsg,
-}
-
-impl core::fmt::Display for SaveError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            SaveError::TooShort => write!(f, "save data too short for header"),
-            SaveError::BadMagic => write!(f, "unrecognized save file header"),
-            SaveError::BadVersion => write!(f, "unsupported save format version"),
-            SaveError::Truncated => write!(f, "save data truncated"),
-            SaveError::UnsupportedVanillaDsg => {
-                write!(f, "vanilla DSG payload support is not implemented yet")
-            }
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1233,6 +1224,15 @@ pub fn save_slot_filename(slot: usize) -> String {
     format!("doomsav{}.dsg", slot)
 }
 
+impl core::fmt::Display for SaveFormat {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            SaveFormat::DoomRs => write!(f, "DoomRs"),
+            SaveFormat::VanillaDsg => write!(f, "VanillaDsg"),
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -1331,6 +1331,61 @@ mod tests {
         assert!(MobjKind::from_repr(0xFFFF).is_none());
     }
 
+    #[test]
+    fn bad_version_load_game_returns_error() {
+        let gs = test_game_state();
+        let mut data = save_game(&gs, &test_level_name(), 2, "test save");
+        // Tamper with the version byte to simulate an unsupported version
+        data[4] = 0xFF;
+
+        let result = load_game(&data);
+        assert_eq!(result.unwrap_err(), SaveError::BadVersion);
+    }
+
+    #[test]
+    fn bad_version_load_game_doomrs_returns_error() {
+        let gs = test_game_state();
+        let mut data = save_game_doomrs(&gs, &test_level_name(), 2, "test save");
+        data[4] = 0xFF;
+        let result = load_game_doomrs(&data);
+        assert_eq!(result.unwrap_err(), SaveError::BadVersion);
+    }
+
+    #[test]
+    fn load_game_doomrs_too_short() {
+        let result = load_game_doomrs(b"TOO_SHORT");
+        assert_eq!(result.unwrap_err(), SaveError::TooShort);
+    }
+
+    #[test]
+    fn load_game_doomrs_bad_magic() {
+        let mut data = vec![0; 50];
+        data[0..4].copy_from_slice(b"MOOD");
+        let result = load_game_doomrs(&data);
+        assert_eq!(result.unwrap_err(), SaveError::BadMagic);
+    }
+
+    #[test]
+    fn too_short_load_game_returns_error() {
+        let result = load_game(b"DOOM");
+        assert_eq!(result.unwrap_err(), SaveError::TooShort);
+    }
+
+    #[test]
+    fn bad_magic_load_game_returns_error() {
+        let gs = test_game_state();
+        let mut data = save_game(&gs, &test_level_name(), 2, "test save");
+        data[0..4].copy_from_slice(b"MOOD");
+        let result = load_game(&data);
+        assert_eq!(result.unwrap_err(), SaveError::BadMagic);
+    }
+
+    #[test]
+    fn save_format_display() {
+        assert_eq!(format!("{}", SaveFormat::DoomRs), "DoomRs");
+        assert_eq!(format!("{}", SaveFormat::VanillaDsg), "VanillaDsg");
+    }
+
     // --- Test 1: save_game produces bytes starting with SAVE_MAGIC ---
     #[test]
     fn save_starts_with_magic() {
@@ -1363,15 +1418,6 @@ mod tests {
         assert_eq!(load_game(&[]).unwrap_err(), SaveError::TooShort);
     }
 
-    // --- Test 5: load_game with bad magic returns BadMagic ---
-    #[test]
-    fn load_bad_magic() {
-        let mut data = vec![0u8; 64];
-        data[..4].copy_from_slice(b"NOPE");
-        // Fill version as valid.
-        data[4..8].copy_from_slice(&SAVE_VERSION.to_le_bytes());
-        assert_eq!(load_game(&data).unwrap_err(), SaveError::BadMagic);
-    }
 
     // --- Test 6: load_game with bad version returns BadVersion ---
     #[test]
@@ -1776,6 +1822,24 @@ mod tests {
     }
 
     // --- Test 27: Header description is stored correctly ---
+
+    // --- Havoc Test: Description is invalid UTF-8 panics if unwrapped ---
+    #[test]
+    fn havoc_test_invalid_utf8_description() {
+        let gs = test_game_state();
+        let valid_data = save_game(&gs, &test_level_name(), 3, "My Cool Save");
+        let mut data = valid_data.clone();
+
+        let desc_start = 21; // offset of description
+        data[desc_start] = 0x80; // Invalid UTF-8 byte
+
+        let loaded = load_game(&data).expect("load must succeed");
+        let desc = &loaded.header.description;
+        // This is the vulnerable line
+        let desc_str = core::str::from_utf8(desc).unwrap_or("").trim_end_matches('\0');
+        assert_eq!(desc_str, "");
+    }
+
     #[test]
     fn save_header_description() {
         let gs = test_game_state();
@@ -1783,7 +1847,7 @@ mod tests {
         let loaded = load_game(&data).expect("load must succeed");
         // Description should start with "My Cool Save" then be null-padded.
         let desc = &loaded.header.description;
-        let desc_str = core::str::from_utf8(desc).unwrap().trim_end_matches('\0');
+        let desc_str = core::str::from_utf8(desc).unwrap_or("").trim_end_matches('\0');
         assert_eq!(desc_str, "My Cool Save");
         assert_eq!(loaded.header.skill, 3);
     }

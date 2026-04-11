@@ -26,3 +26,6 @@
 **Avoid String Allocations for 8-byte WAD Lump Lookups**
 **Learning:** `FlatCache` and other caches previously used `HashMap<String, ...>` which forced a `String` allocation (via `String::from_utf8_lossy(&name[..len]).to_uppercase()`) on every single lookup during rendering.
 **Action:** Use `doom_wad::lump::LumpName` (a lightweight wrapper around `[u8; 8]`) as the key for `HashMap`s caching WAD data. `LumpName::from_raw` handles null padding and uppercasing safely, yielding a zero-allocation `get()` method.
+**[Entry API in Caches]**
+**Learning:** Using `contains_key` followed by `insert` and `get` on a cache dictionary like `HashMap` results in duplicate hashing and key allocations (`clone()` or `to_uppercase()`).
+**Action:** Use the `Entry` API (`HashMap::entry`) to cleanly handle cache misses. It allows us to process the miss safely by consuming the allocated key, performing only a single hash lookup to update or retrieve the cached object.

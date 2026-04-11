@@ -180,8 +180,11 @@ pub struct Mobj {
     pub health: i32,
 
     // --- Velocity ---
+    /// X-axis momentum (velocity).
     pub momx: Fixed16_16,
+    /// Y-axis momentum (velocity).
     pub momy: Fixed16_16,
+    /// Z-axis momentum (vertical velocity).
     pub momz: Fixed16_16,
 
     // --- State machine ---

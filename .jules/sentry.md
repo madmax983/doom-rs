@@ -27,3 +27,6 @@
 ## 2026-04-10 - Replace unwrap() with expect()
 **Learning:** Removing unwrap() reduces panic points and gives better crash context via panic messages, especially in file parsing logic.
 **Action:** Replaced unwrap() with expect() in wad.rs, main.rs, savegame.rs, and net_mode.rs.
+## 2024-04-10 - SaveError Refactoring
+**Learning:** Replaced manual `Display` implementation for `SaveError` with `#[derive(thiserror::Error)]`. Used tests to verify correct routing of format decoding (`SaveFormat` formatting, too short save detection, magic byte mismatches) for both regular saves and `doomrs` specific loading.
+**Action:** Always prefer `thiserror` when modifying error types that have simple manual implementations.
