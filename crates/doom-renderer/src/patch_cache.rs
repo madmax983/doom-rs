@@ -25,14 +25,21 @@ impl PatchCache {
     /// Retrieves a patch graphic by lump name, dynamically loading and caching it from the active WAD file on first request.
     ///
     /// Returns `None` if the lump doesn't exist or isn't a valid patch.
+    ///
+    /// ⚡ Bolt Optimization:
+    /// Avoids an extra `.clone()` on the string key and eliminates double hash lookups
+    /// by using the `Entry` API during the cache miss path.
     pub fn get<'a>(&'a mut self, name: &str, wad: &WadStack) -> Option<&'a PatchImage> {
         let key = name.to_uppercase();
-        if !self.patches.contains_key(&key) {
-            let data = wad.lump_data(&key)?;
-            let patch = parse_patch(data)?;
-            self.patches.insert(key.clone(), patch);
+        use std::collections::hash_map::Entry;
+        match self.patches.entry(key) {
+            Entry::Occupied(o) => Some(o.into_mut()),
+            Entry::Vacant(v) => {
+                let data = wad.lump_data(v.key())?;
+                let patch = parse_patch(data)?;
+                Some(v.insert(patch))
+            }
         }
-        self.patches.get(&key)
     }
 
     /// Preload all menu patches so first frame has no stutter.

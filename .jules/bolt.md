@@ -23,3 +23,6 @@
 **[Eliminating intermediate Vec in p_check_pickups]
 **Learning:** Checking special items on the hot path in `p_check_pickups` used `.collect::<Vec<_>>()` which caused unnecessary heap allocations. Using `Option::is_none_or` alongside direct iteration via `handle_at` and generation checking safely and efficiently bypassed this issue.
 **Action:** Use `slot_count` and `next_generation` methods to do a non-allocating generation-aware loop over a generational arena when mutations on the arena are performed within the loop.
+**[Entry API in Caches]**
+**Learning:** Using `contains_key` followed by `insert` and `get` on a cache dictionary like `HashMap` results in duplicate hashing and key allocations (`clone()` or `to_uppercase()`).
+**Action:** Use the `Entry` API (`HashMap::entry`) to cleanly handle cache misses. It allows us to process the miss safely by consuming the allocated key, performing only a single hash lookup to update or retrieve the cached object.
