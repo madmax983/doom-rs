@@ -345,22 +345,23 @@ pub struct LightSpecial {
 // ---------------------------------------------------------------------------
 
 /// Type of light effect applied to a sector.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum_macros::FromRepr)]
+#[repr(u16)]
 pub enum LightEffectType {
     /// Special 1: Light oscillates between base and dark at random intervals.
-    BlinkRandom,
+    BlinkRandom = 1,
     /// Special 2: Light blinks every ~17 tics.
-    Blink05s,
+    Blink05s = 2,
     /// Special 3: Light blinks every ~35 tics.
-    Blink1s,
+    Blink1s = 3,
     /// Special 8: Light smoothly oscillates.
-    Oscillate,
+    Oscillate = 8,
     /// Special 12: Synchronized blink every ~17 tics.
-    BlinkSync05s,
+    BlinkSync05s = 12,
     /// Special 13: Synchronized blink every ~35 tics.
-    BlinkSync1s,
+    BlinkSync1s = 13,
     /// Special 17: Random light variation (fire flicker).
-    FireFlicker,
+    FireFlicker = 17,
 }
 
 /// Extended sector light effect with per-sector state tracking.
