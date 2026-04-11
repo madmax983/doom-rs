@@ -66,6 +66,21 @@ impl DemoTicCmd {
     /// retained, so the lower 8 bits are dropped when serializing to LMP.
     /// `buttons` are preserved, and `chatchar` is omitted from the demo
     /// stream.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_demo::DemoTicCmd;
+    /// use doom_types::TicCmd;
+    ///
+    /// let mut tic = TicCmd::default();
+    /// tic.forward_move = 10;
+    /// tic.angle_turn = 0x1234; // 16-bit angle
+    ///
+    /// let demo_cmd = DemoTicCmd::from_ticcmd(&tic);
+    /// assert_eq!(demo_cmd.forward_move, 10);
+    /// assert_eq!(demo_cmd.angle_turn, 0x12); // Only high byte kept
+    /// ```
     #[must_use]
     pub const fn from_ticcmd(cmd: &TicCmd) -> Self {
         Self {
@@ -81,6 +96,23 @@ impl DemoTicCmd {
     /// The demo turn byte is expanded back into engine units by shifting it
     /// into the high byte. The lower 8 bits are zeroed by design. `buttons`
     /// are preserved; `chatchar` and other padding fields default to zero.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_demo::DemoTicCmd;
+    ///
+    /// let demo_cmd = DemoTicCmd {
+    ///     forward_move: 20,
+    ///     side_move: -5,
+    ///     angle_turn: 0x12,
+    ///     buttons: 0x01, // BT_ATTACK
+    /// };
+    ///
+    /// let tic = demo_cmd.to_ticcmd();
+    /// assert_eq!(tic.forward_move, 20);
+    /// assert_eq!(tic.angle_turn, 0x1200); // Shifted to high byte
+    /// ```
     #[must_use]
     pub fn to_ticcmd(&self) -> TicCmd {
         TicCmd {
