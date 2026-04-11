@@ -116,9 +116,17 @@ impl Fixed16_16 {
     #[inline]
     pub fn fixed_div(self, rhs: Self) -> Self {
         debug_assert!(rhs.0 != 0, "FixedDiv: division by zero");
+        if rhs.0 == 0 {
+            // Havoc 👺: Protect against division by zero in release builds
+            return if self.0 >= 0 {
+                Self(i32::MAX)
+            } else {
+                Self(i32::MIN)
+            };
+        }
         let numerator = (self.0 as i64) << FRAC_BITS;
         // Havoc 👺: Catch overflow division cases!
-        let mut result = numerator / rhs.0 as i64;
+        let mut result = numerator.checked_div(rhs.0 as i64).unwrap_or(if numerator > 0 { i64::MAX } else { i64::MIN });
 
         if result > i32::MAX as i64 {
             result = i32::MAX as i64;
