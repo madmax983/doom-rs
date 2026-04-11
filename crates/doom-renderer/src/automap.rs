@@ -191,22 +191,9 @@ pub fn render_automap(
     player_x: i32,
     player_y: i32,
     player_angle: Bam,
-    zoom: f32,
-    show_all_lines: bool,
-    show_all_things: bool,
+    state: &doom_game::AutomapState,
     seen_lines: &[bool],
 ) {
-    // Build automap state from parameters.
-    let state = doom_game::AutomapState {
-        active: true,
-        zoom,
-        center_x: player_x as f32,
-        center_y: player_y as f32,
-        follow_player: true,
-        show_all_lines,
-        show_all_things,
-    };
-
     // Convert BAM angle to radians.
     let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
 
@@ -214,7 +201,7 @@ pub fn render_automap(
     doom_game::draw_automap_full(
         &mut canvas,
         level,
-        &state,
+        state,
         seen_lines,
         player_x,
         player_y,
@@ -863,22 +850,9 @@ mod tests {
         player_x: i32,
         player_y: i32,
         player_angle: Bam,
-        zoom: f32,
-        show_all_lines: bool,
-        show_all_things: bool,
+        state: &doom_game::AutomapState,
         seen_lines: &[bool],
     ) {
-        // Build automap state from parameters.
-        let state = doom_game::AutomapState {
-            active: true,
-            zoom,
-            center_x: player_x as f32,
-            center_y: player_y as f32,
-            follow_player: true,
-            show_all_lines,
-            show_all_things,
-        };
-
         // Convert BAM angle to radians.
         let angle_rad = (player_angle.0 as f64) * core::f64::consts::TAU / (u32::MAX as f64 + 1.0);
 
@@ -886,7 +860,7 @@ mod tests {
         doom_game::draw_automap_full(
             &mut canvas,
             level,
-            &state,
+            state,
             seen_lines,
             player_x,
             player_y,
@@ -1925,7 +1899,7 @@ mod tests {
         fn t37_render_automap_empty_level_does_not_panic() {
             let level = make_level(vec![], vec![]);
             let mut fb = Framebuffer::new();
-            render_automap(&mut fb, &level, 0, 0, Bam(0), 0.5, false, false, &[]);
+            render_automap(&mut fb, &level, 0, 0, Bam(0), &doom_game::AutomapState { active: true, zoom: 0.5, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: false, show_all_things: false }, &[]);
             // Background should be black (cleared).
             assert!(fb.data.iter().all(|&b| b == 0));
         }
@@ -1946,7 +1920,7 @@ mod tests {
             let mut fb = Framebuffer::new();
             let seen = vec![true]; // line 0 is seen
 
-            render_automap(&mut fb, &level, 100, 0, Bam(0), 1.0, false, false, &seen);
+            render_automap(&mut fb, &level, 100, 0, Bam(0), &doom_game::AutomapState { active: true, zoom: 1.0, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: false, show_all_things: false }, &seen);
 
             let has_non_black = fb.data.iter().any(|&b| b != 0);
             assert!(has_non_black, "seen linedef should produce visible pixels");
@@ -1968,7 +1942,7 @@ mod tests {
             let mut fb = Framebuffer::new();
             let seen = vec![false]; // line 0 is NOT seen
 
-            render_automap(&mut fb, &level, 100, 0, Bam(0), 1.0, false, false, &seen);
+            render_automap(&mut fb, &level, 100, 0, Bam(0), &doom_game::AutomapState { active: true, zoom: 1.0, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: false, show_all_things: false }, &seen);
 
             // The player arrow and grid will still draw some pixels, but
             // we count non-grid/non-arrow pixels specifically by checking
@@ -1997,7 +1971,7 @@ mod tests {
             let seen = vec![false]; // line 0 is NOT seen
 
             // But show_all_lines is true.
-            render_automap(&mut fb, &level, 100, 0, Bam(0), 1.0, true, false, &seen);
+            render_automap(&mut fb, &level, 100, 0, Bam(0), &doom_game::AutomapState { active: true, zoom: 1.0, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: true, show_all_things: false }, &seen);
 
             // Should draw the line in UNSEEN colour (gray).
             let unseen_count = fb
@@ -2017,7 +1991,7 @@ mod tests {
             let mut fb = Framebuffer::new();
             fb.clear(99); // Fill with non-zero.
 
-            render_automap(&mut fb, &level, 0, 0, Bam(0), 0.5, false, false, &[]);
+            render_automap(&mut fb, &level, 0, 0, Bam(0), &doom_game::AutomapState { active: true, zoom: 0.5, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: false, show_all_things: false }, &[]);
 
             // After render_automap, fb should be cleared to background.
             assert!(fb.data.iter().all(|&b| b == 0));
@@ -2047,9 +2021,7 @@ mod tests {
                     50,
                     50,
                     Bam(angle),
-                    1.0,
-                    true,
-                    false,
+                    &doom_game::AutomapState { active: true, zoom: 1.0, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: true, show_all_things: false },
                     &[true],
                 );
             }
@@ -2188,7 +2160,7 @@ mod tests {
             let mut fb = Framebuffer::new();
             let seen = vec![true];
 
-            render_automap(&mut fb, &level, 100, 100, Bam(0), 1.0, false, true, &seen);
+            render_automap(&mut fb, &level, 100, 100, Bam(0), &doom_game::AutomapState { active: true, zoom: 1.0, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: false, show_all_things: true }, &seen);
 
             let has_non_black = fb.data.iter().any(|&b| b != 0);
             assert!(has_non_black, "things should produce visible markers");
@@ -2219,9 +2191,7 @@ mod tests {
                 100,
                 100,
                 Bam(0),
-                1.0,
-                true,
-                true,
+                &doom_game::AutomapState { active: true, zoom: 1.0, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: true, show_all_things: true },
                 &[true],
             );
 
@@ -2233,9 +2203,7 @@ mod tests {
                 100,
                 100,
                 Bam(0),
-                1.0,
-                true,
-                false,
+                &doom_game::AutomapState { active: true, zoom: 1.0, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: true, show_all_things: false },
                 &[true],
             );
 
@@ -2268,7 +2236,7 @@ mod tests {
             let mut fb = Framebuffer::new();
 
             // show_all_things = false, but player starts should still draw.
-            render_automap(&mut fb, &level, 100, 100, Bam(0), 1.0, true, false, &[true]);
+            render_automap(&mut fb, &level, 100, 100, Bam(0), &doom_game::AutomapState { active: true, zoom: 1.0, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: true, show_all_things: false }, &[true]);
 
             // The player marker colour (from doom_game) should appear.
             let player_marker_count = fb
@@ -2319,9 +2287,7 @@ mod tests {
                 100,
                 100,
                 Bam(0),
-                1.0,
-                false,
-                false,
+                &doom_game::AutomapState { active: true, zoom: 1.0, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: false, show_all_things: false },
                 &[true, false],
             );
             let count1 = fb1.data.iter().filter(|&&b| b == COLOR_ONE_SIDED).count();
@@ -2334,9 +2300,7 @@ mod tests {
                 100,
                 100,
                 Bam(0),
-                1.0,
-                false,
-                false,
+                &doom_game::AutomapState { active: true, zoom: 1.0, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: false, show_all_things: false },
                 &[true, true],
             );
             let count2 = fb2.data.iter().filter(|&&b| b == COLOR_ONE_SIDED).count();
@@ -2379,7 +2343,7 @@ mod tests {
             let level = make_level(vertexes, linedefs);
             let mut fb = Framebuffer::new();
 
-            render_automap(&mut fb, &level, 500, 500, Bam(0), 0.5, true, false, &[true]);
+            render_automap(&mut fb, &level, 500, 500, Bam(0), &doom_game::AutomapState { active: true, zoom: 0.5, center_x: 0.0, center_y: 0.0, follow_player: true, show_all_lines: true, show_all_things: false }, &[true]);
 
             // Grid uses doom_game::COLOR_GRID.
             let grid_count = fb
