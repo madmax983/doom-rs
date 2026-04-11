@@ -11,6 +11,7 @@
 
 use doom_types::CompatibilityProfile;
 use doom_types::limits::FLAT_SIZE;
+use doom_wad::lump::LumpName;
 use doom_wad::{LumpDef, WadFile, WadStack};
 use std::collections::HashMap;
 
@@ -19,8 +20,8 @@ use std::collections::HashMap;
 /// All flats are looked up by their 8-byte lump name (uppercase, null-padded).
 /// If a requested flat is not present in the WAD, a zeroed fallback is returned.
 pub struct FlatCache {
-    /// Keyed by uppercase lump name string (trimmed of null bytes).
-    flats: HashMap<String, Box<[u8; FLAT_SIZE]>>,
+    /// Keyed by lump name (uppercase, null-padded).
+    flats: HashMap<LumpName, Box<[u8; FLAT_SIZE]>>,
     /// 4096-byte zeroed fallback, returned when a lump is missing.
     default_flat: Box<[u8; FLAT_SIZE]>,
 }
@@ -32,7 +33,7 @@ impl FlatCache {
     /// `FF_START`/`FF_END` sections for PWAD support) and loads every lump
     /// that is exactly [`FLAT_SIZE`] bytes.
     pub fn load(wad: &WadFile) -> Self {
-        let mut flats: HashMap<String, Box<[u8; FLAT_SIZE]>> = HashMap::new();
+        let mut flats: HashMap<LumpName, Box<[u8; FLAT_SIZE]>> = HashMap::new();
 
         for lump in wad.lumps_between("F_START", "F_END") {
             Self::insert_flat(&mut flats, wad, lump);
@@ -72,7 +73,7 @@ impl FlatCache {
     }
 
     fn load_from_stack_impl(wad_stack: &WadStack, allow_ff_markers: bool) -> Self {
-        let mut flats: HashMap<String, Box<[u8; FLAT_SIZE]>> = HashMap::new();
+        let mut flats: HashMap<LumpName, Box<[u8; FLAT_SIZE]>> = HashMap::new();
         let mut in_flat_section = false;
 
         for (wad, lump) in wad_stack.all_lumps() {
@@ -110,7 +111,7 @@ impl FlatCache {
     }
 
     fn insert_flat(
-        flats: &mut HashMap<String, Box<[u8; FLAT_SIZE]>>,
+        flats: &mut HashMap<LumpName, Box<[u8; FLAT_SIZE]>>,
         wad: &WadFile,
         lump: &LumpDef,
     ) {
@@ -118,12 +119,11 @@ impl FlatCache {
             return;
         }
 
-        let name = lump.name.as_str().to_uppercase();
         let data = wad.lump_data(lump);
 
         let mut texels = Box::new([0u8; FLAT_SIZE]);
         texels.copy_from_slice(data);
-        flats.insert(name, texels);
+        flats.insert(lump.name, texels);
     }
 
     /// Loads or retrieves cached flat texture data for the specified 8-byte lump name, allowing efficient reuse during rendering.
@@ -132,12 +132,18 @@ impl FlatCache {
     /// format). Lookup is case-insensitive. Returns the default (zeroed) flat
     /// if the name is not in the cache.
     pub fn get(&self, name: &[u8; 8]) -> &[u8; FLAT_SIZE] {
-        // Trim trailing NUL/space padding and uppercase for lookup.
-        let len = name
+        // Build a normalized uppercase key directly from the bytes
+        let mut key_bytes = *name;
+        // Trim trailing space padding (and NUL, but from_raw handles NUL)
+        let len = key_bytes
             .iter()
             .rposition(|&b| b != 0 && b != b' ')
             .map_or(0, |i| i + 1);
-        let key = String::from_utf8_lossy(&name[..len]).to_uppercase();
+
+        key_bytes[len..].fill(0);
+        // LumpName::from_raw handles the uppercase conversion
+        let key = LumpName::from_raw(key_bytes);
+
         self.flats
             .get(&key)
             .map(|b| b.as_ref())

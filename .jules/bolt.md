@@ -23,3 +23,6 @@
 **[Eliminating intermediate Vec in p_check_pickups]
 **Learning:** Checking special items on the hot path in `p_check_pickups` used `.collect::<Vec<_>>()` which caused unnecessary heap allocations. Using `Option::is_none_or` alongside direct iteration via `handle_at` and generation checking safely and efficiently bypassed this issue.
 **Action:** Use `slot_count` and `next_generation` methods to do a non-allocating generation-aware loop over a generational arena when mutations on the arena are performed within the loop.
+**Avoid String Allocations for 8-byte WAD Lump Lookups**
+**Learning:** `FlatCache` and other caches previously used `HashMap<String, ...>` which forced a `String` allocation (via `String::from_utf8_lossy(&name[..len]).to_uppercase()`) on every single lookup during rendering.
+**Action:** Use `doom_wad::lump::LumpName` (a lightweight wrapper around `[u8; 8]`) as the key for `HashMap`s caching WAD data. `LumpName::from_raw` handles null padding and uppercasing safely, yielding a zero-allocation `get()` method.
