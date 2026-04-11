@@ -31,16 +31,30 @@ pub enum FaceDir {
 /// Which mugshot expression is currently displayed.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FaceKind {
-    /// Normal idle / damage-turn.  `tier` is 0 (80-100% HP) through 4 (0-19%).
-    Normal { tier: u8, dir: FaceDir },
+    /// Normal idle / damage-turn.
+    Normal {
+        /// Health tier, where 0 is 80-100% HP and 4 is 0-19% HP.
+        tier: u8,
+        /// The direction the face is looking.
+        dir: FaceDir,
+    },
     /// Took any damage (< 20 HP in one hit).
-    Pain { tier: u8 },
+    Pain {
+        /// Health tier (0-4).
+        tier: u8,
+    },
     /// Took 20+ HP damage in one tic — big ouch face.
-    Ouch { tier: u8 },
+    Ouch {
+        /// Health tier (0-4).
+        tier: u8,
+    },
     /// Just picked up a new weapon — evil grin.
     EvilGrin,
     /// Firing continuously (rampage).
-    Rampage { tier: u8 },
+    Rampage {
+        /// Health tier (0-4).
+        tier: u8,
+    },
     /// Invulnerability active — gold eyes.
     GodMode,
     /// Dead (health ≤ 0).

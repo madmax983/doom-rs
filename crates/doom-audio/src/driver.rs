@@ -81,7 +81,7 @@ impl AudioDriver {
     /// - [`AudioError::Stream`] — cpal could not create or start the stream.
     ///
     /// # Examples
-    /// ```no_run
+    /// ```rust,no_run
     /// use doom_audio::driver::AudioDriver;
     ///
     /// // Open the driver at a requested 44.1kHz (though the OS might give us

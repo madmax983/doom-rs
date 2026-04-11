@@ -198,6 +198,23 @@ fn get_alive_target_with_pos(
     Some((target, mo_x, mo_y))
 }
 
+/// Dispatches a monster or projectile behavior action by its index.
+///
+/// This is the primary router for the `A_*` functions (e.g. `A_Look`, `A_Chase`),
+/// called automatically when an actor enters a new state that has an action assigned.
+///
+/// # Examples
+/// ```
+/// use doom_game::actions::{dispatch_action, ACTION_NONE};
+/// use doom_game::state::GameState;
+/// use doom_game::mobj::MobjHandle;
+///
+/// let mut gs = GameState::new("E1M1");
+/// // A dummy handle for illustration; in a real game, this points to a live actor.
+/// let handle = MobjHandle { index: 0, generation: 0 };
+/// // Action 0 is ACTION_NONE, which is a no-op.
+/// dispatch_action(&mut gs, handle, ACTION_NONE, None);
+/// ```
 pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level: Option<&Level>) {
     if let Some(a) = Action::from_repr(action) {
         match a {
@@ -244,14 +261,23 @@ pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level
 // ---------------------------------------------------------------------------
 
 /// Direction constants matching Doom's `dirtype_t`.
+/// East (0 degrees).
 pub const DI_EAST: u8 = 0;
+/// Northeast (45 degrees).
 pub const DI_NORTHEAST: u8 = 1;
+/// North (90 degrees).
 pub const DI_NORTH: u8 = 2;
+/// Northwest (135 degrees).
 pub const DI_NORTHWEST: u8 = 3;
+/// West (180 degrees).
 pub const DI_WEST: u8 = 4;
+/// Southwest (225 degrees).
 pub const DI_SOUTHWEST: u8 = 5;
+/// South (270 degrees).
 pub const DI_SOUTH: u8 = 6;
+/// Southeast (315 degrees).
 pub const DI_SOUTHEAST: u8 = 7;
+/// No direction or invalid direction.
 pub const DI_NODIR: u8 = 8;
 
 /// Unit movement vectors for the 8-way grid (Doom `DI_*` directions).

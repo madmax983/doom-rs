@@ -31,6 +31,10 @@ enum HitscanInterceptKind {
     Actor(MobjHandle),
 }
 
+/// Represents an object or wall hit along a hitscan trace line.
+///
+/// Records the fractional distance along the trace where the collision occurred,
+/// and whether it hit an actor (`MobjHandle`) or a map line (`Line`).
 #[derive(Clone, Copy, Debug)]
 pub struct HitscanIntercept {
     frac: f32,

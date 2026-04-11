@@ -278,39 +278,42 @@ fn audio_cmd_thread(
     while let Ok(event) = rx.recv() {
         match event {
             AudioEvent::PlaySfx(sfx_id, priority, volume, pan, origin) => {
-                if let Some(sample) = sfx_cache.get(sfx_id) {
-                    if let Ok(mut mixer) = mixer_arc.lock() {
-                        if let Some(origin) = origin {
-                            if let Some(&channel) = origin_channels.get(&origin) {
-                                mixer.play_on_channel(
-                                    channel,
-                                    sfx_id,
-                                    std::sync::Arc::clone(&sample.data),
-                                    volume,
-                                    pan,
-                                    priority,
-                                );
-                                channel_origins[channel] = Some(origin);
-                                continue;
-                            }
-                        }
+                let Some(sample) = sfx_cache.get(sfx_id) else {
+                    continue;
+                };
+                let Ok(mut mixer) = mixer_arc.lock() else {
+                    continue;
+                };
 
-                        if let Some(channel) = mixer.play(
+                if let Some(origin) = origin {
+                    if let Some(&channel) = origin_channels.get(&origin) {
+                        mixer.play_on_channel(
+                            channel,
                             sfx_id,
                             std::sync::Arc::clone(&sample.data),
                             volume,
                             pan,
                             priority,
-                        ) {
-                            if let Some(previous_origin) = channel_origins[channel].take() {
-                                origin_channels.remove(&previous_origin);
-                            }
+                        );
+                        channel_origins[channel] = Some(origin);
+                        continue;
+                    }
+                }
 
-                            if let Some(origin) = origin {
-                                origin_channels.insert(origin, channel);
-                                channel_origins[channel] = Some(origin);
-                            }
-                        }
+                if let Some(channel) = mixer.play(
+                    sfx_id,
+                    std::sync::Arc::clone(&sample.data),
+                    volume,
+                    pan,
+                    priority,
+                ) {
+                    if let Some(previous_origin) = channel_origins[channel].take() {
+                        origin_channels.remove(&previous_origin);
+                    }
+
+                    if let Some(origin) = origin {
+                        origin_channels.insert(origin, channel);
+                        channel_origins[channel] = Some(origin);
                     }
                 }
             }
@@ -318,30 +321,34 @@ fn audio_cmd_thread(
             AudioEvent::StartMusic(data) => {
                 on_music_start();
                 log::debug!("[music] StartMusic received, data_len={}", data.len());
-                match MusScore::parse(&data) {
-                    Ok(score) => {
-                        log::debug!(
-                            "[music] score parsed: {} events, {} instruments",
-                            score.events.len(),
-                            score.instruments.len()
-                        );
-                        if let Ok(mut mp) = midi_arc.lock() {
-                            log::debug!("[music] genmidi={}", mp.genmidi.is_some());
-                            mp.load_score(score);
-                            log::debug!("[music] score loaded — playback started");
-                        }
-                    }
+                let score = match MusScore::parse(&data) {
+                    Ok(s) => s,
                     Err(e) => {
                         // Non-fatal: log and continue.
                         log::warn!("[music] parse failed: {e}");
+                        continue;
                     }
-                }
+                };
+
+                log::debug!(
+                    "[music] score parsed: {} events, {} instruments",
+                    score.events.len(),
+                    score.instruments.len()
+                );
+
+                let Ok(mut mp) = midi_arc.lock() else {
+                    continue;
+                };
+                log::debug!("[music] genmidi={}", mp.genmidi.is_some());
+                mp.load_score(score);
+                log::debug!("[music] score loaded — playback started");
             }
 
             AudioEvent::StopMusic => {
-                if let Ok(mut mp) = midi_arc.lock() {
-                    mp.stop();
-                }
+                let Ok(mut mp) = midi_arc.lock() else {
+                    continue;
+                };
+                mp.stop();
             }
         }
     }

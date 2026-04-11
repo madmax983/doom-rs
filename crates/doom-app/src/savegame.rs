@@ -390,7 +390,7 @@ mod tests {
         );
         // Description starts with 'Slot 3'.
         let desc = core::str::from_utf8(&header.description)
-            .expect("description must be valid utf8")
+            .unwrap_or("")
             .trim_matches('\0');
         assert_eq!(desc, "Slot 3", "slot must round-trip via description");
 

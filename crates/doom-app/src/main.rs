@@ -1,4 +1,27 @@
-//! Doom engine entry point.
+//! Doom engine entry point and master orchestrator.
+//!
+//! # The Grand Assembly
+//!
+//! While the `doom-*` crates are meticulously decoupled components—`doom-game`
+//! simulates the world, `doom-renderer` paints the walls, `doom-audio` mixes the
+//! screams, and `doom-tui` maps pixels to the terminal—they cannot play Doom
+//! on their own. They need a conductor.
+//!
+//! `doom-app` is that conductor. It owns the main executable loop and wires
+//! the isolated systems together. It parses command-line arguments, loads the
+//! `WadFile`s, initializes the `AudioSystem`, sets up the `Terminal`, and
+//! pumps the `DoomEventLoop`.
+//!
+//! # Modes of Play
+//!
+//! The app can boot into several different modes depending on the arguments:
+//! - **Singleplayer**: The default mode. Connects local `TicInput` directly to `doom-game`.
+//! - **Demo Playback**: Wraps the game in a [`demo_mode::DemoPlaybackApp`], ignoring
+//!   local input and feeding pre-recorded tics from an LMP file.
+//! - **Demo Recording**: Wraps the game in a [`demo_mode::DemoRecordingWrapper`], saving
+//!   every local input to disk while playing.
+//! - **Netplay Client**: Uses [`net_mode::NetGameApp`] to synchronize tics over UDP
+//!   with a relay server before feeding them to the local simulation.
 //!
 //! Usage: doom-app --iwad doom1.wad [--pwad mod.wad] [--warp E1M1]
 
@@ -2369,22 +2392,58 @@ fn run_doom() -> Result<()> {
     }
 
     if let Some(path_str) = &args.pathfind {
+        use crossterm::style::Stylize;
+        let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
         let parts: Vec<&str> = path_str.split(',').collect();
         if parts.len() == 2 {
             if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
                 let graph = doom_map::SectorGraph::build(&level);
                 if let Some(path) = graph.shortest_path(start, end) {
-                    println!("Path found: {:?}", path);
+                    let path_str = path.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ➔ ");
+                    if is_tty {
+                        println!(
+                            "{} {} {}",
+                            "🗺️ ".green(),
+                            "Path found:".green().bold(),
+                            path_str.cyan()
+                        );
+                    } else {
+                        println!("Path found: {}", path_str);
+                    }
                 } else {
-                    println!("No path found between sector {} and sector {}", start, end);
+                    if is_tty {
+                        println!(
+                            "{} {}",
+                            "❌".red(),
+                            format!("No path found between sector {} and sector {}", start, end).red().bold()
+                        );
+                    } else {
+                        println!("No path found between sector {} and sector {}", start, end);
+                    }
                 }
             } else {
-                println!(
-                    "Invalid sector indices. Please provide two integers separated by a comma."
-                );
+                if is_tty {
+                    println!(
+                        "{} {}",
+                        "❌".red(),
+                        "Invalid sector indices. Please provide two integers separated by a comma.".red().bold()
+                    );
+                } else {
+                    println!(
+                        "Invalid sector indices. Please provide two integers separated by a comma."
+                    );
+                }
             }
         } else {
-            println!("Invalid format. Please use START,END (e.g. 0,5).");
+            if is_tty {
+                println!(
+                    "{} {}",
+                    "❌".red(),
+                    "Invalid format. Please use START,END (e.g. 0,5).".red().bold()
+                );
+            } else {
+                println!("Invalid format. Please use START,END (e.g. 0,5).");
+            }
         }
         return Ok(());
     }

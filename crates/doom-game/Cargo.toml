@@ -3,6 +3,10 @@ name    = "doom-game"
 version.workspace = true
 edition.workspace = true
 
+[features]
+default = []
+style_meter = []
+
 [dependencies]
 doom-types = { workspace = true }
 doom-map   = { workspace = true }

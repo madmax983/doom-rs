@@ -70,15 +70,24 @@ pub mod powers {
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 #[repr(u8)]
 pub enum WeaponType {
+    /// Bare fists.
     Fist = 0,
+    /// Standard starting pistol.
     #[default]
     Pistol = 1,
+    /// Pump-action shotgun.
     Shotgun = 2,
+    /// Rapid-fire chaingun.
     Chaingun = 3,
+    /// Explosive rocket launcher.
     RocketLauncher = 4,
+    /// Rapid-fire plasma rifle.
     PlasmaRifle = 5,
+    /// Big Fucking Gun 9000.
     Bfg = 6,
+    /// Melee chainsaw.
     Chainsaw = 7,
+    /// Double-barreled super shotgun (Doom II).
     SuperShotgun = 8,
 }
 
@@ -90,9 +99,13 @@ pub enum WeaponType {
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum AmmoType {
+    /// Ammo for Pistol and Chaingun.
     Bullets = 0,
+    /// Ammo for Shotgun and Super Shotgun.
     Shells = 1,
+    /// Ammo for Plasma Rifle and BFG.
     Cells = 2,
+    /// Ammo for Rocket Launcher.
     Rockets = 3,
     /// Melee weapons (Fist, Chainsaw) — no ammo consumed.
     None = 255,
@@ -184,6 +197,7 @@ pub struct PlayerState {
     pub use_down: bool,
 
     // --- Power-ups: remaining tics (0 = not active) ---
+    /// Active duration remaining for each power-up type (e.g. Invulnerability, Invisibility).
     pub powers: [u32; NUM_POWERS],
 
     // --- Cheat flags ---

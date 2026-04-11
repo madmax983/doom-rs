@@ -394,15 +394,21 @@ fn dispatch_effect(
     }
 }
 
+/// Specifies whether a door automatically closes after opening.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DoorBehavior {
+    /// Door opens, waits briefly, and then closes automatically.
     OpenWaitClose,
+    /// Door opens and stays open permanently.
     OpenStay,
 }
 
+/// The vertical travel speed of a door.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DoorSpeed {
+    /// Standard door speed.
     Normal,
+    /// Fast "blazing" door speed (typical of turbo doors).
     Blazing,
 }
 
