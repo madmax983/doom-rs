@@ -9,12 +9,11 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
-
-[dependencies.doom-types]
-path = "../crates/doom-types"
-
-[dependencies.doom-wad]
-path = "../crates/doom-wad"
+doom-types = { path = "../crates/doom-types" }
+doom-wad = { path = "../crates/doom-wad" }
+doom-game = { path = "../crates/doom-game" }
+doom-audio = { path = "../crates/doom-audio" }
+doom-map = { path = "../crates/doom-map" }
 
 [[bin]]
 name = "fuzz_target_1"
@@ -37,9 +36,6 @@ test = false
 doc = false
 bench = false
 
-[dependencies.doom-game]
-path = "../crates/doom-game"
-
 [[bin]]
 name = "dehacked"
 path = "fuzz_targets/dehacked.rs"
@@ -53,9 +49,6 @@ path = "fuzz_targets/fuzz_target_4.rs"
 test = false
 doc = false
 bench = false
-
-[dependencies.doom-audio]
-path = "../crates/doom-audio"
 
 [[bin]]
 name = "fuzz_target_5"
@@ -77,3 +70,15 @@ path = "fuzz_targets/fuzz_target_15.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "savegame"
+path = "fuzz_targets/savegame.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "fuzz_mobj"
+path = "fuzz_targets/fuzz_mobj.rs"
+test = false
+doc = false
