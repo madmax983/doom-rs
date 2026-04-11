@@ -8,8 +8,8 @@
 use crate::font::BitmapFont;
 use crate::framebuffer::Framebuffer;
 use crate::patch_cache::PatchCache;
-use doom_game::menu::{GameMenu, MenuPage, TitlePhase, TitleScreen};
-use doom_types::limits::{FB_SIZE, FB_WIDTH};
+use doom_game::{GameMenu, MenuPage, TitlePhase, TitleScreen};
+use doom_types::{FB_SIZE, FB_WIDTH};
 use doom_wad::WadStack;
 
 // ---------------------------------------------------------------------------

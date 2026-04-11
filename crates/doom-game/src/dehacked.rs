@@ -5,7 +5,7 @@
 //!
 //! # Usage
 //! ```rust
-//! use doom_game::dehacked::DehPatch;
+//! use doom_game::DehPatch;
 //!
 //! let patch = DehPatch::parse("Thing 1\nHit points = 200\n").unwrap();
 //! assert_eq!(patch.things[0].hit_points, Some(200));

@@ -6,13 +6,13 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(unexpected_cfgs)]
 
-pub mod angle;
-pub mod bbox;
-pub mod fixed;
-pub mod limits;
-pub mod primitives;
-pub mod ticcmd;
-pub mod vec2;
+pub(crate) mod angle;
+pub(crate) mod bbox;
+pub(crate) mod fixed;
+pub(crate) mod limits;
+pub(crate) mod primitives;
+pub(crate) mod ticcmd;
+pub(crate) mod vec2;
 
 pub use angle::{ANG45, ANG90, ANG180, ANG270, Bam};
 pub use bbox::BBox;
@@ -24,3 +24,6 @@ pub use vec2::Vec2Fixed;
 #[allow(unexpected_cfgs)]
 #[cfg(verus_keep_ghost)]
 mod proofs;
+
+pub use limits::*;
+pub use primitives::*;

@@ -4,7 +4,7 @@
 //! keypresses for known sequences (e.g. "iddqd" for god mode).
 
 use doom_game::{GameState, flags};
-use doom_types::limits::MAX_AMMO;
+use doom_types::MAX_AMMO;
 
 // ---------------------------------------------------------------------------
 // Cheat definitions
@@ -189,32 +189,32 @@ pub fn apply_cheat(gs: &mut GameState, cheat_name: &str) -> &'static str {
             "Map Revealed"
         }
         "IDBEHOLDS" => {
-            use doom_game::player::powers;
+            use doom_game::powers;
             gs.player.powers[powers::PW_STRENGTH] = 1;
             "Berserk!"
         }
         "IDBEHOLDI" => {
-            use doom_game::player::powers;
+            use doom_game::powers;
             gs.player.powers[powers::PW_INVISIBILITY] = 60 * 35;
             "Partial Invisibility"
         }
         "IDBEHOLDR" => {
-            use doom_game::player::powers;
+            use doom_game::powers;
             gs.player.powers[powers::PW_IRONFEET] = 60 * 35;
             "Radiation Shielding Suit"
         }
         "IDBEHOLDA" => {
-            use doom_game::player::powers;
+            use doom_game::powers;
             gs.player.powers[powers::PW_ALLMAP] = 1;
             "Computer Area Map"
         }
         "IDBEHOLDV" => {
-            use doom_game::player::powers;
+            use doom_game::powers;
             gs.player.powers[powers::PW_INVULNERABILITY] = 30 * 35;
             "Invulnerability"
         }
         "IDBEHOLDL" => {
-            use doom_game::player::powers;
+            use doom_game::powers;
             gs.player.powers[powers::PW_INFRARED] = 120 * 35;
             "Light Amplification Visor"
         }

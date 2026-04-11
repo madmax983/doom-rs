@@ -7,7 +7,7 @@
 //! - `health ≤ MAX_HEALTH (100)` at all times
 //! - `ammo[i] ≤ MAX_AMMO[i]` for all i
 
-use doom_types::limits::{MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_WEAPONS};
+use doom_types::{MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_WEAPONS};
 
 use crate::mobj::{MobjHandle, StateNum};
 
@@ -415,7 +415,7 @@ impl WeaponType {
 #[cfg(test)]
 mod prop_tests {
     use super::*;
-    use doom_types::limits::{MAX_AMMO, NUM_AMMO};
+    use doom_types::{MAX_AMMO, NUM_AMMO};
     use proptest::prelude::*;
 
     // Property: `ammo[i] ≤ MAX_AMMO[i]` holds after any `give_ammo` call.

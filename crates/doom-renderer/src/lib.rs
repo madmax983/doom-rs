@@ -4,36 +4,36 @@
 //! Hot path — no Verus proofs in this crate.
 //! `Framebuffer` and `PaletteLut` are the primary types consumed by `doom-tui`.
 
-pub mod anim;
-pub mod automap;
-pub mod clip;
-pub mod colormap;
-pub mod column;
-pub mod flat_cache;
-pub mod font;
-pub mod framebuffer;
-pub mod fuzz;
-pub mod hud_messages;
-pub mod intermission;
-pub mod lighting;
-pub mod menu_render;
-pub mod palette;
-pub mod palette_flash;
-pub mod patch_cache;
-pub mod render;
-pub mod render_flags;
-pub mod seg;
-pub mod sky;
-pub mod span;
-pub mod sprite;
-pub mod sprite_lookup;
-pub mod statusbar;
-pub mod texture;
-pub mod texture_compose;
-pub mod visplane;
-pub mod wad_font;
-pub mod weapon_anim;
-pub mod wipe;
+pub(crate) mod anim;
+pub(crate) mod automap;
+pub(crate) mod clip;
+pub(crate) mod colormap;
+pub(crate) mod column;
+pub(crate) mod flat_cache;
+pub(crate) mod font;
+pub(crate) mod framebuffer;
+pub(crate) mod fuzz;
+pub(crate) mod hud_messages;
+pub(crate) mod intermission;
+pub(crate) mod lighting;
+pub(crate) mod menu_render;
+pub(crate) mod palette;
+pub(crate) mod palette_flash;
+pub(crate) mod patch_cache;
+pub(crate) mod render;
+pub(crate) mod render_flags;
+pub(crate) mod seg;
+pub(crate) mod sky;
+pub(crate) mod span;
+pub(crate) mod sprite;
+pub(crate) mod sprite_lookup;
+pub(crate) mod statusbar;
+pub(crate) mod texture;
+pub(crate) mod texture_compose;
+pub(crate) mod visplane;
+pub(crate) mod wad_font;
+pub(crate) mod weapon_anim;
+pub(crate) mod wipe;
 
 pub use anim::{AnimSequence, AnimState, AnimType, SwitchList};
 pub use automap::{

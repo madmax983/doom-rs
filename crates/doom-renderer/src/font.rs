@@ -5,7 +5,7 @@
 //! Each glyph is stored as 8 bytes, one per row, MSB = leftmost pixel.
 
 use crate::framebuffer::Framebuffer;
-use doom_types::limits::FB_WIDTH;
+use doom_types::FB_WIDTH;
 
 /// A simple 8x8 bitmap font for rendering text onto the framebuffer.
 pub struct BitmapFont {

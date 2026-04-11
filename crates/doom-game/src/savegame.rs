@@ -8,7 +8,7 @@
 //! `load_game(&save_game(gs, ...)).unwrap().state` must produce a `GameState`
 //! equivalent to the original.
 
-use doom_types::limits::{NUM_AMMO, NUM_WEAPONS};
+use doom_types::{NUM_AMMO, NUM_WEAPONS};
 use doom_types::{Bam, Fixed16_16};
 
 use crate::mobj::{Mobj, MobjHandle, MobjKind, MobjSlab, StateNum};

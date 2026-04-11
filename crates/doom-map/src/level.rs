@@ -138,7 +138,7 @@ impl Level {
     ///
     /// # Examples
     /// ```no_run
-    /// use doom_map::level::Level;
+    /// use doom_map::Level;
     /// use doom_wad::WadFile;
     ///
     /// let bytes = std::fs::read("doom1.wad").unwrap();
@@ -162,7 +162,7 @@ impl Level {
     ///
     /// # Examples
     /// ```no_run
-    /// use doom_map::level::Level;
+    /// use doom_map::Level;
     /// use doom_wad::{WadFile, WadStack};
     ///
     /// let iwad_bytes = std::fs::read("doom1.wad").unwrap();

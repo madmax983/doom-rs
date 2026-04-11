@@ -82,7 +82,7 @@ impl AudioDriver {
     ///
     /// # Examples
     /// ```no_run
-    /// use doom_audio::driver::AudioDriver;
+    /// use doom_audio::AudioDriver;
     ///
     /// // Open the driver at a requested 44.1kHz (though the OS might give us
     /// // something else, which the driver handles gracefully!)
@@ -174,7 +174,7 @@ impl AudioDriver {
     /// # Examples
     ///
     /// ```
-    /// use doom_audio::driver::AudioDriver;
+    /// use doom_audio::AudioDriver;
     ///
     /// # #[cfg(not(feature = "loom"))]
     /// # {

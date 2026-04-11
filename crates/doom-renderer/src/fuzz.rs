@@ -13,7 +13,7 @@
 
 use crate::colormap::ColormapCache;
 use crate::framebuffer::Framebuffer;
-use doom_types::limits::{FB_HEIGHT, FB_WIDTH};
+use doom_types::{FB_HEIGHT, FB_WIDTH};
 
 /// The classic Doom fuzz offset table — 50 entries of +1 or -1.
 ///

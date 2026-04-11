@@ -11,36 +11,36 @@
 //! - `player.ammo[i] ≤ MAX_AMMO[i]` for all i.
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
-pub mod actions;
-pub mod automap;
-pub mod cheats;
-pub mod combat;
-pub mod dehacked;
-pub mod face;
-pub mod intermission;
-pub mod linedef_dispatch;
-pub mod menu;
-pub mod mobj;
-pub mod mobjinfo;
-pub mod movement;
-pub mod phase;
-pub mod pickups;
-pub mod player;
-pub mod projectile;
-pub mod random;
-pub mod savegame;
-pub mod sight;
-pub mod snapshot;
-pub mod sound;
-pub mod spawn;
-pub mod specials;
-pub mod state;
-pub mod states;
-pub mod switch;
-pub mod tic;
-pub mod trace;
-pub mod weapon_fire;
-pub mod weapons;
+pub(crate) mod actions;
+pub(crate) mod automap;
+pub(crate) mod cheats;
+pub(crate) mod combat;
+pub(crate) mod dehacked;
+pub(crate) mod face;
+pub(crate) mod intermission;
+pub(crate) mod linedef_dispatch;
+pub(crate) mod menu;
+pub(crate) mod mobj;
+pub(crate) mod mobjinfo;
+pub(crate) mod movement;
+pub(crate) mod phase;
+pub(crate) mod pickups;
+pub(crate) mod player;
+pub(crate) mod projectile;
+pub(crate) mod random;
+pub(crate) mod savegame;
+pub(crate) mod sight;
+pub(crate) mod snapshot;
+pub(crate) mod sound;
+pub(crate) mod spawn;
+pub(crate) mod specials;
+pub(crate) mod state;
+pub(crate) mod states;
+pub(crate) mod switch;
+pub(crate) mod tic;
+pub(crate) mod trace;
+pub(crate) mod weapon_fire;
+pub(crate) mod weapons;
 
 pub use actions::{
     ACTION_BRAIN_AWAKE, ACTION_BRAIN_DIE, ACTION_BRAIN_EXPLODE, ACTION_BRAIN_SCREAM,
@@ -53,7 +53,7 @@ pub use actions::{
 };
 pub use automap::{
     AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
-    draw_grid, draw_line, draw_thing_marker, init_seen_lines, line_color, mark_lines_seen,
+    draw_grid, draw_line, draw_thing_marker, COLOR_UNSEEN, COLOR_PLAYER_MARKER, COLOR_GRID, init_seen_lines, line_color, mark_lines_seen,
     mark_subsector_lines_seen, thing_marker_color, world_to_screen,
 };
 pub use cheats::{CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
@@ -128,3 +128,12 @@ pub use weapon_fire::{
     select_next_weapon, weapon_ammo_cost,
 };
 pub use weapons::{fire_weapon, player_can_fire, setup_psprites, tick_psprites};
+
+pub use player::powers;
+
+pub use player::psprite_slots;
+
+pub use states::ids;
+
+pub use mobj::MobjStateEntry;
+pub use player::{KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD, KEY_YELLOW_SKULL};

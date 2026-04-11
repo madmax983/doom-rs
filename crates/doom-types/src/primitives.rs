@@ -26,7 +26,7 @@
 ///
 /// # Examples
 /// ```
-/// use doom_types::primitives::Brightness;
+/// use doom_types::Brightness;
 ///
 /// let dark = Brightness::new(0).unwrap();
 /// assert_eq!(dark.raw(), 0);
@@ -46,7 +46,7 @@ impl Brightness {
 
     /// # Examples
     /// ```
-    /// use doom_types::primitives::Brightness;
+    /// use doom_types::Brightness;
     /// let b = Brightness::new(128).unwrap();
     /// assert_eq!(b.raw(), 128);
     /// ```
@@ -68,7 +68,7 @@ impl Brightness {
 ///
 /// # Examples
 /// ```
-/// use doom_types::primitives::SectorSpecial;
+/// use doom_types::SectorSpecial;
 ///
 /// // A normal, non-special sector.
 /// let normal = SectorSpecial::NORMAL;
@@ -93,7 +93,7 @@ impl SectorSpecial {
 
     /// # Examples
     /// ```
-    /// use doom_types::primitives::SectorSpecial;
+    /// use doom_types::SectorSpecial;
     /// let s = SectorSpecial::NORMAL;
     /// assert_eq!(s.raw(), 0);
     /// ```
@@ -114,7 +114,7 @@ impl SectorSpecial {
 ///
 /// # Examples
 /// ```
-/// use doom_types::primitives::SkillLevel;
+/// use doom_types::SkillLevel;
 ///
 /// // "Hurt Me Plenty"
 /// let hmp = SkillLevel::HMP;
@@ -134,7 +134,7 @@ impl SkillLevel {
 
     /// # Examples
     /// ```
-    /// use doom_types::primitives::SkillLevel;
+    /// use doom_types::SkillLevel;
     /// let s = SkillLevel::UV;
     /// assert_eq!(s.raw(), 3);
     /// ```
@@ -157,7 +157,7 @@ impl SkillLevel {
 ///
 /// # Examples
 /// ```
-/// use doom_types::primitives::PlayerNum;
+/// use doom_types::PlayerNum;
 ///
 /// let p1 = PlayerNum::new(0).unwrap();
 /// assert_eq!(p1.raw(), 0);
@@ -176,7 +176,7 @@ impl PlayerNum {
 
     /// # Examples
     /// ```
-    /// use doom_types::primitives::PlayerNum;
+    /// use doom_types::PlayerNum;
     /// let p = PlayerNum::new(2).unwrap();
     /// assert_eq!(p.raw(), 2);
     /// ```
@@ -193,7 +193,7 @@ impl PlayerNum {
 ///
 /// # Examples
 /// ```
-/// use doom_types::primitives::Coord;
+/// use doom_types::Coord;
 ///
 /// let x = Coord::new(-1024);
 /// assert_eq!(x.raw(), -1024);
@@ -209,7 +209,7 @@ impl Coord {
 
     /// # Examples
     /// ```
-    /// use doom_types::primitives::Coord;
+    /// use doom_types::Coord;
     /// let c = Coord::new(32);
     /// assert_eq!(c.raw(), 32);
     /// ```

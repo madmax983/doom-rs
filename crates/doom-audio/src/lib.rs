@@ -1,17 +1,17 @@
 //! OPL2/3 FM synthesis, MUS→MIDI conversion, PCM SFX mixing,
 //! positional audio, and cpal audio output driver.
 
-pub mod driver;
-pub mod midi;
-pub mod mixer;
-pub mod mus;
-pub mod opl;
-pub mod sfx;
-pub mod sfx_mixer;
-pub mod spatial;
-pub mod wav;
+pub(crate) mod driver;
+pub(crate) mod midi;
+pub(crate) mod mixer;
+pub(crate) mod mus;
+pub(crate) mod opl;
+pub(crate) mod sfx;
+pub(crate) mod sfx_mixer;
+pub(crate) mod spatial;
+pub(crate) mod wav;
 
-pub use driver::AudioDriver;
+pub use driver::{SharedSfxMixer, SharedMidiPlayer, AudioDriver};
 pub use midi::{GenmidiBank, GenmidiInstrument, MidiPlayer};
 pub use mixer::PcmSample;
 pub use mus::{MusEvent, MusScore};
@@ -36,3 +36,5 @@ pub enum AudioError {
     #[error("invalid MUS data: {0}")]
     InvalidMus(&'static str),
 }
+
+pub use mus::MusHeader;

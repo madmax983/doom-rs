@@ -448,7 +448,7 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             // Double all max_ammo values (only once -- cap at 2x original).
             // The original Doom doubles max_ammo unconditionally but since
             // we track per-player max_ammo, we cap at 2x the base.
-            use doom_types::limits::MAX_AMMO;
+            use doom_types::MAX_AMMO;
             for (i, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
                 let doubled = max_ammo * 2;
                 if gs.player.max_ammo[i] < doubled {
@@ -945,7 +945,7 @@ mod tests {
     #[test]
     fn pickup_backpack_doubles_max_ammo() {
         let mut gs = make_game_state();
-        use doom_types::limits::MAX_AMMO;
+        use doom_types::MAX_AMMO;
         let old_max = gs.player.max_ammo[0];
         assert_eq!(old_max, MAX_AMMO[0]);
         let item = spawn_item(&mut gs, MobjKind::Backpack, 0, 0);
@@ -971,7 +971,7 @@ mod tests {
     #[test]
     fn pickup_backpack_does_not_triple_max() {
         let mut gs = make_game_state();
-        use doom_types::limits::MAX_AMMO;
+        use doom_types::MAX_AMMO;
         // Pick up backpack twice.
         let item1 = spawn_item(&mut gs, MobjKind::Backpack, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item1));

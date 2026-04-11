@@ -337,7 +337,7 @@ pub fn make_join_packet() -> TicPacket {
         sender: HANDSHAKE_JOIN_SENDER,
         ack_tic: 0,
         state_checksum: 0,
-        cmds: [crate::packet::TicCmd::default(); crate::packet::MAX_PLAYERS],
+        cmds: [crate::packet::TicCmd::default(); crate::MAX_PLAYERS],
     }
 }
 
@@ -350,7 +350,7 @@ pub fn make_join_response(slot: u8) -> TicPacket {
         sender: slot,
         ack_tic: 0,
         state_checksum: 0,
-        cmds: [crate::packet::TicCmd::default(); crate::packet::MAX_PLAYERS],
+        cmds: [crate::packet::TicCmd::default(); crate::MAX_PLAYERS],
     }
 }
 

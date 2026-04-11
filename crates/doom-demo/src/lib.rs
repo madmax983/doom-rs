@@ -11,10 +11,10 @@
 //! - [`recorder`] — [`DemoRecorder`]: accumulates tics and writes an LMP file
 //! - [`player`] — [`DemoPlayer`]: parses an LMP file and replays tics
 
-pub mod header;
-pub mod player;
-pub mod recorder;
-pub mod ticcmd;
+pub(crate) mod header;
+pub(crate) mod player;
+pub(crate) mod recorder;
+pub(crate) mod ticcmd;
 
 // Re-export primary types at crate root for convenience.
 pub use header::{LMP_HEADER_SIZE, LMP_TERMINATOR, LMP_VERSION_1_9, LmpHeader};

@@ -21,7 +21,7 @@
 
 use doom_game::{
     GameState,
-    savegame::{SaveGame, load_game as engine_load, save_game as engine_save},
+    SaveGame, load_game as engine_load, save_game as engine_save,
 };
 use std::path::Path;
 
@@ -51,13 +51,13 @@ pub enum SaveError {
     Truncated,
 }
 
-impl From<doom_game::savegame::SaveError> for SaveError {
-    fn from(err: doom_game::savegame::SaveError) -> Self {
+impl From<doom_game::SaveError> for SaveError {
+    fn from(err: doom_game::SaveError) -> Self {
         match err {
-            doom_game::savegame::SaveError::TooShort => SaveError::Truncated,
-            doom_game::savegame::SaveError::BadMagic => SaveError::BadMagic,
-            doom_game::savegame::SaveError::BadVersion => SaveError::BadVersion,
-            doom_game::savegame::SaveError::Truncated => SaveError::Truncated,
+            doom_game::SaveError::TooShort => SaveError::Truncated,
+            doom_game::SaveError::BadMagic => SaveError::BadMagic,
+            doom_game::SaveError::BadVersion => SaveError::BadVersion,
+            doom_game::SaveError::Truncated => SaveError::Truncated,
         }
     }
 }
@@ -137,7 +137,7 @@ pub fn save_game(path: &Path, gs: &GameState, slot: u8) -> Result<(), SaveError>
 /// * Returns [`SaveError::Truncated`] if the binary format is malformed or cut off.
 /// * Returns [`SaveError::BadMagic`] if the file lacks the `b"DRS1"` signature.
 /// * Returns [`SaveError::BadVersion`] for an unsupported version number.
-pub fn load_game(path: &Path) -> Result<(doom_game::savegame::SaveHeader, SaveGame), SaveError> {
+pub fn load_game(path: &Path) -> Result<(doom_game::SaveHeader, SaveGame), SaveError> {
     let data = std::fs::read(path)?;
     let save_game = engine_load(&data)?;
     // We clone the header so we can return both. Note `SaveGame` already contains the header.
@@ -229,7 +229,7 @@ mod tests {
 
         assert_eq!(
             header.magic,
-            doom_game::savegame::SAVE_MAGIC,
+            doom_game::SAVE_MAGIC,
             "magic must be b\"DRS1\""
         );
         // Description starts with 'Slot 3'.

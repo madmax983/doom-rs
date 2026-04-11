@@ -30,7 +30,7 @@
 //! so floor/ceiling spans fill through the gap.
 
 use doom_map::Level;
-use doom_map::lumps::{FLAG_DONTPEGBOTTOM, FLAG_DONTPEGTOP};
+use doom_map::{FLAG_DONTPEGBOTTOM, FLAG_DONTPEGTOP};
 use doom_types::Bam;
 
 use crate::anim::AnimState;
@@ -1362,12 +1362,12 @@ mod tests {
     use crate::sky::SKY_FALLBACK_COLOR;
     use crate::sprite::{SpriteCache, SpriteFrame, render_actors_with_masked_ex};
     use crate::sprite_lookup::ActorRenderInfo;
-    use doom_map::lumps::FLAG_DONTPEGTOP;
+    use doom_map::FLAG_DONTPEGTOP;
     use doom_wad::WadFile;
 
     /// Build a minimal Level with one sector and one seg for testing.
     fn make_minimal_level() -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -1457,7 +1457,7 @@ mod tests {
         back_floor: i16,
         back_ceil: i16,
     ) -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -1559,7 +1559,7 @@ mod tests {
     }
 
     fn make_player_sector_mismatch_level() -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Node, NodeBBox, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -1731,7 +1731,7 @@ mod tests {
     /// second to catch regressions where later portal processing rewrites
     /// visplane bounds behind a solid wall.
     fn make_occluded_portal_level() -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -1869,7 +1869,7 @@ mod tests {
     /// outside the opening should remain background. If far walls are not
     /// clipped to the current portal window, they leak into those rows.
     fn make_portal_window_with_far_solid_level() -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -2020,7 +2020,7 @@ mod tests {
         back_floor: i16,
         back_ceil: i16,
     ) -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -2124,7 +2124,7 @@ mod tests {
     }
 
     fn make_oblique_wall_level() -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -2209,7 +2209,7 @@ mod tests {
     /// it can repaint rows outside the near window with the tall front sector's
     /// ceiling/floor flats.
     fn make_portal_window_with_far_portal_level() -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -2378,7 +2378,7 @@ mod tests {
     /// portal. Doom should still use the near portal's saved clip state for
     /// that sprite instead of borrowing the farther portal's tighter context.
     fn make_nested_ceiling_portal_level() -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -3137,7 +3137,7 @@ mod tests {
 
     #[test]
     fn masked_midtexture_sprite_ordering_keeps_grate_in_front() {
-        use doom_game::states::sprite_names;
+        use doom_game::sprite_names;
         use doom_types::{ANG90, Fixed16_16};
 
         init_trig();
@@ -3210,7 +3210,7 @@ mod tests {
 
     #[test]
     fn sprite_between_nested_top_portals_keeps_near_clip_context() {
-        use doom_game::states::sprite_names;
+        use doom_game::sprite_names;
         use doom_types::{ANG90, Fixed16_16};
 
         init_trig();
@@ -3368,8 +3368,8 @@ mod tests {
         init_trig();
 
         let mut level = make_minimal_level();
-        level.vertexes[0] = doom_map::lumps::Vertex { x: -64, y: 128 };
-        level.vertexes[1] = doom_map::lumps::Vertex { x: 64, y: 128 };
+        level.vertexes[0] = doom_map::Vertex { x: -64, y: 128 };
+        level.vertexes[1] = doom_map::Vertex { x: 64, y: 128 };
 
         let columns: Vec<u8> = (1..=64).collect();
         let tex_cache = load_single_texture_cache_from_columns("WALL3", &columns);
@@ -3537,7 +3537,7 @@ mod tests {
     /// the floor region without panicking.
     #[test]
     fn test_render_level_with_flat_cache_smoke() {
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
 
         // Build a minimal in-memory WAD with F_START / FLAT1 / FLAT2 / F_END.
         let mut flat_data = vec![0u8; FLAT_SIZE];
@@ -3858,7 +3858,7 @@ mod tests {
     #[test]
     fn test_front_floor_does_not_leak_into_two_sided_lower_wall() {
         use doom_types::ANG90;
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
 
         init_trig();
 
@@ -3914,7 +3914,7 @@ mod tests {
     #[test]
     fn test_oblique_two_sided_lower_wall_does_not_show_back_floor() {
         use doom_types::ANG90;
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
 
         init_trig();
 
@@ -4000,7 +4000,7 @@ mod tests {
     #[test]
     fn test_oblique_two_sided_lower_wall_band_stays_wall_colored() {
         use doom_types::ANG90;
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
 
         init_trig();
 
@@ -4094,7 +4094,7 @@ mod tests {
     #[test]
     fn test_far_portal_flats_do_not_repaint_near_wall_pixels_at_oblique_view() {
         use doom_types::ANG90;
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
 
         init_trig();
 
@@ -4132,8 +4132,8 @@ mod tests {
         );
 
         let mut near_only = make_minimal_level();
-        near_only.vertexes[0] = doom_map::lumps::Vertex { x: -64, y: 128 };
-        near_only.vertexes[1] = doom_map::lumps::Vertex { x: 64, y: 128 };
+        near_only.vertexes[0] = doom_map::Vertex { x: -64, y: 128 };
+        near_only.vertexes[1] = doom_map::Vertex { x: 64, y: 128 };
 
         let mut near_fb = Framebuffer::new();
         render_level(
@@ -4179,7 +4179,7 @@ mod tests {
     #[test]
     fn test_closed_two_sided_door_does_not_leave_floor_slit() {
         use doom_types::ANG90;
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
 
         init_trig();
 
@@ -4235,7 +4235,7 @@ mod tests {
     #[test]
     fn test_visplane_clipped_by_near_wall_when_far_portal_exists() {
         use doom_types::ANG90;
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
 
         init_trig();
 
@@ -4368,7 +4368,7 @@ mod tests {
     #[test]
     fn test_far_portal_visplanes_respect_near_portal_window() {
         use doom_types::ANG90;
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
 
         init_trig();
 
@@ -4596,7 +4596,7 @@ mod tests {
     #[test]
     fn test_far_portal_flats_do_not_escape_near_window_at_oblique_angle() {
         use doom_types::Bam;
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
 
         init_trig();
 
@@ -4720,7 +4720,7 @@ mod tests {
     #[test]
     fn test_far_portal_visplanes_do_not_depend_on_subsector_seg_order() {
         use doom_types::ANG90;
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
 
         init_trig();
 
@@ -4859,7 +4859,7 @@ mod tests {
 
     /// Build a minimal level with a configurable light level.
     fn make_level_with_light(light: i16) -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -4936,7 +4936,7 @@ mod tests {
 
     /// Build a two-sided level with different light levels for front and back.
     fn make_two_sided_level_with_lights(front_light: i16, back_light: i16) -> Level {
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
         };
 
@@ -5902,7 +5902,7 @@ mod tests {
 
     #[test]
     fn light_flats_with_colormap_no_panic() {
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
         init_trig();
 
         // Build flats.
@@ -5972,7 +5972,7 @@ mod tests {
 
     #[test]
     fn light_flats_fullbright_with_colormap() {
-        use doom_types::limits::FLAT_SIZE;
+        use doom_types::FLAT_SIZE;
         init_trig();
 
         let flat_data = vec![50u8; FLAT_SIZE];

@@ -56,7 +56,7 @@ impl<'a> DoomSixelWidget<'a> {
     ///
     /// ```
     /// use doom_renderer::{Framebuffer, PaletteLut};
-    /// use doom_tui::sixel::DoomSixelWidget;
+    /// use doom_tui::DoomSixelWidget;
     ///
     /// let fb = Framebuffer::new();
     /// let lut = PaletteLut::grayscale();
@@ -143,7 +143,7 @@ impl Widget for DoomSixelWidget<'_> {
 ///
 /// ```
 /// use doom_renderer::PaletteLut;
-/// use doom_tui::sixel::encode_doom_sixel;
+/// use doom_tui::encode_doom_sixel;
 ///
 /// let lut = PaletteLut::grayscale();
 /// let data = vec![0; 320 * 200];
@@ -386,8 +386,8 @@ mod tests {
 #[cfg(test)]
 mod tests_havoc {
     use super::*;
-    use doom_renderer::framebuffer::Framebuffer;
-    use doom_renderer::palette::PaletteLut;
+    use doom_renderer::Framebuffer;
+    use doom_renderer::PaletteLut;
     use ratatui::layout::Rect;
 
     #[test]

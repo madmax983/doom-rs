@@ -10,7 +10,7 @@
 //! row is `(frac >> FRACBITS) & (texture_height - 1)`.
 
 use crate::framebuffer::Framebuffer;
-use doom_types::limits::FB_WIDTH;
+use doom_types::FB_WIDTH;
 
 /// Parameters for a single `R_DrawColumn` call.
 pub struct DrawColumnParams<'a> {

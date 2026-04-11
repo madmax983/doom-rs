@@ -23,7 +23,7 @@ use loom::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use doom_audio::{
-    AudioDriver, GenmidiBank, MAX_CHANNELS, MusScore, SfxCache, SfxPriority, mixer::PcmSample,
+    AudioDriver, GenmidiBank, MAX_CHANNELS, MusScore, SfxCache, SfxPriority, PcmSample,
 };
 use doom_wad::WadStack;
 
@@ -267,8 +267,8 @@ fn populate_sfx_cache(wad: &WadStack, cache: &mut SfxCache) {
 /// Exits when the sender side of the channel is dropped (game shutdown).
 fn audio_cmd_thread(
     rx: std::sync::mpsc::Receiver<AudioEvent>,
-    mixer_arc: &doom_audio::driver::SharedSfxMixer,
-    midi_arc: &doom_audio::driver::SharedMidiPlayer,
+    mixer_arc: &doom_audio::SharedSfxMixer,
+    midi_arc: &doom_audio::SharedMidiPlayer,
     sfx_cache: &SfxCache,
     on_music_start: impl Fn(),
 ) {

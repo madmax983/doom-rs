@@ -16,7 +16,7 @@ use crate::lumps::SIDEDEF_NONE;
 /// # Examples
 ///
 /// ```
-/// use doom_map::{Level, lumps::{Blockmap, Linedef, Reject, Sector, Sidedef, Vertex}};
+/// use doom_map::{Level, Blockmap, Linedef, Reject, Sector, Sidedef, Vertex};
 ///
 /// let reject = Reject::parse_lump(&[0u8], 1).unwrap();
 /// let mut bm_data = vec![0u8; 14];

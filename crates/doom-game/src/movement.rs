@@ -319,7 +319,7 @@ fn try_move_with_blocker(
                 }
 
                 // --- Two-sided: ML_BLOCKING always blocks, ML_BLOCKMONSTERS blocks monsters ---
-                if ld.flags & doom_map::lumps::FLAG_BLOCKING != 0 {
+                if ld.flags & doom_map::FLAG_BLOCKING != 0 {
                     return (
                         false,
                         Some(BlockingLine {
@@ -335,7 +335,7 @@ fn try_move_with_blocker(
                     .get(handle)
                     .map(|mo| mo.flags & flags::MF_COUNTKILL != 0)
                     .unwrap_or(false);
-                if ld.flags & doom_map::lumps::FLAG_BLOCKMONSTERS != 0 && is_monster {
+                if ld.flags & doom_map::FLAG_BLOCKMONSTERS != 0 && is_monster {
                     return (
                         false,
                         Some(BlockingLine {
@@ -482,7 +482,7 @@ fn bbox_straddles_line(
 mod tests {
     use super::*;
     use crate::mobj::{Mobj, MobjKind, MobjSlab};
-    use doom_map::{Node, NodeBBox, lumps::NODE_SUBSECTOR_BIT};
+    use doom_map::{Node, NodeBBox, NODE_SUBSECTOR_BIT};
     use doom_types::Bam;
 
     // -----------------------------------------------------------------------
