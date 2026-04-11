@@ -769,4 +769,102 @@ mod tests {
             .collect();
         assert_eq!(flats, vec!["FLAT1", "FLAT2"]);
     }
+
+    #[test]
+    fn parse_rejects_negative_lump_count() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&(-1i32).to_le_bytes()); // negative lump count
+        data[8..12].copy_from_slice(&12i32.to_le_bytes());
+        assert!(matches!(
+            WadFile::parse(data),
+            Err(WadError::NegativeLumpCount(-1))
+        ));
+    }
+
+    #[test]
+    fn parse_rejects_negative_directory_offset() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&0i32.to_le_bytes());
+        data[8..12].copy_from_slice(&(-1i32).to_le_bytes()); // negative dir offset
+        assert!(matches!(
+            WadFile::parse(data),
+            Err(WadError::DirectoryOutOfBounds { .. })
+        ));
+    }
+
+    #[test]
+    fn parse_rejects_directory_out_of_bounds() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes());
+        data[8..12].copy_from_slice(&12i32.to_le_bytes()); // 1 entry = 16 bytes. 12+16=28 > 12.
+        assert!(matches!(
+            WadFile::parse(data),
+            Err(WadError::DirectoryOutOfBounds { .. })
+        ));
+    }
+
+    #[test]
+    fn parse_rejects_lump_negative_size() {
+        let mut data = vec![0u8; 28]; // 12 header + 16 entry
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes());
+        data[8..12].copy_from_slice(&12i32.to_le_bytes());
+
+        data[12..16].copy_from_slice(&12i32.to_le_bytes()); // valid offset
+        data[16..20].copy_from_slice(&(-1i32).to_le_bytes()); // negative size
+        data[20..28].copy_from_slice(b"TEST\0\0\0\0");
+
+        assert!(matches!(
+            WadFile::parse(data),
+            Err(WadError::LumpNegativeField { .. })
+        ));
+    }
+
+    #[test]
+    fn parse_rejects_lump_negative_filepos() {
+        let mut data = vec![0u8; 28];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes());
+        data[8..12].copy_from_slice(&12i32.to_le_bytes());
+
+        data[12..16].copy_from_slice(&(-1i32).to_le_bytes()); // negative filepos
+        data[16..20].copy_from_slice(&0i32.to_le_bytes()); // valid size
+        data[20..28].copy_from_slice(b"TEST\0\0\0\0");
+
+        assert!(matches!(
+            WadFile::parse(data),
+            Err(WadError::LumpNegativeField { .. })
+        ));
+    }
+
+    #[test]
+    fn parse_rejects_lump_out_of_bounds() {
+        let mut data = vec![0u8; 28];
+        data[0..4].copy_from_slice(b"IWAD");
+        data[4..8].copy_from_slice(&1i32.to_le_bytes());
+        data[8..12].copy_from_slice(&12i32.to_le_bytes());
+
+        data[12..16].copy_from_slice(&28i32.to_le_bytes()); // filepos = 28
+        data[16..20].copy_from_slice(&1i32.to_le_bytes()); // size = 1, end = 29 > 28
+        data[20..28].copy_from_slice(b"TEST\0\0\0\0");
+
+        assert!(matches!(
+            WadFile::parse(data),
+            Err(WadError::LumpOutOfBounds { .. })
+        ));
+    }
+
+    #[test]
+    fn map_lump_group_classic_missing_lumps_at_eof() {
+        let wad_bytes = make_iwad(&[
+            ("E1M1", b""),
+            ("THINGS", b""),
+            // Only 1 sublump instead of the 10 required
+        ]);
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        assert!(wad.map_lump_group("E1M1").is_none());
+    }
 }
