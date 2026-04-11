@@ -21,6 +21,30 @@ use crate::net_mode::ticinput_to_ticcmd;
 /// Wraps [`DoomGame`] and records each tic's [`TicCmd`] to a [`DemoRecorder`].
 ///
 /// When the wrapper is dropped the accumulated demo is written to `save_path`.
+///
+/// # Examples
+/// ```no_run
+/// # use doom_app::demo_mode::DemoRecordingWrapper;
+/// # use doom_app::DoomGame;
+/// # use doom_demo::{DemoRecorder, LmpHeader};
+/// # use doom_tui::TicInput;
+/// # use doom_tui::DoomApp;
+/// # let doom_game: DoomGame = unsafe { std::mem::zeroed() };
+/// # let dir = std::env::temp_dir();
+/// # let path = dir.join("my_demo.lmp");
+/// let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// let recorder = DemoRecorder::new(header);
+/// let mut wrapper = DemoRecordingWrapper::new(
+///     doom_game,
+///     recorder,
+///     path.clone(),
+/// );
+///
+/// // Pump the event loop...
+/// wrapper.tick(TicInput::default());
+///
+/// // my_demo.lmp is written to disk when `wrapper` goes out of scope.
+/// ```
 pub struct DemoRecordingWrapper {
     inner: DoomGame,
     recorder: DemoRecorder,
@@ -103,6 +127,22 @@ impl Drop for DemoRecordingWrapper {
 ///
 /// When the demo is exhausted the last rendered frame stays frozen until the
 /// user quits (Q/Esc via the event loop).
+///
+/// # Examples
+/// ```no_run
+/// # use doom_app::demo_mode::DemoPlaybackApp;
+/// # use doom_app::DoomGame;
+/// # use doom_demo::DemoPlayer;
+/// # use doom_tui::TicInput;
+/// # use doom_tui::DoomApp;
+/// # let doom_game: DoomGame = unsafe { std::mem::zeroed() };
+/// let demo_bytes = std::fs::read("my_demo.lmp").unwrap();
+/// let player = DemoPlayer::parse(&demo_bytes).unwrap();
+/// let mut app = DemoPlaybackApp::new(doom_game, player);
+///
+/// // The game will ignore `TicInput` and use the recorded demo ticks instead.
+/// app.tick(TicInput::default());
+/// ```
 pub struct DemoPlaybackApp {
     inner: DoomGame,
     player: DemoPlayer,
