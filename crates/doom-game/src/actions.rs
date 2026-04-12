@@ -205,15 +205,15 @@ fn get_alive_target_with_pos(
 ///
 /// # Examples
 /// ```
-/// use doom_game::actions::{dispatch_action, ACTION_NONE};
+/// use doom_game::actions::{dispatch_action, Action};
 /// use doom_game::state::GameState;
 /// use doom_game::mobj::MobjHandle;
 ///
 /// let mut gs = GameState::new("E1M1");
 /// // A dummy handle for illustration; in a real game, this points to a live actor.
 /// let handle = MobjHandle { index: 0, generation: 0 };
-/// // Action 0 is ACTION_NONE, which is a no-op.
-/// dispatch_action(&mut gs, handle, ACTION_NONE, None);
+/// // Action 0 is Action::NoAction as u8, which is a no-op.
+/// dispatch_action(&mut gs, handle, Action::NoAction as u8, None);
 /// ```
 pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level: Option<&Level>) {
     if let Some(a) = Action::from_repr(action) {
@@ -4651,5 +4651,42 @@ mod tests {
             11,
             "BOSS_SPAWN_TYPES must have 11 monster types"
         );
+    }
+    #[test]
+    fn get_alive_target_with_pos_returns_none_no_target() {
+        let mut gs = make_game_state();
+        let mo = Mobj::new(
+            MobjKind::Imp,
+            Fixed16_16::from_int(0),
+            Fixed16_16::from_int(0),
+            Bam::ZERO,
+        );
+        let handle = gs.mobjslab.alloc(mo);
+        assert_eq!(get_alive_target_with_pos(&gs, handle), None);
+    }
+
+    #[test]
+    fn get_alive_target_with_pos_returns_none_dead_target() {
+        let mut gs = make_game_state();
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().health = 0;
+        let imp = spawn_monster_targeting_player(&mut gs, MobjKind::Imp, 100, 100, 100);
+        assert_eq!(get_alive_target_with_pos(&gs, imp), None);
+    }
+
+    #[test]
+    fn get_alive_target_with_pos_returns_target() {
+        let mut gs = make_game_state();
+        let target_h = gs.player.handle;
+        let imp = spawn_monster_targeting_player(&mut gs, MobjKind::Imp, 100, 100, 100);
+        let _target = gs.mobjslab.get(target_h).unwrap();
+
+        let result = get_alive_target_with_pos(&gs, imp);
+        assert!(result.is_some());
+        let (found_target, x, y) = result.unwrap();
+        assert_eq!(found_target, target_h);
+        // The position returned is the caller's position, not the target's
+        let imp_mo = gs.mobjslab.get(imp).unwrap();
+        assert_eq!(x, imp_mo.x);
+        assert_eq!(y, imp_mo.y);
     }
 }

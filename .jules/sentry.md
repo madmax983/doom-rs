@@ -30,3 +30,7 @@
 ## 2024-04-10 - SaveError Refactoring
 **Learning:** Replaced manual `Display` implementation for `SaveError` with `#[derive(thiserror::Error)]`. Used tests to verify correct routing of format decoding (`SaveFormat` formatting, too short save detection, magic byte mismatches) for both regular saves and `doomrs` specific loading.
 **Action:** Always prefer `thiserror` when modifying error types that have simple manual implementations.
+
+## 2024-04-11 - Adding tests for get_alive_target_with_pos
+**Learning:** Discovered a lack of test coverage for the `get_alive_target_with_pos` function in `actions.rs`, which is used in actor logic.
+**Action:** Added unit tests to ensure `get_alive_target_with_pos` correctly handles cases with no target, a dead target, and a valid alive target. This prevents regressions in monster targeting logic.
