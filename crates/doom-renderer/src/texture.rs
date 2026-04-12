@@ -269,10 +269,10 @@ fn parse_texture_lump<'a, F>(
         // Blit each patch into the texture.
         for mp in &patches {
             let patch_name = match pnames.get(mp.patch as usize) {
-                Some(n) => n.clone(),
+                Some(n) => n,
                 None => continue,
             };
-            let patch_data = match find_patch(&patch_name) {
+            let patch_data = match find_patch(patch_name) {
                 Some(d) => d,
                 None => continue,
             };

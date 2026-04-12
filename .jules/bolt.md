@@ -26,3 +26,6 @@
 **[Entry API in Caches]**
 **Learning:** Using `contains_key` followed by `insert` and `get` on a cache dictionary like `HashMap` results in duplicate hashing and key allocations (`clone()` or `to_uppercase()`).
 **Action:** Use the `Entry` API (`HashMap::entry`) to cleanly handle cache misses. It allows us to process the miss safely by consuming the allocated key, performing only a single hash lookup to update or retrieve the cached object.
+**Remove Unnecessary String Clones in Loops**
+**Learning:** Passing `&String` (or `&str`) instead of invoking `.clone()` in tight loops (like `find_patch` map lookups) avoids needless heap allocations and overhead.
+**Action:** Audit map `.get()` and callback arguments to ensure they take references instead of owned Strings when ownership isn't needed.
