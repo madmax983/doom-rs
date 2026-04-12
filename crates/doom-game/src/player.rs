@@ -306,7 +306,7 @@ impl PlayerState {
     ///
     /// Used for items that set health to a fixed value (e.g. Megasphere).
     pub fn set_health_capped(&mut self, value: i32, cap: i32) {
-        self.health = value.clamp(0, cap);
+        self.health = value.clamp(0, cap.max(0));
     }
 
     /// Returns `true` if the player is dead (health ≤ 0).
@@ -337,7 +337,7 @@ impl PlayerState {
 
     /// Deduct `amount` from armor; clears `armor_type` when armor reaches 0.
     pub fn deduct_armor(&mut self, amount: i32) {
-        self.armor = (self.armor - amount).max(0);
+        self.armor = self.armor.saturating_sub(amount).max(0);
         if self.armor == 0 {
             self.armor_type = 0;
         }
@@ -378,7 +378,7 @@ impl PlayerState {
             if *cur >= max {
                 return false;
             }
-            *cur = (*cur + amount).min(max);
+            *cur = cur.saturating_add(amount).min(max);
             true
         } else {
             false
@@ -832,3 +832,7 @@ mod proptests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "player_tests.rs"]
+mod player_tests;

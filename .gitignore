@@ -10,3 +10,5 @@
 gameplay.log
 .claude/
 audio-diag.txt
+crates/doom-audio/fuzz/target/
+fuzz/target/

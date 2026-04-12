@@ -1418,7 +1418,6 @@ mod tests {
         assert_eq!(load_game(&[]).unwrap_err(), SaveError::TooShort);
     }
 
-
     // --- Test 6: load_game with bad version returns BadVersion ---
     #[test]
     fn load_bad_version() {
@@ -1836,7 +1835,9 @@ mod tests {
         let loaded = load_game(&data).expect("load must succeed");
         let desc = &loaded.header.description;
         // This is the vulnerable line
-        let desc_str = core::str::from_utf8(desc).unwrap_or("").trim_end_matches('\0');
+        let desc_str = core::str::from_utf8(desc)
+            .unwrap_or("")
+            .trim_end_matches('\0');
         assert_eq!(desc_str, "");
     }
 
@@ -1847,7 +1848,9 @@ mod tests {
         let loaded = load_game(&data).expect("load must succeed");
         // Description should start with "My Cool Save" then be null-padded.
         let desc = &loaded.header.description;
-        let desc_str = core::str::from_utf8(desc).unwrap_or("").trim_end_matches('\0');
+        let desc_str = core::str::from_utf8(desc)
+            .unwrap_or("")
+            .trim_end_matches('\0');
         assert_eq!(desc_str, "My Cool Save");
         assert_eq!(loaded.header.skill, 3);
     }
