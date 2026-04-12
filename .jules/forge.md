@@ -14,3 +14,7 @@
 **Flatten audio event dispatch**
 **Learning:** The background audio command loop contained deeply nested `if let` and `match` blocks (Pyramid of Doom), making the main event dispatch obscured by indentation.
 **Action:** Use guard clauses (`let Ok(x) = ... else { continue }`) to flatten deeply nested logic loops, significantly improving read flow without altering early-exit semantics.
+
+**[Boolean Blindness in activate_crusher]
+**Learning:** `activate_crusher` taking multiple booleans like `silent` and `remove_when_done` creates "Boolean Blindness", obscuring intent at the call site.
+**Action:** Group these configuration flags into a named struct like `CrusherParams` to self-document call sites.
