@@ -2399,17 +2399,48 @@ fn run_doom() -> Result<()> {
             if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
                 let graph = doom_map::SectorGraph::build(&level);
                 if let Some(path) = graph.shortest_path(start, end) {
-                    let path_str = path.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ➔ ");
                     if is_tty {
                         println!(
-                            "{} {} {}",
+                            "{} {}",
                             "🗺️ ".green(),
-                            "Path found:".green().bold(),
-                            path_str.cyan()
+                            "Path found:".green().bold()
                         );
                     } else {
-                        println!("Path found: {}", path_str);
+                        println!("Path found:");
                     }
+
+                    let mut table = comfy_table::Table::new();
+                    if is_tty {
+                        table
+                            .load_preset(comfy_table::presets::UTF8_FULL)
+                            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+                        table.set_header(vec![
+                            comfy_table::Cell::new("Step")
+                                .fg(comfy_table::Color::Cyan)
+                                .add_attribute(comfy_table::Attribute::Bold),
+                            comfy_table::Cell::new("Sector")
+                                .fg(comfy_table::Color::Cyan)
+                                .add_attribute(comfy_table::Attribute::Bold),
+                        ]);
+                        for (i, &sector) in path.iter().enumerate() {
+                            table.add_row(vec![
+                                comfy_table::Cell::new((i + 1).to_string()),
+                                comfy_table::Cell::new(sector.to_string()).fg(comfy_table::Color::Yellow),
+                            ]);
+                        }
+                    } else {
+                        table.set_header(vec![
+                            comfy_table::Cell::new("Step"),
+                            comfy_table::Cell::new("Sector"),
+                        ]);
+                        for (i, &sector) in path.iter().enumerate() {
+                            table.add_row(vec![
+                                comfy_table::Cell::new((i + 1).to_string()),
+                                comfy_table::Cell::new(sector.to_string()),
+                            ]);
+                        }
+                    }
+                    println!("{table}");
                 } else {
                     if is_tty {
                         println!(

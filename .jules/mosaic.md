@@ -1,0 +1,3 @@
+**[CLI Output Refactoring - comfy_table]**
+**Learning:** Raw text output formats, like joined strings or plain `println!`, can be visually unappealing and inconsistent with polished CLI tools that utilize tables for data representation. Wait, when drafting execution plans that propose `replace_with_git_merge_diff`, you must include the exact `SEARCH` and `REPLACE` blocks in the plan.
+**Action:** When working as the 'Mosaic' UI persona, replace raw terminal logging for tabular or grid data with `comfy_table`, ensuring that both TTY (styled) and non-TTY (unstyled) execution modes are correctly handled. Always draft precise code edits into the plan step upfront.
