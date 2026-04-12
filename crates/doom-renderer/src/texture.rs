@@ -40,8 +40,10 @@ pub struct WallTexture {
 /// Cache of all wall textures composed from TEXTURE1/TEXTURE2 + PNAMES.
 ///
 /// Look up textures by their 8-byte, null-padded WAD name.
+use doom_wad::lump::LumpName;
+
 pub struct TextureCache {
-    textures: HashMap<String, WallTexture>,
+    textures: HashMap<LumpName, WallTexture>,
 }
 
 impl TextureCache {
@@ -129,13 +131,17 @@ impl TextureCache {
             return None;
         }
 
-        // Trim trailing NUL/space padding and uppercase for hashmap lookup.
-        // Some maps may space-pad names in sidedefs.
-        let len = name
-            .iter()
-            .rposition(|&b| b != 0 && b != b' ')
-            .map_or(0, |i| i + 1);
-        let key = String::from_utf8_lossy(&name[..len]).to_uppercase();
+        // Trim trailing NUL/space padding so LumpName interprets correctly.
+        let mut clean_name = *name;
+        for i in (0..8).rev() {
+            if clean_name[i] == b' ' || clean_name[i] == 0 {
+                clean_name[i] = 0;
+            } else {
+                break;
+            }
+        }
+
+        let key = LumpName::from_raw(clean_name);
         self.textures.get(&key)
     }
 
@@ -194,7 +200,7 @@ fn parse_texture_lump<'a, F>(
     data: &[u8],
     pnames: &[String],
     mut find_patch: F,
-    out: &mut HashMap<String, WallTexture>,
+    out: &mut HashMap<LumpName, WallTexture>,
 ) where
     F: FnMut(&str) -> Option<&'a [u8]>,
 {
@@ -230,9 +236,9 @@ fn parse_texture_lump<'a, F>(
         //   +16  u32    columndir (unused in Doom, skip)
         //   +20  u16    patch_count
         //   +22  patch_count × MapPatch (10 bytes each)
-        let name_bytes = &data[tex_offset..tex_offset + 8];
-        let name_len = name_bytes.iter().position(|&b| b == 0).unwrap_or(8);
-        let name = String::from_utf8_lossy(&name_bytes[..name_len]).to_uppercase();
+        let mut name_raw = [0u8; 8];
+        name_raw.copy_from_slice(&data[tex_offset..tex_offset + 8]);
+        let name = LumpName::from_raw(name_raw);
 
         let width = u16::from_le_bytes([data[tex_offset + 12], data[tex_offset + 13]]) as u32;
         let height = u16::from_le_bytes([data[tex_offset + 14], data[tex_offset + 15]]) as u32;
