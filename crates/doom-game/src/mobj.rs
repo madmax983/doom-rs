@@ -592,4 +592,23 @@ mod tests {
 
         let _handle2 = slab.alloc(make_player_mobj());
     }
+
+    #[test]
+    #[should_panic(expected = "free list points to occupied slot")]
+    fn alloc_free_list_occupied_panic() {
+        let mut slab = MobjSlab::new();
+        let handle1 = slab.alloc(make_player_mobj());
+        slab.free(handle1);
+
+        // Corrupt the free list to point to an occupied slot
+        // In this case, `handle1.index` is the free head.
+        // We will force it to be occupied.
+        slab.slots[handle1.index as usize] = Slot::Occupied {
+            mobj: make_player_mobj(),
+            generation: 2,
+        };
+
+        // Attempting to allocate should follow the free list, encounter the Occupied slot, and panic.
+        slab.alloc(make_player_mobj());
+    }
 }
