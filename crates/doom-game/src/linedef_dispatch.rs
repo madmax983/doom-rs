@@ -449,25 +449,8 @@ fn dispatch_doors(
         }
         DoorCloseWaitOpen => {
             // Close, wait 30 s (1050 tics), then reopen to the standard door top.
-            if tag == 0 {
-                let ld = match level.linedefs.get(linedef_index) {
-                    Some(ld) => ld,
-                    None => return false,
-                };
-                let left = ld.left_sidedef;
-                if left == doom_map::SIDEDEF_NONE {
-                    return false;
-                }
-                let sector_idx = match level.sidedefs.get(left as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return false,
-                };
-                close_wait_open_helper(gs, level, sector_idx);
-            } else {
-                let indices = sectors_by_tag(level, tag);
-                for idx in indices {
-                    close_wait_open_helper(gs, level, idx);
-                }
+            for idx in sectors_from_tag_or_back(level, linedef_index, tag) {
+                close_wait_open_helper(gs, level, idx);
             }
             true
         }
@@ -535,93 +518,22 @@ fn dispatch_locked_doors(
     activator: MobjHandle,
 ) -> bool {
     use LinedefEffect::*;
-    match effect {
-        DoorLockedBlue => {
-            if !check_locked_door_keys(gs, activator, LockedDoorColor::Blue) {
-                return false;
-            }
-            door_by_tag_or_back(
-                gs,
-                level,
-                linedef_index,
-                tag,
-                DoorBehavior::OpenWaitClose,
-                DoorSpeed::Normal,
-            );
-            true
-        }
-        DoorLockedRed => {
-            if !check_locked_door_keys(gs, activator, LockedDoorColor::Red) {
-                return false;
-            }
-            door_by_tag_or_back(
-                gs,
-                level,
-                linedef_index,
-                tag,
-                DoorBehavior::OpenWaitClose,
-                DoorSpeed::Normal,
-            );
-            true
-        }
-        DoorLockedYellow => {
-            if !check_locked_door_keys(gs, activator, LockedDoorColor::Yellow) {
-                return false;
-            }
-            door_by_tag_or_back(
-                gs,
-                level,
-                linedef_index,
-                tag,
-                DoorBehavior::OpenWaitClose,
-                DoorSpeed::Normal,
-            );
-            true
-        }
-        DoorLockedBlueOpen => {
-            if !check_locked_door_keys(gs, activator, LockedDoorColor::Blue) {
-                return false;
-            }
-            door_by_tag_or_back(
-                gs,
-                level,
-                linedef_index,
-                tag,
-                DoorBehavior::OpenStay,
-                DoorSpeed::Normal,
-            );
-            true
-        }
-        DoorLockedRedOpen => {
-            if !check_locked_door_keys(gs, activator, LockedDoorColor::Red) {
-                return false;
-            }
-            door_by_tag_or_back(
-                gs,
-                level,
-                linedef_index,
-                tag,
-                DoorBehavior::OpenStay,
-                DoorSpeed::Normal,
-            );
-            true
-        }
-        DoorLockedYellowOpen => {
-            if !check_locked_door_keys(gs, activator, LockedDoorColor::Yellow) {
-                return false;
-            }
-            door_by_tag_or_back(
-                gs,
-                level,
-                linedef_index,
-                tag,
-                DoorBehavior::OpenStay,
-                DoorSpeed::Normal,
-            );
-            true
-        }
-        _ => false,
+    let (color, behavior) = match effect {
+        DoorLockedBlue => (LockedDoorColor::Blue, DoorBehavior::OpenWaitClose),
+        DoorLockedRed => (LockedDoorColor::Red, DoorBehavior::OpenWaitClose),
+        DoorLockedYellow => (LockedDoorColor::Yellow, DoorBehavior::OpenWaitClose),
+        DoorLockedBlueOpen => (LockedDoorColor::Blue, DoorBehavior::OpenStay),
+        DoorLockedRedOpen => (LockedDoorColor::Red, DoorBehavior::OpenStay),
+        DoorLockedYellowOpen => (LockedDoorColor::Yellow, DoorBehavior::OpenStay),
+        _ => return false,
+    };
+
+    if !check_locked_door_keys(gs, activator, color) {
+        return false;
     }
+
+    door_by_tag_or_back(gs, level, linedef_index, tag, behavior, DoorSpeed::Normal);
+    true
 }
 
 fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefEffect) -> bool {
@@ -854,6 +766,23 @@ fn queue_locked_door_feedback(gs: &mut GameState, activator: MobjHandle, color: 
 ///
 /// If `tag` is 0, use the back (left) sidedef's sector.
 /// If `tag` is non-zero, find all sectors with that tag.
+fn sectors_from_tag_or_back(level: &Level, linedef_index: usize, tag: u16) -> Vec<usize> {
+    if tag == 0 {
+        let Some(ld) = level.linedefs.get(linedef_index) else {
+            return Vec::new();
+        };
+        if ld.left_sidedef == doom_map::SIDEDEF_NONE {
+            return Vec::new();
+        }
+        let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+            return Vec::new();
+        };
+        vec![sd.sector as usize]
+    } else {
+        sectors_by_tag(level, tag)
+    }
+}
+
 fn door_by_tag_or_back(
     gs: &mut GameState,
     level: &mut Level,
@@ -862,31 +791,10 @@ fn door_by_tag_or_back(
     behavior: DoorBehavior,
     speed: DoorSpeed,
 ) {
-    if tag == 0 {
-        // Direct sector: use the back sidedef.
-        let ld = match level.linedefs.get(linedef_index) {
-            Some(ld) => ld,
-            None => return,
-        };
-        let left = ld.left_sidedef;
-        if left == doom_map::SIDEDEF_NONE {
-            return;
-        }
-        let sector_idx = match level.sidedefs.get(left as usize) {
-            Some(sd) => sd.sector as usize,
-            None => return,
-        };
+    for idx in sectors_from_tag_or_back(level, linedef_index, tag) {
         match speed {
-            DoorSpeed::Blazing => open_blazing_door_helper(gs, level, sector_idx, behavior),
-            DoorSpeed::Normal => open_door_helper(gs, level, sector_idx, behavior),
-        }
-    } else {
-        let indices = sectors_by_tag(level, tag);
-        for idx in indices {
-            match speed {
-                DoorSpeed::Blazing => open_blazing_door_helper(gs, level, idx, behavior),
-                DoorSpeed::Normal => open_door_helper(gs, level, idx, behavior),
-            }
+            DoorSpeed::Blazing => open_blazing_door_helper(gs, level, idx, behavior),
+            DoorSpeed::Normal => open_door_helper(gs, level, idx, behavior),
         }
     }
 }
@@ -899,31 +807,10 @@ fn close_door_by_tag_or_back(
     tag: u16,
     speed: DoorSpeed,
 ) {
-    if tag == 0 {
-        let ld = match level.linedefs.get(linedef_index) {
-            Some(ld) => ld,
-            None => return,
-        };
-        let left = ld.left_sidedef;
-        if left == doom_map::SIDEDEF_NONE {
-            return;
-        }
-        let sector_idx = match level.sidedefs.get(left as usize) {
-            Some(sd) => sd.sector as usize,
-            None => return,
-        };
-        if speed == DoorSpeed::Blazing {
-            close_blazing_door_helper(gs, level, sector_idx);
-        } else {
-            close_door_helper(gs, level, sector_idx);
-        }
-    } else {
-        let indices = sectors_by_tag(level, tag);
-        for idx in indices {
-            match speed {
-                DoorSpeed::Blazing => close_blazing_door_helper(gs, level, idx),
-                DoorSpeed::Normal => close_door_helper(gs, level, idx),
-            }
+    for idx in sectors_from_tag_or_back(level, linedef_index, tag) {
+        match speed {
+            DoorSpeed::Blazing => close_blazing_door_helper(gs, level, idx),
+            DoorSpeed::Normal => close_door_helper(gs, level, idx),
         }
     }
 }

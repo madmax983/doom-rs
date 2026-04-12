@@ -14,3 +14,6 @@
 **Flatten audio event dispatch**
 **Learning:** The background audio command loop contained deeply nested `if let` and `match` blocks (Pyramid of Doom), making the main event dispatch obscured by indentation.
 **Action:** Use guard clauses (`let Ok(x) = ... else { continue }`) to flatten deeply nested logic loops, significantly improving read flow without altering early-exit semantics.
+**[Extracted and flattened Linedef/Specials Dispatch logic]
+**Learning:** `crates/doom-game/src/linedef_dispatch.rs` and `crates/doom-game/src/specials.rs` contained significant amounts of boilerplate and repetitive iterator loops inside `match` statements across several special types (e.g. types 56, 65, 36, etc.). Iterating over `sectors` and doing `collect` on indices is slow and redundant. Using descriptive structs instead of arrays of unlabelled arguments provides much better documentation.
+**Action:** Consolidate tag-matching iterator chains using `filter` and `map` to perform the transformation succinctly and cleanly. Extract large repetitive structures into generic closure-based helpers when applicable. Replace deeply nested condition checks with early returns and guards to reduce nesting density. Always maintain zero-overhead logic.
