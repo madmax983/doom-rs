@@ -1,0 +1,194 @@
+crates/doom-net/src/lib.rs:13://! layout-compatible with `doom_game::TicCmd`.  doom-net depends only on
+crates/doom-renderer/src/automap.rs:16://!   [`doom_game::draw_automap_full`] to leverage game-side visibility tracking,
+crates/doom-renderer/src/automap.rs:23:use doom_game::AutomapCanvas;
+crates/doom-renderer/src/automap.rs:24:use doom_game::AutomapState;
+crates/doom-renderer/src/automap.rs:112:/// Implements [`doom_game::AutomapCanvas`] so that `doom_game::draw_automap_full`
+crates/doom-renderer/src/automap.rs:119:/// use doom_game::AutomapCanvas;
+crates/doom-renderer/src/automap.rs:200:    let state = doom_game::AutomapState {
+crates/doom-renderer/src/automap.rs:214:    doom_game::draw_automap_full(
+crates/doom-renderer/src/automap.rs:238:    doom_game::draw_grid(&mut canvas, center_x, center_y, zoom);
+crates/doom-renderer/src/automap.rs:682:    use doom_game::AutomapState;
+crates/doom-renderer/src/automap.rs:798:    /// Implements [`doom_game::AutomapCanvas`] so that `doom_game::draw_automap_full`
+crates/doom-renderer/src/automap.rs:848:    /// This delegates to [`doom_game::draw_automap_full`] through the
+crates/doom-renderer/src/automap.rs:872:        let state = doom_game::AutomapState {
+crates/doom-renderer/src/automap.rs:886:        doom_game::draw_automap_full(
+crates/doom-renderer/src/automap.rs:910:        doom_game::draw_grid(&mut canvas, center_x, center_y, zoom);
+crates/doom-renderer/src/automap.rs:1326:        use doom_game::AutomapState;
+crates/doom-renderer/src/automap.rs:1908:                doom_game::draw_line(&mut canvas, 10, 10, 50, 10, 123);
+crates/doom-renderer/src/automap.rs:2006:                .filter(|&&b| b == doom_game::automap::COLOR_UNSEEN)
+crates/doom-renderer/src/automap.rs:2132:            // Zero zoom should be a no-op (doom_game::draw_grid bails on zoom <= 0).
+crates/doom-renderer/src/automap.rs:2277:                .filter(|&&b| b == doom_game::automap::COLOR_PLAYER_MARKER)
+crates/doom-renderer/src/automap.rs:2384:            // Grid uses doom_game::COLOR_GRID.
+crates/doom-renderer/src/automap.rs:2388:                .filter(|&&b| b == doom_game::automap::COLOR_GRID)
+crates/doom-renderer/src/intermission.rs:9:use doom_game::IntermissionStats;
+crates/doom-renderer/src/menu_render.rs:11:use doom_game::menu::{GameMenu, MenuPage, TitlePhase, TitleScreen};
+crates/doom-renderer/src/sprite_lookup.rs:6://! This module bridges the game-logic state table (`doom_game::states::STATES`)
+crates/doom-renderer/src/sprite_lookup.rs:11:use doom_game::mobj::MobjStateEntry;
+crates/doom-renderer/src/sprite_lookup.rs:12:use doom_game::states::sprite_names;
+crates/doom-renderer/src/sprite_lookup.rs:198:    use doom_game::mobj::flags::MF_SHADOW;
+crates/doom-renderer/src/sprite_lookup.rs:288:    use doom_game::mobj::MobjStateEntry;
+crates/doom-renderer/src/sprite_lookup.rs:289:    use doom_game::states::{STATES, ids, sprite_names};
+crates/doom-renderer/src/sprite_lookup.rs:617:        let flag = render_flag_from_state(0x80, doom_game::mobj::flags::MF_SHADOW);
+crates/doom-renderer/src/lib.rs:45:pub use doom_game::AutomapState;
+crates/doom-renderer/src/render.rs:3215:        use doom_game::states::sprite_names;
+crates/doom-renderer/src/render.rs:3288:        use doom_game::states::sprite_names;
+crates/doom-renderer/src/statusbar.rs:21:use doom_game::face::{FaceState, face_patch_name};
+crates/doom-renderer/src/statusbar.rs:22:use doom_game::player::{
+crates/doom-renderer/src/statusbar.rs:1228:    use doom_game::player::PlayerState;
+crates/doom-renderer/src/sprite.rs:783:    use doom_game::states::sprite_names;
+crates/doom-renderer/src/sprite.rs:2669:            sprite: doom_game::states::sprite_names::SPR_NONE,
+crates/doom-renderer/src/sprite.rs:2737:            sprite: doom_game::states::sprite_names::SPR_NONE,
+crates/doom-renderer/src/sprite.rs:2852:            sprite: doom_game::states::sprite_names::SPR_NONE,
+crates/doom-renderer/src/sprite.rs:2915:            sprite: doom_game::states::sprite_names::SPR_NONE,
+crates/doom-renderer/src/sprite.rs:2989:            sprite: doom_game::states::sprite_names::SPR_NONE,
+crates/doom-renderer/src/sprite.rs:3047:            sprite: doom_game::states::sprite_names::SPR_NONE,
+crates/doom-renderer/src/sprite.rs:3118:            sprite: doom_game::states::sprite_names::SPR_NONE,
+crates/doom-renderer/src/sprite.rs:3195:            sprite: doom_game::states::sprite_names::SPR_NONE,
+crates/doom-app/src/main.rs:39:use doom_game::FaceState;
+crates/doom-app/src/main.rs:40:use doom_game::LockedDoorColor;
+crates/doom-app/src/main.rs:41:use doom_game::cheats as game_cheats;
+crates/doom-app/src/main.rs:42:use doom_game::dehacked::DehPatch;
+crates/doom-app/src/main.rs:43:use doom_game::player::WeaponType;
+crates/doom-app/src/main.rs:44:use doom_game::{
+crates/doom-app/src/main.rs:48:use doom_game::{MOBJINFO, STATES};
+crates/doom-app/src/main.rs:284:    menu: doom_game::menu::GameMenu,
+crates/doom-app/src/main.rs:389:        let mut menu = doom_game::menu::GameMenu::new(false); // false = Doom 1 mode
+crates/doom-app/src/main.rs:455:            self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+crates/doom-app/src/main.rs:478:    fn start_intermission_music(&self, next_map: doom_game::MapId) {
+crates/doom-app/src/main.rs:499:    fn map_id_from_level_name(level_name: &str) -> doom_game::MapId {
+crates/doom-app/src/main.rs:500:        doom_game::MapId::from_name(level_name).unwrap_or(doom_game::MapId::new(1, 1))
+crates/doom-app/src/main.rs:514:        self.menu = doom_game::menu::GameMenu::new(false);
+crates/doom-app/src/main.rs:536:    fn load_map_after_intermission(&mut self, map_id: doom_game::MapId, carry_player_state: bool) {
+crates/doom-app/src/main.rs:571:            doom_game::weapons::setup_psprites(&mut player);
+crates/doom-app/src/main.rs:606:        use doom_game::player::psprite_slots;
+crates/doom-app/src/main.rs:610:        if weapon == doom_game::StateNum::NULL && flash == doom_game::StateNum::NULL {
+crates/doom-app/src/main.rs:611:            doom_game::weapons::setup_psprites(&mut self.gs.player);
+crates/doom-app/src/main.rs:616:        use doom_game::player::psprite_slots;
+crates/doom-app/src/main.rs:625:        self.weapon_anim.current.flash_active = flash_psprite.state != doom_game::StateNum::NULL;
+crates/doom-app/src/main.rs:669:    fn handle_sound_events(&mut self, events: impl IntoIterator<Item = doom_game::SoundRequest>) {
+crates/doom-app/src/main.rs:670:        use doom_game::SoundRequest;
+crates/doom-app/src/main.rs:777:        use doom_game::player::{AmmoType, WEAPON_AMMO};
+crates/doom-app/src/main.rs:816:                if mo.flags & doom_game::mobj::flags::MF_COUNTKILL == 0 {
+crates/doom-app/src/main.rs:867:                if mo.flags & doom_game::mobj::flags::MF_SCREAMED != 0 {
+crates/doom-app/src/main.rs:869:                    mo.flags &= !doom_game::mobj::flags::MF_SCREAMED;
+crates/doom-app/src/main.rs:914:                        doom_game::menu::MenuResult::StartGame { episode: _, skill } => {
+crates/doom-app/src/main.rs:935:                        doom_game::menu::MenuResult::Quit => {
+crates/doom-app/src/main.rs:1008:                        doom_game::menu::MenuResult::Quit => {
+crates/doom-app/src/main.rs:1013:                        doom_game::menu::MenuResult::LoadGame(slot) => {
+crates/doom-app/src/main.rs:1038:                        doom_game::menu::MenuResult::SaveGame(slot) => {
+crates/doom-app/src/main.rs:1240:                    self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+crates/doom-app/src/main.rs:1397:                        let state_entry = doom_game::STATES.get(mo.state.0 as usize);
+crates/doom-app/src/main.rs:1400:                            .unwrap_or((doom_game::states::sprite_names::SPR_NONE, 0));
+crates/doom-app/src/main.rs:1403:                        let fallback_prefix = if sprite == doom_game::states::sprite_names::SPR_NONE
+crates/doom-app/src/main.rs:1410:                        if sprite == doom_game::states::sprite_names::SPR_NONE
+crates/doom-app/src/main.rs:1530:        use doom_game::player::{
+crates/doom-app/src/main.rs:1534:        use doom_game::{AmmoType, WEAPON_AMMO};
+crates/doom-app/src/main.rs:1548:            doom_game::WeaponType::Fist => "FIST",
+crates/doom-app/src/main.rs:1549:            doom_game::WeaponType::Pistol => "PIST",
+crates/doom-app/src/main.rs:1550:            doom_game::WeaponType::Shotgun => "SG",
+crates/doom-app/src/main.rs:1551:            doom_game::WeaponType::Chaingun => "CG",
+crates/doom-app/src/main.rs:1552:            doom_game::WeaponType::RocketLauncher => "RL",
+crates/doom-app/src/main.rs:1553:            doom_game::WeaponType::PlasmaRifle => "PLAS",
+crates/doom-app/src/main.rs:1554:            doom_game::WeaponType::Bfg => "BFG",
+crates/doom-app/src/main.rs:1555:            doom_game::WeaponType::Chainsaw => "SAW",
+crates/doom-app/src/main.rs:1556:            doom_game::WeaponType::SuperShotgun => "SSG",
+crates/doom-app/src/main.rs:1795:fn psprite_state_is_fullbright(state: doom_game::StateNum) -> bool {
+crates/doom-app/src/main.rs:1796:    if state == doom_game::StateNum::NULL {
+crates/doom-app/src/main.rs:1806:fn psprite_patch_name(state: doom_game::StateNum) -> Option<[u8; 8]> {
+crates/doom-app/src/main.rs:1807:    if state == doom_game::StateNum::NULL {
+crates/doom-app/src/main.rs:1812:    if entry.sprite == doom_game::sprite_names::SPR_NONE {
+crates/doom-app/src/main.rs:1817:    let sprite_name = *doom_game::sprite_names::SPRITE_NAMES.get(sprite_index)?;
+crates/doom-app/src/main.rs:1830:fn psprite_transition_flags(weapon: WeaponType, state: doom_game::StateNum) -> (bool, bool) {
+crates/doom-app/src/main.rs:1831:    use doom_game::states::ids;
+crates/doom-app/src/main.rs:1846:        state == doom_game::StateNum(up),
+crates/doom-app/src/main.rs:1847:        state == doom_game::StateNum(down),
+crates/doom-app/src/main.rs:2453:        doom_game::spawn_level_things(&mut gs, &level, Skill::Medium, false);
+crates/doom-app/src/main.rs:2983:    use doom_game::cheats as game_cheats;
+crates/doom-app/src/main.rs:2984:    use doom_game::{GameState, Mobj, PlayerState, flags};
+crates/doom-app/src/main.rs:3180:        game.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] = 1;
+crates/doom-app/src/main.rs:3205:        game.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] = 1;
+crates/doom-app/src/main.rs:3802:        imp.state = doom_game::MOBJINFO[MobjKind::Imp as usize].spawn_state;
+crates/doom-app/src/main.rs:3968:        game.handle_sound_events([doom_game::SoundRequest::PlayerUseLockedDoor(
+crates/doom-app/src/main.rs:3969:            doom_game::LockedDoorColor::Blue,
+crates/doom-app/src/main.rs:4693:        use doom_game::dehacked::DehPatch;
+crates/doom-app/src/main.rs:4949:        game.phase_controller = doom_game::GamePhaseController::new(doom_game::MapId::new(1, 1)); // Ensure phase is Playing
+crates/doom-app/src/main.rs:4957:            .push(doom_game::SoundRequest::PlayerWeaponFire(
+crates/doom-app/src/main.rs:4958:                doom_game::player::WeaponType::Pistol,
+crates/doom-app/src/demo_mode.rs:273:    use doom_game::{GameState, Mobj, PlayerState, flags};
+crates/doom-app/src/savegame.rs:10://! By leveraging the engine's native binary format (`doom_game::savegame`),
+crates/doom-app/src/savegame.rs:23:use doom_game::{
+crates/doom-app/src/savegame.rs:68:impl From<doom_game::savegame::SaveError> for SaveError {
+crates/doom-app/src/savegame.rs:69:    fn from(err: doom_game::savegame::SaveError) -> Self {
+crates/doom-app/src/savegame.rs:71:            doom_game::savegame::SaveError::TooShort => SaveError::Truncated,
+crates/doom-app/src/savegame.rs:72:            doom_game::savegame::SaveError::BadMagic => SaveError::BadMagic,
+crates/doom-app/src/savegame.rs:73:            doom_game::savegame::SaveError::BadVersion => SaveError::BadVersion,
+crates/doom-app/src/savegame.rs:74:            doom_game::savegame::SaveError::Truncated => SaveError::Truncated,
+crates/doom-app/src/savegame.rs:75:            doom_game::savegame::SaveError::UnsupportedVanillaDsg => {
+crates/doom-app/src/savegame.rs:104:/// # use doom_game::GameState;
+crates/doom-app/src/savegame.rs:194:) -> Result<(doom_game::savegame::SaveHeader, SaveGame), SaveError> {
+crates/doom-app/src/savegame.rs:202:) -> Result<(doom_game::savegame::SaveHeader, SaveGame), SaveError> {
+crates/doom-app/src/savegame.rs:231:/// # use doom_game::GameState;
+crates/doom-app/src/savegame.rs:260:    use doom_game::savegame::{SAVE_MAGIC, SaveFormat};
+crates/doom-app/src/savegame.rs:261:    use doom_game::{Mobj, PlayerState};
+crates/doom-app/src/savegame.rs:388:            doom_game::savegame::SAVE_MAGIC,
+crates/doom-app/src/cheats.rs:6:use doom_game::{GameState, flags};
+crates/doom-app/src/cheats.rs:192:            use doom_game::player::powers;
+crates/doom-app/src/cheats.rs:197:            use doom_game::player::powers;
+crates/doom-app/src/cheats.rs:202:            use doom_game::player::powers;
+crates/doom-app/src/cheats.rs:207:            use doom_game::player::powers;
+crates/doom-app/src/cheats.rs:212:            use doom_game::player::powers;
+crates/doom-app/src/cheats.rs:217:            use doom_game::player::powers;
+crates/doom-app/src/cheats.rs:288:        use doom_game::{Mobj, PlayerState};
+crates/doom-app/src/cogmind/effects.rs:8:use doom_game::GameState;
+crates/doom-app/src/cogmind/effects.rs:9:use doom_game::mobj::MobjHandle;
+crates/doom-app/src/cogmind/effects.rs:252:    pub fn spawn_sound_ripples(&mut self, events: &[doom_game::SoundRequest], gs: &GameState) {
+crates/doom-app/src/cogmind/effects.rs:253:        use doom_game::SoundRequest;
+crates/doom-app/src/cogmind/render.rs:7:use doom_game::GameState;
+crates/doom-app/src/cogmind/render.rs:171:    /// # use doom_game::GameState;
+crates/doom-app/src/cogmind/render.rs:469:    use doom_game::mobj::flags;
+crates/doom-app/src/cogmind/render.rs:470:    use doom_game::player::PlayerState;
+crates/doom-app/src/cogmind/render.rs:471:    use doom_game::{GameState, Mobj};
+crates/doom-app/src/cogmind/mod.rs:12://! 2. **Phase 2: Entity Overlay** - Active [`doom_game::Mobj`] entities are mapped
+crates/doom-app/src/cogmind/mod.rs:29://! use doom_game::GameState;
+crates/doom-app/src/audio_system.rs:43:    PlaySfx(u16, SfxPriority, f32, f32, Option<doom_game::MobjHandle>),
+crates/doom-app/src/audio_system.rs:207:        origin: Option<doom_game::MobjHandle>,
+crates/doom-app/src/audio_system.rs:275:    let mut origin_channels = std::collections::HashMap::<doom_game::MobjHandle, usize>::new();
+crates/doom-app/src/audio_system.rs:366:pub fn weapon_fire_sfx_lump(weapon: doom_game::WeaponType) -> &'static str {
+crates/doom-app/src/audio_system.rs:367:    use doom_game::WeaponType;
+crates/doom-app/src/audio_system.rs:380:pub fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, SfxPriority)> {
+crates/doom-app/src/audio_system.rs:382:        doom_game::SoundRequest::MonsterWake(kind, _, _, _) => {
+crates/doom-app/src/audio_system.rs:385:        doom_game::SoundRequest::MonsterAttack(kind, _, _, _) => {
+crates/doom-app/src/audio_system.rs:388:        doom_game::SoundRequest::MonsterDie(kind, _, _, _) => {
+crates/doom-app/src/audio_system.rs:391:        doom_game::SoundRequest::PlayerWeaponFire(weapon) => {
+crates/doom-app/src/audio_system.rs:394:        doom_game::SoundRequest::PlayerSuperShotgunOpen => Some(("DSDBOPN", SfxPriority::Weapon)),
+crates/doom-app/src/audio_system.rs:395:        doom_game::SoundRequest::PlayerSuperShotgunLoad => Some(("DSDBLOAD", SfxPriority::Weapon)),
+crates/doom-app/src/audio_system.rs:396:        doom_game::SoundRequest::PlayerSuperShotgunClose => Some(("DSDBCLS", SfxPriority::Weapon)),
+crates/doom-app/src/audio_system.rs:397:        doom_game::SoundRequest::PlayerDie => Some(("DSPLDETH", SfxPriority::Weapon)),
+crates/doom-app/src/audio_system.rs:398:        doom_game::SoundRequest::PlayerUseFail => Some(("DSNOWAY", SfxPriority::High)),
+crates/doom-app/src/audio_system.rs:399:        doom_game::SoundRequest::PlayerUseLockedDoor(_) => Some(("DSOOF", SfxPriority::High)),
+crates/doom-app/src/audio_system.rs:525:        doom_game::MapId::from_name(map)?.map_name()
+crates/doom-app/src/audio_system.rs:641:        let origin = doom_game::MobjHandle {
+crates/doom-app/src/audio_system.rs:665:                Some(doom_game::MobjHandle {
+crates/doom-app/src/audio_system.rs:675:                Some(doom_game::MobjHandle {
+crates/doom-app/src/audio_system.rs:717:            weapon_fire_sfx_lump(doom_game::WeaponType::Pistol),
+crates/doom-app/src/audio_system.rs:724:        assert_eq!(weapon_fire_sfx_lump(doom_game::WeaponType::Bfg), "DSBFG");
+crates/doom-app/src/audio_system.rs:730:            weapon_fire_sfx_lump(doom_game::WeaponType::Chaingun),
+crates/doom-app/src/audio_system.rs:731:            weapon_fire_sfx_lump(doom_game::WeaponType::Pistol)
+crates/doom-app/src/audio_system.rs:738:            sound_request_sfx(doom_game::SoundRequest::PlayerWeaponFire(
+crates/doom-app/src/audio_system.rs:739:                doom_game::WeaponType::Shotgun
+crates/doom-app/src/audio_system.rs:748:            sound_request_sfx(doom_game::SoundRequest::PlayerSuperShotgunOpen),
+crates/doom-app/src/audio_system.rs:752:            sound_request_sfx(doom_game::SoundRequest::PlayerSuperShotgunLoad),
+crates/doom-app/src/audio_system.rs:756:            sound_request_sfx(doom_game::SoundRequest::PlayerSuperShotgunClose),
+crates/doom-app/src/audio_system.rs:765:            sound_request_sfx(doom_game::SoundRequest::PlayerUseFail),
+crates/doom-app/src/audio_system.rs:774:            sound_request_sfx(doom_game::SoundRequest::PlayerUseLockedDoor(
+crates/doom-app/src/audio_system.rs:775:                doom_game::LockedDoorColor::Blue,
+crates/doom-game/src/automap.rs:127:    /// use doom_game::AutomapState;
+crates/doom-game/src/automap.rs:143:    /// use doom_game::AutomapState;
+crates/doom-game/src/dehacked.rs:8://! use doom_game::dehacked::DehPatch;
+crates/doom-game/src/actions.rs:208:/// use doom_game::actions::{dispatch_action, ACTION_NONE};
+crates/doom-game/src/actions.rs:209:/// use doom_game::state::GameState;
+crates/doom-game/src/actions.rs:210:/// use doom_game::mobj::MobjHandle;
+crates/doom-game/src/mobj.rs:306:/// use doom_game::mobj::{MobjSlab, Mobj, MobjHandle};
+crates/doom-game/tests/test_savegame_panic.rs:1:use doom_game::{GameState, savegame::*};
+crates/doom-game/tests/test_savegame_panic.rs:7:    let mobj = doom_game::Mobj::new(
+crates/doom-game/tests/test_savegame_panic.rs:8:        doom_game::MobjKind::Imp,

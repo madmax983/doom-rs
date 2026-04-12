@@ -12,44 +12,45 @@
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
 pub mod actions;
-pub mod automap;
+pub(crate) mod automap;
 pub mod cheats;
 pub mod combat;
 pub mod dehacked;
 pub mod face;
-pub mod intermission;
+pub(crate) mod intermission;
 pub mod linedef_dispatch;
 pub mod menu;
 pub mod mobj;
 pub mod mobjinfo;
-pub mod movement;
-pub mod phase;
+pub(crate) mod movement;
+pub(crate) mod phase;
 pub mod pickups;
 pub mod player;
-pub mod projectile;
-pub mod random;
+pub(crate) mod projectile;
+pub(crate) mod random;
 pub mod savegame;
 mod savegame_vanilla;
 pub mod sight;
 pub mod snapshot;
-pub mod sound;
+pub(crate) mod sound;
 pub mod spawn;
 pub mod specials;
 pub mod state;
 pub mod states;
 #[cfg(feature = "style_meter")]
 pub mod style;
-pub mod switch;
-pub mod tic;
-pub mod trace;
-pub mod weapon_fire;
+pub(crate) mod switch;
+pub(crate) mod tic;
+pub(crate) mod trace;
+pub(crate) mod weapon_fire;
 pub mod weapons;
 
 pub use actions::{Action, dispatch_action, p_move, p_new_chase_dir};
 pub use automap::{
-    AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
-    draw_grid, draw_line, draw_thing_marker, init_seen_lines, line_color, mark_lines_seen,
-    mark_subsector_lines_seen, thing_marker_color, world_to_screen,
+    AutomapCanvas, AutomapState, COLOR_GRID, COLOR_PLAYER_MARKER, COLOR_UNSEEN, TestCanvas,
+    ThingCategory, classify_thing, draw_automap_full, draw_grid, draw_line, draw_thing_marker,
+    init_seen_lines, line_color, mark_lines_seen, mark_subsector_lines_seen, thing_marker_color,
+    world_to_screen,
 };
 pub use cheats::{CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
