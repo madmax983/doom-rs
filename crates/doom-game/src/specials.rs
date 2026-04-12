@@ -1589,11 +1589,13 @@ pub fn ev_ceiling_crush_and_raise(gs: &mut GameState, level: &Level, tag: u16, s
         gs,
         level,
         tag,
-        speed,
-        10,
-        false,
-        false,
-        CeilingType::CrushAndRaise,
+        CrusherParams {
+            speed,
+            crush_damage: 10,
+            silent: false,
+            remove_when_done: false,
+            ceiling_type: CeilingType::CrushAndRaise,
+        },
     );
 }
 
@@ -1605,11 +1607,13 @@ pub fn ev_ceiling_lower_and_crush(gs: &mut GameState, level: &Level, tag: u16, s
         gs,
         level,
         tag,
-        speed,
-        0,
-        false,
-        true,
-        CeilingType::LowerAndCrush,
+        CrusherParams {
+            speed,
+            crush_damage: 0,
+            silent: false,
+            remove_when_done: true,
+            ceiling_type: CeilingType::LowerAndCrush,
+        },
     );
 }
 
@@ -1621,11 +1625,13 @@ pub fn ev_ceiling_lower_to_floor(gs: &mut GameState, level: &Level, tag: u16, sp
         gs,
         level,
         tag,
-        speed,
-        0,
-        false,
-        true,
-        CeilingType::LowerToFloor,
+        CrusherParams {
+            speed,
+            crush_damage: 0,
+            silent: false,
+            remove_when_done: true,
+            ceiling_type: CeilingType::LowerToFloor,
+        },
     );
 }
 
@@ -1644,11 +1650,13 @@ pub fn ev_ceiling_crush_raise_fast(gs: &mut GameState, level: &Level, tag: u16, 
         gs,
         level,
         tag,
-        speed,
-        10,
-        false,
-        false,
-        CeilingType::FastCrushAndRaise,
+        CrusherParams {
+            speed,
+            crush_damage: 10,
+            silent: false,
+            remove_when_done: false,
+            ceiling_type: CeilingType::FastCrushAndRaise,
+        },
     );
 }
 
@@ -1693,16 +1701,15 @@ pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) 
 // ---------------------------------------------------------------------------
 
 /// Activate a crusher on all sectors matching `tag`.
-fn activate_crusher(
-    gs: &mut GameState,
-    level: &Level,
-    tag: u16,
-    speed: i16,
-    crush_damage: i32,
-    silent: bool,
-    remove_when_done: bool,
-    ceiling_type: CeilingType,
-) {
+pub struct CrusherParams {
+    pub speed: i16,
+    pub crush_damage: i32,
+    pub silent: bool,
+    pub remove_when_done: bool,
+    pub ceiling_type: CeilingType,
+}
+
+fn activate_crusher(gs: &mut GameState, level: &Level, tag: u16, params: CrusherParams) {
     for idx in level
         .sectors
         .iter()
@@ -1720,7 +1727,7 @@ fn activate_crusher(
             continue;
         }
         let sector = &level.sectors[idx];
-        let bottom = match ceiling_type {
+        let bottom = match params.ceiling_type {
             CeilingType::LowerToFloor => sector.floor_height,
             _ => sector.floor_height + 8,
         };
@@ -1728,14 +1735,14 @@ fn activate_crusher(
             sector_index: idx,
             top_height: sector.ceil_height,
             bottom_height: bottom,
-            speed,
-            normal_speed: speed,
-            crush_damage,
+            speed: params.speed,
+            normal_speed: params.speed,
+            crush_damage: params.crush_damage,
             direction: MoveDirection::Down,
-            silent,
-            remove_when_done,
+            silent: params.silent,
+            remove_when_done: params.remove_when_done,
             tag,
-            ceiling_type,
+            ceiling_type: params.ceiling_type,
         });
     }
 }
@@ -2663,11 +2670,13 @@ fn activate_ceilings(
                 gs,
                 level,
                 tag,
-                2,
-                10,
-                false,
-                true,
-                CeilingType::LowerAndCrush,
+                CrusherParams {
+                    speed: 2,
+                    crush_damage: 10,
+                    silent: false,
+                    remove_when_done: true,
+                    ceiling_type: CeilingType::LowerAndCrush,
+                },
             );
         }
 
@@ -2698,7 +2707,18 @@ fn activate_ceilings(
         // Type 141: W1 Ceiling crush and raise (silent, perpetual).
         141 => {
             let tag = level.linedefs[linedef_idx].tag;
-            activate_crusher(gs, level, tag, 2, 10, true, false, CeilingType::SilentCrush);
+            activate_crusher(
+                gs,
+                level,
+                tag,
+                CrusherParams {
+                    speed: 2,
+                    crush_damage: 10,
+                    silent: true,
+                    remove_when_done: false,
+                    ceiling_type: CeilingType::SilentCrush,
+                },
+            );
         }
         _ => {}
     }
@@ -7144,11 +7164,13 @@ mod tests {
             &mut gs,
             &level3,
             2,
-            4,
-            10,
-            false,
-            false,
-            CeilingType::CrushAndRaise,
+            CrusherParams {
+                speed: 4,
+                crush_damage: 10,
+                silent: false,
+                remove_when_done: false,
+                ceiling_type: CeilingType::CrushAndRaise,
+            },
         );
         assert_eq!(gs.movers.active_ceilings[0].speed, 4);
         assert_eq!(gs.movers.active_ceilings[0].normal_speed, 4);
@@ -7528,11 +7550,13 @@ mod tests {
             &mut gs,
             &level,
             2,
-            4,
-            10,
-            true,
-            false,
-            CeilingType::SilentCrush,
+            CrusherParams {
+                speed: 4,
+                crush_damage: 10,
+                silent: true,
+                remove_when_done: false,
+                ceiling_type: CeilingType::SilentCrush,
+            },
         );
         assert_eq!(gs.movers.active_ceilings[0].speed, 4);
 
@@ -7573,11 +7597,13 @@ mod tests {
             &mut gs,
             &level,
             2,
-            4,
-            10,
-            false,
-            false,
-            CeilingType::FastCrushAndRaise,
+            CrusherParams {
+                speed: 4,
+                crush_damage: 10,
+                silent: false,
+                remove_when_done: false,
+                ceiling_type: CeilingType::FastCrushAndRaise,
+            },
         );
         assert_eq!(gs.movers.active_ceilings[0].speed, 4);
 
