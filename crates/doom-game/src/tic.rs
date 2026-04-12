@@ -61,7 +61,7 @@ pub const MAXMOVE: Fixed16_16 = Fixed16_16(15 << 16);
 /// Port of Doom's `P_SetMobjState`:
 /// - Sets `mobj.state = new_state`
 /// - Sets `mobj.tics` from `STATES[new_state].tics`
-/// - Fires the action function on state *entry* (if `action != ACTION_NONE`)
+/// - Fires the action function on state *entry* (if `action != Action::NoAction`)
 /// - Returns `false` if `new_state` is `S_NULL` (mobj should be removed)
 ///
 /// The caller is responsible for removing the mobj from the slab when this
@@ -719,7 +719,7 @@ mod tests {
         let trooper = make_trooper(StateNum::NULL, -1);
         let handle = gs.mobjslab.alloc(trooper);
 
-        // S_POSS_DIE1 has ACTION_NONE — should just set state.
+        // S_POSS_DIE1 has Action::NoAction — should just set state.
         let result = p_set_mobj_state(&mut gs, handle, StateNum(ids::S_POSS_DIE1), None);
         assert!(result);
 
@@ -1328,7 +1328,7 @@ mod tests {
     #[test]
     fn state_transition_atk3_to_run1() {
         let mut gs = make_game_state();
-        // S_POSS_ATK3: 4 tics, next = S_POSS_RUN1, action = ACTION_NONE.
+        // S_POSS_ATK3: 4 tics, next = S_POSS_RUN1, action = Action::NoAction.
         // But S_POSS_RUN1 entry fires A_Chase, which needs a target.
         let trooper = make_trooper(StateNum(ids::S_POSS_ATK3), 1);
         let handle = gs.mobjslab.alloc(trooper);
@@ -2123,7 +2123,7 @@ mod tests {
         missile.momx = Fixed16_16::from_int(3);
         missile.momy = Fixed16_16::from_int(4);
         missile.momz = Fixed16_16::ZERO;
-        missile.state = StateNum(ids::S_POSS_DIE1); // 8 tics, ACTION_NONE
+        missile.state = StateNum(ids::S_POSS_DIE1); // 8 tics, Action::NoAction
         missile.tics = 5;
         missile.health = 1;
         let missile_handle = gs.mobjslab.alloc(missile);
