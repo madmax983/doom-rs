@@ -11,6 +11,7 @@
 //! - [`recorder`] — [`DemoRecorder`]: accumulates tics and writes an LMP file
 //! - [`player`] — [`DemoPlayer`]: parses an LMP file and replays tics
 
+pub mod analyzer;
 pub mod header;
 pub mod player;
 pub mod recorder;

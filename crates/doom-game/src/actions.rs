@@ -205,15 +205,15 @@ fn get_alive_target_with_pos(
 ///
 /// # Examples
 /// ```
-/// use doom_game::actions::{dispatch_action, ACTION_NONE};
+/// use doom_game::actions::{dispatch_action};
 /// use doom_game::state::GameState;
 /// use doom_game::mobj::MobjHandle;
 ///
 /// let mut gs = GameState::new("E1M1");
 /// // A dummy handle for illustration; in a real game, this points to a live actor.
 /// let handle = MobjHandle { index: 0, generation: 0 };
-/// // Action 0 is ACTION_NONE, which is a no-op.
-/// dispatch_action(&mut gs, handle, ACTION_NONE, None);
+/// // Action 0 is 0, which is a no-op.
+/// dispatch_action(&mut gs, handle, 0, None);
 /// ```
 pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level: Option<&Level>) {
     if let Some(a) = Action::from_repr(action) {
@@ -4076,7 +4076,7 @@ mod tests {
     #[test]
     fn action_constants_are_unique() {
         let constants = [
-            Action::NoAction as u8,
+            0,
             Action::Look as u8,
             Action::Chase as u8,
             Action::PosAttack as u8,

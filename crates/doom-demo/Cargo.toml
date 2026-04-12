@@ -7,6 +7,8 @@ edition.workspace = true
 doom-types = { workspace = true }
 doom-game  = { workspace = true }
 thiserror  = { workspace = true }
+serde      = { workspace = true }
+serde_json = "1"
 
 [lints]
 workspace = true

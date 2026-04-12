@@ -229,6 +229,10 @@ struct Args {
     #[arg(long)]
     analyze: bool,
 
+    /// Analyze a demo file and print statistics as JSON.
+    #[arg(long)]
+    analyze_demo: Option<std::path::PathBuf>,
+
     /// Print the map statistics as raw JSON. Only valid when combined with --map-stats.
     #[arg(long)]
     json: bool,
@@ -2261,6 +2265,14 @@ fn run_doom() -> Result<()> {
         return Ok(());
     }
 
+    if let Some(demo_path) = args.analyze_demo {
+        let player = load_demo_player(&demo_path)?;
+        let stats = doom_demo::analyzer::DemoAnalyzer::analyze(player);
+        let json = serde_json::to_string_pretty(&stats)?;
+        println!("{}", json);
+        return Ok(());
+    }
+
     if args.analyze {
         let graph = doom_map::SectorGraph::build(&level);
         let analyzer = doom_map::MapAnalyzer::new(&graph);
@@ -2399,7 +2411,11 @@ fn run_doom() -> Result<()> {
             if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
                 let graph = doom_map::SectorGraph::build(&level);
                 if let Some(path) = graph.shortest_path(start, end) {
-                    let path_str = path.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ➔ ");
+                    let path_str = path
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ➔ ");
                     if is_tty {
                         println!(
                             "{} {} {}",
@@ -2415,7 +2431,9 @@ fn run_doom() -> Result<()> {
                         println!(
                             "{} {}",
                             "❌".red(),
-                            format!("No path found between sector {} and sector {}", start, end).red().bold()
+                            format!("No path found between sector {} and sector {}", start, end)
+                                .red()
+                                .bold()
                         );
                     } else {
                         println!("No path found between sector {} and sector {}", start, end);
@@ -2426,7 +2444,9 @@ fn run_doom() -> Result<()> {
                     println!(
                         "{} {}",
                         "❌".red(),
-                        "Invalid sector indices. Please provide two integers separated by a comma.".red().bold()
+                        "Invalid sector indices. Please provide two integers separated by a comma."
+                            .red()
+                            .bold()
                     );
                 } else {
                     println!(
@@ -2439,7 +2459,9 @@ fn run_doom() -> Result<()> {
                 println!(
                     "{} {}",
                     "❌".red(),
-                    "Invalid format. Please use START,END (e.g. 0,5).".red().bold()
+                    "Invalid format. Please use START,END (e.g. 0,5)."
+                        .red()
+                        .bold()
                 );
             } else {
                 println!("Invalid format. Please use START,END (e.g. 0,5).");
@@ -4980,6 +5002,26 @@ mod tests {
         assert!(args.is_ok(), "args with --pathfind must parse successfully");
         let args = args.expect("args parse must succeed");
         assert_eq!(args.pathfind.expect("pathfind must exist"), "0,5");
+    }
+
+    #[test]
+    fn cli_args_parse_analyze_demo() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--analyze-demo",
+            "demo.lmp",
+        ]);
+        assert!(
+            args.is_ok(),
+            "args with --analyze-demo must parse successfully"
+        );
+        let args = args.expect("args parse must succeed");
+        assert_eq!(
+            args.analyze_demo.expect("analyze_demo must exist"),
+            std::path::PathBuf::from("demo.lmp")
+        );
     }
 
     #[test]
