@@ -104,6 +104,42 @@ impl BspChild {
 }
 
 /// A validated BSP tree — holds references to the node and subsector arrays.
+///
+/// The BSP (Binary Space Partitioning) tree is the core spatial structure in a Doom map.
+/// It partitions the map into convex regions called subsectors. This struct is a safe,
+/// validated wrapper around the raw `NODES` and `SSECTORS` arrays, ensuring that
+/// all child pointers are in bounds and that the leaf-count invariant holds.
+///
+/// # Examples
+/// ```
+/// use doom_map::lumps::{Node, NodeBBox, Ssector};
+/// use doom_map::bsp::{BspTree, BspError};
+///
+/// // Create a simple mock level with 1 node and 2 subsectors.
+/// let ssectors = vec![
+///     Ssector { seg_count: 1, first_seg: 0 },
+///     Ssector { seg_count: 1, first_seg: 1 },
+/// ];
+/// let nodes = vec![
+///     Node {
+///         x: 0, y: 0, dx: 0, dy: 64,
+///         right_bbox: NodeBBox { ymax: 64, ymin: 0, xmin: 0, xmax: 64 },
+///         left_bbox: NodeBBox { ymax: 64, ymin: 0, xmin: -64, xmax: 0 },
+///         right_child: doom_map::lumps::NODE_SUBSECTOR_BIT | 0,
+///         left_child: doom_map::lumps::NODE_SUBSECTOR_BIT | 1,
+///     }
+/// ];
+///
+/// // Create the validated BSP tree.
+/// let tree = BspTree::validate(&nodes, &ssectors, 2).unwrap();
+///
+/// // Query the maximum depth of the tree.
+/// assert_eq!(tree.max_depth(), 1);
+///
+/// // Query which subsector a point falls into.
+/// let point_subsector = tree.point_in_subsector(32, 32).unwrap();
+/// assert_eq!(point_subsector.first_seg, 0); // Point is on the right side.
+/// ```
 pub struct BspTree<'a> {
     nodes: &'a [Node],
     ssectors: &'a [Ssector],

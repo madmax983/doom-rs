@@ -19,6 +19,52 @@ impl SectorGraph {
     /// Builds a topological graph of sectors from the given Level.
     /// Connections are established by finding two-sided linedefs that connect
     /// one sector to another via their front and back sidedefs.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_map::lumps::{Linedef, Sidedef, Sector, Blockmap, Reject};
+    /// use doom_map::Level;
+    /// use doom_map::graph::SectorGraph;
+    ///
+    /// let mut bm_data = vec![0u8; 14];
+    /// bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+    /// bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+    /// bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+    /// bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+    /// bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+    /// let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+    ///
+    /// let mut level = Level {
+    ///     name: "TEST".to_owned(),
+    ///     things: vec![],
+    ///     vertexes: vec![],
+    ///     segs: vec![],
+    ///     ssectors: vec![],
+    ///     nodes: vec![],
+    ///     reject: Reject::parse_lump(&[0u8], 1).unwrap(),
+    ///     blockmap,
+    ///     sectors: vec![
+    ///         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT1\0\0\0", light_level: 255, special: 0, tag: 0 },
+    ///         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT1\0\0\0", light_level: 255, special: 0, tag: 0 },
+    ///         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT1\0\0\0", light_level: 255, special: 0, tag: 0 },
+    ///     ],
+    ///     sidedefs: vec![
+    ///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"WALL\0\0\0\0", lower_texture: *b"WALL\0\0\0\0", middle_texture: *b"WALL\0\0\0\0", sector: 0 },
+    ///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"WALL\0\0\0\0", lower_texture: *b"WALL\0\0\0\0", middle_texture: *b"WALL\0\0\0\0", sector: 1 },
+    ///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"WALL\0\0\0\0", lower_texture: *b"WALL\0\0\0\0", middle_texture: *b"WALL\0\0\0\0", sector: 1 },
+    ///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"WALL\0\0\0\0", lower_texture: *b"WALL\0\0\0\0", middle_texture: *b"WALL\0\0\0\0", sector: 2 },
+    ///     ],
+    ///     linedefs: vec![
+    ///         Linedef { from_vertex: 0, to_vertex: 1, flags: 0x0004, special: 0, tag: 0, right_sidedef: 0, left_sidedef: 1 },
+    ///         Linedef { from_vertex: 1, to_vertex: 2, flags: 0x0004, special: 0, tag: 0, right_sidedef: 2, left_sidedef: 3 },
+    ///     ],
+    /// };
+    ///
+    /// let graph = SectorGraph::build(&level);
+    ///
+    /// // The path from sector 0 to sector 2 should go through sector 1
+    /// assert_eq!(graph.shortest_path(0, 2), Some(vec![0, 1, 2]));
+    /// ```
     #[must_use]
     pub fn build(level: &Level) -> Self {
         let mut adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::new();
