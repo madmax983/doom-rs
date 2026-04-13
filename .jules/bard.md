@@ -26,3 +26,7 @@
 ## 2024-11-20 - [Clarified doom-app Orchestration and demo modes]
 **Confusion:** The `doom-app` crate root (`main.rs`) and the `demo_mode` structs (`DemoRecordingWrapper`, `DemoPlaybackApp`) lacked narrative documentation explaining how the decoupled components form the "Grand Assembly" and how they intercept the game loop.
 **Clarification:** Added a story-driven module-level `//!` block to `main.rs` detailing the application's orchestration role. Added executable `///` doc-tests to the demo wrappers to show how they initialize and pump the `DoomEventLoop` with `TicInput` without needing to trace into `demo_mode.rs`.
+
+## 2026-04-03 - [Missing Module Docs]
+**Confusion:** Module `doom-map::graph` and `doom-types::proofs` had no module-level documentation.
+**Clarification:** Add `//!` docstrings for missing modules.
