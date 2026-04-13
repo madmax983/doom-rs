@@ -61,7 +61,7 @@ pub struct SpriteFrame {
 ///
 /// Keyed by uppercase lump name (null bytes stripped).
 pub struct SpriteCache {
-    frames: HashMap<String, SpriteFrame>,
+    frames: HashMap<doom_wad::lump::LumpName, SpriteFrame>,
 }
 
 impl SpriteCache {
@@ -70,7 +70,7 @@ impl SpriteCache {
     /// Lumps that fail to parse (too small, malformed column offsets) are
     /// silently skipped — this matches vanilla Doom's behaviour.
     pub fn load(wad: &WadFile) -> Self {
-        let mut frames = HashMap::new();
+        let mut frames: HashMap<doom_wad::lump::LumpName, SpriteFrame> = HashMap::new();
 
         for lump in wad.lumps_between("S_START", "S_END") {
             Self::insert_frame(&mut frames, wad, lump);
@@ -107,7 +107,7 @@ impl SpriteCache {
     }
 
     fn load_from_stack_impl(wad_stack: &WadStack, allow_ss_markers: bool) -> Self {
-        let mut frames = HashMap::new();
+        let mut frames: HashMap<doom_wad::lump::LumpName, SpriteFrame> = HashMap::new();
         let mut in_sprite_section = false;
 
         for (wad, lump) in wad_stack.all_lumps() {
@@ -148,9 +148,11 @@ impl SpriteCache {
     pub fn get(&self, name: &[u8; 8]) -> Option<&SpriteFrame> {
         // Trim trailing nulls and convert to uppercase string.
         let trimmed_len = name.iter().position(|&b| b == 0).unwrap_or(8);
-        let key = std::str::from_utf8(&name[..trimmed_len])
-            .ok()?
-            .to_uppercase();
+        let mut clean = [0u8; 8];
+        for (i, &b) in name[..trimmed_len].iter().enumerate() {
+            clean[i] = b.to_ascii_uppercase();
+        }
+        let key = doom_wad::lump::LumpName::from_raw(clean);
         self.frames.get(&key)
     }
 
@@ -166,7 +168,12 @@ impl SpriteCache {
 
     /// Insert a frame directly (used in tests and by callers that pre-parse frames).
     pub fn insert(&mut self, name: String, frame: SpriteFrame) {
-        self.frames.insert(name.to_uppercase(), frame);
+        let mut clean = [0u8; 8];
+        for (i, &b) in name.as_bytes().iter().take(8).enumerate() {
+            clean[i] = b.to_ascii_uppercase();
+        }
+        self.frames
+            .insert(doom_wad::lump::LumpName::from_raw(clean), frame);
     }
 
     /// Construct an empty cache (useful in tests).
@@ -176,13 +183,21 @@ impl SpriteCache {
         }
     }
 
-    fn insert_frame(frames: &mut HashMap<String, SpriteFrame>, wad: &WadFile, lump: &LumpDef) {
+    fn insert_frame(
+        frames: &mut HashMap<doom_wad::lump::LumpName, SpriteFrame>,
+        wad: &WadFile,
+        lump: &LumpDef,
+    ) {
         if lump.size == 0 {
             return;
         }
         let data = wad.lump_data(lump);
         if let Some(frame) = parse_picture(data) {
-            let name = lump.name.as_str().to_uppercase();
+            let mut raw = [0u8; 8];
+            for (i, &b) in lump.name.raw().iter().enumerate() {
+                raw[i] = b.to_ascii_uppercase();
+            }
+            let name = doom_wad::lump::LumpName::from_raw(raw);
             frames.insert(name, frame);
         }
     }

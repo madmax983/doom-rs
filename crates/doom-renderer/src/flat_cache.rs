@@ -20,7 +20,7 @@ use std::collections::HashMap;
 /// If a requested flat is not present in the WAD, a zeroed fallback is returned.
 pub struct FlatCache {
     /// Keyed by uppercase lump name string (trimmed of null bytes).
-    flats: HashMap<String, Box<[u8; FLAT_SIZE]>>,
+    flats: HashMap<doom_wad::lump::LumpName, Box<[u8; FLAT_SIZE]>>,
     /// 4096-byte zeroed fallback, returned when a lump is missing.
     default_flat: Box<[u8; FLAT_SIZE]>,
 }
@@ -32,7 +32,7 @@ impl FlatCache {
     /// `FF_START`/`FF_END` sections for PWAD support) and loads every lump
     /// that is exactly [`FLAT_SIZE`] bytes.
     pub fn load(wad: &WadFile) -> Self {
-        let mut flats: HashMap<String, Box<[u8; FLAT_SIZE]>> = HashMap::new();
+        let mut flats: HashMap<doom_wad::lump::LumpName, Box<[u8; FLAT_SIZE]>> = HashMap::new();
 
         for lump in wad.lumps_between("F_START", "F_END") {
             Self::insert_flat(&mut flats, wad, lump);
@@ -72,7 +72,7 @@ impl FlatCache {
     }
 
     fn load_from_stack_impl(wad_stack: &WadStack, allow_ff_markers: bool) -> Self {
-        let mut flats: HashMap<String, Box<[u8; FLAT_SIZE]>> = HashMap::new();
+        let mut flats: HashMap<doom_wad::lump::LumpName, Box<[u8; FLAT_SIZE]>> = HashMap::new();
         let mut in_flat_section = false;
 
         for (wad, lump) in wad_stack.all_lumps() {
@@ -110,7 +110,7 @@ impl FlatCache {
     }
 
     fn insert_flat(
-        flats: &mut HashMap<String, Box<[u8; FLAT_SIZE]>>,
+        flats: &mut HashMap<doom_wad::lump::LumpName, Box<[u8; FLAT_SIZE]>>,
         wad: &WadFile,
         lump: &LumpDef,
     ) {
@@ -118,7 +118,11 @@ impl FlatCache {
             return;
         }
 
-        let name = lump.name.as_str().to_uppercase();
+        let mut raw = [0u8; 8];
+        for (i, &b) in lump.name.raw().iter().enumerate() {
+            raw[i] = b.to_ascii_uppercase();
+        }
+        let name = doom_wad::lump::LumpName::from_raw(raw);
         let data = wad.lump_data(lump);
 
         let mut texels = Box::new([0u8; FLAT_SIZE]);
@@ -137,7 +141,11 @@ impl FlatCache {
             .iter()
             .rposition(|&b| b != 0 && b != b' ')
             .map_or(0, |i| i + 1);
-        let key = String::from_utf8_lossy(&name[..len]).to_uppercase();
+        let mut clean = [0u8; 8];
+        for (i, &b) in name[..len].iter().enumerate() {
+            clean[i] = b.to_ascii_uppercase();
+        }
+        let key = doom_wad::lump::LumpName::from_raw(clean);
         self.flats
             .get(&key)
             .map(|b| b.as_ref())

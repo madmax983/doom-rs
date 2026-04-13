@@ -26,3 +26,6 @@
 **[Entry API in Caches]**
 **Learning:** Using `contains_key` followed by `insert` and `get` on a cache dictionary like `HashMap` results in duplicate hashing and key allocations (`clone()` or `to_uppercase()`).
 **Action:** Use the `Entry` API (`HashMap::entry`) to cleanly handle cache misses. It allows us to process the miss safely by consuming the allocated key, performing only a single hash lookup to update or retrieve the cached object.
+**[Texture/Sprite Caching: `String` to `[u8; 8]`]**
+**Learning:** Using `String` to store WAD lump names in HashMaps incurs heap allocation overhead on every cache lookup. Switching to a fixed-size `[u8; 8]` array wrapped in a struct (`LumpName`) eliminates this allocation. However, care must be taken to retain uppercase conversion (`.to_ascii_uppercase()`) and garbage stripping (finding the first `NUL` byte) to avoid cache miss regressions on malformed or lowercase keys.
+**Action:** When replacing string allocations with fixed array keys, ensure any previously applied string mutations (trimming, uppercasing) are correctly ported to the byte array copying loop.
