@@ -12,7 +12,6 @@ use doom_types::CompatibilityProfile;
 use doom_types::TicCmd;
 
 use crate::DoomGame;
-use crate::net_mode::ticinput_to_ticcmd;
 
 // ---------------------------------------------------------------------------
 // DemoRecordingWrapper
@@ -87,7 +86,7 @@ impl DoomApp for DemoRecordingWrapper {
             CompatibilityProfile::Extended | CompatibilityProfile::VanillaStrict => {
                 // Demo behavior is intentionally shared across profiles for now.
                 // The profile is still threaded here so the seam stays explicit.
-                let cmd = ticinput_to_ticcmd(input);
+                let cmd = input.into();
                 self.recorder.record_tic(&cmd);
                 self.inner.tick(input);
             }

@@ -11,7 +11,6 @@ use anyhow::Result;
 use doom_net::{MAX_PLAYERS, NetClient, NetConfig, RelayServer, TicPacket};
 use doom_renderer::Framebuffer;
 use doom_tui::{DoomApp, TicInput};
-use doom_types::TicCmd;
 use std::time::{Duration, Instant};
 
 use crate::DoomGame;
@@ -19,24 +18,6 @@ use crate::DoomGame;
 /// Default UDP port for the doom-rs relay server.
 #[cfg(test)]
 pub(crate) const DEFAULT_PORT: u16 = 5029;
-
-// ---------------------------------------------------------------------------
-// Conversion helpers
-// ---------------------------------------------------------------------------
-
-/// Convert a [`TicInput`] (from doom-tui) to a [`TicCmd`] (for doom-game).
-///
-/// Only the wire-compatible fields are copied; console/UI fields are dropped.
-pub(crate) fn ticinput_to_ticcmd(input: TicInput) -> TicCmd {
-    TicCmd {
-        forward_move: input.forward_move,
-        side_move: input.side_move,
-        angle_turn: input.angle_turn,
-        buttons: input.buttons,
-        chatchar: input.chatchar,
-        ..Default::default()
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Relay server
@@ -244,7 +225,7 @@ impl NetGameApp {
 impl DoomApp for NetGameApp {
     fn tick(&mut self, input: TicInput) {
         // Convert local input to wire format and send to the server.
-        let wire_cmd = ticinput_to_ticcmd(input);
+        let wire_cmd = input.into();
         let slot = self.client.player_slot();
         let mut cmds = [doom_types::TicCmd::default(); MAX_PLAYERS];
         if (slot as usize) < MAX_PLAYERS {
@@ -268,7 +249,7 @@ impl DoomApp for NetGameApp {
             let auth_cmd = if (slot as usize) < MAX_PLAYERS {
                 server_pkt.cmds[slot as usize]
             } else {
-                ticinput_to_ticcmd(input)
+                input.into()
             };
 
             // Feed the authoritative command into the game via a synthetic
@@ -304,26 +285,6 @@ impl DoomApp for NetGameApp {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // -- Conversion helper tests (preserved from original) --
-
-    #[test]
-    fn ticinput_to_ticcmd_copies_all_fields() {
-        let input = TicInput {
-            forward_move: 100,
-            side_move: -50,
-            angle_turn: 640,
-            buttons: 0x03,
-            chatchar: b'z',
-            ..Default::default()
-        };
-        let cmd = ticinput_to_ticcmd(input);
-        assert_eq!(cmd.forward_move, 100);
-        assert_eq!(cmd.side_move, -50);
-        assert_eq!(cmd.angle_turn, 640);
-        assert_eq!(cmd.buttons, 0x03);
-        assert_eq!(cmd.chatchar, b'z');
-    }
 
     // -- Server tests --
 

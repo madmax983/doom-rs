@@ -69,6 +69,19 @@ pub struct TicInput {
     pub wait_pressed: bool,
 }
 
+impl From<TicInput> for doom_types::TicCmd {
+    fn from(input: TicInput) -> Self {
+        Self {
+            forward_move: input.forward_move,
+            side_move: input.side_move,
+            angle_turn: input.angle_turn,
+            buttons: input.buttons,
+            chatchar: input.chatchar,
+            ..Default::default()
+        }
+    }
+}
+
 /// Tracks which keys are currently held and produces `TicInput` on demand.
 #[derive(Default)]
 pub struct InputState {
@@ -338,6 +351,24 @@ impl InputState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ticinput_into_ticcmd_copies_all_fields() {
+        let input = TicInput {
+            forward_move: 100,
+            side_move: -50,
+            angle_turn: 640,
+            buttons: 0x03,
+            chatchar: b'z',
+            ..Default::default()
+        };
+        let cmd: doom_types::TicCmd = input.into();
+        assert_eq!(cmd.forward_move, 100);
+        assert_eq!(cmd.side_move, -50);
+        assert_eq!(cmd.angle_turn, 640);
+        assert_eq!(cmd.buttons, 0x03);
+        assert_eq!(cmd.chatchar, b'z');
+    }
 
     #[test]
     fn forward_key_sets_forward_move() {

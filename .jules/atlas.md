@@ -17,3 +17,7 @@
 **[Stop TicCmd Re-export Leak]**
 **Tangle:** `doom-game/src/lib.rs` was unnecessarily re-exporting `doom_types::{TicCmd, bt}` via `pub use`. This caused presentation and utility crates like `doom-app` and `doom-demo` to depend on the game engine `doom-game` just to use basic shared data types. This violated the boundary isolation.
 **Blueprint:** Removed the re-export from `doom-game` and updated `doom-demo` and `doom-app` to import `TicCmd` and `bt` constants directly from the foundational `doom-types` crate. This enforces cleaner dependency arrows where higher-level crates fetch domain primitives directly from the shared types crate rather than pulling them through the game logic.
+
+**[TicInput Conversion Boundary]**
+**Tangle:** `doom-app` contained a `pub(crate) fn ticinput_to_ticcmd` helper that manually converted `TicInput` (from `doom-tui`) to `TicCmd` (from `doom-types`), creating tight coupling where the app orchestrated the field mapping. This bypassed Rust's idiomatic type conversion boundaries.
+**Blueprint:** Added `doom-types` to `doom-tui` dependencies and implemented `From<TicInput> for TicCmd` directly on the input struct. Removed the helper from `doom-app` and changed all usages to `input.into()`, enforcing a cleaner dependency arrow where UI types natively know how to lower themselves to core types.

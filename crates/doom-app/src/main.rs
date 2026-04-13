@@ -1149,7 +1149,7 @@ impl DoomApp for DoomGame {
             }
         }
 
-        let cmd = crate::net_mode::ticinput_to_ticcmd(input);
+        let cmd = input.into();
 
         // Pause the game simulation while the menu is open during gameplay.
         // Title screen and intermission handle their own timing; only Playing
