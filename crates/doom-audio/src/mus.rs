@@ -38,7 +38,7 @@ pub struct MusHeader {
 ///
 /// ## Examples
 /// ```
-/// use doom_audio::mus::MusEvent;
+/// use doom_audio::MusEvent;
 /// // A note-on event for Middle C (note 60) on channel 0, with a velocity of 127.
 /// let event = MusEvent::PlayNote {
 ///     channel: 0,

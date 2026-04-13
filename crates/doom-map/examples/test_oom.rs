@@ -1,4 +1,4 @@
-use doom_map::lumps::Blockmap;
+use doom_map::Blockmap;
 
 fn main() {
     let mut data = vec![0; 8];

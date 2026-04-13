@@ -17,3 +17,7 @@
 **[Stop TicCmd Re-export Leak]**
 **Tangle:** `doom-game/src/lib.rs` was unnecessarily re-exporting `doom_types::{TicCmd, bt}` via `pub use`. This caused presentation and utility crates like `doom-app` and `doom-demo` to depend on the game engine `doom-game` just to use basic shared data types. This violated the boundary isolation.
 **Blueprint:** Removed the re-export from `doom-game` and updated `doom-demo` and `doom-app` to import `TicCmd` and `bt` constants directly from the foundational `doom-types` crate. This enforces cleaner dependency arrows where higher-level crates fetch domain primitives directly from the shared types crate rather than pulling them through the game logic.
+
+**[Facade utility crates]**
+**Tangle:** Several utility and foundation crates (`doom-wad`, `doom-demo`, `doom-net`, `doom-tui`, `doom-map`, `doom-audio`) exposed all internal file structures via `pub mod` directly in their `lib.rs`. This created a "Leaky Abstraction" allowing external crates like `doom-app` and `doom-game` to tightly couple to internal paths instead of a clean, flat public API contract.
+**Blueprint:** Changed visibility of internal modules to `pub(crate) mod` in `lib.rs` for these crates, enforcing strict architectural boundaries. Explicitly re-exported required public items via `pub use` (like `PcmSample` and `FLAG_BLOCKING`). Applied `#[allow(dead_code)]` to bypass rustc warnings for `pub` items that are now module-private yet part of a well-defined standard interface. This ensures strict internal encapsulation and unidirectional dependencies.

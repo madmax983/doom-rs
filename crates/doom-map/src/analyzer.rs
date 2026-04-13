@@ -12,7 +12,7 @@
 //! # Examples
 //! ```
 //! use doom_map::SectorGraph;
-//! use doom_map::analyzer::MapAnalyzer;
+//! use doom_map::MapAnalyzer;
 //! use std::collections::{HashMap, HashSet};
 //!
 //! // Construct a manual graph where sector 2 connects {0, 1} and {3}
@@ -48,7 +48,7 @@ impl<'a> MapAnalyzer<'a> {
     ///
     /// ```
     /// use doom_map::SectorGraph;
-    /// use doom_map::analyzer::MapAnalyzer;
+    /// use doom_map::MapAnalyzer;
     /// use std::collections::{HashMap, HashSet};
     ///
     /// // A simple linear map: 0 <-> 1 <-> 2

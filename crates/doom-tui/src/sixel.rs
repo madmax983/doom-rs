@@ -35,6 +35,7 @@ use doom_renderer::{Framebuffer, PaletteLut};
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 
 /// Palette-aware Sixel widget for a Doom framebuffer.
+#[allow(dead_code)]
 pub struct DoomSixelWidget<'a> {
     /// Raw indexed pixel data from the `Framebuffer`.
     pub data: &'a [u8],
@@ -56,7 +57,7 @@ impl<'a> DoomSixelWidget<'a> {
     ///
     /// ```
     /// use doom_renderer::{Framebuffer, PaletteLut};
-    /// use doom_tui::sixel::DoomSixelWidget;
+    /// use doom_tui::DoomSixelWidget;
     ///
     /// let fb = Framebuffer::new();
     /// let lut = PaletteLut::grayscale();
@@ -65,6 +66,7 @@ impl<'a> DoomSixelWidget<'a> {
     ///
     /// let widget = DoomSixelWidget::new(&fb, &lut, active_palette, font_size);
     /// ```
+    #[allow(dead_code)]
     pub fn new(
         fb: &'a Framebuffer,
         lut: &'a PaletteLut,
@@ -143,7 +145,7 @@ impl Widget for DoomSixelWidget<'_> {
 ///
 /// ```
 /// use doom_renderer::PaletteLut;
-/// use doom_tui::sixel::encode_doom_sixel;
+/// use doom_tui::encode_doom_sixel;
 ///
 /// let lut = PaletteLut::grayscale();
 /// let data = vec![0; 320 * 200];

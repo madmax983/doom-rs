@@ -1952,7 +1952,7 @@ fn export_sfx_wav_for_name(
         .lump_data(sfx_name)
         .ok_or_else(|| anyhow::anyhow!("SFX lump {} not found in WAD stack", sfx_name))?;
 
-    let sfx_sample = doom_audio::mixer::PcmSample::parse_sfx_lump(sfx_lump)
+    let sfx_sample = doom_audio::PcmSample::parse_sfx_lump(sfx_lump)
         .map_err(|e| anyhow::anyhow!("Failed to parse SFX lump {}: {}", sfx_name, e))?;
 
     let mut samples_i16 = Vec::with_capacity(sfx_sample.data.len());
@@ -1964,7 +1964,7 @@ fn export_sfx_wav_for_name(
         samples_i16.push(pcm);
     }
 
-    let wav_bytes = doom_audio::wav::encode_pcm16_wav_mono(sfx_sample.sample_rate, &samples_i16);
+    let wav_bytes = doom_audio::encode_pcm16_wav_mono(sfx_sample.sample_rate, &samples_i16);
     std::fs::write(out_path, wav_bytes)
         .with_context(|| format!("Failed to write WAV to {}", out_path.display()))?;
     Ok(())
@@ -2208,7 +2208,7 @@ fn run_doom() -> Result<()> {
     }
 
     if let Some(ref obj_path) = args.export_obj {
-        let obj_data = doom_map::obj::export_map_to_obj(&level);
+        let obj_data = doom_map::export_map_to_obj(&level);
         std::fs::write(obj_path, obj_data)
             .with_context(|| format!("Failed to write OBJ to {}", obj_path.display()))?;
         use crossterm::style::Stylize;
@@ -2399,7 +2399,11 @@ fn run_doom() -> Result<()> {
             if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
                 let graph = doom_map::SectorGraph::build(&level);
                 if let Some(path) = graph.shortest_path(start, end) {
-                    let path_str = path.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ➔ ");
+                    let path_str = path
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ➔ ");
                     if is_tty {
                         println!(
                             "{} {} {}",
@@ -2415,7 +2419,9 @@ fn run_doom() -> Result<()> {
                         println!(
                             "{} {}",
                             "❌".red(),
-                            format!("No path found between sector {} and sector {}", start, end).red().bold()
+                            format!("No path found between sector {} and sector {}", start, end)
+                                .red()
+                                .bold()
                         );
                     } else {
                         println!("No path found between sector {} and sector {}", start, end);
@@ -2426,7 +2432,9 @@ fn run_doom() -> Result<()> {
                     println!(
                         "{} {}",
                         "❌".red(),
-                        "Invalid sector indices. Please provide two integers separated by a comma.".red().bold()
+                        "Invalid sector indices. Please provide two integers separated by a comma."
+                            .red()
+                            .bold()
                     );
                 } else {
                     println!(
@@ -2439,7 +2447,9 @@ fn run_doom() -> Result<()> {
                 println!(
                     "{} {}",
                     "❌".red(),
-                    "Invalid format. Please use START,END (e.g. 0,5).".red().bold()
+                    "Invalid format. Please use START,END (e.g. 0,5)."
+                        .red()
+                        .bold()
                 );
             } else {
                 println!("Invalid format. Please use START,END (e.g. 0,5).");
@@ -3087,7 +3097,7 @@ mod tests {
     #[test]
     fn score_total_ticks_sums_all_event_deltas() {
         let score = MusScore {
-            header: doom_audio::mus::MusHeader {
+            header: doom_audio::MusHeader {
                 score_length: 0,
                 score_start: 0,
                 primary_channels: 0,

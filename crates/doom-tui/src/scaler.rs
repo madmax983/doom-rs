@@ -24,18 +24,21 @@ pub enum ScalingMode {
 
 /// Map terminal column `cx` to framebuffer X pixel, given `term_w` and `fb_w`.
 #[inline]
+#[allow(dead_code)]
 pub fn cell_to_fb_x(cx: usize, term_w: usize, fb_w: usize) -> usize {
     (cx * fb_w) / term_w
 }
 
 /// Map terminal row `cy` (top sub-pixel) to framebuffer Y, given `term_h` and `fb_h`.
 #[inline]
+#[allow(dead_code)]
 pub fn cell_to_fb_y_top(cy: usize, term_h: usize, fb_h: usize) -> usize {
     (cy * 2 * fb_h) / (term_h * 2)
 }
 
 /// Map terminal row `cy` (bottom sub-pixel) to framebuffer Y.
 #[inline]
+#[allow(dead_code)]
 pub fn cell_to_fb_y_bot(cy: usize, term_h: usize, fb_h: usize) -> usize {
     ((cy * 2 + 1) * fb_h) / (term_h * 2)
 }

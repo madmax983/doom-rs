@@ -274,7 +274,7 @@ mod tests {
     use super::*;
     use crate::mobj::{Mobj, MobjHandle, flags};
     use doom_map::Level;
-    use doom_map::lumps::*;
+    use doom_map::*;
     use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 

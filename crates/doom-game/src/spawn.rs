@@ -379,7 +379,7 @@ pub fn p_nightmare_respawn(gs: &mut GameState, level: Option<&Level>, handle: Mo
 mod tests {
     use super::*;
     use crate::mobj::flags;
-    use doom_map::lumps::NODE_SUBSECTOR_BIT;
+    use doom_map::NODE_SUBSECTOR_BIT;
     use doom_map::{Node, NodeBBox, Thing};
 
     /// Build a minimal valid Level with the given things list and floor height.

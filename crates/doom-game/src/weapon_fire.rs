@@ -489,7 +489,7 @@ mod tests {
     use crate::player::PlayerState;
     use crate::sound::{get_sound_target, init_sound_state};
     use crate::state::{GameState, SoundRequest};
-    use doom_map::lumps::{Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex};
+    use doom_map::{Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex};
     use doom_map::{Level, SIDEDEF_NONE};
     use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};

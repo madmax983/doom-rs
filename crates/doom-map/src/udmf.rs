@@ -236,7 +236,7 @@ impl UdmfMap {
     ///
     /// # Examples
     /// ```
-    /// use doom_map::udmf::UdmfMap;
+    /// use doom_map::UdmfMap;
     ///
     /// let textmap_data = br#"
     /// namespace = "doom";
@@ -310,7 +310,7 @@ impl UdmfMap {
     ///
     /// # Examples
     /// ```
-    /// use doom_map::udmf::UdmfMap;
+    /// use doom_map::UdmfMap;
     ///
     /// let map = UdmfMap::parse(br#"
     /// namespace = "doom";

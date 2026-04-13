@@ -158,7 +158,7 @@ pub struct GenmidiInstrument {
 /// # Example
 ///
 /// ```rust,no_run
-/// # use doom_audio::midi::GenmidiBank;
+/// # use doom_audio::GenmidiBank;
 /// // `data` is the raw bytes of the GENMIDI lump from the WAD.
 /// # let data = vec![0u8; 5608]; // placeholder
 /// let bank = GenmidiBank::parse(&data).expect("valid GENMIDI lump");

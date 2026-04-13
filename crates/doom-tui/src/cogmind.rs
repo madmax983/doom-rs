@@ -164,7 +164,7 @@ impl Widget for CogmindWidget<'_> {
 ///
 /// ## Examples
 /// ```
-/// use doom_tui::cogmind::CogmindHud;
+/// use doom_tui::CogmindHud;
 /// let hud = CogmindHud {
 ///     health: 100,
 ///     max_health: 100,
@@ -292,7 +292,7 @@ impl<'a> CogmindHudWidget<'a> {
     ///
     /// ## Examples
     /// ```
-    /// use doom_tui::cogmind::{CogmindHud, CogmindHudWidget};
+    /// use doom_tui::{CogmindHud, CogmindHudWidget};
     /// let hud = CogmindHud::default();
     /// let widget = CogmindHudWidget::new(&hud);
     /// ```

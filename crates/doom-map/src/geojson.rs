@@ -15,7 +15,7 @@ use crate::Level;
 /// # Examples
 ///
 /// ```
-/// use doom_map::{Level, lumps::{Blockmap, Linedef, Reject, Sector, Sidedef, Thing, Vertex}};
+/// use doom_map::{Level, Blockmap, Linedef, Reject, Sector, Sidedef, Thing, Vertex};
 ///
 /// let reject = Reject::parse_lump(&[0u8], 1).unwrap();
 /// let mut bm_data = vec![0u8; 14];
@@ -146,7 +146,7 @@ pub fn export_map_to_geojson(level: &Level) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lumps::{Blockmap, Linedef, Reject, Sector, Sidedef, Thing, Vertex};
+    use crate::{Blockmap, Linedef, Reject, Sector, Sidedef, Thing, Vertex};
 
     fn make_test_level() -> Level {
         let reject = Reject::parse_lump(&[0u8], 1).unwrap();

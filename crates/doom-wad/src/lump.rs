@@ -36,7 +36,7 @@ impl RawLumpEntry {
     ///
     /// # Examples
     /// ```
-    /// use doom_wad::lump::RawLumpEntry;
+    /// use doom_wad::RawLumpEntry;
     ///
     /// let entry = RawLumpEntry { filepos: 100, size: 50, name: [0; 8] };
     /// assert_eq!(entry.byte_range(), Some((100, 150)));
@@ -68,7 +68,7 @@ impl LumpName {
     ///
     /// # Examples
     /// ```
-    /// use doom_wad::lump::LumpName;
+    /// use doom_wad::LumpName;
     ///
     /// let mut raw = [0u8; 8];
     /// raw[..8].copy_from_slice(b"playpal\0");
@@ -97,7 +97,7 @@ impl LumpName {
     ///
     /// # Examples
     /// ```
-    /// use doom_wad::lump::LumpName;
+    /// use doom_wad::LumpName;
     ///
     /// let name = LumpName::from_str("e1m1");
     /// assert_eq!(name.as_str(), "E1M1");
@@ -164,7 +164,7 @@ impl LumpDef {
     ///
     /// # Examples
     /// ```
-    /// use doom_wad::lump::{LumpDef, LumpName};
+    /// use doom_wad::{LumpDef, LumpName};
     ///
     /// let marker = LumpDef {
     ///     name: LumpName::from_str("F_START"),

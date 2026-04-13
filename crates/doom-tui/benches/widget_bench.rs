@@ -14,7 +14,7 @@
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use doom_renderer::{Framebuffer, PaletteLut};
 use doom_tui::DoomFramebufferWidget;
-use doom_tui::scaler::ScalingMode;
+use doom_tui::ScalingMode;
 use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
 
 fn make_framebuffer() -> Framebuffer {

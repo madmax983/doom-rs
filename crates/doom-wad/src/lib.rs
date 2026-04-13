@@ -8,9 +8,9 @@
 //! - [`WadStack`] — IWAD + PWADs with override-resolution semantics
 //! - [`LumpDef`] — a validated lump descriptor (offset, size, name)
 
-pub mod lump;
-pub mod stack;
-pub mod wad;
+pub(crate) mod lump;
+pub(crate) mod stack;
+pub(crate) mod wad;
 
 pub use lump::{LumpDef, LumpName, RawLumpEntry};
 pub use stack::WadStack;
