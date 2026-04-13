@@ -2866,7 +2866,7 @@ fn main() {
             if causes.peek().is_some() {
                 eprintln!("\n↳ {}:", "Caused by".yellow().bold());
                 for cause in causes {
-                    eprintln!("    {}", cause);
+                    eprintln!("    {}", cause.to_string().red());
                 }
             }
             eprintln!();
