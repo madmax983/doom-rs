@@ -238,7 +238,7 @@ impl AudioSystem {
 fn populate_sfx_cache(wad: &WadStack, cache: &mut SfxCache) {
     for (idx, name) in sfx_candidate_names(wad).enumerate() {
         let id = (idx + 1) as u16;
-        if let Some(data) = wad.lump_data(&name) {
+        if let Some(data) = wad.lump_data(name.as_str()) {
             match PcmSample::parse_sfx_lump(data) {
                 Ok(sample) => {
                     cache.insert(id, Arc::new(sample));
@@ -404,7 +404,9 @@ pub fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, 
 ///
 /// Uses the same candidate-lump strategy as [`populate_sfx_cache`] so that
 /// `sfx_lookup["DSPISTOL"]` always returns the same ID the mixer uses.
-pub fn build_sfx_lookup(wad: &WadStack) -> std::collections::HashMap<String, u16> {
+pub fn build_sfx_lookup(
+    wad: &WadStack,
+) -> std::collections::HashMap<doom_wad::lump::LumpName, u16> {
     let mut map = std::collections::HashMap::new();
     for (idx, name) in sfx_candidate_names(wad).enumerate() {
         map.insert(name, (idx + 1) as u16);
@@ -420,10 +422,12 @@ pub fn build_sfx_lookup(wad: &WadStack) -> std::collections::HashMap<String, u16
 ///
 /// Namespace markers (DS_START/DS_END) are intentionally ignored: they
 /// do not reliably contain all DS-prefixed SFX lumps in every WAD variant.
-fn sfx_candidate_names<'a>(wad: &'a WadStack) -> impl Iterator<Item = String> + 'a {
+fn sfx_candidate_names<'a>(
+    wad: &'a WadStack,
+) -> impl Iterator<Item = doom_wad::lump::LumpName> + 'a {
     wad.all_lumps()
         .filter(|(_, l)| l.size > 0 && l.name.as_str().starts_with("DS"))
-        .map(|(_, l)| l.name.as_str().to_ascii_uppercase())
+        .map(|(_, l)| doom_wad::lump::LumpName::from_str(&l.name.as_str().to_ascii_uppercase()))
 }
 
 /// Return the Doom DS* lump name for a monster's wake (see) sound.

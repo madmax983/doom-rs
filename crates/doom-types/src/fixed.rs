@@ -126,7 +126,9 @@ impl Fixed16_16 {
         }
         let numerator = (self.0 as i64) << FRAC_BITS;
         // Havoc 👺: Catch overflow division cases!
-        let mut result = numerator.checked_div(rhs.0 as i64).unwrap_or(if numerator > 0 { i64::MAX } else { i64::MIN });
+        let mut result = numerator
+            .checked_div(rhs.0 as i64)
+            .unwrap_or(if numerator > 0 { i64::MAX } else { i64::MIN });
 
         if result > i32::MAX as i64 {
             result = i32::MAX as i64;
