@@ -88,7 +88,7 @@ pub use sight::{
 pub use snapshot::Snapshot;
 pub use sound::{
     ML_SOUNDBLOCK, adjacent_sectors, clear_sound_targets, get_sound_target, init_sound_state,
-    monster_should_wake, p_noise_alert,
+    monster_should_wake, p_noise_alert, simulate_sound_from_sector,
 };
 pub use spawn::{Skill, spawn_level_things};
 pub use specials::{

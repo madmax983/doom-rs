@@ -157,6 +157,22 @@ pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emit
     recursive_sound(gs, level, emitter_sector, 1, target, new_gen);
 }
 
+/// Simulates a sound emission from `sector_idx` and returns the number of sectors reached.
+/// This is used for acoustic analysis.
+pub fn simulate_sound_from_sector(gs: &mut GameState, level: &Level, sector_idx: usize) -> usize {
+    gs.sound.sound_gen = gs.sound.sound_gen.wrapping_add(1);
+    if gs.sound.sound_gen == 0 {
+        gs.sound.sound_traversed.fill(0);
+        gs.sound.sound_gen = 1;
+    }
+    let new_gen = gs.sound.sound_gen;
+    let dummy_target = crate::mobj::MobjHandle::NULL;
+
+    recursive_sound(gs, level, sector_idx, 1, dummy_target, new_gen);
+
+    gs.sound.sound_traversed.iter().filter(|&&g| g == new_gen).count()
+}
+
 /// Recursive flood fill: propagate sound into `sector_idx` and its neighbors.
 ///
 /// `sound_blocks_remaining` tracks how many `ML_SOUNDBLOCK` linedefs sound
@@ -1061,6 +1077,28 @@ mod tests {
         let adj = adjacent_sectors(&level, 0);
         // Should be deduplicated: only one entry for sector 1.
         assert_eq!(adj, vec![1]);
+    }
+
+    #[test]
+    fn simulate_sound_from_sector_counts_correctly() {
+        let mut gs = make_game_state_with_sound(3);
+        // All sectors connected normally
+        // 0 <-> 1 <-> 2
+        let level = make_test_level(3, &[(0, 1, 0), (1, 2, 0)]);
+
+        let reached = simulate_sound_from_sector(&mut gs, &level, 0);
+        assert_eq!(reached, 3);
+    }
+
+    #[test]
+    fn simulate_sound_from_sector_respects_soundblock() {
+        let mut gs = make_game_state_with_sound(4);
+        // 0 <-> 1 <sb> 2 <sb> 3
+        let level = make_test_level(4, &[(0, 1, 0), (1, 2, ML_SOUNDBLOCK), (2, 3, ML_SOUNDBLOCK)]);
+
+        let reached = simulate_sound_from_sector(&mut gs, &level, 0);
+        // Can cross one soundblock, so reaches 0, 1, 2 but not 3
+        assert_eq!(reached, 3);
     }
 
     #[test]

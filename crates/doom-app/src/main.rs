@@ -232,6 +232,10 @@ struct Args {
     /// Print the map statistics as raw JSON. Only valid when combined with --map-stats.
     #[arg(long)]
     json: bool,
+
+    /// Run acoustic analysis on the map to find the loudest and quietest sectors.
+    #[arg(long)]
+    analyze_acoustics: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -2258,6 +2262,73 @@ fn run_doom() -> Result<()> {
         } else {
             println!("Exported SFX WAV to {}", sfx_wav_path.display());
         }
+        return Ok(());
+    }
+
+    if args.analyze_acoustics {
+        let mut gs = GameState::new(warp_str);
+        doom_game::init_sound_state(&mut gs, level.sectors.len());
+
+        let mut sector_loudness: Vec<(usize, usize)> = (0..level.sectors.len())
+            .map(|i| (i, doom_game::simulate_sound_from_sector(&mut gs, &level, i)))
+            .collect();
+
+        sector_loudness.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+
+        let mut table = comfy_table::Table::new();
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            table.load_preset(comfy_table::presets::UTF8_FULL)
+                 .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+            table.set_header(vec![
+                comfy_table::Cell::new("Sector").fg(comfy_table::Color::Cyan).add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new("Acoustic Reach (Sectors)").fg(comfy_table::Color::Cyan).add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new("Category").fg(comfy_table::Color::Cyan).add_attribute(comfy_table::Attribute::Bold),
+            ]);
+        } else {
+            table.set_header(vec![
+                comfy_table::Cell::new("Sector"),
+                comfy_table::Cell::new("Acoustic Reach (Sectors)"),
+                comfy_table::Cell::new("Category"),
+            ]);
+        }
+
+        let loudest = sector_loudness.iter().take(5);
+        for &(sec, reach) in loudest {
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                table.add_row(vec![
+                    comfy_table::Cell::new(sec.to_string()),
+                    comfy_table::Cell::new(reach.to_string()),
+                    comfy_table::Cell::new("Loudest").fg(comfy_table::Color::Red),
+                ]);
+            } else {
+                table.add_row(vec![
+                    comfy_table::Cell::new(sec.to_string()),
+                    comfy_table::Cell::new(reach.to_string()),
+                    comfy_table::Cell::new("Loudest"),
+                ]);
+            }
+        }
+
+        if sector_loudness.len() > 5 {
+            let quietest = sector_loudness.iter().rev().take(5).collect::<Vec<_>>();
+            for &&(sec, reach) in quietest.iter().rev() {
+                if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                    table.add_row(vec![
+                        comfy_table::Cell::new(sec.to_string()),
+                        comfy_table::Cell::new(reach.to_string()),
+                        comfy_table::Cell::new("Quietest").fg(comfy_table::Color::Green),
+                    ]);
+                } else {
+                    table.add_row(vec![
+                        comfy_table::Cell::new(sec.to_string()),
+                        comfy_table::Cell::new(reach.to_string()),
+                        comfy_table::Cell::new("Quietest"),
+                    ]);
+                }
+            }
+        }
+
+        println!("{table}");
         return Ok(());
     }
 
