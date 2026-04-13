@@ -666,6 +666,64 @@ impl DoomGame {
 }
 
 impl DoomGame {
+    fn handle_menu_result(&mut self, result: doom_game::menu::MenuResult) {
+        match result {
+            doom_game::menu::MenuResult::Quit => {
+                // Signal quit; can't reach event loop directly, so
+                // we just close the menu — user can press Q to exit.
+                self.menu.close();
+            }
+            doom_game::menu::MenuResult::LoadGame(slot) => {
+                self.handle_load_game(slot);
+            }
+            doom_game::menu::MenuResult::SaveGame(slot) => {
+                self.handle_save_game(slot);
+            }
+            _ => {}
+        }
+    }
+
+    fn handle_load_game(&mut self, slot: u8) {
+        let path = format!("doom_save_{slot}.bin");
+        match savegame::load_game(std::path::Path::new(&path), self.compat) {
+            Ok((_header, payload)) => {
+                if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
+                    self.console.print(format!("Load failed: {e}"));
+                    self.hud_messages.push(format!("Load failed: {e}"), 105);
+                } else {
+                    self.player_view_height = if self.gs.player.is_dead() {
+                        DEAD_PLAYER_VIEW_HEIGHT
+                    } else {
+                        PLAYER_HEIGHT
+                    };
+                    self.console.print("Game loaded.".to_string());
+                    self.hud_messages.push("Game loaded.".to_string(), 105);
+                    self.start_level_music();
+                    self.menu.close();
+                }
+            }
+            Err(e) => {
+                self.console.print(format!("Load failed: {e}"));
+                self.hud_messages.push(format!("Load failed: {e}"), 105);
+            }
+        }
+    }
+
+    fn handle_save_game(&mut self, slot: u8) {
+        let path = format!("doom_save_{slot}.bin");
+        if let Err(e) =
+            savegame::save_game(std::path::Path::new(&path), &self.gs, slot, self.compat)
+        {
+            self.console.print(format!("Save failed: {e}"));
+            self.hud_messages.push(format!("Save failed: {e}"), 105);
+        } else {
+            self.console.print(format!("Saved to slot {slot}."));
+            self.hud_messages
+                .push(format!("Saved to slot {slot}."), 105);
+            self.menu.close();
+        }
+    }
+
     fn handle_sound_events(&mut self, events: impl IntoIterator<Item = doom_game::SoundRequest>) {
         use doom_game::SoundRequest;
 
@@ -1004,56 +1062,7 @@ impl DoomApp for DoomGame {
             }
             if input.menu_select {
                 if let Some(result) = self.menu.select() {
-                    match result {
-                        doom_game::menu::MenuResult::Quit => {
-                            // Signal quit; can't reach event loop directly, so
-                            // we just close the menu — user can press Q to exit.
-                            self.menu.close();
-                        }
-                        doom_game::menu::MenuResult::LoadGame(slot) => {
-                            let path = format!("doom_save_{slot}.bin");
-                            match savegame::load_game(std::path::Path::new(&path), self.compat) {
-                                Ok((_header, payload)) => {
-                                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                                        self.console.print(format!("Load failed: {e}"));
-                                        self.hud_messages.push(format!("Load failed: {e}"), 105);
-                                    } else {
-                                        self.player_view_height = if self.gs.player.is_dead() {
-                                            DEAD_PLAYER_VIEW_HEIGHT
-                                        } else {
-                                            PLAYER_HEIGHT
-                                        };
-                                        self.console.print("Game loaded.".to_string());
-                                        self.hud_messages.push("Game loaded.".to_string(), 105);
-                                        self.start_level_music();
-                                        self.menu.close();
-                                    }
-                                }
-                                Err(e) => {
-                                    self.console.print(format!("Load failed: {e}"));
-                                    self.hud_messages.push(format!("Load failed: {e}"), 105);
-                                }
-                            }
-                        }
-                        doom_game::menu::MenuResult::SaveGame(slot) => {
-                            let path = format!("doom_save_{slot}.bin");
-                            if let Err(e) = savegame::save_game(
-                                std::path::Path::new(&path),
-                                &self.gs,
-                                slot,
-                                self.compat,
-                            ) {
-                                self.console.print(format!("Save failed: {e}"));
-                                self.hud_messages.push(format!("Save failed: {e}"), 105);
-                            } else {
-                                self.console.print(format!("Saved to slot {slot}."));
-                                self.hud_messages
-                                    .push(format!("Saved to slot {slot}."), 105);
-                                self.menu.close();
-                            }
-                        }
-                        _ => {}
-                    }
+                    self.handle_menu_result(result);
                 }
             }
         }
@@ -2399,7 +2408,11 @@ fn run_doom() -> Result<()> {
             if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
                 let graph = doom_map::SectorGraph::build(&level);
                 if let Some(path) = graph.shortest_path(start, end) {
-                    let path_str = path.iter().map(|s| s.to_string()).collect::<Vec<_>>().join(" ➔ ");
+                    let path_str = path
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                        .join(" ➔ ");
                     if is_tty {
                         println!(
                             "{} {} {}",
@@ -2415,7 +2428,9 @@ fn run_doom() -> Result<()> {
                         println!(
                             "{} {}",
                             "❌".red(),
-                            format!("No path found between sector {} and sector {}", start, end).red().bold()
+                            format!("No path found between sector {} and sector {}", start, end)
+                                .red()
+                                .bold()
                         );
                     } else {
                         println!("No path found between sector {} and sector {}", start, end);
@@ -2426,7 +2441,9 @@ fn run_doom() -> Result<()> {
                     println!(
                         "{} {}",
                         "❌".red(),
-                        "Invalid sector indices. Please provide two integers separated by a comma.".red().bold()
+                        "Invalid sector indices. Please provide two integers separated by a comma."
+                            .red()
+                            .bold()
                     );
                 } else {
                     println!(
@@ -2439,7 +2456,9 @@ fn run_doom() -> Result<()> {
                 println!(
                     "{} {}",
                     "❌".red(),
-                    "Invalid format. Please use START,END (e.g. 0,5).".red().bold()
+                    "Invalid format. Please use START,END (e.g. 0,5)."
+                        .red()
+                        .bold()
                 );
             } else {
                 println!("Invalid format. Please use START,END (e.g. 0,5).");

@@ -14,3 +14,7 @@
 **Flatten audio event dispatch**
 **Learning:** The background audio command loop contained deeply nested `if let` and `match` blocks (Pyramid of Doom), making the main event dispatch obscured by indentation.
 **Action:** Use guard clauses (`let Ok(x) = ... else { continue }`) to flatten deeply nested logic loops, significantly improving read flow without altering early-exit semantics.
+
+**[Extract match blocks nested inside if/else checks to remove Pyramids of Doom]**
+**Learning:** Handlers for UI inputs and menu events often grow indefinitely and become 9 levels deep.
+**Action:** Extract large blocks of match logic operating on enums (like menu options) into their own `handle_enum_result` function instead of writing the implementations inline.
