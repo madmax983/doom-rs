@@ -9,6 +9,8 @@ default = ["std"]
 std     = []
 
 [dependencies]
+libm = "0.2.16"
+spin = { version = "0.9.8", features = ["once"] }
 strum = "0.28.0"
 strum_macros = "0.28.0"
 

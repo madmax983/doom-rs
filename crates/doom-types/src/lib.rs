@@ -27,3 +27,5 @@ pub mod mobj_kind;
 #[allow(unexpected_cfgs)]
 #[cfg(verus_keep_ghost)]
 mod proofs;
+#[cfg(test)]
+mod angle_test;

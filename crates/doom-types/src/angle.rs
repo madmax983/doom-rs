@@ -27,6 +27,8 @@ pub struct Bam(pub u32);
 /// 2048 entries covering 90°, fine-shifted angle = `bam >> 19` (2048 steps per 90°).
 const FINE_TABLE_SIZE: usize = 8192; // 2048 * 4 quadrants
 static FINESINE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+static INIT_TRIG_TABLES: spin::Once<()> = spin::Once::new();
+
 
 /// Lookup table populated at runtime.
 static mut SINE_TABLE: [Fixed16_16; FINE_TABLE_SIZE] = [Fixed16_16(0); FINE_TABLE_SIZE];
@@ -180,19 +182,21 @@ impl Bam {
     /// assert_eq!(ANG90.sin(), FIXED_ONE);
     /// ```
     pub unsafe fn init_trig_tables() {
-        use core::f64::consts::PI;
-        // SAFETY: single-threaded init before any reads.
-        #[allow(clippy::needless_range_loop)]
-        unsafe {
+        INIT_TRIG_TABLES.call_once(|| {
+            use core::f64::consts::PI;
+            // SAFETY: protected by spin::Once to ensure only single execution.
             #[allow(clippy::needless_range_loop)]
-            for i in 0..FINE_TABLE_SIZE {
-                let angle = (i as f64) * (2.0 * PI) / (FINE_TABLE_SIZE as f64);
-                let sin_val = angle.sin();
-                core::ptr::addr_of_mut!(SINE_TABLE[i])
-                    .write(Fixed16_16((sin_val * (1 << 16) as f64) as i32));
+            unsafe {
+                #[allow(clippy::needless_range_loop)]
+                for i in 0..FINE_TABLE_SIZE {
+                    let angle = (i as f64) * (2.0 * PI) / (FINE_TABLE_SIZE as f64);
+                    let sin_val = libm::sin(angle);
+                    core::ptr::addr_of_mut!(SINE_TABLE[i])
+                        .write(Fixed16_16((sin_val * (1 << 16) as f64) as i32));
+                }
             }
-        }
-        FINESINE.store(true, core::sync::atomic::Ordering::Release);
+            FINESINE.store(true, core::sync::atomic::Ordering::Release);
+        });
     }
 }
 
@@ -231,7 +235,7 @@ impl core::fmt::Display for Bam {
 mod tests {
     use super::*;
 
-    static INIT: std::sync::Once = std::sync::Once::new();
+    static INIT: spin::Once<()> = spin::Once::new();
 
     fn ensure_trig_init() {
         INIT.call_once(|| unsafe {
