@@ -30,3 +30,6 @@
 ## 2024-04-10 - SaveError Refactoring
 **Learning:** Replaced manual `Display` implementation for `SaveError` with `#[derive(thiserror::Error)]`. Used tests to verify correct routing of format decoding (`SaveFormat` formatting, too short save detection, magic byte mismatches) for both regular saves and `doomrs` specific loading.
 **Action:** Always prefer `thiserror` when modifying error types that have simple manual implementations.
+## 2023-10-24 - Fix doctest compilation error related to ACTION_NONE
+**Learning:** Refactored enums such as `Action` broke documentation tests in `dispatch_action` because `ACTION_NONE` was removed and replaced with `Action::NoAction`. Rust doctests are compiled as part of the test suite and can break when imports or symbols they rely on change.
+**Action:** When renaming or removing constants or enums, search the entire codebase including doc comments `///` to ensure all doctests compile correctly using `cargo test --doc`.
