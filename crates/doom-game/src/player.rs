@@ -299,14 +299,16 @@ impl PlayerState {
     /// Used for power-up items (Soulsphere, Megasphere) that can overheal.
     /// Health is capped at `cap` (e.g. 200).
     pub fn heal_overheal(&mut self, amount: i32, cap: i32) {
-        self.health = self.health.saturating_add(amount).min(cap);
+        let safe_cap = cap.max(0);
+        self.health = self.health.saturating_add(amount).min(safe_cap);
     }
 
     /// Set health directly to `value`, clamped to `[0, cap]`.
     ///
     /// Used for items that set health to a fixed value (e.g. Megasphere).
     pub fn set_health_capped(&mut self, value: i32, cap: i32) {
-        self.health = value.clamp(0, cap);
+        let safe_cap = cap.max(0);
+        self.health = value.clamp(0, safe_cap);
     }
 
     /// Returns `true` if the player is dead (health ≤ 0).
@@ -337,7 +339,7 @@ impl PlayerState {
 
     /// Deduct `amount` from armor; clears `armor_type` when armor reaches 0.
     pub fn deduct_armor(&mut self, amount: i32) {
-        self.armor = (self.armor - amount).max(0);
+        self.armor = self.armor.saturating_sub(amount).max(0);
         if self.armor == 0 {
             self.armor_type = 0;
         }
@@ -829,6 +831,34 @@ mod proptests {
         fn havoc_player_health_damage_does_not_panic(start_health in i32::MIN..i32::MAX, amount in i32::MIN..i32::MAX) {
             let mut p = PlayerState { health: start_health, ..Default::default() };
             p.apply_damage(amount);
+        }
+    }
+}
+
+#[cfg(test)]
+mod havoc_proptests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn havoc_player_math_fuzz_does_not_panic(
+            dmg in any::<i32>(),
+            heal in any::<i32>(),
+            heal_cap in any::<i32>(),
+            set_h in any::<i32>(),
+            set_cap in any::<i32>(),
+            armor_give in any::<i32>(),
+            armor_type in any::<u8>(),
+            armor_deduct in any::<i32>(),
+        ) {
+            let mut p = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            p.apply_damage(dmg);
+            p.heal(heal);
+            p.heal_overheal(heal, heal_cap);
+            p.set_health_capped(set_h, set_cap);
+            p.give_armor(armor_give, armor_type);
+            p.deduct_armor(armor_deduct);
         }
     }
 }
