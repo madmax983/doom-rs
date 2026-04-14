@@ -17,3 +17,9 @@
 **[Stop TicCmd Re-export Leak]**
 **Tangle:** `doom-game/src/lib.rs` was unnecessarily re-exporting `doom_types::{TicCmd, bt}` via `pub use`. This caused presentation and utility crates like `doom-app` and `doom-demo` to depend on the game engine `doom-game` just to use basic shared data types. This violated the boundary isolation.
 **Blueprint:** Removed the re-export from `doom-game` and updated `doom-demo` and `doom-app` to import `TicCmd` and `bt` constants directly from the foundational `doom-types` crate. This enforces cleaner dependency arrows where higher-level crates fetch domain primitives directly from the shared types crate rather than pulling them through the game logic.
+**[Fix clone on copy clippy warning]
+**Tangle:** The  crate had a  on  which implements .
+**Blueprint:** Removed the  method call and let the compiler figure it out, as it implements . It was causing a clippy warning.
+**[Fix clone on copy clippy warning]**
+**Tangle:** The `doom-renderer` crate had a `clone()` on `LumpName` which implements `Copy`.
+**Blueprint:** Removed the `clone()` method call and let the compiler figure it out, as it implements `Copy`. It was causing a clippy warning.
