@@ -1177,6 +1177,19 @@ pub fn ev_build_stairs(
 /// looking at the back side of linedefs fronting the trigger sector.
 ///
 /// Returns the number of floor movers created.
+///
+/// # Arguments
+///
+/// * `gs` - Game state for tracking movers.
+/// * `level` - Level containing the donut.
+/// * `trigger_sector` - The sector activating the special.
+///
+/// # Examples
+///
+/// ```
+/// use doom_game::specials::ev_do_donut;
+/// // ev_do_donut(&mut gs, &level, sector_idx);
+/// ```
 pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> usize {
     let ld_indices = sector_linedefs(level, trigger_sector);
 
@@ -1288,6 +1301,20 @@ const PLATFORM_WAIT: i32 = 105;
 /// current floor height.
 ///
 /// Returns the number of platforms created.
+///
+/// # Arguments
+///
+/// * `gs` - Game state tracking platforms.
+/// * `level` - Map containing tagged sectors.
+/// * `tag` - Identify the sector to activate.
+/// * `speed` - Rate of platform movement.
+///
+/// # Examples
+///
+/// ```
+/// use doom_game::specials::ev_perpetual_platform;
+/// // ev_perpetual_platform(&mut gs, &level, 1, 8);
+/// ```
 pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed: i16) -> usize {
     let mut count = 0;
     for idx in level
@@ -1333,6 +1360,18 @@ pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed:
 /// 3. Move floor up by `speed` until `high_height` is reached.
 /// 4. Enter wait phase for `wait_tics`.
 /// 5. Repeat.
+///
+/// # Arguments
+///
+/// * `gs` - Game state containing active platforms.
+/// * `level` - Level to mutate sector floors in.
+///
+/// # Examples
+///
+/// ```
+/// use doom_game::specials::tick_platforms;
+/// // tick_platforms(&mut gs, &mut level);
+/// ```
 pub fn tick_platforms(gs: &mut GameState, level: &mut Level) {
     for plat in &mut gs.movers.active_platforms {
         let sector_idx = plat.sector_index;
@@ -1389,6 +1428,18 @@ pub fn tick_platforms(gs: &mut GameState, level: &mut Level) {
 ///    If in crush range, apply `crush_damage` to the player (simplified).
 /// 3. If moving Up and reaches `top_height`: reverse to Down (perpetual)
 ///    or remove (one-shot).
+///
+/// # Arguments
+///
+/// * `gs` - Game state containing active ceilings.
+/// * `level` - Level to mutate sector ceilings in.
+///
+/// # Examples
+///
+/// ```
+/// use doom_game::specials::tick_ceilings;
+/// // tick_ceilings(&mut gs, &mut level);
+/// ```
 pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
     let mut active_ceilings = std::mem::take(&mut gs.movers.active_ceilings);
 
