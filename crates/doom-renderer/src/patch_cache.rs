@@ -11,7 +11,7 @@ use crate::texture_compose::{PatchImage, parse_patch};
 
 /// Lazy-loading cache for picture-format patches.
 pub struct PatchCache {
-    patches: HashMap<String, PatchImage>,
+    patches: HashMap<doom_wad::lump::LumpName, PatchImage>,
 }
 
 impl PatchCache {
@@ -30,12 +30,18 @@ impl PatchCache {
     /// Avoids an extra `.clone()` on the string key and eliminates double hash lookups
     /// by using the `Entry` API during the cache miss path.
     pub fn get<'a>(&'a mut self, name: &str, wad: &WadStack) -> Option<&'a PatchImage> {
-        let key = name.to_uppercase();
+        let mut key_bytes = [0u8; 8];
+        let bytes = name.as_bytes();
+        for i in 0..8.min(bytes.len()) {
+            key_bytes[i] = bytes[i].to_ascii_uppercase();
+        }
+        let key = doom_wad::lump::LumpName::from_raw(key_bytes);
+
         use std::collections::hash_map::Entry;
         match self.patches.entry(key) {
             Entry::Occupied(o) => Some(o.into_mut()),
             Entry::Vacant(v) => {
-                let data = wad.lump_data(v.key())?;
+                let data = wad.lump_data(v.key().as_str())?;
                 let patch = parse_patch(data)?;
                 Some(v.insert(patch))
             }

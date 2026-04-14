@@ -120,7 +120,7 @@ impl FlatCache {
             return;
         }
 
-        let name = lump.name.clone();
+        let name = lump.name;
         let data = wad.lump_data(lump);
 
         let mut texels = Box::new([0u8; FLAT_SIZE]);
@@ -135,7 +135,7 @@ impl FlatCache {
     /// if the name is not in the cache.
     pub fn get(&self, name: &[u8; 8]) -> &[u8; FLAT_SIZE] {
         // Some maps space-pad their flat names (e.g. "FLOOR   " instead of "FLOOR\0\0\0").
-        // Convert trailing spaces to null bytes so LumpName can parse correctly.
+        // Convert trailing spaces to null bytes so LumpName can parse correctly, and uppercase it.
         let mut clean_name = *name;
         for i in (0..8).rev() {
             if clean_name[i] == b' ' || clean_name[i] == 0 {
@@ -143,6 +143,9 @@ impl FlatCache {
             } else {
                 break;
             }
+        }
+        for b in &mut clean_name {
+            *b = b.to_ascii_uppercase();
         }
         let key = LumpName::from_raw(clean_name);
         self.flats
