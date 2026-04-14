@@ -3,6 +3,9 @@ name    = "doom-tui"
 version.workspace = true
 edition.workspace = true
 
+[features]
+style_meter = ["doom-game/style_meter"]
+
 [dependencies]
 doom-renderer = { workspace = true }
 ratatui       = { workspace = true }
@@ -10,6 +13,7 @@ crossterm     = { workspace = true }
 thiserror     = { workspace = true }
 ratatui-image = { version = "10.0.6", default-features = false, features = ["crossterm", "image-defaults"] }
 image           = { version = "0.25", default-features = false }
+doom-game       = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
