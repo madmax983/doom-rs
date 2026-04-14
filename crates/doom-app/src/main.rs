@@ -1983,7 +1983,7 @@ fn export_sfx_wav_for_name(
 
     let wav_bytes = doom_audio::wav::encode_pcm16_wav_mono(sfx_sample.sample_rate, &samples_i16);
     std::fs::write(out_path, wav_bytes)
-        .with_context(|| format!("Failed to write WAV to {}", out_path.display()))?;
+        .with_context(|| format!("Could not save the WAV file to '{}'. Please check your permissions.", out_path.display()))?;
     Ok(())
 }
 
@@ -2021,7 +2021,7 @@ fn export_music_wav_for_map(
 
     let wav_bytes = wav_from_f32_mono(&rendered, sample_rate);
     std::fs::write(out_path, wav_bytes)
-        .with_context(|| format!("Failed to write WAV to {}", out_path.display()))?;
+        .with_context(|| format!("Could not save the WAV file to '{}'. Please check your permissions.", out_path.display()))?;
     Ok(())
 }
 
@@ -2100,20 +2100,20 @@ fn run_doom() -> Result<()> {
     let compat = args.compat;
 
     let iwad_bytes = std::fs::read(&args.iwad)
-        .with_context(|| format!("Failed to read IWAD file: {}", args.iwad.display()))?;
+        .with_context(|| format!("Could not locate the IWAD file '{}'. Please check the path and try again.", args.iwad.display()))?;
 
     // Build a WadStack for patch/lump lookups (menu graphics, HUD sprites).
     let mut wad_stack = WadStack::new();
     wad_stack
         .push_iwad(iwad_bytes)
-        .with_context(|| format!("Failed to load IWAD: {}", args.iwad.display()))?;
+        .with_context(|| format!("The IWAD file '{}' could not be parsed. It may be corrupted.", args.iwad.display()))?;
 
     for pwad_path in &args.pwad {
         let pwad_bytes = std::fs::read(pwad_path)
-            .with_context(|| format!("Failed to read PWAD file: {}", pwad_path.display()))?;
+            .with_context(|| format!("Could not locate the PWAD file '{}'. Please check the path and try again.", pwad_path.display()))?;
         wad_stack
             .push_pwad(pwad_bytes)
-            .with_context(|| format!("Failed to load PWAD: {}", pwad_path.display()))?;
+            .with_context(|| format!("The PWAD file '{}' could not be parsed. It may be corrupted.", pwad_path.display()))?;
     }
 
     // Build the PLAYPAL blit palette (for terminal RGB conversion).
@@ -2132,12 +2132,12 @@ fn run_doom() -> Result<()> {
 
     // Parse the requested level.
     let level = Level::from_wad_stack(&wad_stack, warp_str)
-        .with_context(|| format!("Failed to load map {warp_str}"))?;
+        .with_context(|| format!("Could not load the map '{warp_str}'. Please ensure it exists in the provided WADs."))?;
 
     if let Some(ref html_path) = args.export_html {
         let html_data = doom_map::export_map_to_html(&level);
         std::fs::write(html_path, html_data)
-            .with_context(|| format!("Failed to write HTML to {}", html_path.display()))?;
+            .with_context(|| format!("Could not save the HTML report to '{}'. Please check your permissions.", html_path.display()))?;
         use crossterm::style::Stylize;
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
             println!(
@@ -2155,7 +2155,7 @@ fn run_doom() -> Result<()> {
     if let Some(ref json_path) = args.export_json {
         let json_data = doom_map::export_map_to_json(&level);
         std::fs::write(json_path, json_data)
-            .with_context(|| format!("Failed to write JSON to {}", json_path.display()))?;
+            .with_context(|| format!("Could not save the JSON report to '{}'. Please check your permissions.", json_path.display()))?;
         use crossterm::style::Stylize;
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
             println!(
@@ -2173,7 +2173,7 @@ fn run_doom() -> Result<()> {
     if let Some(ref svg_path) = args.export_svg {
         let svg_data = doom_map::export_map_to_svg(&level);
         std::fs::write(svg_path, svg_data)
-            .with_context(|| format!("Failed to write SVG to {}", svg_path.display()))?;
+            .with_context(|| format!("Could not save the SVG layout to '{}'. Please check your permissions.", svg_path.display()))?;
         use crossterm::style::Stylize;
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
             println!(
@@ -2191,7 +2191,7 @@ fn run_doom() -> Result<()> {
     if let Some(ref geojson_path) = args.export_geojson {
         let geojson_data = doom_map::export_map_to_geojson(&level);
         std::fs::write(geojson_path, geojson_data)
-            .with_context(|| format!("Failed to write GeoJSON to {}", geojson_path.display()))?;
+            .with_context(|| format!("Could not save the GeoJSON file to '{}'. Please check your permissions.", geojson_path.display()))?;
         use crossterm::style::Stylize;
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
             println!(
@@ -2209,7 +2209,7 @@ fn run_doom() -> Result<()> {
     if let Some(ref dot_path) = args.export_dot {
         let graph = doom_map::SectorGraph::build(&level);
         std::fs::write(dot_path, graph.to_dot())
-            .with_context(|| format!("Failed to write DOT to {}", dot_path.display()))?;
+            .with_context(|| format!("Could not save the Graphviz DOT file to '{}'. Please check your permissions.", dot_path.display()))?;
         use crossterm::style::Stylize;
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
             println!(
@@ -2227,7 +2227,7 @@ fn run_doom() -> Result<()> {
     if let Some(ref obj_path) = args.export_obj {
         let obj_data = doom_map::obj::export_map_to_obj(&level);
         std::fs::write(obj_path, obj_data)
-            .with_context(|| format!("Failed to write OBJ to {}", obj_path.display()))?;
+            .with_context(|| format!("Could not save the 3D model to '{}'. Please check your permissions.", obj_path.display()))?;
         use crossterm::style::Stylize;
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
             println!(
@@ -2333,7 +2333,26 @@ fn run_doom() -> Result<()> {
 }}"#,
                 warp_str, chokepoints_json, areas_json
             );
-            println!("{}", json_data);
+            use std::io::IsTerminal;
+            if std::io::stdout().is_terminal() {
+                use crossterm::style::Stylize;
+                let formatted_json = format!(
+                    r#"{{
+  {}: "{}",
+  {}: {},
+  {}: {}
+}}"#,
+                    r#""map""#.cyan().bold(),
+                    warp_str.yellow(),
+                    r#""chokepoints""#.cyan().bold(),
+                    chokepoints_json,
+                    r#""isolated_areas""#.cyan().bold(),
+                    areas_json
+                );
+                println!("{formatted_json}");
+            } else {
+                println!("{json_data}");
+            }
         } else {
             use crossterm::style::Stylize;
             if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
@@ -2895,7 +2914,7 @@ fn main() {
             if causes.peek().is_some() {
                 eprintln!("\n↳ {}:", "Caused by".yellow().bold());
                 for cause in causes {
-                    eprintln!("    {}", cause.to_string().red());
+                    eprintln!("    {}", cause);
                 }
             }
             eprintln!();
