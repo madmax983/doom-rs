@@ -37,11 +37,21 @@ pub struct WallTexture {
     pub data: Vec<u8>,
 }
 
+use doom_wad::lump::LumpName;
+
 /// Cache of all wall textures composed from TEXTURE1/TEXTURE2 + PNAMES.
 ///
 /// Look up textures by their 8-byte, null-padded WAD name.
-use doom_wad::lump::LumpName;
-
+///
+/// ## Examples
+/// ```
+/// use doom_wad::WadFile;
+/// use doom_renderer::texture::TextureCache;
+///
+/// let wad_bytes = b"IWAD\x00\0\0\0\x0C\0\0\0".to_vec();
+/// let wad = WadFile::parse(wad_bytes).unwrap();
+/// let textures = TextureCache::load(&wad);
+/// ```
 pub struct TextureCache {
     textures: HashMap<LumpName, WallTexture>,
 }
