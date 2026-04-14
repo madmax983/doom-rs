@@ -29,3 +29,6 @@
 ## 2024-05-18 - [Fixed broken doc tests by using exact enum paths]
 **Confusion:** Doctests containing `ACTION_NONE` failed to compile because the symbol is not exported under `actions`.
 **Clarification:** Modified doctests to correctly use `Action::NoAction as u8` when demonstrating dispatch behavior.
+## 2024-05-18 - [Fixed TextureCache/FlatCache struct docs]
+**Confusion:** The struct doc-comments in `TextureCache` and `FlatCache` were separated from their structs by `use` statements, causing rustdoc to not associate them correctly.
+**Clarification:** Moved the `use` statements above the doc-comments and added executable `## Examples` sections that create an in-memory `WadFile` to satisfy the "executable examples" rule.
