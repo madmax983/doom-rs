@@ -427,4 +427,26 @@ mod tests {
             "rollback must point to the earliest misprediction"
         );
     }
+
+    #[test]
+    fn get_inputs_predicts_stops_at_tic_0() {
+        let mut rm: RollbackManager<u32> = RollbackManager::new(0);
+
+        // Record input for tic 0.
+        rm.record_local_input(0, cmd(45));
+
+        // Ask for tic 5 (depth max is 8).
+        // It will search back to tic 0 and stop because 0 - 6 would underflow.
+        let inputs = rm.get_inputs(5);
+        assert_eq!(
+            inputs[0].forward_move, 45,
+            "prediction must find tic 0 and correctly avoid underflow"
+        );
+
+        let inputs2 = rm.get_inputs(10);
+        assert_eq!(
+            inputs2[0].forward_move, 0,
+            "prediction should fail to find history beyond max depth"
+        );
+    }
 }

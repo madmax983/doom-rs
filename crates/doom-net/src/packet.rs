@@ -309,4 +309,16 @@ mod tests {
     fn empty_bytes_returns_none() {
         assert!(TicPacket::from_bytes(&[]).is_none());
     }
+
+    #[test]
+    fn from_bytes_rejects_missing_data_at_cmd_boundary() {
+        let pkt = sample_packet();
+        let mut bytes = pkt.to_bytes();
+
+        // Truncate halfway through the first cmd (37 bytes is full size)
+        // Let's truncate to 35 bytes
+        bytes.truncate(TIC_PACKET_SIZE - 2);
+
+        assert!(TicPacket::from_bytes(&bytes).is_none());
+    }
 }

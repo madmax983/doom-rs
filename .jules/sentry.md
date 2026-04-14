@@ -34,3 +34,6 @@
 ## 2024-04-11 - Adding tests for get_alive_target_with_pos
 **Learning:** Discovered a lack of test coverage for the `get_alive_target_with_pos` function in `actions.rs`, which is used in actor logic.
 **Action:** Added unit tests to ensure `get_alive_target_with_pos` correctly handles cases with no target, a dead target, and a valid alive target. This prevents regressions in monster targeting logic.
+## 2023-10-27 - [doom-net] Improved RollbackManager and packet edge case tests
+**Learning:** Found coverage gaps in `rollback.rs` around the rollback depth boundary conditions (it could potentially search back too far if not bounded), and `packet.rs` around missing data handling in `from_bytes` near the end of a command chunk.
+**Action:** Wrote `get_inputs_predicts_stops_at_tic_0` boundary test to verify predictions properly avoid underflow and stop at tic 0. Wrote `from_bytes_rejects_missing_data_at_cmd_boundary` to ensure packet deserialization gracefully rejects malformed or truncated payload buffers near command boundary offsets. Fixed a `clippy::clone-on-copy` issue in `flat_cache.rs`.
