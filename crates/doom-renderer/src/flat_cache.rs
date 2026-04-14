@@ -120,7 +120,7 @@ impl FlatCache {
             return;
         }
 
-        let name = lump.name.clone();
+        let name = lump.name;
         let data = wad.lump_data(lump);
 
         let mut texels = Box::new([0u8; FLAT_SIZE]);

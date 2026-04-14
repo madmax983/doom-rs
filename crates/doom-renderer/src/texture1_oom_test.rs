@@ -1,3 +1,4 @@
+//! Test for Out-Of-Memory (OOM) handling in the TEXTURE1 parser.
 #[cfg(test)]
 mod tests {
     use crate::texture_compose::parse_texture_lump;

@@ -1,3 +1,4 @@
+//! Test for Out-Of-Memory (OOM) handling in the Blockmap parser.
 use doom_map::lumps::Blockmap;
 
 fn main() {

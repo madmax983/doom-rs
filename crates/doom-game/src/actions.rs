@@ -29,6 +29,10 @@
 
 use doom_map::Level;
 
+/// All possible action functions (code pointers) an actor can execute.
+///
+/// Doom's actors are driven by a state machine where each state may invoke an
+/// action function. This enum maps to the original C function pointers.
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Action {
