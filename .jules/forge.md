@@ -18,3 +18,7 @@
 **[Boolean Blindness in activate_crusher]
 **Learning:** `activate_crusher` taking multiple booleans like `silent` and `remove_when_done` creates "Boolean Blindness", obscuring intent at the call site.
 **Action:** Group these configuration flags into a named struct like `CrusherParams` to self-document call sites.
+
+**[Avoid clone when using Copy types like LumpName]**
+**Learning:** Using `clone()` on types that implement `Copy` (like `LumpName` which wraps an array of bytes) is redundant, causes Clippy warnings (`clone_on_copy`), and reduces readability without providing any safety benefit.
+**Action:** Remove `.clone()` calls on instances of `Copy` types when passing them around or inserting them into collections.
