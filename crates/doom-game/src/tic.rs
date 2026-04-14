@@ -390,6 +390,8 @@ impl GameState {
 
         // World simulation: mobjs, movers, projectiles, level_time.
         tick_world(self, level);
+        #[cfg(feature = "style_meter")]
+        self.style.tick(self.tic_num);
     }
 
     // -----------------------------------------------------------------------

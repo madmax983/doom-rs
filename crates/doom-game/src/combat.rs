@@ -264,6 +264,10 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             .get(target)
             .map(|mo| (mo.x, mo.y))
             .unwrap_or_default();
+        #[cfg(feature = "style_meter")]
+        if inflictor == gs.player.handle {
+            gs.style.register_kill(gs.tic_num);
+        }
         gs.sound
             .sound_queue
             .push(crate::state::SoundRequest::MonsterDie(kind, target, sx, sy));

@@ -1580,6 +1580,8 @@ impl DoomApp for DoomGame {
             kill_count: p.kill_count,
             total_monsters: self.gs.stats.total_kills,
             level_name: self.gs.level_name.clone(),
+            #[cfg(feature = "style_meter")]
+            style_rank: Some(self.gs.style.rank()),
         })
     }
 }
