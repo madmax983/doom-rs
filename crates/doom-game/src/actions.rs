@@ -4666,6 +4666,35 @@ mod tests {
     }
 
     #[test]
+    fn get_alive_target_returns_none_no_target() {
+        let mut gs = make_game_state();
+        let mo = Mobj::new(
+            MobjKind::Imp,
+            Fixed16_16::from_int(0),
+            Fixed16_16::from_int(0),
+            Bam::ZERO,
+        );
+        let handle = gs.mobjslab.alloc(mo);
+        assert_eq!(get_alive_target(&gs, handle), None);
+    }
+
+    #[test]
+    fn get_alive_target_returns_none_dead_target() {
+        let mut gs = make_game_state();
+        gs.mobjslab.get_mut(gs.player.handle).unwrap().health = 0;
+        let imp = spawn_monster_targeting_player(&mut gs, MobjKind::Imp, 100, 100, 100);
+        assert_eq!(get_alive_target(&gs, imp), None);
+    }
+
+    #[test]
+    fn get_alive_target_returns_target() {
+        let mut gs = make_game_state();
+        let target_h = gs.player.handle;
+        let imp = spawn_monster_targeting_player(&mut gs, MobjKind::Imp, 100, 100, 100);
+        assert_eq!(get_alive_target(&gs, imp), Some(target_h));
+    }
+
+    #[test]
     fn get_alive_target_with_pos_returns_none_dead_target() {
         let mut gs = make_game_state();
         gs.mobjslab.get_mut(gs.player.handle).unwrap().health = 0;
