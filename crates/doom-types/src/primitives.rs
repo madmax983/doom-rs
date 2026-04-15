@@ -300,19 +300,25 @@ mod tests {
     #[test]
     fn sector_special_rejects_over_16() {
         assert!(SectorSpecial::new(17).is_none());
+        assert!(SectorSpecial::new(255).is_none());
         assert!(SectorSpecial::new(16).is_some());
+        assert!(SectorSpecial::new(0).is_some());
     }
 
     #[test]
     fn skill_level_rejects_over_4() {
         assert!(SkillLevel::new(5).is_none());
+        assert!(SkillLevel::new(255).is_none());
         assert_eq!(SkillLevel::new(4).unwrap().raw(), 4);
+        assert_eq!(SkillLevel::new(0).unwrap().raw(), 0);
     }
 
     #[test]
     fn player_num_rejects_over_3() {
         assert!(PlayerNum::new(4).is_none());
+        assert!(PlayerNum::new(255).is_none());
         assert!(PlayerNum::new(3).is_some());
+        assert!(PlayerNum::new(0).is_some());
     }
 
     #[test]

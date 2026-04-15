@@ -37,3 +37,6 @@
 ## 2023-10-27 - [doom-net] Improved RollbackManager and packet edge case tests
 **Learning:** Found coverage gaps in `rollback.rs` around the rollback depth boundary conditions (it could potentially search back too far if not bounded), and `packet.rs` around missing data handling in `from_bytes` near the end of a command chunk.
 **Action:** Wrote `get_inputs_predicts_stops_at_tic_0` boundary test to verify predictions properly avoid underflow and stop at tic 0. Wrote `from_bytes_rejects_missing_data_at_cmd_boundary` to ensure packet deserialization gracefully rejects malformed or truncated payload buffers near command boundary offsets. Fixed a `clippy::clone-on-copy` issue in `flat_cache.rs`.
+## 2024-04-15 - Add missing bounds checks in primitive macros and tests for Fixed16_16
+**Learning:** Certain `if rhs.0 == 0` bounds in `Fixed16_16` couldn't be easily fully tested due to `#![cfg_attr]` debug_asserts interfering with coverage test runs, requiring manual disabling or specific test attributes to correctly cover the behavior. Adding full bounds to `CompatibilityProfile` parsing brought `compat.rs` to 100% coverage.
+**Action:** Use conditional `debug_assertions` checks in tests to handle branches that deliberately `panic` in debug mode but clamp/return fallbacks in release mode.

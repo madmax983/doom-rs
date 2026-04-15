@@ -115,8 +115,10 @@ impl Fixed16_16 {
     /// ```
     #[inline]
     pub fn fixed_div(self, rhs: Self) -> Self {
-        debug_assert!(rhs.0 != 0, "FixedDiv: division by zero");
         if rhs.0 == 0 {
+            if cfg!(debug_assertions) {
+                panic!("FixedDiv: division by zero");
+            }
             // Havoc 👺: Protect against division by zero in release builds
             return if self.0 >= 0 {
                 Self(i32::MAX)
@@ -126,16 +128,17 @@ impl Fixed16_16 {
         }
         let numerator = (self.0 as i64) << FRAC_BITS;
         // Havoc 👺: Catch overflow division cases!
-        let mut result = numerator
+        let result = numerator
             .checked_div(rhs.0 as i64)
             .unwrap_or(if numerator > 0 { i64::MAX } else { i64::MIN });
 
         if result > i32::MAX as i64 {
-            result = i32::MAX as i64;
+            Self(i32::MAX)
         } else if result < i32::MIN as i64 {
-            result = i32::MIN as i64;
+            Self(i32::MIN)
+        } else {
+            Self(result as i32)
         }
-        Self(result as i32)
     }
 
     /// Absolute value.
@@ -363,11 +366,16 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn fixed_div_by_zero_panics() {
+    #[cfg_attr(debug_assertions, should_panic)]
+    fn fixed_div_by_zero_panics_or_clamps() {
         let a = Fixed16_16::from_int(10);
         let b = Fixed16_16::ZERO;
-        let _ = a.fixed_div(b);
+        let res = a.fixed_div(b);
+        assert_eq!(res, Fixed16_16::from_raw(i32::MAX));
+
+        let c = Fixed16_16::from_int(-10);
+        let res2 = c.fixed_div(b);
+        assert_eq!(res2, Fixed16_16::from_raw(i32::MIN));
     }
 
     #[test]

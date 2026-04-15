@@ -42,3 +42,27 @@ impl FromStr for CompatibilityProfile {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_return_canonical_cli_string() {
+        assert_eq!(CompatibilityProfile::Extended.as_str(), "extended");
+        assert_eq!(CompatibilityProfile::VanillaStrict.as_str(), "vanilla-strict");
+    }
+
+    #[test]
+    fn should_display_correctly() {
+        assert_eq!(format!("{}", CompatibilityProfile::Extended), "extended");
+        assert_eq!(format!("{}", CompatibilityProfile::VanillaStrict), "vanilla-strict");
+    }
+
+    #[test]
+    fn should_parse_from_str_correctly() {
+        assert_eq!(CompatibilityProfile::from_str("extended"), Ok(CompatibilityProfile::Extended));
+        assert_eq!(CompatibilityProfile::from_str("vanilla-strict"), Ok(CompatibilityProfile::VanillaStrict));
+        assert_eq!(CompatibilityProfile::from_str("invalid"), Err("expected `extended` or `vanilla-strict`"));
+    }
+}

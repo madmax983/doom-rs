@@ -144,6 +144,7 @@ impl Bam {
     /// unsafe { Bam::init_trig_tables(); }
     /// assert_eq!(ANG90.sin(), FIXED_ONE);
     /// ```
+    #[inline]
     pub fn sin(self) -> Fixed16_16 {
         if !FINESINE.load(core::sync::atomic::Ordering::Acquire) {
             return Fixed16_16::ZERO;
@@ -161,6 +162,7 @@ impl Bam {
     /// assert_eq!(Bam::ZERO.cos(), FIXED_ONE);
     /// assert_eq!(ANG180.cos(), -FIXED_ONE);
     /// ```
+    #[inline]
     pub fn cos(self) -> Fixed16_16 {
         let cos_angle = Bam(self.0.wrapping_add(ANG90.0));
         cos_angle.sin()
