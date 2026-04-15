@@ -525,7 +525,15 @@ pub fn p_radius_attack(
             let total_dist = dist_f.max(1.0);
             let cos_a = dx_f / total_dist;
             let sin_a = dy_f / total_dist;
-            let los = trace::trace_ray(lv, sx, sy, cos_a, sin_a, total_dist, false, None, &[]);
+            let los = trace::trace_ray(
+                lv,
+                sx,
+                sy,
+                cos_a,
+                sin_a,
+                total_dist,
+                trace::ActorCheck::Ignore,
+            );
             if matches!(los.hit, TraceHit::Wall { .. }) {
                 continue; // Wall blocks the blast.
             }
