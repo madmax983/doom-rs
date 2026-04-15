@@ -57,11 +57,12 @@ impl InputLog {
     #[must_use]
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "InputLog capacity must be > 0");
-        let mut log = Vec::with_capacity(capacity);
-        log.resize_with(capacity, || None);
+        let cap = capacity.min(1024);
+        let mut log = Vec::with_capacity(cap);
+        log.resize_with(cap, || None);
         Self {
             log,
-            capacity,
+            capacity: cap,
             oldest_tic: 0,
         }
     }
@@ -86,7 +87,8 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    /// use doom_net::{InputLog, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
     ///
     /// let mut log = InputLog::new(8);
     /// let mut cmds = [TicCmd::default(); MAX_PLAYERS];
@@ -109,7 +111,8 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    /// use doom_net::{InputLog, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
     ///
     /// let mut log = InputLog::new(8);
     /// log.record(5, [TicCmd::default(); MAX_PLAYERS]);
@@ -132,7 +135,8 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    /// use doom_net::{InputLog, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
     ///
     /// let mut log = InputLog::new(8);
     /// log.record(1, [TicCmd::default(); MAX_PLAYERS]); // Predicted
@@ -154,7 +158,8 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    /// use doom_net::{InputLog, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
     ///
     /// let mut log = InputLog::new(8);
     /// log.set_authoritative(42, [TicCmd::default(); MAX_PLAYERS]);
