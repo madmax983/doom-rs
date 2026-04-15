@@ -34,3 +34,4 @@ tempfile = "3.10"
 [features]
 loom = ["dep:loom", "doom-audio/loom"]
 sound_ripples = []
+style_meter = ["doom-game/style_meter", "doom-tui/style_meter"]

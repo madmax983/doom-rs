@@ -306,7 +306,7 @@ impl PlayerState {
     ///
     /// Used for items that set health to a fixed value (e.g. Megasphere).
     pub fn set_health_capped(&mut self, value: i32, cap: i32) {
-        self.health = value.clamp(0, cap);
+        self.health = value.clamp(0, cap.max(0));
     }
 
     /// Returns `true` if the player is dead (health ≤ 0).
@@ -496,6 +496,16 @@ mod prop_tests {
         // Property: after any sequence of `apply_damage(n)`, health is always
         // within `[-32768, MAX_HEALTH]`.
         #[test]
+
+        #[test]
+        fn set_health_capped_havoc_negative_cap(
+            value in proptest::num::i32::ANY,
+            cap in proptest::num::i32::ANY
+        ) {
+            let mut player = PlayerState::pistol_start(crate::mobj::MobjHandle::NULL);
+            player.set_health_capped(value, cap);
+        }
+
         fn health_clamped_after_apply_damage(
             damage in i32::MIN..=i32::MAX,
         ) {

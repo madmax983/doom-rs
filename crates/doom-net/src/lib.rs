@@ -25,7 +25,7 @@ pub mod transport;
 pub use checksum::{CRC32_TABLE, checksums_match, compute_checksum};
 pub use client::NetClient;
 pub use input_log::InputLog;
-pub use packet::{MAX_PLAYERS, MAX_ROLLBACK_TICS, TIC_PACKET_SIZE, TicCmd, TicPacket};
+pub use packet::{MAX_PLAYERS, MAX_ROLLBACK_TICS, TIC_PACKET_SIZE, TicPacket};
 pub use rollback::RollbackManager;
 pub use server::RelayServer;
 pub use snapshot::SnapshotRing;

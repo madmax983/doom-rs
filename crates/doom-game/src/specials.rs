@@ -2250,7 +2250,7 @@ pub fn p_use_lines(gs: &mut GameState, level: &mut Level, handle: MobjHandle) {
     // Find crossed linedefs in front-to-back order. Vanilla Doom traverses all
     // intercepts here: a closed ordinary wall in front of a special must block
     // use instead of letting the player "reach through" it.
-    let mut intercepts = Vec::new();
+    let mut intercepts: smallvec::SmallVec<[(i64, i64, usize); 16]> = smallvec::SmallVec::new();
     for ld_idx in 0..level.linedefs.len() {
         // Collect data while the borrow is immutable; drop before mutable dispatch.
         let (lx1, ly1, lx2, ly2) = {

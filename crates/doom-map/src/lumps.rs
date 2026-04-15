@@ -445,9 +445,17 @@ impl Reject {
     /// Parse a REJECT lump given the number of sectors.
     ///
     /// # Errors
-    /// Returns `LumpParseError::BadRejectSize` if the lump size doesn't match.
+    /// Returns `LumpParseError::BadRejectSize` if the lump size doesn't match,
+    /// or if the required sector size overflows.
     pub fn parse_lump(data: &[u8], n_sectors: usize) -> Result<Self, LumpParseError> {
-        let expected = (n_sectors * n_sectors).div_ceil(8);
+        let expected = n_sectors
+            .checked_mul(n_sectors)
+            .map(|sq| sq.div_ceil(8))
+            .ok_or(LumpParseError::BadRejectSize {
+                n_sectors,
+                expected: usize::MAX,
+                actual: data.len(),
+            })?;
         if data.len() != expected {
             return Err(LumpParseError::BadRejectSize {
                 n_sectors,

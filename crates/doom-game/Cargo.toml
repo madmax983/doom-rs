@@ -13,6 +13,7 @@ doom-map   = { workspace = true }
 thiserror  = { workspace = true }
 strum = { version = "0.28.0" }
 strum_macros = { version = "0.28.0" }
+smallvec = "1.15.1"
 
 [dev-dependencies]
 proptest = { workspace = true }

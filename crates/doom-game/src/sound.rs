@@ -77,8 +77,11 @@ pub fn clear_sound_targets(gs: &mut GameState) {
 /// included in the result.
 ///
 /// Returned indices are deduplicated but not sorted.
-pub fn adjacent_sectors(level: &Level, sector_index: usize) -> Vec<usize> {
-    let mut result = Vec::new();
+///
+/// ⚡ Bolt Optimization:
+/// Uses `SmallVec` to avoid heap allocations on this frequently called hot path.
+pub fn adjacent_sectors(level: &Level, sector_index: usize) -> smallvec::SmallVec<[usize; 8]> {
+    let mut result = smallvec::SmallVec::new();
 
     for ld in &level.linedefs {
         // Only two-sided linedefs connect sectors.
@@ -653,7 +656,7 @@ mod tests {
         let level = make_test_level(3, &[(0, 1, 0), (1, 2, 0)]);
 
         let adj_0 = adjacent_sectors(&level, 0);
-        assert_eq!(adj_0, vec![1]);
+        assert_eq!(adj_0.as_slice(), &[1]);
 
         let adj_1 = adjacent_sectors(&level, 1);
         assert!(adj_1.contains(&0));
@@ -661,7 +664,7 @@ mod tests {
         assert_eq!(adj_1.len(), 2);
 
         let adj_2 = adjacent_sectors(&level, 2);
-        assert_eq!(adj_2, vec![1]);
+        assert_eq!(adj_2.as_slice(), &[1]);
     }
 
     #[test]
@@ -1060,7 +1063,7 @@ mod tests {
 
         let adj = adjacent_sectors(&level, 0);
         // Should be deduplicated: only one entry for sector 1.
-        assert_eq!(adj, vec![1]);
+        assert_eq!(adj.as_slice(), &[1]);
     }
 
     #[test]
