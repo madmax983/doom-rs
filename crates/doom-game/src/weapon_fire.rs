@@ -123,7 +123,7 @@ fn bullet_autoaim_angle(
     handle: MobjHandle,
     base_angle: Bam,
     level: Option<&Level>,
-    intercepts: &mut Vec<crate::combat::HitscanIntercept>,
+    intercepts: &mut smallvec::SmallVec<[crate::combat::HitscanIntercept; 16]>,
 ) -> Bam {
     let right_probe = Bam(base_angle.0.wrapping_add(BULLET_AUTOAIM_SIDE_PROBE));
     let left_probe = Bam(base_angle.0.wrapping_sub(BULLET_AUTOAIM_SIDE_PROBE));
@@ -209,7 +209,7 @@ pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
         None => return,
     };
 
-    let mut intercepts = Vec::new();
+    let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
     let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
     let damage = p_damage_with_variance(gs, 5);
@@ -239,7 +239,7 @@ pub fn p_fire_shotgun(gs: &mut GameState, level: Option<&Level>) {
         None => return,
     };
 
-    let mut intercepts = Vec::new();
+    let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
 
     for _ in 0..7 {
@@ -273,7 +273,7 @@ pub fn p_fire_super_shotgun(gs: &mut GameState, level: Option<&Level>) {
         None => return,
     };
 
-    let mut intercepts = Vec::new();
+    let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
 
     for _ in 0..20 {
@@ -307,7 +307,7 @@ pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
         None => return,
     };
 
-    let mut intercepts = Vec::new();
+    let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
     let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
     let damage = p_damage_with_variance(gs, 5);
@@ -348,7 +348,7 @@ pub fn p_fire_fist(gs: &mut GameState, level: Option<&Level>) {
     let spread = gs.p_subrandom() << 18;
     let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
 
-    let mut intercepts = Vec::new();
+    let mut intercepts = smallvec::SmallVec::new();
     let hit = p_line_attack(
         gs,
         handle,
@@ -382,7 +382,7 @@ pub fn p_fire_chainsaw(gs: &mut GameState, level: Option<&Level>) {
     // MELEERANGE + 1 map unit for chainsaw (slightly longer reach).
     let chainsaw_range = Fixed16_16(MELEERANGE.0 + (1 << 16));
 
-    let mut intercepts = Vec::new();
+    let mut intercepts = smallvec::SmallVec::new();
     let hit = p_line_attack(
         gs,
         handle,

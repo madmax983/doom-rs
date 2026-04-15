@@ -741,7 +741,7 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
     let damage_lo = info.damage_lo;
 
     // --- Hitscan: fire each pellet ---
-    let mut intercepts = Vec::new();
+    let mut intercepts = smallvec::SmallVec::new();
     for i in 0..pellets {
         // Compute per-pellet angle.
         // For single-pellet weapons spread=0, so this is just base_angle.
