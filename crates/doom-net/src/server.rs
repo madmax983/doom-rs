@@ -360,7 +360,7 @@ mod tests {
 
     #[test]
     fn broadcast_excludes_sender() {
-        use crate::packet::TicCmd;
+        use doom_types::TicCmd;
 
         // Create a server and two "client" transports.
         let mut server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();

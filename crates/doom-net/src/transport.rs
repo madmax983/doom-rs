@@ -337,7 +337,7 @@ pub fn make_join_packet() -> TicPacket {
         sender: HANDSHAKE_JOIN_SENDER,
         ack_tic: 0,
         state_checksum: 0,
-        cmds: [crate::packet::TicCmd::default(); crate::packet::MAX_PLAYERS],
+        cmds: [doom_types::TicCmd::default(); crate::packet::MAX_PLAYERS],
     }
 }
 
@@ -350,7 +350,7 @@ pub fn make_join_response(slot: u8) -> TicPacket {
         sender: slot,
         ack_tic: 0,
         state_checksum: 0,
-        cmds: [crate::packet::TicCmd::default(); crate::packet::MAX_PLAYERS],
+        cmds: [doom_types::TicCmd::default(); crate::packet::MAX_PLAYERS],
     }
 }
 
@@ -373,7 +373,8 @@ pub const fn is_join_response(packet: &TicPacket) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::packet::{MAX_PLAYERS, TicCmd, TicPacket};
+    use crate::packet::{MAX_PLAYERS, TicPacket};
+    use doom_types::TicCmd;
 
     // -- NetConfig tests --
 

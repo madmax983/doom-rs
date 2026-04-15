@@ -7,7 +7,7 @@
 //! [`TicCmd`] is the wire-format player input command. It is imported from `doom-types`
 //! so that it can be shared across the entire workspace.
 
-pub use doom_types::TicCmd;
+use doom_types::TicCmd;
 
 /// Maximum number of players in a multiplayer session.
 pub const MAX_PLAYERS: usize = 4;
