@@ -37,3 +37,6 @@
 ## 2023-10-27 - [doom-net] Improved RollbackManager and packet edge case tests
 **Learning:** Found coverage gaps in `rollback.rs` around the rollback depth boundary conditions (it could potentially search back too far if not bounded), and `packet.rs` around missing data handling in `from_bytes` near the end of a command chunk.
 **Action:** Wrote `get_inputs_predicts_stops_at_tic_0` boundary test to verify predictions properly avoid underflow and stop at tic 0. Wrote `from_bytes_rejects_missing_data_at_cmd_boundary` to ensure packet deserialization gracefully rejects malformed or truncated payload buffers near command boundary offsets. Fixed a `clippy::clone-on-copy` issue in `flat_cache.rs`.
+## 2024-04-15 - Replace unwrap() with expect() in domain structs and tests
+**Learning:** Found scattered instances of `.unwrap()` and `.unwrap_err()` in map parsing logic, primitives, and game logic, which can obscure test failure context or lead to uninformative panics.
+**Action:** Replaced `.unwrap()` and `.unwrap_err()` with `.expect()` or `.expect_err()` to enforce providing explicit failure messages, making assertions clearer when parsing WAD data or managing the audio system.
