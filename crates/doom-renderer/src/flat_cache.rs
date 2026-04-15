@@ -20,6 +20,7 @@ use std::collections::HashMap;
 /// If a requested flat is not present in the WAD, a zeroed fallback is returned.
 use doom_wad::lump::LumpName;
 
+/// A cache for pre-loaded 64x64 flat textures from the WAD file.
 pub struct FlatCache {
     /// Keyed by uppercase lump name string (trimmed of null bytes).
     flats: HashMap<LumpName, Box<[u8; FLAT_SIZE]>>,

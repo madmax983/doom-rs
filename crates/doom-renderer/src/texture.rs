@@ -42,6 +42,7 @@ pub struct WallTexture {
 /// Look up textures by their 8-byte, null-padded WAD name.
 use doom_wad::lump::LumpName;
 
+/// A cache for composited wall textures, mapped by their 8-byte lump name.
 pub struct TextureCache {
     textures: HashMap<LumpName, WallTexture>,
 }

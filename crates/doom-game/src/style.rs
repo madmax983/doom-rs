@@ -5,13 +5,20 @@ use std::cmp;
 /// Represents the current style rank.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StyleRank {
-    Dismal,          // D
-    Crazy,           // C
-    Badass,          // B
-    Apocalyptic,     // A
-    Savage,          // S
-    Sick,            // SS
-    SmokinSexyStyle, // SSS
+    /// D rank. The lowest style rank.
+    Dismal,
+    /// C rank. Doing okay.
+    Crazy,
+    /// B rank. Good style.
+    Badass,
+    /// A rank. Great style.
+    Apocalyptic,
+    /// S rank. Excellent style.
+    Savage,
+    /// SS rank. Incredible style.
+    Sick,
+    /// SSS rank. The highest possible style rank.
+    SmokinSexyStyle,
 }
 
 impl StyleRank {
@@ -53,6 +60,7 @@ impl StyleMeter {
     /// Score required for SSS rank.
     pub const SSS_SCORE: u32 = 10000;
 
+    /// Creates a new `StyleMeter` with an initial score of zero and a dismal rank.
     pub fn new() -> Self {
         Self {
             score: 0,
