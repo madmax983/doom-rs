@@ -5,7 +5,7 @@ fn load_game_panic() {
     let mut gs = GameState::new("E1M1");
     // Insert a mobj to make sure it's serialized.
     let mobj = doom_game::Mobj::new(
-        doom_game::MobjKind::Imp,
+        doom_types::mobj_kind::MobjKind::Imp,
         doom_types::Fixed16_16::from_int(100),
         doom_types::Fixed16_16::from_int(100),
         doom_types::Bam::ZERO,

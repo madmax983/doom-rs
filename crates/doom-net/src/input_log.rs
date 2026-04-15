@@ -5,7 +5,8 @@
 //! be marked as *authoritative* (server-confirmed) or *predicted* (local
 //! extrapolation).
 
-use crate::packet::{MAX_PLAYERS, MAX_ROLLBACK_TICS, TicCmd};
+use crate::packet::{MAX_PLAYERS, MAX_ROLLBACK_TICS};
+use doom_types::TicCmd;
 
 // ---------------------------------------------------------------------------
 // InputEntry

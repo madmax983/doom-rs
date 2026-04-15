@@ -151,7 +151,8 @@ impl NetClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::packet::{MAX_PLAYERS, TicCmd, TicPacket};
+    use crate::packet::{MAX_PLAYERS, TicPacket};
+    use doom_types::TicCmd;
     use crate::server::RelayServer;
     use crate::transport::{NetConfig, make_join_packet};
 
