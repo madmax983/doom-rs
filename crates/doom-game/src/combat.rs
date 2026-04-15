@@ -104,7 +104,7 @@ fn collect_actor_hitscan_intercepts(
     sy: f32,
     rdx: f32,
     rdy: f32,
-    intercepts: &mut Vec<HitscanIntercept>,
+    intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
 ) {
     intercepts.clear();
 
@@ -309,7 +309,7 @@ pub(crate) fn p_line_attack_target(
     angle: Bam,
     range: Fixed16_16,
     level: Option<&Level>,
-    intercepts: &mut Vec<HitscanIntercept>,
+    intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
 ) -> Option<MobjHandle> {
     let (sx, sy, shootz) = match gs.mobjslab.get(source) {
         Some(mo) => (
@@ -431,6 +431,9 @@ pub(crate) fn p_line_attack_target(
 /// `None`, only actor intercepts are considered.
 ///
 /// Returns `Some(handle)` if an actor was hit and damaged, `None` otherwise.
+///
+/// ⚡ Bolt Optimization:
+/// `intercepts` uses `SmallVec` to avoid heap allocations on the hitscan hot path.
 pub fn p_line_attack(
     gs: &mut GameState,
     source: MobjHandle,
@@ -438,7 +441,7 @@ pub fn p_line_attack(
     range: Fixed16_16,
     damage: i32,
     level: Option<&Level>,
-    intercepts: &mut Vec<HitscanIntercept>,
+    intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
 ) -> Option<MobjHandle> {
     let hit = p_line_attack_target(gs, source, angle, range, level, intercepts)?;
     damage_mobj(gs, hit, source, damage);
@@ -902,7 +905,7 @@ mod tests {
         src.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
         let src_handle = gs.mobjslab.alloc(src);
 
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             src_handle,
@@ -922,7 +925,7 @@ mod tests {
         let mut gs = make_game_state();
         let _trooper = spawn_trooper(&mut gs, 100, 0);
         let src = gs.player.handle;
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             src,
@@ -946,7 +949,7 @@ mod tests {
         // Even if trig tables were initialized and the geometry lined up,
         // dead actors must be skipped.  With uninitialized tables, t=0 and
         // both the dead-check and t<=0 guard fire — None is the expected result.
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             src,
@@ -971,7 +974,7 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 512, -21);
         let angle = Bam(((-8i32) << 18) as u32);
 
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             src,
@@ -1261,7 +1264,7 @@ mod tests {
         // ray will have zero direction and return Nothing. We need to
         // test the blockmap path so we pass Some(&level).
         // Since trig tables return 0, the ray has zero direction — no hit.
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1301,7 +1304,7 @@ mod tests {
         // Trooper at (64, 100) — behind the wall at y=64.
         let trooper = spawn_trooper(&mut gs, 64, 100);
 
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1339,7 +1342,7 @@ mod tests {
         // because the ray has zero direction (cos=sin=0).
         let trooper = spawn_trooper(&mut gs, 64, 1);
 
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1372,7 +1375,7 @@ mod tests {
 
         let trooper = spawn_trooper(&mut gs, 64, 50);
 
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1410,7 +1413,7 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 512, -21);
         let angle = Bam(((-8i32) << 18) as u32);
 
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1440,7 +1443,7 @@ mod tests {
         let low_trooper = spawn_trooper(&mut gs, 128, 0);
         gs.mobjslab.get_mut(low_trooper).unwrap().z = Fixed16_16::ZERO;
 
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
@@ -1476,7 +1479,7 @@ mod tests {
         let high_far = spawn_trooper(&mut gs, 160, 0);
         gs.mobjslab.get_mut(high_far).unwrap().z = Fixed16_16::from_int(128);
 
-        let mut intercepts = Vec::new();
+        let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,

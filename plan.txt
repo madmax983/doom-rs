@@ -1,5 +1,0 @@
-1. We will use `LumpName` as keys in `sfx_lookup` and `music_library` HashMap. This removes string allocations and comparisons, because `LumpName` internally stores an `[u8; 8]` and implements `Hash` and `Eq` correctly.
-2. In `crates/doom-app/src/main.rs`, update `sfx_lookup` and `music_library` types in `DoomGame`.
-3. In `crates/doom-app/src/main.rs`, update `load_music_library` to return `HashMap<LumpName, Arc<[u8]>>`.
-4. In `crates/doom-app/src/audio_system.rs`, update `build_sfx_lookup` to return `HashMap<LumpName, u16>`, and modify `sfx_candidate_names` to yield `LumpName` instead of `String`.
-5. Fix call sites where we lookup or insert using string refs to use `LumpName::from_str`.
