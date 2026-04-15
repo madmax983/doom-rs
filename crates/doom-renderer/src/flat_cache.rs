@@ -14,12 +14,12 @@ use doom_types::limits::FLAT_SIZE;
 use doom_wad::{LumpDef, WadFile, WadStack};
 use std::collections::HashMap;
 
+use doom_wad::lump::LumpName;
+
 /// Cache of 64×64 flat textures loaded from a WAD file.
 ///
 /// All flats are looked up by their 8-byte lump name (uppercase, null-padded).
 /// If a requested flat is not present in the WAD, a zeroed fallback is returned.
-use doom_wad::lump::LumpName;
-
 pub struct FlatCache {
     /// Keyed by uppercase lump name string (trimmed of null bytes).
     flats: HashMap<LumpName, Box<[u8; FLAT_SIZE]>>,
