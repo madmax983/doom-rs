@@ -34,7 +34,7 @@ impl FlatCache {
     /// `FF_START`/`FF_END` sections for PWAD support) and loads every lump
     /// that is exactly [`FLAT_SIZE`] bytes.
     pub fn load(wad: &WadFile) -> Self {
-        let mut flats: HashMap<LumpName, Box<[u8; FLAT_SIZE]>> = HashMap::new();
+        let mut flats = HashMap::new();
 
         for lump in wad.lumps_between("F_START", "F_END") {
             Self::insert_flat(&mut flats, wad, lump);
@@ -74,7 +74,7 @@ impl FlatCache {
     }
 
     fn load_from_stack_impl(wad_stack: &WadStack, allow_ff_markers: bool) -> Self {
-        let mut flats: HashMap<LumpName, Box<[u8; FLAT_SIZE]>> = HashMap::new();
+        let mut flats = HashMap::new();
         let mut in_flat_section = false;
 
         for (wad, lump) in wad_stack.all_lumps() {

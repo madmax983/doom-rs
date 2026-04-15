@@ -60,8 +60,10 @@ pub struct SpriteFrame {
 /// Cache of all sprite frames loaded from WAD lumps between S_START and S_END.
 ///
 /// Keyed by uppercase lump name (null bytes stripped).
+use doom_wad::lump::LumpName;
+
 pub struct SpriteCache {
-    frames: HashMap<String, SpriteFrame>,
+    frames: HashMap<LumpName, SpriteFrame>,
 }
 
 impl SpriteCache {
@@ -146,11 +148,7 @@ impl SpriteCache {
     /// The name is normalised to uppercase with trailing null bytes stripped
     /// before lookup, matching how WAD lump names are stored.
     pub fn get(&self, name: &[u8; 8]) -> Option<&SpriteFrame> {
-        // Trim trailing nulls and convert to uppercase string.
-        let trimmed_len = name.iter().position(|&b| b == 0).unwrap_or(8);
-        let key = std::str::from_utf8(&name[..trimmed_len])
-            .ok()?
-            .to_uppercase();
+        let key = LumpName::from_raw(*name);
         self.frames.get(&key)
     }
 
@@ -166,7 +164,7 @@ impl SpriteCache {
 
     /// Insert a frame directly (used in tests and by callers that pre-parse frames).
     pub fn insert(&mut self, name: String, frame: SpriteFrame) {
-        self.frames.insert(name.to_uppercase(), frame);
+        self.frames.insert(LumpName::from_str(&name), frame);
     }
 
     /// Construct an empty cache (useful in tests).
@@ -176,13 +174,13 @@ impl SpriteCache {
         }
     }
 
-    fn insert_frame(frames: &mut HashMap<String, SpriteFrame>, wad: &WadFile, lump: &LumpDef) {
+    fn insert_frame(frames: &mut HashMap<LumpName, SpriteFrame>, wad: &WadFile, lump: &LumpDef) {
         if lump.size == 0 {
             return;
         }
         let data = wad.lump_data(lump);
         if let Some(frame) = parse_picture(data) {
-            let name = lump.name.as_str().to_uppercase();
+            let name = lump.name;
             frames.insert(name, frame);
         }
     }
