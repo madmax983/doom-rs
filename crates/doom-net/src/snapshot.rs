@@ -32,9 +32,13 @@ impl<S: Clone> SnapshotRing<S> {
     #[must_use]
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "SnapshotRing capacity must be > 0");
-        let mut ring = Vec::with_capacity(capacity);
-        ring.resize_with(capacity, || None);
-        Self { ring, capacity }
+        let cap = capacity.min(1024);
+        let mut ring = Vec::with_capacity(cap);
+        ring.resize_with(cap, || None);
+        Self {
+            ring,
+            capacity: cap,
+        }
     }
 
     /// Create a ring with the default capacity ([`MAX_ROLLBACK_TICS`]).
