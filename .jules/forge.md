@@ -22,3 +22,6 @@
 **[Avoid clone when using Copy types like LumpName]**
 **Learning:** Using `clone()` on types that implement `Copy` (like `LumpName` which wraps an array of bytes) is redundant, causes Clippy warnings (`clone_on_copy`), and reduces readability without providing any safety benefit.
 **Action:** Remove `.clone()` calls on instances of `Copy` types when passing them around or inserting them into collections.
+**Refactor trace_ray actor checking to resolve Boolean Blindness**
+**Learning:** Functions that accept a boolean flag to enable a feature (like `check_actors: bool`) alongside optional data required only when that flag is true (like `shooter_index` and `actor_positions`) suffer from Boolean Blindness and disconnected parameters.
+**Action:** Group the boolean flag and its dependent data into a strongly typed enum (e.g., `ActorCheck::Ignore` and `ActorCheck::Check { shooter_index, actor_positions }`) to enforce correct usage at compile time and clarify intent at call sites.
