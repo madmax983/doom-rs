@@ -295,9 +295,8 @@ pub fn p_nightmare_respawn(gs: &mut GameState, level: Option<&Level>, handle: Mo
         return false;
     }
 
-    let kind = match doomed_type_to_kind(spawn_type) {
-        Some(k) => k,
-        None => return false,
+    let Some(kind) = doomed_type_to_kind(spawn_type) else {
+        return false;
     };
 
     let spawn_radius = MOBJINFO[kind as usize].radius;

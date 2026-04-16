@@ -278,13 +278,11 @@ pub fn p_check_sight(
         }
 
         // Two-sided line: check the opening.
-        let right_sd = match level.sidedefs.get(ld.right_sidedef as usize) {
-            Some(sd) => sd,
-            None => return false,
+        let Some(right_sd) = level.sidedefs.get(ld.right_sidedef as usize) else {
+            return false;
         };
-        let left_sd = match level.sidedefs.get(ld.left_sidedef as usize) {
-            Some(sd) => sd,
-            None => return false,
+        let Some(left_sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+            return false;
         };
 
         let front_sector = &level.sectors[right_sd.sector as usize];
@@ -350,14 +348,14 @@ pub fn p_check_sight(
 ///
 /// Returns `0` if the horizontal distance is zero (actors at same position).
 pub fn p_aim_line_slope(gs: &GameState, source: MobjHandle, target: MobjHandle) -> Fixed16_16 {
-    let (src_x, src_y, src_z, src_h) = match gs.mobjslab.get(source) {
-        Some(mo) => (mo.x, mo.y, mo.z, mo.height),
-        None => return Fixed16_16::ZERO,
+    let Some(src_mo) = gs.mobjslab.get(source) else {
+        return Fixed16_16::ZERO;
     };
-    let (tgt_x, tgt_y, tgt_z, tgt_h) = match gs.mobjslab.get(target) {
-        Some(mo) => (mo.x, mo.y, mo.z, mo.height),
-        None => return Fixed16_16::ZERO,
+    let (src_x, src_y, src_z, src_h) = (src_mo.x, src_mo.y, src_mo.z, src_mo.height);
+    let Some(tgt_mo) = gs.mobjslab.get(target) else {
+        return Fixed16_16::ZERO;
     };
+    let (tgt_x, tgt_y, tgt_z, tgt_h) = (tgt_mo.x, tgt_mo.y, tgt_mo.z, tgt_mo.height);
 
     let src_eye = sight_eye_z(src_z, src_h);
     let tgt_eye = sight_eye_z(tgt_z, tgt_h);

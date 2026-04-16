@@ -25,3 +25,6 @@
 **Refactor trace_ray actor checking to resolve Boolean Blindness**
 **Learning:** Functions that accept a boolean flag to enable a feature (like `check_actors: bool`) alongside optional data required only when that flag is true (like `shooter_index` and `actor_positions`) suffer from Boolean Blindness and disconnected parameters.
 **Action:** Group the boolean flag and its dependent data into a strongly typed enum (e.g., `ActorCheck::Ignore` and `ActorCheck::Check { shooter_index, actor_positions }`) to enforce correct usage at compile time and clarify intent at call sites.
+**[Let Else Guard Clauses for Cleaner Code]**
+**Learning:** Replacing nested `match` and `if let` statements with `let else` guard clauses flattens logic, reducing code nesting significantly and making functions more readable.
+**Action:** Use `let Some(...) = ... else { ... }` consistently instead of verbose `match` or `if let` when dealing with early returns on missing values.

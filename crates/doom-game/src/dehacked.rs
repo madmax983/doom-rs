@@ -365,14 +365,16 @@ impl DehPatch {
                 {
                     return Ok(false);
                 }
-                if let Some(eq_pos) = trimmed.find('=') {
-                    let lhs = trimmed[..eq_pos].trim();
-                    let rhs = trimmed[eq_pos + 1..].trim();
-                    if let Some(frame_part) = lhs.strip_prefix("Frame ") {
-                        if let Ok(frame_num) = frame_part.trim().parse::<usize>() {
-                            patch.code_pointers.insert(frame_num, rhs.to_owned());
-                        }
-                    }
+                let Some(eq_pos) = trimmed.find('=') else {
+                    return Ok(true);
+                };
+                let lhs = trimmed[..eq_pos].trim();
+                let rhs = trimmed[eq_pos + 1..].trim();
+                let Some(frame_part) = lhs.strip_prefix("Frame ") else {
+                    return Ok(true);
+                };
+                if let Ok(frame_num) = frame_part.trim().parse::<usize>() {
+                    patch.code_pointers.insert(frame_num, rhs.to_owned());
                 }
                 Ok(true)
             }

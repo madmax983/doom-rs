@@ -289,13 +289,12 @@ pub fn p_move_projectiles(gs: &mut GameState, level: Option<&Level>) {
             continue;
         }
         // Re-read missile data (it may have been freed by an earlier iteration).
-        let (mx, my, mz, momx, momy, momz, m_radius, m_kind, m_source) =
-            match gs.mobjslab.get(missile_handle) {
-                Some(m) => (
-                    m.x, m.y, m.z, m.momx, m.momy, m.momz, m.radius, m.kind, m.target,
-                ),
-                None => continue,
-            };
+        let Some(m) = gs.mobjslab.get(missile_handle) else {
+            continue;
+        };
+        let (mx, my, mz, momx, momy, momz, m_radius, m_kind, m_source) = (
+            m.x, m.y, m.z, m.momx, m.momy, m.momz, m.radius, m.kind, m.target,
+        );
 
         let new_x = mx + momx;
         let new_y = my + momy;
