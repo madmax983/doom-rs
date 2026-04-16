@@ -605,33 +605,78 @@ impl DehPatch {
     fn parse_i32(s: &str) -> Result<i32, DehError> {
         s.parse::<i32>()
             .or_else(|_| {
-                s.parse::<i64>()
-                    .map(|v| v.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+                s.parse::<f64>()
+                    .and_then(|v| {
+                        if v.is_nan() {
+                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err())) // dummy error to fail through
+                        } else {
+                            Ok(v.clamp(i32::MIN as f64, i32::MAX as f64) as i32)
+                        }
+                    })
             })
             .map_err(|_| DehError::BadField(format!("expected i32, got {s:?}")))
     }
 
     fn parse_u32(s: &str) -> Result<u32, DehError> {
         s.parse::<u32>()
-            .or_else(|_| s.parse::<i64>().map(|v| v.clamp(0, u32::MAX as i64) as u32))
+            .or_else(|_| {
+                s.parse::<f64>()
+                    .and_then(|v| {
+                        if v.is_nan() {
+                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
+                        } else {
+                            Ok(v.clamp(0.0, u32::MAX as f64) as u32)
+                        }
+                    })
+            })
             .map_err(|_| DehError::BadField(format!("expected u32, got {s:?}")))
     }
 
     fn parse_u16(s: &str) -> Result<u16, DehError> {
         s.parse::<u16>()
-            .or_else(|_| s.parse::<i64>().map(|v| v.clamp(0, u16::MAX as i64) as u16))
+            .or_else(|_| {
+                s.parse::<f64>()
+                    .and_then(|v| {
+                        if v.is_nan() {
+                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
+                        } else {
+                            Ok(v.clamp(0.0, u16::MAX as f64) as u16)
+                        }
+                    })
+            })
             .map_err(|_| DehError::BadField(format!("expected u16, got {s:?}")))
     }
 
     fn parse_u8(s: &str) -> Result<u8, DehError> {
         s.parse::<u8>()
-            .or_else(|_| s.parse::<i64>().map(|v| v.clamp(0, u8::MAX as i64) as u8))
+            .or_else(|_| {
+                s.parse::<f64>()
+                    .and_then(|v| {
+                        if v.is_nan() {
+                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
+                        } else {
+                            Ok(v.clamp(0.0, u8::MAX as f64) as u8)
+                        }
+                    })
+            })
             .map_err(|_| DehError::BadField(format!("expected u8, got {s:?}")))
     }
 
     fn parse_usize(s: &str) -> Result<usize, DehError> {
         s.parse::<usize>()
-            .or_else(|_| s.parse::<isize>().map(|v| v.max(0) as usize))
+            .or_else(|_| {
+                s.parse::<f64>().and_then(|v| {
+                    if v.is_nan() {
+                        Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
+                    } else if v < 0.0 {
+                        Ok(0)
+                    } else if v > usize::MAX as f64 {
+                        Ok(usize::MAX)
+                    } else {
+                        Ok(v as usize)
+                    }
+                })
+            })
             .map_err(|_| DehError::BadField(format!("expected usize, got {s:?}")))
     }
 
@@ -1489,6 +1534,15 @@ mod proptests {
         #[test]
         fn parser_does_not_panic(s in "\\PC*") {
             let _ = DehPatch::parse(&s);
+        }
+
+        #[test]
+        fn havoc_parse_does_not_panic_on_massive_digits(s in "[0-9]{50,100}") {
+            assert!(DehPatch::parse_i32(&s).is_ok());
+            assert!(DehPatch::parse_u32(&s).is_ok());
+            assert!(DehPatch::parse_u16(&s).is_ok());
+            assert!(DehPatch::parse_u8(&s).is_ok());
+            assert!(DehPatch::parse_usize(&s).is_ok());
         }
     }
 }
