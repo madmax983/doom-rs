@@ -506,10 +506,12 @@ fn wi_draw_number(
     let s = value.to_string();
     for ch in s.bytes() {
         let digit = ch - b'0';
-        let name = format!("WINUM{digit}");
-        if let Some(p) = cache.get(&name, wad) {
-            let p = p.clone();
-            fb.draw_patch_vanilla(x, y, &p);
+        let name = [
+            "WINUM0", "WINUM1", "WINUM2", "WINUM3", "WINUM4", "WINUM5", "WINUM6", "WINUM7",
+            "WINUM8", "WINUM9",
+        ][digit as usize];
+        if let Some(p) = cache.get(name, wad) {
+            fb.draw_patch_vanilla(x, y, p);
             x += p.width as i32;
         }
     }
@@ -527,8 +529,7 @@ fn wi_draw_percent(
 ) {
     let x2 = wi_draw_number(fb, cache, wad, x, y, value as u32);
     if let Some(p) = cache.get("WIPCNT", wad) {
-        let p = p.clone();
-        fb.draw_patch_vanilla(x2, y, &p);
+        fb.draw_patch_vanilla(x2, y, p);
     }
 }
 
@@ -546,16 +547,14 @@ fn wi_draw_time(
     let mut cx = x;
     cx = wi_draw_number(fb, cache, wad, cx, y, minutes);
     if let Some(p) = cache.get("WICOLON", wad) {
-        let p = p.clone();
-        fb.draw_patch_vanilla(cx, y, &p);
+        fb.draw_patch_vanilla(cx, y, p);
         cx += p.width as i32;
     }
     // Always draw two digits for seconds.
     if seconds < 10 {
         let name = "WINUM0";
         if let Some(p) = cache.get(name, wad) {
-            let p = p.clone();
-            fb.draw_patch_vanilla(cx, y, &p);
+            fb.draw_patch_vanilla(cx, y, p);
             cx += p.width as i32;
         }
     }
@@ -592,9 +591,8 @@ pub fn draw_intermission_wad(
         "INTERPIC".to_string()
     };
     if let Some(p) = cache.get(&bg_name, wad) {
-        let p = p.clone();
         let x = (320 - p.width as i32) / 2;
-        fb.draw_patch(x, 0, &p);
+        fb.draw_patch(x, 0, p);
     } else {
         fb.clear(0);
     }
@@ -610,13 +608,11 @@ pub fn draw_intermission_wad(
 
     // 2. "Finished" + current level name.
     if let Some(p) = cache.get("WIF", wad) {
-        let p = p.clone();
-        fb.draw_patch_vanilla(84, 16, &p);
+        fb.draw_patch_vanilla(84, 16, p);
     }
     let lvname = level_patch(ep, map);
     if let Some(p) = cache.get(&lvname, wad) {
-        let p = p.clone();
-        fb.draw_patch_vanilla(160, 16, &p);
+        fb.draw_patch_vanilla(160, 16, p);
     }
 
     // 3. Stats (shown as counting progresses).
@@ -636,24 +632,21 @@ pub fn draw_intermission_wad(
     );
 
     if let Some(p) = cache.get("WIOSTK", wad) {
-        let p = p.clone();
-        fb.draw_patch_vanilla(50, 114, &p);
+        fb.draw_patch_vanilla(50, 114, p);
     }
     if show_kills {
         wi_draw_percent(fb, cache, wad, 200, 114, renderer.shown_kills);
     }
 
     if let Some(p) = cache.get("WIOSTI", wad) {
-        let p = p.clone();
-        fb.draw_patch_vanilla(50, 134, &p);
+        fb.draw_patch_vanilla(50, 134, p);
     }
     if show_items {
         wi_draw_percent(fb, cache, wad, 200, 134, renderer.shown_items);
     }
 
     if let Some(p) = cache.get("WISCRT2", wad) {
-        let p = p.clone();
-        fb.draw_patch_vanilla(50, 154, &p);
+        fb.draw_patch_vanilla(50, 154, p);
     }
     if show_secrets {
         wi_draw_percent(fb, cache, wad, 200, 154, renderer.shown_secrets);
@@ -661,14 +654,12 @@ pub fn draw_intermission_wad(
 
     if show_time {
         if let Some(p) = cache.get("WITIME", wad) {
-            let p = p.clone();
-            fb.draw_patch_vanilla(16, 180, &p);
+            fb.draw_patch_vanilla(16, 180, p);
         }
         wi_draw_time(fb, cache, wad, 96, 180, renderer.level_time);
 
         if let Some(p) = cache.get("WIPAR", wad) {
-            let p = p.clone();
-            fb.draw_patch_vanilla(232, 180, &p);
+            fb.draw_patch_vanilla(232, 180, p);
         }
         wi_draw_time(fb, cache, wad, 296, 180, renderer.par_time);
     }
@@ -676,15 +667,13 @@ pub fn draw_intermission_wad(
     // 4. "Entering" + next level name (only when Done).
     if phase == IntermissionPhase::Done {
         if let Some(p) = cache.get("WIENTER", wad) {
-            let p = p.clone();
-            fb.draw_patch_vanilla(84, 84, &p);
+            fb.draw_patch_vanilla(84, 84, p);
         }
         // Next map: vanilla advances map by 1 (wrapping per episode handled by game).
         let next_map = map + 1;
         let next_patch = level_patch(ep, next_map);
         if let Some(p) = cache.get(&next_patch, wad) {
-            let p = p.clone();
-            fb.draw_patch_vanilla(160, 84, &p);
+            fb.draw_patch_vanilla(160, 84, p);
         }
     }
 }

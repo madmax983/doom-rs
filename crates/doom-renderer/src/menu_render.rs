@@ -314,8 +314,7 @@ pub fn draw_menu_wad(
 
     // Title patch.
     if let Some(patch) = cache.get(layout.title_patch, wad) {
-        let p = patch.clone();
-        fb.draw_patch_vanilla(layout.title_x, layout.title_y, &p);
+        fb.draw_patch_vanilla(layout.title_x, layout.title_y, patch);
     }
 
     let items = menu.items();
@@ -342,8 +341,7 @@ pub fn draw_menu_wad(
                 if let Some(&patch_name) = layout.item_patches.get(i) {
                     if let Some(&y) = layout.item_ys.get(i) {
                         if let Some(patch) = cache.get(patch_name, wad) {
-                            let p = patch.clone();
-                            fb.draw_patch_vanilla(layout.items_x, y, &p);
+                            fb.draw_patch_vanilla(layout.items_x, y, patch);
                         }
                     }
                 }
@@ -363,8 +361,7 @@ pub fn draw_menu_wad(
         .copied()
         .unwrap_or(layout.item_ys.first().copied().unwrap_or(60));
     if let Some(patch) = cache.get(skull_name, wad) {
-        let p = patch.clone();
-        fb.draw_patch_vanilla(layout.items_x - 32, cursor_y, &p);
+        fb.draw_patch_vanilla(layout.items_x - 32, cursor_y, patch);
     }
 }
 
@@ -383,10 +380,9 @@ pub fn draw_title_screen_wad(
     match title_screen.phase() {
         TitlePhase::Title => {
             if let Some(patch) = cache.get("TITLEPIC", wad) {
-                let p = patch.clone();
                 // Widescreen WADs ship TITLEPIC wider than 320px; center it.
-                let x = (320 - p.width as i32) / 2;
-                fb.draw_patch(x, 0, &p);
+                let x = (320 - patch.width as i32) / 2;
+                fb.draw_patch(x, 0, patch);
             } else {
                 draw_title_pic(fb, font);
             }
@@ -394,9 +390,8 @@ pub fn draw_title_screen_wad(
         TitlePhase::Demo(_) => {}
         TitlePhase::Credits => {
             if let Some(patch) = cache.get("CREDIT", wad) {
-                let p = patch.clone();
-                let x = (320 - p.width as i32) / 2;
-                fb.draw_patch(x, 0, &p);
+                let x = (320 - patch.width as i32) / 2;
+                fb.draw_patch(x, 0, patch);
             } else {
                 draw_credits_screen(fb, font);
             }
@@ -416,8 +411,7 @@ pub fn draw_overlay_patch(
     y: i32,
 ) -> bool {
     if let Some(patch) = cache.get(name, wad) {
-        let p = patch.clone();
-        fb.draw_patch_centered(y, &p);
+        fb.draw_patch_centered(y, patch);
         true
     } else {
         false
@@ -546,25 +540,22 @@ pub fn draw_finale_wad(
     if episode == 3 {
         // PFUB1: static left half; PFUB2: scrolling overlay.
         if let Some(p) = cache.get("PFUB1", wad) {
-            let p = p.clone();
             let x = (320 - p.width as i32) / 2;
-            fb.draw_patch(x, 0, &p);
+            fb.draw_patch(x, 0, p);
         } else {
             fb.clear(0);
         }
         // PFUB2 scrolls right-to-left: vanilla scrolls 2px per 3 tics.
         let scroll = ((tic / 3) * 2) as i32;
         if let Some(p) = cache.get("PFUB2", wad) {
-            let p = p.clone();
             let base_x = (320 - p.width as i32) / 2;
-            fb.draw_patch(base_x - scroll, 0, &p);
+            fb.draw_patch(base_x - scroll, 0, p);
         }
         // After enough scrolling, show ENDPIC.
         if tic > 220 {
             if let Some(p) = cache.get("ENDPIC", wad) {
-                let p = p.clone();
                 let x = (320 - p.width as i32) / 2;
-                fb.draw_patch(x, 0, &p);
+                fb.draw_patch(x, 0, p);
             }
         }
         return;
@@ -575,9 +566,8 @@ pub fn draw_finale_wad(
     // Background.
     if is_doom2 {
         if let Some(p) = cache.get("INTERPIC", wad) {
-            let p = p.clone();
             let x = (320 - p.width as i32) / 2;
-            fb.draw_patch(x, 0, &p);
+            fb.draw_patch(x, 0, p);
         } else {
             fb.clear(0);
         }

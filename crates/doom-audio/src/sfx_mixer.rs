@@ -204,7 +204,7 @@ impl SfxMixer {
     /// let sfx_data: std::sync::Arc<[u8]> = vec![128; 1024].into(); // dummy silent PCM data
     ///
     /// // Play a sound, which gives us a channel index.
-    /// if let Some(channel) = mixer.play(42, sfx_data.clone(), 1.0, 0.0, SfxPriority::Weapon) {
+    /// if let Some(channel) = mixer.play(42, std::sync::Arc::clone(&sfx_data), 1.0, 0.0, SfxPriority::Weapon) {
     ///     // The same entity makes another sound immediately. We restart it on the same channel!
     ///     mixer.play_on_channel(channel, 43, sfx_data, 1.0, 0.0, SfxPriority::Weapon);
     /// }
@@ -372,7 +372,13 @@ mod tests {
         let mut mixer = SfxMixer::new();
         let data: std::sync::Arc<[u8]> = vec![128u8; 100].into();
         let ch = mixer
-            .play(1, data.clone(), 1.0, 0.0, SfxPriority::Medium)
+            .play(
+                1,
+                std::sync::Arc::clone(&data),
+                1.0,
+                0.0,
+                SfxPriority::Medium,
+            )
             .expect("should allocate a channel");
 
         let channel = mixer.channels[ch].as_ref().expect("channel should exist");
@@ -463,7 +469,13 @@ mod tests {
     fn mixer_mix_applies_left_panning() {
         let mut mixer = SfxMixer::new();
         let data: std::sync::Arc<[u8]> = vec![200u8; 100].into();
-        mixer.play(1, data.clone(), 1.0, -1.0, SfxPriority::Medium); // full left
+        mixer.play(
+            1,
+            std::sync::Arc::clone(&data),
+            1.0,
+            -1.0,
+            SfxPriority::Medium,
+        ); // full left
         let mut output = vec![0.0f32; 200];
         mixer.mix(&mut output, 11025);
         let left_energy: f32 = output.iter().step_by(2).map(|s| s * s).sum();
@@ -478,7 +490,13 @@ mod tests {
     fn mixer_channel_finishes_when_data_exhausted() {
         let mut mixer = SfxMixer::new();
         let data: std::sync::Arc<[u8]> = vec![128u8; 10].into(); // very short sound
-        mixer.play(1, data.clone(), 1.0, 0.0, SfxPriority::Medium);
+        mixer.play(
+            1,
+            std::sync::Arc::clone(&data),
+            1.0,
+            0.0,
+            SfxPriority::Medium,
+        );
         let mut output = vec![0.0f32; 200]; // more than enough
         mixer.mix(&mut output, 11025);
         assert_eq!(
@@ -554,7 +572,13 @@ mod tests {
         let mut mixer = SfxMixer::new();
         // Play a short sound that will finish quickly.
         let data: std::sync::Arc<[u8]> = vec![200u8; 5].into();
-        mixer.play(1, data.clone(), 1.0, 0.0, SfxPriority::Medium);
+        mixer.play(
+            1,
+            std::sync::Arc::clone(&data),
+            1.0,
+            0.0,
+            SfxPriority::Medium,
+        );
 
         // Exhaust it.
         let mut output = vec![0.0f32; 100];
@@ -563,7 +587,7 @@ mod tests {
 
         // Now play another sound -- should reuse the inactive channel.
         let data2: std::sync::Arc<[u8]> = vec![200u8; 100].into();
-        let ch = mixer.play(2, data2.clone(), 1.0, 0.0, SfxPriority::Low);
+        let ch = mixer.play(2, std::sync::Arc::clone(&data2), 1.0, 0.0, SfxPriority::Low);
         assert!(ch.is_some());
         assert_eq!(mixer.active_count(), 1);
     }
@@ -574,11 +598,23 @@ mod tests {
         // Fill all channels with Medium priority.
         for i in 0..MAX_CHANNELS {
             let data: std::sync::Arc<[u8]> = vec![128u8; 1000].into();
-            mixer.play(i as u16, data.clone(), 1.0, 0.0, SfxPriority::Medium);
+            mixer.play(
+                i as u16,
+                std::sync::Arc::clone(&data),
+                1.0,
+                0.0,
+                SfxPriority::Medium,
+            );
         }
         // Another Medium priority should be able to steal.
         let data: std::sync::Arc<[u8]> = vec![128u8; 100].into();
-        let ch = mixer.play(99, data.clone(), 1.0, 0.0, SfxPriority::Medium);
+        let ch = mixer.play(
+            99,
+            std::sync::Arc::clone(&data),
+            1.0,
+            0.0,
+            SfxPriority::Medium,
+        );
         assert!(
             ch.is_some(),
             "equal priority should steal lowest-priority channel"
@@ -589,7 +625,13 @@ mod tests {
     fn mixer_volume_zero_produces_silence() {
         let mut mixer = SfxMixer::new();
         let data: std::sync::Arc<[u8]> = vec![255u8; 100].into(); // loud sound
-        mixer.play(1, data.clone(), 0.0, 0.0, SfxPriority::Medium); // zero volume
+        mixer.play(
+            1,
+            std::sync::Arc::clone(&data),
+            0.0,
+            0.0,
+            SfxPriority::Medium,
+        ); // zero volume
         let mut output = vec![0.0f32; 200];
         mixer.mix(&mut output, 11025);
         assert!(
@@ -700,7 +742,13 @@ mod tests {
         // Play multiple loud sounds on different channels to try to exceed [-1, 1].
         for i in 0..MAX_CHANNELS {
             let data: std::sync::Arc<[u8]> = vec![255u8; 100].into(); // max positive signal
-            mixer.play(i as u16, data.clone(), 1.0, 0.0, SfxPriority::Medium);
+            mixer.play(
+                i as u16,
+                std::sync::Arc::clone(&data),
+                1.0,
+                0.0,
+                SfxPriority::Medium,
+            );
         }
         let mut output = vec![0.0f32; 200];
         mixer.mix(&mut output, 11025);
