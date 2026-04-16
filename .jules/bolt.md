@@ -6,3 +6,9 @@
 **[SmallVec for Hitscan Intercepts and Sector Traversal]
 **Learning:** Returning `Vec<T>` or mutating `&mut Vec<T>` on hot paths like `adjacent_sectors` and `p_line_attack` causes many tiny heap allocations. `smallvec` avoids allocations for arrays up to a chosen size, dropping them on the stack. Changing `Vec::new()` to `SmallVec::new()` and setting up a sensible default capacity (e.g. 16 for `HitscanIntercept` or 8 for adjacent sectors) speeds up traversal and weapon firing significantly.
 **Action:** When a function collects a small, bounded number of items (like adjacent level geometry or raycast intercepts) and is called very frequently, use `smallvec::SmallVec` instead of `Vec`.
+**[Console History Optimization]
+**Learning:** Using  with  for fixed-capacity rolling logs introduces an (N)$ shift penalty on every eviction.  is the mathematically correct structure.
+**Action:** Replace  with  and use  for rolling logs to ensure (1)$ updates and zero initial resize allocations.
+**[Console History Optimization]**
+**Learning:** Using `Vec` with `remove(0)` for fixed-capacity rolling logs introduces an O(N) shift penalty on every eviction. `VecDeque` is the mathematically correct structure.
+**Action:** Replace `Vec` with `VecDeque::with_capacity(max)` and use `pop_front()` for rolling logs to ensure O(1) updates and zero initial resize allocations.

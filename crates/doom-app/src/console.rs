@@ -8,6 +8,8 @@
 // Console
 // ---------------------------------------------------------------------------
 
+use std::collections::VecDeque;
+
 /// In-game console for cheat entry and status display.
 pub struct Console {
     /// Whether the console overlay is currently visible.
@@ -15,7 +17,7 @@ pub struct Console {
     /// The current input line being typed.
     pub input: String,
     /// Recent output messages (newest at end, oldest evicted when full).
-    pub messages: Vec<String>,
+    pub messages: VecDeque<String>,
     /// Maximum number of messages to retain.
     pub max_messages: usize,
 }
@@ -26,7 +28,7 @@ impl Console {
         Self {
             visible: false,
             input: String::new(),
-            messages: Vec::new(),
+            messages: VecDeque::with_capacity(10),
             max_messages: 10,
         }
     }
@@ -72,9 +74,9 @@ impl Console {
     /// If the message count exceeds [`Console::max_messages`], the oldest
     /// message is removed.
     pub fn print(&mut self, msg: impl Into<String>) {
-        self.messages.push(msg.into());
+        self.messages.push_back(msg.into());
         if self.messages.len() > self.max_messages {
-            self.messages.remove(0);
+            self.messages.pop_front();
         }
     }
 
