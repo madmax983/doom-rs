@@ -628,7 +628,13 @@ fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefE
     use LinedefEffect::*;
     match effect {
         FloorRaiseToLowestCeiling => {
-            crate::specials::ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, false);
+            crate::specials::ev_floor_raise_to_lowest_ceiling(
+                gs,
+                level,
+                tag,
+                1,
+                crate::specials::CrushBehavior::NoCrush,
+            );
             true
         }
         FloorRaiseToNearest => {
@@ -648,7 +654,13 @@ fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefE
             true
         }
         FloorCrushAndRaise => {
-            crate::specials::ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, true);
+            crate::specials::ev_floor_raise_to_lowest_ceiling(
+                gs,
+                level,
+                tag,
+                1,
+                crate::specials::CrushBehavior::Crush,
+            );
             true
         }
         FloorLowerToLowest => {
@@ -740,7 +752,7 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                     level,
                     idx,
                     crate::specials::StairType::Build8,
-                    false,
+                    crate::specials::CrushBehavior::NoCrush,
                 );
             }
             true
@@ -753,7 +765,7 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                     level,
                     idx,
                     crate::specials::StairType::Turbo16,
-                    false,
+                    crate::specials::CrushBehavior::NoCrush,
                 );
             }
             true

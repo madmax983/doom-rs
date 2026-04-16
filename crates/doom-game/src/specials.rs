@@ -16,6 +16,21 @@
 //! - `player_sector_index`: find which sector the player is standing in.
 
 use doom_map::{Level, SIDEDEF_NONE};
+
+/// Behavior for doors when they open.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DoorBehavior {
+    AutoClose,
+    RemainOpen,
+}
+
+/// Behavior for floor movers regarding crush damage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CrushBehavior {
+    Crush,
+    NoCrush,
+}
+
 use doom_types::{FIXED_ONE, Fixed16_16};
 
 use crate::mobj::MobjHandle;
@@ -867,7 +882,7 @@ pub fn ev_floor_raise_to_lowest_ceiling(
     level: &Level,
     tag: u16,
     speed: i16,
-    crush: bool,
+    crush_behavior: CrushBehavior,
 ) {
     for (idx, target) in level
         .sectors
@@ -883,7 +898,7 @@ pub fn ev_floor_raise_to_lowest_ceiling(
             tag,
             target,
             speed,
-            crush,
+            crush_behavior,
             FloorType::RaiseCrush,
         );
     }
@@ -905,7 +920,7 @@ pub fn ev_floor_raise_to_nearest(gs: &mut GameState, level: &Level, tag: u16, sp
             tag,
             target,
             speed,
-            false,
+            CrushBehavior::NoCrush,
             FloorType::RaiseToNearest,
         );
     }
@@ -927,7 +942,7 @@ pub fn ev_floor_raise_by_texture(gs: &mut GameState, level: &Level, tag: u16, sp
             tag,
             target,
             speed,
-            false,
+            CrushBehavior::NoCrush,
             FloorType::RaiseByTexture,
         );
     }
@@ -949,7 +964,7 @@ pub fn ev_floor_raise_24(gs: &mut GameState, level: &Level, tag: u16, speed: i16
             tag,
             target,
             speed,
-            false,
+            CrushBehavior::NoCrush,
             FloorType::Raise24,
         );
     }
@@ -971,7 +986,7 @@ pub fn ev_floor_raise_32(gs: &mut GameState, level: &Level, tag: u16, speed: i16
             tag,
             target,
             speed,
-            false,
+            CrushBehavior::NoCrush,
             FloorType::Raise32,
         );
     }
@@ -983,7 +998,7 @@ pub fn ev_floor_raise_to_ceiling(
     level: &Level,
     tag: u16,
     speed: i16,
-    crush: bool,
+    crush_behavior: CrushBehavior,
 ) {
     for (idx, target) in level
         .sectors
@@ -999,7 +1014,7 @@ pub fn ev_floor_raise_to_ceiling(
             tag,
             target,
             speed,
-            crush,
+            crush_behavior,
             FloorType::RaiseToCeiling,
         );
     }
@@ -1060,7 +1075,7 @@ pub fn ev_build_stairs(
     level: &Level,
     start_sector: usize,
     stair_type: StairType,
-    crush: bool,
+    crush_behavior: CrushBehavior,
 ) -> usize {
     let (step_size, speed): (i16, i16) = match stair_type {
         StairType::Build8 => (8, 2),
@@ -1090,7 +1105,7 @@ pub fn ev_build_stairs(
             return_height: level.sectors[start_sector].floor_height,
             waiting: false,
             wait_remaining: 0,
-            crush,
+            crush: crush_behavior == CrushBehavior::Crush,
             tag: 0,
             floor_type: FloorType::RaiseToNearest,
         });
@@ -1148,7 +1163,7 @@ pub fn ev_build_stairs(
                 return_height: other_sec.floor_height,
                 waiting: false,
                 wait_remaining: 0,
-                crush,
+                crush: crush_behavior == CrushBehavior::Crush,
                 tag: 0,
                 floor_type: FloorType::RaiseToNearest,
             });
@@ -1952,7 +1967,7 @@ fn activate_floor_raise_single_typed(
     tag: u16,
     target_height: i16,
     speed: i16,
-    crush: bool,
+    crush_behavior: CrushBehavior,
     floor_type: FloorType,
 ) {
     if gs
@@ -1975,7 +1990,7 @@ fn activate_floor_raise_single_typed(
         return_height: sector.floor_height,
         waiting: false,
         wait_remaining: 0,
-        crush,
+        crush: crush_behavior == CrushBehavior::Crush,
         tag,
         floor_type,
     });
@@ -2023,7 +2038,7 @@ fn activate_floor_lower_single_typed(
 // ---------------------------------------------------------------------------
 
 /// Enqueue a door mover that opens and optionally auto-closes.
-fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: bool) {
+fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, behavior: DoorBehavior) {
     let sector = match level.sectors.get(sector_idx) {
         Some(s) => s,
         None => return,
@@ -2047,7 +2062,11 @@ fn open_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: b
         current_height: sector.ceil_height,
         speed: DOOR_SPEED,
         is_ceiling: true,
-        wait_tics: if auto_close { DOOR_WAIT } else { -1 },
+        wait_tics: if behavior == DoorBehavior::AutoClose {
+            DOOR_WAIT
+        } else {
+            -1
+        },
         countdown: -1,
         reopen_height: 0,
         reopen_countdown: -1,
@@ -2064,9 +2083,9 @@ pub fn monster_activate_door_linedef(
         return false;
     };
 
-    let auto_close = match ld.special {
-        1 | 117 => true,
-        31 | 118 => false,
+    let behavior = match ld.special {
+        1 | 117 => DoorBehavior::AutoClose,
+        31 | 118 => DoorBehavior::RemainOpen,
         _ => return false,
     };
 
@@ -2082,7 +2101,7 @@ pub fn monster_activate_door_linedef(
         return false;
     }
 
-    open_door(gs, level, sector_idx, auto_close);
+    open_door(gs, level, sector_idx, behavior);
     true
 }
 
@@ -2151,7 +2170,7 @@ fn close_wait_open_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
 /// Enqueue a blazing (fast) door mover that opens and optionally auto-closes.
 ///
 /// Same as `open_door` but with `BLAZING_DOOR_SPEED` (8 units/tic).
-fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_close: bool) {
+fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, behavior: DoorBehavior) {
     let sector = match level.sectors.get(sector_idx) {
         Some(s) => s,
         None => return,
@@ -2174,7 +2193,11 @@ fn open_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize, auto_
         current_height: sector.ceil_height,
         speed: BLAZING_DOOR_SPEED,
         is_ceiling: true,
-        wait_tics: if auto_close { DOOR_WAIT } else { -1 },
+        wait_tics: if behavior == DoorBehavior::AutoClose {
+            DOOR_WAIT
+        } else {
+            -1
+        },
         countdown: -1,
         reopen_height: 0,
         reopen_countdown: -1,
@@ -2420,7 +2443,7 @@ fn activate_doors(
                 return;
             };
             let sector_idx = sd.sector as usize;
-            open_door(gs, level, sector_idx, false);
+            open_door(gs, level, sector_idx, DoorBehavior::RemainOpen);
         }
 
         // --- Type 29: close door (animated) ---
@@ -2451,7 +2474,7 @@ fn activate_doors(
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, true);
+                open_door(gs, level, sector_idx, DoorBehavior::AutoClose);
             }
         }
         27 => {
@@ -2463,7 +2486,7 @@ fn activate_doors(
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, true);
+                open_door(gs, level, sector_idx, DoorBehavior::AutoClose);
             }
         }
         28 => {
@@ -2475,7 +2498,7 @@ fn activate_doors(
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, true);
+                open_door(gs, level, sector_idx, DoorBehavior::AutoClose);
             }
         }
 
@@ -2489,7 +2512,7 @@ fn activate_doors(
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
             {
-                open_door(gs, level, idx, false);
+                open_door(gs, level, idx, DoorBehavior::RemainOpen);
             }
         }
 
@@ -2507,7 +2530,7 @@ fn activate_doors(
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
             {
-                open_blazing_door(gs, level, idx, true);
+                open_blazing_door(gs, level, idx, DoorBehavior::AutoClose);
             }
         }
 
@@ -2521,7 +2544,7 @@ fn activate_doors(
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
             {
-                open_blazing_door(gs, level, idx, false);
+                open_blazing_door(gs, level, idx, DoorBehavior::RemainOpen);
             }
         }
 
@@ -2545,7 +2568,7 @@ fn activate_doors(
                 return;
             };
             let sector_idx = sd.sector as usize;
-            open_blazing_door(gs, level, sector_idx, true);
+            open_blazing_door(gs, level, sector_idx, DoorBehavior::AutoClose);
         }
 
         // Type 109: W1 Blazing door open-stay.
@@ -2554,7 +2577,7 @@ fn activate_doors(
                 return;
             };
             let sector_idx = sd.sector as usize;
-            open_blazing_door(gs, level, sector_idx, false);
+            open_blazing_door(gs, level, sector_idx, DoorBehavior::RemainOpen);
         }
 
         // Type 110: W1 Blazing door close.
@@ -2579,7 +2602,7 @@ fn activate_doors(
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, false);
+                open_door(gs, level, sector_idx, DoorBehavior::RemainOpen);
             }
         }
 
@@ -2592,7 +2615,7 @@ fn activate_doors(
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_blazing_door(gs, level, sector_idx, false);
+                open_blazing_door(gs, level, sector_idx, DoorBehavior::RemainOpen);
             }
         }
 
@@ -2605,7 +2628,7 @@ fn activate_doors(
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, false);
+                open_door(gs, level, sector_idx, DoorBehavior::RemainOpen);
             }
         }
 
@@ -2618,7 +2641,7 @@ fn activate_doors(
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_blazing_door(gs, level, sector_idx, false);
+                open_blazing_door(gs, level, sector_idx, DoorBehavior::RemainOpen);
             }
         }
 
@@ -2631,7 +2654,7 @@ fn activate_doors(
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_door(gs, level, sector_idx, false);
+                open_door(gs, level, sector_idx, DoorBehavior::RemainOpen);
             }
         }
 
@@ -2644,7 +2667,7 @@ fn activate_doors(
                     return;
                 };
                 let sector_idx = sd.sector as usize;
-                open_blazing_door(gs, level, sector_idx, false);
+                open_blazing_door(gs, level, sector_idx, DoorBehavior::RemainOpen);
             }
         }
         _ => {}
@@ -2865,7 +2888,7 @@ fn activate_floors(
         // Type 5: W1 Floor raise to lowest adjacent ceiling (crush).
         5 => {
             let tag = level.linedefs[linedef_idx].tag;
-            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, true);
+            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, CrushBehavior::Crush);
         }
 
         // Type 14: S1 Raise floor 32 + change texture/type.
@@ -2901,7 +2924,7 @@ fn activate_floors(
         // Type 24: G1 Raise floor to lowest adjacent ceiling.
         24 => {
             let tag = level.linedefs[linedef_idx].tag;
-            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, false);
+            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, CrushBehavior::NoCrush);
         }
 
         // Type 30: W1 Raise floor by shortest lower texture.
@@ -2923,7 +2946,7 @@ fn activate_floors(
                         tag,
                         target,
                         1,
-                        true,
+                        CrushBehavior::Crush,
                         FloorType::RaiseCrush,
                     );
                 }
@@ -2945,7 +2968,7 @@ fn activate_floors(
         // Type 64: SR Raise floor to lowest adjacent ceiling.
         64 => {
             let tag = level.linedefs[linedef_idx].tag;
-            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, false);
+            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, CrushBehavior::NoCrush);
         }
 
         // Type 65: SR Raise floor to 8 below lowest ceiling + crush.
@@ -2961,7 +2984,7 @@ fn activate_floors(
                         tag,
                         target,
                         1,
-                        true,
+                        CrushBehavior::Crush,
                         FloorType::RaiseCrush,
                     );
                 }
@@ -2983,7 +3006,7 @@ fn activate_floors(
         // Type 91: WR Raise floor to lowest adjacent ceiling.
         91 => {
             let tag = level.linedefs[linedef_idx].tag;
-            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, false);
+            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, CrushBehavior::NoCrush);
         }
 
         // Type 92: WR Raise floor 24.
@@ -3011,7 +3034,7 @@ fn activate_floors(
                         tag,
                         target,
                         1,
-                        true,
+                        CrushBehavior::Crush,
                         FloorType::RaiseCrush,
                     );
                 }
@@ -3219,7 +3242,7 @@ fn activate_stairs(
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
             {
-                ev_build_stairs(gs, level, idx, StairType::Build8, false);
+                ev_build_stairs(gs, level, idx, StairType::Build8, CrushBehavior::NoCrush);
             }
         }
 
@@ -3233,7 +3256,7 @@ fn activate_stairs(
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
             {
-                ev_build_stairs(gs, level, idx, StairType::Turbo16, false);
+                ev_build_stairs(gs, level, idx, StairType::Turbo16, CrushBehavior::NoCrush);
             }
         }
 
@@ -3247,7 +3270,7 @@ fn activate_stairs(
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
             {
-                ev_build_stairs(gs, level, idx, StairType::Turbo16, true);
+                ev_build_stairs(gs, level, idx, StairType::Turbo16, CrushBehavior::Crush);
             }
         }
 
@@ -3261,7 +3284,7 @@ fn activate_stairs(
                 .filter(|(_, s)| s.tag == tag)
                 .map(|(i, _)| i)
             {
-                ev_build_stairs(gs, level, idx, StairType::Turbo16, false);
+                ev_build_stairs(gs, level, idx, StairType::Turbo16, CrushBehavior::NoCrush);
             }
         }
         _ => {}
@@ -6232,7 +6255,13 @@ mod tests {
         let mut gs = GameState::new("TEST");
         let level = make_stair_level(4, 0, 1);
 
-        let count = ev_build_stairs(&mut gs, &level, 0, StairType::Build8, false);
+        let count = ev_build_stairs(
+            &mut gs,
+            &level,
+            0,
+            StairType::Build8,
+            CrushBehavior::NoCrush,
+        );
 
         // Should create 4 floor movers (sectors 0, 1, 2, 3).
         assert_eq!(count, 4, "4 sectors should get stair movers");
@@ -6254,7 +6283,13 @@ mod tests {
         let mut gs = GameState::new("TEST");
         let level = make_stair_level(3, 0, 1);
 
-        let count = ev_build_stairs(&mut gs, &level, 0, StairType::Turbo16, false);
+        let count = ev_build_stairs(
+            &mut gs,
+            &level,
+            0,
+            StairType::Turbo16,
+            CrushBehavior::NoCrush,
+        );
 
         assert_eq!(count, 3, "3 sectors should get stair movers");
         // Target heights: 16, 32, 48.
@@ -6270,7 +6305,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         let level = make_stair_level(2, 0, 1);
 
-        ev_build_stairs(&mut gs, &level, 0, StairType::Turbo16, true);
+        ev_build_stairs(&mut gs, &level, 0, StairType::Turbo16, CrushBehavior::Crush);
 
         assert!(
             gs.movers.active_floors[0].crush,
@@ -6289,7 +6324,13 @@ mod tests {
         // Change sector 2's floor texture so stairs stop there.
         level.sectors[2].floor_flat = *b"NUKAGE1\0";
 
-        let count = ev_build_stairs(&mut gs, &level, 0, StairType::Build8, false);
+        let count = ev_build_stairs(
+            &mut gs,
+            &level,
+            0,
+            StairType::Build8,
+            CrushBehavior::NoCrush,
+        );
 
         // Should create only 2 movers (sectors 0 and 1). Sector 2 has different
         // flat so the chain breaks.
@@ -6805,7 +6846,13 @@ mod tests {
         let mut gs = GameState::new("TEST");
         let level = make_stair_level(5, 0, 1);
 
-        ev_build_stairs(&mut gs, &level, 0, StairType::Build8, false);
+        ev_build_stairs(
+            &mut gs,
+            &level,
+            0,
+            StairType::Build8,
+            CrushBehavior::NoCrush,
+        );
 
         assert_eq!(
             gs.movers.active_floors.len(),
@@ -9344,7 +9391,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 0: ceil=128, Sector 1: floor=0 ceil=200 tag=1, Sector 2: ceil=96.
         let level = make_multi_sector_level([0, 0, 0], [128, 200, 96], [0, 1, 0], 0, 0);
-        ev_floor_raise_to_lowest_ceiling(&mut gs, &level, 1, 1, false);
+        ev_floor_raise_to_lowest_ceiling(&mut gs, &level, 1, 1, CrushBehavior::NoCrush);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
             gs.movers.active_floors[0].target_height, 96,
@@ -9479,7 +9526,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 1: floor=0, ceil=200, tag=1.
         let level = make_multi_sector_level([0, 0, 0], [128, 200, 128], [0, 1, 0], 0, 0);
-        ev_floor_raise_to_ceiling(&mut gs, &level, 1, 1, false);
+        ev_floor_raise_to_ceiling(&mut gs, &level, 1, 1, CrushBehavior::NoCrush);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
             gs.movers.active_floors[0].target_height, 200,
