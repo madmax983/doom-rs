@@ -7,8 +7,8 @@
 
 use crate::input_log::InputLog;
 use crate::packet::{MAX_PLAYERS, MAX_ROLLBACK_TICS, TicPacket};
-use doom_types::TicCmd;
 use crate::snapshot::SnapshotRing;
+use doom_types::TicCmd;
 
 // ---------------------------------------------------------------------------
 // RollbackManager
