@@ -86,7 +86,8 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
+    /// use doom_net::{InputLog,  packet::MAX_PLAYERS};
     ///
     /// let mut log = InputLog::new(8);
     /// let mut cmds = [TicCmd::default(); MAX_PLAYERS];
@@ -109,7 +110,8 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
+    /// use doom_net::{InputLog,  packet::MAX_PLAYERS};
     ///
     /// let mut log = InputLog::new(8);
     /// log.record(5, [TicCmd::default(); MAX_PLAYERS]);
@@ -132,7 +134,8 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
+    /// use doom_net::{InputLog,  packet::MAX_PLAYERS};
     ///
     /// let mut log = InputLog::new(8);
     /// log.record(1, [TicCmd::default(); MAX_PLAYERS]); // Predicted
@@ -154,7 +157,8 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, TicCmd, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
+    /// use doom_net::{InputLog,  packet::MAX_PLAYERS};
     ///
     /// let mut log = InputLog::new(8);
     /// log.set_authoritative(42, [TicCmd::default(); MAX_PLAYERS]);

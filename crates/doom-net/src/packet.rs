@@ -60,7 +60,8 @@ impl TicPacket {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{TicPacket, TicCmd, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
+    /// use doom_net::{TicPacket,  packet::MAX_PLAYERS};
     ///
     /// let packet = TicPacket {
     ///     tic: 42,
@@ -100,7 +101,8 @@ impl TicPacket {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{TicPacket, TicCmd, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
+    /// use doom_net::{TicPacket,  packet::MAX_PLAYERS};
     ///
     /// let original = TicPacket {
     ///     tic: 100,
