@@ -104,6 +104,10 @@ impl InputLog {
             cmds,
             authoritative: false,
         });
+        let new_oldest = tic.saturating_sub((self.capacity - 1) as u32);
+        if new_oldest > self.oldest_tic {
+            self.oldest_tic = new_oldest;
+        }
     }
 
     /// Retrieve the inputs for `tic`, if stored and the tic matches.
@@ -173,6 +177,10 @@ impl InputLog {
             cmds,
             authoritative: true,
         });
+        let new_oldest = tic.saturating_sub((self.capacity - 1) as u32);
+        if new_oldest > self.oldest_tic {
+            self.oldest_tic = new_oldest;
+        }
     }
 
     /// The oldest tic number tracked (informational, updated on record).
@@ -279,5 +287,22 @@ mod tests {
     #[should_panic(expected = "capacity must be > 0")]
     fn zero_capacity_panics() {
         let _log = InputLog::new(0);
+    }
+
+    #[test]
+    fn oldest_tic_is_updated() {
+        let mut log = InputLog::new(8);
+        assert_eq!(log.oldest_tic(), 0);
+        // Since capacity is 8, recording up to tic 7 means oldest_tic is still 0.
+        for i in 0..8 {
+            log.record(i, make_cmds(0));
+            assert_eq!(log.oldest_tic(), 0);
+        }
+        // Recording tic 8 should push oldest_tic to 1, because capacity is 8.
+        log.record(8, make_cmds(0));
+        assert_eq!(log.oldest_tic(), 1);
+
+        log.set_authoritative(9, make_cmds(0));
+        assert_eq!(log.oldest_tic(), 2);
     }
 }
