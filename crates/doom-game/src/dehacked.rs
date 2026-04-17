@@ -608,7 +608,7 @@ impl DehPatch {
                 s.parse::<f64>()
                     .and_then(|v| {
                         if v.is_nan() {
-                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err())) // dummy error to fail through
+                            Err(std::num::ParseFloatError::from("".parse::<f64>().unwrap_err())) // dummy error to fail through
                         } else {
                             Ok(v.clamp(i32::MIN as f64, i32::MAX as f64) as i32)
                         }
@@ -623,7 +623,7 @@ impl DehPatch {
                 s.parse::<f64>()
                     .and_then(|v| {
                         if v.is_nan() {
-                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
+                            Err(std::num::ParseFloatError::from("".parse::<f64>().unwrap_err()))
                         } else {
                             Ok(v.clamp(0.0, u32::MAX as f64) as u32)
                         }
@@ -638,7 +638,7 @@ impl DehPatch {
                 s.parse::<f64>()
                     .and_then(|v| {
                         if v.is_nan() {
-                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
+                            Err(std::num::ParseFloatError::from("".parse::<f64>().unwrap_err()))
                         } else {
                             Ok(v.clamp(0.0, u16::MAX as f64) as u16)
                         }
@@ -653,7 +653,7 @@ impl DehPatch {
                 s.parse::<f64>()
                     .and_then(|v| {
                         if v.is_nan() {
-                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
+                            Err(std::num::ParseFloatError::from("".parse::<f64>().unwrap_err()))
                         } else {
                             Ok(v.clamp(0.0, u8::MAX as f64) as u8)
                         }
@@ -667,7 +667,7 @@ impl DehPatch {
             .or_else(|_| {
                 s.parse::<f64>().and_then(|v| {
                     if v.is_nan() {
-                        Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
+                        Err(std::num::ParseFloatError::from("".parse::<f64>().unwrap_err()))
                     } else if v < 0.0 {
                         Ok(0)
                     } else if v > usize::MAX as f64 {
@@ -1546,3 +1546,7 @@ mod proptests {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "dehacked_havoc_tests.rs"]
+mod dehacked_havoc_tests;
