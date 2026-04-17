@@ -23,7 +23,8 @@ use crate::snapshot::SnapshotRing;
 ///
 /// ```rust
 /// use doom_net::RollbackManager;
-/// use doom_net::{TicCmd, TicPacket, packet::MAX_PLAYERS};
+/// use doom_net::{TicPacket, packet::MAX_PLAYERS};
+use doom_types::TicCmd;
 ///
 /// // Game state can be any Clone type.
 /// #[derive(Clone, Debug, PartialEq)]
