@@ -5,6 +5,14 @@ use core::str::FromStr;
 
 /// Compatibility profile for behavior that can differ between vanilla Doom and
 /// the current extended engine.
+///
+/// ## Examples
+/// ```
+/// use doom_types::compat::CompatibilityProfile;
+///
+/// let compat = CompatibilityProfile::default();
+/// assert_eq!(compat, CompatibilityProfile::Extended);
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum CompatibilityProfile {
     /// Preserve the current extended/source-port behavior.

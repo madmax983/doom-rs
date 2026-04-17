@@ -4,6 +4,18 @@ use crate::fixed::Fixed16_16;
 use core::ops::{Add, Neg, Sub};
 
 /// 2D vector with fixed-point components.
+///
+/// ## Examples
+/// ```
+/// use doom_types::vec2::Vec2Fixed;
+/// use doom_types::fixed::Fixed16_16;
+///
+/// let vec = Vec2Fixed {
+///     x: Fixed16_16::from_int(1),
+///     y: Fixed16_16::from_int(2),
+/// };
+/// assert_eq!(vec.x, Fixed16_16::from_int(1));
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Vec2Fixed {
     /// X component.

@@ -32,3 +32,7 @@
 ## 2024-05-18 - [Fixed TextureCache/FlatCache struct docs]
 **Confusion:** The struct doc-comments in `TextureCache` and `FlatCache` were separated from their structs by `use` statements, causing rustdoc to not associate them correctly.
 **Clarification:** Moved the `use` statements above the doc-comments and added executable `## Examples` sections that create an in-memory `WadFile` to satisfy the "executable examples" rule.
+
+## 2024-04-17 - Added Doc Tests for Core Types
+**Confusion:** Many public types in `doom-types` lacked examples, leaving users to infer how to use core mechanics like `Bam`, `Fixed16_16`, and `BBox`.
+**Clarification:** Added explicit `## Examples` doc-tests for all major public structs and enums in `doom-types`, guaranteeing they are tested and compiled.

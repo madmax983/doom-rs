@@ -8,6 +8,20 @@ use crate::vec2::Vec2Fixed;
 
 /// Axis-aligned bounding box. Stored as top/bottom/left/right to match
 /// the Doom node format (ymax = top, ymin = bottom, xmin = left, xmax = right).
+///
+/// ## Examples
+/// ```
+/// use doom_types::bbox::BBox;
+/// use doom_types::fixed::Fixed16_16;
+///
+/// let bbox = BBox {
+///     ymax: Fixed16_16::from_int(10),
+///     ymin: Fixed16_16::from_int(0),
+///     xmin: Fixed16_16::from_int(0),
+///     xmax: Fixed16_16::from_int(10),
+/// };
+/// assert!(bbox.is_valid());
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BBox {
     /// Maximum Y (top of box in world space, where +Y is up).

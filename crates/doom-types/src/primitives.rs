@@ -81,6 +81,14 @@ impl Brightness {
 /// // Invalid specials are rejected at construction.
 /// assert!(SectorSpecial::new(20).is_none());
 /// ```
+///
+/// ## Examples
+/// ```
+/// use doom_types::primitives::SectorSpecial;
+///
+/// let special = SectorSpecial::new(9).unwrap();
+/// assert_eq!(special.raw(), 9);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SectorSpecial(u8);
 
@@ -185,6 +193,14 @@ impl SkillLevel {
 /// // Player 5 does not exist.
 /// assert!(PlayerNum::new(4).is_none());
 /// ```
+///
+/// ## Examples
+/// ```
+/// use doom_types::primitives::PlayerNum;
+///
+/// let player = PlayerNum::new(0).unwrap();
+/// assert_eq!(player.raw(), 0);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PlayerNum(u8);
 
@@ -231,6 +247,14 @@ impl PlayerNum {
 ///
 /// let x = Coord::new(-1024);
 /// assert_eq!(x.raw(), -1024);
+/// ```
+///
+/// ## Examples
+/// ```
+/// use doom_types::primitives::Coord;
+///
+/// let coord = Coord::new(100);
+/// assert_eq!(coord.raw(), 100);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Coord(pub i16);
