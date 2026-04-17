@@ -40,3 +40,6 @@
 ## 2024-04-15 - Replace unwrap() with expect() in domain structs and tests
 **Learning:** Found scattered instances of `.unwrap()` and `.unwrap_err()` in map parsing logic, primitives, and game logic, which can obscure test failure context or lead to uninformative panics.
 **Action:** Replaced `.unwrap()` and `.unwrap_err()` with `.expect()` or `.expect_err()` to enforce providing explicit failure messages, making assertions clearer when parsing WAD data or managing the audio system.
+## 2024-04-18 - [Doom TUI Event Loop Testing]
+**Learning:** Found significant missing coverage in the main `event_loop.rs` of doom-tui including logic for mode switching, timing drain thresholds, action costs for turn-based gameplay, and event loop states.
+**Action:** Add targeted unit tests to cover missing edge cases and state management to increase overall robustness without requiring full terminal emulation.
