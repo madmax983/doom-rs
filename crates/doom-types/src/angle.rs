@@ -16,6 +16,18 @@ use crate::fixed::Fixed16_16;
 /// - `0x40000000` → North (90°)
 /// - `0x80000000` → West (180°)
 /// - `0xC0000000` → South (270°)
+///
+/// ## Examples
+/// ```
+/// use doom_types::angle::{Bam, ANG90, ANG180};
+///
+/// let east = Bam::from_raw(0);
+/// let north = ANG90;
+/// let west = ANG180;
+///
+/// // Adding two 90 degree angles results in a 180 degree angle
+/// assert_eq!(north.wrapping_add(north), west);
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bam(pub u32);
 

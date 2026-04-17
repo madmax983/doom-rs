@@ -13,6 +13,15 @@ use core::ops::{Add, AddAssign, Div, Mul, Neg, Sub, SubAssign};
 /// Fixed-point 16.16 number: bits [31..16] = integer, bits [15..0] = fraction.
 ///
 /// One unit = `1 << 16 = 65536`.
+///
+/// ## Examples
+/// ```
+/// use doom_types::fixed::Fixed16_16;
+///
+/// let a = Fixed16_16::from_int(2);
+/// let b = Fixed16_16::from_int(3);
+/// assert_eq!(a + b, Fixed16_16::from_int(5));
+/// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Fixed16_16(pub i32);
 
