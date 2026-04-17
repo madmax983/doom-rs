@@ -59,9 +59,12 @@ pub struct SpriteFrame {
 
 /// Cache of all sprite frames loaded from WAD lumps between S_START and S_END.
 ///
-/// Keyed by uppercase lump name (null bytes stripped).
+/// Keyed by `LumpName`.
+/// ⚡ Bolt Optimization: Using `LumpName` (which wraps `[u8; 8]`) directly as a Map key instead of
+/// `String` eliminates thousands of heap allocations per frame by bypassing string
+/// allocation and UTF-8 conversion overhead during sprite lookups.
 pub struct SpriteCache {
-    frames: HashMap<String, SpriteFrame>,
+    frames: HashMap<doom_wad::lump::LumpName, SpriteFrame>,
 }
 
 impl SpriteCache {
@@ -146,12 +149,7 @@ impl SpriteCache {
     /// The name is normalised to uppercase with trailing null bytes stripped
     /// before lookup, matching how WAD lump names are stored.
     pub fn get(&self, name: &[u8; 8]) -> Option<&SpriteFrame> {
-        // Trim trailing nulls and convert to uppercase string.
-        let trimmed_len = name.iter().position(|&b| b == 0).unwrap_or(8);
-        let key = std::str::from_utf8(&name[..trimmed_len])
-            .ok()?
-            .to_uppercase();
-        self.frames.get(&key)
+        self.frames.get(&doom_wad::lump::LumpName::from_raw(*name))
     }
 
     /// Number of sprite frames in the cache.
@@ -165,8 +163,8 @@ impl SpriteCache {
     }
 
     /// Insert a frame directly (used in tests and by callers that pre-parse frames).
-    pub fn insert(&mut self, name: String, frame: SpriteFrame) {
-        self.frames.insert(name.to_uppercase(), frame);
+    pub fn insert(&mut self, name: doom_wad::lump::LumpName, frame: SpriteFrame) {
+        self.frames.insert(name, frame);
     }
 
     /// Construct an empty cache (useful in tests).
@@ -176,14 +174,17 @@ impl SpriteCache {
         }
     }
 
-    fn insert_frame(frames: &mut HashMap<String, SpriteFrame>, wad: &WadFile, lump: &LumpDef) {
+    fn insert_frame(
+        frames: &mut HashMap<doom_wad::lump::LumpName, SpriteFrame>,
+        wad: &WadFile,
+        lump: &LumpDef,
+    ) {
         if lump.size == 0 {
             return;
         }
         let data = wad.lump_data(lump);
         if let Some(frame) = parse_picture(data) {
-            let name = lump.name.as_str().to_uppercase();
-            frames.insert(name, frame);
+            frames.insert(lump.name, frame);
         }
     }
 }
@@ -1651,7 +1652,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(77); 4],
         };
-        cache.insert("PISGA0".to_string(), frame);
+        cache.insert(doom_wad::lump::LumpName::from_str("PISGA0"), frame);
 
         let mut fb = Framebuffer::new();
         draw_weapon_sprite(&mut fb, b"PISGA0\0\0", &cache, &IDENTITY_COLORMAP);
@@ -1676,7 +1677,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(88); 4],
         };
-        cache.insert("PISGA0".to_string(), frame);
+        cache.insert(doom_wad::lump::LumpName::from_str("PISGA0"), frame);
 
         let mut fb = Framebuffer::new();
         draw_weapon_sprite(&mut fb, b"PISGA0\0\0", &cache, &IDENTITY_COLORMAP);
@@ -1735,7 +1736,7 @@ mod tests {
             top_offset: 1,
             pixels: vec![Some(10), Some(20), Some(30), Some(40)],
         };
-        cache.insert("TROOA1".to_string(), frame);
+        cache.insert(doom_wad::lump::LumpName::from_str("TROOA1"), frame);
 
         // Lookup via exact byte array name (null-padded).
         let found = cache.get(b"TROOA1\0\0");
@@ -2006,7 +2007,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(42); 4],
         };
-        cache.insert("BAR1A0".to_string(), dummy_frame);
+        cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), dummy_frame);
 
         let mut fb = Framebuffer::new();
         // Player at origin, facing east (Bam(0)).
@@ -2131,7 +2132,10 @@ mod tests {
         let level = make_test_level(vec![thing]);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 77));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 77),
+        );
 
         // Expected sprite center from the wall transform convention in render.rs:
         //   vx = dx*cos + dy*sin
@@ -2464,7 +2468,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(77); 4],
         };
-        cache.insert("TROOA5".to_string(), dummy);
+        cache.insert(doom_wad::lump::LumpName::from_str("TROOA5"), dummy);
 
         let mut fb = Framebuffer::new();
         render_things(
@@ -2502,7 +2506,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(88); 4],
         };
-        cache.insert("BAR1A0".to_string(), dummy);
+        cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), dummy);
 
         let mut fb = Framebuffer::new();
         render_things(
@@ -2541,7 +2545,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(55); 4],
         };
-        cache.insert("TROOA0".to_string(), dummy);
+        cache.insert(doom_wad::lump::LumpName::from_str("TROOA0"), dummy);
 
         let mut fb = Framebuffer::new();
         render_things(
@@ -2590,7 +2594,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(33); 4],
         };
-        cache.insert("TROOA4".to_string(), dummy);
+        cache.insert(doom_wad::lump::LumpName::from_str("TROOA4"), dummy);
 
         // Player needs the thing in front. Player at (0,0) facing east-ish.
         // cos(0) = 1, sin(0) = 0. vx = 100*1 + 50*0 = 100. In front.
@@ -2676,12 +2680,12 @@ mod tests {
         let mut floor_cache = SpriteCache::empty();
         let mut floor_sprite = make_opaque_sprite(8, 8, 71);
         floor_sprite.top_offset = 8;
-        floor_cache.insert("BAR1A0".to_string(), floor_sprite);
+        floor_cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), floor_sprite);
 
         let mut sunk_cache = SpriteCache::empty();
         let mut sunk_sprite = make_opaque_sprite(8, 8, 72);
         sunk_sprite.top_offset = 4;
-        sunk_cache.insert("BAR1A0".to_string(), sunk_sprite);
+        sunk_cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), sunk_sprite);
 
         let mut floor_fb = Framebuffer::new();
         render_actors_ex(
@@ -2742,7 +2746,10 @@ mod tests {
         };
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 8, 71));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 8, 71),
+        );
 
         let mut data = vec![0u8; COLORMAP_ROWS * COLORMAP_SIZE];
         for row in 0..COLORMAP_ROWS {
@@ -2788,12 +2795,12 @@ mod tests {
         let mut floor_cache = SpriteCache::empty();
         let mut floor_sprite = make_opaque_sprite(8, 8, 81);
         floor_sprite.top_offset = 8;
-        floor_cache.insert("BAR1A0".to_string(), floor_sprite);
+        floor_cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), floor_sprite);
 
         let mut sunk_cache = SpriteCache::empty();
         let mut sunk_sprite = make_opaque_sprite(8, 8, 82);
         sunk_sprite.top_offset = 4;
-        sunk_cache.insert("BAR1A0".to_string(), sunk_sprite);
+        sunk_cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), sunk_sprite);
 
         let mut floor_fb = Framebuffer::new();
         render_things(
@@ -2842,7 +2849,10 @@ mod tests {
         let player_x = doom_types::Fixed16_16::from_int(-96);
         let player_y = doom_types::Fixed16_16::from_int(32);
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 8, 91));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 8, 91),
+        );
 
         let floor_actor = crate::sprite_lookup::ActorRenderInfo {
             x: doom_types::Fixed16_16::from_int(32).raw(),
@@ -2919,7 +2929,10 @@ mod tests {
             fallback_prefix: Some(*b"BAR1"),
         };
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 8, 92));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 8, 92),
+        );
 
         let mut top = [0i32; SCREEN_W];
         let mut bottom = [SCREEN_H as i32 - 1; SCREEN_W];
@@ -2993,7 +3006,10 @@ mod tests {
             fallback_prefix: Some(*b"BAR1"),
         };
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 8, 93));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 8, 93),
+        );
 
         let mut top = [0i32; SCREEN_W];
         let mut bottom = [SCREEN_H as i32 - 1; SCREEN_W];
@@ -3052,7 +3068,7 @@ mod tests {
         };
         let mut cache = SpriteCache::empty();
         let frame = make_opaque_sprite(8, 128, 94);
-        cache.insert("BAR1A0".to_string(), frame);
+        cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), frame);
 
         let top = [0i32; SCREEN_W];
         let mut bottom = [120i32; SCREEN_W];
@@ -3122,7 +3138,10 @@ mod tests {
             fallback_prefix: Some(*b"BAR1"),
         };
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 95));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(16, 32, 95),
+        );
 
         let top = [0i32; SCREEN_W];
         let bottom = [SCREEN_H as i32 - 1; SCREEN_W];
@@ -3199,7 +3218,10 @@ mod tests {
             fallback_prefix: Some(*b"BAR1"),
         };
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 96));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(16, 32, 96),
+        );
 
         let top = [0i32; SCREEN_W];
         let bottom = [SCREEN_H as i32 - 1; SCREEN_W];
@@ -3319,7 +3341,10 @@ mod tests {
         let level = make_test_level(vec![thing]);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 77));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(16, 32, 77),
+        );
 
         let mut fb = Framebuffer::new();
         let zbuf = make_zbuf(50.0); // wall at depth 50, sprite at ~100
@@ -3354,7 +3379,10 @@ mod tests {
         let level = make_test_level(vec![thing]);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 88));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(16, 32, 88),
+        );
 
         let mut fb = Framebuffer::new();
         let zbuf = make_zbuf(200.0); // wall at depth 200, sprite at ~100
@@ -3391,7 +3419,10 @@ mod tests {
         let level = make_test_level(vec![thing]);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 66));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(16, 32, 66),
+        );
 
         let mut fb = Framebuffer::new();
         let mut zbuf = [0.0f32; SCREEN_W];
@@ -3445,7 +3476,10 @@ mod tests {
         let level = make_test_level(vec![thing]);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 55));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(16, 32, 55),
+        );
 
         let mut fb = Framebuffer::new();
         let zbuf = make_zbuf(f32::MAX);
@@ -3517,7 +3551,10 @@ mod tests {
         // Since render_things uses painter's algorithm (back-to-front),
         // the near barrel overdraw the far one. With z_buffer=150,
         // the far barrel (depth~200) is clipped, near (depth~100) is drawn.
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 99));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 99),
+        );
 
         let mut fb = Framebuffer::new();
         let zbuf = make_zbuf(150.0);
@@ -3553,7 +3590,10 @@ mod tests {
         let level = make_test_level(vec![thing]);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 44));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(16, 32, 44),
+        );
 
         let mut fb = Framebuffer::new();
         let zbuf = make_zbuf(100.0);
@@ -3586,7 +3626,10 @@ mod tests {
         let level = make_test_level(vec![thing]);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 111));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 111),
+        );
 
         let mut fb = Framebuffer::new();
         let zbuf = make_zbuf(f32::MAX); // no walls
@@ -3622,7 +3665,10 @@ mod tests {
         let level = make_test_level(vec![thing]);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(16, 32, 22));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(16, 32, 22),
+        );
 
         let mut fb = Framebuffer::new();
         let mut zbuf = make_zbuf(f32::MAX);
@@ -3673,7 +3719,10 @@ mod tests {
         let level = make_test_level(vec![thing]);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 33));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 33),
+        );
 
         let mut fb = Framebuffer::new();
         let zbuf = make_zbuf(f32::MAX);
@@ -3707,7 +3756,10 @@ mod tests {
         let level = make_test_level(vec![thing]);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 200));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 200),
+        );
 
         let mut fb = Framebuffer::new();
 
@@ -4209,7 +4261,10 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         // Insert a bright sprite (all pixels = 200).
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 200));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 200),
+        );
 
         let cm = test_colormap_cache();
         let mut fb = Framebuffer::new();
@@ -4253,7 +4308,10 @@ mod tests {
         let level = make_test_level_with_light(vec![thing], 0); // pitch dark
 
         let mut cache = SpriteCache::empty();
-        cache.insert("COLUA0".to_string(), make_opaque_sprite(8, 16, 123));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("COLUA0"),
+            make_opaque_sprite(8, 16, 123),
+        );
 
         let cm = test_colormap_cache();
         let mut fb = Framebuffer::new();
@@ -4310,7 +4368,10 @@ mod tests {
         let level = make_test_level_with_light(vec![thing], 0);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 150));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 150),
+        );
 
         let cm = test_colormap_cache();
         let mut fb = Framebuffer::new();
@@ -4350,7 +4411,10 @@ mod tests {
         let level = make_test_level_with_light(vec![thing], 255);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 77));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 77),
+        );
 
         let id_cache = ColormapCache::identity();
         let mut fb = Framebuffer::new();
@@ -4382,7 +4446,10 @@ mod tests {
         let level = make_test_level_with_light(vec![thing], 0); // dark sector
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 55));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 55),
+        );
 
         let mut fb = Framebuffer::new();
         render_things(
@@ -4417,7 +4484,10 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         // Spectre uses SARG prefix.
-        cache.insert("SARGA0".to_string(), make_opaque_sprite(16, 32, 222));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("SARGA0"),
+            make_opaque_sprite(16, 32, 222),
+        );
 
         // Pre-fill fb with a known value so fuzz has something to darken.
         let mut fb = Framebuffer::new();
@@ -4459,7 +4529,10 @@ mod tests {
         let level = make_test_level_with_light(vec![thing], 192);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("SARGA0".to_string(), make_opaque_sprite(16, 32, 222));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("SARGA0"),
+            make_opaque_sprite(16, 32, 222),
+        );
 
         // Build a colormap where row 6 (fuzz dark) maps everything to 42.
         let mut cm_data = vec![0u8; COLORMAP_ROWS * COLORMAP_SIZE];
@@ -4565,7 +4638,10 @@ mod tests {
         let level = make_test_level_with_light(vec![thing], 64);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 150));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 150),
+        );
 
         let cm = test_colormap_cache();
         let zbuf = make_zbuf(200.0);
@@ -4602,7 +4678,10 @@ mod tests {
         let level = make_test_level_with_light(vec![thing], 192);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 88));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 88),
+        );
 
         let cm = test_colormap_cache();
         let zbuf = make_zbuf(50.0);
@@ -4661,7 +4740,10 @@ mod tests {
         let level = make_test_level_with_light(vec![thing], 128);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 77));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 77),
+        );
 
         let id_cache = ColormapCache::identity();
         let mut fb = Framebuffer::new();
@@ -4697,8 +4779,14 @@ mod tests {
         let level = make_test_level_with_light(vec![barrel, lamp], 0); // pitch dark
 
         let mut cache = SpriteCache::empty();
-        cache.insert("BAR1A0".to_string(), make_opaque_sprite(8, 16, 150));
-        cache.insert("COLUA0".to_string(), make_opaque_sprite(8, 16, 200));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            make_opaque_sprite(8, 16, 150),
+        );
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("COLUA0"),
+            make_opaque_sprite(8, 16, 200),
+        );
 
         let cm = test_colormap_cache();
         let mut fb = Framebuffer::new();
@@ -4732,7 +4820,10 @@ mod tests {
         let level = make_test_level_with_light(vec![thing], 192);
 
         let mut cache = SpriteCache::empty();
-        cache.insert("SARGA0".to_string(), make_opaque_sprite(16, 32, 222));
+        cache.insert(
+            doom_wad::lump::LumpName::from_str("SARGA0"),
+            make_opaque_sprite(16, 32, 222),
+        );
 
         let zbuf = make_zbuf(50.0);
         let mut fb = Framebuffer::new();
