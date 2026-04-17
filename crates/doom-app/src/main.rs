@@ -81,7 +81,7 @@ fn cli_styles() -> clap::builder::styling::Styles {
         .usage(AnsiColor::Green.on_default() | Effects::BOLD)
         .literal(AnsiColor::Cyan.on_default() | Effects::BOLD)
         .placeholder(AnsiColor::Cyan.on_default())
-        .error(AnsiColor::Red.on_default() | Effects::BOLD)
+        .error(AnsiColor::Yellow.on_default() | Effects::BOLD)
         .valid(AnsiColor::Green.on_default() | Effects::BOLD)
         .invalid(AnsiColor::Yellow.on_default() | Effects::BOLD)
 }
@@ -2513,9 +2513,9 @@ fn run_doom() -> Result<()> {
                     if is_tty {
                         println!(
                             "{} {}",
-                            "❌".red(),
+                            "❌".yellow(),
                             format!("No path found between sector {} and sector {}", start, end)
-                                .red()
+                                .yellow()
                                 .bold()
                         );
                     } else {
@@ -2526,9 +2526,9 @@ fn run_doom() -> Result<()> {
                 if is_tty {
                     println!(
                         "{} {}",
-                        "❌".red(),
+                        "❌".yellow(),
                         "Invalid sector indices. Please provide two integers separated by a comma."
-                            .red()
+                            .yellow()
                             .bold()
                     );
                 } else {
@@ -2541,9 +2541,9 @@ fn run_doom() -> Result<()> {
             if is_tty {
                 println!(
                     "{} {}",
-                    "❌".red(),
+                    "❌".yellow(),
                     "Invalid format. Please use START,END (e.g. 0,5)."
-                        .red()
+                        .yellow()
                         .bold()
                 );
             } else {
@@ -2971,7 +2971,7 @@ fn main() {
     if let Err(err) = run_doom() {
         use crossterm::style::Stylize;
         if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-            eprintln!("\n❌ {}: {}", "Fatal Error".red().bold(), err);
+            eprintln!("\n❌ {}: {}", "Fatal Error".yellow().bold(), err);
 
             let mut causes = err.chain().skip(1).peekable();
             if causes.peek().is_some() {
