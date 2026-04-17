@@ -9,7 +9,7 @@
 //! This crate is fully synchronous -- no async, no tokio.  UDP transport
 //! uses `std::net::UdpSocket` in non-blocking mode.
 //!
-//! [`TicCmd`] is defined locally as the wire-format player input command,
+//! `TicCmd` is defined locally as the wire-format player input command,
 //! layout-compatible with `doom_game::TicCmd`.  doom-net depends only on
 //! `doom-types`, not `doom-game`.
 

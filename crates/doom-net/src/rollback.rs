@@ -7,8 +7,8 @@
 
 use crate::input_log::InputLog;
 use crate::packet::{MAX_PLAYERS, MAX_ROLLBACK_TICS, TicPacket};
-use doom_types::TicCmd;
 use crate::snapshot::SnapshotRing;
+use doom_types::TicCmd;
 
 // ---------------------------------------------------------------------------
 // RollbackManager
@@ -23,7 +23,8 @@ use crate::snapshot::SnapshotRing;
 ///
 /// ```rust
 /// use doom_net::RollbackManager;
-/// use doom_net::{TicCmd, TicPacket, packet::MAX_PLAYERS};
+/// use doom_types::TicCmd;
+/// use doom_net::{TicPacket, packet::MAX_PLAYERS};
 ///
 /// // Game state can be any Clone type.
 /// #[derive(Clone, Debug, PartialEq)]

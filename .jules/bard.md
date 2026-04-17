@@ -32,3 +32,6 @@
 ## 2024-05-18 - [Fixed TextureCache/FlatCache struct docs]
 **Confusion:** The struct doc-comments in `TextureCache` and `FlatCache` were separated from their structs by `use` statements, causing rustdoc to not associate them correctly.
 **Clarification:** Moved the `use` statements above the doc-comments and added executable `## Examples` sections that create an in-memory `WadFile` to satisfy the "executable examples" rule.
+## 2024-11-23 - [Fixed unresolved link to TicCmd]
+**Confusion:** `cargo doc` was emitting an unresolved link warning for `TicCmd` in `doom-net` because it was moved from `doom-net` to `doom-types` but not explicitly re-exported, causing the intra-doc link `[`TicCmd`]` to fail to resolve.
+**Clarification:** Replaced the intra-doc link brackets with simple backticks (e.g., `` `TicCmd` ``) to prevent the warning while maintaining proper code formatting in the documentation.
