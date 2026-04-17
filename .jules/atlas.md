@@ -23,3 +23,6 @@
 **[Fix clone on copy clippy warning]**
 **Tangle:** The `doom-renderer` crate had a `clone()` on `LumpName` which implements `Copy`.
 **Blueprint:** Removed the `clone()` method call and let the compiler figure it out, as it implements `Copy`. It was causing a clippy warning.
+**[Fix doom-net doctest resolution failure]**
+**Tangle:** The doctests in `doom-net` were failing during `cargo test --workspace` because they attempted to `use doom_net::TicCmd` in example snippets. The `doom-net` crate did not export `TicCmd` at its root level (and properly shouldn't, to avoid re-export leaks), causing the doctest compiler to error out with `E0432: unresolved import doom_net::TicCmd`.
+**Blueprint:** Updated the doctest strings inside `crates/doom-net/src/input_log.rs`, `crates/doom-net/src/packet.rs`, and `crates/doom-net/src/rollback.rs`. Replaced the direct inclusion of `TicCmd` from `doom_net` with an explicit `use doom_types::TicCmd;` line for each example, which is the foundational crate holding the core data structure. This aligns the examples with correct dependency structures and prevents compile failures during tests.
