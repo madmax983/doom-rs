@@ -1,4 +1,3 @@
-
 **Refactoring pattern: Use from_repr instead of huge match statements for enums**
 **Learning:** `FromRepr` from `strum` can replace large, manual integer-to-enum matches, decreasing the number of lines of code and reducing cognitive load while remaining strictly typed.
 **Action:** Use `#[derive(strum_macros::FromRepr)]` on primitive enums instead of writing manual matching logic.
@@ -22,6 +21,11 @@
 **[Avoid clone when using Copy types like LumpName]**
 **Learning:** Using `clone()` on types that implement `Copy` (like `LumpName` which wraps an array of bytes) is redundant, causes Clippy warnings (`clone_on_copy`), and reduces readability without providing any safety benefit.
 **Action:** Remove `.clone()` calls on instances of `Copy` types when passing them around or inserting them into collections.
+
 **Refactor trace_ray actor checking to resolve Boolean Blindness**
 **Learning:** Functions that accept a boolean flag to enable a feature (like `check_actors: bool`) alongside optional data required only when that flag is true (like `shooter_index` and `actor_positions`) suffer from Boolean Blindness and disconnected parameters.
 **Action:** Group the boolean flag and its dependent data into a strongly typed enum (e.g., `ActorCheck::Ignore` and `ActorCheck::Check { shooter_index, actor_positions }`) to enforce correct usage at compile time and clarify intent at call sites.
+
+**Refactored Boolean Blindness in door and floor specials**
+**Learning:** Functions like `open_door(gs, level, idx, true)` and `ev_build_stairs(gs, level, idx, type, false)` suffer from Boolean Blindness, hiding the true intent (`OpenWaitClose` and `CrushBehavior::NoCrush`).
+**Action:** Replace `bool` with descriptive enums like `DoorBehavior` (`OpenStay` vs `OpenWaitClose`) and `CrushBehavior` (`Crush` vs `NoCrush`) to strongly type API boundaries and self-document the code at the call site.

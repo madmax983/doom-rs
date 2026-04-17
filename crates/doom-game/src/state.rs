@@ -185,7 +185,15 @@ pub struct CeilingMover {
     pub ceiling_type: CeilingType,
 }
 
-/// The type of floor motion behavior.
+/// Defines whether a floor mover applies crushing damage when moving.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CrushBehavior {
+    /// Floor damages actors it moves into.
+    Crush,
+    /// Floor stops or acts normally without causing damage.
+    NoCrush,
+}
+
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FloorType {
@@ -241,7 +249,7 @@ pub struct FloorMover {
     /// Tics remaining in the wait phase.
     pub wait_remaining: i32,
     /// Does this floor damage actors when raising into them?
-    pub crush: bool,
+    pub crush: CrushBehavior,
     /// Tag from the activating linedef.
     pub tag: u16,
     /// The type of floor motion (for savegame serialization and behavior differentiation).
