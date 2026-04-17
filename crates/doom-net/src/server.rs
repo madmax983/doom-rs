@@ -418,4 +418,18 @@ mod tests {
             "stale slot must be disconnected after timeout"
         );
     }
+
+    #[test]
+    fn test_transport_and_state() {
+        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
+
+        let state = ConnectionState::Connected {
+            player_slot: 0,
+            remote_addr: "127.0.0.1:5029".parse().unwrap(),
+        };
+        server.set_transport_state(state.clone());
+
+        let t = server.transport();
+        assert_eq!(*t.state(), state);
+    }
 }

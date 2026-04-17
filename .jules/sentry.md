@@ -40,3 +40,7 @@
 ## 2024-04-15 - Replace unwrap() with expect() in domain structs and tests
 **Learning:** Found scattered instances of `.unwrap()` and `.unwrap_err()` in map parsing logic, primitives, and game logic, which can obscure test failure context or lead to uninformative panics.
 **Action:** Replaced `.unwrap()` and `.unwrap_err()` with `.expect()` or `.expect_err()` to enforce providing explicit failure messages, making assertions clearer when parsing WAD data or managing the audio system.
+
+## 2024-04-18 - Improved test coverage of doom-net transport
+**Learning:** The `doom-net` crate had some missing coverage in `transport.rs` specifically around testing the `NetConfig` passing, bounds checking `recv_raw`, sending manually constructed packets, and proper validation of the transport state. Also discovered that there was no test confirming that `NetTransport::bind_with_config` actually applied the config.
+**Action:** Added tests for `NetTransport`'s edge cases and configuration behavior. Addressed failing doctests from a previous rename of `doom_net::TicCmd` to `doom_types::TicCmd` to ensure the public API examples are compilable.

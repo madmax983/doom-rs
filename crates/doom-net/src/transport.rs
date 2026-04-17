@@ -373,8 +373,7 @@ pub const fn is_join_response(packet: &TicPacket) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::packet::{MAX_PLAYERS, TicPacket};
-    use doom_types::TicCmd;
+    use crate::packet::TicPacket;
 
     // -- NetConfig tests --
 
@@ -456,7 +455,7 @@ mod tests {
             sender: 1,
             ack_tic: 40,
             state_checksum: 0xCAFE,
-            cmds: [TicCmd::default(); MAX_PLAYERS],
+            cmds: [doom_types::TicCmd::default(); crate::packet::MAX_PLAYERS],
         };
 
         // Send via send_raw to the receiver's address.
@@ -504,7 +503,7 @@ mod tests {
             sender: 0,
             ack_tic: 0,
             state_checksum: 0,
-            cmds: [TicCmd::default(); MAX_PLAYERS],
+            cmds: [doom_types::TicCmd::default(); crate::packet::MAX_PLAYERS],
         };
 
         let data = pkt.to_bytes();
@@ -559,5 +558,96 @@ mod tests {
             !is_join_request(&response),
             "response must not be identified as join request"
         );
+    }
+
+    #[test]
+    fn check_timeout() {
+        let mut t = NetTransport::bind("127.0.0.1:0").unwrap();
+        // Since we just created it, the elapsed time should be < timeout_ms
+        assert!(!t.check_timeout(), "fresh transport must not be timed out");
+        assert_eq!(*t.state(), ConnectionState::Disconnected);
+    }
+
+    #[test]
+    fn config_getter() {
+        let t = NetTransport::bind("127.0.0.1:0").unwrap();
+        let cfg = t.config();
+        assert_eq!(cfg.port, 5029);
+    }
+
+    #[test]
+    fn bind_with_config_uses_provided_config() {
+        let cfg = NetConfig {
+            port: 0,
+            max_players: 2,
+            timeout_ms: 1000,
+            keepalive_interval_ms: 200,
+        };
+        let t = NetTransport::bind_with_config(cfg.clone()).unwrap();
+        let cfg2 = t.config();
+        assert_eq!(cfg.max_players, cfg2.max_players);
+        assert_eq!(cfg.timeout_ms, cfg2.timeout_ms);
+        assert_eq!(cfg.keepalive_interval_ms, cfg2.keepalive_interval_ms);
+    }
+
+    #[test]
+    fn recv_raw_returns_bytes_and_updates_stats() {
+        let mut sender = NetTransport::bind("127.0.0.1:0").unwrap();
+        let mut receiver = NetTransport::bind("127.0.0.1:0").unwrap();
+        let recv_addr = receiver.local_addr().unwrap();
+
+        let data = b"hello";
+        sender.send_raw(data, &recv_addr).unwrap();
+
+        let mut buf = [0u8; 16];
+        let result = receiver.recv_raw(&mut buf).unwrap();
+        assert!(result.is_some());
+        let (n, addr) = result.unwrap();
+        assert_eq!(n, 5);
+        assert_eq!(&buf[..n], b"hello");
+        assert_eq!(addr, sender.local_addr().unwrap());
+
+        let stats = receiver.stats();
+        assert_eq!(stats.packets_received, 1);
+        assert_eq!(stats.bytes_received, 5);
+    }
+
+    #[test]
+    fn recv_raw_empty_socket_returns_none() {
+        let mut t = NetTransport::bind("127.0.0.1:0").unwrap();
+        let mut buf = [0u8; 16];
+        let result = t.recv_raw(&mut buf).unwrap();
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn send_packet_sends_data() {
+        let mut sender = NetTransport::bind("127.0.0.1:0").unwrap();
+        let mut receiver = NetTransport::bind("127.0.0.1:0").unwrap();
+        let recv_addr = receiver.local_addr().unwrap();
+
+        // We have to connect first to use send_packet
+        sender.connect_to(&recv_addr.to_string()).unwrap();
+
+        let pkt = TicPacket {
+            tic: 42,
+            sender: 1,
+            ack_tic: 40,
+            state_checksum: 0xCAFE,
+            cmds: [doom_types::TicCmd::default(); crate::packet::MAX_PLAYERS],
+        };
+
+        let n = sender.send_packet(&pkt).unwrap();
+        assert_eq!(n, crate::packet::TIC_PACKET_SIZE);
+
+        let result = receiver.recv_packet().unwrap();
+        assert!(result.is_some());
+    }
+
+    #[test]
+    fn connect_to_invalid_addr_returns_error() {
+        let mut t = NetTransport::bind("127.0.0.1:0").unwrap();
+        let err = t.connect_to("invalid address").unwrap_err();
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     }
 }

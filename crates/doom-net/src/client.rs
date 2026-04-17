@@ -152,9 +152,9 @@ impl NetClient {
 mod tests {
     use super::*;
     use crate::packet::{MAX_PLAYERS, TicPacket};
-    use doom_types::TicCmd;
     use crate::server::RelayServer;
     use crate::transport::{NetConfig, make_join_packet};
+    use doom_types::TicCmd;
 
     fn test_config() -> NetConfig {
         NetConfig {
@@ -272,5 +272,18 @@ mod tests {
 
         // Verify the response is recognized as a join response.
         assert!(crate::transport::is_join_response(&resp_pkt));
+    }
+
+    #[test]
+    fn net_client_from_parts() {
+        let server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
+        let server_addr = server.local_addr().unwrap();
+
+        let transport = NetTransport::bind("127.0.0.1:0").unwrap();
+        let client = NetClient::from_parts(transport, server_addr, 2);
+
+        assert!(client.is_connected());
+        assert_eq!(client.player_slot(), 2);
+        assert_eq!(client.server_addr(), server_addr);
     }
 }
