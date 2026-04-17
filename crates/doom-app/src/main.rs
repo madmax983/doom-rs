@@ -232,6 +232,10 @@ struct Args {
     /// Print the map statistics or tactical analysis as raw JSON. Only valid when combined with --map-stats or --analyze.
     #[arg(long)]
     json: bool,
+
+    /// Analyze an LMP demo file and extract player metrics and statistics
+    #[arg(long)]
+    pub analyze_demo: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -2602,7 +2606,10 @@ fn run_doom() -> Result<()> {
         } else {
             let par_time_mins = stats.par_time_tics / 35 / 60;
             let par_time_secs = (stats.par_time_tics / 35) % 60;
-            let par_time_formatted = format!("{:02}:{:02} ({} tics)", par_time_mins, par_time_secs, stats.par_time_tics);
+            let par_time_formatted = format!(
+                "{:02}:{:02} ({} tics)",
+                par_time_mins, par_time_secs, stats.par_time_tics
+            );
 
             let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
             let mut table = comfy_table::Table::new();
@@ -2641,8 +2648,7 @@ fn run_doom() -> Result<()> {
                     ])
                     .add_row(vec![
                         comfy_table::Cell::new("⏱️  Par Time"),
-                        comfy_table::Cell::new(par_time_formatted)
-                            .fg(comfy_table::Color::Cyan),
+                        comfy_table::Cell::new(par_time_formatted).fg(comfy_table::Color::Cyan),
                     ]);
             } else {
                 table

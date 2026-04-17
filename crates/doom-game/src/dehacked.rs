@@ -605,14 +605,13 @@ impl DehPatch {
     fn parse_i32(s: &str) -> Result<i32, DehError> {
         s.parse::<i32>()
             .or_else(|_| {
-                s.parse::<f64>()
-                    .and_then(|v| {
-                        if v.is_nan() {
-                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err())) // dummy error to fail through
-                        } else {
-                            Ok(v.clamp(i32::MIN as f64, i32::MAX as f64) as i32)
-                        }
-                    })
+                s.parse::<f64>().and_then(|v| {
+                    if v.is_nan() {
+                        Err("".parse::<f64>().unwrap_err()) // dummy error to fail through
+                    } else {
+                        Ok(v.clamp(i32::MIN as f64, i32::MAX as f64) as i32)
+                    }
+                })
             })
             .map_err(|_| DehError::BadField(format!("expected i32, got {s:?}")))
     }
@@ -620,14 +619,13 @@ impl DehPatch {
     fn parse_u32(s: &str) -> Result<u32, DehError> {
         s.parse::<u32>()
             .or_else(|_| {
-                s.parse::<f64>()
-                    .and_then(|v| {
-                        if v.is_nan() {
-                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
-                        } else {
-                            Ok(v.clamp(0.0, u32::MAX as f64) as u32)
-                        }
-                    })
+                s.parse::<f64>().and_then(|v| {
+                    if v.is_nan() {
+                        Err("".parse::<f64>().unwrap_err())
+                    } else {
+                        Ok(v.clamp(0.0, u32::MAX as f64) as u32)
+                    }
+                })
             })
             .map_err(|_| DehError::BadField(format!("expected u32, got {s:?}")))
     }
@@ -635,14 +633,13 @@ impl DehPatch {
     fn parse_u16(s: &str) -> Result<u16, DehError> {
         s.parse::<u16>()
             .or_else(|_| {
-                s.parse::<f64>()
-                    .and_then(|v| {
-                        if v.is_nan() {
-                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
-                        } else {
-                            Ok(v.clamp(0.0, u16::MAX as f64) as u16)
-                        }
-                    })
+                s.parse::<f64>().and_then(|v| {
+                    if v.is_nan() {
+                        Err("".parse::<f64>().unwrap_err())
+                    } else {
+                        Ok(v.clamp(0.0, u16::MAX as f64) as u16)
+                    }
+                })
             })
             .map_err(|_| DehError::BadField(format!("expected u16, got {s:?}")))
     }
@@ -650,14 +647,13 @@ impl DehPatch {
     fn parse_u8(s: &str) -> Result<u8, DehError> {
         s.parse::<u8>()
             .or_else(|_| {
-                s.parse::<f64>()
-                    .and_then(|v| {
-                        if v.is_nan() {
-                            Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
-                        } else {
-                            Ok(v.clamp(0.0, u8::MAX as f64) as u8)
-                        }
-                    })
+                s.parse::<f64>().and_then(|v| {
+                    if v.is_nan() {
+                        Err("".parse::<f64>().unwrap_err())
+                    } else {
+                        Ok(v.clamp(0.0, u8::MAX as f64) as u8)
+                    }
+                })
             })
             .map_err(|_| DehError::BadField(format!("expected u8, got {s:?}")))
     }
@@ -667,7 +663,7 @@ impl DehPatch {
             .or_else(|_| {
                 s.parse::<f64>().and_then(|v| {
                     if v.is_nan() {
-                        Err(std::num::ParseFloatError::from(s.parse::<f64>().unwrap_err()))
+                        Err("".parse::<f64>().unwrap_err())
                     } else if v < 0.0 {
                         Ok(0)
                     } else if v > usize::MAX as f64 {

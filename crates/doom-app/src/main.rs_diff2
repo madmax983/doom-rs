@@ -1,0 +1,15 @@
+<<<<<<< SEARCH
+    /// Print the map statistics or tactical analysis as raw JSON.
+    /// Only valid when combined with --map-stats or --analyze
+    #[arg(long)]
+    pub json: bool,
+=======
+    /// Print the map statistics or tactical analysis as raw JSON.
+    /// Only valid when combined with --map-stats or --analyze
+    #[arg(long)]
+    pub json: bool,
+
+    /// Analyze an LMP demo file and extract player metrics and statistics
+    #[arg(long)]
+    pub analyze_demo: Option<String>,
+>>>>>>> REPLACE

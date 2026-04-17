@@ -1,0 +1,23 @@
+<<<<<<< SEARCH
+        // --- End of feature exports ---
+=======
+        // --- End of feature exports ---
+
+        if args.analyze_demo.is_some() {
+            let lmp_path = args.analyze_demo.as_ref().unwrap();
+            let lmp_bytes = std::fs::read(lmp_path).unwrap();
+            let mut player = doom_demo::player::DemoPlayer::from_lmp(&lmp_bytes).unwrap();
+            let metrics = doom_demo::analyzer::DemoAnalyzer::analyze(&mut player);
+            println!("Demo Analysis for {}:", lmp_path);
+            for (i, m) in metrics.iter().enumerate() {
+                println!("Player {}:", i + 1);
+                println!("  Total tics: {}", m.total_tics);
+                println!("  Attack presses: {}", m.attack_presses);
+                println!("  Use presses: {}", m.use_presses);
+                println!("  Weapon changes: {}", m.weapon_changes);
+                println!("  SR40 tics: {}", m.sr40_tics);
+                println!("  SR50 tics: {}", m.sr50_tics);
+            }
+            return Ok(());
+        }
+>>>>>>> REPLACE
