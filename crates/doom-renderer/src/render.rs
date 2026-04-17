@@ -2811,7 +2811,7 @@ mod tests {
     fn make_opaque_sprite_cache(name: &str, width: u16, height: u16, pixel: u8) -> SpriteCache {
         let mut cache = SpriteCache::empty();
         cache.insert(
-            name.to_string(),
+            doom_wad::lump::LumpName::from_str(name),
             SpriteFrame {
                 width,
                 height,
