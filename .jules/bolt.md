@@ -6,3 +6,10 @@
 **[SmallVec for Hitscan Intercepts and Sector Traversal]
 **Learning:** Returning `Vec<T>` or mutating `&mut Vec<T>` on hot paths like `adjacent_sectors` and `p_line_attack` causes many tiny heap allocations. `smallvec` avoids allocations for arrays up to a chosen size, dropping them on the stack. Changing `Vec::new()` to `SmallVec::new()` and setting up a sensible default capacity (e.g. 16 for `HitscanIntercept` or 8 for adjacent sectors) speeds up traversal and weapon firing significantly.
 **Action:** When a function collects a small, bounded number of items (like adjacent level geometry or raycast intercepts) and is called very frequently, use `smallvec::SmallVec` instead of `Vec`.
+**[VecDeque for rolling logs]**
+**Learning:** Fixed-capacity rolling logs built with `Vec` must call `.remove(0)` when full, shifting all elements `O(N)` times. Using `std::collections::VecDeque` provides `O(1)` `.pop_front()`, eliminating that overhead entirely.
+**Action:** Use `VecDeque` instead of `Vec` for small fixed-capacity ring buffers or scrolling text logs.
+
+**[Lazily evaluated impl Iterator instead of Vec]**
+**Learning:** Functions that query lists of things based on a condition (like `sectors_by_tag`) often `.collect()` into a `Vec` for convenience, but the caller usually just iterates over them immediately. Returning an `impl Iterator` avoids allocating the intermediate `Vec`.
+**Action:** When filtering a collection to loop over the matches, return `impl Iterator` instead of `.collect::<Vec<_>>()` to eliminate heap allocations.
