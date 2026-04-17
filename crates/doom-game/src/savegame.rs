@@ -115,7 +115,7 @@ impl WriteCursor {
     /// Create a new cursor with the given initial capacity.
     pub fn new(capacity: usize) -> Self {
         Self {
-            buf: Vec::with_capacity(capacity),
+            buf: Vec::with_capacity(capacity.min(10 * 1024 * 1024)), // Cap at 10MB to avoid OOM
         }
     }
 

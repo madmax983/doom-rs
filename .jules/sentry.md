@@ -43,3 +43,6 @@
 ## 2024-04-18 - [Doom TUI Event Loop Testing]
 **Learning:** Found significant missing coverage in the main `event_loop.rs` of doom-tui including logic for mode switching, timing drain thresholds, action costs for turn-based gameplay, and event loop states.
 **Action:** Add targeted unit tests to cover missing edge cases and state management to increase overall robustness without requiring full terminal emulation.
+## 2026-04-17 - Update oldest_tic in InputLog
+**Learning:** InputLog::oldest_tic() returned 0 due to missing state update implementation which went undiscovered.
+**Action:** Add unit tests to check state mutation methods verify public API changes are observed.
