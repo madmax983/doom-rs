@@ -13,3 +13,9 @@
 **[Lazily evaluated impl Iterator instead of Vec]**
 **Learning:** Functions that query lists of things based on a condition (like `sectors_by_tag`) often `.collect()` into a `Vec` for convenience, but the caller usually just iterates over them immediately. Returning an `impl Iterator` avoids allocating the intermediate `Vec`.
 **Action:** When filtering a collection to loop over the matches, return `impl Iterator` instead of `.collect::<Vec<_>>()` to eliminate heap allocations.
+**[Console History Optimization]
+**Learning:** Using  with  for fixed-capacity rolling logs introduces an (N)$ shift penalty on every eviction.  is the mathematically correct structure.
+**Action:** Replace  with  and use  for rolling logs to ensure (1)$ updates and zero initial resize allocations.
+**[Console History Optimization]**
+**Learning:** Using `Vec` with `remove(0)` for fixed-capacity rolling logs introduces an O(N) shift penalty on every eviction. `VecDeque` is the mathematically correct structure.
+**Action:** Replace `Vec` with `VecDeque::with_capacity(max)` and use `pop_front()` for rolling logs to ensure O(1) updates and zero initial resize allocations.

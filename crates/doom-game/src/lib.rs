@@ -40,6 +40,8 @@ pub mod states;
 #[cfg(feature = "style_meter")]
 pub mod style;
 pub mod switch;
+#[cfg(feature = "telemetry")]
+pub mod telemetry;
 pub mod tic;
 pub mod trace;
 pub mod weapon_fire;
@@ -114,6 +116,8 @@ pub use switch::{
     KeyType, SWITCH_PAIRS, clear_linedef_special, find_switch_opposite, player_has_key,
     toggle_switch_texture,
 };
+#[cfg(feature = "telemetry")]
+pub use telemetry::{SessionTelemetry, TelemetryEvent, TelemetryKind};
 pub use tic::{
     FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, p_set_mobj_state, tick_all_mobjs, tick_player,
     tick_world,

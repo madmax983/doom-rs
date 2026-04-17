@@ -229,7 +229,7 @@ struct Args {
     #[arg(long)]
     analyze: bool,
 
-    /// Print the map statistics as raw JSON. Only valid when combined with --map-stats.
+    /// Print the map statistics or tactical analysis as raw JSON. Only valid when combined with --map-stats or --analyze.
     #[arg(long)]
     json: bool,
 }
@@ -2432,12 +2432,6 @@ fn run_doom() -> Result<()> {
                     })
             };
 
-            let areas_str = format!(
-                "{} area{}",
-                areas.len(),
-                if areas.len() == 1 { "" } else { "s" }
-            );
-
             let mut table = comfy_table::Table::new();
             if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
                 table
@@ -2453,12 +2447,19 @@ fn run_doom() -> Result<()> {
                 ]);
                 table.add_row(vec![
                     comfy_table::Cell::new("Chokepoints"),
-                    comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Red),
+                    comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
                 ]);
-                table.add_row(vec![
-                    comfy_table::Cell::new("Isolated Areas"),
-                    comfy_table::Cell::new(&areas_str).fg(comfy_table::Color::Magenta),
-                ]);
+                for (i, area) in areas.iter().enumerate() {
+                    let area_str = area
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    table.add_row(vec![
+                        comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
+                        comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
+                    ]);
+                }
             } else {
                 table.set_header(vec![
                     comfy_table::Cell::new("Feature"),
@@ -2468,10 +2469,17 @@ fn run_doom() -> Result<()> {
                     comfy_table::Cell::new("Chokepoints"),
                     comfy_table::Cell::new(&chokepoints_str),
                 ]);
-                table.add_row(vec![
-                    comfy_table::Cell::new("Isolated Areas"),
-                    comfy_table::Cell::new(&areas_str),
-                ]);
+                for (i, area) in areas.iter().enumerate() {
+                    let area_str = area
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    table.add_row(vec![
+                        comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
+                        comfy_table::Cell::new(area_str),
+                    ]);
+                }
             }
             println!("{table}");
         }
@@ -2579,19 +2587,23 @@ fn run_doom() -> Result<()> {
                     r#""map""#.cyan().bold(),
                     warp_str.yellow(),
                     r#""total_kills""#.cyan().bold(),
-                    stats.total_kills.to_string().red(),
+                    stats.total_kills.to_string().yellow(),
                     r#""total_items""#.cyan().bold(),
                     stats.total_items.to_string().green(),
                     r#""total_secrets""#.cyan().bold(),
                     stats.total_secrets.to_string().magenta(),
                     r#""par_time_tics""#.cyan().bold(),
-                    stats.par_time_tics.to_string().blue()
+                    stats.par_time_tics.to_string().cyan()
                 );
                 println!("{formatted_json}");
             } else {
                 println!("{json_data}");
             }
         } else {
+            let par_time_mins = stats.par_time_tics / 35 / 60;
+            let par_time_secs = (stats.par_time_tics / 35) % 60;
+            let par_time_formatted = format!("{:02}:{:02} ({} tics)", par_time_mins, par_time_secs, stats.par_time_tics);
+
             let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
             let mut table = comfy_table::Table::new();
             table
@@ -2615,7 +2627,7 @@ fn run_doom() -> Result<()> {
                     .add_row(vec![
                         comfy_table::Cell::new("💀 Total Kills"),
                         comfy_table::Cell::new(stats.total_kills.to_string())
-                            .fg(comfy_table::Color::Red),
+                            .fg(comfy_table::Color::Yellow),
                     ])
                     .add_row(vec![
                         comfy_table::Cell::new("📦 Total Items"),
@@ -2628,9 +2640,9 @@ fn run_doom() -> Result<()> {
                             .fg(comfy_table::Color::Magenta),
                     ])
                     .add_row(vec![
-                        comfy_table::Cell::new("⏱️  Par Time (tics)"),
-                        comfy_table::Cell::new(stats.par_time_tics.to_string())
-                            .fg(comfy_table::Color::Blue),
+                        comfy_table::Cell::new("⏱️  Par Time"),
+                        comfy_table::Cell::new(par_time_formatted)
+                            .fg(comfy_table::Color::Cyan),
                     ]);
             } else {
                 table
@@ -2655,8 +2667,8 @@ fn run_doom() -> Result<()> {
                         comfy_table::Cell::new(stats.total_secrets.to_string()),
                     ])
                     .add_row(vec![
-                        comfy_table::Cell::new("Par Time (tics)"),
-                        comfy_table::Cell::new(stats.par_time_tics.to_string()),
+                        comfy_table::Cell::new("Par Time"),
+                        comfy_table::Cell::new(par_time_formatted),
                     ]);
             }
             println!("{table}");
