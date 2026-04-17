@@ -690,7 +690,7 @@ fn write_floor_mover(w: &mut WriteCursor, fm: &FloorMover) {
     w.write_i16(fm.return_height);
     w.write_bool(fm.waiting);
     w.write_i32(fm.wait_remaining);
-    w.write_bool(fm.crush);
+    w.write_bool(fm.crush == crate::state::CrushBehavior::Crush);
     w.write_u16(fm.tag);
     write_floor_type(w, fm.floor_type);
 }
@@ -705,7 +705,11 @@ fn read_floor_mover(r: &mut ReadCursor<'_>) -> Result<FloorMover, SaveError> {
         return_height: r.read_i16()?,
         waiting: r.read_bool()?,
         wait_remaining: r.read_i32()?,
-        crush: r.read_bool()?,
+        crush: if r.read_bool()? {
+            crate::state::CrushBehavior::Crush
+        } else {
+            crate::state::CrushBehavior::NoCrush
+        },
         tag: r.read_u16()?,
         floor_type: read_floor_type(r)?,
     })
@@ -1606,7 +1610,7 @@ mod tests {
             return_height: 0,
             waiting: false,
             wait_remaining: 0,
-            crush: true,
+            crush: crate::state::CrushBehavior::Crush,
             tag: 7,
             floor_type: FloorType::LowerToLowest,
         });
@@ -1619,7 +1623,7 @@ mod tests {
             loaded.state.movers.active_floors[0].direction,
             MoveDirection::Down
         );
-        assert!(loaded.state.movers.active_floors[0].crush);
+        assert!(loaded.state.movers.active_floors[0].crush == crate::state::CrushBehavior::Crush);
     }
 
     // --- Test 18: save_slot_filename format ---
