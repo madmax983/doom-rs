@@ -2512,7 +2512,8 @@ fn run_doom() -> Result<()> {
                     }
                 } else {
                     if args.json {
-                        let msg = format!("No path found between sector {} and sector {}", start, end);
+                        let msg =
+                            format!("No path found between sector {} and sector {}", start, end);
                         let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
                         if is_tty {
                             let formatted_json = format!(
@@ -2529,9 +2530,12 @@ fn run_doom() -> Result<()> {
                             println!(
                                 "{} {}",
                                 "❌".yellow(),
-                                format!("No path found between sector {} and sector {}", start, end)
-                                    .yellow()
-                                    .bold()
+                                format!(
+                                    "No path found between sector {} and sector {}",
+                                    start, end
+                                )
+                                .yellow()
+                                .bold()
                             );
                         } else {
                             println!("No path found between sector {} and sector {}", start, end);
@@ -2539,7 +2543,8 @@ fn run_doom() -> Result<()> {
                     }
                 }
             } else {
-                let msg = "Invalid sector indices. Please provide two integers separated by a comma.";
+                let msg =
+                    "Invalid sector indices. Please provide two integers separated by a comma.";
                 if args.json {
                     let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
                     if is_tty {
