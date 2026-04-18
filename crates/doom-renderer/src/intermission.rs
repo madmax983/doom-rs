@@ -503,14 +503,34 @@ fn wi_draw_number(
     y: i32,
     value: u32,
 ) -> i32 {
-    let s = value.to_string();
-    for ch in s.bytes() {
-        let digit = ch - b'0';
-        let name = format!("WINUM{digit}");
-        if let Some(p) = cache.get(&name, wad) {
-            let p = p.clone();
-            fb.draw_patch_vanilla(x, y, &p);
-            x += p.width as i32;
+    let mut digits = [0u8; 10];
+    let mut count = 0;
+    let mut n = value;
+    if n == 0 {
+        digits[0] = 0;
+        count = 1;
+    } else {
+        while n > 0 && count < 10 {
+            digits[count] = (n % 10) as u8;
+            n /= 10;
+            count += 1;
+        }
+    }
+
+    // digits are stored little-endian (ones, tens, hundreds), we need to draw left-to-right (most significant first).
+    for i in (0..count).rev() {
+        let digit = digits[i];
+        if let Some(name) = [
+            "WINUM0", "WINUM1", "WINUM2", "WINUM3", "WINUM4", "WINUM5", "WINUM6", "WINUM7",
+            "WINUM8", "WINUM9",
+        ]
+        .get(digit as usize)
+        {
+            if let Some(p) = cache.get(name, wad) {
+                let p = p.clone();
+                fb.draw_patch_vanilla(x, y, &p);
+                x += p.width as i32;
+            }
         }
     }
     x
