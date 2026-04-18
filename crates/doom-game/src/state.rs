@@ -194,6 +194,7 @@ pub enum CrushBehavior {
     NoCrush,
 }
 
+/// The target destination height type for an activating floor.
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FloorType {

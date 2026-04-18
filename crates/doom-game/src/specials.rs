@@ -1757,10 +1757,15 @@ pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) 
 
 /// Activate a crusher on all sectors matching `tag`.
 pub struct CrusherParams {
+    /// The movement speed of the crusher.
     pub speed: i16,
+    /// The damage dealt when an actor is crushed.
     pub crush_damage: i32,
+    /// Whether the crusher is silent or makes noise.
     pub silent: bool,
+    /// Whether the crusher should be removed after completing its action.
     pub remove_when_done: bool,
+    /// The target height type for the ceiling to reach when closing.
     pub ceiling_type: CeilingType,
 }
 

@@ -267,6 +267,38 @@ pub enum ActorCheck<'a> {
     },
 }
 
+/// Traces a ray through the level geometry to find the first blocking collision.
+///
+/// This function performs line-of-sight checking and hitscan collision detection against
+/// both level geometry (linedefs) and actors (if specified via `actor_check`). It uses the
+/// Blockmap to efficiently traverse only the grid cells intersected by the ray.
+///
+/// ## Returns
+/// A [`TraceResult`] indicating what the ray hit, if anything.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_game::trace::{trace_ray, ActorCheck};
+/// use doom_map::Level;
+///
+/// # let level = Level::default();
+/// # let x1 = 0;
+/// # let y1 = 0;
+/// # let angle_cos = 1.0;
+/// # let angle_sin = 0.0;
+/// # let max_range = 100.0;
+/// // Trace a ray to the east for 100 units, ignoring actors.
+/// let hit = trace_ray(
+///     &level,
+///     x1,
+///     y1,
+///     angle_cos,
+///     angle_sin,
+///     max_range,
+///     ActorCheck::Ignore,
+/// );
+/// ```
 pub fn trace_ray(
     level: &Level,
     x1: i32,
