@@ -15,6 +15,7 @@
 //!   `i16 top_offset`, `width x u32` column offsets, then column posts
 //!   (topdelta, length, pad, pixels, pad; `0xFF` = end of column).
 
+use doom_wad::lump::LumpName;
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
@@ -377,7 +378,7 @@ pub struct TextureDirectory {
     /// Patch names from PNAMES.
     pnames: Vec<[u8; 8]>,
     /// Name -> index lookup.
-    name_index: HashMap<[u8; 8], usize>,
+    name_index: HashMap<LumpName, usize>,
 }
 
 impl TextureDirectory {
@@ -392,7 +393,7 @@ impl TextureDirectory {
         let name_index = textures
             .iter()
             .enumerate()
-            .map(|(i, t)| (t.name, i))
+            .map(|(i, t)| (LumpName::from_raw(t.name), i))
             .collect();
         Self {
             textures,
@@ -403,7 +404,9 @@ impl TextureDirectory {
 
     /// Look up a texture definition by name.
     pub fn get(&self, name: &[u8; 8]) -> Option<&TextureDef> {
-        self.name_index.get(name).map(|&i| &self.textures[i])
+        self.name_index
+            .get(&LumpName::from_raw(*name))
+            .map(|&i| &self.textures[i])
     }
 
     /// Number of textures in the directory.
