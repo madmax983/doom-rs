@@ -427,6 +427,53 @@ mod tests {
     // -- NetTransport tests --
 
     #[test]
+    fn connect_to_invalid_address_fails() {
+        let mut transport = NetTransport::bind("127.0.0.1:0").unwrap();
+        let err = transport.connect_to("invalid").unwrap_err();
+        assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn send_packet_without_connect_fails() {
+        let mut transport = NetTransport::bind("127.0.0.1:0").unwrap();
+        let pkt = TicPacket {
+            tic: 0,
+            sender: 0,
+            ack_tic: 0,
+            state_checksum: 0,
+            cmds: [TicCmd::default(); MAX_PLAYERS],
+        };
+        let err = transport.send_packet(&pkt).unwrap_err();
+        // Socket behavior without connect depends on the OS.
+        // It could be NotConnected, ConnectionRefused, AddrNotAvailable, InvalidInput
+        // We just care that it correctly returned an error rather than panicking.
+        let _ = err;
+    }
+
+    #[test]
+    fn recv_packet_malformed_returns_none_silently() {
+        let mut sender = NetTransport::bind("127.0.0.1:0").unwrap();
+        let mut receiver = NetTransport::bind("127.0.0.1:0").unwrap();
+        let recv_addr = receiver.local_addr().unwrap();
+        let bad_data = b"bad packet";
+        sender.send_raw(bad_data, &recv_addr).unwrap();
+
+        // Use a polling loop instead of thread::sleep
+        let start = std::time::Instant::now();
+        loop {
+            // Under normal circumstances, this either returns Ok(None) immediately if not received,
+            // or reads the packet, identifies it as malformed, and returns Ok(None).
+            // We want to wait long enough to ensure it received the packet and dropped it.
+            // A small loop with a short timeout ensures we don't hang if it's slow.
+            if start.elapsed().as_millis() > 100 {
+                break;
+            }
+            let res = receiver.recv_packet().unwrap();
+            assert!(res.is_none());
+        }
+    }
+
+    #[test]
     fn transport_bind_on_localhost_succeeds() {
         let transport = NetTransport::bind("127.0.0.1:0");
         assert!(transport.is_ok(), "bind to 127.0.0.1:0 must succeed");
@@ -436,6 +483,7 @@ mod tests {
     }
 
     #[test]
+
     fn transport_set_nonblocking_works() {
         let t = NetTransport::bind("127.0.0.1:0").unwrap();
         // Already set to nonblocking by bind, toggle off and back on.
