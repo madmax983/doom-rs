@@ -1054,8 +1054,11 @@ pub fn draw_stnum(
     for (i, digit) in digits.iter().copied().enumerate().take(max_digits) {
         x -= digit_w;
         if i < count {
-            let name = format!("STTNUM{digit}");
-            if let Some(patch) = cache.get(&name, wad) {
+            let name = [
+                "STTNUM0", "STTNUM1", "STTNUM2", "STTNUM3", "STTNUM4", "STTNUM5", "STTNUM6",
+                "STTNUM7", "STTNUM8", "STTNUM9",
+            ][digit as usize];
+            if let Some(patch) = cache.get(name, wad) {
                 let p = patch.clone();
                 fb.draw_patch_vanilla(x, y, &p);
             }
@@ -1098,8 +1101,11 @@ pub fn draw_stysnum(
     for (i, digit) in digits.iter().copied().enumerate().take(max_digits) {
         x -= digit_w;
         if i < count {
-            let name = format!("STYSNUM{digit}");
-            if let Some(patch) = cache.get(&name, wad) {
+            let name = [
+                "STYSNUM0", "STYSNUM1", "STYSNUM2", "STYSNUM3", "STYSNUM4", "STYSNUM5", "STYSNUM6",
+                "STYSNUM7", "STYSNUM8", "STYSNUM9",
+            ][digit as usize];
+            if let Some(patch) = cache.get(name, wad) {
                 let p = patch.clone();
                 fb.draw_patch_vanilla(x, y, &p);
             }
@@ -1159,8 +1165,11 @@ pub fn draw_status_bar_wad(
         let weapon_num = slot + 2; // weapons 2-7
         let owned = data.weapons.get(weapon_num).copied().unwrap_or(false);
         if owned {
-            let name = format!("STGNUM{weapon_num}");
-            if let Some(patch) = cache.get(&name, wad) {
+            let name = [
+                "STGNUM0", "STGNUM1", "STGNUM2", "STGNUM3", "STGNUM4", "STGNUM5", "STGNUM6",
+                "STGNUM7", "STGNUM8", "STGNUM9",
+            ][weapon_num];
+            if let Some(patch) = cache.get(name, wad) {
                 let p = patch.clone();
                 fb.draw_patch_vanilla(arm_xs[slot], arm_ys[slot], &p);
             }
@@ -1195,8 +1204,10 @@ pub fn draw_status_bar_wad(
         if data.keys & bit != 0 {
             let slot = idx % 3;
             if !slot_used[slot] {
-                let name = format!("STKEYS{idx}");
-                if let Some(patch) = cache.get(&name, wad) {
+                let name = [
+                    "STKEYS0", "STKEYS1", "STKEYS2", "STKEYS3", "STKEYS4", "STKEYS5",
+                ][*idx];
+                if let Some(patch) = cache.get(name, wad) {
                     let p = patch.clone();
                     fb.draw_patch_vanilla(239, *ky, &p);
                 }

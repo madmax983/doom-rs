@@ -64,25 +64,48 @@ impl PatchCache {
     pub fn preload_statusbar_patches(&mut self, wad: &WadStack) {
         // Tall red digits for ammo/health/armor.
         for i in 0..=9 {
-            self.get(&format!("STTNUM{i}"), wad);
+            self.get(
+                [
+                    "STTNUM0", "STTNUM1", "STTNUM2", "STTNUM3", "STTNUM4", "STTNUM5", "STTNUM6",
+                    "STTNUM7", "STTNUM8", "STTNUM9",
+                ][i as usize],
+                wad,
+            );
         }
         self.get("STTMINUS", wad);
         self.get("STTPRCNT", wad);
 
         // Short yellow digits for ammo tally.
         for i in 0..=9 {
-            self.get(&format!("STYSNUM{i}"), wad);
+            self.get(
+                [
+                    "STYSNUM0", "STYSNUM1", "STYSNUM2", "STYSNUM3", "STYSNUM4", "STYSNUM5",
+                    "STYSNUM6", "STYSNUM7", "STYSNUM8", "STYSNUM9",
+                ][i as usize],
+                wad,
+            );
         }
 
         // Arms / weapon numbers.
         self.get("STARMS", wad);
         for i in 2..=7 {
-            self.get(&format!("STGNUM{i}"), wad);
+            self.get(
+                [
+                    "STGNUM0", "STGNUM1", "STGNUM2", "STGNUM3", "STGNUM4", "STGNUM5", "STGNUM6",
+                    "STGNUM7", "STGNUM8", "STGNUM9",
+                ][i as usize],
+                wad,
+            );
         }
 
         // Keys.
         for i in 0..=5 {
-            self.get(&format!("STKEYS{i}"), wad);
+            self.get(
+                [
+                    "STKEYS0", "STKEYS1", "STKEYS2", "STKEYS3", "STKEYS4", "STKEYS5",
+                ][i as usize],
+                wad,
+            );
         }
 
         // Face backgrounds.
@@ -95,7 +118,8 @@ impl PatchCache {
         let suffixes = ["STFST", "STFTL", "STFTR", "STFOUCH", "STFEVL", "STFKLL"];
         for tier in 0..=4 {
             for prefix in &suffixes {
-                self.get(&format!("{prefix}{tier}0"), wad);
+                let name = format!("{prefix}{tier}0");
+                self.get(&name, wad);
             }
         }
         self.get("STFGOD0", wad);
