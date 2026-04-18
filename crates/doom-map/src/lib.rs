@@ -9,6 +9,7 @@
 //! - All sidedef sector refs in bounds
 //! - Reject size == `ceil(N_SECTORS² / 8)`
 
+pub mod ascii;
 pub mod bsp;
 pub mod geojson;
 pub mod graph;
@@ -20,6 +21,7 @@ pub mod obj;
 pub mod svg;
 pub mod udmf;
 
+pub use ascii::export_map_to_ascii;
 pub use bsp::{BspChild, BspError, BspTree};
 pub use geojson::export_map_to_geojson;
 pub use graph::SectorGraph;
