@@ -590,6 +590,9 @@ mod tests {
             generation: 1,
         };
 
+        // This should trigger the unreachable!("free list points to occupied slot") panic
+        slab.alloc(make_player_mobj());
+
         let _handle2 = slab.alloc(make_player_mobj());
     }
 
