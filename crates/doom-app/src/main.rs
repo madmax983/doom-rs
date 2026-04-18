@@ -699,30 +699,8 @@ impl DoomGame {
                 continue;
             };
 
-            let emitter = match ev {
-                SoundRequest::MonsterWake(_, _, x, y)
-                | SoundRequest::MonsterAttack(_, _, x, y)
-                | SoundRequest::MonsterDie(_, _, x, y) => Some((x, y)),
-                SoundRequest::PlayerWeaponFire(_)
-                | SoundRequest::PlayerSuperShotgunOpen
-                | SoundRequest::PlayerSuperShotgunLoad
-                | SoundRequest::PlayerSuperShotgunClose => Some((pl_x, pl_y)),
-                SoundRequest::PlayerDie
-                | SoundRequest::PlayerUseFail
-                | SoundRequest::PlayerUseLockedDoor(_) => None,
-            };
-            let origin = match ev {
-                SoundRequest::MonsterWake(_, handle, _, _)
-                | SoundRequest::MonsterAttack(_, handle, _, _)
-                | SoundRequest::MonsterDie(_, handle, _, _) => Some(handle),
-                SoundRequest::PlayerWeaponFire(_)
-                | SoundRequest::PlayerSuperShotgunOpen
-                | SoundRequest::PlayerSuperShotgunLoad
-                | SoundRequest::PlayerSuperShotgunClose => player_origin,
-                SoundRequest::PlayerDie
-                | SoundRequest::PlayerUseFail
-                | SoundRequest::PlayerUseLockedDoor(_) => None,
-            };
+            let emitter = ev.emitter(pl_x, pl_y);
+            let origin = ev.origin_handle(player_origin);
 
             if lump.is_empty() {
                 continue;
