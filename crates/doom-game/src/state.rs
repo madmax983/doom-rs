@@ -73,6 +73,45 @@ pub enum SoundRequest {
     PlayerUseLockedDoor(LockedDoorColor),
 }
 
+impl SoundRequest {
+    pub fn emitter(
+        &self,
+        player_x: doom_types::Fixed16_16,
+        player_y: doom_types::Fixed16_16,
+    ) -> Option<(doom_types::Fixed16_16, doom_types::Fixed16_16)> {
+        match *self {
+            SoundRequest::MonsterWake(_, _, x, y)
+            | SoundRequest::MonsterAttack(_, _, x, y)
+            | SoundRequest::MonsterDie(_, _, x, y) => Some((x, y)),
+            SoundRequest::PlayerWeaponFire(_)
+            | SoundRequest::PlayerSuperShotgunOpen
+            | SoundRequest::PlayerSuperShotgunLoad
+            | SoundRequest::PlayerSuperShotgunClose => Some((player_x, player_y)),
+            SoundRequest::PlayerDie
+            | SoundRequest::PlayerUseFail
+            | SoundRequest::PlayerUseLockedDoor(_) => None,
+        }
+    }
+
+    pub fn origin_handle(
+        &self,
+        player_origin: Option<crate::mobj::MobjHandle>,
+    ) -> Option<crate::mobj::MobjHandle> {
+        match *self {
+            SoundRequest::MonsterWake(_, handle, _, _)
+            | SoundRequest::MonsterAttack(_, handle, _, _)
+            | SoundRequest::MonsterDie(_, handle, _, _) => Some(handle),
+            SoundRequest::PlayerWeaponFire(_)
+            | SoundRequest::PlayerSuperShotgunOpen
+            | SoundRequest::PlayerSuperShotgunLoad
+            | SoundRequest::PlayerSuperShotgunClose => player_origin,
+            SoundRequest::PlayerDie
+            | SoundRequest::PlayerUseFail
+            | SoundRequest::PlayerUseLockedDoor(_) => None,
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Exit request
 // ---------------------------------------------------------------------------

@@ -29,3 +29,6 @@
 **Refactored Boolean Blindness in door and floor specials**
 **Learning:** Functions like `open_door(gs, level, idx, true)` and `ev_build_stairs(gs, level, idx, type, false)` suffer from Boolean Blindness, hiding the true intent (`OpenWaitClose` and `CrushBehavior::NoCrush`).
 **Action:** Replace `bool` with descriptive enums like `DoorBehavior` (`OpenStay` vs `OpenWaitClose`) and `CrushBehavior` (`Crush` vs `NoCrush`) to strongly type API boundaries and self-document the code at the call site.
+**Refactored duplicated `match` statements over `SoundRequest` in `handle_sound_events`**
+**Learning:** Redundant `match` statements that extract values from an enum based on its variant create code duplication and visual noise, especially when the same matching logic is repeated within the same function or module.
+**Action:** Extract the matching logic into helper methods (e.g., `emitter(&self)` and `origin_handle(&self)`) on the enum itself using an `impl` block to encapsulate the behavior and simplify the call sites.

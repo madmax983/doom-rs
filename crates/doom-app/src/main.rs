@@ -699,30 +699,8 @@ impl DoomGame {
                 continue;
             };
 
-            let emitter = match ev {
-                SoundRequest::MonsterWake(_, _, x, y)
-                | SoundRequest::MonsterAttack(_, _, x, y)
-                | SoundRequest::MonsterDie(_, _, x, y) => Some((x, y)),
-                SoundRequest::PlayerWeaponFire(_)
-                | SoundRequest::PlayerSuperShotgunOpen
-                | SoundRequest::PlayerSuperShotgunLoad
-                | SoundRequest::PlayerSuperShotgunClose => Some((pl_x, pl_y)),
-                SoundRequest::PlayerDie
-                | SoundRequest::PlayerUseFail
-                | SoundRequest::PlayerUseLockedDoor(_) => None,
-            };
-            let origin = match ev {
-                SoundRequest::MonsterWake(_, handle, _, _)
-                | SoundRequest::MonsterAttack(_, handle, _, _)
-                | SoundRequest::MonsterDie(_, handle, _, _) => Some(handle),
-                SoundRequest::PlayerWeaponFire(_)
-                | SoundRequest::PlayerSuperShotgunOpen
-                | SoundRequest::PlayerSuperShotgunLoad
-                | SoundRequest::PlayerSuperShotgunClose => player_origin,
-                SoundRequest::PlayerDie
-                | SoundRequest::PlayerUseFail
-                | SoundRequest::PlayerUseLockedDoor(_) => None,
-            };
+            let emitter = ev.emitter(pl_x, pl_y);
+            let origin = ev.origin_handle(player_origin);
 
             if lump.is_empty() {
                 continue;
@@ -2602,7 +2580,10 @@ fn run_doom() -> Result<()> {
         } else {
             let par_time_mins = stats.par_time_tics / 35 / 60;
             let par_time_secs = (stats.par_time_tics / 35) % 60;
-            let par_time_formatted = format!("{:02}:{:02} ({} tics)", par_time_mins, par_time_secs, stats.par_time_tics);
+            let par_time_formatted = format!(
+                "{:02}:{:02} ({} tics)",
+                par_time_mins, par_time_secs, stats.par_time_tics
+            );
 
             let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
             let mut table = comfy_table::Table::new();
@@ -2641,8 +2622,7 @@ fn run_doom() -> Result<()> {
                     ])
                     .add_row(vec![
                         comfy_table::Cell::new("⏱️  Par Time"),
-                        comfy_table::Cell::new(par_time_formatted)
-                            .fg(comfy_table::Color::Cyan),
+                        comfy_table::Cell::new(par_time_formatted).fg(comfy_table::Color::Cyan),
                     ]);
             } else {
                 table
