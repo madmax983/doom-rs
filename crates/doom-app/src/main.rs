@@ -229,7 +229,7 @@ struct Args {
     #[arg(long)]
     analyze: bool,
 
-    /// Print the map statistics or tactical analysis as raw JSON. Only valid when combined with --map-stats or --analyze.
+    /// Print the map statistics or tactical analysis as raw JSON. Only valid when combined with --map-stats, --analyze, or --pathfind.
     #[arg(long)]
     json: bool,
 }
@@ -2406,7 +2406,8 @@ fn run_doom() -> Result<()> {
             }
         } else {
             use crossterm::style::Stylize;
-            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+            if is_tty {
                 println!(
                     "{} {} tactical analysis for {}",
                     "🌟".green(),
@@ -2433,10 +2434,11 @@ fn run_doom() -> Result<()> {
             };
 
             let mut table = comfy_table::Table::new();
-            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-                table
-                    .load_preset(comfy_table::presets::UTF8_FULL)
-                    .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+
+            if is_tty {
                 table.set_header(vec![
                     comfy_table::Cell::new("Feature")
                         .fg(comfy_table::Color::Cyan)
@@ -2446,7 +2448,7 @@ fn run_doom() -> Result<()> {
                         .add_attribute(comfy_table::Attribute::Bold),
                 ]);
                 table.add_row(vec![
-                    comfy_table::Cell::new("Chokepoints"),
+                    comfy_table::Cell::new("🗺️  Chokepoints"),
                     comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
                 ]);
                 for (i, area) in areas.iter().enumerate() {
@@ -2456,7 +2458,7 @@ fn run_doom() -> Result<()> {
                         .collect::<Vec<_>>()
                         .join(", ");
                     table.add_row(vec![
-                        comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
+                        comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
                         comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
                     ]);
                 }
@@ -2466,7 +2468,7 @@ fn run_doom() -> Result<()> {
                     comfy_table::Cell::new("Data"),
                 ]);
                 table.add_row(vec![
-                    comfy_table::Cell::new("Chokepoints"),
+                    comfy_table::Cell::new("🗺️  Chokepoints"),
                     comfy_table::Cell::new(&chokepoints_str),
                 ]);
                 for (i, area) in areas.iter().enumerate() {
@@ -2494,60 +2496,112 @@ fn run_doom() -> Result<()> {
             if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
                 let graph = doom_map::SectorGraph::build(&level);
                 if let Some(path) = graph.shortest_path(start, end) {
-                    let path_str = path
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<_>>()
-                        .join(" ➔ ");
-                    if is_tty {
-                        println!(
-                            "{} {} {}",
-                            "🗺️ ".green(),
-                            "Path found:".green().bold(),
-                            path_str.cyan()
+                    if args.json {
+                        let path_json = format!(
+                            "[{}]",
+                            path.iter()
+                                .map(|s| s.to_string())
+                                .collect::<Vec<_>>()
+                                .join(", ")
                         );
+                        let json_data = format!(r#"{{ "path": {} }}"#, path_json);
+                        if is_tty {
+                            let formatted_json = format!(
+                                r#"{{ {}: {} }}"#,
+                                r#""path""#.cyan().bold(),
+                                path_json.green()
+                            );
+                            println!("{formatted_json}");
+                        } else {
+                            println!("{json_data}");
+                        }
                     } else {
-                        println!("Path found: {}", path_str);
+                        let path_str = path
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect::<Vec<_>>()
+                            .join(" ➔ ");
+                        if is_tty {
+                            println!(
+                                "{} {} {}",
+                                "🗺️ ".green(),
+                                "Path found:".green().bold(),
+                                path_str.cyan()
+                            );
+                        } else {
+                            println!("Path found: {}", path_str);
+                        }
                     }
                 } else {
-                    if is_tty {
-                        println!(
-                            "{} {}",
-                            "❌".yellow(),
-                            format!("No path found between sector {} and sector {}", start, end)
-                                .yellow()
-                                .bold()
-                        );
+                    if args.json {
+                        let msg = format!("No path found between sector {} and sector {}", start, end);
+                        let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                        if is_tty {
+                            let formatted_json = format!(
+                                r#"{{ {}: "{}" }}"#,
+                                r#""error""#.cyan().bold(),
+                                msg.yellow()
+                            );
+                            println!("{formatted_json}");
+                        } else {
+                            println!("{json_data}");
+                        }
                     } else {
-                        println!("No path found between sector {} and sector {}", start, end);
+                        if is_tty {
+                            println!(
+                                "{} {}",
+                                "❌".yellow(),
+                                format!("No path found between sector {} and sector {}", start, end)
+                                    .yellow()
+                                    .bold()
+                            );
+                        } else {
+                            println!("No path found between sector {} and sector {}", start, end);
+                        }
                     }
                 }
             } else {
-                if is_tty {
-                    println!(
-                        "{} {}",
-                        "❌".yellow(),
-                        "Invalid sector indices. Please provide two integers separated by a comma."
-                            .yellow()
-                            .bold()
-                    );
+                let msg = "Invalid sector indices. Please provide two integers separated by a comma.";
+                if args.json {
+                    let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                    if is_tty {
+                        let formatted_json = format!(
+                            r#"{{ {}: "{}" }}"#,
+                            r#""error""#.cyan().bold(),
+                            msg.yellow()
+                        );
+                        println!("{formatted_json}");
+                    } else {
+                        println!("{json_data}");
+                    }
                 } else {
-                    println!(
-                        "Invalid sector indices. Please provide two integers separated by a comma."
-                    );
+                    if is_tty {
+                        println!("{} {}", "❌".yellow(), msg.yellow().bold());
+                    } else {
+                        println!("{}", msg);
+                    }
                 }
             }
         } else {
-            if is_tty {
-                println!(
-                    "{} {}",
-                    "❌".yellow(),
-                    "Invalid format. Please use START,END (e.g. 0,5)."
-                        .yellow()
-                        .bold()
-                );
+            let msg = "Invalid format. Please use START,END (e.g. 0,5).";
+            if args.json {
+                let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                if is_tty {
+                    let formatted_json = format!(
+                        r#"{{ {}: "{}" }}"#,
+                        r#""error""#.cyan().bold(),
+                        msg.yellow()
+                    );
+                    println!("{formatted_json}");
+                } else {
+                    println!("{json_data}");
+                }
             } else {
-                println!("Invalid format. Please use START,END (e.g. 0,5).");
+                if is_tty {
+                    println!("{} {}", "❌".yellow(), msg.yellow().bold());
+                } else {
+                    println!("{}", msg);
+                }
             }
         }
         return Ok(());
