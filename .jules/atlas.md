@@ -26,3 +26,7 @@
 **[Fix doom-net doctest resolution failure]**
 **Tangle:** The doctests in `doom-net` were failing during `cargo test --workspace` because they attempted to `use doom_net::TicCmd` in example snippets. The `doom-net` crate did not export `TicCmd` at its root level (and properly shouldn't, to avoid re-export leaks), causing the doctest compiler to error out with `E0432: unresolved import doom_net::TicCmd`.
 **Blueprint:** Updated the doctest strings inside `crates/doom-net/src/input_log.rs`, `crates/doom-net/src/packet.rs`, and `crates/doom-net/src/rollback.rs`. Replaced the direct inclusion of `TicCmd` from `doom_net` with an explicit `use doom_types::TicCmd;` line for each example, which is the foundational crate holding the core data structure. This aligns the examples with correct dependency structures and prevents compile failures during tests.
+
+**[Stop AutomapState Re-export Leak]**
+**Tangle:** `doom-renderer/src/lib.rs` was unnecessarily re-exporting `doom_game::AutomapState` via `pub use`. This caused presentation crates like `doom-app` to depend on the renderer crate just to use basic game state data. This violated the boundary isolation.
+**Blueprint:** Removed the re-export from `doom-renderer` and updated `doom-app` to import `AutomapState` directly from the game engine crate `doom-game`.
