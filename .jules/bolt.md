@@ -12,3 +12,11 @@
 **[Console History Optimization]**
 **Learning:** Using `Vec` with `remove(0)` for fixed-capacity rolling logs introduces an O(N) shift penalty on every eviction. `VecDeque` is the mathematically correct structure.
 **Action:** Replace `Vec` with `VecDeque::with_capacity(max)` and use `pop_front()` for rolling logs to ensure O(1) updates and zero initial resize allocations.
+
+**[LumpName in HashMap Keys]**
+**Learning:** Lookups into string dictionaries using a sequence of characters usually causes overhead from String allocation or UTF-8 matching overhead. Specifically,  forces a heap-allocated  on every single cache lookup. By using  (which parses into an 8-byte stack value), we eliminate a very common heap allocation on the rendering hot path.
+**Action:** Use fixed-size, byte-wrapping types like  over  or  when defining lookup maps. When passing these keys to APIs expecting string slices, convert them back using .
+
+**[LumpName in HashMap Keys]**
+**Learning:** Lookups into string dictionaries using a sequence of characters usually causes overhead from String allocation or UTF-8 matching overhead. Specifically, `to_uppercase()` forces a heap-allocated `String` on every single cache lookup. By using `LumpName` (which parses into an 8-byte stack value), we eliminate a very common heap allocation on the rendering hot path.
+**Action:** Use fixed-size, byte-wrapping types like `LumpName` over `String` or `Vec<u8>` when defining lookup maps. When passing these keys to APIs expecting string slices, convert them back using `.as_str()`.
