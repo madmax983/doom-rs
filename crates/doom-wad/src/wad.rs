@@ -165,9 +165,21 @@ impl WadFile {
 
         let numlumps = numlumps as usize;
         let dir_offset = infotableofs as usize;
-        let dir_size = numlumps.saturating_mul(size_of::<RawLumpEntry>());
+        let dir_size = numlumps.checked_mul(size_of::<RawLumpEntry>()).ok_or(
+            WadError::DirectoryOutOfBounds {
+                offset: dir_offset,
+                dir_size: usize::MAX,
+                file_len: data.len(),
+            },
+        )?;
 
-        let dir_end = dir_offset.saturating_add(dir_size);
+        let dir_end = dir_offset
+            .checked_add(dir_size)
+            .ok_or(WadError::DirectoryOutOfBounds {
+                offset: dir_offset,
+                dir_size,
+                file_len: data.len(),
+            })?;
         if dir_end > data.len() || dir_offset > data.len() {
             return Err(WadError::DirectoryOutOfBounds {
                 offset: dir_offset,
