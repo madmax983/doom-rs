@@ -267,6 +267,18 @@ pub enum ActorCheck<'a> {
     },
 }
 
+/// Casts a ray through the level geometry and optional actors.
+///
+/// Uses DDA (Digital Differential Analyzer) algorithm to traverse the blockmap grid.
+///
+/// ## Examples
+/// ```no_run
+/// # use doom_game::trace::{trace_ray, ActorCheck};
+/// # // Mock level for documentation purposes.
+/// # let level: doom_map::Level = unimplemented!();
+/// // Trace a 1000-unit ray straight East, ignoring actors.
+/// let hit = trace_ray(&level, 0, 0, 1.0, 0.0, 1000.0, ActorCheck::Ignore);
+/// ```
 pub fn trace_ray(
     level: &Level,
     x1: i32,

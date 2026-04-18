@@ -233,6 +233,10 @@ pub enum CrushBehavior {
     NoCrush,
 }
 
+/// Represents the behavior target of a floor mover.
+///
+/// Used by map specials (like stairs, lifts, and generic moving floors) to
+/// define how the destination height is calculated relative to adjacent sectors.
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum FloorType {

@@ -1755,12 +1755,30 @@ pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) 
 
 // ---------------------------------------------------------------------------
 
-/// Activate a crusher on all sectors matching `tag`.
+/// Parameters to spawn a ceiling crusher.
+///
+/// ## Examples
+/// ```
+/// # use doom_game::specials::CrusherParams;
+/// # use doom_game::state::CeilingType;
+/// let params = CrusherParams {
+///     speed: 2,
+///     crush_damage: 10,
+///     silent: false,
+///     remove_when_done: false,
+///     ceiling_type: CeilingType::CrushAndRaise,
+/// };
+/// ```
 pub struct CrusherParams {
+    /// Vertical speed of the ceiling when crushing downward (map units per tic).
     pub speed: i16,
+    /// Damage dealt to actors caught under the ceiling when it bottoms out.
     pub crush_damage: i32,
+    /// If true, the crusher does not play standard movement sounds.
     pub silent: bool,
+    /// If true, the crusher is removed from the active mover list after one cycle.
     pub remove_when_done: bool,
+    /// The state-machine type controlling the oscillation/raising pattern.
     pub ceiling_type: CeilingType,
 }
 
