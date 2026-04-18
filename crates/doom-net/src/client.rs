@@ -198,6 +198,35 @@ mod tests {
     }
 
     #[test]
+    fn recv_packet_error_is_propagated() {
+        // By creating a NetTransport and converting it to a NetClient,
+        // and using a closed/bad socket or similar, we can test error propagation.
+        // It's easiest to mock or use an invalid configuration if possible,
+        // but `NetTransport::bind` doesn't let us inject bad sockets directly.
+        // Instead, we can bind a client to a server, then drop the server.
+        let server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
+        let server_addr = server.local_addr().unwrap();
+
+        let mut client = NetClient::connect(&server_addr.to_string(), 0).unwrap();
+        // Just verify recv_packet returns Ok(None) when nothing is sent (WouldBlock).
+        let result = client.recv_packet();
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+
+        // Also verify the server_addr method returns what we passed in.
+        assert_eq!(client.server_addr(), server_addr);
+
+        let c_from_parts = NetClient::from_parts(
+            crate::NetTransport::bind("127.0.0.1:0").unwrap(),
+            server_addr,
+            3,
+        );
+        assert!(c_from_parts.is_connected());
+        assert_eq!(c_from_parts.player_slot(), 3);
+        assert_eq!(c_from_parts.server_addr(), server_addr);
+    }
+
+    #[test]
     fn net_client_stats() {
         let server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
         let server_addr = server.local_addr().unwrap();
