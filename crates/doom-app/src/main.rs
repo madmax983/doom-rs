@@ -36,6 +36,7 @@ mod savegame;
 use anyhow::{Context, Result};
 use clap::Parser;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+use doom_game::AutomapState;
 use doom_game::FaceState;
 use doom_game::LockedDoorColor;
 use doom_game::cheats as game_cheats;
@@ -49,7 +50,7 @@ use doom_game::{MOBJINFO, STATES};
 use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
-    ActorRenderInfo, AnimState, AutomapState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
+    ActorRenderInfo, AnimState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
     IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, PatchCache, RenderOut,
     SpriteCache, SpriteClip, TextureCache, WadFont, WeaponAnimState, draw_automap_ex,
     draw_finale_wad, draw_intermission, draw_intermission_wad, draw_menu_wad, draw_status_bar_wad,
@@ -2602,7 +2603,10 @@ fn run_doom() -> Result<()> {
         } else {
             let par_time_mins = stats.par_time_tics / 35 / 60;
             let par_time_secs = (stats.par_time_tics / 35) % 60;
-            let par_time_formatted = format!("{:02}:{:02} ({} tics)", par_time_mins, par_time_secs, stats.par_time_tics);
+            let par_time_formatted = format!(
+                "{:02}:{:02} ({} tics)",
+                par_time_mins, par_time_secs, stats.par_time_tics
+            );
 
             let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
             let mut table = comfy_table::Table::new();
@@ -2641,8 +2645,7 @@ fn run_doom() -> Result<()> {
                     ])
                     .add_row(vec![
                         comfy_table::Cell::new("⏱️  Par Time"),
-                        comfy_table::Cell::new(par_time_formatted)
-                            .fg(comfy_table::Color::Cyan),
+                        comfy_table::Cell::new(par_time_formatted).fg(comfy_table::Color::Cyan),
                     ]);
             } else {
                 table
