@@ -30,3 +30,6 @@
 **[Stop AutomapState Re-export Leak]**
 **Tangle:** `doom-renderer/src/lib.rs` was unnecessarily re-exporting `doom_game::AutomapState` via `pub use`. This caused presentation crates like `doom-app` to depend on the renderer crate just to use basic game state data. This violated the boundary isolation.
 **Blueprint:** Removed the re-export from `doom-renderer` and updated `doom-app` to import `AutomapState` directly from the game engine crate `doom-game`.
+**[Enforce module boundaries in doom-app]**
+**Tangle:** The `doom-app` crate contained many internal structures, functions, enums, and constants (e.g. `DoomGame`, `Console`, `AudioSystem`, etc) that were marked as `pub`, leaking implementation details to the outside despite the app being a binary orchestrator and having no downstream dependants.
+**Blueprint:** Modified the visibility of all internal components in `doom-app` from `pub` to `pub(crate)` where applicable (like `DoomGame`, `DemoRecordingWrapper`, `Console`, `AudioSystem`, etc). Removed leaky `pub use` from internal modules.

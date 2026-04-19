@@ -12,14 +12,14 @@ use doom_types::limits::MAX_AMMO;
 
 /// A cheat code definition.
 #[derive(Debug, Clone)]
-pub struct CheatDef {
+pub(crate) struct CheatDef {
     pub name: &'static str,
     /// The keypress sequence to match (lowercase ASCII).
     pub sequence: &'static str,
 }
 
 /// All standard Doom cheat codes.
-pub const CHEATS: &[CheatDef] = &[
+pub(crate) const CHEATS: &[CheatDef] = &[
     CheatDef {
         name: "IDDQD",
         sequence: "iddqd",
@@ -79,7 +79,7 @@ pub const CHEATS: &[CheatDef] = &[
 /// The detector maintains a rolling buffer of recent printable characters and
 /// checks whether the buffer ends with any known cheat sequence after each
 /// character is fed in.
-pub struct CheatDetector {
+pub(crate) struct CheatDetector {
     /// Rolling buffer of recent keypresses (max length = longest cheat + 1).
     buffer: String,
     max_len: usize,
@@ -87,7 +87,7 @@ pub struct CheatDetector {
 
 impl CheatDetector {
     /// Create a new detector sized for the longest registered cheat sequence.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let max_len = CHEATS.iter().map(|c| c.sequence.len()).max().unwrap_or(16);
         Self {
             buffer: String::with_capacity(max_len + 1),
@@ -99,7 +99,7 @@ impl CheatDetector {
     ///
     /// Returns the matched cheat name if the buffer now ends with a known
     /// sequence, otherwise returns `None`.
-    pub fn feed(&mut self, ch: char) -> Option<&'static str> {
+    pub(crate) fn feed(&mut self, ch: char) -> Option<&'static str> {
         if ch.is_ascii_alphabetic() || ch.is_ascii_digit() {
             self.buffer.push(ch.to_ascii_lowercase());
             if self.buffer.len() > self.max_len {
@@ -118,7 +118,7 @@ impl CheatDetector {
 
     /// Clear the running buffer (e.g. on menu open or map change).
     #[allow(dead_code)]
-    pub fn clear(&mut self) {
+    pub(crate) fn clear(&mut self) {
         self.buffer.clear();
     }
 }
@@ -137,7 +137,7 @@ impl Default for CheatDetector {
 ///
 /// Returns a static message string to display, or an empty string if the
 /// cheat name is not recognised.
-pub fn apply_cheat(gs: &mut GameState, cheat_name: &str) -> &'static str {
+pub(crate) fn apply_cheat(gs: &mut GameState, cheat_name: &str) -> &'static str {
     match cheat_name {
         "IDDQD" => {
             // God mode: restore health to full.

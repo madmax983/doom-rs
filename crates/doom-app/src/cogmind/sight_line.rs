@@ -10,7 +10,7 @@ use super::glyphs::Rgb;
 // ---------------------------------------------------------------------------
 
 /// A single cell in the player's sight-line ray.
-pub struct SightCell {
+pub(crate) struct SightCell {
     /// Terminal-space column offset from the player cell.
     pub dx: i32,
     /// Terminal-space row offset from the player cell (Y-flipped from Doom).
@@ -54,7 +54,7 @@ const OCTANTS: [(i32, i32, char); 8] = [
 /// Adds half an octant (`ANG45 / 2 = 0x1000_0000`) so the octant boundaries
 /// fall *between* cardinal/diagonal directions, then extracts the top 3 bits.
 #[must_use]
-pub fn angle_to_octant(angle: Bam) -> usize {
+pub(crate) fn angle_to_octant(angle: Bam) -> usize {
     let half_octant: u32 = 0x1000_0000; // ANG45 / 2
     let shifted = angle.raw().wrapping_add(half_octant);
     (shifted >> 29) as usize
@@ -70,7 +70,7 @@ pub fn angle_to_octant(angle: Bam) -> usize {
 /// row 0 at top, positive = down).
 ///
 /// The ray stops early if `is_wall` returns `true` for the next step.
-pub fn sight_line_cells(angle: Bam, is_wall: impl Fn(i32, i32) -> bool) -> Vec<SightCell> {
+pub(crate) fn sight_line_cells(angle: Bam, is_wall: impl Fn(i32, i32) -> bool) -> Vec<SightCell> {
     let oct = angle_to_octant(angle);
     let (doom_dx, doom_dy, arrow) = OCTANTS[oct];
 

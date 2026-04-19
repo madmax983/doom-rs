@@ -36,7 +36,7 @@ use std::path::Path;
 
 /// Errors that can occur during the delicate act of manipulating time (saving/loading).
 #[derive(Debug, thiserror::Error)]
-pub enum SaveError {
+pub(crate) enum SaveError {
     /// The physical realm rejected our request (file not found, permission denied, etc.).
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
@@ -81,7 +81,7 @@ impl From<doom_game::savegame::SaveError> for SaveError {
 
 /// Map an app-level compatibility profile to the required on-disk save format.
 #[must_use]
-pub const fn save_format_for_compat(compat: CompatibilityProfile) -> SaveFormat {
+pub(crate) const fn save_format_for_compat(compat: CompatibilityProfile) -> SaveFormat {
     match compat {
         CompatibilityProfile::Extended => SaveFormat::DoomRs,
         CompatibilityProfile::VanillaStrict => SaveFormat::VanillaDsg,
@@ -119,7 +119,7 @@ pub const fn save_format_for_compat(compat: CompatibilityProfile) -> SaveFormat 
 /// Returns [`SaveError::Io`] if the disk write fails (e.g., read-only filesystem).
 /// Returns [`SaveError::UnsupportedVanillaDsg`] when strict compatibility is
 /// selected before vanilla payload support exists.
-pub fn save_game(
+pub(crate) fn save_game(
     path: &Path,
     gs: &GameState,
     slot: u8,
@@ -129,7 +129,7 @@ pub fn save_game(
 }
 
 /// Save the current game using an explicit on-disk format, bypassing profile mapping.
-pub fn save_game_with_format(
+pub(crate) fn save_game_with_format(
     path: &Path,
     gs: &GameState,
     slot: u8,
@@ -188,7 +188,7 @@ pub fn save_game_with_format(
 ///   compatibility profile.
 /// * Returns [`SaveError::UnsupportedVanillaDsg`] if strict mode encounters a
 ///   plausible vanilla header before full vanilla payload support exists.
-pub fn load_game(
+pub(crate) fn load_game(
     path: &Path,
     compat: CompatibilityProfile,
 ) -> Result<(doom_game::savegame::SaveHeader, SaveGame), SaveError> {
@@ -196,7 +196,7 @@ pub fn load_game(
 }
 
 /// Load a game while requiring a specific detected on-disk format.
-pub fn load_game_with_format(
+pub(crate) fn load_game_with_format(
     path: &Path,
     expected_format: SaveFormat,
 ) -> Result<(doom_game::savegame::SaveHeader, SaveGame), SaveError> {
@@ -243,7 +243,7 @@ pub fn load_game_with_format(
 /// # Errors
 /// Currently always returns `Ok(())`, but exists as a `Result` for future-proofing
 /// validation logic.
-pub fn apply_save(gs: &mut GameState, payload: &SaveGame) -> Result<(), SaveError> {
+pub(crate) fn apply_save(gs: &mut GameState, payload: &SaveGame) -> Result<(), SaveError> {
     // Completely overwrite the current game state with the deserialized one.
     // This is valid because `GameState` implements `Clone` and owns all its data.
     *gs = payload.state.clone();
