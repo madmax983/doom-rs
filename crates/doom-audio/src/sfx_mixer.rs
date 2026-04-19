@@ -190,10 +190,10 @@ impl SfxMixer {
     /// is restarted in place instead of allocating a second channel, preventing
     /// audio clutter.
     ///
-    /// # Panics
     ///
-    /// Panics if `channel` is greater than or equal to [`MAX_CHANNELS`] in debug builds.
-    /// Callers must ensure they only pass indices returned by [`SfxMixer::play`].
+    ///
+    /// Silently ignored if `channel` is greater than or equal to [`MAX_CHANNELS`].
+    ///
     ///
     /// # Examples
     ///
@@ -218,10 +218,9 @@ impl SfxMixer {
         pan: f32,
         priority: SfxPriority,
     ) -> usize {
-        debug_assert!(
-            channel < MAX_CHANNELS,
-            "channel index {channel} out of range"
-        );
+        if channel >= MAX_CHANNELS {
+            return channel;
+        }
         self.channels[channel] = Some(Self::make_channel(sfx_id, data, volume, pan, priority));
         channel
     }
@@ -708,5 +707,19 @@ mod tests {
             output.iter().all(|&s| (-1.0..=1.0).contains(&s)),
             "output should be clamped to [-1.0, 1.0]"
         );
+    }
+
+    #[test]
+    fn mixer_play_on_channel_ignores_out_of_bounds() {
+        let mut mixer = SfxMixer::new();
+        mixer.play_on_channel(
+            99,
+            1,
+            std::sync::Arc::<[u8]>::from(vec![128u8; 100]),
+            1.0,
+            0.0,
+            SfxPriority::Medium,
+        );
+        assert_eq!(mixer.active_count(), 0);
     }
 }
