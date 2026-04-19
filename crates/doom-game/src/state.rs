@@ -74,6 +74,32 @@ pub enum SoundRequest {
 }
 
 impl SoundRequest {
+    /// Resolves the origin coordinates of the sound event.
+    ///
+    /// This function exists so that the audio engine can determine where
+    /// to spatialize the sound in the 2D world. Because player-generated
+    /// sounds (`PlayerWeaponFire`, etc.) don't store the player's position
+    /// redundantly in the enum, the caller must provide the current player
+    /// position as a fallback.
+    ///
+    /// Returns `None` for global or UI-only sounds that have no spatial
+    /// origin (like dying or use-fails).
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_game::state::SoundRequest;
+    /// use doom_game::player::WeaponType;
+    /// use doom_types::Fixed16_16;
+    ///
+    /// let px = Fixed16_16::from_int(100);
+    /// let py = Fixed16_16::from_int(200);
+    ///
+    /// let req = SoundRequest::PlayerWeaponFire(WeaponType::Pistol);
+    /// let origin = req.emitter(px, py);
+    ///
+    /// assert_eq!(origin, Some((px, py)));
+    /// ```
     pub fn emitter(
         &self,
         player_x: doom_types::Fixed16_16,
@@ -93,6 +119,33 @@ impl SoundRequest {
         }
     }
 
+    /// Resolves the [`crate::mobj::MobjHandle`] of the entity that emitted the sound.
+    ///
+    /// This is used to track which actor is making noise, which is necessary
+    /// for sound channel eviction (e.g., if a monster makes a new sound, it interrupts
+    /// its previous sound). Player sounds must pass in the player's handle
+    /// as `player_origin` since it is not stored in the variant.
+    ///
+    /// Returns `None` if the sound is unassociated with an actor.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_game::state::SoundRequest;
+    /// use doom_game::mobj::{MobjHandle, MobjSlab, Mobj};
+    /// use doom_game::player::WeaponType;
+    /// use doom_types::mobj_kind::MobjKind;
+    /// use doom_types::{Fixed16_16, Bam};
+    ///
+    /// let mut slab = MobjSlab::new();
+    /// let mobj = Mobj::new(MobjKind::Player, Fixed16_16::ZERO, Fixed16_16::ZERO, Bam::ZERO);
+    /// let player_handle = slab.alloc(mobj);
+    ///
+    /// let req = SoundRequest::PlayerWeaponFire(WeaponType::Pistol);
+    ///
+    /// let handle = req.origin_handle(Some(player_handle));
+    /// assert_eq!(handle, Some(player_handle));
+    /// ```
     pub fn origin_handle(
         &self,
         player_origin: Option<crate::mobj::MobjHandle>,
