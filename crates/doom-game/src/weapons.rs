@@ -10,10 +10,11 @@ use doom_types::{Bam, Fixed16_16};
 
 use crate::combat::{MISSILERANGE, p_line_attack};
 use crate::mobj::{MobjHandle, StateNum};
-use crate::player::{AmmoType, PlayerState, PspriteState, WeaponType, psprite_slots};
+use crate::player::{AmmoType, PlayerState, PspriteState, psprite_slots};
 use crate::projectile::p_spawn_player_missile;
 use crate::state::{GameState, SoundRequest};
 use crate::states::{STATES, ids, sprite_names};
+use doom_types::WeaponType;
 use doom_types::mobj_kind::MobjKind;
 use doom_types::{TicCmd, bt};
 
@@ -693,7 +694,7 @@ pub fn tick_psprites(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
 /// Fires `pellets` separate rays via `p_line_attack`.  Each pellet's angle is
 /// spread evenly around the actor's facing direction.
 pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle) {
-    use crate::player::WeaponType;
+    use doom_types::WeaponType;
 
     let weapon = gs.player.weapon;
     let info = &WEAPON_INFO[weapon as usize];
@@ -795,9 +796,10 @@ pub fn player_can_fire(gs: &GameState) -> bool {
 mod tests {
     use super::*;
     use crate::mobj::{Mobj, flags};
-    use crate::player::{PlayerState, WeaponType, psprite_slots};
+    use crate::player::{PlayerState, psprite_slots};
     use crate::state::GameState;
     use crate::states::ids;
+    use doom_types::WeaponType;
     use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
     use doom_types::{TicCmd, bt};

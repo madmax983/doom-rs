@@ -30,3 +30,6 @@
 **[Stop AutomapState Re-export Leak]**
 **Tangle:** `doom-renderer/src/lib.rs` was unnecessarily re-exporting `doom_game::AutomapState` via `pub use`. This caused presentation crates like `doom-app` to depend on the renderer crate just to use basic game state data. This violated the boundary isolation.
 **Blueprint:** Removed the re-export from `doom-renderer` and updated `doom-app` to import `AutomapState` directly from the game engine crate `doom-game`.
+**[Extract WeaponType to Shared Primitives]**
+**Tangle:** The `WeaponType` enum was defined in `doom-game` but widely used in presentation crates like `doom-app` to look up audio data and draw the UI. This caused UI components to depend directly on the entire game engine crate just for a basic enum definition, creating tight coupling between rendering and core game state, and bringing `doom-game` into the UI crate dependency graph unnecessarily.
+**Blueprint:** Extracted `WeaponType` into `doom-types/src/weapon.rs`. `doom-game` and `doom-app` imports were updated to reference the primitive from the shared types crate, creating a clean dependency hierarchy where both presentation and logic rely on foundational types.

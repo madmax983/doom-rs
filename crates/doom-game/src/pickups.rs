@@ -8,8 +8,9 @@
 //! left in the world -- `p_touch_special_thing` returns `false`.
 
 use crate::mobj::{MobjHandle, flags};
-use crate::player::{self, AmmoType, WeaponType, powers};
+use crate::player::{self, AmmoType, powers};
 use crate::state::GameState;
+use doom_types::WeaponType;
 use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------

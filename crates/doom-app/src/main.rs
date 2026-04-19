@@ -40,7 +40,6 @@ use doom_game::FaceState;
 use doom_game::LockedDoorColor;
 use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
-use doom_game::player::WeaponType;
 use doom_game::{
     AutomapState, GamePhase, GamePhaseController, GameState, Skill, TitleScreen, init_conveyors,
     init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
@@ -58,6 +57,7 @@ use doom_renderer::{
     render_level_with_view_height_and_extra_light_and_fixed_colormap, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, RendererMode, TicInput};
+use doom_types::WeaponType;
 use doom_types::{Bam, CompatibilityProfile, Fixed16_16};
 use doom_wad::WadStack;
 
@@ -1529,15 +1529,15 @@ impl DoomApp for DoomGame {
         };
 
         let weapon_name = match p.weapon {
-            doom_game::WeaponType::Fist => "FIST",
-            doom_game::WeaponType::Pistol => "PIST",
-            doom_game::WeaponType::Shotgun => "SG",
-            doom_game::WeaponType::Chaingun => "CG",
-            doom_game::WeaponType::RocketLauncher => "RL",
-            doom_game::WeaponType::PlasmaRifle => "PLAS",
-            doom_game::WeaponType::Bfg => "BFG",
-            doom_game::WeaponType::Chainsaw => "SAW",
-            doom_game::WeaponType::SuperShotgun => "SSG",
+            WeaponType::Fist => "FIST",
+            WeaponType::Pistol => "PIST",
+            WeaponType::Shotgun => "SG",
+            WeaponType::Chaingun => "CG",
+            WeaponType::RocketLauncher => "RL",
+            WeaponType::PlasmaRifle => "PLAS",
+            WeaponType::Bfg => "BFG",
+            WeaponType::Chainsaw => "SAW",
+            WeaponType::SuperShotgun => "SSG",
         };
 
         Some(doom_tui::CogmindHud {
@@ -5108,7 +5108,7 @@ mod tests {
             .sound
             .sound_queue
             .push(doom_game::SoundRequest::PlayerWeaponFire(
-                doom_game::player::WeaponType::Pistol,
+                WeaponType::Pistol,
             ));
 
         // Open menu to pause the game, so `gs.tick()` doesn't clear the sound queue we just pushed!

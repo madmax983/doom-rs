@@ -7,6 +7,7 @@
 //! - `health ≤ MAX_HEALTH (100)` at all times
 //! - `ammo[i] ≤ MAX_AMMO[i]` for all i
 
+use doom_types::WeaponType;
 use doom_types::limits::{MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_WEAPONS};
 
 use crate::mobj::{MobjHandle, StateNum};
@@ -60,35 +61,6 @@ pub mod powers {
     pub const PW_ALLMAP: usize = 4;
     /// Infrared (light amplification visor).
     pub const PW_INFRARED: usize = 5;
-}
-
-// ---------------------------------------------------------------------------
-// Weapon types
-// ---------------------------------------------------------------------------
-
-/// Weapon slots (index = selection key − 1 for keys 1-7; chainsaw = key 1 alt).
-#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-#[repr(u8)]
-pub enum WeaponType {
-    /// Bare fists.
-    Fist = 0,
-    /// Standard starting pistol.
-    #[default]
-    Pistol = 1,
-    /// Pump-action shotgun.
-    Shotgun = 2,
-    /// Rapid-fire chaingun.
-    Chaingun = 3,
-    /// Explosive rocket launcher.
-    RocketLauncher = 4,
-    /// Rapid-fire plasma rifle.
-    PlasmaRifle = 5,
-    /// Big Fucking Gun 9000.
-    Bfg = 6,
-    /// Melee chainsaw.
-    Chainsaw = 7,
-    /// Double-barreled super shotgun (Doom II).
-    SuperShotgun = 8,
 }
 
 // ---------------------------------------------------------------------------
@@ -413,14 +385,6 @@ impl Default for PlayerState {
     }
 }
 
-impl WeaponType {
-    /// Convert a weapon number (0–8) from `BT_WEAPONMASK` to a `WeaponType`.
-    ///
-    /// Returns `None` for any out-of-range value.
-    pub fn from_num(n: usize) -> Option<Self> {
-        u8::try_from(n).ok().and_then(Self::from_repr)
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Proptest property tests
