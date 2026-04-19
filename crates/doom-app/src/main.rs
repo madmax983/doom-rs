@@ -3044,11 +3044,11 @@ fn main() {
     if let Err(err) = run_doom() {
         use crossterm::style::Stylize;
         if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-            eprintln!("\n❌ {}: {}", "Fatal Error".yellow().bold(), err);
+            eprintln!("\n❌ {}: {}", "Fatal Error".red().bold(), err);
 
             let mut causes = err.chain().skip(1).peekable();
             if causes.peek().is_some() {
-                eprintln!("\n↳ {}:", "Caused by".yellow().bold());
+                eprintln!("\n↳ {}:", "Caused by".red().bold());
                 for cause in causes {
                     eprintln!("    {}", cause);
                 }
