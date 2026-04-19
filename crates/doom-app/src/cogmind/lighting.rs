@@ -10,13 +10,13 @@ use super::glyphs::Rgb;
 // ---------------------------------------------------------------------------
 
 /// Maximum radius (in tile cells) for the player's radial light bonus.
-pub const PLAYER_LIGHT_RADIUS: i32 = 8;
+pub(crate) const PLAYER_LIGHT_RADIUS: i32 = 8;
 
 /// Light level added per cell of proximity within the radial light radius.
-pub const LIGHT_PER_CELL: i32 = 15;
+pub(crate) const LIGHT_PER_CELL: i32 = 15;
 
 /// Sector special values that produce flickering light effects.
-pub const FLICKER_SPECIALS: [u16; 6] = [1, 2, 3, 12, 13, 17];
+pub(crate) const FLICKER_SPECIALS: [u16; 6] = [1, 2, 3, 12, 13, 17];
 
 // ---------------------------------------------------------------------------
 // Cosmetic PRNG
@@ -25,7 +25,7 @@ pub const FLICKER_SPECIALS: [u16; 6] = [1, 2, 3, 12, 13, 17];
 /// Xorshift32 cosmetic PRNG. NOT for gameplay determinism -- only for visual
 /// effects like flicker offsets that don't affect game state.
 #[must_use]
-pub fn cosm_rand(state: u32) -> u32 {
+pub(crate) fn cosm_rand(state: u32) -> u32 {
     let mut s = state;
     // Ensure non-zero input (xorshift32 has a zero fixed point).
     if s == 0 {
@@ -48,7 +48,7 @@ pub fn cosm_rand(state: u32) -> u32 {
 /// `(sector_idx * 2654435761) ^ tic` so that each sector flickers
 /// independently.
 #[must_use]
-pub fn flicker_offset(sector_special: u16, sector_idx: usize, tic: u32) -> i16 {
+pub(crate) fn flicker_offset(sector_special: u16, sector_idx: usize, tic: u32) -> i16 {
     if !FLICKER_SPECIALS.contains(&sector_special) {
         return 0;
     }
@@ -71,7 +71,7 @@ pub fn flicker_offset(sector_special: u16, sector_idx: usize, tic: u32) -> i16 {
 /// bonus. Each cell further away reduces the bonus by `LIGHT_PER_CELL`.
 /// Tiles beyond `PLAYER_LIGHT_RADIUS` get 0.
 #[must_use]
-pub fn player_radial_bonus(player_tx: i32, player_ty: i32, tile_tx: i32, tile_ty: i32) -> i32 {
+pub(crate) fn player_radial_bonus(player_tx: i32, player_ty: i32, tile_tx: i32, tile_ty: i32) -> i32 {
     let dist = (player_tx - tile_tx).abs() + (player_ty - tile_ty).abs();
     if dist > PLAYER_LIGHT_RADIUS {
         return 0;
@@ -85,7 +85,7 @@ pub fn player_radial_bonus(player_tx: i32, player_ty: i32, tile_tx: i32, tile_ty
 
 /// Blend a base color with a hazard glow: 80% base + 20% glow.
 #[must_use]
-pub fn blend_hazard_glow(base: Rgb, glow: Rgb) -> Rgb {
+pub(crate) fn blend_hazard_glow(base: Rgb, glow: Rgb) -> Rgb {
     let blend = |b: u8, g: u8| -> u8 {
         let val = (u16::from(b) * 4 + u16::from(g)) / 5;
         val as u8
@@ -105,7 +105,7 @@ pub fn blend_hazard_glow(base: Rgb, glow: Rgb) -> Rgb {
 /// flicker offset, and player radial bonus. Clamps result to `[0, 255]`.
 #[must_use]
 #[allow(clippy::too_many_arguments)]
-pub fn effective_light(
+pub(crate) fn effective_light(
     sector_light: u8,
     sector_special: u16,
     sector_idx: usize,
@@ -131,7 +131,7 @@ pub fn effective_light(
 ///
 /// If `light < 80`, bumps the value to `min(light + 60, 120)`.
 #[must_use]
-pub fn entity_light_boost(light: u8) -> u8 {
+pub(crate) fn entity_light_boost(light: u8) -> u8 {
     if light < 80 {
         (light as u16 + 60).min(120) as u8
     } else {
