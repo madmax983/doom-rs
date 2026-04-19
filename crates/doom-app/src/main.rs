@@ -326,6 +326,19 @@ fn next_player_view_height(current: i32, player_dead: bool) -> i32 {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum WeaponMotion {
+    Preserve,
+    Reset,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[allow(dead_code)]
+pub(crate) enum PlayerStateCarry {
+    Carry,
+    Reset,
+}
+
 impl DoomGame {
     #[allow(dead_code)]
     #[allow(clippy::too_many_arguments)]
@@ -536,7 +549,11 @@ impl DoomGame {
         }
     }
 
-    fn load_map_after_intermission(&mut self, map_id: doom_game::MapId, carry_player_state: bool) {
+    fn load_map_after_intermission(
+        &mut self,
+        map_id: doom_game::MapId,
+        carry_player_state: PlayerStateCarry,
+    ) {
         if !self.wad_stack.has_iwad() {
             self.console
                 .print("Cannot load next level: no WAD attached for transitions.".to_string());
@@ -555,9 +572,15 @@ impl DoomGame {
             }
         };
 
-        let carried_player = carry_player_state.then(|| self.gs.player.clone());
+        let carried_player =
+            (carry_player_state == PlayerStateCarry::Carry).then(|| self.gs.player.clone());
         let mut gs = GameState::new(&map_name);
-        let player_handle = spawn_level_things(&mut gs, &level, self.skill, false);
+        let player_handle = spawn_level_things(
+            &mut gs,
+            &level,
+            self.skill,
+            doom_game::GameMode::SinglePlayer,
+        );
 
         if let (Some(mut player), Some(handle)) = (carried_player, player_handle) {
             player.handle = handle;
@@ -593,7 +616,7 @@ impl DoomGame {
     fn reset_weapon_anim(&mut self) {
         self.weapon_anim = WeaponAnimState::new();
         self.ensure_player_psprites_initialized();
-        self.sync_weapon_anim_from_player_psprites(false);
+        self.sync_weapon_anim_from_player_psprites(WeaponMotion::Reset);
     }
 
     fn player_weapon_anim_speed(&self) -> i32 {
@@ -615,12 +638,13 @@ impl DoomGame {
         }
     }
 
-    fn sync_weapon_anim_from_player_psprites(&mut self, preserve_motion: bool) {
+    fn sync_weapon_anim_from_player_psprites(&mut self, motion: WeaponMotion) {
         use doom_game::player::psprite_slots;
 
         let weapon_psprite = self.gs.player.psprites[psprite_slots::WEAPON];
         let flash_psprite = self.gs.player.psprites[psprite_slots::FLASH];
-        let previous_offset = preserve_motion.then_some(self.weapon_anim.raise_offset);
+        let previous_offset =
+            (motion == WeaponMotion::Preserve).then_some(self.weapon_anim.raise_offset);
 
         self.weapon_anim.current.sx = weapon_psprite.sx;
         self.weapon_anim.current.sprite_name =
@@ -652,12 +676,12 @@ impl DoomGame {
         self.ensure_player_psprites_initialized();
         if self.gs.player.is_dead() {
             self.weapon_anim.bob.reset();
-            self.sync_weapon_anim_from_player_psprites(false);
+            self.sync_weapon_anim_from_player_psprites(WeaponMotion::Reset);
             return;
         }
 
         self.weapon_anim.bob.tick(self.player_weapon_anim_speed());
-        self.sync_weapon_anim_from_player_psprites(true);
+        self.sync_weapon_anim_from_player_psprites(WeaponMotion::Preserve);
     }
 
     fn transition_input_pressed(&mut self, input: &TicInput) -> bool {
@@ -900,7 +924,12 @@ impl DoomApp for DoomGame {
                             let sk = Skill::from_num(skill).unwrap_or(Skill::Medium);
                             // Re-spawn the level with the chosen skill.
                             self.gs = GameState::new(&self.gs.level_name.clone());
-                            spawn_level_things(&mut self.gs, &self.level, sk, false);
+                            spawn_level_things(
+                                &mut self.gs,
+                                &self.level,
+                                sk,
+                                doom_game::GameMode::SinglePlayer,
+                            );
                             init_scrolling_walls(&mut self.gs, &self.level);
                             init_conveyors(&mut self.gs, &self.level);
                             init_sector_lights(&mut self.gs, &self.level);
@@ -947,7 +976,7 @@ impl DoomApp for DoomGame {
 
                 self.phase_controller.tick(&mut self.gs);
                 if let Some(map_id) = self.phase_controller.should_load_map() {
-                    self.load_map_after_intermission(map_id, true);
+                    self.load_map_after_intermission(map_id, PlayerStateCarry::Carry);
                 }
                 self.update_intermission_renderer();
                 return;
@@ -1154,7 +1183,7 @@ impl DoomApp for DoomGame {
         }
         self.update_intermission_renderer();
         if let Some(map_id) = self.phase_controller.should_load_map() {
-            self.load_map_after_intermission(map_id, true);
+            self.load_map_after_intermission(map_id, PlayerStateCarry::Carry);
         }
 
         // Drain the game's sound event queue.  Each event maps to a DS* lump
@@ -2592,7 +2621,12 @@ fn run_doom() -> Result<()> {
 
     if args.map_stats {
         let mut gs = GameState::new(warp_str);
-        doom_game::spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        doom_game::spawn_level_things(
+            &mut gs,
+            &level,
+            Skill::Medium,
+            doom_game::GameMode::SinglePlayer,
+        );
         let stats = gs.compute_intermission_stats();
 
         if args.json {
@@ -2722,7 +2756,7 @@ fn run_doom() -> Result<()> {
         .checked_sub(1)
         .and_then(Skill::from_num)
         .unwrap_or(Skill::Medium);
-    spawn_level_things(&mut gs, &level, skill, false);
+    spawn_level_things(&mut gs, &level, skill, doom_game::GameMode::SinglePlayer);
 
     // Apply DeHackEd patch if one was specified.
     if let Some(ref deh_path) = args.deh {
