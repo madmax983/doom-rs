@@ -172,7 +172,7 @@ pub fn save_game_with_format(
 /// // A tragic end... but we can try again!
 /// match load_game(save_path, CompatibilityProfile::Extended) {
 ///     Ok((header, payload)) => {
-///         println!("Restoring: {}", core::str::from_utf8(&header.description).unwrap_or("Unknown"));
+///         println!("Restoring: {}", core::str::from_utf8(&header.description).unwrap_or("Unknown").trim_end_matches('\0'));
 ///         // Now apply the payload to your GameState!
 ///     }
 ///     Err(e) => eprintln!("The save file is corrupted: {}", e),
@@ -391,7 +391,7 @@ mod tests {
         // Description starts with 'Slot 3'.
         let desc = core::str::from_utf8(&header.description)
             .unwrap_or("")
-            .trim_matches('\0');
+            .trim_end_matches('\0');
         assert_eq!(desc, "Slot 3", "slot must round-trip via description");
 
         // Clean up.
