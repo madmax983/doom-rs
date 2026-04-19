@@ -1178,7 +1178,7 @@ pub fn draw_status_bar_wad(
 
     // 5. Face mugshot — ST_FACEX=143, ST_FACEY=168.
     let face_name = face_patch_name(face.kind);
-    if let Some(patch) = cache.get(&face_name, wad) {
+    if let Some(patch) = cache.get(face_name, wad) {
         let p = patch.clone();
         fb.draw_patch_vanilla(143, BAR, &p);
     }

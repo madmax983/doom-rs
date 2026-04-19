@@ -71,7 +71,12 @@ pub(crate) fn flicker_offset(sector_special: u16, sector_idx: usize, tic: u32) -
 /// bonus. Each cell further away reduces the bonus by `LIGHT_PER_CELL`.
 /// Tiles beyond `PLAYER_LIGHT_RADIUS` get 0.
 #[must_use]
-pub(crate) fn player_radial_bonus(player_tx: i32, player_ty: i32, tile_tx: i32, tile_ty: i32) -> i32 {
+pub(crate) fn player_radial_bonus(
+    player_tx: i32,
+    player_ty: i32,
+    tile_tx: i32,
+    tile_ty: i32,
+) -> i32 {
     let dist = (player_tx - tile_tx).abs() + (player_ty - tile_ty).abs();
     if dist > PLAYER_LIGHT_RADIUS {
         return 0;

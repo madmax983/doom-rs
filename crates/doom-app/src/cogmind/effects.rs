@@ -249,7 +249,11 @@ impl EffectLayer {
 
     /// Spawn expanding particles for sound events.
     #[cfg(feature = "sound_ripples")]
-    pub(crate) fn spawn_sound_ripples(&mut self, events: &[doom_game::SoundRequest], gs: &GameState) {
+    pub(crate) fn spawn_sound_ripples(
+        &mut self,
+        events: &[doom_game::SoundRequest],
+        gs: &GameState,
+    ) {
         let rings: [(i32, i32, char); 9] = [
             (0, 0, 'O'),
             (1, 0, 'o'),

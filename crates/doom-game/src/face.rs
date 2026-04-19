@@ -311,34 +311,34 @@ const IDLE_GLANCE_INTERVAL: u32 = 105;
 /// Return the WAD lump name for the given face expression.
 ///
 /// Names match vanilla Doom's `ST_lib.c` face patch naming scheme.
-pub fn face_patch_name(kind: FaceKind) -> String {
+pub fn face_patch_name(kind: FaceKind) -> &'static str {
     match kind {
         FaceKind::Normal { tier, dir } => {
-            let t = tier.min(4);
+            let t = tier.min(4) as usize;
             match dir {
-                FaceDir::Forward => format!("STFST{t}0"),
-                FaceDir::Left => format!("STFTL{t}0"),
-                FaceDir::Right => format!("STFTR{t}0"),
+                FaceDir::Forward => ["STFST00", "STFST10", "STFST20", "STFST30", "STFST40"][t],
+                FaceDir::Left => ["STFTL00", "STFTL10", "STFTL20", "STFTL30", "STFTL40"][t],
+                FaceDir::Right => ["STFTR00", "STFTR10", "STFTR20", "STFTR30", "STFTR40"][t],
             }
         }
         FaceKind::Pain { tier } => {
             // Pain uses the same ST_F_xxx00 scheme but with the ouch variant
             // in vanilla; we use the damage-direction approach: straight.
-            let t = tier.min(4);
-            format!("STFST{t}0")
+            let t = tier.min(4) as usize;
+            ["STFST00", "STFST10", "STFST20", "STFST30", "STFST40"][t]
         }
         FaceKind::Ouch { tier } => {
-            let t = tier.min(4);
-            format!("STFOUCH{t}")
+            let t = tier.min(4) as usize;
+            ["STFOUCH0", "STFOUCH1", "STFOUCH2", "STFOUCH3", "STFOUCH4"][t]
         }
-        FaceKind::EvilGrin => "STFEVL0".to_string(),
+        FaceKind::EvilGrin => "STFEVL0",
         FaceKind::Rampage { tier } => {
-            let t = tier.min(4);
-            format!("STFKLL{t}0")
+            let t = tier.min(4) as usize;
+            ["STFKLL00", "STFKLL10", "STFKLL20", "STFKLL30", "STFKLL40"][t]
         }
-        FaceKind::GodMode => "STFGOD0".to_string(),
-        FaceKind::Dead => "STFDEAD0".to_string(),
-        FaceKind::XDead => "STFXDTH1".to_string(),
+        FaceKind::GodMode => "STFGOD0",
+        FaceKind::Dead => "STFDEAD0",
+        FaceKind::XDead => "STFXDTH1",
     }
 }
 
