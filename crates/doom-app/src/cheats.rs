@@ -329,4 +329,11 @@ mod tests {
         let msg = apply_cheat(&mut gs, "IDDT");
         assert_eq!(msg, "Map Revealed", "IDDT must return 'Map Revealed'");
     }
+
+    #[test]
+    fn havoc_test_apply_cheat_invalid_string() {
+        let mut gs = make_test_gs();
+        let msg = apply_cheat(&mut gs, "NOT_A_REAL_CHEAT");
+        assert_eq!(msg, "");
+    }
 }
