@@ -608,6 +608,12 @@ impl DehPatch {
                 s.parse::<f64>().and_then(|v| {
                     if v.is_nan() {
                         Err("".parse::<f64>().unwrap_err()) // dummy error to fail through
+                    } else if v.is_infinite() {
+                        if v.is_sign_positive() {
+                            Ok(i32::MAX)
+                        } else {
+                            Ok(i32::MIN)
+                        }
                     } else {
                         Ok(v.clamp(i32::MIN as f64, i32::MAX as f64) as i32)
                     }
@@ -622,6 +628,12 @@ impl DehPatch {
                 s.parse::<f64>().and_then(|v| {
                     if v.is_nan() {
                         Err("".parse::<f64>().unwrap_err())
+                    } else if v.is_infinite() {
+                        if v.is_sign_positive() {
+                            Ok(u32::MAX)
+                        } else {
+                            Ok(0)
+                        }
                     } else {
                         Ok(v.clamp(0.0, u32::MAX as f64) as u32)
                     }
@@ -636,6 +648,12 @@ impl DehPatch {
                 s.parse::<f64>().and_then(|v| {
                     if v.is_nan() {
                         Err("".parse::<f64>().unwrap_err())
+                    } else if v.is_infinite() {
+                        if v.is_sign_positive() {
+                            Ok(u16::MAX)
+                        } else {
+                            Ok(0)
+                        }
                     } else {
                         Ok(v.clamp(0.0, u16::MAX as f64) as u16)
                     }
@@ -650,6 +668,12 @@ impl DehPatch {
                 s.parse::<f64>().and_then(|v| {
                     if v.is_nan() {
                         Err("".parse::<f64>().unwrap_err())
+                    } else if v.is_infinite() {
+                        if v.is_sign_positive() {
+                            Ok(u8::MAX)
+                        } else {
+                            Ok(0)
+                        }
                     } else {
                         Ok(v.clamp(0.0, u8::MAX as f64) as u8)
                     }
@@ -664,6 +688,12 @@ impl DehPatch {
                 s.parse::<f64>().and_then(|v| {
                     if v.is_nan() {
                         Err("".parse::<f64>().unwrap_err())
+                    } else if v.is_infinite() {
+                        if v.is_sign_positive() {
+                            Ok(usize::MAX)
+                        } else {
+                            Ok(0)
+                        }
                     } else if v < 0.0 {
                         Ok(0)
                     } else if v > usize::MAX as f64 {

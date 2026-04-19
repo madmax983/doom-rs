@@ -74,6 +74,43 @@ pub enum SoundRequest {
 }
 
 impl SoundRequest {
+    /// Returns the (x, y) map coordinates where this sound originated, if any.
+    ///
+    /// Useful for distance attenuation and stereo panning in the audio subsystem.
+    /// Player-originated sounds will return the provided `player_x` and `player_y`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_game::state::SoundRequest;
+    /// use doom_types::mobj_kind::MobjKind;
+    /// use doom_game::mobj::MobjHandle;
+    /// use doom_types::Fixed16_16;
+    ///
+    /// // Simulate a handle allocation with index 1
+    /// let mut slab = doom_game::mobj::MobjSlab::new();
+    /// let mobj = doom_game::mobj::Mobj::new(
+    ///     MobjKind::Player,
+    ///     Fixed16_16::from_raw(100),
+    ///     Fixed16_16::from_raw(200),
+    ///     doom_types::Bam::ZERO
+    /// );
+    /// let handle = slab.alloc(mobj);
+    ///
+    /// let req = SoundRequest::MonsterWake(
+    ///     MobjKind::Player,
+    ///     handle,
+    ///     Fixed16_16::from_int(100),
+    ///     Fixed16_16::from_int(200),
+    /// );
+    ///
+    /// let px = Fixed16_16::from_int(0);
+    /// let py = Fixed16_16::from_int(0);
+    ///
+    /// let (x, y) = req.emitter(px, py).unwrap();
+    /// assert_eq!(x, Fixed16_16::from_int(100));
+    /// assert_eq!(y, Fixed16_16::from_int(200));
+    /// ```
     pub fn emitter(
         &self,
         player_x: doom_types::Fixed16_16,
@@ -93,6 +130,38 @@ impl SoundRequest {
         }
     }
 
+    /// Returns the handle of the mob object that generated this sound, if any.
+    ///
+    /// Useful for checking if the object is still alive or tracking its position
+    /// dynamically as the sound plays. Player-originated sounds will return the
+    /// provided `player_origin` handle.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_game::state::SoundRequest;
+    /// use doom_types::mobj_kind::MobjKind;
+    /// use doom_game::mobj::MobjHandle;
+    ///
+    /// // Simulate a handle allocation
+    /// let mut slab = doom_game::mobj::MobjSlab::new();
+    /// let mobj = doom_game::mobj::Mobj::new(
+    ///     MobjKind::Player,
+    ///     doom_types::Fixed16_16::ZERO,
+    ///     doom_types::Fixed16_16::ZERO,
+    ///     doom_types::Bam::ZERO
+    /// );
+    /// let handle = slab.alloc(mobj);
+    ///
+    /// let req = SoundRequest::MonsterAttack(
+    ///     MobjKind::Player,
+    ///     handle,
+    ///     doom_types::Fixed16_16::ZERO,
+    ///     doom_types::Fixed16_16::ZERO,
+    /// );
+    ///
+    /// assert_eq!(req.origin_handle(None), Some(handle));
+    /// ```
     pub fn origin_handle(
         &self,
         player_origin: Option<crate::mobj::MobjHandle>,

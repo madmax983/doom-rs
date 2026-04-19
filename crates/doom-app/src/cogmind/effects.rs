@@ -25,7 +25,7 @@ const MAX_DUST: usize = 15;
 // ---------------------------------------------------------------------------
 
 /// A single cosmetic particle (debris, trail, dust).
-pub struct Effect {
+pub(crate) struct Effect {
     /// Map-unit X position.
     pub x: i32,
     /// Map-unit Y position.
@@ -50,7 +50,7 @@ impl Effect {
     /// When `fade` is `true`, each channel is scaled by `lifetime / max_lifetime`.
     /// At full lifetime the color is unchanged; at 0 it would be black.
     #[must_use]
-    pub fn current_fg(&self) -> Rgb {
+    pub(crate) fn current_fg(&self) -> Rgb {
         if !self.fade || self.max_lifetime == 0 {
             return self.fg;
         }
@@ -68,7 +68,7 @@ impl Effect {
 // ---------------------------------------------------------------------------
 
 /// Manages the pool of active particle effects.
-pub struct EffectLayer {
+pub(crate) struct EffectLayer {
     /// Active effects (newest at end).
     pub effects: Vec<Effect>,
     /// Countdown timer throttling ambient dust spawns.
@@ -82,7 +82,7 @@ pub struct EffectLayer {
 impl EffectLayer {
     /// Create an empty effect layer.
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             effects: Vec::new(),
             dust_timer: 0,
@@ -98,7 +98,7 @@ impl EffectLayer {
     }
 
     /// Tick all effects: decrement lifetimes and remove expired ones.
-    pub fn tick(&mut self) {
+    pub(crate) fn tick(&mut self) {
         for eff in &mut self.effects {
             eff.lifetime = eff.lifetime.saturating_sub(1);
         }
@@ -110,7 +110,7 @@ impl EffectLayer {
     }
 
     /// Push a new effect, evicting the oldest if at capacity.
-    pub fn push(&mut self, effect: Effect) {
+    pub(crate) fn push(&mut self, effect: Effect) {
         if self.effects.len() >= MAX_EFFECTS {
             self.effects.remove(0);
         }
@@ -118,7 +118,7 @@ impl EffectLayer {
     }
 
     /// Spawn 1-2 debris particles for each new `BulletPuff` or `Blood` mobj.
-    pub fn spawn_combat_debris(&mut self, gs: &GameState) {
+    pub(crate) fn spawn_combat_debris(&mut self, gs: &GameState) {
         for handle in gs.mobjslab.iter_handles() {
             if self.spawned_puffs.contains(&handle) {
                 continue;
@@ -158,7 +158,7 @@ impl EffectLayer {
     }
 
     /// Spawn trail particles behind each active projectile.
-    pub fn spawn_projectile_trails(&mut self, gs: &GameState) {
+    pub(crate) fn spawn_projectile_trails(&mut self, gs: &GameState) {
         for handle in gs.mobjslab.iter_handles() {
             let Some(mobj) = gs.mobjslab.get(handle) else {
                 continue;
@@ -198,7 +198,7 @@ impl EffectLayer {
     }
 
     /// Spawn ambient dust on random visible floor positions, throttled.
-    pub fn spawn_ambient_dust(&mut self, visible_floors: &[(i32, i32)]) {
+    pub(crate) fn spawn_ambient_dust(&mut self, visible_floors: &[(i32, i32)]) {
         if self.dust_timer > 0 || visible_floors.is_empty() {
             return;
         }
@@ -242,14 +242,14 @@ impl EffectLayer {
     }
 
     /// Remove stale handles from `spawned_puffs` that no longer exist in the slab.
-    pub fn clean_stale_handles(&mut self, gs: &GameState) {
+    pub(crate) fn clean_stale_handles(&mut self, gs: &GameState) {
         self.spawned_puffs
             .retain(|handle| gs.mobjslab.get(*handle).is_some());
     }
 
     /// Spawn expanding particles for sound events.
     #[cfg(feature = "sound_ripples")]
-    pub fn spawn_sound_ripples(&mut self, events: &[doom_game::SoundRequest], gs: &GameState) {
+    pub(crate) fn spawn_sound_ripples(&mut self, events: &[doom_game::SoundRequest], gs: &GameState) {
         let rings: [(i32, i32, char); 9] = [
             (0, 0, 'O'),
             (1, 0, 'o'),

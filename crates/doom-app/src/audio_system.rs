@@ -35,7 +35,7 @@ use doom_wad::WadStack;
 /// Commands the game loop sends to the audio background thread.
 // StopMusic and try_open_null are public API; silence dead_code warnings.
 #[allow(dead_code)]
-pub enum AudioEvent {
+pub(crate) enum AudioEvent {
     /// Play a sound effect with the given priority.
     /// `sfx_id` is the sequential DS* lump index from `populate_sfx_cache`.
     /// Higher-priority sounds steal channels from lower-priority ones when
@@ -56,7 +56,7 @@ pub enum AudioEvent {
 ///
 /// Holds the cpal stream alive via `AudioDriver` and sends events to the
 /// background audio thread via an mpsc channel.
-pub struct AudioSystem {
+pub(crate) struct AudioSystem {
     sender: std::sync::mpsc::Sender<AudioEvent>,
     /// Keeps the cpal stream alive.  Must stay on the same thread that called
     /// `AudioDriver::open` (the main thread).
@@ -75,7 +75,7 @@ impl AudioSystem {
     ///
     /// Returns `None` if no audio device is available (headless CI, etc.).
     /// The game continues silently in that case — no crash.
-    pub fn try_open(wad: &WadStack) -> Option<Self> {
+    pub(crate) fn try_open(wad: &WadStack) -> Option<Self> {
         const SAMPLE_RATE: u32 = 44_100;
 
         let driver = match AudioDriver::open(SAMPLE_RATE) {
@@ -162,7 +162,7 @@ impl AudioSystem {
     ///
     /// Uses `AudioDriver::null()` which requires no real audio device.
     #[must_use]
-    pub fn try_open_null() -> Option<Self> {
+    pub(crate) fn try_open_null() -> Option<Self> {
         let driver = AudioDriver::null();
         let mixer_arc = driver.mixer.clone();
         let midi_arc = driver.midi.clone();
@@ -199,7 +199,7 @@ impl AudioSystem {
     /// The 8-channel mixer will steal the lowest-priority channel if all are
     /// occupied and the new sound's priority is >= that channel's priority.
     /// Fire-and-forget: silently ignored if the audio thread has exited.
-    pub fn play_sfx(
+    pub(crate) fn play_sfx(
         &self,
         sfx_id: u16,
         priority: SfxPriority,
@@ -213,17 +213,17 @@ impl AudioSystem {
     }
 
     /// Send a start-music command with raw MUS lump bytes.
-    pub fn start_music(&self, data: std::sync::Arc<[u8]>) {
+    pub(crate) fn start_music(&self, data: std::sync::Arc<[u8]>) {
         let _ = self.sender.send(AudioEvent::StartMusic(data));
     }
 
     /// Send a stop-music command.
-    pub fn stop_music(&self) {
+    pub(crate) fn stop_music(&self) {
         let _ = self.sender.send(AudioEvent::StopMusic);
     }
 
     #[cfg(test)]
-    pub fn debug_music_start_count(&self) -> usize {
+    pub(crate) fn debug_music_start_count(&self) -> usize {
         self.music_start_count.load(Ordering::SeqCst)
     }
 }
@@ -378,7 +378,7 @@ pub fn weapon_fire_sfx_lump(weapon: WeaponType) -> &'static str {
 }
 
 /// Map a game sound request to its Doom DS* lump name and priority.
-pub fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, SfxPriority)> {
+pub(crate) fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, SfxPriority)> {
     match req {
         doom_game::SoundRequest::MonsterWake(kind, _, _, _) => {
             Some((monster_wake_lump(kind), SfxPriority::High))
@@ -405,7 +405,7 @@ pub fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, 
 ///
 /// Uses the same candidate-lump strategy as [`populate_sfx_cache`] so that
 /// `sfx_lookup["DSPISTOL"]` always returns the same ID the mixer uses.
-pub fn build_sfx_lookup(
+pub(crate) fn build_sfx_lookup(
     wad: &WadStack,
 ) -> std::collections::HashMap<doom_wad::lump::LumpName, u16> {
     let mut map = std::collections::HashMap::new();
@@ -434,7 +434,7 @@ fn sfx_candidate_names<'a>(
 /// Return the Doom DS* lump name for a monster's wake (see) sound.
 ///
 /// Returns `""` for kinds that have no wake sound (projectiles, pickups, etc.).
-pub fn monster_wake_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str {
+pub(crate) fn monster_wake_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str {
     use doom_types::mobj_kind::MobjKind;
     match kind {
         MobjKind::Trooper => "DSPOSSIT",
@@ -460,7 +460,7 @@ pub fn monster_wake_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str 
 /// Return the Doom DS* lump name for a monster's attack sound.
 ///
 /// Returns `""` for kinds that have no dedicated attack sound.
-pub fn monster_attack_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str {
+pub(crate) fn monster_attack_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str {
     use doom_types::mobj_kind::MobjKind;
     match kind {
         MobjKind::Trooper | MobjKind::WolfSS => "DSPISTOL",
@@ -482,7 +482,7 @@ pub fn monster_attack_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static st
 /// Return the Doom DS* lump name for a monster's death sound.
 ///
 /// Returns `""` for kinds that have no death sound.
-pub fn monster_death_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str {
+pub(crate) fn monster_death_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str {
     use doom_types::mobj_kind::MobjKind;
     match kind {
         MobjKind::Trooper | MobjKind::WolfSS => "DSPODTH1",
@@ -524,7 +524,7 @@ pub fn monster_death_lump(kind: doom_types::mobj_kind::MobjKind) -> &'static str
 /// assert_eq!(music_lump_for_map("MAP01"), Some("D_MAP01".to_string()));
 /// assert_eq!(music_lump_for_map("INVALID"), None);
 /// ```
-pub fn music_lump_for_map(map: &str) -> Option<String> {
+pub(crate) fn music_lump_for_map(map: &str) -> Option<String> {
     Some(format!(
         "D_{}",
         doom_game::MapId::from_name(map)?.map_name()

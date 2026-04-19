@@ -45,7 +45,7 @@ use crate::net_mode::ticinput_to_ticcmd;
 ///
 /// // my_demo.lmp is written to disk when `wrapper` goes out of scope.
 /// ```
-pub struct DemoRecordingWrapper {
+pub(crate) struct DemoRecordingWrapper {
     inner: DoomGame,
     recorder: DemoRecorder,
     save_path: std::path::PathBuf,
@@ -55,12 +55,12 @@ pub struct DemoRecordingWrapper {
 impl DemoRecordingWrapper {
     /// Create a new recording wrapper.
     #[allow(dead_code)]
-    pub fn new(inner: DoomGame, recorder: DemoRecorder, save_path: std::path::PathBuf) -> Self {
+    pub(crate) fn new(inner: DoomGame, recorder: DemoRecorder, save_path: std::path::PathBuf) -> Self {
         Self::new_with_compat(inner, recorder, save_path, CompatibilityProfile::Extended)
     }
 
     /// Create a new recording wrapper with an explicit compatibility profile.
-    pub fn new_with_compat(
+    pub(crate) fn new_with_compat(
         inner: DoomGame,
         recorder: DemoRecorder,
         save_path: std::path::PathBuf,
@@ -76,7 +76,7 @@ impl DemoRecordingWrapper {
 
     /// Return the compatibility profile used when constructing the wrapper.
     #[allow(dead_code)]
-    pub const fn compat_profile(&self) -> CompatibilityProfile {
+    pub(crate) const fn compat_profile(&self) -> CompatibilityProfile {
         self.compat
     }
 }
@@ -143,7 +143,7 @@ impl Drop for DemoRecordingWrapper {
 /// // The game will ignore `TicInput` and use the recorded demo ticks instead.
 /// app.tick(TicInput::default());
 /// ```
-pub struct DemoPlaybackApp {
+pub(crate) struct DemoPlaybackApp {
     inner: DoomGame,
     player: DemoPlayer,
     compat: CompatibilityProfile,
@@ -152,12 +152,12 @@ pub struct DemoPlaybackApp {
 impl DemoPlaybackApp {
     /// Create a new playback app backed by `inner` and `player`.
     #[allow(dead_code)]
-    pub fn new(inner: DoomGame, player: DemoPlayer) -> Self {
+    pub(crate) fn new(inner: DoomGame, player: DemoPlayer) -> Self {
         Self::new_with_compat(inner, player, CompatibilityProfile::Extended)
     }
 
     /// Create a new playback app with an explicit compatibility profile.
-    pub fn new_with_compat(
+    pub(crate) fn new_with_compat(
         inner: DoomGame,
         player: DemoPlayer,
         compat: CompatibilityProfile,
@@ -171,7 +171,7 @@ impl DemoPlaybackApp {
 
     /// Return the compatibility profile used when constructing the wrapper.
     #[allow(dead_code)]
-    pub const fn compat_profile(&self) -> CompatibilityProfile {
+    pub(crate) const fn compat_profile(&self) -> CompatibilityProfile {
         self.compat
     }
 
@@ -188,7 +188,7 @@ impl DemoPlaybackApp {
     }
 
     /// Returns `true` if the demo has been completely replayed.
-    pub fn is_finished(&self) -> bool {
+    pub(crate) fn is_finished(&self) -> bool {
         self.player.is_finished()
     }
 }

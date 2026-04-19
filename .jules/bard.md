@@ -36,3 +36,6 @@
 ## 2024-04-17 - Added Doc Tests for Core Types
 **Confusion:** Many public types in `doom-types` lacked examples, leaving users to infer how to use core mechanics like `Bam`, `Fixed16_16`, and `BBox`.
 **Clarification:** Added explicit `## Examples` doc-tests for all major public structs and enums in `doom-types`, guaranteeing they are tested and compiled.
+## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
+**Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
+**Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.

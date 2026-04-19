@@ -679,7 +679,7 @@ mod prop_tests {
             let name_bytes: Vec<u8> = (0..name_len)
                 .map(|i| if i % 2 == 0 { ch0 } else { ch1 })
                 .collect();
-            let name_str = String::from_utf8(name_bytes).unwrap();
+            let name_str = String::from_utf8(name_bytes).unwrap_or_else(|_| "TEST".to_string());
 
             let payload = b"data";
             let wad_bytes = make_iwad_with_lump(&name_str, payload);

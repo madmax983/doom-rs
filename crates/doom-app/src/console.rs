@@ -11,7 +11,7 @@
 use std::collections::VecDeque;
 
 /// In-game console for cheat entry and status display.
-pub struct Console {
+pub(crate) struct Console {
     /// Whether the console overlay is currently visible.
     pub visible: bool,
     /// The current input line being typed.
@@ -24,7 +24,7 @@ pub struct Console {
 
 impl Console {
     /// Create a new hidden console with default capacity.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             visible: false,
             input: String::new(),
@@ -36,7 +36,7 @@ impl Console {
     /// Toggle console visibility.
     ///
     /// Hiding the console also clears any partially-typed input.
-    pub fn toggle(&mut self) {
+    pub(crate) fn toggle(&mut self) {
         self.visible = !self.visible;
         if !self.visible {
             self.input.clear();
@@ -49,7 +49,7 @@ impl Console {
     /// - `\n` / `\r` (Enter) is a no-op here; the caller should call
     ///   [`Console::submit`] instead.
     /// - Other printable ASCII characters are appended.
-    pub fn type_char(&mut self, ch: char) {
+    pub(crate) fn type_char(&mut self, ch: char) {
         if ch == '\x08' {
             self.input.pop();
         } else if ch == '\n' || ch == '\r' {
@@ -63,7 +63,7 @@ impl Console {
     ///
     /// Clears the input buffer and returns the submitted string so the caller
     /// can process it as a command or cheat code.
-    pub fn submit(&mut self) -> String {
+    pub(crate) fn submit(&mut self) -> String {
         let line = self.input.clone();
         self.input.clear();
         line
@@ -73,7 +73,7 @@ impl Console {
     ///
     /// If the message count exceeds [`Console::max_messages`], the oldest
     /// message is removed.
-    pub fn print(&mut self, msg: impl Into<String>) {
+    pub(crate) fn print(&mut self, msg: impl Into<String>) {
         self.messages.push_back(msg.into());
         if self.messages.len() > self.max_messages {
             self.messages.pop_front();
@@ -85,7 +85,7 @@ impl Console {
     /// Returns up to 10 lines suitable for display by a TUI renderer.
     /// Newest messages appear near the top; the current input line is last.
     #[allow(dead_code)]
-    pub fn render_lines(&self) -> Vec<String> {
+    pub(crate) fn render_lines(&self) -> Vec<String> {
         let mut lines = Vec::new();
         lines.push("--- CONSOLE ---".to_string());
         for msg in self.messages.iter().rev().take(8) {

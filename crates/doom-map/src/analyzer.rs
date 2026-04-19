@@ -136,6 +136,26 @@ impl<'a> MapAnalyzer<'a> {
     }
 
     /// Finds distinct disconnected areas of the map.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_map::SectorGraph;
+    /// use doom_map::analyzer::MapAnalyzer;
+    /// use std::collections::{HashMap, HashSet};
+    ///
+    /// // Two disconnected rooms: 0 <-> 1 and 2 <-> 3
+    /// let mut adj = HashMap::new();
+    /// adj.insert(0, HashSet::from([1]));
+    /// adj.insert(1, HashSet::from([0]));
+    /// adj.insert(2, HashSet::from([3]));
+    /// adj.insert(3, HashSet::from([2]));
+    /// let graph = SectorGraph { adjacency_list: adj };
+    ///
+    /// let analyzer = MapAnalyzer::new(&graph);
+    /// let areas = analyzer.isolated_areas();
+    /// assert_eq!(areas.len(), 2);
+    /// ```
     pub fn isolated_areas(&self) -> Vec<HashSet<usize>> {
         let mut visited = HashSet::new();
         let mut components = Vec::new();
@@ -202,5 +222,48 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let areas = analyzer.isolated_areas();
         assert_eq!(areas.len(), 2);
+    }
+
+    #[test]
+    fn test_chokepoints_empty() {
+        let graph = SectorGraph { adjacency_list: HashMap::new() };
+        let analyzer = MapAnalyzer::new(&graph);
+        assert_eq!(analyzer.chokepoints(), vec![]);
+    }
+
+    #[test]
+    fn test_chokepoints_fully_connected() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1, 2]));
+        adj.insert(1, HashSet::from([0, 2]));
+        adj.insert(2, HashSet::from([0, 1]));
+        let graph = SectorGraph { adjacency_list: adj };
+        let analyzer = MapAnalyzer::new(&graph);
+        assert_eq!(analyzer.chokepoints(), vec![]);
+    }
+
+    #[test]
+    fn test_chokepoints_disconnected() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1]));
+        adj.insert(1, HashSet::from([0]));
+        adj.insert(2, HashSet::from([3]));
+        adj.insert(3, HashSet::from([2]));
+        let graph = SectorGraph { adjacency_list: adj };
+        let analyzer = MapAnalyzer::new(&graph);
+        assert_eq!(analyzer.chokepoints(), vec![]);
+    }
+
+    #[test]
+    fn test_isolated_areas_single() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1]));
+        adj.insert(1, HashSet::from([0]));
+        let graph = SectorGraph { adjacency_list: adj };
+        let analyzer = MapAnalyzer::new(&graph);
+        let areas = analyzer.isolated_areas();
+        assert_eq!(areas.len(), 1);
+        assert!(areas[0].contains(&0));
+        assert!(areas[0].contains(&1));
     }
 }
