@@ -377,7 +377,9 @@ pub(crate) fn weapon_fire_sfx_lump(weapon: doom_game::WeaponType) -> &'static st
 }
 
 /// Map a game sound request to its Doom DS* lump name and priority.
-pub(crate) fn sound_request_sfx(req: doom_game::SoundRequest) -> Option<(&'static str, SfxPriority)> {
+pub(crate) fn sound_request_sfx(
+    req: doom_game::SoundRequest,
+) -> Option<(&'static str, SfxPriority)> {
     match req {
         doom_game::SoundRequest::MonsterWake(kind, _, _, _) => {
             Some((monster_wake_lump(kind), SfxPriority::High))

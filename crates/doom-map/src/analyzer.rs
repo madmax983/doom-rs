@@ -226,7 +226,9 @@ mod tests {
 
     #[test]
     fn test_chokepoints_empty() {
-        let graph = SectorGraph { adjacency_list: HashMap::new() };
+        let graph = SectorGraph {
+            adjacency_list: HashMap::new(),
+        };
         let analyzer = MapAnalyzer::new(&graph);
         assert_eq!(analyzer.chokepoints(), vec![]);
     }
@@ -237,7 +239,9 @@ mod tests {
         adj.insert(0, HashSet::from([1, 2]));
         adj.insert(1, HashSet::from([0, 2]));
         adj.insert(2, HashSet::from([0, 1]));
-        let graph = SectorGraph { adjacency_list: adj };
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
         let analyzer = MapAnalyzer::new(&graph);
         assert_eq!(analyzer.chokepoints(), vec![]);
     }
@@ -249,7 +253,9 @@ mod tests {
         adj.insert(1, HashSet::from([0]));
         adj.insert(2, HashSet::from([3]));
         adj.insert(3, HashSet::from([2]));
-        let graph = SectorGraph { adjacency_list: adj };
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
         let analyzer = MapAnalyzer::new(&graph);
         assert_eq!(analyzer.chokepoints(), vec![]);
     }
@@ -259,7 +265,9 @@ mod tests {
         let mut adj = HashMap::new();
         adj.insert(0, HashSet::from([1]));
         adj.insert(1, HashSet::from([0]));
-        let graph = SectorGraph { adjacency_list: adj };
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
         let analyzer = MapAnalyzer::new(&graph);
         let areas = analyzer.isolated_areas();
         assert_eq!(areas.len(), 1);

@@ -55,7 +55,11 @@ pub(crate) struct DemoRecordingWrapper {
 impl DemoRecordingWrapper {
     /// Create a new recording wrapper.
     #[allow(dead_code)]
-    pub(crate) fn new(inner: DoomGame, recorder: DemoRecorder, save_path: std::path::PathBuf) -> Self {
+    pub(crate) fn new(
+        inner: DoomGame,
+        recorder: DemoRecorder,
+        save_path: std::path::PathBuf,
+    ) -> Self {
         Self::new_with_compat(inner, recorder, save_path, CompatibilityProfile::Extended)
     }
 
