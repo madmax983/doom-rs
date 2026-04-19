@@ -250,8 +250,6 @@ impl EffectLayer {
     /// Spawn expanding particles for sound events.
     #[cfg(feature = "sound_ripples")]
     pub fn spawn_sound_ripples(&mut self, events: &[doom_game::SoundRequest], gs: &GameState) {
-        use doom_game::SoundRequest;
-
         let rings: [(i32, i32, char); 9] = [
             (0, 0, 'O'),
             (1, 0, 'o'),
@@ -265,23 +263,26 @@ impl EffectLayer {
         ];
 
         for ev in events {
-            let (origin_x, origin_y, is_player) = match ev {
-                SoundRequest::MonsterWake(_, _, x, y)
-                | SoundRequest::MonsterAttack(_, _, x, y)
-                | SoundRequest::MonsterDie(_, _, x, y) => (x.to_int(), y.to_int(), false),
-                SoundRequest::PlayerWeaponFire(_)
-                | SoundRequest::PlayerSuperShotgunOpen
-                | SoundRequest::PlayerSuperShotgunLoad
-                | SoundRequest::PlayerSuperShotgunClose
-                | SoundRequest::PlayerDie => {
-                    if let Some(player_mo) = gs.mobjslab.get(gs.player.handle) {
-                        (player_mo.x.to_int(), player_mo.y.to_int(), true)
-                    } else {
-                        continue;
-                    }
-                }
-                _ => continue,
+            let player_mo = gs.mobjslab.get(gs.player.handle);
+            let player_x = player_mo
+                .map(|mo| mo.x)
+                .unwrap_or(doom_types::Fixed16_16::ZERO);
+            let player_y = player_mo
+                .map(|mo| mo.y)
+                .unwrap_or(doom_types::Fixed16_16::ZERO);
+
+            let Some((origin_x, origin_y)) = ev.emitter(player_x, player_y) else {
+                continue;
             };
+
+            let is_player = ev.origin_handle(Some(gs.player.handle)) == Some(gs.player.handle);
+
+            if is_player && player_mo.is_none() {
+                continue;
+            }
+
+            let origin_x = origin_x.to_int();
+            let origin_y = origin_y.to_int();
 
             let fg = if is_player {
                 (50, 150, 200)
