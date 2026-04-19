@@ -150,11 +150,18 @@ fn should_spawn_for_skill(thing_flags: u16, skill: Skill) -> bool {
 ///
 /// Player starts 2-4 (DoomEd types 2-4) are skipped in single-player
 /// (`is_deathmatch == false`).
+/// Dictates whether to spawn multiplayer-only things.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum GameMode {
+    SinglePlayer,
+    Deathmatch,
+}
+
 pub fn spawn_level_things(
     gs: &mut GameState,
     level: &Level,
     skill: Skill,
-    is_deathmatch: bool,
+    game_mode: GameMode,
 ) -> Option<MobjHandle> {
     let mut player_handle: Option<MobjHandle> = None;
 
@@ -165,7 +172,7 @@ pub fn spawn_level_things(
         }
 
         // --- Multiplayer filter ---
-        if thing.flags & MTF_MULTIPLAYER != 0 && !is_deathmatch {
+        if thing.flags & MTF_MULTIPLAYER != 0 && game_mode != GameMode::Deathmatch {
             continue;
         }
 
@@ -235,9 +242,9 @@ impl GameState {
     /// Spawn all things from the level and return the player handle.
     ///
     /// This is a convenience wrapper around [`spawn_level_things`] with
-    /// `is_deathmatch = false`.
+    /// `game_mode = GameMode::SinglePlayer`.
     pub fn spawn_things(&mut self, level: &Level, skill: Skill) -> Option<MobjHandle> {
-        spawn_level_things(self, level, skill, false)
+        spawn_level_things(self, level, skill, GameMode::SinglePlayer)
     }
 }
 
@@ -595,7 +602,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         assert!(handle.is_some());
         let mo = gs.mobjslab.get(handle.unwrap()).unwrap();
         assert_eq!(mo.kind, MobjKind::Player);
@@ -613,7 +620,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         assert!(handle.is_some());
         assert_eq!(gs.player.handle, handle.unwrap());
         assert_eq!(gs.player.health(), 100);
@@ -629,7 +636,8 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, false).unwrap();
+        let handle =
+            spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer).unwrap();
         let mo = gs.mobjslab.get(handle).unwrap();
         // Player MOBJINFO: health=100, radius=16, height=56
         assert_eq!(mo.health, 100);
@@ -651,7 +659,8 @@ mod tests {
         );
         let mut gs = GameState::new("E1M1");
 
-        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, false).unwrap();
+        let handle =
+            spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer).unwrap();
         let mo = gs.mobjslab.get(handle).unwrap();
 
         assert_eq!(mo.z, Fixed16_16::from_int(24));
@@ -671,7 +680,7 @@ mod tests {
         );
         let mut gs = GameState::new("E1M1");
 
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let trooper = gs
             .mobjslab
             .iter_handles()
@@ -696,7 +705,7 @@ mod tests {
         );
         let mut gs = GameState::new("E1M1");
 
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let trooper = gs
             .mobjslab
             .iter_handles()
@@ -749,7 +758,7 @@ mod tests {
         let mut gs = GameState::new("E1M1");
         gs.rng.set_index(3); // 220 % 10 = 0, so Doom-style randomized tics should become 1.
 
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let trooper = gs
             .mobjslab
             .iter_handles()
@@ -785,7 +794,7 @@ mod tests {
             }, // hard only
         ]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Easy, false);
+        spawn_level_things(&mut gs, &level, Skill::Easy, GameMode::SinglePlayer);
         // Only the easy-skill trooper should exist.
         let count = gs
             .mobjslab
@@ -819,7 +828,7 @@ mod tests {
             }, // hard only
         ]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Hard, false);
+        spawn_level_things(&mut gs, &level, Skill::Hard, GameMode::SinglePlayer);
         let count = gs
             .mobjslab
             .iter_handles()
@@ -850,7 +859,7 @@ mod tests {
             Skill::Nightmare,
         ] {
             let mut gs = GameState::new("TEST");
-            spawn_level_things(&mut gs, &level, skill, false);
+            spawn_level_things(&mut gs, &level, skill, GameMode::SinglePlayer);
             let count = gs
                 .mobjslab
                 .iter_handles()
@@ -880,7 +889,7 @@ mod tests {
             flags: 0,
         }]);
         let mut gs = GameState::new("TEST");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let count = gs
             .mobjslab
             .iter_handles()
@@ -908,7 +917,7 @@ mod tests {
             flags: 7 | 16,
         }]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false); // singleplayer
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer); // singleplayer
         let count = gs
             .mobjslab
             .iter_handles()
@@ -932,7 +941,7 @@ mod tests {
             flags: 7 | 16,
         }]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, true); // deathmatch
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::Deathmatch); // deathmatch
         let count = gs
             .mobjslab
             .iter_handles()
@@ -960,7 +969,7 @@ mod tests {
             flags: 7 | 8,
         }]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let handle = gs
             .mobjslab
             .iter_handles()
@@ -988,7 +997,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let handle = gs
             .mobjslab
             .iter_handles()
@@ -1029,7 +1038,7 @@ mod tests {
             }, // HealthBonus (MF_COUNTITEM)
         ]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         assert_eq!(gs.stats.total_kills, 1, "Trooper should count as a kill");
         assert_eq!(
             gs.stats.total_items, 1,
@@ -1063,7 +1072,7 @@ mod tests {
             }, // Imp
         ]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         assert_eq!(
             gs.stats.total_kills, 3,
             "All three monsters should be counted"
@@ -1084,7 +1093,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let handle = gs
             .mobjslab
             .iter_handles()
@@ -1115,7 +1124,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let handle = gs
             .mobjslab
             .iter_handles()
@@ -1149,7 +1158,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let handle = gs
             .mobjslab
             .iter_handles()
@@ -1181,7 +1190,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let handle = gs
             .mobjslab
             .iter_handles()
@@ -1206,7 +1215,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let handle = gs
             .mobjslab
             .iter_handles()
@@ -1271,7 +1280,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         assert!(handle.is_none(), "No player should be spawned");
         assert!(gs.mobjslab.is_empty(), "Unknown type should be skipped");
     }
@@ -1284,7 +1293,7 @@ mod tests {
     fn spawn_empty_level() {
         let level = make_test_level_with_things(vec![]);
         let mut gs = GameState::new("E1M1");
-        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         assert!(handle.is_none());
         assert!(gs.mobjslab.is_empty());
         assert_eq!(gs.stats.total_kills, 0);
@@ -1305,7 +1314,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let handle = gs
             .mobjslab
             .iter_handles()
@@ -1721,7 +1730,7 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("TEST");
-        spawn_level_things(&mut gs, &level, Skill::Medium, false);
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
 
         let handle = gs
             .mobjslab

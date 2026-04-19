@@ -32,3 +32,7 @@
 **Refactored duplicated `match` statements over `SoundRequest` in `handle_sound_events`**
 **Learning:** Redundant `match` statements that extract values from an enum based on its variant create code duplication and visual noise, especially when the same matching logic is repeated within the same function or module.
 **Action:** Extract the matching logic into helper methods (e.g., `emitter(&self)` and `origin_handle(&self)`) on the enum itself using an `impl` block to encapsulate the behavior and simplify the call sites.
+
+**[Boolean Blindness in spawn_level_things and sync_weapon_anim]**
+**Learning:** Functions like `spawn_level_things` taking `is_deathmatch: bool` alongside `carry_player_state: bool` in `load_map_after_intermission` creates "Boolean Blindness", making calls like `spawn_level_things(&mut gs, &level, Skill::Medium, false)` hard to understand. Similarly, `sync_weapon_anim_from_player_psprites(false)` hides intent about what the boolean does (preserve motion vs reset).
+**Action:** Replaced `bool` with enums like `GameMode` (`SinglePlayer` vs `Deathmatch`), `PlayerStateCarry` (`Carry` vs `Reset`) and `WeaponMotion` (`Preserve` vs `Reset`) to self-document the code at call sites and enforce correct usage at compile time.
