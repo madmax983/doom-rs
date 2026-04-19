@@ -125,6 +125,11 @@ struct Args {
     #[arg(long)]
     timedemo: Option<std::path::PathBuf>,
 
+    /// Analyze a .lmp demo file without rendering, printing a post-game stats report.
+    #[arg(long)]
+    analyze_demo: Option<std::path::PathBuf>,
+
+
     /// Path to DeHackEd (.deh) patch file to apply.
     #[arg(long)]
     deh: Option<String>,
@@ -2076,6 +2081,153 @@ fn load_demo_player(path: &std::path::Path) -> Result<DemoPlayer> {
 // main
 // ---------------------------------------------------------------------------
 
+
+fn run_demo_analyzer(app: DoomGame, demo_path: &std::path::Path) -> Result<()> {
+    let player = load_demo_player(demo_path)?;
+    let mut playback_app = demo_mode::DemoPlaybackApp::new_with_compat(app, player, CompatibilityProfile::Extended);
+
+    use std::io::Write;
+    let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+    use crossterm::style::Stylize;
+
+    if is_tty {
+        print!("{} ", "Analyzing Demo...".cyan().bold());
+        std::io::stdout().flush().ok();
+    } else {
+        print!("Analyzing Demo... ");
+        std::io::stdout().flush().ok();
+    }
+
+    let start_time = std::time::Instant::now();
+    let mut actual_tics = 0;
+
+    // We will track weapon usage and damage taken
+    let mut weapon_shots = std::collections::HashMap::new();
+    let mut damage_taken = 0;
+    let mut prev_health = playback_app.inner.gs.player.health();
+
+    while !playback_app.player.is_finished() {
+        playback_app.tick(TicInput::default());
+        actual_tics += 1;
+
+        // Track health changes
+        let cur_health = playback_app.inner.gs.player.health();
+        if cur_health < prev_health {
+            damage_taken += prev_health - cur_health;
+        }
+        prev_health = cur_health;
+
+        // Drain the sound queue to track weapon fires exactly once per tic
+        let events = std::mem::take(&mut playback_app.inner.gs.sound.sound_queue);
+        for ev in events {
+            if let doom_game::SoundRequest::PlayerWeaponFire(weapon) = ev {
+                *weapon_shots.entry(weapon).or_insert(0) += 1;
+            }
+        }
+    }
+
+    let duration = start_time.elapsed();
+    let fps = actual_tics as f64 / duration.as_secs_f64();
+
+    let stats = playback_app.inner.gs.stats;
+
+    let demo_time_formatted = format!("{:02}:{:02}", actual_tics / 35 / 60, (actual_tics / 35) % 60);
+
+    println!("\r          \r"); // Clear line securely without raw escape
+
+    let mut table = comfy_table::Table::new();
+    table
+        .load_preset(comfy_table::presets::UTF8_FULL)
+        .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+
+    if is_tty {
+        table
+            .set_header(vec![
+                comfy_table::Cell::new("Metric").fg(comfy_table::Color::Cyan).add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new("Value").fg(comfy_table::Color::Cyan).add_attribute(comfy_table::Attribute::Bold),
+            ])
+            .add_row(vec![
+                comfy_table::Cell::new("🎬 Demo Length"),
+                comfy_table::Cell::new(format!("{} ({} tics)", demo_time_formatted, actual_tics)).fg(comfy_table::Color::Yellow),
+            ])
+            .add_row(vec![
+                comfy_table::Cell::new("💀 Kills"),
+                comfy_table::Cell::new(format!("{}/{}", stats.kill_count, stats.total_kills)).fg(comfy_table::Color::Red),
+            ])
+            .add_row(vec![
+                comfy_table::Cell::new("📦 Items"),
+                comfy_table::Cell::new(format!("{}/{}", stats.item_count, stats.total_items)).fg(comfy_table::Color::Green),
+            ])
+            .add_row(vec![
+                comfy_table::Cell::new("🕵️  Secrets"),
+                comfy_table::Cell::new(format!("{}/{}", stats.secret_count, stats.total_secrets)).fg(comfy_table::Color::Magenta),
+            ])
+            .add_row(vec![
+                comfy_table::Cell::new("🩸 Damage Taken"),
+                comfy_table::Cell::new(damage_taken.to_string()).fg(comfy_table::Color::DarkRed),
+            ]);
+
+        let mut w_str = String::new();
+        for (w, count) in &weapon_shots {
+            let name = match w {
+                doom_game::WeaponType::Fist => "Fist",
+                doom_game::WeaponType::Pistol => "Pistol",
+                doom_game::WeaponType::Shotgun => "Shotgun",
+                doom_game::WeaponType::Chaingun => "Chaingun",
+                doom_game::WeaponType::RocketLauncher => "Rocket",
+                doom_game::WeaponType::PlasmaRifle => "Plasma",
+                doom_game::WeaponType::Bfg => "BFG",
+                doom_game::WeaponType::Chainsaw => "Chainsaw",
+                doom_game::WeaponType::SuperShotgun => "SSG",
+            };
+            w_str.push_str(&format!("{}: {}\n", name, count));
+        }
+        if w_str.is_empty() {
+            w_str.push_str("None");
+        }
+        table.add_row(vec![
+            comfy_table::Cell::new("🔫 Shots Fired"),
+            comfy_table::Cell::new(w_str.trim_end()),
+        ]);
+
+        println!("{} {} in {:.2}s ({:.2} fps)", "✅".green(), "Analysis Complete".green().bold(), duration.as_secs_f64(), fps);
+    } else {
+        table
+            .set_header(vec!["Metric", "Value"])
+            .add_row(vec!["Demo Length", &format!("{} ({} tics)", demo_time_formatted, actual_tics)])
+            .add_row(vec!["Kills", &format!("{}/{}", stats.kill_count, stats.total_kills)])
+            .add_row(vec!["Items", &format!("{}/{}", stats.item_count, stats.total_items)])
+            .add_row(vec!["Secrets", &format!("{}/{}", stats.secret_count, stats.total_secrets)])
+            .add_row(vec!["Damage Taken", &damage_taken.to_string()]);
+
+        let mut w_str = String::new();
+        for (w, count) in &weapon_shots {
+            let name = match w {
+                doom_game::WeaponType::Fist => "Fist",
+                doom_game::WeaponType::Pistol => "Pistol",
+                doom_game::WeaponType::Shotgun => "Shotgun",
+                doom_game::WeaponType::Chaingun => "Chaingun",
+                doom_game::WeaponType::RocketLauncher => "Rocket",
+                doom_game::WeaponType::PlasmaRifle => "Plasma",
+                doom_game::WeaponType::Bfg => "BFG",
+                doom_game::WeaponType::Chainsaw => "Chainsaw",
+                doom_game::WeaponType::SuperShotgun => "SSG",
+            };
+            w_str.push_str(&format!("{}: {}\n", name, count));
+        }
+        if w_str.is_empty() {
+            w_str.push_str("None");
+        }
+        table.add_row(vec!["Shots Fired", w_str.trim_end()]);
+
+        println!("Analysis Complete in {:.2}s ({:.2} fps)", duration.as_secs_f64(), fps);
+    }
+
+    println!("{table}");
+
+    Ok(())
+}
+
 fn run_doom() -> Result<()> {
     // Initialize trig tables (required for sin/cos in the game simulation).
     // SAFETY: called exactly once at startup, single-threaded, before any
@@ -2890,6 +3042,11 @@ fn run_doom() -> Result<()> {
         }
 
         return Ok(());
+    }
+
+
+    if let Some(ref demo_path) = args.analyze_demo {
+        return run_demo_analyzer(app, demo_path);
     }
 
     // Headless capture mode: tick N frames, render, save BMP, exit.

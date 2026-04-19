@@ -144,8 +144,8 @@ impl Drop for DemoRecordingWrapper {
 /// app.tick(TicInput::default());
 /// ```
 pub struct DemoPlaybackApp {
-    inner: DoomGame,
-    player: DemoPlayer,
+    pub(crate) inner: DoomGame,
+    pub(crate) player: DemoPlayer,
     compat: CompatibilityProfile,
 }
 
