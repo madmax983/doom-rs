@@ -687,7 +687,7 @@ mod tests {
         let result = p_set_mobj_state(&mut gs, handle, StateNum(ids::S_POSS_STND), None);
         assert!(result, "p_set_mobj_state must return true for valid state");
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_STND));
         assert_eq!(mo.tics, 10, "POSS_STND has 10 tics");
     }
@@ -725,7 +725,7 @@ mod tests {
         let result = p_set_mobj_state(&mut gs, handle, StateNum(ids::S_POSS_DIE1), None);
         assert!(result);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE1));
         assert_eq!(mo.tics, 8, "POSS_DIE1 has 8 tics");
     }
@@ -768,7 +768,7 @@ mod tests {
         let result = tick_mobj(&mut gs, handle, None);
         assert!(matches!(result, TickMobjResult::Alive));
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.tics, 4, "tics should decrement from 5 to 4");
     }
 
@@ -782,7 +782,7 @@ mod tests {
         let result = tick_mobj(&mut gs, handle, None);
         assert!(matches!(result, TickMobjResult::Alive));
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_STND2));
         assert_eq!(mo.tics, 10, "should have reloaded tics from STATES table");
     }
@@ -796,7 +796,7 @@ mod tests {
         let result = tick_mobj(&mut gs, handle, None);
         assert!(matches!(result, TickMobjResult::Alive));
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.tics, -1, "negative tics should hold indefinitely");
         assert_eq!(
             mo.state,
@@ -815,7 +815,7 @@ mod tests {
         let result = tick_mobj(&mut gs, handle, None);
         assert!(matches!(result, TickMobjResult::Alive));
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE2));
         assert_eq!(mo.tics, 8, "DIE2 runs for 8 tics before DIE3");
     }
@@ -829,7 +829,7 @@ mod tests {
         let result = tick_mobj(&mut gs, handle, None);
         assert!(matches!(result, TickMobjResult::Alive));
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         // Missiles advance by momentum every tic (matching P_MobjThinker).
         assert_eq!(
             mo.x,
@@ -858,7 +858,7 @@ mod tests {
 
         tick_mobj(&mut gs, handle, None);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         // Missile position updates happen EVERY tic, not just on transition.
         assert_eq!(mo.tics, 9, "tics should have decremented");
         assert_eq!(mo.x, Fixed16_16::from_int(5), "missile x should advance");
@@ -891,9 +891,9 @@ mod tests {
 
         tick_all_mobjs(&mut gs, None);
 
-        let mo1 = gs.mobjslab.get(h1).unwrap();
+        let mo1 = gs.mobjslab.get(h1).expect("mo1 should exist");
         assert_eq!(mo1.tics, 4, "first trooper tics should decrement");
-        let mo2 = gs.mobjslab.get(h2).unwrap();
+        let mo2 = gs.mobjslab.get(h2).expect("mo2 should exist");
         assert_eq!(mo2.tics, 2, "second trooper tics should decrement");
     }
 
@@ -909,7 +909,7 @@ mod tests {
 
         tick_all_mobjs(&mut gs, None);
 
-        let mo = gs.mobjslab.get(player_handle).unwrap();
+        let mo = gs.mobjslab.get(player_handle).expect("player should exist");
         assert_eq!(
             mo.tics, 5,
             "player mobj should not be ticked by tick_all_mobjs"
@@ -958,7 +958,7 @@ mod tests {
 
         tick_world(&mut gs, None);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.tics, 4, "tick_world should advance actor state machines");
     }
 
@@ -1002,7 +1002,7 @@ mod tests {
         };
         tick_player(&mut gs, cmd, None);
 
-        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         let expected = Bam((640i32 as u32).wrapping_shl(16));
         assert_eq!(mo.angle, expected);
     }
@@ -1010,11 +1010,11 @@ mod tests {
     #[test]
     fn tick_player_applies_friction() {
         let mut gs = make_game_state();
-        gs.mobjslab.get_mut(gs.player.handle).unwrap().momx = Fixed16_16::from_int(4);
+        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").momx = Fixed16_16::from_int(4);
 
         tick_player(&mut gs, TicCmd::default(), None);
 
-        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         assert!(
             mo.momx < Fixed16_16::from_int(4),
             "friction must reduce momx"
@@ -1056,7 +1056,7 @@ mod tests {
         );
 
         assert!(
-            gs.mobjslab.get(trooper_handle).unwrap().health < 20,
+            gs.mobjslab.get(trooper_handle).expect("item must exist in tests").health < 20,
             "first pistol shot through tick_player should be accurate"
         );
     }
@@ -1072,7 +1072,7 @@ mod tests {
         gs.player.apply_damage(200);
         gs.player.attack_down = true;
         gs.player.use_down = true;
-        gs.mobjslab.get_mut(gs.player.handle).unwrap().health = 0;
+        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").health = 0;
         let start_ammo = gs.player.ammo(AmmoType::Bullets as usize);
 
         tick_player(
@@ -1086,7 +1086,7 @@ mod tests {
             None,
         );
 
-        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         assert_eq!(mo.x, Fixed16_16::ZERO, "dead player must not move");
         assert_eq!(mo.y, Fixed16_16::ZERO, "dead player must not move");
         assert_eq!(mo.angle, Bam::ZERO, "dead player must not turn");
@@ -1288,11 +1288,11 @@ mod tests {
         let trooper = make_trooper(StateNum(ids::S_POSS_RUN1), 1);
         let handle = gs.mobjslab.alloc(trooper);
         // Set the player as the trooper's target so A_Chase doesn't revert.
-        gs.mobjslab.get_mut(handle).unwrap().target = gs.player.handle;
+        gs.mobjslab.get_mut(handle).expect("item must exist in tests").target = gs.player.handle;
 
         tick_mobj(&mut gs, handle, None);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_RUN2));
         assert_eq!(mo.tics, 4);
     }
@@ -1303,11 +1303,11 @@ mod tests {
         // S_POSS_RUN4: 4 tics, next = S_POSS_RUN1, action = A_Chase.
         let trooper = make_trooper(StateNum(ids::S_POSS_RUN4), 1);
         let handle = gs.mobjslab.alloc(trooper);
-        gs.mobjslab.get_mut(handle).unwrap().target = gs.player.handle;
+        gs.mobjslab.get_mut(handle).expect("item must exist in tests").target = gs.player.handle;
 
         tick_mobj(&mut gs, handle, None);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_RUN1));
         assert_eq!(mo.tics, 4);
     }
@@ -1322,7 +1322,7 @@ mod tests {
 
         tick_mobj(&mut gs, handle, None);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_STND));
         assert_eq!(mo.tics, 10);
     }
@@ -1334,11 +1334,11 @@ mod tests {
         // But S_POSS_RUN1 entry fires A_Chase, which needs a target.
         let trooper = make_trooper(StateNum(ids::S_POSS_ATK3), 1);
         let handle = gs.mobjslab.alloc(trooper);
-        gs.mobjslab.get_mut(handle).unwrap().target = gs.player.handle;
+        gs.mobjslab.get_mut(handle).expect("item must exist in tests").target = gs.player.handle;
 
         tick_mobj(&mut gs, handle, None);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_RUN1));
         assert_eq!(mo.tics, 4);
     }
@@ -1355,7 +1355,7 @@ mod tests {
             let result = tick_mobj(&mut gs, handle, None);
             assert!(matches!(result, TickMobjResult::Alive));
         }
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(
             mo.state,
             StateNum(ids::S_POSS_DIE1),
@@ -1367,7 +1367,7 @@ mod tests {
         let result = tick_mobj(&mut gs, handle, None);
         assert!(matches!(result, TickMobjResult::Alive));
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE2));
         assert_eq!(mo.tics, 8, "DIE2 runs for 8 tics before chaining to DIE3");
     }
@@ -1419,7 +1419,7 @@ mod tests {
             gs.mobjslab.get(alive_handle).is_some(),
             "alive mobj should remain"
         );
-        assert_eq!(gs.mobjslab.get(alive_handle).unwrap().tics, 4);
+        assert_eq!(gs.mobjslab.get(alive_handle).expect("item must exist in tests").tics, 4);
     }
 
     // =======================================================================
@@ -1435,11 +1435,11 @@ mod tests {
         // tics is 5, so it won't transition yet — but wait, the MF_MISSILE
         // position update only happens on state transition in tick_mobj.
         // Set tics to 1 so it transitions.
-        gs.mobjslab.get_mut(handle).unwrap().tics = 1;
+        gs.mobjslab.get_mut(handle).expect("item must exist in tests").tics = 1;
 
         tick_mobj(&mut gs, handle, None);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.x, Fixed16_16::from_int(10));
         assert_eq!(mo.y, Fixed16_16::from_int(-5));
         assert_eq!(mo.z, Fixed16_16::from_int(2));
@@ -1455,7 +1455,7 @@ mod tests {
 
         tick_mobj(&mut gs, handle, None);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         // Non-missile actors don't get position updates from tick_mobj.
         assert_eq!(
             mo.x,
@@ -1496,7 +1496,7 @@ mod tests {
         // Trig tables not initialized -> sin/cos = 0 -> no thrust -> no movement.
         let mut gs = make_game_state();
         gs.tick(TicCmd::default(), None);
-        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         assert_eq!(mo.x, Fixed16_16::ZERO);
         assert_eq!(mo.y, Fixed16_16::ZERO);
     }
@@ -1509,7 +1509,7 @@ mod tests {
             ..Default::default()
         };
         gs.tick(cmd, None);
-        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         // angle_turn = 640 << 16 in 32-bit BAM.
         let expected = Bam((640i32 as u32).wrapping_shl(16));
         assert_eq!(mo.angle, expected);
@@ -1519,11 +1519,11 @@ mod tests {
     fn friction_drains_existing_momentum() {
         let mut gs = make_game_state();
         // Inject momentum directly (bypassing thrust, since trig tables uninitialized).
-        gs.mobjslab.get_mut(gs.player.handle).unwrap().momx = Fixed16_16::from_int(4);
+        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").momx = Fixed16_16::from_int(4);
 
         gs.tick(TicCmd::default(), None);
 
-        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         // After FRICTION (approx 0.906): 4 -> ~3.625. Must be < 4 and > 0.
         assert!(
             mo.momx < Fixed16_16::from_int(4),
@@ -1538,11 +1538,11 @@ mod tests {
     #[test]
     fn momentum_carries_position_forward() {
         let mut gs = make_game_state();
-        gs.mobjslab.get_mut(gs.player.handle).unwrap().momx = Fixed16_16::from_int(2);
+        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").momx = Fixed16_16::from_int(2);
 
         gs.tick(TicCmd::default(), None);
 
-        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         // x started at 0, momx = 2 -> x = 2 after one tick.
         assert_eq!(mo.x, Fixed16_16::from_int(2));
     }
@@ -1551,11 +1551,11 @@ mod tests {
     fn maxmove_clamps_excessive_velocity() {
         let mut gs = make_game_state();
         // Inject extreme velocity.
-        gs.mobjslab.get_mut(gs.player.handle).unwrap().momx = Fixed16_16::from_int(1000);
+        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").momx = Fixed16_16::from_int(1000);
 
         gs.tick(TicCmd::default(), None);
 
-        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         // After friction + clamp: must be <= MAXMOVE.
         assert!(
             mo.momx <= MAXMOVE,
@@ -1680,7 +1680,7 @@ mod tests {
 
     fn make_secret_level(floor_height: i16) -> doom_map::Level {
         let bm = make_minimal_blockmap();
-        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).expect("item must exist in tests");
         doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],
@@ -1711,7 +1711,7 @@ mod tests {
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        doom_map::Blockmap::parse_lump(&bm_data).unwrap()
+        doom_map::Blockmap::parse_lump(&bm_data).expect("item must exist in tests")
     }
 
     fn make_partition_step_level(right_floor: i16, left_floor: i16) -> doom_map::Level {
@@ -1844,8 +1844,8 @@ mod tests {
         bm_data.extend_from_slice(&0u16.to_le_bytes());
         bm_data.extend_from_slice(&1u16.to_le_bytes());
         bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
-        let reject = Reject::parse_lump(&[0u8], 2).unwrap();
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("item must exist in tests");
+        let reject = Reject::parse_lump(&[0u8], 2).expect("item must exist in tests");
 
         doom_map::Level {
             name: "STEP".to_string(),
@@ -1906,7 +1906,7 @@ mod tests {
             gs.tick(TicCmd::default(), Some(&mut level));
         }
 
-        let health = gs.mobjslab.get(gs.player.handle).unwrap().health;
+        let health = gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health;
         assert_eq!(
             health, 90,
             "hellslime during gameplay should deal 5 damage on tic 0 and tic 32 only"
@@ -1917,7 +1917,7 @@ mod tests {
     fn tick_player_keeps_support_floor_while_descending_partial_dropoff() {
         let mut gs = make_game_state();
         let mut level = make_partition_step_level(64, 0);
-        let mo = gs.mobjslab.get_mut(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get_mut(gs.player.handle).expect("player should exist");
         mo.flags |= flags::MF_DROPOFF;
         mo.x = Fixed16_16::from_int(96);
         mo.y = Fixed16_16::ZERO;
@@ -1926,7 +1926,7 @@ mod tests {
 
         tick_player(&mut gs, TicCmd::default(), Some(&mut level));
 
-        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         assert_eq!(mo.x, Fixed16_16::from_int(56));
         assert_eq!(
             mo.z,
@@ -1939,7 +1939,7 @@ mod tests {
     fn tick_player_can_keep_moving_after_starting_down_stairs() {
         let mut gs = make_game_state();
         let mut level = make_partition_step_level(64, 0);
-        let mo = gs.mobjslab.get_mut(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get_mut(gs.player.handle).expect("player should exist");
         mo.flags |= flags::MF_DROPOFF;
         mo.x = Fixed16_16::from_int(96);
         mo.y = Fixed16_16::ZERO;
@@ -1948,13 +1948,13 @@ mod tests {
 
         tick_player(&mut gs, TicCmd::default(), Some(&mut level));
 
-        let mo = gs.mobjslab.get_mut(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get_mut(gs.player.handle).expect("player should exist");
         mo.momx = Fixed16_16::from_int(-4);
         mo.momy = Fixed16_16::ZERO;
 
         tick_player(&mut gs, TicCmd::default(), Some(&mut level));
 
-        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         assert_eq!(
             mo.x,
             Fixed16_16::from_int(52),
@@ -1964,7 +1964,7 @@ mod tests {
 
     fn make_walk_exit_level() -> doom_map::Level {
         let bm = make_minimal_blockmap();
-        let reject = doom_map::Reject::parse_lump(&[0u8], 2).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).expect("item must exist in tests");
         doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],
@@ -2029,7 +2029,7 @@ mod tests {
 
     fn make_damage_level(floor_height: i16, special: u16) -> doom_map::Level {
         let bm = make_minimal_blockmap();
-        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).expect("item must exist in tests");
         doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],
@@ -2056,7 +2056,7 @@ mod tests {
     #[test]
     fn tick_sets_exit_request_when_player_crosses_walk_line() {
         let mut gs = make_game_state();
-        gs.mobjslab.get_mut(gs.player.handle).unwrap().momx = Fixed16_16::from_int(40);
+        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").momx = Fixed16_16::from_int(40);
         let mut level = make_walk_exit_level();
 
         gs.tick(TicCmd::default(), Some(&mut level));
@@ -2098,7 +2098,7 @@ mod tests {
         tick_world(&mut gs, None);
 
         // Mobj should have been processed.
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(
             mo.tics, 2,
             "mobj should be ticked before level_time increment"
@@ -2142,11 +2142,11 @@ mod tests {
         tick_world(&mut gs, None);
 
         // Trooper should have been ticked.
-        let mo = gs.mobjslab.get(trooper_handle).unwrap();
+        let mo = gs.mobjslab.get(trooper_handle).expect("trooper should exist");
         assert_eq!(mo.tics, 4);
 
         // Missile should have been ticked (still alive since it's far away).
-        let missile_mo = gs.mobjslab.get(missile_handle).unwrap();
+        let missile_mo = gs.mobjslab.get(missile_handle).expect("missile should exist");
         assert_eq!(missile_mo.tics, 4);
 
         // Scrolling wall should have advanced.
@@ -2168,7 +2168,7 @@ mod tests {
 
         gs.tick(TicCmd::default(), None);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(
             mo.tics, 4,
             "tick should call tick_world which advances actors"
@@ -2178,7 +2178,7 @@ mod tests {
     #[test]
     fn tick_processes_both_player_and_world() {
         let mut gs = make_game_state();
-        gs.mobjslab.get_mut(gs.player.handle).unwrap().momx = Fixed16_16::from_int(2);
+        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").momx = Fixed16_16::from_int(2);
 
         let trooper = make_trooper(StateNum(ids::S_POSS_STND), 5);
         let trooper_handle = gs.mobjslab.alloc(trooper);
@@ -2186,11 +2186,11 @@ mod tests {
         gs.tick(TicCmd::default(), None);
 
         // Player should have moved.
-        let player_mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        let player_mo = gs.mobjslab.get(gs.player.handle).expect("player should exist");
         assert_eq!(player_mo.x, Fixed16_16::from_int(2), "player should move");
 
         // Trooper should have been ticked.
-        let trooper_mo = gs.mobjslab.get(trooper_handle).unwrap();
+        let trooper_mo = gs.mobjslab.get(trooper_handle).expect("trooper should exist");
         assert_eq!(trooper_mo.tics, 4, "trooper should be ticked");
     }
 
@@ -2237,7 +2237,7 @@ mod tests {
 
         gs.advance_mobj_state(handle, None);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(
             mo.tics, -1,
             "advance_mobj_state falling back to StateNum::NULL should hold the state forever (-1 tics)"
