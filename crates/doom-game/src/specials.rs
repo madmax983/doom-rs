@@ -2445,7 +2445,11 @@ fn activate_doors(
     match special {
         // --- Type 1: toggle door (immediate, for backward compatibility with existing tests) ---
         1 => {
-            let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+            let Some(sector_idx) = level
+                .sidedefs
+                .get(left_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+            else {
                 return;
             };
 
@@ -2464,7 +2468,11 @@ fn activate_doors(
 
         // --- Type 2: open door, stays open (animated) ---
         2 => {
-            let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+            let Some(sector_idx) = level
+                .sidedefs
+                .get(left_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+            else {
                 return;
             };
             open_door(
@@ -2477,7 +2485,11 @@ fn activate_doors(
 
         // --- Type 29: close door (animated) ---
         29 => {
-            let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+            let Some(sector_idx) = level
+                .sidedefs
+                .get(left_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+            else {
                 return;
             };
             close_door(gs, level, sector_idx);
@@ -2485,7 +2497,11 @@ fn activate_doors(
 
         // --- Types 16, 76: close door, wait 30s, reopen ---
         16 | 76 => {
-            let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+            let Some(sector_idx) = level
+                .sidedefs
+                .get(left_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+            else {
                 return;
             };
             close_wait_open_door(gs, level, sector_idx);
@@ -2497,7 +2513,11 @@ fn activate_doors(
             if gs.player.has_key(crate::player::KEY_BLUE_CARD)
                 || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
             {
-                let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+                let Some(sector_idx) = level
+                    .sidedefs
+                    .get(left_sidedef as usize)
+                    .map(|sd| sd.sector as usize)
+                else {
                     return;
                 };
                 open_door(
@@ -2513,7 +2533,11 @@ fn activate_doors(
             if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
                 || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
             {
-                let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+                let Some(sector_idx) = level
+                    .sidedefs
+                    .get(left_sidedef as usize)
+                    .map(|sd| sd.sector as usize)
+                else {
                     return;
                 };
                 open_door(
@@ -2529,7 +2553,11 @@ fn activate_doors(
             if gs.player.has_key(crate::player::KEY_RED_CARD)
                 || gs.player.has_key(crate::player::KEY_RED_SKULL)
             {
-                let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+                let Some(sector_idx) = level
+                    .sidedefs
+                    .get(left_sidedef as usize)
+                    .map(|sd| sd.sector as usize)
+                else {
                     return;
                 };
                 open_door(
@@ -2618,7 +2646,11 @@ fn activate_doors(
 
         // Type 108: W1 Blazing door open-close.
         108 => {
-            let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+            let Some(sector_idx) = level
+                .sidedefs
+                .get(left_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+            else {
                 return;
             };
             open_blazing_door(
@@ -2631,7 +2663,11 @@ fn activate_doors(
 
         // Type 109: W1 Blazing door open-stay.
         109 => {
-            let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+            let Some(sector_idx) = level
+                .sidedefs
+                .get(left_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+            else {
                 return;
             };
             open_blazing_door(
@@ -2644,7 +2680,11 @@ fn activate_doors(
 
         // Type 110: W1 Blazing door close.
         110 => {
-            let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+            let Some(sector_idx) = level
+                .sidedefs
+                .get(left_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+            else {
                 return;
             };
             close_blazing_door(gs, level, sector_idx);
@@ -2659,7 +2699,11 @@ fn activate_doors(
             if gs.player.has_key(crate::player::KEY_BLUE_CARD)
                 || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
             {
-                let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+                let Some(sector_idx) = level
+                    .sidedefs
+                    .get(left_sidedef as usize)
+                    .map(|sd| sd.sector as usize)
+                else {
                     return;
                 };
                 open_door(
@@ -2676,7 +2720,11 @@ fn activate_doors(
             if gs.player.has_key(crate::player::KEY_BLUE_CARD)
                 || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
             {
-                let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+                let Some(sector_idx) = level
+                    .sidedefs
+                    .get(left_sidedef as usize)
+                    .map(|sd| sd.sector as usize)
+                else {
                     return;
                 };
                 open_blazing_door(
@@ -2693,7 +2741,11 @@ fn activate_doors(
             if gs.player.has_key(crate::player::KEY_RED_CARD)
                 || gs.player.has_key(crate::player::KEY_RED_SKULL)
             {
-                let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+                let Some(sector_idx) = level
+                    .sidedefs
+                    .get(left_sidedef as usize)
+                    .map(|sd| sd.sector as usize)
+                else {
                     return;
                 };
                 open_door(
@@ -2710,7 +2762,11 @@ fn activate_doors(
             if gs.player.has_key(crate::player::KEY_RED_CARD)
                 || gs.player.has_key(crate::player::KEY_RED_SKULL)
             {
-                let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+                let Some(sector_idx) = level
+                    .sidedefs
+                    .get(left_sidedef as usize)
+                    .map(|sd| sd.sector as usize)
+                else {
                     return;
                 };
                 open_blazing_door(
@@ -2727,7 +2783,11 @@ fn activate_doors(
             if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
                 || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
             {
-                let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+                let Some(sector_idx) = level
+                    .sidedefs
+                    .get(left_sidedef as usize)
+                    .map(|sd| sd.sector as usize)
+                else {
                     return;
                 };
                 open_door(
@@ -2744,7 +2804,11 @@ fn activate_doors(
             if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
                 || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
             {
-                let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else {
+                let Some(sector_idx) = level
+                    .sidedefs
+                    .get(left_sidedef as usize)
+                    .map(|sd| sd.sector as usize)
+                else {
                     return;
                 };
                 open_blazing_door(

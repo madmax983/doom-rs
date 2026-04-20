@@ -2309,7 +2309,10 @@ mod tests {
         let spawn_sn = mobjinfo::MOBJINFO[MobjKind::Trooper as usize].spawn_state;
 
         // Kill the player.
-        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").health = 0;
+        gs.mobjslab
+            .get_mut(gs.player.handle)
+            .expect("item must exist in tests")
+            .health = 0;
 
         dispatch_action(&mut gs, trooper, Action::Look as u8, None);
 
@@ -2384,7 +2387,10 @@ mod tests {
             gs.tick(TicCmd::default(), None);
         }
         // Kill the player.
-        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").health = 0;
+        gs.mobjslab
+            .get_mut(gs.player.handle)
+            .expect("item must exist in tests")
+            .health = 0;
 
         // Keep ticking: A_Chase should notice dead target and revert.
         // With attack states added (Batch 5), the trooper may be mid-attack
@@ -2580,7 +2586,10 @@ mod tests {
     fn p_check_missile_range_archvile_rejects_far_targets() {
         let mut gs = make_game_state();
         let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 1100, 0, 700);
-        gs.mobjslab.get_mut(vile).expect("item must exist in tests").reactiontime = 0;
+        gs.mobjslab
+            .get_mut(vile)
+            .expect("item must exist in tests")
+            .reactiontime = 0;
         let player = gs.player.handle;
 
         assert!(
@@ -2593,7 +2602,10 @@ mod tests {
     fn p_check_missile_range_revenant_rejects_targets_under_196_units() {
         let mut gs = make_game_state();
         let skel = spawn_monster_targeting_player(&mut gs, MobjKind::Revenant, 128, 0, 300);
-        gs.mobjslab.get_mut(skel).expect("item must exist in tests").reactiontime = 0;
+        gs.mobjslab
+            .get_mut(skel)
+            .expect("item must exist in tests")
+            .reactiontime = 0;
         let player = gs.player.handle;
         gs.rng.set_index(2); // RNG_TABLE[2] = 109, high enough to pass the old random gate.
 
@@ -2651,7 +2663,10 @@ mod tests {
         let mut gs = make_game_state();
         let player_handle = gs.player.handle;
         let trooper = spawn_monster_targeting_player(&mut gs, MobjKind::Trooper, 100, 0, 20);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").flags |= flags::MF_JUSTHIT;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .flags |= flags::MF_JUSTHIT;
 
         let can_fire = p_check_missile_range(&mut gs, trooper, player_handle, None);
 
@@ -2673,7 +2688,10 @@ mod tests {
         let player_handle = gs.player.handle;
         // Trooper within range
         let trooper = spawn_monster_targeting_player(&mut gs, MobjKind::Trooper, 200, 0, 20);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").reactiontime = 10;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .reactiontime = 10;
 
         let can_fire = p_check_missile_range(&mut gs, trooper, player_handle, None);
 
@@ -2686,10 +2704,16 @@ mod tests {
         let player_handle = gs.player.handle;
 
         let demon = spawn_monster_targeting_player(&mut gs, MobjKind::Demon, 300, 0, 150);
-        gs.mobjslab.get_mut(demon).expect("item must exist in tests").reactiontime = 0;
+        gs.mobjslab
+            .get_mut(demon)
+            .expect("item must exist in tests")
+            .reactiontime = 0;
 
         let trooper = spawn_monster_targeting_player(&mut gs, MobjKind::Trooper, 300, 0, 20);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").reactiontime = 0;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .reactiontime = 0;
 
         // RNG_TABLE[11] = 140.
         // demon: dist = 200, random = 140 -> can_fire = false
@@ -2716,7 +2740,10 @@ mod tests {
         let mut gs = make_game_state();
         let player_handle = gs.player.handle;
         let cyber = spawn_monster_targeting_player(&mut gs, MobjKind::Cyberdemon, 500, 0, 4000);
-        gs.mobjslab.get_mut(cyber).expect("item must exist in tests").reactiontime = 0;
+        gs.mobjslab
+            .get_mut(cyber)
+            .expect("item must exist in tests")
+            .reactiontime = 0;
 
         // RNG_TABLE[6] = 149 (false).
         // RNG_TABLE[20] = 154 (true).
@@ -2778,7 +2805,10 @@ mod tests {
     fn p_move_moves_actor_in_direction() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").movedir = DI_WEST;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .movedir = DI_WEST;
 
         let moved = p_move(&mut gs, trooper, None);
 
@@ -2794,7 +2824,10 @@ mod tests {
     fn p_move_nodir_returns_false() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").movedir = DI_NODIR;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .movedir = DI_NODIR;
 
         let moved = p_move(&mut gs, trooper, None);
 
@@ -2816,7 +2849,10 @@ mod tests {
     fn p_move_updates_momentum() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").movedir = DI_EAST;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .movedir = DI_EAST;
 
         p_move(&mut gs, trooper, None);
 
@@ -2831,7 +2867,10 @@ mod tests {
     fn p_move_opens_the_actual_blocking_door() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 104, 0);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").movedir = DI_EAST;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .movedir = DI_EAST;
 
         let reject = doom_map::Reject::parse_lump(&[0u8], 2).expect("item must exist in tests");
 
@@ -2930,7 +2969,10 @@ mod tests {
     fn a_face_target_faces_east() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, -100, 0);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").target = gs.player.handle;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .target = gs.player.handle;
 
         a_face_target(&mut gs, trooper);
 
@@ -2948,7 +2990,10 @@ mod tests {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
         // Player is at (0,0), trooper is at (100,0), so target is west.
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").target = gs.player.handle;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .target = gs.player.handle;
 
         a_face_target(&mut gs, trooper);
 
@@ -2966,7 +3011,11 @@ mod tests {
     fn a_face_target_no_target_does_nothing() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        let original_angle = gs.mobjslab.get(trooper).expect("item must exist in tests").angle;
+        let original_angle = gs
+            .mobjslab
+            .get(trooper)
+            .expect("item must exist in tests")
+            .angle;
 
         a_face_target(&mut gs, trooper);
 
@@ -2981,7 +3030,10 @@ mod tests {
     fn dispatch_action_face_target_works() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, -100, 0);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").target = gs.player.handle;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .target = gs.player.handle;
 
         dispatch_action(&mut gs, trooper, Action::FaceTarget as u8, None);
 
@@ -3062,7 +3114,11 @@ mod tests {
 
         // MF_SCREAMED must NOT be set before the action fires.
         assert_eq!(
-            gs.mobjslab.get(trooper).expect("item must exist in tests").flags & flags::MF_SCREAMED,
+            gs.mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .flags
+                & flags::MF_SCREAMED,
             0,
             "MF_SCREAMED must not be set before A_Scream"
         );
@@ -3070,7 +3126,11 @@ mod tests {
         dispatch_action(&mut gs, trooper, Action::Scream as u8, None);
 
         assert_ne!(
-            gs.mobjslab.get(trooper).expect("item must exist in tests").flags & flags::MF_SCREAMED,
+            gs.mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .flags
+                & flags::MF_SCREAMED,
             0,
             "A_Scream must set MF_SCREAMED"
         );
@@ -3115,7 +3175,11 @@ mod tests {
 
         // Confirm solid before.
         assert_ne!(
-            gs.mobjslab.get(trooper).expect("item must exist in tests").flags & flags::MF_SOLID,
+            gs.mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .flags
+                & flags::MF_SOLID,
             0,
             "trooper must start with MF_SOLID"
         );
@@ -3175,7 +3239,10 @@ mod tests {
         let mut gs = make_game_state();
         // Player at (0,0), monster at (500, 500) — target is SW of monster.
         let monster = spawn_monster_chasing_at(&mut gs, 500, 500);
-        gs.mobjslab.get_mut(monster).expect("item must exist in tests").target = gs.player.handle;
+        gs.mobjslab
+            .get_mut(monster)
+            .expect("item must exist in tests")
+            .target = gs.player.handle;
 
         super::p_new_chase_dir(&mut gs, monster, None);
 
@@ -3207,7 +3274,13 @@ mod tests {
         let mut gs = make_game_state();
         let monster = spawn_monster_chasing_at(&mut gs, 100, 0);
         // No target — leave target as NULL.
-        assert_eq!(gs.mobjslab.get(monster).expect("item must exist in tests").target, MobjHandle::NULL);
+        assert_eq!(
+            gs.mobjslab
+                .get(monster)
+                .expect("item must exist in tests")
+                .target,
+            MobjHandle::NULL
+        );
 
         super::p_new_chase_dir(&mut gs, monster, None);
 
@@ -3223,7 +3296,10 @@ mod tests {
     fn p_check_sight_returns_true_without_level() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").target = gs.player.handle;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .target = gs.player.handle;
 
         // No level → falls through to Manhattan distance check (≤ 4096).
         let can_see = super::p_check_sight_local(&gs, trooper, gs.player.handle, None);
@@ -3237,7 +3313,10 @@ mod tests {
     fn p_check_sight_returns_false_for_reject_blocked() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").target = gs.player.handle;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .target = gs.player.handle;
 
         // Build a minimal level with 2 sectors where the REJECT marks them
         // as mutually invisible (all-ones reject data = all blocked).
@@ -3366,7 +3445,10 @@ mod tests {
     fn p_check_sight_returns_true_for_all_zero_reject() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        gs.mobjslab.get_mut(trooper).expect("item must exist in tests").target = gs.player.handle;
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .target = gs.player.handle;
 
         let reject = doom_map::Reject::parse_lump(&[0u8], 1).expect("item must exist in tests");
 
@@ -3482,10 +3564,21 @@ mod tests {
         for dir in 0..8u8 {
             let mut gs = make_game_state();
             let trooper = spawn_trooper(&mut gs, 500, 500);
-            gs.mobjslab.get_mut(trooper).expect("item must exist in tests").movedir = dir;
+            gs.mobjslab
+                .get_mut(trooper)
+                .expect("item must exist in tests")
+                .movedir = dir;
 
-            let old_x = gs.mobjslab.get(trooper).expect("item must exist in tests").x;
-            let old_y = gs.mobjslab.get(trooper).expect("item must exist in tests").y;
+            let old_x = gs
+                .mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .x;
+            let old_y = gs
+                .mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .y;
 
             let moved = p_move(&mut gs, trooper, None);
             assert!(moved, "p_move should succeed for dir={}", dir);
@@ -3581,11 +3674,19 @@ mod tests {
     fn dispatch_action_unknown_index_does_nothing() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        let health_before = gs.mobjslab.get(trooper).expect("item must exist in tests").health;
+        let health_before = gs
+            .mobjslab
+            .get(trooper)
+            .expect("item must exist in tests")
+            .health;
 
         dispatch_action(&mut gs, trooper, 255, None);
 
-        let health_after = gs.mobjslab.get(trooper).expect("item must exist in tests").health;
+        let health_after = gs
+            .mobjslab
+            .get(trooper)
+            .expect("item must exist in tests")
+            .health;
         assert_eq!(
             health_before, health_after,
             "unknown action should be no-op"
@@ -4029,7 +4130,10 @@ mod tests {
     fn all_attacks_noop_with_dead_target() {
         let mut gs = make_game_state();
         // Kill the player.
-        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").health = 0;
+        gs.mobjslab
+            .get_mut(gs.player.handle)
+            .expect("item must exist in tests")
+            .health = 0;
 
         let h = spawn_monster_targeting_player(&mut gs, MobjKind::Cyberdemon, 200, 0, 4000);
 
@@ -4212,11 +4316,19 @@ mod tests {
     fn vile_attack_damages_target() {
         let mut gs = make_game_state();
         let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
-        let hp_before = gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health;
+        let hp_before = gs
+            .mobjslab
+            .get(gs.player.handle)
+            .expect("item must exist in tests")
+            .health;
 
         a_vile_attack(&mut gs, vile);
 
-        let hp_after = gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health;
+        let hp_after = gs
+            .mobjslab
+            .get(gs.player.handle)
+            .expect("item must exist in tests")
+            .health;
         assert_eq!(
             hp_before - hp_after,
             90,
@@ -4231,7 +4343,11 @@ mod tests {
 
         a_vile_attack(&mut gs, vile);
 
-        let momz = gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").momz;
+        let momz = gs
+            .mobjslab
+            .get(gs.player.handle)
+            .expect("item must exist in tests")
+            .momz;
         assert_eq!(
             momz,
             Fixed16_16::from_int(15),
@@ -4243,8 +4359,14 @@ mod tests {
     fn fire_tracks_tracer_position() {
         let mut gs = make_game_state();
         // Move the player to a known position.
-        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").x = Fixed16_16::from_int(500);
-        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").y = Fixed16_16::from_int(300);
+        gs.mobjslab
+            .get_mut(gs.player.handle)
+            .expect("item must exist in tests")
+            .x = Fixed16_16::from_int(500);
+        gs.mobjslab
+            .get_mut(gs.player.handle)
+            .expect("item must exist in tests")
+            .y = Fixed16_16::from_int(300);
 
         let mut fire = Mobj::new(
             MobjKind::VileFire,
@@ -4525,7 +4647,10 @@ mod tests {
             "must spawn a monster from BOSS_SPAWN_TYPES"
         );
 
-        let spawned = gs.mobjslab.get(monster.expect("item must exist in tests")).expect("item must exist in tests");
+        let spawned = gs
+            .mobjslab
+            .get(monster.expect("item must exist in tests"))
+            .expect("item must exist in tests");
         assert_eq!(
             spawned.reactiontime, 18,
             "spawned monster must have reactiontime=18"
@@ -4636,7 +4761,10 @@ mod tests {
     #[test]
     fn vile_actions_noop_with_dead_target() {
         let mut gs = make_game_state();
-        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").health = 0;
+        gs.mobjslab
+            .get_mut(gs.player.handle)
+            .expect("item must exist in tests")
+            .health = 0;
         let vile = spawn_monster_targeting_player(&mut gs, MobjKind::ArchVile, 200, 0, 700);
 
         let count_before = gs.mobjslab.len();
@@ -4685,7 +4813,10 @@ mod tests {
     #[test]
     fn get_alive_target_returns_none_dead_target() {
         let mut gs = make_game_state();
-        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").health = 0;
+        gs.mobjslab
+            .get_mut(gs.player.handle)
+            .expect("item must exist in tests")
+            .health = 0;
         let imp = spawn_monster_targeting_player(&mut gs, MobjKind::Imp, 100, 100, 100);
         assert_eq!(get_alive_target(&gs, imp), None);
     }
@@ -4701,7 +4832,10 @@ mod tests {
     #[test]
     fn get_alive_target_with_pos_returns_none_dead_target() {
         let mut gs = make_game_state();
-        gs.mobjslab.get_mut(gs.player.handle).expect("item must exist in tests").health = 0;
+        gs.mobjslab
+            .get_mut(gs.player.handle)
+            .expect("item must exist in tests")
+            .health = 0;
         let imp = spawn_monster_targeting_player(&mut gs, MobjKind::Imp, 100, 100, 100);
         assert_eq!(get_alive_target_with_pos(&gs, imp), None);
     }
