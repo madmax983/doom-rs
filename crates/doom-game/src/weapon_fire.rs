@@ -12,7 +12,7 @@ use doom_types::{Bam, Fixed16_16};
 use crate::combat::{MELEERANGE, MISSILERANGE, p_line_attack, p_line_attack_target};
 use crate::mobj::MobjHandle;
 use crate::player::powers::PW_STRENGTH;
-use crate::player::{AmmoType, WeaponType};
+use doom_types::{ammo_type::AmmoType, weapon_type::WeaponType};
 use crate::projectile::p_spawn_player_missile;
 use crate::random::p_damage_with_variance;
 use crate::state::{GameState, SoundRequest};

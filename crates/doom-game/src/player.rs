@@ -8,6 +8,7 @@
 //! - `ammo[i] ≤ MAX_AMMO[i]` for all i
 
 use doom_types::limits::{MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_WEAPONS};
+use doom_types::{AmmoType, WeaponType};
 
 use crate::mobj::{MobjHandle, StateNum};
 
@@ -66,50 +67,7 @@ pub mod powers {
 // Weapon types
 // ---------------------------------------------------------------------------
 
-/// Weapon slots (index = selection key − 1 for keys 1-7; chainsaw = key 1 alt).
-#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
-#[repr(u8)]
-pub enum WeaponType {
-    /// Bare fists.
-    Fist = 0,
-    /// Standard starting pistol.
-    #[default]
-    Pistol = 1,
-    /// Pump-action shotgun.
-    Shotgun = 2,
-    /// Rapid-fire chaingun.
-    Chaingun = 3,
-    /// Explosive rocket launcher.
-    RocketLauncher = 4,
-    /// Rapid-fire plasma rifle.
-    PlasmaRifle = 5,
-    /// Big Fucking Gun 9000.
-    Bfg = 6,
-    /// Melee chainsaw.
-    Chainsaw = 7,
-    /// Double-barreled super shotgun (Doom II).
-    SuperShotgun = 8,
-}
 
-// ---------------------------------------------------------------------------
-// Ammo types
-// ---------------------------------------------------------------------------
-
-/// Ammo pool indices.
-#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum AmmoType {
-    /// Ammo for Pistol and Chaingun.
-    Bullets = 0,
-    /// Ammo for Shotgun and Super Shotgun.
-    Shells = 1,
-    /// Ammo for Plasma Rifle and BFG.
-    Cells = 2,
-    /// Ammo for Rocket Launcher.
-    Rockets = 3,
-    /// Melee weapons (Fist, Chainsaw) — no ammo consumed.
-    None = 255,
-}
 
 /// Current state of one player psprite slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -413,14 +371,6 @@ impl Default for PlayerState {
     }
 }
 
-impl WeaponType {
-    /// Convert a weapon number (0–8) from `BT_WEAPONMASK` to a `WeaponType`.
-    ///
-    /// Returns `None` for any out-of-range value.
-    pub fn from_num(n: usize) -> Option<Self> {
-        u8::try_from(n).ok().and_then(Self::from_repr)
-    }
-}
 
 // ---------------------------------------------------------------------------
 // Proptest property tests
@@ -627,6 +577,7 @@ mod prop_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use doom_types::{AmmoType, WeaponType};
 
     #[test]
     fn pistol_start_invariants() {
@@ -799,13 +750,12 @@ mod tests {
 
     #[test]
     fn weapon_from_num_converts_correctly_and_handles_bounds() {
-        assert_eq!(WeaponType::from_num(0), Some(WeaponType::Fist));
-        assert_eq!(WeaponType::from_num(1), Some(WeaponType::Pistol));
-        assert_eq!(WeaponType::from_num(8), Some(WeaponType::SuperShotgun));
-        assert_eq!(WeaponType::from_num(9), None);
-        assert_eq!(WeaponType::from_num(255), None);
-        assert_eq!(WeaponType::from_num(256), None);
-        assert_eq!(WeaponType::from_num(usize::MAX), None);
+        assert_eq!(WeaponType::from_repr(0), Some(WeaponType::Fist));
+        assert_eq!(WeaponType::from_repr(1), Some(WeaponType::Pistol));
+        assert_eq!(WeaponType::from_repr(8), Some(WeaponType::SuperShotgun));
+        assert_eq!(WeaponType::from_repr(9), None);
+        assert_eq!(WeaponType::from_repr(255), None);
+        assert_eq!(WeaponType::from_repr(255), None);
     }
 
     #[test]

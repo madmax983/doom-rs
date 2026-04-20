@@ -58,7 +58,7 @@ pub enum SoundRequest {
         doom_types::Fixed16_16,
     ),
     /// Player weapon actually fired this tic.
-    PlayerWeaponFire(crate::player::WeaponType),
+    PlayerWeaponFire(doom_types::weapon_type::WeaponType),
     /// Super shotgun break-open sound.
     PlayerSuperShotgunOpen,
     /// Super shotgun shell-load sound.

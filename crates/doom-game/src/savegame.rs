@@ -12,7 +12,8 @@ use doom_types::limits::{NUM_AMMO, NUM_WEAPONS};
 use doom_types::{Bam, Fixed16_16};
 
 use crate::mobj::{Mobj, MobjHandle, MobjSlab, StateNum};
-use crate::player::{NUM_POWERS, NUM_PSPRITES, PlayerState, PspriteState, WeaponType};
+use doom_types::weapon_type::WeaponType;
+use crate::player::{NUM_POWERS, NUM_PSPRITES, PlayerState, PspriteState};
 use crate::savegame_vanilla;
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoomRng, DoorMover, ExitRequest, FloorMover,
@@ -344,7 +345,7 @@ fn write_weapon_type(w: &mut WriteCursor, wt: WeaponType) {
 
 fn read_weapon_type(r: &mut ReadCursor<'_>) -> Result<WeaponType, SaveError> {
     let v = r.read_u8()?;
-    WeaponType::from_num(v as usize).ok_or(SaveError::Truncated)
+    WeaponType::from_repr(v).ok_or(SaveError::Truncated)
 }
 
 fn write_move_direction(w: &mut WriteCursor, d: MoveDirection) {

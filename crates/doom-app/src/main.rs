@@ -40,7 +40,7 @@ use doom_game::FaceState;
 use doom_game::LockedDoorColor;
 use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
-use doom_game::player::WeaponType;
+use doom_types::weapon_type::WeaponType;
 use doom_game::{
     AutomapState, GamePhase, GamePhaseController, GameState, Skill, TitleScreen, init_conveyors,
     init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
@@ -782,7 +782,8 @@ impl DoomGame {
         let arm = self.gs.player.armor();
         let kills = self.gs.player.kill_count;
         let weapon = self.gs.player.weapon;
-        use doom_game::player::{AmmoType, WEAPON_AMMO};
+        use doom_types::ammo_type::AmmoType;
+        use doom_game::player::WEAPON_AMMO;
         let cur_ammo_type = WEAPON_AMMO[weapon as usize];
         let cur_ammo = if cur_ammo_type == AmmoType::None {
             u32::MAX
@@ -1544,7 +1545,8 @@ impl DoomApp for DoomGame {
             KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD,
             KEY_YELLOW_SKULL,
         };
-        use doom_game::{AmmoType, WEAPON_AMMO};
+        use doom_types::ammo_type::AmmoType;
+        use doom_game::WEAPON_AMMO;
 
         let p = &self.gs.player;
         let ammo_type = WEAPON_AMMO[p.weapon as usize];
@@ -1558,15 +1560,15 @@ impl DoomApp for DoomGame {
         };
 
         let weapon_name = match p.weapon {
-            doom_game::WeaponType::Fist => "FIST",
-            doom_game::WeaponType::Pistol => "PIST",
-            doom_game::WeaponType::Shotgun => "SG",
-            doom_game::WeaponType::Chaingun => "CG",
-            doom_game::WeaponType::RocketLauncher => "RL",
-            doom_game::WeaponType::PlasmaRifle => "PLAS",
-            doom_game::WeaponType::Bfg => "BFG",
-            doom_game::WeaponType::Chainsaw => "SAW",
-            doom_game::WeaponType::SuperShotgun => "SSG",
+            doom_types::weapon_type::WeaponType::Fist => "FIST",
+            doom_types::weapon_type::WeaponType::Pistol => "PIST",
+            doom_types::weapon_type::WeaponType::Shotgun => "SG",
+            doom_types::weapon_type::WeaponType::Chaingun => "CG",
+            doom_types::weapon_type::WeaponType::RocketLauncher => "RL",
+            doom_types::weapon_type::WeaponType::PlasmaRifle => "PLAS",
+            doom_types::weapon_type::WeaponType::Bfg => "BFG",
+            doom_types::weapon_type::WeaponType::Chainsaw => "SAW",
+            doom_types::weapon_type::WeaponType::SuperShotgun => "SSG",
         };
 
         Some(doom_tui::CogmindHud {
@@ -5142,7 +5144,7 @@ mod tests {
             .sound
             .sound_queue
             .push(doom_game::SoundRequest::PlayerWeaponFire(
-                doom_game::player::WeaponType::Pistol,
+                doom_types::weapon_type::WeaponType::Pistol,
             ));
 
         // Open menu to pause the game, so `gs.tick()` doesn't clear the sound queue we just pushed!

@@ -596,7 +596,8 @@ fn p_thrust(mo: &mut crate::mobj::Mobj, angle: Bam, move_units: i8) {
 mod tests {
     use super::*;
     use crate::mobj::{Mobj, flags};
-    use crate::player::{AmmoType, PlayerState, WeaponType};
+    use doom_types::{ammo_type::AmmoType, weapon_type::WeaponType};
+    use crate::player::PlayerState;
     use crate::states::ids;
     use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16, TicCmd, bt};
@@ -1214,7 +1215,7 @@ mod tests {
 
     #[test]
     fn tick_player_weapon_change() {
-        use crate::player::WeaponType;
+        use doom_types::weapon_type::WeaponType;
         let mut gs = make_game_state();
         gs.player.weapons[WeaponType::Shotgun as usize] = true;
 
@@ -1234,7 +1235,7 @@ mod tests {
 
     #[test]
     fn tick_player_no_change_unowned_weapon() {
-        use crate::player::WeaponType;
+        use doom_types::weapon_type::WeaponType;
         let mut gs = make_game_state();
         gs.player.weapons[WeaponType::Shotgun as usize] = false;
         let original = gs.player.weapon;
@@ -1587,7 +1588,7 @@ mod tests {
 
     #[test]
     fn bt_change_switches_weapon_when_owned() {
-        use crate::player::WeaponType;
+        use doom_types::weapon_type::WeaponType;
         let mut gs = make_game_state();
         // Give player the shotgun.
         gs.player.weapons[WeaponType::Shotgun as usize] = true;
@@ -1620,7 +1621,7 @@ mod tests {
 
     #[test]
     fn bt_change_ignores_unowned_weapon() {
-        use crate::player::WeaponType;
+        use doom_types::weapon_type::WeaponType;
         let mut gs = make_game_state();
         // Confirm player does NOT have the shotgun.
         gs.player.weapons[WeaponType::Shotgun as usize] = false;

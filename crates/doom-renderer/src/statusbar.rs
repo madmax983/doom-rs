@@ -16,11 +16,12 @@
 //! | Keys       | 244..271  | 3 key card slots (blue/yellow/red)   |
 //! | Ammo tally | 272..319  | 4 rows: ammo/maxammo per type        |
 
+use doom_types::ammo_type::AmmoType;
 use crate::framebuffer::Framebuffer;
 use crate::patch_cache::PatchCache;
 use doom_game::face::{FaceState, face_patch_name};
 use doom_game::player::{
-    AmmoType, KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD,
+    KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD,
     KEY_YELLOW_SKULL, PlayerState, WEAPON_AMMO,
 };
 use doom_wad::WadStack;

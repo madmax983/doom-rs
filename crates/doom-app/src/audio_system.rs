@@ -363,8 +363,8 @@ fn audio_cmd_thread(
 /// Returns the canonical lump name so the caller can resolve it via
 /// `sfx_lookup` — the same map used for monster sounds.  This avoids the
 /// fragile hardcoded-integer approach that assumed a specific WAD lump order.
-pub(crate) fn weapon_fire_sfx_lump(weapon: doom_game::WeaponType) -> &'static str {
-    use doom_game::WeaponType;
+pub(crate) fn weapon_fire_sfx_lump(weapon: doom_types::weapon_type::WeaponType) -> &'static str {
+    use doom_types::weapon_type::WeaponType;
     match weapon {
         WeaponType::Fist => "DSPUNCH",
         WeaponType::Chainsaw => "DSSAWFUL",
@@ -720,21 +720,21 @@ mod tests {
     #[test]
     fn weapon_fire_sfx_lump_pistol() {
         assert_eq!(
-            weapon_fire_sfx_lump(doom_game::WeaponType::Pistol),
+            weapon_fire_sfx_lump(doom_types::weapon_type::WeaponType::Pistol),
             "DSPISTOL"
         );
     }
 
     #[test]
     fn weapon_fire_sfx_lump_bfg() {
-        assert_eq!(weapon_fire_sfx_lump(doom_game::WeaponType::Bfg), "DSBFG");
+        assert_eq!(weapon_fire_sfx_lump(doom_types::weapon_type::WeaponType::Bfg), "DSBFG");
     }
 
     #[test]
     fn weapon_fire_sfx_lump_chaingun_same_as_pistol() {
         assert_eq!(
-            weapon_fire_sfx_lump(doom_game::WeaponType::Chaingun),
-            weapon_fire_sfx_lump(doom_game::WeaponType::Pistol)
+            weapon_fire_sfx_lump(doom_types::weapon_type::WeaponType::Chaingun),
+            weapon_fire_sfx_lump(doom_types::weapon_type::WeaponType::Pistol)
         );
     }
 
@@ -742,7 +742,7 @@ mod tests {
     fn sound_request_sfx_maps_player_weapon_fire_to_weapon_lump() {
         assert_eq!(
             sound_request_sfx(doom_game::SoundRequest::PlayerWeaponFire(
-                doom_game::WeaponType::Shotgun
+                doom_types::weapon_type::WeaponType::Shotgun
             )),
             Some(("DSSHOTGN", doom_audio::SfxPriority::Weapon))
         );

@@ -72,7 +72,7 @@ pub use phase::{GamePhase, GamePhaseController, MapId};
 pub use pickups::{
     doomed_type_to_kind, kind_to_doomed_type, p_check_pickups, p_touch_special_thing,
 };
-pub use player::{AmmoType, PlayerState, WEAPON_AMMO, WeaponType};
+pub use player::{PlayerState, WEAPON_AMMO};
 pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
 };
