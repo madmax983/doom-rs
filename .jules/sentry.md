@@ -43,3 +43,6 @@
 ## 2026-04-17 - Update oldest_tic in InputLog
 **Learning:** InputLog::oldest_tic() returned 0 due to missing state update implementation which went undiscovered.
 **Action:** Add unit tests to check state mutation methods verify public API changes are observed.
+## 2026-04-20 - Replace unwrap calls with expect in tests
+**Learning:** Found scattered instances of `.unwrap()` in test files (`savegame.rs`, `actions.rs`, `driver.rs`, etc) that obscured test failure context by panic-ing with a generic error message, which violates Sentry's principle that tests should provide meaningful context. Added targeted `havoc` testing to `MapAnalyzer` in `doom-map` to prove graph analysis is resilient against malformed/unconnected topological map data.
+**Action:** Always replace `unwrap()` with `expect()` in tests to explicitly document the invariant and assist debugging. Always construct intentionally malformed inputs when testing analysis routines.
