@@ -33,3 +33,7 @@
 **[Enforce module boundaries in doom-app]**
 **Tangle:** The `doom-app` crate contained many internal structures, functions, enums, and constants (e.g. `DoomGame`, `Console`, `AudioSystem`, etc) that were marked as `pub`, leaking implementation details to the outside despite the app being a binary orchestrator and having no downstream dependants.
 **Blueprint:** Modified the visibility of all internal components in `doom-app` from `pub` to `pub(crate)` where applicable (like `DoomGame`, `DemoRecordingWrapper`, `Console`, `AudioSystem`, etc). Removed leaky `pub use` from internal modules.
+
+**[Extract WeaponType and AmmoType to Shared Primitives]**
+**Tangle:** The `WeaponType` and `AmmoType` enums (along with `WEAPON_AMMO`) were defined in `doom-game/src/player.rs`, but widely used in presentation crates like `doom-app` for rendering HUD elements and managing audio playback. This caused UI components to depend directly on the entire game engine crate just for basic enum definitions, creating tight coupling between rendering and core game state.
+**Blueprint:** Extracted `WeaponType` and `AmmoType` into `doom-types/src/weapons.rs`. `doom-game/src/player.rs` now re-exports them for backwards compatibility within the game logic crate, and `doom-app` was updated to import these primitives directly from the shared types crate. This creates a clean dependency hierarchy where presentation relies on foundational types instead of game logic.

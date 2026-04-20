@@ -40,7 +40,6 @@ use doom_game::FaceState;
 use doom_game::LockedDoorColor;
 use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
-use doom_game::player::WeaponType;
 use doom_game::{
     AutomapState, GamePhase, GamePhaseController, GameState, Skill, TitleScreen, init_conveyors,
     init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
@@ -58,6 +57,7 @@ use doom_renderer::{
     render_level_with_view_height_and_extra_light_and_fixed_colormap, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, RendererMode, TicInput};
+use doom_types::weapons::WeaponType;
 use doom_types::{Bam, CompatibilityProfile, Fixed16_16};
 use doom_wad::WadStack;
 
@@ -1558,15 +1558,15 @@ impl DoomApp for DoomGame {
         };
 
         let weapon_name = match p.weapon {
-            doom_game::WeaponType::Fist => "FIST",
-            doom_game::WeaponType::Pistol => "PIST",
-            doom_game::WeaponType::Shotgun => "SG",
-            doom_game::WeaponType::Chaingun => "CG",
-            doom_game::WeaponType::RocketLauncher => "RL",
-            doom_game::WeaponType::PlasmaRifle => "PLAS",
-            doom_game::WeaponType::Bfg => "BFG",
-            doom_game::WeaponType::Chainsaw => "SAW",
-            doom_game::WeaponType::SuperShotgun => "SSG",
+            doom_types::weapons::WeaponType::Fist => "FIST",
+            doom_types::weapons::WeaponType::Pistol => "PIST",
+            doom_types::weapons::WeaponType::Shotgun => "SG",
+            doom_types::weapons::WeaponType::Chaingun => "CG",
+            doom_types::weapons::WeaponType::RocketLauncher => "RL",
+            doom_types::weapons::WeaponType::PlasmaRifle => "PLAS",
+            doom_types::weapons::WeaponType::Bfg => "BFG",
+            doom_types::weapons::WeaponType::Chainsaw => "SAW",
+            doom_types::weapons::WeaponType::SuperShotgun => "SSG",
         };
 
         Some(doom_tui::CogmindHud {

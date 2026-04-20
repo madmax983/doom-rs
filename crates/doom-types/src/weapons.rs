@@ -1,0 +1,65 @@
+//! Weapon and ammo primitives.
+use crate::limits::NUM_WEAPONS;
+
+/// Weapon slots (index = selection key − 1 for keys 1-7; chainsaw = key 1 alt).
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
+#[repr(u8)]
+pub enum WeaponType {
+    /// Bare fists.
+    Fist = 0,
+    /// Standard starting pistol.
+    #[default]
+    Pistol = 1,
+    /// Pump-action shotgun.
+    Shotgun = 2,
+    /// Rapid-fire chaingun.
+    Chaingun = 3,
+    /// Explosive rocket launcher.
+    RocketLauncher = 4,
+    /// Rapid-fire plasma rifle.
+    PlasmaRifle = 5,
+    /// Big Fucking Gun 9000.
+    Bfg = 6,
+    /// Melee chainsaw.
+    Chainsaw = 7,
+    /// Double-barreled super shotgun (Doom II).
+    SuperShotgun = 8,
+}
+
+/// Ammo pool indices.
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
+#[repr(u8)]
+pub enum AmmoType {
+    /// Ammo for Pistol and Chaingun.
+    Bullets = 0,
+    /// Ammo for Shotgun and Super Shotgun.
+    Shells = 1,
+    /// Ammo for Plasma Rifle and BFG.
+    Cells = 2,
+    /// Ammo for Rocket Launcher.
+    Rockets = 3,
+    /// Melee weapons (Fist, Chainsaw) — no ammo consumed.
+    None = 255,
+}
+
+/// Which ammo pool each weapon draws from.
+pub const WEAPON_AMMO: [AmmoType; NUM_WEAPONS] = [
+    AmmoType::None,    // Fist
+    AmmoType::Bullets, // Pistol
+    AmmoType::Shells,  // Shotgun
+    AmmoType::Bullets, // Chaingun
+    AmmoType::Rockets, // RocketLauncher
+    AmmoType::Cells,   // PlasmaRifle
+    AmmoType::Cells,   // BFG
+    AmmoType::None,    // Chainsaw
+    AmmoType::Shells,  // SuperShotgun
+];
+
+impl WeaponType {
+    /// Convert a weapon number (0–8) from `BT_WEAPONMASK` to a `WeaponType`.
+    ///
+    /// Returns `None` for any out-of-range value.
+    pub fn from_num(n: usize) -> Option<Self> {
+        u8::try_from(n).ok().and_then(Self::from_repr)
+    }
+}
