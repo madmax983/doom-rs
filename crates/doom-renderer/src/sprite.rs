@@ -767,8 +767,8 @@ pub fn render_actors_with_masked_ex<'a>(
 /// Used to handle Arch-vile fire overlays and other special effects that need
 /// explicit control over the fullbright state or colormap.
 #[allow(clippy::too_many_arguments)]
-pub fn render_actors_with_masked_and_fixed_colormap_ex<'a>(
-    actors: &[crate::sprite_lookup::ActorRenderInfo],
+pub fn render_actors_with_masked_and_fixed_colormap_ex<'a, I, T>(
+    actors: I,
     level: &doom_map::Level,
     player_x: doom_types::Fixed16_16,
     player_y: doom_types::Fixed16_16,
@@ -780,7 +780,10 @@ pub fn render_actors_with_masked_and_fixed_colormap_ex<'a>(
     sprite_clip: Option<SpriteClip<'_>>,
     masked_columns: Option<&'a [crate::render::MaskedColumnDraw<'a>]>,
     fixed_colormap: Option<&[u8; 256]>,
-) {
+) where
+    I: IntoIterator<Item = T>,
+    T: std::borrow::Borrow<crate::sprite_lookup::ActorRenderInfo>,
+{
     use doom_game::states::sprite_names;
 
     let angle_rad =
@@ -798,7 +801,7 @@ pub fn render_actors_with_masked_and_fixed_colormap_ex<'a>(
     let view_z = player_floor + PLAYER_HEIGHT;
 
     enum VisibleElement<'a> {
-        Actor(f32, &'a crate::sprite_lookup::ActorRenderInfo),
+        Actor(f32, crate::sprite_lookup::ActorRenderInfo),
         Masked(&'a crate::render::MaskedColumnDraw<'a>),
     }
 
@@ -813,15 +816,16 @@ pub fn render_actors_with_masked_and_fixed_colormap_ex<'a>(
 
     // Collect and depth-sort sprites and masked midtextures back-to-front.
     let mut visible: Vec<VisibleElement<'_>> = actors
-        .iter()
+        .into_iter()
         .filter_map(|a| {
-            let ax = a.x as f32 / 65536.0;
-            let ay = a.y as f32 / 65536.0;
+            let a_ref = a.borrow();
+            let ax = a_ref.x as f32 / 65536.0;
+            let ay = a_ref.y as f32 / 65536.0;
             let dx = ax - px;
             let dy = ay - py;
             let vx = dx * cos_a + dy * sin_a;
             if vx > 0.5 {
-                Some(VisibleElement::Actor(vx, a))
+                Some(VisibleElement::Actor(vx, *a_ref))
             } else {
                 None
             }
@@ -2762,7 +2766,7 @@ mod tests {
 
         let mut fb = Framebuffer::new();
         render_actors_with_masked_and_fixed_colormap_ex(
-            &[actor],
+            [actor],
             &level,
             player_x,
             player_y,

@@ -1404,7 +1404,7 @@ impl DoomApp for DoomGame {
             // Uses ActorRenderInfo so animations play correctly.
             if let Some(ref cache) = self.sprite_cache {
                 let player_handle = self.gs.player.handle;
-                let actors: Vec<ActorRenderInfo> = self
+                let actors_iter = self
                     .gs
                     .mobjslab
                     .iter_handles()
@@ -1440,10 +1440,9 @@ impl DoomApp for DoomGame {
                             render_flag: render_flag_from_state(frame, mo.flags),
                             fallback_prefix,
                         })
-                    })
-                    .collect();
+                    });
                 render_actors_with_masked_and_fixed_colormap_ex(
-                    &actors,
+                    actors_iter,
                     &self.level,
                     Fixed16_16::from_int(px),
                     Fixed16_16::from_int(py),
