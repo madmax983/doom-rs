@@ -116,20 +116,29 @@ impl<'a> MapAnalyzer<'a> {
                     parent.insert(v, u);
                     self.ap_util(v, visited, discovery_time, low_time, parent, ap, time);
 
-                    let low_v = *low_time.get(&v).unwrap();
-                    let low_u = *low_time.get(&u).unwrap();
-                    low_time.insert(u, low_u.min(low_v));
+                    if let (Some(low_v), Some(low_u)) = (low_time.get(&v), low_time.get(&u)) {
+                        let low_v = *low_v;
+                        let low_u = *low_u;
+                        low_time.insert(u, low_u.min(low_v));
 
-                    if parent.get(&u).is_none() && children > 1 {
-                        ap.insert(u);
-                    }
-                    if parent.get(&u).is_some() && low_v >= *discovery_time.get(&u).unwrap() {
-                        ap.insert(u);
+                        if parent.get(&u).is_none() && children > 1 {
+                            ap.insert(u);
+                        }
+                        if parent.get(&u).is_some() {
+                            if let Some(disc_u) = discovery_time.get(&u) {
+                                if low_v >= *disc_u {
+                                    ap.insert(u);
+                                }
+                            }
+                        }
                     }
                 } else if parent.get(&u) != Some(&v) {
-                    let low_u = *low_time.get(&u).unwrap();
-                    let disc_v = *discovery_time.get(&v).unwrap();
-                    low_time.insert(u, low_u.min(disc_v));
+                    if let (Some(low_u), Some(disc_v)) = (low_time.get(&u), discovery_time.get(&v))
+                    {
+                        let low_u = *low_u;
+                        let disc_v = *disc_v;
+                        low_time.insert(u, low_u.min(disc_v));
+                    }
                 }
             }
         }

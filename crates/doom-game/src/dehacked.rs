@@ -416,7 +416,7 @@ impl DehPatch {
 
         // Informational headers (patch file preamble)
         if let Some(rest) = trimmed.strip_prefix("Doom version = ") {
-            if let Ok(v) = rest.trim().parse::<i32>() {
+            if let Ok(v) = Self::parse_i32(rest.trim()) {
                 patch.doom_version = Some(v);
             }
             return Ok(true);
@@ -425,7 +425,7 @@ impl DehPatch {
             return Ok(true);
         }
         if let Some(rest) = trimmed.strip_prefix("Patch format = ") {
-            if let Ok(v) = rest.trim().parse::<i32>() {
+            if let Ok(v) = Self::parse_i32(rest.trim()) {
                 patch.patch_format = Some(v);
             }
             return Ok(true);
@@ -745,15 +745,15 @@ impl DehPatch {
                 count += 1;
             }
             if let Some(sp) = patch.speed {
-                info.speed = Fixed16_16(sp << 16);
+                info.speed = Fixed16_16::from_int(sp);
                 count += 1;
             }
             if let Some(r) = patch.radius {
-                info.radius = Fixed16_16(r << 16);
+                info.radius = Fixed16_16::from_int(r);
                 count += 1;
             }
             if let Some(h) = patch.height {
-                info.height = Fixed16_16(h << 16);
+                info.height = Fixed16_16::from_int(h);
                 count += 1;
             }
             if let Some(m) = patch.mass {
