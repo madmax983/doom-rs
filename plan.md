@@ -1,43 +1,5 @@
-2. **Refactor `handle_sound_events`**:
-   Replace the two `match ev { ... }` blocks in `crates/doom-app/src/main.rs` (`handle_sound_events`) with calls to `ev.emitter(pl_x, pl_y)` and `ev.origin_handle(player_origin)`.
-
-   We will use `replace_with_git_merge_diff` with this exact block:
-   ```
-<<<<<<< SEARCH
-            let emitter = match ev {
-                SoundRequest::MonsterWake(_, _, x, y)
-                | SoundRequest::MonsterAttack(_, _, x, y)
-                | SoundRequest::MonsterDie(_, _, x, y) => Some((x, y)),
-                SoundRequest::PlayerWeaponFire(_)
-                | SoundRequest::PlayerSuperShotgunOpen
-                | SoundRequest::PlayerSuperShotgunLoad
-                | SoundRequest::PlayerSuperShotgunClose => Some((pl_x, pl_y)),
-                SoundRequest::PlayerDie
-                | SoundRequest::PlayerUseFail
-                | SoundRequest::PlayerUseLockedDoor(_) => None,
-            };
-            let origin = match ev {
-                SoundRequest::MonsterWake(_, handle, _, _)
-                | SoundRequest::MonsterAttack(_, handle, _, _)
-                | SoundRequest::MonsterDie(_, handle, _, _) => Some(handle),
-                SoundRequest::PlayerWeaponFire(_)
-                | SoundRequest::PlayerSuperShotgunOpen
-                | SoundRequest::PlayerSuperShotgunLoad
-                | SoundRequest::PlayerSuperShotgunClose => player_origin,
-                SoundRequest::PlayerDie
-                | SoundRequest::PlayerUseFail
-                | SoundRequest::PlayerUseLockedDoor(_) => None,
-            };
-
-            if lump.is_empty() {
-=======
-            let emitter = ev.emitter(pl_x, pl_y);
-            let origin = ev.origin_handle(player_origin);
-
-            if lump.is_empty() {
->>>>>>> REPLACE
-   ```
-
-3. **Run tests**: Run `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo fmt --all` to verify the refactor.
-4. **Complete pre-commit steps**: Complete pre commit steps to make sure proper testing, verifications, reviews and reflections are done.
-5. **Submit the change.** Create a PR titled "⚒️ Forge: Extract `SoundRequest` helper methods to reduce `match` duplication" detailing the Smell, Solution, Benefit, and Verification.
+1. **Target**: Address the "let Some(sd) = ...; let sector_idx = sd.sector" Boolean Blindness/Pyramid of Doom in `crates/doom-game/src/specials.rs`. The issue is deeply nested redundant lookup logic.
+2. **Review other occurrences**: `grep` shows we have cleaned up `activate_doors`. Need to review the other `activate_*` methods just to be sure there are no remaining repetitive lookups for `left_sidedef`. Since `get_other.py` showed 0 matches, they might be fully clean or use another pattern.
+3. **Run tests & clippy**: Ensure all tests still pass and clippy is clean.
+4. **Complete Pre Commit Steps**: Follow `pre_commit_instructions` tool and perform all necessary verification and reflections.
+5. **Create PR**: Present a PR following the Forge persona guidelines.

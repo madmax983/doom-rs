@@ -36,3 +36,7 @@
 **[Boolean Blindness in spawn_level_things and sync_weapon_anim]**
 **Learning:** Functions like `spawn_level_things` taking `is_deathmatch: bool` alongside `carry_player_state: bool` in `load_map_after_intermission` creates "Boolean Blindness", making calls like `spawn_level_things(&mut gs, &level, Skill::Medium, false)` hard to understand. Similarly, `sync_weapon_anim_from_player_psprites(false)` hides intent about what the boolean does (preserve motion vs reset).
 **Action:** Replaced `bool` with enums like `GameMode` (`SinglePlayer` vs `Deathmatch`), `PlayerStateCarry` (`Carry` vs `Reset`) and `WeaponMotion` (`Preserve` vs `Reset`) to self-document the code at call sites and enforce correct usage at compile time.
+
+**Refactor sidedef sector extraction guard clauses**
+**Learning:** `activate_doors` repeatedly used two lines to extract a `sector_idx` from `left_sidedef`: `let Some(sd) = level.sidedefs.get(left_sidedef as usize) else { return; }; let sector_idx = sd.sector as usize;`. This pattern was repeated 16 times inside a `match` statement, creating verbose boilerplate.
+**Action:** Use `.map(|sd| sd.sector as usize)` directly in the guard clause: `let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else { return; };` to eliminate the unused intermediate `sd` variable and compress the boilerplate into a single statement.
