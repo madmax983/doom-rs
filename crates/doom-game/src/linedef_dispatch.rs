@@ -294,10 +294,10 @@ pub fn dispatch_linedef(
         return false;
     }
 
-    let effect = match linedef_effect(special) {
-        Some(e) => e,
-        None => return false,
+    let Some(e) = linedef_effect(special) else {
+        return false;
     };
+    let effect = e;
 
     let tag = level
         .linedefs
@@ -450,18 +450,17 @@ fn dispatch_doors(
         DoorCloseWaitOpen => {
             // Close, wait 30 s (1050 tics), then reopen to the standard door top.
             if tag == 0 {
-                let ld = match level.linedefs.get(linedef_index) {
-                    Some(ld) => ld,
-                    None => return false,
+                let Some(ld) = level.linedefs.get(linedef_index) else {
+                    return false;
                 };
                 let left = ld.left_sidedef;
                 if left == doom_map::SIDEDEF_NONE {
                     return false;
                 }
-                let sector_idx = match level.sidedefs.get(left as usize) {
-                    Some(sd) => sd.sector as usize,
-                    None => return false,
+                let Some(sd) = level.sidedefs.get(left as usize) else {
+                    return false;
                 };
+                let sector_idx = sd.sector as usize;
                 close_wait_open_helper(gs, level, sector_idx);
             } else {
                 let indices = sectors_by_tag(level, tag);
@@ -876,18 +875,17 @@ fn door_by_tag_or_back(
 ) {
     if tag == 0 {
         // Direct sector: use the back sidedef.
-        let ld = match level.linedefs.get(linedef_index) {
-            Some(ld) => ld,
-            None => return,
+        let Some(ld) = level.linedefs.get(linedef_index) else {
+            return;
         };
         let left = ld.left_sidedef;
         if left == doom_map::SIDEDEF_NONE {
             return;
         }
-        let sector_idx = match level.sidedefs.get(left as usize) {
-            Some(sd) => sd.sector as usize,
-            None => return,
+        let Some(sd) = level.sidedefs.get(left as usize) else {
+            return;
         };
+        let sector_idx = sd.sector as usize;
         match speed {
             DoorSpeed::Blazing => open_blazing_door_helper(gs, level, sector_idx, behavior),
             DoorSpeed::Normal => open_door_helper(gs, level, sector_idx, behavior),
@@ -912,18 +910,17 @@ fn close_door_by_tag_or_back(
     speed: DoorSpeed,
 ) {
     if tag == 0 {
-        let ld = match level.linedefs.get(linedef_index) {
-            Some(ld) => ld,
-            None => return,
+        let Some(ld) = level.linedefs.get(linedef_index) else {
+            return;
         };
         let left = ld.left_sidedef;
         if left == doom_map::SIDEDEF_NONE {
             return;
         }
-        let sector_idx = match level.sidedefs.get(left as usize) {
-            Some(sd) => sd.sector as usize,
-            None => return,
+        let Some(sd) = level.sidedefs.get(left as usize) else {
+            return;
         };
+        let sector_idx = sd.sector as usize;
         if speed == DoorSpeed::Blazing {
             close_blazing_door_helper(gs, level, sector_idx);
         } else {
@@ -952,10 +949,10 @@ const BLAZING_DOOR_SPEED: i16 = 8;
 const DOOR_WAIT: i32 = 120;
 
 fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavior: DoorBehavior) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
+    let Some(s) = level.sectors.get(sector_idx) else {
+        return;
     };
+    let sector = s;
     let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
     if gs
         .movers
@@ -983,10 +980,10 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavi
 }
 
 fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
+    let Some(s) = level.sectors.get(sector_idx) else {
+        return;
     };
+    let sector = s;
     let target = sector.floor_height;
     if gs
         .movers
@@ -1011,10 +1008,10 @@ fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
 
 /// Close a door then reopen it after 30 s (types 16 / 76).
 fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
+    let Some(s) = level.sectors.get(sector_idx) else {
+        return;
     };
+    let sector = s;
     if gs
         .movers
         .active_doors
@@ -1043,10 +1040,10 @@ fn open_blazing_door_helper(
     sector_idx: usize,
     behavior: DoorBehavior,
 ) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
+    let Some(s) = level.sectors.get(sector_idx) else {
+        return;
     };
+    let sector = s;
     let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
     if gs
         .movers
@@ -1074,10 +1071,10 @@ fn open_blazing_door_helper(
 }
 
 fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
+    let Some(s) = level.sectors.get(sector_idx) else {
+        return;
     };
+    let sector = s;
     let target = sector.floor_height;
     if gs
         .movers

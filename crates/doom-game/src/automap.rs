@@ -526,23 +526,23 @@ pub fn line_color(ld: &doom_map::Linedef, level: &Level) -> u8 {
 /// Returns `true` if the front and back sectors of a two-sided linedef have
 /// different floor or ceiling heights.
 fn has_height_change(ld: &doom_map::Linedef, level: &Level) -> bool {
-    let right_sd = match level.sidedefs.get(ld.right_sidedef as usize) {
-        Some(sd) => sd,
-        None => return false,
+    let Some(sd) = level.sidedefs.get(ld.right_sidedef as usize) else {
+        return false;
     };
-    let left_sd = match level.sidedefs.get(ld.left_sidedef as usize) {
-        Some(sd) => sd,
-        None => return false,
+    let right_sd = sd;
+    let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+        return false;
     };
+    let left_sd = sd;
 
-    let right_sector = match level.sectors.get(right_sd.sector as usize) {
-        Some(s) => s,
-        None => return false,
+    let Some(s) = level.sectors.get(right_sd.sector as usize) else {
+        return false;
     };
-    let left_sector = match level.sectors.get(left_sd.sector as usize) {
-        Some(s) => s,
-        None => return false,
+    let right_sector = s;
+    let Some(s) = level.sectors.get(left_sd.sector as usize) else {
+        return false;
     };
+    let left_sector = s;
 
     right_sector.floor_height != left_sector.floor_height
         || right_sector.ceil_height != left_sector.ceil_height

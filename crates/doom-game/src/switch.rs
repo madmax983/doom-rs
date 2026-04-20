@@ -130,13 +130,12 @@ pub fn find_switch_opposite(texture: &[u8; 8]) -> Option<[u8; 8]> {
 ///
 /// Returns `true` if a texture was toggled.
 pub fn toggle_switch_texture(level: &mut doom_map::Level, linedef_index: usize) -> bool {
-    let sd_idx = match level.linedefs.get(linedef_index) {
-        Some(ld) => ld.right_sidedef as usize,
-        None => return false,
+    let Some(ld) = level.linedefs.get(linedef_index) else {
+        return false;
     };
-    let sd = match level.sidedefs.get(sd_idx) {
-        Some(sd) => sd,
-        None => return false,
+    let sd_idx = ld.right_sidedef as usize;
+    let Some(sd) = level.sidedefs.get(sd_idx) else {
+        return false;
     };
 
     // Check middle texture first (most common for switches).

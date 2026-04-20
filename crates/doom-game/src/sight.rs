@@ -278,14 +278,14 @@ pub fn p_check_sight(
         }
 
         // Two-sided line: check the opening.
-        let right_sd = match level.sidedefs.get(ld.right_sidedef as usize) {
-            Some(sd) => sd,
-            None => return false,
+        let Some(sd) = level.sidedefs.get(ld.right_sidedef as usize) else {
+            return false;
         };
-        let left_sd = match level.sidedefs.get(ld.left_sidedef as usize) {
-            Some(sd) => sd,
-            None => return false,
+        let right_sd = sd;
+        let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+            return false;
         };
+        let left_sd = sd;
 
         let front_sector = &level.sectors[right_sd.sector as usize];
         let back_sector = &level.sectors[left_sd.sector as usize];

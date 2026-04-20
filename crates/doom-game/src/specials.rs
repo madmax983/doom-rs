@@ -126,10 +126,10 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
     let handle = gs.player.handle;
 
     // Read actor position.
-    let az = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.z.to_int(),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let az = mo.z.to_int();
 
     // Check if player has RadSuit active.
     let has_radsuit = gs.player.powers[crate::player::powers::PW_IRONFEET] > 0;
@@ -1069,10 +1069,10 @@ pub fn ev_build_stairs(
 
     let mut count = 0;
     let mut current_sector = start_sector;
-    let mut target_height = match level.sectors.get(start_sector) {
-        Some(s) => s.floor_height + step_size,
-        None => return 0,
+    let Some(s) = level.sectors.get(start_sector) else {
+        return 0;
     };
+    let mut target_height = s.floor_height + step_size;
 
     // Raise the starting sector first.
     if !gs
@@ -1111,19 +1111,19 @@ pub fn ev_build_stairs(
                 continue;
             }
             // The "other" sector is on the left side of the linedef.
-            let other_sector = match level.sidedefs.get(ld.left_sidedef as usize) {
-                Some(sd) => sd.sector as usize,
-                None => continue,
+            let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+                continue;
             };
+            let other_sector = sd.sector as usize;
             // Skip if it's the same sector.
             if other_sector == current_sector {
                 continue;
             }
             // Check matching floor texture.
-            let other_sec = match level.sectors.get(other_sector) {
-                Some(s) => s,
-                None => continue,
+            let Some(s) = level.sectors.get(other_sector) else {
+                continue;
             };
+            let other_sec = s;
             if other_sec.floor_flat != cur_flat {
                 continue;
             }
@@ -1202,10 +1202,10 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
             continue;
         }
         // The "donut hole" is on the back side.
-        let hole_sector = match level.sidedefs.get(ld.left_sidedef as usize) {
-            Some(sd) => sd.sector as usize,
-            None => continue,
+        let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+            continue;
         };
+        let hole_sector = sd.sector as usize;
 
         if hole_sector == trigger_sector {
             continue;
@@ -1222,10 +1222,10 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
             if hld.left_sidedef == SIDEDEF_NONE {
                 continue;
             }
-            let ring_sector = match level.sidedefs.get(hld.left_sidedef as usize) {
-                Some(sd) => sd.sector as usize,
-                None => continue,
+            let Some(sd) = level.sidedefs.get(hld.left_sidedef as usize) else {
+                continue;
             };
+            let ring_sector = sd.sector as usize;
             if ring_sector != hole_sector && ring_sector != trigger_sector {
                 if let Some(s) = level.sectors.get(ring_sector) {
                     ring_floor = Some(s.floor_height);
@@ -1255,10 +1255,10 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
             continue;
         }
 
-        let hole_sec = match level.sectors.get(hole_sector) {
-            Some(s) => s,
-            None => continue,
+        let Some(s) = level.sectors.get(hole_sector) else {
+            continue;
         };
+        let hole_sec = s;
 
         let direction = if target >= hole_sec.floor_height {
             MoveDirection::Up
@@ -2051,10 +2051,10 @@ fn open_door(
     sector_idx: usize,
     behavior: crate::linedef_dispatch::DoorBehavior,
 ) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
+    let Some(s) = level.sectors.get(sector_idx) else {
+        return;
     };
+    let sector = s;
 
     let target = lowest_adjacent_ceiling(level, sector_idx) - 4;
 
@@ -2128,10 +2128,10 @@ pub fn monster_activate_door_linedef(
 
 /// Enqueue a door mover that closes a door.
 fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
+    let Some(s) = level.sectors.get(sector_idx) else {
+        return;
     };
+    let sector = s;
 
     let target = sector.floor_height;
 
@@ -2162,10 +2162,10 @@ fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
 ///
 /// Used by linedef types 16 (W1) and 76 (WR).
 fn close_wait_open_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
+    let Some(s) = level.sectors.get(sector_idx) else {
+        return;
     };
+    let sector = s;
     if gs
         .movers
         .active_doors
@@ -2197,10 +2197,10 @@ fn open_blazing_door(
     sector_idx: usize,
     behavior: crate::linedef_dispatch::DoorBehavior,
 ) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
+    let Some(s) = level.sectors.get(sector_idx) else {
+        return;
     };
+    let sector = s;
 
     let target = lowest_adjacent_ceiling(level, sector_idx) - 4;
 
@@ -2232,10 +2232,10 @@ fn open_blazing_door(
 
 /// Enqueue a blazing (fast) door mover that closes a door.
 fn close_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
-    let sector = match level.sectors.get(sector_idx) {
-        Some(s) => s,
-        None => return,
+    let Some(s) = level.sectors.get(sector_idx) else {
+        return;
     };
+    let sector = s;
 
     let target = sector.floor_height;
 
@@ -3734,10 +3734,10 @@ pub fn tick_conveyors(gs: &mut GameState, level: Option<&Level>) {
             continue;
         }
 
-        let mz = match gs.mobjslab.get(handle) {
-            Some(mo) => mo.z.to_int(),
-            None => continue,
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            continue;
         };
+        let mz = mo.z.to_int();
 
         for conveyor in &gs.movers.conveyors {
             let sector_idx = conveyor.sector_index;

@@ -628,10 +628,10 @@ fn transition_to_see_state(
         Some(info) if info.see_state.0 != 0 => info.see_state,
         _ => return,
     };
-    let new_tics = match states::STATES.get(see_sn.0 as usize) {
-        Some(e) => e.tics,
-        None => return,
+    let Some(e) = states::STATES.get(see_sn.0 as usize) else {
+        return;
     };
+    let new_tics = e.tics;
 
     // Transition monster to see_state.
     let Some(mo) = gs.mobjslab.get_mut(handle) else {
@@ -910,10 +910,10 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     }
 
     // --- Read target info for attack checks ---
-    let current_target = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.target,
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let current_target = mo.target;
 
     let (mo_x, mo_y) = match gs.mobjslab.get(handle) {
         Some(mo) => (mo.x, mo.y),
@@ -1121,10 +1121,10 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     // Face the target, then read the resulting angle.
     a_face_target(gs, handle);
-    let angle = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.angle,
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let angle = mo.angle;
 
     let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
     let mut intercepts = smallvec::SmallVec::new();
@@ -1162,10 +1162,10 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     };
 
     a_face_target(gs, handle);
-    let angle = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.angle,
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let angle = mo.angle;
 
     let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
     // Spread: ~11.25° per step in 32-bit BAM space.
@@ -1339,10 +1339,10 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     };
 
     a_face_target(gs, handle);
-    let angle = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.angle,
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let angle = mo.angle;
 
     let spread = crate::random::p_missile_angle_spread(gs);
     let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
@@ -1595,10 +1595,10 @@ fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     };
 
     a_face_target(gs, handle);
-    let angle = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.angle,
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let angle = mo.angle;
 
     let spread = crate::random::p_missile_angle_spread(gs);
     let shot_angle = Bam(angle.0.wrapping_add(spread as u32));

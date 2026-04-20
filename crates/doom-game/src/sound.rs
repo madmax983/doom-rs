@@ -89,14 +89,14 @@ pub fn adjacent_sectors(level: &Level, sector_index: usize) -> smallvec::SmallVe
             continue;
         }
 
-        let right_sd = match level.sidedefs.get(ld.right_sidedef as usize) {
-            Some(sd) => sd,
-            None => continue,
+        let Some(sd) = level.sidedefs.get(ld.right_sidedef as usize) else {
+            continue;
         };
-        let left_sd = match level.sidedefs.get(ld.left_sidedef as usize) {
-            Some(sd) => sd,
-            None => continue,
+        let right_sd = sd;
+        let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+            continue;
         };
+        let left_sd = sd;
 
         let right_sector = right_sd.sector as usize;
         let left_sector = left_sd.sector as usize;
@@ -193,14 +193,14 @@ fn recursive_sound(
             continue;
         }
 
-        let right_sd = match level.sidedefs.get(ld.right_sidedef as usize) {
-            Some(sd) => sd,
-            None => continue,
+        let Some(sd) = level.sidedefs.get(ld.right_sidedef as usize) else {
+            continue;
         };
-        let left_sd = match level.sidedefs.get(ld.left_sidedef as usize) {
-            Some(sd) => sd,
-            None => continue,
+        let right_sd = sd;
+        let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+            continue;
         };
+        let left_sd = sd;
 
         let right_sector = right_sd.sector as usize;
         let left_sector = left_sd.sector as usize;
@@ -238,23 +238,22 @@ fn recursive_sound(
 /// This helper is intended to be called from `A_Look` or similar monster AI
 /// functions.
 pub fn monster_should_wake(gs: &GameState, level: &Level, actor_handle: MobjHandle) -> bool {
-    let mo = match gs.mobjslab.get(actor_handle) {
-        Some(mo) => mo,
-        None => return false,
+    let Some(mo) = gs.mobjslab.get(actor_handle) else {
+        return false;
     };
 
     // Resolve the actor's sector from its current position.
-    let actor_sector =
-        match sector_from_position_or_subsector(level, mo.x, mo.y, mo.subsector as usize) {
-            Some(s) => s,
-            None => return false,
-        };
+    let Some(s) = sector_from_position_or_subsector(level, mo.x, mo.y, mo.subsector as usize)
+    else {
+        return false;
+    };
+    let actor_sector = s;
 
     // Check if there's a sound target in this sector.
-    let sound_target = match get_sound_target(gs, actor_sector) {
-        Some(t) => t,
-        None => return false,
+    let Some(t) = get_sound_target(gs, actor_sector) else {
+        return false;
     };
+    let sound_target = t;
 
     // If the monster has MF_AMBUSH, it only wakes from sound if it also has
     // line-of-sight to the target.

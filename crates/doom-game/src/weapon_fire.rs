@@ -204,10 +204,10 @@ pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
     }
 
     let handle = gs.player.handle;
-    let base_angle = match player_angle(gs) {
-        Some(a) => a,
-        None => return,
+    let Some(a) = player_angle(gs) else {
+        return;
     };
+    let base_angle = a;
 
     let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
@@ -234,10 +234,10 @@ pub fn p_fire_shotgun(gs: &mut GameState, level: Option<&Level>) {
     }
 
     let handle = gs.player.handle;
-    let base_angle = match player_angle(gs) {
-        Some(a) => a,
-        None => return,
+    let Some(a) = player_angle(gs) else {
+        return;
     };
+    let base_angle = a;
 
     let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
@@ -268,10 +268,10 @@ pub fn p_fire_super_shotgun(gs: &mut GameState, level: Option<&Level>) {
     }
 
     let handle = gs.player.handle;
-    let base_angle = match player_angle(gs) {
-        Some(a) => a,
-        None => return,
+    let Some(a) = player_angle(gs) else {
+        return;
     };
+    let base_angle = a;
 
     let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
@@ -302,10 +302,10 @@ pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
     }
 
     let handle = gs.player.handle;
-    let base_angle = match player_angle(gs) {
-        Some(a) => a,
-        None => return,
+    let Some(a) = player_angle(gs) else {
+        return;
     };
+    let base_angle = a;
 
     let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
@@ -333,10 +333,10 @@ pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
 /// If Berserk active (`powers[PW_STRENGTH] > 0`): damage *= 10.
 pub fn p_fire_fist(gs: &mut GameState, level: Option<&Level>) {
     let handle = gs.player.handle;
-    let base_angle = match player_angle(gs) {
-        Some(a) => a,
-        None => return,
+    let Some(a) = player_angle(gs) else {
+        return;
     };
+    let base_angle = a;
 
     let mut damage = p_damage_with_variance(gs, 2);
 
@@ -369,10 +369,10 @@ pub fn p_fire_fist(gs: &mut GameState, level: Option<&Level>) {
 /// On hit: turn player toward target (auto-aim snap).
 pub fn p_fire_chainsaw(gs: &mut GameState, level: Option<&Level>) {
     let handle = gs.player.handle;
-    let base_angle = match player_angle(gs) {
-        Some(a) => a,
-        None => return,
+    let Some(a) = player_angle(gs) else {
+        return;
     };
+    let base_angle = a;
 
     let damage = p_damage_with_variance(gs, 2);
 
