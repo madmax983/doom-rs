@@ -143,6 +143,15 @@ fn should_spawn_for_skill(thing_flags: u16, skill: Skill) -> bool {
 // Public API
 // ---------------------------------------------------------------------------
 
+/// Dictates whether to spawn multiplayer-only things.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum GameMode {
+    /// Standard single-player mode.
+    SinglePlayer,
+    /// Deathmatch multiplayer mode.
+    Deathmatch,
+}
+
 /// Spawn all things from the level's THINGS lump into the game state.
 ///
 /// Filters by skill level and multiplayer flag. Returns the player handle
@@ -150,13 +159,6 @@ fn should_spawn_for_skill(thing_flags: u16, skill: Skill) -> bool {
 ///
 /// Player starts 2-4 (DoomEd types 2-4) are skipped in single-player
 /// (`is_deathmatch == false`).
-/// Dictates whether to spawn multiplayer-only things.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum GameMode {
-    SinglePlayer,
-    Deathmatch,
-}
-
 pub fn spawn_level_things(
     gs: &mut GameState,
     level: &Level,
