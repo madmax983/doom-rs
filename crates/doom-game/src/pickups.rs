@@ -277,10 +277,10 @@ pub fn p_check_pickups(gs: &mut GameState) {
 /// Returns `false` if the item cannot be picked up right now (e.g. health
 /// when already at max) -- the item stays in the world.
 pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> bool {
-    let kind = match gs.mobjslab.get(item_handle) {
-        Some(mo) => mo.kind,
-        None => return false,
+    let Some(mo) = gs.mobjslab.get(item_handle) else {
+        return false;
     };
+    let kind = mo.kind;
 
     let picked_up = match kind {
         // ---- Health ----
