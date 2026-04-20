@@ -2459,11 +2459,13 @@ fn run_doom() -> Result<()> {
                     comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
                 ]);
                 for (i, area) in areas.iter().enumerate() {
-                    let area_str = area
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ");
+                    let mut area_str = String::new();
+                    for (j, s) in area.iter().enumerate() {
+                        if j > 0 {
+                            area_str.push_str(", ");
+                        }
+                        area_str.push_str(&s.to_string());
+                    }
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
                         comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
@@ -2479,11 +2481,13 @@ fn run_doom() -> Result<()> {
                     comfy_table::Cell::new(&chokepoints_str),
                 ]);
                 for (i, area) in areas.iter().enumerate() {
-                    let area_str = area
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect::<Vec<_>>()
-                        .join(", ");
+                    let mut area_str = String::new();
+                    for (j, s) in area.iter().enumerate() {
+                        if j > 0 {
+                            area_str.push_str(", ");
+                        }
+                        area_str.push_str(&s.to_string());
+                    }
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
                         comfy_table::Cell::new(area_str),
@@ -2504,13 +2508,14 @@ fn run_doom() -> Result<()> {
                 let graph = doom_map::SectorGraph::build(&level);
                 if let Some(path) = graph.shortest_path(start, end) {
                     if args.json {
-                        let path_json = format!(
-                            "[{}]",
-                            path.iter()
-                                .map(|s| s.to_string())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        );
+                        let mut path_inner = String::new();
+                        for (j, s) in path.iter().enumerate() {
+                            if j > 0 {
+                                path_inner.push_str(", ");
+                            }
+                            path_inner.push_str(&s.to_string());
+                        }
+                        let path_json = format!("[{}]", path_inner);
                         let json_data = format!(r#"{{ "path": {} }}"#, path_json);
                         if is_tty {
                             let formatted_json = format!(
@@ -2523,11 +2528,13 @@ fn run_doom() -> Result<()> {
                             println!("{json_data}");
                         }
                     } else {
-                        let path_str = path
-                            .iter()
-                            .map(|s| s.to_string())
-                            .collect::<Vec<_>>()
-                            .join(" ➔ ");
+                        let mut path_str = String::new();
+                        for (j, s) in path.iter().enumerate() {
+                            if j > 0 {
+                                path_str.push_str(" ➔ ");
+                            }
+                            path_str.push_str(&s.to_string());
+                        }
                         if is_tty {
                             println!(
                                 "{} {} {}",
