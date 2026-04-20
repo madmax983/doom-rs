@@ -195,6 +195,10 @@ struct Args {
     #[arg(long)]
     export_geojson: Option<std::path::PathBuf>,
 
+    /// Convert a .lmp demo file to a CSV and exit.
+    #[arg(long, num_args = 2, value_names = ["INPUT_LMP", "OUTPUT_CSV"])]
+    export_demo_csv: Option<Vec<std::path::PathBuf>>,
+
     /// Export the sector topological graph to a Graphviz DOT file and exit.
     #[arg(long)]
     export_dot: Option<std::path::PathBuf>,
@@ -2296,6 +2300,31 @@ fn run_doom() -> Result<()> {
             );
         } else {
             println!("Exported 3D model to {}", obj_path.display());
+        }
+        return Ok(());
+    }
+
+    if let Some(ref paths) = args.export_demo_csv {
+        let input_path = &paths[0];
+        let output_path = &paths[1];
+        let mut player = load_demo_player(input_path)?;
+        let csv_data = doom_demo::export_demo_to_csv(&mut player);
+        std::fs::write(output_path, csv_data).with_context(|| {
+            format!(
+                "Could not save demo CSV to '{}'. Please check your permissions.",
+                output_path.display()
+            )
+        })?;
+        use crossterm::style::Stylize;
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} demo CSV to {}",
+                "🌟".green(),
+                "Exported".green().bold(),
+                output_path.display().to_string().cyan()
+            );
+        } else {
+            println!("Exported demo CSV to {}", output_path.display());
         }
         return Ok(());
     }

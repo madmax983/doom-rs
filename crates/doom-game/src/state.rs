@@ -995,12 +995,24 @@ mod tests {
         gs.player.set_health_capped(50, 100);
 
         // Before sync, mobj health is still 100
-        assert_eq!(gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health, 100);
+        assert_eq!(
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("item must exist in tests")
+                .health,
+            100
+        );
 
         gs.sync_player_mobj_health();
 
         // After sync, mobj health matches player state
-        assert_eq!(gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health, 50);
+        assert_eq!(
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("item must exist in tests")
+                .health,
+            50
+        );
     }
 
     #[test]
@@ -1009,7 +1021,13 @@ mod tests {
         gs.damage_player(30);
 
         assert_eq!(gs.player.health(), 70);
-        assert_eq!(gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health, 70);
+        assert_eq!(
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("item must exist in tests")
+                .health,
+            70
+        );
     }
 
     #[test]
@@ -1020,12 +1038,24 @@ mod tests {
 
         gs.heal_player(20);
         assert_eq!(gs.player.health(), 70);
-        assert_eq!(gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health, 70);
+        assert_eq!(
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("item must exist in tests")
+                .health,
+            70
+        );
 
         // Heal up to max capacity
         gs.heal_player(100);
         assert_eq!(gs.player.health(), 100);
-        assert_eq!(gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health, 100);
+        assert_eq!(
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("item must exist in tests")
+                .health,
+            100
+        );
     }
 
     #[test]
@@ -1034,12 +1064,24 @@ mod tests {
         gs.heal_player_overheal(50, 200);
 
         assert_eq!(gs.player.health(), 150);
-        assert_eq!(gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health, 150);
+        assert_eq!(
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("item must exist in tests")
+                .health,
+            150
+        );
 
         // Ensure cap works
         gs.heal_player_overheal(100, 200);
         assert_eq!(gs.player.health(), 200);
-        assert_eq!(gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health, 200);
+        assert_eq!(
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("item must exist in tests")
+                .health,
+            200
+        );
     }
 
     #[test]
@@ -1048,12 +1090,24 @@ mod tests {
         gs.set_player_health_capped(120, 150);
 
         assert_eq!(gs.player.health(), 120);
-        assert_eq!(gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health, 120);
+        assert_eq!(
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("item must exist in tests")
+                .health,
+            120
+        );
 
         // Ensure cap works
         gs.set_player_health_capped(200, 150);
         assert_eq!(gs.player.health(), 150);
-        assert_eq!(gs.mobjslab.get(gs.player.handle).expect("item must exist in tests").health, 150);
+        assert_eq!(
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("item must exist in tests")
+                .health,
+            150
+        );
     }
 
     #[test]
