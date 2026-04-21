@@ -2506,9 +2506,9 @@ fn run_doom() -> Result<()> {
     if let Some(path_str) = &args.pathfind {
         use crossterm::style::Stylize;
         let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-        let parts: Vec<&str> = path_str.split(',').collect();
-        if parts.len() == 2 {
-            if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+        // Avoids an unnecessary heap allocation from .collect::<Vec<_>>()
+        if let Some((start_str, end_str)) = path_str.split_once(',') {
+            if let (Ok(start), Ok(end)) = (start_str.parse::<usize>(), end_str.parse::<usize>()) {
                 let graph = doom_map::SectorGraph::build(&level);
                 if let Some(path) = graph.shortest_path(start, end) {
                     if args.json {
