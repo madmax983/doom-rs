@@ -1404,7 +1404,7 @@ impl DoomApp for DoomGame {
             // Uses ActorRenderInfo so animations play correctly.
             if let Some(ref cache) = self.sprite_cache {
                 let player_handle = self.gs.player.handle;
-                let actors: Vec<ActorRenderInfo> = self
+                let actors_iter = self
                     .gs
                     .mobjslab
                     .iter_handles()
@@ -1440,8 +1440,9 @@ impl DoomApp for DoomGame {
                             render_flag: render_flag_from_state(frame, mo.flags),
                             fallback_prefix,
                         })
-                    })
-                    .collect();
+                    });
+                let mut actors = Vec::with_capacity(256);
+                actors.extend(actors_iter);
                 render_actors_with_masked_and_fixed_colormap_ex(
                     &actors,
                     &self.level,
@@ -2531,9 +2532,9 @@ fn run_doom() -> Result<()> {
     if let Some(path_str) = &args.pathfind {
         use crossterm::style::Stylize;
         let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-        let parts: Vec<&str> = path_str.split(',').collect();
-        if parts.len() == 2 {
-            if let (Ok(start), Ok(end)) = (parts[0].parse::<usize>(), parts[1].parse::<usize>()) {
+        let mut parts = path_str.split(',');
+        if let (Some(p1), Some(p2), None) = (parts.next(), parts.next(), parts.next()) {
+            if let (Ok(start), Ok(end)) = (p1.parse::<usize>(), p2.parse::<usize>()) {
                 let graph = doom_map::SectorGraph::build(&level);
                 if let Some(path) = graph.shortest_path(start, end) {
                     if args.json {
