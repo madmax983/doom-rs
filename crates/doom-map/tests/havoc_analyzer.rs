@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 use doom_map::SectorGraph;
 use doom_map::analyzer::MapAnalyzer;
 use std::collections::{HashMap, HashSet};

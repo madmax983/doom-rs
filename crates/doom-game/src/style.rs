@@ -3,15 +3,40 @@
 use std::cmp;
 
 /// Represents the current style rank.
+///
+/// Derived from a [`StyleMeter`]'s current score. Ranks range from `Dismal` (the default)
+/// all the way up to `SmokinSexyStyle` for massive unbroken kill streaks.
+///
+/// ## Examples
+/// ```
+/// use doom_game::style::{StyleMeter, StyleRank};
+///
+/// let mut meter = StyleMeter::new();
+/// assert_eq!(meter.rank(), StyleRank::Dismal);
+///
+/// // Register a massive kill streak...
+/// for _ in 0..20 {
+///     meter.register_kill(10);
+/// }
+///
+/// assert_eq!(meter.rank(), StyleRank::SmokinSexyStyle);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StyleRank {
-    Dismal,          // D
-    Crazy,           // C
-    Badass,          // B
-    Apocalyptic,     // A
-    Savage,          // S
-    Sick,            // SS
-    SmokinSexyStyle, // SSS
+    /// **D**ismal. The baseline. You are breathing, but just barely.
+    Dismal,
+    /// **C**razy. A few chained kills. The demons are noticing you.
+    Crazy,
+    /// **B**adass. A respectable streak. Blood is starting to pool.
+    Badass,
+    /// **A**pocalyptic. You are a walking disaster zone.
+    Apocalyptic,
+    /// **S**avage. Total mastery of the arena.
+    Savage,
+    /// **S**ick **S**kills. The framerate stutters from the carnage.
+    Sick,
+    /// **S**mokin **S**exy **S**tyle!! The absolute zenith of demonic slaughter.
+    SmokinSexyStyle,
 }
 
 impl StyleRank {
@@ -30,6 +55,37 @@ impl StyleRank {
 }
 
 /// A DMC-like style meter.
+///
+/// In standard Doom, survival is the only metric. The `StyleMeter` changes the narrative
+/// by rewarding *aggression* and *momentum*. It tracks rapid, successive kills and
+/// assigns a qualitative [`StyleRank`] to the player's current performance.
+///
+/// The core mechanic relies on a combo window (approx 2 seconds). If the player kills
+/// another demon before the window closes, their combo count increases, granting a
+/// multiplicative bonus to the score. If the window closes, the combo resets and the
+/// score begins to rapidly decay.
+///
+/// ## Examples
+/// ```
+/// use doom_game::style::{StyleMeter, StyleRank};
+///
+/// let mut meter = StyleMeter::new();
+///
+/// // Kill a demon at tic 10
+/// meter.register_kill(10);
+/// assert_eq!(meter.score, 100);
+/// assert_eq!(meter.combo_count, 1);
+///
+/// // Kill another demon quickly at tic 20! Combo multiplier kicks in.
+/// meter.register_kill(20);
+/// assert_eq!(meter.score, 300); // 100 + (100 * 2)
+/// assert_eq!(meter.combo_count, 2);
+///
+/// // Wait too long... combo breaks and score decays.
+/// meter.tick(100);
+/// assert_eq!(meter.combo_count, 0);
+/// assert_eq!(meter.score, 295);
+/// ```
 #[derive(Debug, Clone)]
 pub struct StyleMeter {
     /// Current style score.
@@ -53,6 +109,10 @@ impl StyleMeter {
     /// Score required for SSS rank.
     pub const SSS_SCORE: u32 = 10000;
 
+    /// Initializes a cold style meter.
+    ///
+    /// The meter begins at a score of 0 (Rank: `Dismal`) with no active combo.
+    /// It must be fed blood to awaken.
     pub fn new() -> Self {
         Self {
             score: 0,

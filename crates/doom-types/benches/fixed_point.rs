@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Criterion benchmarks for Fixed16_16 arithmetic.
 //!
 //! Baseline numbers before any SIMD/LUT optimizations.

@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Golden-byte regression coverage for vanilla demo payloads.
 
 use doom_demo::DemoPlayer;

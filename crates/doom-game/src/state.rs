@@ -765,6 +765,11 @@ pub struct GameState {
     pub brain_targets: Vec<(Fixed16_16, Fixed16_16)>,
     /// Round-robin index into `brain_targets` for the next cube.
     pub brain_target_index: usize,
+    /// The style meter tracking kills and combo.
+    ///
+    /// When the `style_meter` feature is enabled, this component watches the player's
+    /// murderous momentum, granting a [`crate::style::StyleRank`] based on their
+    /// ability to chain kills together rapidly.
     #[cfg(feature = "style_meter")]
     pub style: crate::style::StyleMeter,
 }

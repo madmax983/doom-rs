@@ -197,6 +197,7 @@ pub struct CogmindHud {
     /// Level name (e.g. "E1M3" or "MAP07").
     pub level_name: String,
     #[cfg(feature = "style_meter")]
+    /// The current style rank of the player (if any).
     pub style_rank: Option<doom_game::style::StyleRank>,
 }
 

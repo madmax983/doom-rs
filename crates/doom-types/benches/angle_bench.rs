@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Criterion benchmarks for Bam (Binary Angle Measure) operations.
 //!
 //! `Bam::sin` / `Bam::cos` are table lookups keyed by `bam >> 19`.

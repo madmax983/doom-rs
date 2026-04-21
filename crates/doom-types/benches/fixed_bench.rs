@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Criterion benchmarks for Fixed16_16 arithmetic — `FixedMul` throughput baseline.
 //!
 //! These numbers document pre-optimization performance so that future SIMD
