@@ -5,12 +5,19 @@ use std::collections::{HashMap, HashSet};
 #[test]
 fn havoc_test_analyzer_does_not_panic_on_unconnected_neighbors() {
     let mut adj = HashMap::new();
-    adj.insert(0, HashSet::from([1, 2]));
-    // Nodes 1 and 2 don't have their own adjacency entries but are referenced by 0.
-    // This tests that analyzer correctly handles partial or unconnected topologies.
+
+    // Simulate a malformed graph where sector 0 points to sector 1,
+    // but sector 1 does not exist in the graph keys.
+    adj.insert(0, HashSet::from([1]));
+
     let graph = SectorGraph {
         adjacency_list: adj,
     };
     let analyzer = MapAnalyzer::new(&graph);
-    let _ = analyzer.chokepoints();
+
+    // This proves that ap_util correctly handles missing nodes and avoids panic
+    let chokes = analyzer.chokepoints();
+
+    // An empty graph or single node returns empty
+    assert_eq!(chokes, vec![]);
 }

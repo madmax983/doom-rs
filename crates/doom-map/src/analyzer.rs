@@ -116,19 +116,32 @@ impl<'a> MapAnalyzer<'a> {
                     parent.insert(v, u);
                     self.ap_util(v, visited, discovery_time, low_time, parent, ap, time);
 
-                    let low_v = *low_time.get(&v).unwrap();
-                    let low_u = *low_time.get(&u).unwrap();
+                    let low_v = *low_time
+                        .get(&v)
+                        .expect("visited node v must have low_time set");
+                    let low_u = *low_time
+                        .get(&u)
+                        .expect("current node u must have low_time set");
                     low_time.insert(u, low_u.min(low_v));
 
                     if parent.get(&u).is_none() && children > 1 {
                         ap.insert(u);
                     }
-                    if parent.get(&u).is_some() && low_v >= *discovery_time.get(&u).unwrap() {
+                    if parent.get(&u).is_some()
+                        && low_v
+                            >= *discovery_time
+                                .get(&u)
+                                .expect("current node u must have discovery_time set")
+                    {
                         ap.insert(u);
                     }
                 } else if parent.get(&u) != Some(&v) {
-                    let low_u = *low_time.get(&u).unwrap();
-                    let disc_v = *discovery_time.get(&v).unwrap();
+                    let low_u = *low_time
+                        .get(&u)
+                        .expect("current node u must have low_time set");
+                    let disc_v = *discovery_time
+                        .get(&v)
+                        .expect("visited node v must have discovery_time set");
                     low_time.insert(u, low_u.min(disc_v));
                 }
             }
