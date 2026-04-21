@@ -1897,6 +1897,20 @@ mod tests {
         assert_eq!(r.read_i32(), Err(SaveError::Truncated));
     }
 
+    #[test]
+    fn read_cursor_bytes_out_of_bounds() {
+        let data = [0u8; 3];
+        let mut r = ReadCursor::new(&data);
+        assert_eq!(r.read_bytes::<4>(), Err(SaveError::Truncated));
+    }
+
+    #[test]
+    fn read_cursor_bytes_exact_bounds() {
+        let data = [1u8, 2u8, 3u8, 4u8];
+        let mut r = ReadCursor::new(&data);
+        assert_eq!(r.read_bytes::<4>(), Ok([1, 2, 3, 4]));
+    }
+
     // --- Test 31: Roundtrip preserves player pending_weapon ---
     #[test]
     fn roundtrip_pending_weapon() {
