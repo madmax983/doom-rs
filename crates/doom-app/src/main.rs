@@ -2113,6 +2113,43 @@ fn load_demo_player(path: &std::path::Path) -> Result<DemoPlayer> {
 // main
 // ---------------------------------------------------------------------------
 
+fn handle_export(
+    export_path: Option<&std::path::Path>,
+    generate_data: impl FnOnce() -> String,
+    success_icon: &str,
+    success_verb: &str,
+    success_noun: &str,
+    error_noun: &str,
+) -> Result<bool> {
+    let Some(path) = export_path else {
+        return Ok(false);
+    };
+
+    let data = generate_data();
+    std::fs::write(path, data).with_context(|| {
+        format!(
+            "Could not save the {} to '{}'. Please check your permissions.",
+            error_noun,
+            path.display()
+        )
+    })?;
+
+    use crossterm::style::Stylize;
+    if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+        println!(
+            "{} {} {} to {}",
+            success_icon.green(),
+            success_verb.green().bold(),
+            success_noun,
+            path.display().to_string().cyan()
+        );
+    } else {
+        println!("{} {} to {}", success_verb, success_noun, path.display());
+    }
+
+    Ok(true)
+}
+
 fn run_doom() -> Result<()> {
     // Initialize trig tables (required for sin/cos in the game simulation).
     // SAFETY: called exactly once at startup, single-threaded, before any
@@ -2176,135 +2213,69 @@ fn run_doom() -> Result<()> {
         )
     })?;
 
-    if let Some(ref html_path) = args.export_html {
-        let html_data = doom_map::export_map_to_html(&level);
-        std::fs::write(html_path, html_data).with_context(|| {
-            format!(
-                "Could not save the HTML report to '{}'. Please check your permissions.",
-                html_path.display()
-            )
-        })?;
-        use crossterm::style::Stylize;
-        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} HTML report to {}",
-                "🌟".green(),
-                "Exported".green().bold(),
-                html_path.display().to_string().cyan()
-            );
-        } else {
-            println!("Exported HTML report to {}", html_path.display());
-        }
+    if handle_export(
+        args.export_html.as_deref(),
+        || doom_map::export_map_to_html(&level),
+        "🌟",
+        "Exported",
+        "HTML report",
+        "HTML report",
+    )? {
         return Ok(());
     }
 
-    if let Some(ref json_path) = args.export_json {
-        let json_data = doom_map::export_map_to_json(&level);
-        std::fs::write(json_path, json_data).with_context(|| {
-            format!(
-                "Could not save the JSON report to '{}'. Please check your permissions.",
-                json_path.display()
-            )
-        })?;
-        use crossterm::style::Stylize;
-        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} JSON report to {}",
-                "🌟".green(),
-                "Exported".green().bold(),
-                json_path.display().to_string().cyan()
-            );
-        } else {
-            println!("Exported JSON report to {}", json_path.display());
-        }
+    if handle_export(
+        args.export_json.as_deref(),
+        || doom_map::export_map_to_json(&level),
+        "🌟",
+        "Exported",
+        "JSON report",
+        "JSON report",
+    )? {
         return Ok(());
     }
 
-    if let Some(ref svg_path) = args.export_svg {
-        let svg_data = doom_map::export_map_to_svg(&level);
-        std::fs::write(svg_path, svg_data).with_context(|| {
-            format!(
-                "Could not save the SVG layout to '{}'. Please check your permissions.",
-                svg_path.display()
-            )
-        })?;
-        use crossterm::style::Stylize;
-        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} layout to {}",
-                "🌟".green(),
-                "Exported".green().bold(),
-                svg_path.display().to_string().cyan()
-            );
-        } else {
-            println!("Exported layout to {}", svg_path.display());
-        }
+    if handle_export(
+        args.export_svg.as_deref(),
+        || doom_map::export_map_to_svg(&level),
+        "🌟",
+        "Exported",
+        "layout",
+        "SVG layout",
+    )? {
         return Ok(());
     }
 
-    if let Some(ref geojson_path) = args.export_geojson {
-        let geojson_data = doom_map::export_map_to_geojson(&level);
-        std::fs::write(geojson_path, geojson_data).with_context(|| {
-            format!(
-                "Could not save the GeoJSON file to '{}'. Please check your permissions.",
-                geojson_path.display()
-            )
-        })?;
-        use crossterm::style::Stylize;
-        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} GeoJSON to {}",
-                "🌟".green(),
-                "Exported".green().bold(),
-                geojson_path.display().to_string().cyan()
-            );
-        } else {
-            println!("Exported GeoJSON to {}", geojson_path.display());
-        }
+    if handle_export(
+        args.export_geojson.as_deref(),
+        || doom_map::export_map_to_geojson(&level),
+        "🌟",
+        "Exported",
+        "GeoJSON",
+        "GeoJSON file",
+    )? {
         return Ok(());
     }
 
-    if let Some(ref dot_path) = args.export_dot {
-        let graph = doom_map::SectorGraph::build(&level);
-        std::fs::write(dot_path, graph.to_dot()).with_context(|| {
-            format!(
-                "Could not save the Graphviz DOT file to '{}'. Please check your permissions.",
-                dot_path.display()
-            )
-        })?;
-        use crossterm::style::Stylize;
-        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} Graphviz DOT to {}",
-                "🌟".green(),
-                "Exported".green().bold(),
-                dot_path.display().to_string().cyan()
-            );
-        } else {
-            println!("Exported Graphviz DOT to {}", dot_path.display());
-        }
+    if handle_export(
+        args.export_dot.as_deref(),
+        || doom_map::SectorGraph::build(&level).to_dot(),
+        "🌟",
+        "Exported",
+        "Graphviz DOT",
+        "Graphviz DOT file",
+    )? {
         return Ok(());
     }
 
-    if let Some(ref obj_path) = args.export_obj {
-        let obj_data = doom_map::obj::export_map_to_obj(&level);
-        std::fs::write(obj_path, obj_data).with_context(|| {
-            format!(
-                "Could not save the 3D model to '{}'. Please check your permissions.",
-                obj_path.display()
-            )
-        })?;
-        use crossterm::style::Stylize;
-        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} 3D model to {}",
-                "🌟".green(),
-                "Exported".green().bold(),
-                obj_path.display().to_string().cyan()
-            );
-        } else {
-            println!("Exported 3D model to {}", obj_path.display());
-        }
+    if handle_export(
+        args.export_obj.as_deref(),
+        || doom_map::obj::export_map_to_obj(&level),
+        "🌟",
+        "Exported",
+        "3D model",
+        "3D model",
+    )? {
         return Ok(());
     }
 
