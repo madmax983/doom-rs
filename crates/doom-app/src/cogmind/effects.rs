@@ -27,21 +27,21 @@ const MAX_DUST: usize = 15;
 /// A single cosmetic particle (debris, trail, dust).
 pub(crate) struct Effect {
     /// Map-unit X position.
-    pub x: i32,
+    pub(crate) x: i32,
     /// Map-unit Y position.
-    pub y: i32,
+    pub(crate) y: i32,
     /// Display character.
-    pub glyph: char,
+    pub(crate) glyph: char,
     /// Base foreground color.
-    pub fg: Rgb,
+    pub(crate) fg: Rgb,
     /// Tics remaining before this effect expires.
-    pub lifetime: u8,
+    pub(crate) lifetime: u8,
     /// Original lifetime, used for fade calculation.
-    pub max_lifetime: u8,
+    pub(crate) max_lifetime: u8,
     /// When `true`, dim `fg` proportional to remaining life.
-    pub fade: bool,
+    pub(crate) fade: bool,
     /// Whether this particle counts toward the dust cap.
-    pub is_dust: bool,
+    pub(crate) is_dust: bool,
 }
 
 impl Effect {
@@ -70,7 +70,7 @@ impl Effect {
 /// Manages the pool of active particle effects.
 pub(crate) struct EffectLayer {
     /// Active effects (newest at end).
-    pub effects: Vec<Effect>,
+    pub(crate) effects: Vec<Effect>,
     /// Countdown timer throttling ambient dust spawns.
     dust_timer: u8,
     /// Cosmetic PRNG state.

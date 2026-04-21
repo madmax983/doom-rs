@@ -23,13 +23,13 @@ pub(crate) const CELL_SIZE: i32 = 24;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Tile {
     /// What kind of map element this cell represents.
-    pub kind: TileKind,
+    pub(crate) kind: TileKind,
     /// Index of the Doom sector that owns this cell, if any.
-    pub sector_idx: Option<usize>,
+    pub(crate) sector_idx: Option<usize>,
     /// Light level (0-255) inherited from the sector.
-    pub light: u8,
+    pub(crate) light: u8,
     /// Hazard glow tint from adjacent nukage/lava tiles, if any.
-    pub glow: Option<Rgb>,
+    pub(crate) glow: Option<Rgb>,
 }
 
 impl Default for Tile {
@@ -51,13 +51,13 @@ impl Default for Tile {
 pub(crate) struct TileGrid {
     tiles: Vec<Tile>,
     /// Width of the grid in cells.
-    pub grid_w: usize,
+    pub(crate) grid_w: usize,
     /// Height of the grid in cells.
-    pub grid_h: usize,
+    pub(crate) grid_h: usize,
     /// Map-unit X coordinate of the grid origin (lower-left corner).
-    pub origin_x: i32,
+    pub(crate) origin_x: i32,
     /// Map-unit Y coordinate of the grid origin (lower-left corner).
-    pub origin_y: i32,
+    pub(crate) origin_y: i32,
 }
 
 impl TileGrid {

@@ -37,3 +37,7 @@
 **[Extract WeaponType and AmmoType to Shared Primitives]**
 **Tangle:** The `WeaponType` and `AmmoType` enums (along with `WEAPON_AMMO`) were defined in `doom-game/src/player.rs`, but widely used in presentation crates like `doom-app` for rendering HUD elements and managing audio playback. This caused UI components to depend directly on the entire game engine crate just for basic enum definitions, creating tight coupling between rendering and core game state.
 **Blueprint:** Extracted `WeaponType` and `AmmoType` into `doom-types/src/weapons.rs`. `doom-game/src/player.rs` now re-exports them for backwards compatibility within the game logic crate, and `doom-app` was updated to import these primitives directly from the shared types crate. This creates a clean dependency hierarchy where presentation relies on foundational types instead of game logic.
+
+**[Encapsulating doom-app state]**
+**Tangle:** Several structs within the internal `doom-app` module (like `Console`, `CheatDef`, `Effect`, `TileGlyph`, `CogmindState`, etc.) had fields erroneously marked as `pub`, exposing internal state to potential mutations from outside the module context and violating the directive that `doom-app` components should be completely scoped as `pub(crate)` due to having no downstream dependents.
+**Blueprint:** Refactored all `pub` field definitions and type aliases within `doom-app` modules to `pub(crate)`.

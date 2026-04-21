@@ -13,13 +13,13 @@ use std::collections::VecDeque;
 /// In-game console for cheat entry and status display.
 pub(crate) struct Console {
     /// Whether the console overlay is currently visible.
-    pub visible: bool,
+    pub(crate) visible: bool,
     /// The current input line being typed.
-    pub input: String,
+    pub(crate) input: String,
     /// Recent output messages (newest at end, oldest evicted when full).
-    pub messages: VecDeque<String>,
+    pub(crate) messages: VecDeque<String>,
     /// Maximum number of messages to retain.
-    pub max_messages: usize,
+    pub(crate) max_messages: usize,
 }
 
 impl Console {

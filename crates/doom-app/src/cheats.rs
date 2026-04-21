@@ -13,9 +13,9 @@ use doom_types::limits::MAX_AMMO;
 /// A cheat code definition.
 #[derive(Debug, Clone)]
 pub(crate) struct CheatDef {
-    pub name: &'static str,
+    pub(crate) name: &'static str,
     /// The keypress sequence to match (lowercase ASCII).
-    pub sequence: &'static str,
+    pub(crate) sequence: &'static str,
 }
 
 /// All standard Doom cheat codes.
