@@ -111,11 +111,17 @@ impl<'a> MapAnalyzer<'a> {
 
         if let Some(neighbors) = self.graph.adjacency_list.get(&u) {
             for &v in neighbors {
+                // Ignore missing target nodes (malformed graph handling)
+                if !self.graph.adjacency_list.contains_key(&v) {
+                    continue;
+                }
                 if !visited.contains(&v) {
                     children += 1;
                     parent.insert(v, u);
                     self.ap_util(v, visited, discovery_time, low_time, parent, ap, time);
 
+                    // Since we check contains_key above, these nodes are guaranteed to have been
+                    // visited and added to low_time.
                     let low_v = *low_time.get(&v).unwrap();
                     let low_u = *low_time.get(&u).unwrap();
                     low_time.insert(u, low_u.min(low_v));
@@ -170,7 +176,8 @@ impl<'a> MapAnalyzer<'a> {
                     component.insert(curr);
                     if let Some(neighbors) = self.graph.adjacency_list.get(&curr) {
                         for &n in neighbors {
-                            if !visited.contains(&n) {
+                            // Only traverse edges to nodes that actually exist in the graph.
+                            if self.graph.adjacency_list.contains_key(&n) && !visited.contains(&n) {
                                 visited.insert(n);
                                 queue.push(n);
                             }

@@ -94,3 +94,11 @@ path = "fuzz_targets/fuzz_target_savegame.rs"
 test = false
 doc = false
 bench = false
+
+
+[[bin]]
+name = "fuzz_target_analyzer"
+path = "fuzz_targets/fuzz_target_analyzer.rs"
+test = false
+doc = false
+bench = false
