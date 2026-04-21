@@ -786,7 +786,7 @@ impl DoomGame {
         let arm = self.gs.player.armor();
         let kills = self.gs.player.kill_count;
         let weapon = self.gs.player.weapon;
-        use doom_game::player::{AmmoType, WEAPON_AMMO};
+        use doom_types::weapons::{AmmoType, WEAPON_AMMO};
         let cur_ammo_type = WEAPON_AMMO[weapon as usize];
         let cur_ammo = if cur_ammo_type == AmmoType::None {
             u32::MAX
@@ -1548,7 +1548,7 @@ impl DoomApp for DoomGame {
             KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD,
             KEY_YELLOW_SKULL,
         };
-        use doom_game::{AmmoType, WEAPON_AMMO};
+        use doom_types::weapons::{AmmoType, WEAPON_AMMO};
 
         let p = &self.gs.player;
         let ammo_type = WEAPON_AMMO[p.weapon as usize];
@@ -5178,7 +5178,7 @@ mod tests {
             .sound
             .sound_queue
             .push(doom_game::SoundRequest::PlayerWeaponFire(
-                doom_game::player::WeaponType::Pistol,
+                doom_types::weapons::WeaponType::Pistol,
             ));
 
         // Open menu to pause the game, so `gs.tick()` doesn't clear the sound queue we just pushed!
