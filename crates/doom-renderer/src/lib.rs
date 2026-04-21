@@ -95,7 +95,7 @@ pub use texture_compose::{
 pub use wad_font::{GLYPH_GAP, SPACE_WIDTH, WadFont};
 pub use weapon_anim::{
     MAX_BOB, RAISE_SPEED, WEAPON_BASE_X, WEAPON_BASE_Y, WEAPON_BOTTOM, WEAPON_FLASH_LIGHT_BONUS,
-    WEAPON_TOP, WeaponAnimState, WeaponBob, WeaponSprite, draw_weapon_animated,
+    WEAPON_TOP, WeaponAnimState, WeaponBob, WeaponSprite, WeaponTransition, draw_weapon_animated,
     draw_weapon_animated_with_override, draw_weapon_shaded, get_weapon_light_params,
     weapon_light_bonus, weapon_sprite_name,
 };

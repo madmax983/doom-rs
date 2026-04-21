@@ -50,9 +50,9 @@ use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
     ActorRenderInfo, AnimState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
     IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, PatchCache, RenderOut,
-    SpriteCache, SpriteClip, TextureCache, WadFont, WeaponAnimState, draw_automap_ex,
-    draw_finale_wad, draw_intermission, draw_intermission_wad, draw_menu_wad, draw_status_bar_wad,
-    draw_title_screen_wad, draw_weapon_animated_with_override,
+    SpriteCache, SpriteClip, TextureCache, WadFont, WeaponAnimState, WeaponTransition,
+    draw_automap_ex, draw_finale_wad, draw_intermission, draw_intermission_wad, draw_menu_wad,
+    draw_status_bar_wad, draw_title_screen_wad, draw_weapon_animated_with_override,
     render_actors_with_masked_and_fixed_colormap_ex, render_flag_from_state,
     render_level_with_view_height_and_extra_light_and_fixed_colormap, thing_sprite_prefix,
 };
@@ -661,18 +661,20 @@ impl DoomGame {
             || psprite_state_is_fullbright(weapon_psprite.state);
         self.weapon_anim.raise_offset = weapon_psprite.sy;
 
-        let (state_raising, state_lowering) =
-            psprite_transition_flags(self.gs.player.weapon, weapon_psprite.state);
+        let transition = psprite_transition(self.gs.player.weapon, weapon_psprite.state);
 
-        if state_raising || state_lowering {
-            self.weapon_anim.current.raising = state_raising;
-            self.weapon_anim.current.lowering = state_lowering;
+        if transition != WeaponTransition::None {
+            self.weapon_anim.current.transition = transition;
         } else if let Some(previous_offset) = previous_offset {
-            self.weapon_anim.current.raising = weapon_psprite.sy < previous_offset;
-            self.weapon_anim.current.lowering = weapon_psprite.sy > previous_offset;
+            if weapon_psprite.sy < previous_offset {
+                self.weapon_anim.current.transition = WeaponTransition::Raising;
+            } else if weapon_psprite.sy > previous_offset {
+                self.weapon_anim.current.transition = WeaponTransition::Lowering;
+            } else {
+                self.weapon_anim.current.transition = WeaponTransition::None;
+            }
         } else {
-            self.weapon_anim.current.raising = false;
-            self.weapon_anim.current.lowering = false;
+            self.weapon_anim.current.transition = WeaponTransition::None;
         }
     }
 
@@ -1846,7 +1848,7 @@ fn psprite_patch_name(state: doom_game::StateNum) -> Option<[u8; 8]> {
     Some(lump)
 }
 
-fn psprite_transition_flags(weapon: WeaponType, state: doom_game::StateNum) -> (bool, bool) {
+fn psprite_transition(weapon: WeaponType, state: doom_game::StateNum) -> WeaponTransition {
     use doom_game::states::ids;
 
     let (up, down) = match weapon {
@@ -1861,10 +1863,13 @@ fn psprite_transition_flags(weapon: WeaponType, state: doom_game::StateNum) -> (
         WeaponType::SuperShotgun => (ids::S_DSGUN_UP, ids::S_DSGUN_DOWN),
     };
 
-    (
-        state == doom_game::StateNum(up),
-        state == doom_game::StateNum(down),
-    )
+    if state == doom_game::StateNum(up) {
+        WeaponTransition::Raising
+    } else if state == doom_game::StateNum(down) {
+        WeaponTransition::Lowering
+    } else {
+        WeaponTransition::None
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -3939,7 +3944,7 @@ mod tests {
             "weapon switch should stage the new weapon in the gameplay psprite state"
         );
         assert!(
-            game.weapon_anim.current.lowering,
+            game.weapon_anim.current.transition == doom_renderer::WeaponTransition::Lowering,
             "weapon switch should start by lowering the current weapon psprite"
         );
 

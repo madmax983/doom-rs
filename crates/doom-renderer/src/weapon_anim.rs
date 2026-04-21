@@ -53,8 +53,20 @@ const ANGLE_PER_TIC: u32 = 0x0333_3333;
 // WeaponSprite
 // ---------------------------------------------------------------------------
 
+/// Transition state of the weapon (raising, lowering, or resting).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum WeaponTransition {
+    /// The weapon is neither raising nor lowering.
+    #[default]
+    None,
+    /// The weapon is being raised.
+    Raising,
+    /// The weapon is being lowered.
+    Lowering,
+}
+
 /// Snapshot of the weapon overlay's visual state for a single frame.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct WeaponSprite {
     /// Current sprite name (8 bytes, null-padded).
     pub sprite_name: [u8; 8],
@@ -62,10 +74,8 @@ pub struct WeaponSprite {
     pub sx: i32,
     /// Y position on screen (normally 167, modified by raise/lower).
     pub sy: i32,
-    /// Is the weapon currently being raised?
-    pub raising: bool,
-    /// Is the weapon currently being lowered?
-    pub lowering: bool,
+    /// Transition state of the weapon (raising, lowering, or resting).
+    pub transition: WeaponTransition,
     /// Muzzle flash active (draws bright overlay).
     pub flash_active: bool,
     /// Flash sprite name (if different from main sprite).
@@ -82,8 +92,7 @@ impl Default for WeaponSprite {
             sprite_name: *b"PISGA0\0\0",
             sx: 0,
             sy: WEAPON_BASE_Y,
-            raising: false,
-            lowering: false,
+            transition: WeaponTransition::None,
             flash_active: false,
             flash_sprite: [0u8; 8],
             flash_tics: 0,
@@ -195,14 +204,18 @@ impl WeaponAnimState {
         if self.raise_offset < self.raise_target {
             // Lowering: offset increases toward target.
             self.raise_offset = (self.raise_offset + self.raise_speed).min(self.raise_target);
-            if self.raise_offset >= self.raise_target {
-                self.current.lowering = false;
+            if self.raise_offset >= self.raise_target
+                && self.current.transition == WeaponTransition::Lowering
+            {
+                self.current.transition = WeaponTransition::None;
             }
         } else if self.raise_offset > self.raise_target {
             // Raising: offset decreases toward target.
             self.raise_offset = (self.raise_offset - self.raise_speed).max(self.raise_target);
-            if self.raise_offset <= self.raise_target {
-                self.current.raising = false;
+            if self.raise_offset <= self.raise_target
+                && self.current.transition == WeaponTransition::Raising
+            {
+                self.current.transition = WeaponTransition::None;
             }
         }
 
@@ -224,15 +237,13 @@ impl WeaponAnimState {
     pub fn start_raise(&mut self) {
         self.raise_offset = WEAPON_BOTTOM;
         self.raise_target = WEAPON_TOP;
-        self.current.raising = true;
-        self.current.lowering = false;
+        self.current.transition = WeaponTransition::Raising;
     }
 
     /// Begin lowering the weapon to the bottom of the screen.
     pub fn start_lower(&mut self) {
         self.raise_target = WEAPON_BOTTOM;
-        self.current.lowering = true;
-        self.current.raising = false;
+        self.current.transition = WeaponTransition::Lowering;
     }
 
     /// Start a muzzle-flash overlay.
@@ -245,7 +256,7 @@ impl WeaponAnimState {
 
     /// Returns `true` when the weapon is fully raised and not transitioning.
     pub fn is_ready(&self) -> bool {
-        self.raise_offset == WEAPON_TOP && !self.current.raising && !self.current.lowering
+        self.raise_offset == WEAPON_TOP && self.current.transition == WeaponTransition::None
     }
 
     /// Compute the final screen X including bob offset.
@@ -473,8 +484,7 @@ mod tests {
         assert_eq!(ws.sprite_name, *b"PISGA0\0\0");
         assert_eq!(ws.sx, 0);
         assert_eq!(ws.sy, WEAPON_BASE_Y);
-        assert!(!ws.raising);
-        assert!(!ws.lowering);
+        assert_eq!(ws.transition, WeaponTransition::None);
         assert!(!ws.flash_active);
         assert_eq!(ws.flash_tics, 0);
         assert!(!ws.full_bright);
@@ -570,8 +580,7 @@ mod tests {
     fn weapon_anim_state_start_raise_sets_flag() {
         let mut state = WeaponAnimState::new();
         state.start_raise();
-        assert!(state.current.raising);
-        assert!(!state.current.lowering);
+        assert_eq!(state.current.transition, WeaponTransition::Raising);
         assert_eq!(state.raise_offset, WEAPON_BOTTOM);
         assert_eq!(state.raise_target, WEAPON_TOP);
     }
@@ -580,8 +589,7 @@ mod tests {
     fn weapon_anim_state_start_lower_sets_flag() {
         let mut state = WeaponAnimState::new();
         state.start_lower();
-        assert!(state.current.lowering);
-        assert!(!state.current.raising);
+        assert_eq!(state.current.transition, WeaponTransition::Lowering);
         assert_eq!(state.raise_target, WEAPON_BOTTOM);
     }
 

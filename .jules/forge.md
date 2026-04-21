@@ -40,3 +40,7 @@
 **Refactor sidedef sector extraction guard clauses**
 **Learning:** `activate_doors` repeatedly used two lines to extract a `sector_idx` from `left_sidedef`: `let Some(sd) = level.sidedefs.get(left_sidedef as usize) else { return; }; let sector_idx = sd.sector as usize;`. This pattern was repeated 16 times inside a `match` statement, creating verbose boilerplate.
 **Action:** Use `.map(|sd| sd.sector as usize)` directly in the guard clause: `let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else { return; };` to eliminate the unused intermediate `sd` variable and compress the boilerplate into a single statement.
+**[Refactored Boolean Blindness in weapon_anim]**\n**Learning:**  using mutually exclusive booleans  and  allowed impossible states (both true) and complicated the update logic across multiple modules.\n**Action:** Replaced boolean state flags with a strictly typed  enum (, , ) to enforce valid states and clean up update/check conditionals.
+**[Refactored Boolean Blindness in weapon_anim]**
+**Learning:** `WeaponSprite` using mutually exclusive booleans `raising` and `lowering` allowed impossible states (both true) and complicated the update logic across multiple modules.
+**Action:** Replaced boolean state flags with a strictly typed `WeaponTransition` enum (`None`, `Raising`, `Lowering`) to enforce valid states and clean up update/check conditionals.
