@@ -2445,6 +2445,7 @@ fn run_doom() -> Result<()> {
             };
 
             let mut table = comfy_table::Table::new();
+            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
             table
                 .load_preset(comfy_table::presets::UTF8_FULL)
                 .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
@@ -2691,6 +2692,7 @@ fn run_doom() -> Result<()> {
 
             let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
             let mut table = comfy_table::Table::new();
+            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
             table
                 .load_preset(comfy_table::presets::UTF8_FULL)
                 .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
