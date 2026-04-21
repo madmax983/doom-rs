@@ -20,9 +20,10 @@ use crate::framebuffer::Framebuffer;
 use crate::patch_cache::PatchCache;
 use doom_game::face::{FaceState, face_patch_name};
 use doom_game::player::{
-    AmmoType, KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD,
-    KEY_YELLOW_SKULL, PlayerState, WEAPON_AMMO,
+    KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD, KEY_YELLOW_SKULL,
+    PlayerState,
 };
+use doom_types::weapons::{AmmoType, WEAPON_AMMO};
 use doom_wad::WadStack;
 
 // ---------------------------------------------------------------------------

@@ -8,9 +8,9 @@
 //! - `ammo[i] ≤ MAX_AMMO[i]` for all i
 
 use doom_types::limits::{MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_WEAPONS};
+use doom_types::weapons::{AmmoType, WEAPON_AMMO, WeaponType};
 
 use crate::mobj::{MobjHandle, StateNum};
-pub use doom_types::weapons::{AmmoType, WEAPON_AMMO, WeaponType};
 
 // ---------------------------------------------------------------------------
 // Key bit constants

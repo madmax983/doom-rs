@@ -8,9 +8,11 @@
 //! left in the world -- `p_touch_special_thing` returns `false`.
 
 use crate::mobj::{MobjHandle, flags};
-use crate::player::{self, AmmoType, WeaponType, powers};
+use crate::player::{self, powers};
 use crate::state::GameState;
 use doom_types::mobj_kind::MobjKind;
+use doom_types::weapons::AmmoType;
+use doom_types::weapons::WeaponType;
 
 // ---------------------------------------------------------------------------
 // Power-up duration constants (in tics, 35 tics = 1 second)
