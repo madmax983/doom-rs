@@ -12,13 +12,13 @@ use super::glyphs::Rgb;
 /// A single cell in the player's sight-line ray.
 pub(crate) struct SightCell {
     /// Terminal-space column offset from the player cell.
-    pub dx: i32,
+    pub(crate) dx: i32,
     /// Terminal-space row offset from the player cell (Y-flipped from Doom).
-    pub dy: i32,
+    pub(crate) dy: i32,
     /// Character to render at this cell.
-    pub glyph: char,
+    pub(crate) glyph: char,
     /// Foreground color.
-    pub fg: Rgb,
+    pub(crate) fg: Rgb,
 }
 
 // ---------------------------------------------------------------------------

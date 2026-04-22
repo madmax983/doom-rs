@@ -27,14 +27,14 @@ pub(crate) enum TileKind {
 // ---------------------------------------------------------------------------
 
 /// An RGB color triple.
-pub type Rgb = (u8, u8, u8);
+pub(crate) type Rgb = (u8, u8, u8);
 
 /// A single tile's visual representation: character + foreground/background.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TileGlyph {
-    pub glyph: char,
-    pub fg: Rgb,
-    pub bg: Rgb,
+    pub(crate) glyph: char,
+    pub(crate) fg: Rgb,
+    pub(crate) bg: Rgb,
 }
 
 // ---------------------------------------------------------------------------
