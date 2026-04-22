@@ -41,3 +41,7 @@
 **[Stop WeaponType Re-export Leak]**
 **Tangle:** `doom-game/src/lib.rs` and `doom-game/src/player.rs` were unnecessarily re-exporting `doom_types::weapons::{AmmoType, WeaponType, WEAPON_AMMO}` via `pub use`. This caused presentation crates like `doom-app` and `doom-renderer` to depend on the game engine `doom-game` just to use basic shared weapon data types. This violated the boundary isolation.
 **Blueprint:** Removed the re-exports from `doom-game` and updated `doom-app`, `doom-renderer`, and `doom-game` itself to import `WeaponType`, `AmmoType`, and `WEAPON_AMMO` directly from the foundational `doom-types` crate. This enforces cleaner dependency arrows where higher-level crates fetch domain primitives directly from the shared types crate rather than pulling them through the game logic.
+
+**[Extract NUM_POWERS and NUM_PSPRITES to Shared Primitives]**
+**Tangle:** The `NUM_POWERS` and `NUM_PSPRITES` constants were defined in `doom-game/src/player.rs`, causing UI and game engine components to depend directly on the entire game engine crate just for basic limits.
+**Blueprint:** Extracted `NUM_POWERS` and `NUM_PSPRITES` into `doom-types/src/limits.rs`. `doom-game/src/player.rs` now re-exports them for backwards compatibility within the game logic crate, and `doom-game` components that relied on them were updated to import these primitives directly from the shared types crate. This creates a clean dependency hierarchy where presentation relies on foundational limits instead of game logic.

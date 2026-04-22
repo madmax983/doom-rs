@@ -7,6 +7,7 @@
 //! - `health ≤ MAX_HEALTH (100)` at all times
 //! - `ammo[i] ≤ MAX_AMMO[i]` for all i
 
+pub use doom_types::limits::{NUM_POWERS, NUM_PSPRITES};
 use doom_types::limits::{MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_WEAPONS};
 use doom_types::weapons::{AmmoType, WEAPON_AMMO, WeaponType};
 
@@ -32,12 +33,6 @@ pub const KEY_RED_SKULL: u8 = 0x20;
 // ---------------------------------------------------------------------------
 // Power-up constants
 // ---------------------------------------------------------------------------
-
-/// Number of distinct power-up types.
-pub const NUM_POWERS: usize = 6;
-
-/// Number of player psprite slots (`weapon`, `flash`).
-pub const NUM_PSPRITES: usize = 2;
 
 /// Psprite slot indices matching vanilla Doom's `ps_weapon` / `ps_flash`.
 pub mod psprite_slots {
