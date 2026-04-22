@@ -28,15 +28,15 @@ use super::visibility::{SectorVisibility, VisibilityMap};
 pub(crate) struct CogmindState {
     /// Tile grid for the current level (lazily built).
     #[doc(hidden)]
-    pub tile_grid: Option<TileGrid>,
+    pub(crate) tile_grid: Option<TileGrid>,
     /// Per-sector visibility map (lazily built).
     #[doc(hidden)]
-    pub visibility: Option<VisibilityMap>,
+    pub(crate) visibility: Option<VisibilityMap>,
     /// Name of the level the cached grid was built for.
     cached_level_name: String,
     /// Particle effect layer (combat debris, projectile trails, dust).
     #[doc(hidden)]
-    pub effects: EffectLayer,
+    pub(crate) effects: EffectLayer,
 }
 
 impl CogmindState {
