@@ -44,3 +44,6 @@
 **[Refactored Boolean Blindness in weapon_anim]**
 **Learning:** `WeaponSprite` using mutually exclusive booleans `raising` and `lowering` allowed impossible states (both true) and complicated the update logic across multiple modules.
 **Action:** Replaced boolean state flags with a strictly typed `WeaponTransition` enum (`None`, `Raising`, `Lowering`) to enforce valid states and clean up update/check conditionals.
+**Refactor Mobj field extraction using if-let guard clauses**
+**Learning:** `match gs.mobjslab.get(handle) { Some(mo) => (mo.x, mo.y), None => return, };` with tuple destructuring repeats boilerplate, is noisy, and has an indentation hit.
+**Action:** Replace `match` blocks used solely for extracting values into tuples with idiomatic `if let Some` guard clauses (`let Some(mo) = gs.mobjslab.get(handle) else { return; }; let x = mo.x;`) to improve linearity and readability.
