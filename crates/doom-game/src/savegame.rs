@@ -5,7 +5,7 @@
 //! changes can be detected and handled.
 //!
 //! # Roundtrip invariant
-//! `load_game(&save_game(gs, ...)).unwrap().state` must produce a `GameState`
+//! `load_game(&save_game(gs, ...)).expect("Value must exist").state` must produce a `GameState`
 //! equivalent to the original.
 
 use doom_types::limits::{NUM_AMMO, NUM_WEAPONS};
@@ -1299,11 +1299,14 @@ mod tests {
     fn detect_save_format_distinguishes_doomrs_and_vanilla_headers() {
         let gs = test_game_state();
         let doomrs = save_game(&gs, &test_level_name(), 2, "format test");
-        assert_eq!(detect_save_format(&doomrs).unwrap(), SaveFormat::DoomRs);
+        assert_eq!(
+            detect_save_format(&doomrs).expect("Value must exist"),
+            SaveFormat::DoomRs
+        );
 
         let vanilla = vanilla_header_bytes();
         assert_eq!(
-            detect_save_format(&vanilla).unwrap(),
+            detect_save_format(&vanilla).expect("Value must exist"),
             SaveFormat::VanillaDsg
         );
     }
@@ -1314,7 +1317,10 @@ mod tests {
         let result =
             save_game_with_format(&gs, &test_level_name(), 2, "strict", SaveFormat::VanillaDsg);
 
-        assert_eq!(result.unwrap_err(), SaveError::UnsupportedVanillaDsg);
+        assert_eq!(
+            result.expect_err("Must be an error"),
+            SaveError::UnsupportedVanillaDsg
+        );
     }
 
     #[test]
@@ -1352,7 +1358,7 @@ mod tests {
         data[4] = 0xFF;
 
         let result = load_game(&data);
-        assert_eq!(result.unwrap_err(), SaveError::BadVersion);
+        assert_eq!(result.expect_err("Must be an error"), SaveError::BadVersion);
     }
 
     #[test]
@@ -1361,13 +1367,13 @@ mod tests {
         let mut data = save_game_doomrs(&gs, &test_level_name(), 2, "test save");
         data[4] = 0xFF;
         let result = load_game_doomrs(&data);
-        assert_eq!(result.unwrap_err(), SaveError::BadVersion);
+        assert_eq!(result.expect_err("Must be an error"), SaveError::BadVersion);
     }
 
     #[test]
     fn load_game_doomrs_too_short() {
         let result = load_game_doomrs(b"TOO_SHORT");
-        assert_eq!(result.unwrap_err(), SaveError::TooShort);
+        assert_eq!(result.expect_err("Must be an error"), SaveError::TooShort);
     }
 
     #[test]
@@ -1375,13 +1381,13 @@ mod tests {
         let mut data = vec![0; 50];
         data[0..4].copy_from_slice(b"MOOD");
         let result = load_game_doomrs(&data);
-        assert_eq!(result.unwrap_err(), SaveError::BadMagic);
+        assert_eq!(result.expect_err("Must be an error"), SaveError::BadMagic);
     }
 
     #[test]
     fn too_short_load_game_returns_error() {
         let result = load_game(b"DOOM");
-        assert_eq!(result.unwrap_err(), SaveError::TooShort);
+        assert_eq!(result.expect_err("Must be an error"), SaveError::TooShort);
     }
 
     #[test]
@@ -1390,7 +1396,7 @@ mod tests {
         let mut data = save_game(&gs, &test_level_name(), 2, "test save");
         data[0..4].copy_from_slice(b"MOOD");
         let result = load_game(&data);
-        assert_eq!(result.unwrap_err(), SaveError::BadMagic);
+        assert_eq!(result.expect_err("Must be an error"), SaveError::BadMagic);
     }
 
     #[test]
@@ -1428,7 +1434,10 @@ mod tests {
     // --- Test 4: load_game with empty bytes returns TooShort ---
     #[test]
     fn load_empty_returns_too_short() {
-        assert_eq!(load_game(&[]).unwrap_err(), SaveError::TooShort);
+        assert_eq!(
+            load_game(&[]).expect_err("Must be an error"),
+            SaveError::TooShort
+        );
     }
 
     // --- Test 6: load_game with bad version returns BadVersion ---
@@ -1437,7 +1446,10 @@ mod tests {
         let mut data = vec![0u8; 64];
         data[..4].copy_from_slice(&SAVE_MAGIC);
         data[4..8].copy_from_slice(&99u32.to_le_bytes());
-        assert_eq!(load_game(&data).unwrap_err(), SaveError::BadVersion);
+        assert_eq!(
+            load_game(&data).expect_err("Must be an error"),
+            SaveError::BadVersion
+        );
     }
 
     // --- Test 7: Roundtrip preserves player health ---
@@ -1665,37 +1677,73 @@ mod tests {
         let data = w.into_bytes();
         let mut r = ReadCursor::new(&data);
 
-        assert_eq!(r.read_u8().unwrap(), 0xAB);
-        assert_eq!(r.read_i16().unwrap(), -1234);
-        assert_eq!(r.read_u16().unwrap(), 0xBEEF);
-        assert_eq!(r.read_i32().unwrap(), -100_000);
-        assert_eq!(r.read_u32().unwrap(), 0xDEAD_BEEF);
-        assert!(r.read_bool().unwrap());
-        assert!(!r.read_bool().unwrap());
+        assert_eq!(r.read_u8().expect("Value must exist"), 0xAB);
+        assert_eq!(r.read_i16().expect("Value must exist"), -1234);
+        assert_eq!(r.read_u16().expect("Value must exist"), 0xBEEF);
+        assert_eq!(r.read_i32().expect("Value must exist"), -100_000);
+        assert_eq!(r.read_u32().expect("Value must exist"), 0xDEAD_BEEF);
+        assert!(r.read_bool().expect("Value must exist"));
+        assert!(!r.read_bool().expect("Value must exist"));
     }
 
     #[test]
     fn cursor_read_truncated() {
         let empty: [u8; 0] = [];
         let mut r = ReadCursor::new(&empty);
-        assert_eq!(r.read_u8().unwrap_err(), SaveError::Truncated);
-        assert_eq!(r.read_i16().unwrap_err(), SaveError::Truncated);
-        assert_eq!(r.read_u16().unwrap_err(), SaveError::Truncated);
-        assert_eq!(r.read_i32().unwrap_err(), SaveError::Truncated);
-        assert_eq!(r.read_u32().unwrap_err(), SaveError::Truncated);
-        assert_eq!(r.read_bool().unwrap_err(), SaveError::Truncated);
+        assert_eq!(
+            r.read_u8().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
+        assert_eq!(
+            r.read_i16().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
+        assert_eq!(
+            r.read_u16().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
+        assert_eq!(
+            r.read_i32().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
+        assert_eq!(
+            r.read_u32().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
+        assert_eq!(
+            r.read_bool().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
 
         let one_byte: [u8; 1] = [0xAB];
         let mut r2 = ReadCursor::new(&one_byte);
-        assert_eq!(r2.read_i16().unwrap_err(), SaveError::Truncated);
-        assert_eq!(r2.read_u16().unwrap_err(), SaveError::Truncated);
-        assert_eq!(r2.read_i32().unwrap_err(), SaveError::Truncated);
-        assert_eq!(r2.read_u32().unwrap_err(), SaveError::Truncated);
+        assert_eq!(
+            r2.read_i16().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
+        assert_eq!(
+            r2.read_u16().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
+        assert_eq!(
+            r2.read_i32().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
+        assert_eq!(
+            r2.read_u32().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
 
         let three_bytes: [u8; 3] = [0xAB, 0xCD, 0xEF];
         let mut r3 = ReadCursor::new(&three_bytes);
-        assert_eq!(r3.read_i32().unwrap_err(), SaveError::Truncated);
-        assert_eq!(r3.read_u32().unwrap_err(), SaveError::Truncated);
+        assert_eq!(
+            r3.read_i32().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
+        assert_eq!(
+            r3.read_u32().expect_err("Must be an error"),
+            SaveError::Truncated
+        );
     }
 
     // --- Test 21: Roundtrip preserves mobj data ---
@@ -1734,7 +1782,11 @@ mod tests {
                 .is_some_and(|m| m.kind == MobjKind::Imp)
         });
         assert!(imp_handle.is_some(), "imp must be present after load");
-        let imp_loaded = loaded.state.mobjslab.get(*imp_handle.unwrap()).unwrap();
+        let imp_loaded = loaded
+            .state
+            .mobjslab
+            .get(*imp_handle.expect("Value must exist"))
+            .expect("Value must exist");
         assert_eq!(imp_loaded.health, 60);
         assert_eq!(imp_loaded.x, Fixed16_16::from_int(500));
         assert_eq!(imp_loaded.y, Fixed16_16::from_int(-300));
@@ -1807,7 +1859,7 @@ mod tests {
         // The player handle must point to a valid mobj.
         let player_mo = loaded.state.mobjslab.get(loaded.state.player.handle);
         assert!(player_mo.is_some(), "player handle must resolve after load");
-        assert_eq!(player_mo.unwrap().kind, MobjKind::Player);
+        assert_eq!(player_mo.expect("Value must exist").kind, MobjKind::Player);
     }
 
     // --- Test 26: Roundtrip with multiple mobjs ---
@@ -1876,7 +1928,10 @@ mod tests {
         let data = save_game(&gs, &test_level_name(), 2, "truncate test");
         // Truncate to just the header.
         let truncated = &data[..45];
-        assert_eq!(load_game(truncated).unwrap_err(), SaveError::Truncated);
+        assert_eq!(
+            load_game(truncated).expect_err("Must be an error"),
+            SaveError::Truncated
+        );
     }
 
     // --- Test 29: ReadCursor out of bounds returns Truncated ---
@@ -2010,6 +2065,6 @@ mod tests {
         }
 
         let res = load_game(&data);
-        assert_eq!(res.unwrap_err(), SaveError::Truncated);
+        assert_eq!(res.expect_err("Must be an error"), SaveError::Truncated);
     }
 }

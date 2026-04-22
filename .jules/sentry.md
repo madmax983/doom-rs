@@ -49,3 +49,7 @@
 ## 2026-04-20 - Uncovered panic point when truncating savegame byte bounds
 **Learning:** The bounds checking in `savegame::ReadCursor::read_bytes` lacked explicit testing when passing a large chunk size exceeding bounds, presenting a hidden edge case.
 **Action:** Always verify array slices when parsing files and provide missing boundary condition tests using `read_bytes_out_of_bounds` and similar cases to increase safety.
+## 2024-05-18 - Graceful degradation for unconnected/malformed topologies
+
+**Learning:** `MapAnalyzer::chokepoints` previously lacked proper testing to verify resilience against malformed graphs, particularly graphs that included asymmetric connections or nonexistent child nodes in the adjacency list.
+**Action:** Adding tests like `havoc_test_analyzer_does_not_panic_on_asymmetric_edges` and `havoc_test_analyzer_missing_back_edges` proactively protects analysis functions against dirty maps without failing safely.
