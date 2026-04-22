@@ -2447,7 +2447,8 @@ fn run_doom() -> Result<()> {
             let mut table = comfy_table::Table::new();
             table
                 .load_preset(comfy_table::presets::UTF8_FULL)
-                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
 
             if is_tty {
                 table.set_header(vec![
@@ -2693,7 +2694,8 @@ fn run_doom() -> Result<()> {
             let mut table = comfy_table::Table::new();
             table
                 .load_preset(comfy_table::presets::UTF8_FULL)
-                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
 
             if is_tty {
                 table
