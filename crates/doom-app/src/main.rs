@@ -195,6 +195,11 @@ struct Args {
     #[arg(long)]
     export_geojson: Option<std::path::PathBuf>,
 
+    /// Save telemetry data for the session as a GeoJSON file upon exit.
+    #[cfg(feature = "telemetry")]
+    #[arg(long)]
+    telemetry_out: Option<std::path::PathBuf>,
+
     /// Convert a .lmp demo file to a CSV and exit.
     #[arg(long, num_args = 2, value_names = ["INPUT_LMP", "OUTPUT_CSV"])]
     export_demo_csv: Option<Vec<std::path::PathBuf>>,
@@ -3029,6 +3034,17 @@ fn run_doom() -> Result<()> {
         event_loop
             .run(&mut playback_app, &blit_palette)
             .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+
+        #[cfg(feature = "telemetry")]
+        if let Some(path) = args.telemetry_out.as_deref() {
+            if let Err(e) =
+                std::fs::write(path, playback_app.inner().gs.telemetry.export_to_geojson())
+            {
+                log::error!("Failed to write telemetry: {}", e);
+            } else {
+                println!("Telemetry written to {}", path.display());
+            }
+        }
     } else if let Some(record_path) = args.record {
         // Parse episode/map from the --warp argument.
         let (episode, map) = parse_warp_episode_map(warp_str);
@@ -3041,11 +3057,31 @@ fn run_doom() -> Result<()> {
         event_loop
             .run(&mut recording_app, &blit_palette)
             .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+
+        #[cfg(feature = "telemetry")]
+        if let Some(path) = args.telemetry_out.as_deref() {
+            if let Err(e) =
+                std::fs::write(path, recording_app.inner().gs.telemetry.export_to_geojson())
+            {
+                log::error!("Failed to write telemetry: {}", e);
+            } else {
+                println!("Telemetry written to {}", path.display());
+            }
+        }
     } else {
         let mut app = app;
         event_loop
             .run(&mut app, &blit_palette)
             .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+
+        #[cfg(feature = "telemetry")]
+        if let Some(path) = args.telemetry_out.as_deref() {
+            if let Err(e) = std::fs::write(path, app.gs.telemetry.export_to_geojson()) {
+                log::error!("Failed to write telemetry: {}", e);
+            } else {
+                println!("Telemetry written to {}", path.display());
+            }
+        }
     }
 
     Ok(())

@@ -53,6 +53,9 @@ pub(crate) struct DemoRecordingWrapper {
 }
 
 impl DemoRecordingWrapper {
+    pub(crate) fn inner(&self) -> &DoomGame {
+        &self.inner
+    }
     /// Create a new recording wrapper.
     #[allow(dead_code)]
     pub(crate) fn new(
@@ -154,6 +157,9 @@ pub(crate) struct DemoPlaybackApp {
 }
 
 impl DemoPlaybackApp {
+    pub(crate) fn inner(&self) -> &DoomGame {
+        &self.inner
+    }
     /// Create a new playback app backed by `inner` and `player`.
     #[allow(dead_code)]
     pub(crate) fn new(inner: DoomGame, player: DemoPlayer) -> Self {

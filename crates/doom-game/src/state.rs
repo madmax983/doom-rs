@@ -767,6 +767,8 @@ pub struct GameState {
     pub brain_target_index: usize,
     #[cfg(feature = "style_meter")]
     pub style: crate::style::StyleMeter,
+    #[cfg(feature = "telemetry")]
+    pub telemetry: crate::telemetry::SessionTelemetry,
 }
 
 impl GameState {
@@ -794,6 +796,8 @@ impl GameState {
             brain_target_index: 0,
             #[cfg(feature = "style_meter")]
             style: crate::style::StyleMeter::new(),
+            #[cfg(feature = "telemetry")]
+            telemetry: crate::telemetry::SessionTelemetry::new(),
         }
     }
 

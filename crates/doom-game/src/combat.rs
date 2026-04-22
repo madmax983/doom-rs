@@ -206,6 +206,23 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         }
         gs.player.apply_damage(dmg);
         gs.player.damage_count = (gs.player.damage_count + dmg.max(0) as u32).min(100);
+
+        #[cfg(feature = "telemetry")]
+        {
+            if dmg > 0 {
+                let (px, py) = gs
+                    .mobjslab
+                    .get(gs.player.handle)
+                    .map(|mo| (mo.x, mo.y))
+                    .unwrap_or_default();
+                gs.telemetry.record(
+                    gs.tic_num,
+                    px.to_int(),
+                    py.to_int(),
+                    crate::telemetry::TelemetryKind::DamageTaken(dmg as u32),
+                );
+            }
+        }
         dmg
     } else {
         damage
@@ -267,6 +284,17 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         #[cfg(feature = "style_meter")]
         if inflictor == gs.player.handle {
             gs.style.register_kill(gs.tic_num);
+        }
+
+        #[cfg(feature = "telemetry")]
+        if inflictor == gs.player.handle {
+            let name = format!("{:?}", kind);
+            gs.telemetry.record(
+                gs.tic_num,
+                sx.to_int(),
+                sy.to_int(),
+                crate::telemetry::TelemetryKind::MonsterKill(name),
+            );
         }
         gs.sound
             .sound_queue

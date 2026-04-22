@@ -487,6 +487,16 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             if mo.flags & flags::MF_COUNTITEM != 0 {
                 gs.stats.item_count += 1;
             }
+            #[cfg(feature = "telemetry")]
+            {
+                let name = format!("{:?}", kind);
+                gs.telemetry.record(
+                    gs.tic_num,
+                    mo.x.to_int(),
+                    mo.y.to_int(),
+                    crate::telemetry::TelemetryKind::ItemPickup(name),
+                );
+            }
         }
         gs.player.bonus_count = 6; // HUD flash for 6 tics
     }
