@@ -12,7 +12,8 @@ use doom_types::limits::{NUM_AMMO, NUM_WEAPONS};
 use doom_types::{Bam, Fixed16_16};
 
 use crate::mobj::{Mobj, MobjHandle, MobjSlab, StateNum};
-use crate::player::{NUM_POWERS, NUM_PSPRITES, PlayerState, PspriteState};
+use crate::player::{PlayerState, PspriteState};
+use doom_types::limits::{NUM_POWERS, NUM_PSPRITES};
 use crate::savegame_vanilla;
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoomRng, DoorMover, ExitRequest, FloorMover,

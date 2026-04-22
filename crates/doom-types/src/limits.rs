@@ -82,6 +82,11 @@ pub const FB_SIZE: usize = FB_WIDTH * FB_HEIGHT;
 // ---------------------------------------------------------------------------
 // Game limits
 // ---------------------------------------------------------------------------
+/// Number of powers a player can have.
+pub const NUM_POWERS: usize = 6;
+
+/// Number of player sprites (weapon and flash).
+pub const NUM_PSPRITES: usize = 2;
 
 /// Maximum number of players in a game (4-player limit).
 pub const MAX_PLAYERS: usize = 4;

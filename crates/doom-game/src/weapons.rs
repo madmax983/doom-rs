@@ -648,7 +648,7 @@ fn tick_psprite_slot(gs: &mut GameState, slot: usize, cmd: TicCmd, level: Option
 pub fn setup_psprites(player: &mut PlayerState) {
     player.refire = 0;
     player.extra_light = 0;
-    player.psprites = [PspriteState::default(); crate::player::NUM_PSPRITES];
+    player.psprites = [PspriteState::default(); doom_types::limits::NUM_PSPRITES];
     player.pending_weapon = Some(player.weapon);
     bring_up_weapon(player);
     init_psprite_state(player, psprite_slots::FLASH, StateNum::NULL);
