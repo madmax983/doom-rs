@@ -336,6 +336,18 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
     }
     gs.player.use_down = use_held;
 
+    #[cfg(feature = "telemetry")]
+    {
+        if let Some(mo) = gs.mobjslab.get(gs.player.handle) {
+            gs.telemetry.record(
+                gs.tic_num,
+                mo.x.to_int(),
+                mo.y.to_int(),
+                crate::telemetry::TelemetryKind::Position,
+            );
+        }
+    }
+
     crate::weapons::tick_psprites(gs, cmd, level.as_deref());
 
     // Sector specials: periodic player floor damage, etc. (immutable level borrow).
