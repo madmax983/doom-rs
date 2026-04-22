@@ -195,7 +195,8 @@ impl WadFile {
         // loaded from already-validated, caller-owned buffers).
         let dir_bytes = &data[dir_offset..dir_end];
 
-        let mut dir = Vec::with_capacity(numlumps);
+        let capacity = numlumps.min(data.len().saturating_sub(dir_offset) / 16);
+        let mut dir = Vec::with_capacity(capacity);
         for chunk in dir_bytes.chunks_exact(16) {
             let raw = RawLumpEntry {
                 filepos: i32::from_le_bytes(chunk[0..4].try_into().expect("chunk 0..4 is 4 bytes")),
