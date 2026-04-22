@@ -196,6 +196,7 @@ pub struct CogmindHud {
     pub total_monsters: u32,
     /// Level name (e.g. "E1M3" or "MAP07").
     pub level_name: String,
+    /// The currently tracked style rank, if the `style_meter` feature is enabled.
     #[cfg(feature = "style_meter")]
     pub style_rank: Option<doom_game::style::StyleRank>,
 }

@@ -10,6 +10,7 @@
 //!
 //! The framebuffer is filled with a varied pattern (not uniform) to avoid
 //! any unrealistic cache behaviour.
+#![allow(missing_docs)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use doom_renderer::{Framebuffer, PaletteLut};

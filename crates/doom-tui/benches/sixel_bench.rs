@@ -9,6 +9,7 @@
 //!   - full:    1760×1100  (~maximised 220-col terminal with 8×20 font)
 //!
 //! FPS headroom = 1000 ms / bench_time_ms.  Goal: > 60 FPS at "full".
+#![allow(missing_docs)]
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use doom_renderer::PaletteLut;

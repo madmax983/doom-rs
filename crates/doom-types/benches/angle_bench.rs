@@ -2,6 +2,7 @@
 //!
 //! `Bam::sin` / `Bam::cos` are table lookups keyed by `bam >> 19`.
 //! These benchmarks establish the lookup throughput baseline.
+#![allow(missing_docs)]
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use doom_types::Bam;
 

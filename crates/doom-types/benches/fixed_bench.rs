@@ -2,6 +2,7 @@
 //!
 //! These numbers document pre-optimization performance so that future SIMD
 //! or LUT changes can be compared against this baseline.
+#![allow(missing_docs)]
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use doom_types::Fixed16_16;
 

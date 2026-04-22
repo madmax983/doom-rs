@@ -5,13 +5,20 @@ use std::cmp;
 /// Represents the current style rank.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum StyleRank {
-    Dismal,          // D
-    Crazy,           // C
-    Badass,          // B
-    Apocalyptic,     // A
-    Savage,          // S
-    Sick,            // SS
-    SmokinSexyStyle, // SSS
+    /// D Rank - Lowest rank, given when a player hasn't scored enough points or lost their combo.
+    Dismal,
+    /// C Rank - Given to a player who's doing okay but could do better.
+    Crazy,
+    /// B Rank - Given to a player who's doing well but can still improve.
+    Badass,
+    /// A Rank - Given to a player who is really rocking the demon hordes.
+    Apocalyptic,
+    /// S Rank - Very good performance, almost perfect.
+    Savage,
+    /// SS Rank - Amazing performance, tearing through enemies like paper.
+    Sick,
+    /// SSS Rank - The ultimate rank, absolute dominance.
+    SmokinSexyStyle,
 }
 
 impl StyleRank {
@@ -53,6 +60,14 @@ impl StyleMeter {
     /// Score required for SSS rank.
     pub const SSS_SCORE: u32 = 10000;
 
+    /// Create a new, empty StyleMeter with a starting score of 0.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::style::StyleMeter;
+    /// let meter = StyleMeter::new();
+    /// assert_eq!(meter.score, 0);
+    /// ```
     pub fn new() -> Self {
         Self {
             score: 0,

@@ -5,6 +5,7 @@
 //! - `draw_span`   — R_DrawSpan throughput (textured horizontal strip)
 //! - `Framebuffer::clear` — full-framebuffer clear baseline
 //! - `render_level` — full BSP traversal + perspective projection on a minimal level
+#![allow(missing_docs)]
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use doom_map::{Blockmap, Level, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex};
 use doom_renderer::{

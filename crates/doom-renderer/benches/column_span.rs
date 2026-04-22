@@ -1,4 +1,5 @@
 //! Criterion benchmarks for column and span drawing.
+#![allow(missing_docs)]
 use criterion::{Criterion, criterion_group, criterion_main};
 
 pub fn bench_placeholder(c: &mut Criterion) {

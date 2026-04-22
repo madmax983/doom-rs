@@ -1,6 +1,7 @@
 //! Criterion benchmarks for Fixed16_16 arithmetic.
 //!
 //! Baseline numbers before any SIMD/LUT optimizations.
+#![allow(missing_docs)]
 use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use doom_types::fixed::Fixed16_16;
 
