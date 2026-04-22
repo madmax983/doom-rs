@@ -220,16 +220,24 @@ pub fn p_check_sight(
     target: MobjHandle,
 ) -> bool {
     // Extract source data.
-    let (src_x, src_y, src_z, src_height, src_subsector) = match gs.mobjslab.get(source) {
-        Some(mo) => (mo.x, mo.y, mo.z, mo.height, mo.subsector as usize),
-        None => return false,
+    let Some(mo) = gs.mobjslab.get(source) else {
+        return false;
     };
+    let src_x = mo.x;
+    let src_y = mo.y;
+    let src_z = mo.z;
+    let src_height = mo.height;
+    let src_subsector = mo.subsector as usize;
 
     // Extract target data.
-    let (tgt_x, tgt_y, tgt_z, tgt_height, tgt_subsector) = match gs.mobjslab.get(target) {
-        Some(mo) => (mo.x, mo.y, mo.z, mo.height, mo.subsector as usize),
-        None => return false,
+    let Some(mo) = gs.mobjslab.get(target) else {
+        return false;
     };
+    let tgt_x = mo.x;
+    let tgt_y = mo.y;
+    let tgt_z = mo.z;
+    let tgt_height = mo.height;
+    let tgt_subsector = mo.subsector as usize;
 
     // Resolve sector indices from current world positions, falling back to the
     // actor's tracked subsector in synthetic/unit-test geometry.
@@ -350,14 +358,20 @@ pub fn p_check_sight(
 ///
 /// Returns `0` if the horizontal distance is zero (actors at same position).
 pub fn p_aim_line_slope(gs: &GameState, source: MobjHandle, target: MobjHandle) -> Fixed16_16 {
-    let (src_x, src_y, src_z, src_h) = match gs.mobjslab.get(source) {
-        Some(mo) => (mo.x, mo.y, mo.z, mo.height),
-        None => return Fixed16_16::ZERO,
+    let Some(mo) = gs.mobjslab.get(source) else {
+        return Fixed16_16::ZERO;
     };
-    let (tgt_x, tgt_y, tgt_z, tgt_h) = match gs.mobjslab.get(target) {
-        Some(mo) => (mo.x, mo.y, mo.z, mo.height),
-        None => return Fixed16_16::ZERO,
+    let src_x = mo.x;
+    let src_y = mo.y;
+    let src_z = mo.z;
+    let src_h = mo.height;
+    let Some(mo) = gs.mobjslab.get(target) else {
+        return Fixed16_16::ZERO;
     };
+    let tgt_x = mo.x;
+    let tgt_y = mo.y;
+    let tgt_z = mo.z;
+    let tgt_h = mo.height;
 
     let src_eye = sight_eye_z(src_z, src_h);
     let tgt_eye = sight_eye_z(tgt_z, tgt_h);

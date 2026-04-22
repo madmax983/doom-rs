@@ -501,10 +501,13 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
     }
 
     // 4. Compute proposed position, then collision-test (needs shared borrow).
-    let (old_x, old_y, new_x, new_y) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.x, mo.y, mo.x + mo.momx, mo.y + mo.momy),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let old_x = mo.x;
+    let old_y = mo.y;
+    let new_x = mo.x + mo.momx;
+    let new_y = mo.y + mo.momy;
     let mut moved = match level.as_deref() {
         Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
         None => true,
