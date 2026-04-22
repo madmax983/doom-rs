@@ -49,3 +49,6 @@
 ## 2026-04-20 - Uncovered panic point when truncating savegame byte bounds
 **Learning:** The bounds checking in `savegame::ReadCursor::read_bytes` lacked explicit testing when passing a large chunk size exceeding bounds, presenting a hidden edge case.
 **Action:** Always verify array slices when parsing files and provide missing boundary condition tests using `read_bytes_out_of_bounds` and similar cases to increase safety.
+## 2026-04-20 - Uncovered panic point when truncating savegame byte bounds
+**Learning:** Found scattered instances of `.unwrap()` in map traversal logic (`analyzer.rs`) that obscured edge case failure context (like disjoint or malformed graph vertices), which violates Sentry's principle that tests should provide meaningful context and not explode mysteriously.
+**Action:** Always replace `unwrap()` with `expect("invariant description")` when dealing with graph lookups that might fail due to unconnected or malformed topologies. Always construct intentionally malformed inputs when testing analysis routines (e.g. `havoc_test_analyzer_does_not_panic_on_unconnected_neighbors`).

@@ -122,19 +122,32 @@ impl<'a> MapAnalyzer<'a> {
 
                     // Since we check contains_key above, these nodes are guaranteed to have been
                     // visited and added to low_time.
-                    let low_v = *low_time.get(&v).unwrap();
-                    let low_u = *low_time.get(&u).unwrap();
+                    let low_v = *low_time
+                        .get(&v)
+                        .expect("invariant violated: node missing from analysis structures");
+                    let low_u = *low_time
+                        .get(&u)
+                        .expect("invariant violated: node missing from analysis structures");
                     low_time.insert(u, low_u.min(low_v));
 
                     if parent.get(&u).is_none() && children > 1 {
                         ap.insert(u);
                     }
-                    if parent.get(&u).is_some() && low_v >= *discovery_time.get(&u).unwrap() {
+                    if parent.get(&u).is_some()
+                        && low_v
+                            >= *discovery_time
+                                .get(&u)
+                                .expect("invariant violated: node missing from analysis structures")
+                    {
                         ap.insert(u);
                     }
                 } else if parent.get(&u) != Some(&v) {
-                    let low_u = *low_time.get(&u).unwrap();
-                    let disc_v = *discovery_time.get(&v).unwrap();
+                    let low_u = *low_time
+                        .get(&u)
+                        .expect("invariant violated: node missing from analysis structures");
+                    let disc_v = *discovery_time
+                        .get(&v)
+                        .expect("invariant violated: node missing from analysis structures");
                     low_time.insert(u, low_u.min(disc_v));
                 }
             }
@@ -280,5 +293,21 @@ mod tests {
         assert_eq!(areas.len(), 1);
         assert!(areas[0].contains(&0));
         assert!(areas[0].contains(&1));
+    }
+
+    #[test]
+    fn havoc_test_analyzer_does_not_panic_on_unconnected_neighbors() {
+        let mut adj = HashMap::new();
+        // 0 connects to 1 and 2, but 1 and 2 don't exist in the map
+        adj.insert(0, HashSet::from([1, 2]));
+        // 3 connects to 0
+        adj.insert(3, HashSet::from([0]));
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        // This should not panic
+        let _ = analyzer.chokepoints();
+        let _ = analyzer.isolated_areas();
     }
 }
