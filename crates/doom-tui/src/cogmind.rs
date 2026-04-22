@@ -196,6 +196,7 @@ pub struct CogmindHud {
     pub total_monsters: u32,
     /// Level name (e.g. "E1M3" or "MAP07").
     pub level_name: String,
+    /// The current DMC-style rank to display in the HUD.
     #[cfg(feature = "style_meter")]
     pub style_rank: Option<doom_game::style::StyleRank>,
 }

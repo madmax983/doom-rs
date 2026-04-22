@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Criterion benchmarks for the doom-renderer hot paths.
 //!
 //! Covers:

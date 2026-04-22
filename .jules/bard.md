@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-05-14 - Style Meter Documentation
+**Confusion:** The DMC-inspired style meter feature lacked clear documentation and was triggering warnings for undocumented items in public UI/state types. It also wasn't clear what conditions generated which ranks.
+**Clarification:** Added explicit documentation for `StyleRank` variants, `StyleMeter::new`, `GameState::style`, and `CogmindHud::style_rank`, explaining that it measures sequential kills. Included executable doctest for instantiation.

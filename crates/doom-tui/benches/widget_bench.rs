@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Criterion benchmarks for the half-block `▀` framebuffer widget.
 //!
 //! Run with:

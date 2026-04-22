@@ -765,6 +765,7 @@ pub struct GameState {
     pub brain_targets: Vec<(Fixed16_16, Fixed16_16)>,
     /// Round-robin index into `brain_targets` for the next cube.
     pub brain_target_index: usize,
+    /// A DMC-inspired style meter that tracks rapid sequential kills and assigns a letter grade.
     #[cfg(feature = "style_meter")]
     pub style: crate::style::StyleMeter,
 }
