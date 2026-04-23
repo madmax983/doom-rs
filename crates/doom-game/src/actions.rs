@@ -493,16 +493,14 @@ fn p_check_missile_range(
 ///
 /// Port of Doom's `P_Move` from `p_enemy.c`.
 pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> bool {
-    let (mo_x, mo_y, dir, speed) = match gs.mobjslab.get(handle) {
-        Some(mo) => {
-            let spd = mobjinfo::MOBJINFO
-                .get(mo.kind as usize)
-                .map(|i| i.speed)
-                .unwrap_or(Fixed16_16::ZERO);
-            (mo.x, mo.y, mo.movedir, spd)
-        }
-        None => return false,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return false;
     };
+    let spd = mobjinfo::MOBJINFO
+        .get(mo.kind as usize)
+        .map(|i| i.speed)
+        .unwrap_or(Fixed16_16::ZERO);
+    let (mo_x, mo_y, dir, speed) = (mo.x, mo.y, mo.movedir, spd);
 
     if dir == DI_NODIR || dir > 8 {
         return false;
@@ -736,16 +734,14 @@ fn try_move_in_dir(
 /// order.  Finally, if all four fail, tries any direction (cycled via RNG).
 pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     // Get target handle and monster position.
-    let (target_handle, mo_x, mo_y, speed) = match gs.mobjslab.get(handle) {
-        Some(mo) => {
-            let spd = mobjinfo::MOBJINFO
-                .get(mo.kind as usize)
-                .map(|i| i.speed)
-                .unwrap_or(Fixed16_16::ZERO);
-            (mo.target, mo.x, mo.y, spd)
-        }
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let spd = mobjinfo::MOBJINFO
+        .get(mo.kind as usize)
+        .map(|i| i.speed)
+        .unwrap_or(Fixed16_16::ZERO);
+    let (target_handle, mo_x, mo_y, speed) = (mo.target, mo.x, mo.y, spd);
 
     // If no target, set NODIR and return.
     if target_handle == MobjHandle::NULL {
@@ -1728,10 +1724,10 @@ fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
 /// (Manhattan distance), the vile sets its target to the corpse, enters
 /// `S_VILE_ATK1`, and the corpse is restored to life.
 fn a_vile_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    let (vx, vy) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.x.to_int(), mo.y.to_int()),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let (vx, vy) = (mo.x.to_int(), mo.y.to_int());
 
     // Scan for raisable corpses.
     let mut corpse_handle: Option<MobjHandle> = None;
@@ -2032,10 +2028,10 @@ fn a_brain_die(gs: &mut GameState) {
 ///
 /// Spawns 20 explosion effects spread across the brain's width.
 fn a_brain_scream(gs: &mut GameState, handle: MobjHandle) {
-    let (bx, by, bz) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.x.to_int(), mo.y.to_int(), mo.z.to_int()),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let (bx, by, bz) = (mo.x.to_int(), mo.y.to_int(), mo.z.to_int());
 
     // Spawn 20 explosions spread across a 320-unit horizontal range.
     for i in 0..20 {
@@ -2063,10 +2059,10 @@ fn a_brain_scream(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Spawns a single explosion at a random position near the brain.
 fn a_brain_explode(gs: &mut GameState, handle: MobjHandle) {
-    let (bx, by, bz) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.x.to_int(), mo.y.to_int(), mo.z.to_int()),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let (bx, by, bz) = (mo.x.to_int(), mo.y.to_int(), mo.z.to_int());
 
     let r = gs.p_random() as i32;
     let ex = bx + (r - 128) * 2;

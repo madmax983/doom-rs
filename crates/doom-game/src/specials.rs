@@ -62,10 +62,10 @@ const BLINK_SLOW_PERIOD: i32 = 35;
 /// monster AI sees the same liveness the HUD does.
 pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandle) {
     // Read actor position.
-    let (az, _ax, _ay) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.z.to_int(), mo.x.to_int(), mo.y.to_int()),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let (az, _ax, _ay) = (mo.z.to_int(), mo.x.to_int(), mo.y.to_int());
 
     for sector in &level.sectors {
         if sector.special == 0 {
@@ -2278,10 +2278,10 @@ fn close_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
 /// Only the first intersected linedef with a non-zero special is activated.
 pub fn p_use_lines(gs: &mut GameState, level: &mut Level, handle: MobjHandle) {
     // Read actor position and angle.
-    let (ax, ay, angle) = match gs.mobjslab.get(handle) {
-        Some(mo) => (mo.x.to_int(), mo.y.to_int(), mo.angle),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let (ax, ay, angle) = (mo.x.to_int(), mo.y.to_int(), mo.angle);
 
     let cos_raw = i64::from(angle.cos().raw());
     let sin_raw = i64::from(angle.sin().raw());

@@ -223,10 +223,10 @@ pub fn p_check_pickups(gs: &mut GameState) {
     }
 
     // Get player position and radius.
-    let (px, py, pradius) = match gs.mobjslab.get(gs.player.handle) {
-        Some(mo) => (mo.x.to_int(), mo.y.to_int(), mo.radius.to_int()),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(gs.player.handle) else {
+        return;
     };
+    let (px, py, pradius) = (mo.x.to_int(), mo.y.to_int(), mo.radius.to_int());
 
     // Collect all MF_SPECIAL actor handles (to avoid borrow conflicts).
     // Avoid intermediate `Vec` allocation by iterating directly over generations.
@@ -256,10 +256,10 @@ pub fn p_check_pickups(gs: &mut GameState) {
         }
 
         // Extract item position and radius.
-        let (ix, iy, item_radius) = match gs.mobjslab.get(handle) {
-            Some(mo) => (mo.x.to_int(), mo.y.to_int(), mo.radius.to_int()),
-            None => continue,
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            continue;
         };
+        let (ix, iy, item_radius) = (mo.x.to_int(), mo.y.to_int(), mo.radius.to_int());
 
         // AABB overlap: combined-radius square check.
         let combined_radius = pradius + item_radius;

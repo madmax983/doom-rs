@@ -728,10 +728,10 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
     }
 
     // --- Gather source angle (copy out before mutable borrows) ---
-    let base_angle: Bam = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.angle,
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
+    let base_angle: Bam = mo.angle;
 
     let pellets = info.pellets;
     let spread = info.spread;
