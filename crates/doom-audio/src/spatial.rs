@@ -62,6 +62,24 @@ pub struct SpatialParams {
 /// the listener's facing direction and the direction to the emitter.
 /// A positive pan value means the sound is to the listener's right; negative
 /// means left.
+///
+/// ## Examples
+/// ```
+/// use doom_audio::spatial::{compute_spatial, SfxEmitter};
+/// use doom_types::{Fixed16_16, Bam};
+///
+/// let emitter = SfxEmitter {
+///     x: Fixed16_16::from_int(100),
+///     y: Fixed16_16::ZERO,
+/// };
+///
+/// // Listener is at the origin, facing North. The sound is directly to their right (East).
+/// let params = compute_spatial(&emitter, Fixed16_16::ZERO, Fixed16_16::ZERO, Bam(0x4000_0000));
+///
+/// // The sound is close, so volume is 1.0. Pan is > 0 since it's to the right.
+/// assert_eq!(params.volume, 1.0);
+/// assert!(params.pan > 0.5);
+/// ```
 #[must_use]
 #[allow(clippy::cast_precision_loss)] // f32 is intentional for audio path calculations
 pub fn compute_spatial(
