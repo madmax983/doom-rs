@@ -10,6 +10,24 @@ use crate::{MidiPlayer, midi::GenmidiBank, mus::MusScore};
 ///
 /// `loops` controls how many complete score loops to render (minimum 1).
 /// A `sample_rate` of 44_100 reproduces the classic Doom playback path.
+///
+/// ## Examples
+/// ```
+/// use doom_audio::wav::render_mus_to_wav_mono;
+/// use doom_audio::mus::{MusScore, MusHeader, MusEvent};
+///
+/// let score = MusScore {
+///     header: MusHeader { score_length: 0, score_start: 0, primary_channels: 1, secondary_channels: 0, instrument_count: 0 },
+///     instruments: vec![],
+///     events: vec![
+///         (0, MusEvent::PlayNote { channel: 0, note: 60, volume: Some(127) }),
+///         (14, MusEvent::ScoreEnd),
+///     ],
+/// };
+///
+/// let wav = render_mus_to_wav_mono(score, None, 44_100, 1);
+/// assert!(wav.len() > 44); // Needs to be at least a valid header plus data
+/// ```
 #[must_use]
 pub fn render_mus_to_wav_mono(
     score: MusScore,
@@ -48,6 +66,17 @@ pub fn render_mus_to_wav_mono(
 }
 
 /// Encode mono PCM16 samples as a RIFF/WAVE byte vector.
+///
+/// ## Examples
+/// ```
+/// use doom_audio::wav::encode_pcm16_wav_mono;
+///
+/// let samples = vec![0, 1000, -1000];
+/// let wav = encode_pcm16_wav_mono(44_100, &samples);
+///
+/// assert_eq!(&wav[0..4], b"RIFF");
+/// assert_eq!(wav.len(), 44 + 6); // 44 byte header + 3 i16 samples (6 bytes)
+/// ```
 #[must_use]
 pub fn encode_pcm16_wav_mono(sample_rate: u32, samples: &[i16]) -> Vec<u8> {
     let channels: u16 = 1;

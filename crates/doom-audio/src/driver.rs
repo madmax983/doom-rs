@@ -80,7 +80,7 @@ impl AudioDriver {
     /// - [`AudioError::NoDevice`] — no default output device.
     /// - [`AudioError::Stream`] — cpal could not create or start the stream.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```rust,no_run
     /// use doom_audio::driver::AudioDriver;
     ///
@@ -171,7 +171,7 @@ impl AudioDriver {
 
     /// Create a driver that owns no real stream — safe for headless / test use.
     ///
-    /// # Examples
+    /// ## Examples
     ///
     /// ```
     /// use doom_audio::driver::AudioDriver;

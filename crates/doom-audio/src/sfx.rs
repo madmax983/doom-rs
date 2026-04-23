@@ -87,6 +87,17 @@ impl SfxCache {
 ///    override — intentional fallback).
 ///
 /// If `sfx_id` is not present in `cache` the call is a no-op (no panic).
+///
+/// ## Examples
+/// ```
+/// use doom_audio::sfx::{SfxCache, play_sfx};
+/// use doom_audio::mixer::Mixer;
+///
+/// let mut mixer = Mixer::new(22_050);
+/// let cache = SfxCache::new(); // In reality, this would be populated with samples
+///
+/// play_sfx(&mut mixer, &cache, 42, 100);
+/// ```
 pub fn play_sfx(mixer: &mut Mixer, cache: &SfxCache, sfx_id: u16, volume: u8) {
     let Some(sample) = cache.get(sfx_id) else {
         return;
