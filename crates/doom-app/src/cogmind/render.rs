@@ -231,7 +231,9 @@ impl CogmindState {
         let tic = gs.tic_num;
         let player_tx = tw / 2;
         let player_ty = th / 2;
-        let mut visible_floors: Vec<(i32, i32)> = Vec::new();
+        // ⚡ Bolt Optimization: Pre-allocate capacity to avoid heap reallocations.
+        // The visible floors vector often scales with terminal size (typically 1/4th of tiles).
+        let mut visible_floors: Vec<(i32, i32)> = Vec::with_capacity((term_w as usize) * (term_h as usize) / 4);
 
         // --- Phase 1: tile rendering ---
         for ty in 0..term_h {
