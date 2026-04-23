@@ -2389,26 +2389,7 @@ fn run_doom() -> Result<()> {
 }}"#,
                 warp_str, chokepoints_json, areas_json
             );
-            use std::io::IsTerminal;
-            if std::io::stdout().is_terminal() {
-                use crossterm::style::Stylize;
-                let formatted_json = format!(
-                    r#"{{
-  {}: "{}",
-  {}: {},
-  {}: {}
-}}"#,
-                    r#""map""#.cyan().bold(),
-                    warp_str.yellow(),
-                    r#""chokepoints""#.cyan().bold(),
-                    chokepoints_json,
-                    r#""isolated_areas""#.cyan().bold(),
-                    areas_json
-                );
-                println!("{formatted_json}");
-            } else {
-                println!("{json_data}");
-            }
+            println!("{json_data}");
         } else {
             use crossterm::style::Stylize;
             let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
@@ -2514,16 +2495,7 @@ fn run_doom() -> Result<()> {
                         }
                         let path_json = format!("[{}]", path_inner);
                         let json_data = format!(r#"{{ "path": {} }}"#, path_json);
-                        if is_tty {
-                            let formatted_json = format!(
-                                r#"{{ {}: {} }}"#,
-                                r#""path""#.cyan().bold(),
-                                path_json.green()
-                            );
-                            println!("{formatted_json}");
-                        } else {
-                            println!("{json_data}");
-                        }
+                        println!("{json_data}");
                     } else {
                         let mut path_str = String::new();
                         for (j, s) in path.iter().enumerate() {
@@ -2548,16 +2520,7 @@ fn run_doom() -> Result<()> {
                         let msg =
                             format!("No path found between sector {} and sector {}", start, end);
                         let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
-                        if is_tty {
-                            let formatted_json = format!(
-                                r#"{{ {}: "{}" }}"#,
-                                r#""error""#.cyan().bold(),
-                                msg.yellow()
-                            );
-                            println!("{formatted_json}");
-                        } else {
-                            println!("{json_data}");
-                        }
+                        println!("{json_data}");
                     } else {
                         if is_tty {
                             println!(
@@ -2580,16 +2543,7 @@ fn run_doom() -> Result<()> {
                     "Invalid sector indices. Please provide two integers separated by a comma.";
                 if args.json {
                     let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
-                    if is_tty {
-                        let formatted_json = format!(
-                            r#"{{ {}: "{}" }}"#,
-                            r#""error""#.cyan().bold(),
-                            msg.yellow()
-                        );
-                        println!("{formatted_json}");
-                    } else {
-                        println!("{json_data}");
-                    }
+                    println!("{json_data}");
                 } else {
                     if is_tty {
                         println!("{} {}", "❌".yellow(), msg.yellow().bold());
@@ -2602,16 +2556,7 @@ fn run_doom() -> Result<()> {
             let msg = "Invalid format. Please use START,END (e.g. 0,5).";
             if args.json {
                 let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
-                if is_tty {
-                    let formatted_json = format!(
-                        r#"{{ {}: "{}" }}"#,
-                        r#""error""#.cyan().bold(),
-                        msg.yellow()
-                    );
-                    println!("{formatted_json}");
-                } else {
-                    println!("{json_data}");
-                }
+                println!("{json_data}");
             } else {
                 if is_tty {
                     println!("{} {}", "❌".yellow(), msg.yellow().bold());
@@ -2648,32 +2593,7 @@ fn run_doom() -> Result<()> {
                 stats.total_secrets,
                 stats.par_time_tics
             );
-            use std::io::IsTerminal;
-            if std::io::stdout().is_terminal() {
-                use crossterm::style::Stylize;
-                let formatted_json = format!(
-                    r#"{{
-  {}: "{}",
-  {}: {},
-  {}: {},
-  {}: {},
-  {}: {}
-}}"#,
-                    r#""map""#.cyan().bold(),
-                    warp_str.yellow(),
-                    r#""total_kills""#.cyan().bold(),
-                    stats.total_kills.to_string().yellow(),
-                    r#""total_items""#.cyan().bold(),
-                    stats.total_items.to_string().green(),
-                    r#""total_secrets""#.cyan().bold(),
-                    stats.total_secrets.to_string().magenta(),
-                    r#""par_time_tics""#.cyan().bold(),
-                    stats.par_time_tics.to_string().cyan()
-                );
-                println!("{formatted_json}");
-            } else {
-                println!("{json_data}");
-            }
+            println!("{json_data}");
         } else {
             let par_time_mins = stats.par_time_tics / 35 / 60;
             let par_time_secs = (stats.par_time_tics / 35) % 60;
