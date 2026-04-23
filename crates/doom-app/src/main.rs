@@ -2205,11 +2205,8 @@ fn run_doom() -> Result<()> {
     };
 
     // Determine which map to load — default to the first canonical map present.
-    let warp_name = args
-        .warp
-        .clone()
-        .unwrap_or_else(|| default_warp_map(&wad_stack));
-    let warp_str = warp_name.as_str();
+    let default_warp = default_warp_map(&wad_stack);
+    let warp_str = args.warp.as_deref().unwrap_or(&default_warp);
     let show_title = args.warp.is_none();
 
     // Parse the requested level.
@@ -2358,40 +2355,31 @@ fn run_doom() -> Result<()> {
             // This completely eliminates intermediate `.collect::<Vec<_>>()` chains
             // and intermediate inner string allocations that previously happened per-area,
             // saving ~3 heap allocations per JSON generation loop.
-            let chokepoints_json = format!(
-                "[{}]",
-                chokepoints
-                    .iter()
-                    .enumerate()
-                    .fold(String::new(), |mut acc, (i, s)| {
-                        if i > 0 {
-                            acc.push_str(", ");
-                        }
-                        acc.push_str(&s.to_string());
-                        acc
-                    })
-            );
-            let areas_json = format!(
-                "[{}]",
-                areas
-                    .iter()
-                    .enumerate()
-                    .fold(String::new(), |mut acc_outer, (i, a)| {
-                        if i > 0 {
-                            acc_outer.push_str(", ");
-                        }
-                        acc_outer.push('[');
-                        a.iter().enumerate().fold(&mut acc_outer, |acc, (j, s)| {
-                            if j > 0 {
-                                acc.push_str(", ");
-                            }
-                            acc.push_str(&s.to_string());
-                            acc
-                        });
-                        acc_outer.push(']');
-                        acc_outer
-                    })
-            );
+            let mut chokepoints_json = String::new();
+            chokepoints_json.push('[');
+            for (i, s) in chokepoints.iter().enumerate() {
+                if i > 0 {
+                    chokepoints_json.push_str(", ");
+                }
+                chokepoints_json.push_str(&s.to_string());
+            }
+            chokepoints_json.push(']');
+            let mut areas_json = String::new();
+            areas_json.push('[');
+            for (i, a) in areas.iter().enumerate() {
+                if i > 0 {
+                    areas_json.push_str(", ");
+                }
+                areas_json.push('[');
+                for (j, s) in a.iter().enumerate() {
+                    if j > 0 {
+                        areas_json.push_str(", ");
+                    }
+                    areas_json.push_str(&s.to_string());
+                }
+                areas_json.push(']');
+            }
+            areas_json.push(']');
 
             let json_data = format!(
                 r#"{{
@@ -2435,20 +2423,17 @@ fn run_doom() -> Result<()> {
                 println!("Completed tactical analysis for {}", warp_str);
             }
 
-            let chokepoints_str = if chokepoints.is_empty() {
-                "None".to_string()
+            let mut chokepoints_str = String::new();
+            if chokepoints.is_empty() {
+                chokepoints_str.push_str("None");
             } else {
-                chokepoints
-                    .iter()
-                    .enumerate()
-                    .fold(String::new(), |mut acc, (i, s)| {
-                        if i > 0 {
-                            acc.push_str(", ");
-                        }
-                        acc.push_str(&s.to_string());
-                        acc
-                    })
-            };
+                for (i, s) in chokepoints.iter().enumerate() {
+                    if i > 0 {
+                        chokepoints_str.push_str(", ");
+                    }
+                    chokepoints_str.push_str(&s.to_string());
+                }
+            }
 
             let mut table = comfy_table::Table::new();
             table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
