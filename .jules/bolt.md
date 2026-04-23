@@ -1,5 +1,3 @@
-# Bolt's Performance Journal
-
-**Replacing `.collect::<Vec<_>>().join()`**
-**Learning:** In string generation (like formatting JSON arrays), doing an intermediate `.collect::<Vec<_>>()` before calling `.join(", ")` is wasteful and creates unnecessary heap allocations for each item and the vector itself.
-**Action:** Use a pre-allocated `String` and manually loop over the items with an `.enumerate()`, pushing elements and commas sequentially to the buffer to avoid intermediate allocations.
+## 2025-02-12 - Performance Improvements in doom-app and doom-renderer
+**Learning:** Returning references and slicing avoids `.clone()` where ownership isn't needed. Using pre-allocated buffers like `String::new()` and manually concatenating with `.push_str()` completely eliminates intermediate `.collect::<Vec<_>>()` chains and avoids heavy memory allocations, and using the `std::collections::hash_map::Entry` API prevents duplicate HashMap lookups.
+**Action:** Use references and borrowing semantics whenever the data outlives its scope. Pre-allocate `Vec` and `String` with `with_capacity()` or just iteratively write to them, avoiding `.collect()` or multiple `.join()`s, minimizing heap allocations. Use `.entry()` for single-pass HashMap access.

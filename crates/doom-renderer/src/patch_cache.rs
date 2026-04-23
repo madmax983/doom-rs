@@ -31,13 +31,13 @@ impl PatchCache {
     /// ⚡ Bolt Optimization:
     /// Avoids an extra `.clone()` on the string key and eliminates double hash lookups
     /// by using the `Entry` API during the cache miss path.
-    pub fn get<'a>(&'a mut self, name: &str, wad: &WadStack) -> Option<&'a PatchImage> {
+    pub fn get(&mut self, name: &str, wad: &WadStack) -> Option<&PatchImage> {
         let key = LumpName::from_str(name);
-        use std::collections::hash_map::Entry;
-        match self.patches.entry(key) {
-            Entry::Occupied(o) => Some(o.into_mut()),
-            Entry::Vacant(v) => {
-                let data = wad.lump_data(v.key().as_str())?;
+        let entry = self.patches.entry(key);
+        match entry {
+            std::collections::hash_map::Entry::Occupied(o) => Some(o.into_mut()),
+            std::collections::hash_map::Entry::Vacant(v) => {
+                let data = wad.lump_data(name)?;
                 let patch = parse_patch(data)?;
                 Some(v.insert(patch))
             }

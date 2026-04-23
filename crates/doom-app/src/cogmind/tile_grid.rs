@@ -213,7 +213,8 @@ const LAVA_GLOW: Rgb = (200, 80, 0);
 
 fn compute_hazard_glow(tiles: &mut [Tile], grid_w: usize, grid_h: usize) {
     // Snapshot kinds to avoid aliasing.
-    let kinds: Vec<TileKind> = tiles.iter().map(|t| t.kind).collect();
+    let mut kinds = Vec::with_capacity(tiles.len());
+    kinds.extend(tiles.iter().map(|t| t.kind));
     for gy in 0..grid_h {
         for gx in 0..grid_w {
             let idx = gy * grid_w + gx;
