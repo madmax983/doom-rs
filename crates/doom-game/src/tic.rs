@@ -2332,6 +2332,19 @@ mod tests {
     }
 
     #[test]
+    fn tick_mobj_removes_entity_when_current_state_is_null() {
+        let mut gs = make_game_state();
+        let trooper = make_trooper(crate::mobj::StateNum::NULL, 1);
+        let handle = gs.mobjslab.alloc(trooper);
+
+        let result = super::tick_mobj(&mut gs, handle, None);
+        assert!(
+            matches!(result, super::TickMobjResult::Remove),
+            "tick_mobj should return Remove when current state is NULL"
+        );
+    }
+
+    #[test]
     fn tick_mobj_with_invalid_next_state_removes_entity() {
         let mut gs = make_game_state();
         let trooper = make_trooper(crate::mobj::StateNum(65535), 1);
