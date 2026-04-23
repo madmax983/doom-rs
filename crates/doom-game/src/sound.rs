@@ -134,9 +134,8 @@ pub fn adjacent_sectors(level: &Level, sector_index: usize) -> smallvec::SmallVe
 pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emitter: MobjHandle) {
     // Determine the emitter's sector from its current position.
     let emitter_sector = {
-        let mo = match gs.mobjslab.get(emitter) {
-            Some(mo) => mo,
-            None => return, // stale handle, bail gracefully
+        let Some(mo) = gs.mobjslab.get(emitter) else {
+            return;
         };
         match sector_from_position_or_subsector(level, mo.x, mo.y, mo.subsector as usize) {
             Some(s) => s,

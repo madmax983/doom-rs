@@ -211,9 +211,8 @@ impl CogmindState {
         };
 
         // --- Locate the player ---
-        let player_mobj = match gs.mobjslab.get(gs.player.handle) {
-            Some(m) => m,
-            None => return frame,
+        let Some(player_mobj) = gs.mobjslab.get(gs.player.handle) else {
+            return frame;
         };
         let player_x = player_mobj.x.to_int();
         let player_y = player_mobj.y.to_int();
@@ -348,9 +347,8 @@ impl CogmindState {
 
         // --- Phase 2: entity overlay ---
         for handle in gs.mobjslab.iter_handles() {
-            let mobj = match gs.mobjslab.get(handle) {
-                Some(m) => m,
-                None => continue,
+            let Some(mobj) = gs.mobjslab.get(handle) else {
+                continue;
             };
 
             let mx = mobj.x.to_int();

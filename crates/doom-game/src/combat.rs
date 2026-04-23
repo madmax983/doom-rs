@@ -311,14 +311,12 @@ pub(crate) fn p_line_attack_target(
     level: Option<&Level>,
     intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
 ) -> Option<MobjHandle> {
-    let (sx, sy, shootz) = match gs.mobjslab.get(source) {
-        Some(mo) => (
-            fixed_to_f32(mo.x),
-            fixed_to_f32(mo.y),
-            hitscan_shootz(mo.z, mo.height),
-        ),
-        None => return None,
-    };
+    let mo = gs.mobjslab.get(source)?;
+    let (sx, sy, shootz) = (
+        fixed_to_f32(mo.x),
+        fixed_to_f32(mo.y),
+        hitscan_shootz(mo.z, mo.height),
+    );
 
     let angle_cos = angle.cos().raw() as f32 / FIXED_ONE.raw() as f32;
     let angle_sin = angle.sin().raw() as f32 / FIXED_ONE.raw() as f32;
@@ -475,10 +473,10 @@ pub fn p_radius_attack(
     let radius_f = radius_int as f32;
 
     // Extract source position before iterating.
-    let (sx, sy) = match gs.mobjslab.get(source) {
-        Some(mo) => (mo.x.to_int(), mo.y.to_int()),
-        None => return,
+    let Some(mo) = gs.mobjslab.get(source) else {
+        return;
     };
+    let (sx, sy) = (mo.x.to_int(), mo.y.to_int());
 
     // Collect iteration boundaries up front.
     let initial_slot_count = gs.mobjslab.slot_count();
@@ -498,15 +496,15 @@ pub fn p_radius_attack(
         }
 
         // Extract actor data.
-        let (ax, ay, alive, shootable) = match gs.mobjslab.get(handle) {
-            Some(mo) => (
-                mo.x.to_int(),
-                mo.y.to_int(),
-                mo.health > 0,
-                mo.flags & flags::MF_SHOOTABLE != 0,
-            ),
-            None => continue,
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            continue;
         };
+        let (ax, ay, alive, shootable) = (
+            mo.x.to_int(),
+            mo.y.to_int(),
+            mo.health > 0,
+            mo.flags & flags::MF_SHOOTABLE != 0,
+        );
 
         if !alive || !shootable {
             continue;

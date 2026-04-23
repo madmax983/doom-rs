@@ -1343,9 +1343,10 @@ impl DoomApp for DoomGame {
         }
 
         let handle = self.gs.player.handle;
-        let (px, py, angle) = match self.gs.mobjslab.get(handle) {
-            Some(mo) => (mo.x.to_int(), mo.y.to_int(), mo.angle),
-            None => (0, 0, Bam::ZERO),
+        let (px, py, angle) = if let Some(mo) = self.gs.mobjslab.get(handle) {
+            (mo.x.to_int(), mo.y.to_int(), mo.angle)
+        } else {
+            (0, 0, Bam::ZERO)
         };
 
         let palette = PaletteLut::grayscale();
