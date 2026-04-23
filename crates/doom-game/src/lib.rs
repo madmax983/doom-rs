@@ -23,6 +23,7 @@ pub mod menu;
 pub mod mobj;
 pub mod mobjinfo;
 pub mod movement;
+pub mod movers;
 pub mod phase;
 pub mod pickups;
 pub mod player;
@@ -33,10 +34,12 @@ mod savegame_vanilla;
 pub mod sight;
 pub mod snapshot;
 pub mod sound;
+pub mod sound_prop;
 pub mod spawn;
 pub mod specials;
 pub mod state;
 pub mod states;
+pub mod stats;
 #[cfg(feature = "style_meter")]
 pub mod style;
 pub mod switch;
@@ -68,6 +71,11 @@ pub use menu::{GameMenu, MenuAction, MenuItem, MenuPage, MenuResult, TitlePhase,
 pub use mobj::{Mobj, MobjHandle, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_slide_move, p_try_move};
+pub use movers::{
+    CeilingMover, CeilingType, ConveyorBelt, CrushBehavior, DoorMover, FloorMover, FloorType,
+    LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection, PerpetualPlatform,
+    PlatformStatus, ScrollingWall, SectorLightEffect, SectorMovers,
+};
 pub use phase::{GamePhase, GamePhaseController, MapId};
 pub use pickups::{
     doomed_type_to_kind, kind_to_doomed_type, p_check_pickups, p_touch_special_thing,
@@ -91,6 +99,7 @@ pub use sound::{
     ML_SOUNDBLOCK, adjacent_sectors, clear_sound_targets, get_sound_target, init_sound_state,
     monster_should_wake, p_noise_alert,
 };
+pub use sound_prop::{SoundPropagation, SoundRequest};
 pub use spawn::{GameMode, Skill, spawn_level_things};
 pub use specials::{
     StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_ceiling_crush_and_raise,
@@ -102,14 +111,10 @@ pub use specials::{
     tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
     tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
-pub use state::{
-    CeilingMover, CeilingType, ConveyorBelt, DoomRng, ExitRequest, FloorMover, GameState,
-    LevelStats, LiftMover, LiftStatus, LightEffectType, LockedDoorColor, MoveDirection,
-    PerpetualPlatform, PlatformStatus, RNG_TABLE, ScrollingWall, SectorLightEffect, SectorMovers,
-    SoundPropagation, SoundRequest,
-};
+pub use state::{DoomRng, ExitRequest, GameState, LockedDoorColor, RNG_TABLE};
 pub use states::STATES;
 pub use states::sprite_names;
+pub use stats::LevelStats;
 #[cfg(feature = "style_meter")]
 pub use style::{StyleMeter, StyleRank};
 pub use switch::{

@@ -45,3 +45,6 @@
 **[Extract NUM_POWERS and NUM_PSPRITES to Shared Primitives]**
 **Tangle:** The `NUM_POWERS` and `NUM_PSPRITES` constants were defined in `doom-game/src/player.rs`, causing UI and game engine components to depend directly on the entire game engine crate just for basic limits.
 **Blueprint:** Extracted `NUM_POWERS` and `NUM_PSPRITES` into `doom-types/src/limits.rs`. `doom-game/src/player.rs` now re-exports them for backwards compatibility within the game logic crate, and `doom-game` components that relied on them were updated to import these primitives directly from the shared types crate. This creates a clean dependency hierarchy where presentation relies on foundational limits instead of game logic.
+**[Extract GameState sub-components to reduce state.rs bloat]**
+**Tangle:** The `doom-game/src/state.rs` file was a huge "God Struct" holding everything from `LevelStats` to `SectorMovers` and `SoundPropagation`, creating a sprawling mess of responsibilities.
+**Blueprint:** Extracted `LevelStats` to `stats.rs`, `SectorMovers` and all related structures to `movers.rs`, and `SoundPropagation` to `sound_prop.rs`. Updated `state.rs` to import these components, significantly improving code cohesion and module boundaries.
