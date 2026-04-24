@@ -1,20 +1,20 @@
 //! OPL2/3 FM synthesis, MUS→MIDI conversion, PCM SFX mixing,
 //! positional audio, and cpal audio output driver.
 
-pub mod driver;
-pub mod midi;
-pub mod mixer;
-pub mod mus;
-pub mod opl;
-pub mod sfx;
-pub mod sfx_mixer;
-pub mod spatial;
-pub mod wav;
+mod driver;
+mod midi;
+mod mixer;
+mod mus;
+mod opl;
+mod sfx;
+mod sfx_mixer;
+mod spatial;
+mod wav;
 
-pub use driver::AudioDriver;
+pub use driver::{AudioDriver, SharedMidiPlayer, SharedSfxMixer};
 pub use midi::{GenmidiBank, GenmidiInstrument, MidiPlayer};
 pub use mixer::PcmSample;
-pub use mus::{MusEvent, MusScore};
+pub use mus::{MusEvent, MusHeader, MusScore};
 pub use sfx::{SfxCache, play_sfx};
 pub use sfx_mixer::{MAX_CHANNELS, SfxChannel, SfxMixer, SfxPriority};
 pub use spatial::{MAX_SFX_DIST, SfxEmitter, SpatialParams, compute_spatial};

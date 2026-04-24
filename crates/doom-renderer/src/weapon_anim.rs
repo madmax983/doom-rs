@@ -779,7 +779,7 @@ mod tests {
         let state = WeaponAnimState::new();
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("PISGA0"),
+            doom_wad::LumpName::from_str("PISGA0"),
             crate::sprite::SpriteFrame {
                 width: 1,
                 height: 1,

@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use doom_wad::lump::LumpName;
+use doom_wad::LumpName;
 
 use doom_wad::WadStack;
 

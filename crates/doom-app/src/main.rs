@@ -267,7 +267,7 @@ pub(crate) struct DoomGame {
     /// Optional audio subsystem.  `None` when no audio device is available.
     audio: Option<AudioSystem>,
     /// WAD music lumps keyed by their canonical `D_*` lump names.
-    music_library: std::collections::HashMap<doom_wad::lump::LumpName, std::sync::Arc<[u8]>>,
+    music_library: std::collections::HashMap<doom_wad::LumpName, std::sync::Arc<[u8]>>,
     /// Flat texture cache (floor/ceiling textures loaded from the WAD).
     flat_cache: Option<FlatCache>,
     /// Wall texture cache (TEXTURE1/TEXTURE2 composed textures from the WAD).
@@ -309,7 +309,7 @@ pub(crate) struct DoomGame {
     pain_sfx_id: Option<u16>,
     /// Name → SFX ID lookup built from the WAD at startup (same ordering as
     /// `SfxCache`).  Used to play monster wake/attack/death sounds by lump name.
-    sfx_lookup: std::collections::HashMap<doom_wad::lump::LumpName, u16>,
+    sfx_lookup: std::collections::HashMap<doom_wad::LumpName, u16>,
     /// Current skill used when spawning the next map.
     skill: Skill,
     /// Top-level playing/intermission/finale controller.
@@ -355,7 +355,7 @@ impl DoomGame {
         gs: GameState,
         level: Level,
         audio: Option<AudioSystem>,
-        music_library: std::collections::HashMap<doom_wad::lump::LumpName, std::sync::Arc<[u8]>>,
+        music_library: std::collections::HashMap<doom_wad::LumpName, std::sync::Arc<[u8]>>,
         flat_cache: Option<FlatCache>,
         tex_cache: Option<TextureCache>,
         sprite_cache: Option<SpriteCache>,
@@ -363,7 +363,7 @@ impl DoomGame {
         show_title: bool,
         debug_log: Option<std::fs::File>,
         pain_sfx_id: Option<u16>,
-        sfx_lookup: std::collections::HashMap<doom_wad::lump::LumpName, u16>,
+        sfx_lookup: std::collections::HashMap<doom_wad::LumpName, u16>,
     ) -> Self {
         Self::new_with_compat(
             gs,
@@ -387,7 +387,7 @@ impl DoomGame {
         mut gs: GameState,
         level: Level,
         audio: Option<AudioSystem>,
-        music_library: std::collections::HashMap<doom_wad::lump::LumpName, std::sync::Arc<[u8]>>,
+        music_library: std::collections::HashMap<doom_wad::LumpName, std::sync::Arc<[u8]>>,
         flat_cache: Option<FlatCache>,
         tex_cache: Option<TextureCache>,
         sprite_cache: Option<SpriteCache>,
@@ -395,7 +395,7 @@ impl DoomGame {
         show_title: bool,
         debug_log: Option<std::fs::File>,
         pain_sfx_id: Option<u16>,
-        sfx_lookup: std::collections::HashMap<doom_wad::lump::LumpName, u16>,
+        sfx_lookup: std::collections::HashMap<doom_wad::LumpName, u16>,
         compat: CompatibilityProfile,
     ) -> Self {
         // Initialize scrolling wall and conveyor belt specials from level linedefs.
@@ -485,7 +485,7 @@ impl DoomGame {
         };
         let Some(music) = self
             .music_library
-            .get(&doom_wad::lump::LumpName::from_str(lump_name))
+            .get(&doom_wad::LumpName::from_str(lump_name))
         else {
             return false;
         };
@@ -741,10 +741,7 @@ impl DoomGame {
                 continue;
             }
 
-            if let Some(&id) = self
-                .sfx_lookup
-                .get(&doom_wad::lump::LumpName::from_str(lump))
-            {
+            if let Some(&id) = self.sfx_lookup.get(&doom_wad::LumpName::from_str(lump)) {
                 if let Some((emitter_x, emitter_y)) = emitter {
                     let spatial = compute_spatial(
                         &SfxEmitter {
@@ -1881,7 +1878,7 @@ fn psprite_transition(weapon: WeaponType, state: doom_game::StateNum) -> WeaponT
 // Input conversion
 fn load_music_library(
     wad: &WadStack,
-) -> std::collections::HashMap<doom_wad::lump::LumpName, std::sync::Arc<[u8]>> {
+) -> std::collections::HashMap<doom_wad::LumpName, std::sync::Arc<[u8]>> {
     let mut music_library = std::collections::HashMap::new();
 
     for episode in 1..=4 {
@@ -1892,7 +1889,7 @@ fn load_music_library(
             };
             if let Some(mus_data) = wad.lump_data(&music_lump) {
                 music_library.insert(
-                    doom_wad::lump::LumpName::from_str(&music_lump),
+                    doom_wad::LumpName::from_str(&music_lump),
                     std::sync::Arc::<[u8]>::from(mus_data),
                 );
             }
@@ -1906,7 +1903,7 @@ fn load_music_library(
         };
         if let Some(mus_data) = wad.lump_data(&music_lump) {
             music_library.insert(
-                doom_wad::lump::LumpName::from_str(&music_lump),
+                doom_wad::LumpName::from_str(&music_lump),
                 std::sync::Arc::<[u8]>::from(mus_data),
             );
         }
@@ -1915,7 +1912,7 @@ fn load_music_library(
     for lump in ["D_INTER", "D_DM2INT"] {
         if let Some(mus_data) = wad.lump_data(lump) {
             music_library.insert(
-                doom_wad::lump::LumpName::from_str(lump),
+                doom_wad::LumpName::from_str(lump),
                 std::sync::Arc::<[u8]>::from(mus_data),
             );
         }
@@ -1992,7 +1989,7 @@ fn export_sfx_wav_for_name(
         .lump_data(sfx_name)
         .ok_or_else(|| anyhow::anyhow!("SFX lump {} not found in WAD stack", sfx_name))?;
 
-    let sfx_sample = doom_audio::mixer::PcmSample::parse_sfx_lump(sfx_lump)
+    let sfx_sample = doom_audio::PcmSample::parse_sfx_lump(sfx_lump)
         .map_err(|e| anyhow::anyhow!("Failed to parse SFX lump {}: {}", sfx_name, e))?;
 
     let mut samples_i16 = Vec::with_capacity(sfx_sample.data.len());
@@ -2004,7 +2001,7 @@ fn export_sfx_wav_for_name(
         samples_i16.push(pcm);
     }
 
-    let wav_bytes = doom_audio::wav::encode_pcm16_wav_mono(sfx_sample.sample_rate, &samples_i16);
+    let wav_bytes = doom_audio::encode_pcm16_wav_mono(sfx_sample.sample_rate, &samples_i16);
     std::fs::write(out_path, wav_bytes).with_context(|| {
         format!(
             "Could not save the WAV file to '{}'. Please check your permissions.",
@@ -2859,7 +2856,7 @@ fn run_doom() -> Result<()> {
 
     // Resolve player pain SFX (DSPLPAIN) once at startup so we can fire it cheaply.
     let pain_sfx_id = sfx_lookup
-        .get(&doom_wad::lump::LumpName::from_str("DSPLPAIN"))
+        .get(&doom_wad::LumpName::from_str("DSPLPAIN"))
         .copied();
 
     let mut app = DoomGame::new_with_compat(
@@ -3308,7 +3305,7 @@ mod tests {
     #[test]
     fn score_total_ticks_sums_all_event_deltas() {
         let score = MusScore {
-            header: doom_audio::mus::MusHeader {
+            header: doom_audio::MusHeader {
                 score_length: 0,
                 score_start: 0,
                 primary_channels: 0,
@@ -3675,11 +3672,11 @@ mod tests {
     fn music_library_for(
         level_name: &str,
         data: Vec<u8>,
-    ) -> std::collections::HashMap<doom_wad::lump::LumpName, std::sync::Arc<[u8]>> {
+    ) -> std::collections::HashMap<doom_wad::LumpName, std::sync::Arc<[u8]>> {
         let mut library = std::collections::HashMap::new();
         if let Some(lump) = music_lump_for_map(level_name) {
             library.insert(
-                doom_wad::lump::LumpName::from_str(&lump),
+                doom_wad::LumpName::from_str(&lump),
                 std::sync::Arc::<[u8]>::from(data),
             );
         }
@@ -4308,11 +4305,11 @@ mod tests {
         let library = load_music_library(&wad);
 
         assert_eq!(
-            library.get(&doom_wad::lump::LumpName::from_str("D_INTER")),
+            library.get(&doom_wad::LumpName::from_str("D_INTER")),
             Some(&std::sync::Arc::<[u8]>::from(vec![1, 2, 3, 4]))
         );
         assert_eq!(
-            library.get(&doom_wad::lump::LumpName::from_str("D_DM2INT")),
+            library.get(&doom_wad::LumpName::from_str("D_DM2INT")),
             Some(&std::sync::Arc::<[u8]>::from(vec![5, 6, 7, 8]))
         );
     }
@@ -4365,7 +4362,7 @@ mod tests {
         let mut music_library = music_library_for("E1M1", vec![1, 2, 3, 4]);
         music_library.extend(music_library_for("E1M2", vec![5, 6, 7, 8]));
         music_library.insert(
-            doom_wad::lump::LumpName::from_str("D_INTER"),
+            doom_wad::LumpName::from_str("D_INTER"),
             std::sync::Arc::<[u8]>::from(vec![9, 10, 11, 12]),
         );
         let mut game = DoomGame::new(

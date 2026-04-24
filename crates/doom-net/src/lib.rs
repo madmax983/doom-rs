@@ -13,14 +13,14 @@
 //! imported from `doom-types` so that it can be shared across the workspace.
 //! `doom-net` depends only on `doom-types`, not `doom-game`.
 
-pub mod checksum;
-pub mod client;
-pub mod input_log;
-pub mod packet;
-pub mod rollback;
-pub mod server;
-pub mod snapshot;
-pub mod transport;
+mod checksum;
+mod client;
+mod input_log;
+mod packet;
+mod rollback;
+mod server;
+mod snapshot;
+mod transport;
 
 pub use checksum::{CRC32_TABLE, checksums_match, compute_checksum};
 pub use client::NetClient;

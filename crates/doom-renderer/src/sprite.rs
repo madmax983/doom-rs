@@ -64,7 +64,7 @@ pub struct SpriteFrame {
 /// `String` eliminates thousands of heap allocations per frame by bypassing string
 /// allocation and UTF-8 conversion overhead during sprite lookups.
 pub struct SpriteCache {
-    frames: HashMap<doom_wad::lump::LumpName, SpriteFrame>,
+    frames: HashMap<doom_wad::LumpName, SpriteFrame>,
 }
 
 impl SpriteCache {
@@ -149,7 +149,7 @@ impl SpriteCache {
     /// The name is normalised to uppercase with trailing null bytes stripped
     /// before lookup, matching how WAD lump names are stored.
     pub fn get(&self, name: &[u8; 8]) -> Option<&SpriteFrame> {
-        self.frames.get(&doom_wad::lump::LumpName::from_raw(*name))
+        self.frames.get(&doom_wad::LumpName::from_raw(*name))
     }
 
     /// Number of sprite frames in the cache.
@@ -163,7 +163,7 @@ impl SpriteCache {
     }
 
     /// Insert a frame directly (used in tests and by callers that pre-parse frames).
-    pub fn insert(&mut self, name: doom_wad::lump::LumpName, frame: SpriteFrame) {
+    pub fn insert(&mut self, name: doom_wad::LumpName, frame: SpriteFrame) {
         self.frames.insert(name, frame);
     }
 
@@ -175,7 +175,7 @@ impl SpriteCache {
     }
 
     fn insert_frame(
-        frames: &mut HashMap<doom_wad::lump::LumpName, SpriteFrame>,
+        frames: &mut HashMap<doom_wad::LumpName, SpriteFrame>,
         wad: &WadFile,
         lump: &LumpDef,
     ) {
@@ -1656,7 +1656,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(77); 4],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("PISGA0"), frame);
+        cache.insert(doom_wad::LumpName::from_str("PISGA0"), frame);
 
         let mut fb = Framebuffer::new();
         draw_weapon_sprite(&mut fb, b"PISGA0\0\0", &cache, &IDENTITY_COLORMAP);
@@ -1681,7 +1681,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(88); 4],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("PISGA0"), frame);
+        cache.insert(doom_wad::LumpName::from_str("PISGA0"), frame);
 
         let mut fb = Framebuffer::new();
         draw_weapon_sprite(&mut fb, b"PISGA0\0\0", &cache, &IDENTITY_COLORMAP);
@@ -1740,7 +1740,7 @@ mod tests {
             top_offset: 1,
             pixels: vec![Some(10), Some(20), Some(30), Some(40)],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("TROOA1"), frame);
+        cache.insert(doom_wad::LumpName::from_str("TROOA1"), frame);
 
         // Lookup via exact byte array name (null-padded).
         let found = cache.get(b"TROOA1\0\0");
@@ -2011,7 +2011,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(42); 4],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), dummy_frame);
+        cache.insert(doom_wad::LumpName::from_str("BAR1A0"), dummy_frame);
 
         let mut fb = Framebuffer::new();
         // Player at origin, facing east (Bam(0)).
@@ -2137,7 +2137,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 77),
         );
 
@@ -2472,7 +2472,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(77); 4],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("TROOA5"), dummy);
+        cache.insert(doom_wad::LumpName::from_str("TROOA5"), dummy);
 
         let mut fb = Framebuffer::new();
         render_things(
@@ -2510,7 +2510,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(88); 4],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), dummy);
+        cache.insert(doom_wad::LumpName::from_str("BAR1A0"), dummy);
 
         let mut fb = Framebuffer::new();
         render_things(
@@ -2549,7 +2549,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(55); 4],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("TROOA0"), dummy);
+        cache.insert(doom_wad::LumpName::from_str("TROOA0"), dummy);
 
         let mut fb = Framebuffer::new();
         render_things(
@@ -2598,7 +2598,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(33); 4],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("TROOA4"), dummy);
+        cache.insert(doom_wad::LumpName::from_str("TROOA4"), dummy);
 
         // Player needs the thing in front. Player at (0,0) facing east-ish.
         // cos(0) = 1, sin(0) = 0. vx = 100*1 + 50*0 = 100. In front.
@@ -2684,12 +2684,12 @@ mod tests {
         let mut floor_cache = SpriteCache::empty();
         let mut floor_sprite = make_opaque_sprite(8, 8, 71);
         floor_sprite.top_offset = 8;
-        floor_cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), floor_sprite);
+        floor_cache.insert(doom_wad::LumpName::from_str("BAR1A0"), floor_sprite);
 
         let mut sunk_cache = SpriteCache::empty();
         let mut sunk_sprite = make_opaque_sprite(8, 8, 72);
         sunk_sprite.top_offset = 4;
-        sunk_cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), sunk_sprite);
+        sunk_cache.insert(doom_wad::LumpName::from_str("BAR1A0"), sunk_sprite);
 
         let mut floor_fb = Framebuffer::new();
         render_actors_ex(
@@ -2751,7 +2751,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 8, 71),
         );
 
@@ -2799,12 +2799,12 @@ mod tests {
         let mut floor_cache = SpriteCache::empty();
         let mut floor_sprite = make_opaque_sprite(8, 8, 81);
         floor_sprite.top_offset = 8;
-        floor_cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), floor_sprite);
+        floor_cache.insert(doom_wad::LumpName::from_str("BAR1A0"), floor_sprite);
 
         let mut sunk_cache = SpriteCache::empty();
         let mut sunk_sprite = make_opaque_sprite(8, 8, 82);
         sunk_sprite.top_offset = 4;
-        sunk_cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), sunk_sprite);
+        sunk_cache.insert(doom_wad::LumpName::from_str("BAR1A0"), sunk_sprite);
 
         let mut floor_fb = Framebuffer::new();
         render_things(
@@ -2854,7 +2854,7 @@ mod tests {
         let player_y = doom_types::Fixed16_16::from_int(32);
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 8, 91),
         );
 
@@ -2934,7 +2934,7 @@ mod tests {
         };
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 8, 92),
         );
 
@@ -3011,7 +3011,7 @@ mod tests {
         };
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 8, 93),
         );
 
@@ -3072,7 +3072,7 @@ mod tests {
         };
         let mut cache = SpriteCache::empty();
         let frame = make_opaque_sprite(8, 128, 94);
-        cache.insert(doom_wad::lump::LumpName::from_str("BAR1A0"), frame);
+        cache.insert(doom_wad::LumpName::from_str("BAR1A0"), frame);
 
         let top = [0i32; SCREEN_W];
         let mut bottom = [120i32; SCREEN_W];
@@ -3143,7 +3143,7 @@ mod tests {
         };
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(16, 32, 95),
         );
 
@@ -3223,7 +3223,7 @@ mod tests {
         };
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(16, 32, 96),
         );
 
@@ -3346,7 +3346,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(16, 32, 77),
         );
 
@@ -3384,7 +3384,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(16, 32, 88),
         );
 
@@ -3424,7 +3424,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(16, 32, 66),
         );
 
@@ -3481,7 +3481,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(16, 32, 55),
         );
 
@@ -3556,7 +3556,7 @@ mod tests {
         // the near barrel overdraw the far one. With z_buffer=150,
         // the far barrel (depth~200) is clipped, near (depth~100) is drawn.
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 99),
         );
 
@@ -3595,7 +3595,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(16, 32, 44),
         );
 
@@ -3631,7 +3631,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 111),
         );
 
@@ -3670,7 +3670,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(16, 32, 22),
         );
 
@@ -3724,7 +3724,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 33),
         );
 
@@ -3761,7 +3761,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 200),
         );
 
@@ -4266,7 +4266,7 @@ mod tests {
         let mut cache = SpriteCache::empty();
         // Insert a bright sprite (all pixels = 200).
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 200),
         );
 
@@ -4313,7 +4313,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("COLUA0"),
+            doom_wad::LumpName::from_str("COLUA0"),
             make_opaque_sprite(8, 16, 123),
         );
 
@@ -4373,7 +4373,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 150),
         );
 
@@ -4416,7 +4416,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 77),
         );
 
@@ -4451,7 +4451,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 55),
         );
 
@@ -4489,7 +4489,7 @@ mod tests {
         let mut cache = SpriteCache::empty();
         // Spectre uses SARG prefix.
         cache.insert(
-            doom_wad::lump::LumpName::from_str("SARGA0"),
+            doom_wad::LumpName::from_str("SARGA0"),
             make_opaque_sprite(16, 32, 222),
         );
 
@@ -4534,7 +4534,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("SARGA0"),
+            doom_wad::LumpName::from_str("SARGA0"),
             make_opaque_sprite(16, 32, 222),
         );
 
@@ -4643,7 +4643,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 150),
         );
 
@@ -4683,7 +4683,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 88),
         );
 
@@ -4745,7 +4745,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 77),
         );
 
@@ -4784,11 +4784,11 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("BAR1A0"),
+            doom_wad::LumpName::from_str("BAR1A0"),
             make_opaque_sprite(8, 16, 150),
         );
         cache.insert(
-            doom_wad::lump::LumpName::from_str("COLUA0"),
+            doom_wad::LumpName::from_str("COLUA0"),
             make_opaque_sprite(8, 16, 200),
         );
 
@@ -4825,7 +4825,7 @@ mod tests {
 
         let mut cache = SpriteCache::empty();
         cache.insert(
-            doom_wad::lump::LumpName::from_str("SARGA0"),
+            doom_wad::LumpName::from_str("SARGA0"),
             make_opaque_sprite(16, 32, 222),
         );
 

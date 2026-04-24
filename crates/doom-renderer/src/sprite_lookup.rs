@@ -755,7 +755,7 @@ mod tests {
             top_offset: 1,
             pixels: vec![Some(10); 4],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("TROOA1"), frame);
+        cache.insert(doom_wad::LumpName::from_str("TROOA1"), frame);
         assert!(cache.get_by_name("TROOA1").is_some());
         assert!(cache.get_by_name("TROOA2").is_none());
     }
@@ -770,7 +770,7 @@ mod tests {
             top_offset: 0,
             pixels: vec![Some(5)],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("POSSA0"), frame);
+        cache.insert(doom_wad::LumpName::from_str("POSSA0"), frame);
         // Lookup with lowercase should still find it.
         assert!(cache.get_by_name("possa0").is_some());
     }
@@ -785,7 +785,7 @@ mod tests {
             top_offset: 1,
             pixels: vec![Some(10); 4],
         };
-        cache.insert(doom_wad::lump::LumpName::from_str("TROOA3"), frame);
+        cache.insert(doom_wad::LumpName::from_str("TROOA3"), frame);
 
         let result = cache.get_frame("TROO", 0, 3);
         assert!(result.is_some(), "should find TROOA3");
@@ -804,7 +804,7 @@ mod tests {
             pixels: vec![Some(20); 4],
         };
         // Only insert rotation 2 (mirror of 8).
-        cache.insert(doom_wad::lump::LumpName::from_str("POSSA2"), frame);
+        cache.insert(doom_wad::LumpName::from_str("POSSA2"), frame);
 
         // Lookup rotation 8 should fall back to mirror (rotation 2).
         let result = cache.get_frame("POSS", 0, 8);
@@ -824,7 +824,7 @@ mod tests {
             pixels: vec![Some(30); 4],
         };
         // Only insert rotation 0.
-        cache.insert(doom_wad::lump::LumpName::from_str("SARGA0"), frame);
+        cache.insert(doom_wad::LumpName::from_str("SARGA0"), frame);
 
         // Lookup rotation 5 should fall back to rotation 0.
         let result = cache.get_frame("SARG", 0, 5);

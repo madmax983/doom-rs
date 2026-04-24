@@ -14,7 +14,7 @@ use doom_types::limits::FLAT_SIZE;
 use doom_wad::{LumpDef, WadFile, WadStack};
 use std::collections::HashMap;
 
-use doom_wad::lump::LumpName;
+use doom_wad::LumpName;
 
 /// Cache of 64×64 flat textures loaded from a WAD file.
 ///

@@ -23,7 +23,7 @@ use loom::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use doom_audio::{
-    AudioDriver, GenmidiBank, MAX_CHANNELS, MusScore, SfxCache, SfxPriority, mixer::PcmSample,
+    AudioDriver, GenmidiBank, MAX_CHANNELS, MusScore, PcmSample, SfxCache, SfxPriority,
 };
 use doom_wad::WadStack;
 
@@ -267,8 +267,8 @@ fn populate_sfx_cache(wad: &WadStack, cache: &mut SfxCache) {
 /// Exits when the sender side of the channel is dropped (game shutdown).
 fn audio_cmd_thread(
     rx: std::sync::mpsc::Receiver<AudioEvent>,
-    mixer_arc: &doom_audio::driver::SharedSfxMixer,
-    midi_arc: &doom_audio::driver::SharedMidiPlayer,
+    mixer_arc: &doom_audio::SharedSfxMixer,
+    midi_arc: &doom_audio::SharedMidiPlayer,
     sfx_cache: &SfxCache,
     on_music_start: impl Fn(),
 ) {
@@ -408,7 +408,7 @@ pub(crate) fn sound_request_sfx(
 /// `sfx_lookup["DSPISTOL"]` always returns the same ID the mixer uses.
 pub(crate) fn build_sfx_lookup(
     wad: &WadStack,
-) -> std::collections::HashMap<doom_wad::lump::LumpName, u16> {
+) -> std::collections::HashMap<doom_wad::LumpName, u16> {
     let mut map = std::collections::HashMap::new();
     for (idx, name) in sfx_candidate_names(wad).enumerate() {
         map.insert(name, (idx + 1) as u16);
@@ -424,12 +424,10 @@ pub(crate) fn build_sfx_lookup(
 ///
 /// Namespace markers (DS_START/DS_END) are intentionally ignored: they
 /// do not reliably contain all DS-prefixed SFX lumps in every WAD variant.
-fn sfx_candidate_names<'a>(
-    wad: &'a WadStack,
-) -> impl Iterator<Item = doom_wad::lump::LumpName> + 'a {
+fn sfx_candidate_names<'a>(wad: &'a WadStack) -> impl Iterator<Item = doom_wad::LumpName> + 'a {
     wad.all_lumps()
         .filter(|(_, l)| l.size > 0 && l.name.as_str().starts_with("DS"))
-        .map(|(_, l)| doom_wad::lump::LumpName::from_str(&l.name.as_str().to_ascii_uppercase()))
+        .map(|(_, l)| doom_wad::LumpName::from_str(&l.name.as_str().to_ascii_uppercase()))
 }
 
 /// Return the Doom DS* lump name for a monster's wake (see) sound.

@@ -15,7 +15,7 @@
 //!   `i16 top_offset`, `width x u32` column offsets, then column posts
 //!   (topdelta, length, pad, pixels, pad; `0xFF` = end of column).
 
-use doom_wad::lump::LumpName;
+use doom_wad::LumpName;
 use std::collections::HashMap;
 
 // ---------------------------------------------------------------------------
