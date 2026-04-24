@@ -769,6 +769,7 @@ pub struct GameState {
     #[cfg(feature = "style_meter")]
     pub style: crate::style::StyleMeter,
     #[cfg(feature = "telemetry")]
+    /// Tracks player telemetry for session analysis.
     pub telemetry: crate::telemetry::SessionTelemetry,
 }
 

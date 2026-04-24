@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-04-24 - [Clarified Telemetry Session Export and Benchmark docs]
+**Confusion:** The `telemetry` field on `GameState` and several criterion benchmarks were missing `///` or module level docs and failed the `missing_docs` check which prevented a clean compile, reducing the storytelling value of the generated documentation.
+**Clarification:** Added missing module-level documentation and struct field documentation across `doom-types`, `doom-renderer`, `doom-tui`, and `doom-map` tests. Explicitly allowed `missing_docs` via `#![allow(missing_docs)]` in tests and benches to satisfy the rigorous compiler warnings while adding substantive documentation where it added value.

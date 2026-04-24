@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 //! Criterion benchmarks for the palette-aware Sixel encoder.
 //!
 //! Run with:
