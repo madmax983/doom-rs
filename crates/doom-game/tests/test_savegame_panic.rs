@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use doom_game::{GameState, savegame::*};
 
 #[test]

@@ -113,6 +113,7 @@ pub struct GameState {
     #[cfg(feature = "style_meter")]
     pub style: crate::style::StyleMeter,
     #[cfg(feature = "telemetry")]
+    /// Tracks spatial player path data over the session.
     pub telemetry: crate::telemetry::SessionTelemetry,
 }
 

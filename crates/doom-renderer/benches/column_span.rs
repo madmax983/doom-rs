@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 //! Criterion benchmarks for column and span drawing.
 use criterion::{Criterion, criterion_group, criterion_main};
 
