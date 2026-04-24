@@ -1264,7 +1264,8 @@ pub fn check_cross_lines(
     });
 
     for (_, _, ld_idx, special) in walk_lines.into_iter().rev() {
-        let trigger = classify_trigger(special).unwrap();
+        let trigger =
+            classify_trigger(special).expect("special was pre-filtered to be a valid walk trigger");
         dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
     }
 }
@@ -2191,6 +2192,22 @@ mod tests {
         assert_eq!(
             linedef_effect(125),
             Some(LinedefEffect::TeleportMonstersOnly)
+        );
+    }
+
+    #[test]
+    fn cross_lines_ignores_passive_specials() {
+        let (mut gs, handle) = make_gs_with_player();
+        let mut level = make_test_level_with_tag(0);
+        level.linedefs[0].special = 48; // Scrolling texture (passive)
+
+        // Player moves across the line
+        check_cross_lines(&mut gs, &mut level, handle, -5, 0, 5, 0);
+
+        // No panic should happen, and the special is preserved
+        assert_eq!(
+            level.linedefs[0].special, 48,
+            "Passive special should be ignored and preserved"
         );
     }
 }
