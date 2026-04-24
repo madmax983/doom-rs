@@ -88,6 +88,16 @@ pub struct UdmfBlock {
 /// This represents a raw, unvalidated AST (Abstract Syntax Tree) of the `TEXTMAP` file.
 /// It holds the exact structure of the text but doesn't yet mean anything to the Doom engine.
 /// To convert this AST into usable map geometry, you must "compile" it by calling [`UdmfMap::into_level_data`].
+/// ## Examples
+/// ```
+/// use doom_map::udmf::{UdmfMap, UdmfBlock};
+///
+/// let map = UdmfMap {
+///     namespace: "doom".to_string(),
+///     blocks: vec![UdmfBlock { kind: "vertex".to_string(), fields: vec![] }],
+/// };
+/// assert_eq!(map.namespace, "doom");
+/// ```
 #[derive(Debug, Clone)]
 pub struct UdmfMap {
     /// The namespace declaration (the first statement in the file). We currently only support `"doom"`.
@@ -234,7 +244,7 @@ impl UdmfMap {
     /// # Errors
     /// Returns `UdmfError` if the lump is not valid UTF-8 or fails to parse.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_map::udmf::UdmfMap;
     ///
@@ -308,7 +318,7 @@ impl UdmfMap {
     /// Returns [`UdmfError`] when required fields are missing, malformed, or
     /// outside the classic Doom value ranges.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_map::udmf::UdmfMap;
     ///

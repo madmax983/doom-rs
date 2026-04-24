@@ -123,6 +123,15 @@ pub enum LevelError {
 /// This structure holds the loaded geometry data from the binary map lumps,
 /// including `THINGS`, `VERTEXES`, `LINEDEFS`, `SIDEDEFS`, `SECTORS`, `SEGS`,
 /// `SSECTORS`, `NODES`, `REJECT`, and `BLOCKMAP`.
+/// ## Examples
+/// ```no_run
+/// use doom_map::level::Level;
+/// use doom_wad::WadFile;
+///
+/// let wad = WadFile::parse(std::fs::read("doom.wad").unwrap()).unwrap();
+/// let level = Level::from_wad(&wad, "E1M1").unwrap();
+/// assert_eq!(level.name, "E1M1");
+/// ```
 pub struct Level {
     /// Map name (e.g. "E1M1").
     pub name: String,
@@ -182,7 +191,7 @@ impl Level {
     /// # Errors
     /// Returns `LevelError` for any structural or bounds violation.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```no_run
     /// use doom_map::level::Level;
     /// use doom_wad::WadFile;
@@ -206,7 +215,7 @@ impl Level {
     /// # Errors
     /// Returns `LevelError` for any structural or bounds violation.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```no_run
     /// use doom_map::level::Level;
     /// use doom_wad::{WadFile, WadStack};
