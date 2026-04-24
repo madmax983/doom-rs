@@ -631,7 +631,7 @@ mod tests {
         fb.clear(42); // Fill with non-zero.
         let before = fb.data.clone();
 
-        let menu = GameMenu::new(false); // inactive by default
+        let menu = GameMenu::new(doom_game::menu::GameVersion::Doom1); // inactive by default
         draw_menu(&mut fb, &menu, &font);
 
         assert_eq!(
@@ -646,7 +646,7 @@ mod tests {
         let mut fb = Framebuffer::new();
         fb.clear(200); // Bright fill.
 
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
         draw_menu(&mut fb, &menu, &font);
 
@@ -663,7 +663,7 @@ mod tests {
     fn main_page_shows_title_doom() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
 
         draw_menu(&mut fb, &menu, &font);
@@ -682,7 +682,7 @@ mod tests {
     fn episode_page_shows_which_episode() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
         menu.select(); // Main → Episode
 
@@ -701,7 +701,7 @@ mod tests {
     fn skill_page_shows_new_game() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
         menu.select(); // Main → Episode
         menu.select(); // Episode → Skill (selects ep 1)
@@ -722,7 +722,7 @@ mod tests {
     fn menu_items_rendered_at_correct_y_positions() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open(); // Main page: 5 items starting at y=60, spacing=16.
 
         draw_menu(&mut fb, &menu, &font);
@@ -742,7 +742,7 @@ mod tests {
     fn highlighted_item_uses_menu_highlight_color() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
         // Cursor on item 0 (default).
 
@@ -761,7 +761,7 @@ mod tests {
     fn non_highlighted_item_uses_menu_text_color() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
         // Cursor on item 0, so item 1 ("Options") should use MENU_TEXT.
 
@@ -780,7 +780,7 @@ mod tests {
     fn skull_cursor_renders_at_cursor_position() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
         // Cursor is at item 0 → skull at x=56, y=60.
 
@@ -798,7 +798,7 @@ mod tests {
     fn skull_cursor_moves_with_cursor() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
         menu.move_down(); // Cursor → item 1, y=76.
 
@@ -1047,7 +1047,7 @@ mod tests {
     fn load_page_shows_load_game_title() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
         // Navigate: Main cursor=2 → Load Game.
         menu.move_down(); // cursor 1
@@ -1069,7 +1069,7 @@ mod tests {
     fn save_page_shows_save_game_title() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
         // Navigate: cursor=3 → Save Game.
         for _ in 0..3 {
@@ -1092,7 +1092,7 @@ mod tests {
     fn options_page_shows_options_title() {
         let font = make_font();
         let mut fb = Framebuffer::new();
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(doom_game::menu::GameVersion::Doom1);
         menu.open();
         menu.move_down(); // cursor 1 (Options)
         menu.select(); // → Options page
