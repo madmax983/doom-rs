@@ -48,3 +48,7 @@
 **Refactor Mobj field extraction using if-let guard clauses**
 **Learning:** `match gs.mobjslab.get(handle) { Some(mo) => (mo.x, mo.y), None => return, };` with tuple destructuring repeats boilerplate, is noisy, and has an indentation hit.
 **Action:** Replace `match` blocks used solely for extracting values into tuples with idiomatic `if let Some` guard clauses (`let Some(mo) = gs.mobjslab.get(handle) else { return; }; let x = mo.x;`) to improve linearity and readability.
+
+**Refactoring large match statements using from_repr**
+**Learning:** `tick_sector_specials` and `tick_sector_damage` used redundant, hardcoded magic numbers inside match blocks across `SectorDamageType`.
+**Action:** Extract magic numbers into explicitly named constants (e.g., `LEGACY_DAMAGE_HELLSLIME`) to self-document the values, and replace duplicated health-reduction inline logic with calls to a common `apply_sector_damage` helper function to enforce DRY principles without altering runtime behavior.

@@ -47,6 +47,18 @@ const BLINK_FAST_PERIOD: i32 = 15;
 /// Period for slow blinking lights (tics).
 const BLINK_SLOW_PERIOD: i32 = 35;
 
+// Sector damage constants (legacy per tic)
+const LEGACY_DAMAGE_HELLSLIME: i32 = 10;
+const LEGACY_DAMAGE_NUKAGE: i32 = 5;
+const LEGACY_DAMAGE_SUPER_HELLSLIME: i32 = 20;
+
+// Sector damage constants (periodic every 32 tics)
+const PERIODIC_DAMAGE_NUKAGE_BLINK: i32 = 5;
+const PERIODIC_DAMAGE_HELLSLIME: i32 = 5;
+const PERIODIC_DAMAGE_NUKAGE: i32 = 2;
+const PERIODIC_DAMAGE_GOD_EXIT: i32 = 20;
+const PERIODIC_DAMAGE_SUPER_HELLSLIME: i32 = 20;
+
 // ---------------------------------------------------------------------------
 // tick_sector_specials (legacy, kept for backward compatibility)
 // ---------------------------------------------------------------------------
@@ -78,20 +90,13 @@ pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandl
         }
 
         let dmg: i32 = match crate::state::SectorDamageType::from_repr(sector.special) {
-            Some(crate::state::SectorDamageType::Hellslime) => 10, // lava
-            Some(crate::state::SectorDamageType::Nukage) => 5,     // nukage
-            Some(crate::state::SectorDamageType::SuperHellslime) => 20, // acid
+            Some(crate::state::SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
+            Some(crate::state::SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
+            Some(crate::state::SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
             _ => continue,
         };
 
-        if handle == gs.player.handle {
-            gs.damage_player(dmg);
-        } else if let Some(mo) = gs.mobjslab.get_mut(handle) {
-            mo.health -= dmg;
-            if mo.health < 0 {
-                mo.health = 0;
-            }
-        }
+        apply_sector_damage(gs, handle, dmg);
 
         // Only apply one sector's damage per tic (first match wins).
         return;
@@ -148,39 +153,25 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
             continue;
         };
 
-        match damage_type {
-            crate::state::SectorDamageType::NukageBlink => {
-                // Nukage, blink 0.5s — ~5 damage per period.
-                if !has_radsuit {
-                    apply_sector_damage(gs, handle, 5);
-                }
-            }
-            crate::state::SectorDamageType::Hellslime => {
-                // Hellslime — ~5 damage per period.
-                if !has_radsuit {
-                    apply_sector_damage(gs, handle, 5);
-                }
-            }
-            crate::state::SectorDamageType::Nukage => {
-                // Nukage, no blink — ~2 damage per period.
-                if !has_radsuit {
-                    apply_sector_damage(gs, handle, 2);
-                }
-            }
-            crate::state::SectorDamageType::GodExit => {
-                // God exit — ~20 damage per period, RadSuit does NOT protect.
-                apply_sector_damage(gs, handle, 20);
-                // Check if health is low enough to trigger exit.
-                if let Some(mo) = gs.mobjslab.get(handle) {
-                    if mo.health <= 10 {
-                        gs.exit_request = Some(ExitRequest::Normal);
-                    }
-                }
-            }
+        let (damage, ignores_radsuit) = match damage_type {
+            crate::state::SectorDamageType::NukageBlink => (PERIODIC_DAMAGE_NUKAGE_BLINK, false),
+            crate::state::SectorDamageType::Hellslime => (PERIODIC_DAMAGE_HELLSLIME, false),
+            crate::state::SectorDamageType::Nukage => (PERIODIC_DAMAGE_NUKAGE, false),
+            crate::state::SectorDamageType::GodExit => (PERIODIC_DAMAGE_GOD_EXIT, true),
             crate::state::SectorDamageType::SuperHellslime => {
-                // Super hellslime — ~20 damage per period.
-                if !has_radsuit {
-                    apply_sector_damage(gs, handle, 20);
+                (PERIODIC_DAMAGE_SUPER_HELLSLIME, false)
+            }
+        };
+
+        if ignores_radsuit || !has_radsuit {
+            apply_sector_damage(gs, handle, damage);
+        }
+
+        // God exit specific behavior
+        if damage_type == crate::state::SectorDamageType::GodExit {
+            if let Some(mo) = gs.mobjslab.get(handle) {
+                if mo.health <= 10 {
+                    gs.exit_request = Some(ExitRequest::Normal);
                 }
             }
         }
