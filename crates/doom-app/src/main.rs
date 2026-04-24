@@ -408,7 +408,7 @@ impl DoomGame {
         // Capture initial player health for pain-flash delta detection.
         let initial_health = gs.player.health();
 
-        let mut menu = doom_game::menu::GameMenu::new(false); // false = Doom 1 mode
+        let mut menu = doom_game::menu::GameMenu::new(doom_game::menu::GameVersion::Doom1); // false = Doom 1 mode
         let title_screen = if show_title {
             menu.open();
             Some(TitleScreen::new())
@@ -536,7 +536,7 @@ impl DoomGame {
 
     fn enter_title_screen(&mut self) {
         self.title_screen = Some(TitleScreen::new());
-        self.menu = doom_game::menu::GameMenu::new(false);
+        self.menu = doom_game::menu::GameMenu::new(doom_game::menu::GameVersion::Doom1);
         self.menu.open();
         self.intermission_renderer = None;
     }

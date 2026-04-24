@@ -4,6 +4,12 @@
 //! selection, Load/Save game, and Options.  `TitleScreen` manages the
 //! title-screen demo cycle (TITLEPIC -> Demo -> CREDIT -> Demo -> ...).
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GameVersion {
+    Doom1,
+    Doom2,
+}
+
 // ---------------------------------------------------------------------------
 // MenuPage
 // ---------------------------------------------------------------------------
@@ -307,13 +313,13 @@ pub struct GameMenu {
 
 impl GameMenu {
     /// Create a new menu.  Starts inactive (not visible).
-    pub fn new(is_doom2: bool) -> Self {
+    pub fn new(game_version: GameVersion) -> Self {
         Self {
             active: false,
             page: MenuPage::Main,
             cursor: 0,
             selected_episode: 1,
-            is_doom2,
+            is_doom2: game_version == GameVersion::Doom2,
             skull_tic: 0,
         }
     }
@@ -606,19 +612,19 @@ mod tests {
 
     #[test]
     fn new_starts_inactive() {
-        let menu = GameMenu::new(false);
+        let menu = GameMenu::new(GameVersion::Doom1);
         assert!(!menu.is_active());
     }
 
     #[test]
     fn new_doom2_starts_inactive() {
-        let menu = GameMenu::new(true);
+        let menu = GameMenu::new(GameVersion::Doom2);
         assert!(!menu.is_active());
     }
 
     #[test]
     fn open_activates_menu() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         assert!(menu.is_active());
         assert_eq!(menu.page(), MenuPage::Main);
@@ -627,7 +633,7 @@ mod tests {
 
     #[test]
     fn close_deactivates_menu() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.close();
         assert!(!menu.is_active());
@@ -635,7 +641,7 @@ mod tests {
 
     #[test]
     fn open_resets_to_main_page() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         // Navigate away
         menu.select(); // "New Game" -> Episode
@@ -652,21 +658,21 @@ mod tests {
 
     #[test]
     fn main_page_has_5_items() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         assert_eq!(menu.items().len(), 5);
     }
 
     #[test]
     fn main_page_doom2_has_5_items() {
-        let mut menu = GameMenu::new(true);
+        let mut menu = GameMenu::new(GameVersion::Doom2);
         menu.open();
         assert_eq!(menu.items().len(), 5);
     }
 
     #[test]
     fn episode_page_has_3_items() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.select(); // -> Episode
         assert_eq!(menu.page(), MenuPage::Episode);
@@ -675,7 +681,7 @@ mod tests {
 
     #[test]
     fn skill_page_has_5_items() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.select(); // -> Episode
         menu.select(); // SelectEpisode(1) -> Skill
@@ -685,7 +691,7 @@ mod tests {
 
     #[test]
     fn load_page_has_6_items() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 2; // "Load Game"
         menu.select(); // -> Load
@@ -695,7 +701,7 @@ mod tests {
 
     #[test]
     fn save_page_has_6_items() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 3; // "Save Game"
         menu.select(); // -> Save
@@ -705,7 +711,7 @@ mod tests {
 
     #[test]
     fn options_page_has_3_items() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 1; // "Options"
         menu.select(); // -> Options
@@ -719,7 +725,7 @@ mod tests {
 
     #[test]
     fn move_down_increments_cursor() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         assert_eq!(menu.cursor(), 0);
         menu.move_down();
@@ -728,7 +734,7 @@ mod tests {
 
     #[test]
     fn move_down_wraps_from_last_to_0() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         let len = menu.items().len();
         for _ in 0..len {
@@ -739,7 +745,7 @@ mod tests {
 
     #[test]
     fn move_up_wraps_from_0_to_last() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         assert_eq!(menu.cursor(), 0);
         menu.move_up();
@@ -748,7 +754,7 @@ mod tests {
 
     #[test]
     fn move_up_decrements_cursor() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.move_down(); // 1
         menu.move_down(); // 2
@@ -758,7 +764,7 @@ mod tests {
 
     #[test]
     fn cursor_stays_in_bounds_main() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         for _ in 0..20 {
             menu.move_down();
@@ -768,7 +774,7 @@ mod tests {
 
     #[test]
     fn cursor_stays_in_bounds_episode() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.select(); // -> Episode
         for _ in 0..20 {
@@ -779,7 +785,7 @@ mod tests {
 
     #[test]
     fn cursor_stays_in_bounds_skill() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.select(); // -> Episode
         menu.select(); // -> Skill
@@ -795,7 +801,7 @@ mod tests {
 
     #[test]
     fn back_from_main_closes_menu() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.back();
         assert!(!menu.is_active());
@@ -803,7 +809,7 @@ mod tests {
 
     #[test]
     fn back_from_episode_goes_to_main() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.select(); // -> Episode
         assert_eq!(menu.page(), MenuPage::Episode);
@@ -813,7 +819,7 @@ mod tests {
 
     #[test]
     fn back_from_skill_goes_to_episode_doom1() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.select(); // -> Episode
         menu.select(); // -> Skill
@@ -824,7 +830,7 @@ mod tests {
 
     #[test]
     fn back_from_skill_goes_to_main_doom2() {
-        let mut menu = GameMenu::new(true);
+        let mut menu = GameMenu::new(GameVersion::Doom2);
         menu.open();
         menu.select(); // -> Skill (skips episode in Doom 2)
         assert_eq!(menu.page(), MenuPage::Skill);
@@ -834,7 +840,7 @@ mod tests {
 
     #[test]
     fn back_from_load_goes_to_main() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 2; // "Load Game"
         menu.select(); // -> Load
@@ -845,7 +851,7 @@ mod tests {
 
     #[test]
     fn back_from_save_goes_to_main() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 3; // "Save Game"
         menu.select(); // -> Save
@@ -856,7 +862,7 @@ mod tests {
 
     #[test]
     fn back_from_options_goes_to_main() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 1; // "Options"
         menu.select(); // -> Options
@@ -871,7 +877,7 @@ mod tests {
 
     #[test]
     fn select_new_game_doom1_goes_to_episode() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         let result = menu.select(); // "New Game" -> Episode
         assert_eq!(result, Some(MenuResult::PageChange));
@@ -880,7 +886,7 @@ mod tests {
 
     #[test]
     fn select_new_game_doom2_goes_to_skill() {
-        let mut menu = GameMenu::new(true);
+        let mut menu = GameMenu::new(GameVersion::Doom2);
         menu.open();
         let result = menu.select(); // "New Game" -> Skill (Doom 2)
         assert_eq!(result, Some(MenuResult::PageChange));
@@ -889,7 +895,7 @@ mod tests {
 
     #[test]
     fn select_episode_stores_episode_and_goes_to_skill() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.select(); // -> Episode
         menu.move_down(); // cursor = 1 (Shores of Hell, ep 2)
@@ -901,7 +907,7 @@ mod tests {
 
     #[test]
     fn select_skill_returns_start_game_with_correct_episode() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.select(); // -> Episode
         menu.move_down(); // ep 2
@@ -920,7 +926,7 @@ mod tests {
 
     #[test]
     fn select_skill_returns_start_game_episode1() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.select(); // -> Episode
         menu.select(); // ep 1 -> Skill
@@ -936,7 +942,7 @@ mod tests {
 
     #[test]
     fn select_load_slot_returns_load_game() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 2; // "Load Game"
         menu.select(); // -> Load
@@ -948,7 +954,7 @@ mod tests {
 
     #[test]
     fn select_save_slot_returns_save_game() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 3; // "Save Game"
         menu.select(); // -> Save
@@ -959,7 +965,7 @@ mod tests {
 
     #[test]
     fn select_quit_returns_quit() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 4; // "Quit Game"
         let result = menu.select();
@@ -968,7 +974,7 @@ mod tests {
 
     #[test]
     fn select_noop_returns_none() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 1; // "Options"
         menu.select(); // -> Options page
@@ -982,7 +988,7 @@ mod tests {
         // We cannot easily create disabled items in the static arrays,
         // but we can test the code path by verifying the logic:
         // If we set cursor out of bounds, select returns None.
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 99; // out of bounds
         let result = menu.select();
@@ -995,7 +1001,7 @@ mod tests {
 
     #[test]
     fn doom2_new_game_goes_directly_to_skill() {
-        let mut menu = GameMenu::new(true);
+        let mut menu = GameMenu::new(GameVersion::Doom2);
         menu.open();
         let result = menu.select();
         assert_eq!(result, Some(MenuResult::PageChange));
@@ -1004,7 +1010,7 @@ mod tests {
 
     #[test]
     fn doom2_selected_episode_always_1() {
-        let mut menu = GameMenu::new(true);
+        let mut menu = GameMenu::new(GameVersion::Doom2);
         menu.open();
         assert_eq!(menu.selected_episode(), 1);
         menu.select(); // -> Skill
@@ -1020,7 +1026,7 @@ mod tests {
 
     #[test]
     fn doom2_back_from_skill_goes_to_main() {
-        let mut menu = GameMenu::new(true);
+        let mut menu = GameMenu::new(GameVersion::Doom2);
         menu.open();
         menu.select(); // -> Skill
         menu.back();
@@ -1033,13 +1039,13 @@ mod tests {
 
     #[test]
     fn skull_frame_starts_at_0() {
-        let menu = GameMenu::new(false);
+        let menu = GameMenu::new(GameVersion::Doom1);
         assert_eq!(menu.skull_frame(), 0);
     }
 
     #[test]
     fn skull_frame_toggles_every_8_tics() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         // Frames 0-7: skull_frame = 0
         for _ in 0..SKULL_TOGGLE_TICS {
             assert_eq!(menu.skull_frame(), 0);
@@ -1056,7 +1062,7 @@ mod tests {
 
     #[test]
     fn tick_advances_skull_tic() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         assert_eq!(menu.skull_tic, 0);
         menu.tick();
         assert_eq!(menu.skull_tic, 1);
@@ -1070,7 +1076,7 @@ mod tests {
 
     #[test]
     fn multiple_episode_selections_update_correctly() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.select(); // -> Episode
 
@@ -1088,7 +1094,7 @@ mod tests {
 
     #[test]
     fn open_close_open_preserves_doom2_mode() {
-        let mut menu = GameMenu::new(true);
+        let mut menu = GameMenu::new(GameVersion::Doom2);
         menu.open();
         menu.close();
         menu.open();
@@ -1101,7 +1107,7 @@ mod tests {
 
     #[test]
     fn main_menu_labels_are_correct() {
-        let _menu = GameMenu::new(false);
+        let _menu = GameMenu::new(GameVersion::Doom1);
         let items = MAIN_ITEMS_DOOM1;
         assert_eq!(items[0].label, "New Game");
         assert_eq!(items[1].label, "Options");
@@ -1153,7 +1159,7 @@ mod tests {
     #[test]
     fn select_all_skill_levels() {
         for skill in 0..5u8 {
-            let mut menu = GameMenu::new(false);
+            let mut menu = GameMenu::new(GameVersion::Doom1);
             menu.open();
             menu.select(); // -> Episode
             menu.select(); // ep 1 -> Skill
@@ -1166,7 +1172,7 @@ mod tests {
     #[test]
     fn select_all_load_slots() {
         for slot in 0..6u8 {
-            let mut menu = GameMenu::new(false);
+            let mut menu = GameMenu::new(GameVersion::Doom1);
             menu.open();
             menu.cursor = 2; // "Load Game"
             menu.select(); // -> Load
@@ -1179,7 +1185,7 @@ mod tests {
     #[test]
     fn select_all_save_slots() {
         for slot in 0..6u8 {
-            let mut menu = GameMenu::new(false);
+            let mut menu = GameMenu::new(GameVersion::Doom1);
             menu.open();
             menu.cursor = 3; // "Save Game"
             menu.select(); // -> Save
@@ -1192,7 +1198,7 @@ mod tests {
     #[test]
     fn select_all_episodes() {
         for ep_idx in 0..3u8 {
-            let mut menu = GameMenu::new(false);
+            let mut menu = GameMenu::new(GameVersion::Doom1);
             menu.open();
             menu.select(); // -> Episode
             menu.cursor = ep_idx as usize;
@@ -1368,7 +1374,7 @@ mod tests {
 
     #[test]
     fn select_out_of_bounds_item_returns_none() {
-        let mut menu = GameMenu::new(false);
+        let mut menu = GameMenu::new(GameVersion::Doom1);
         menu.open();
         menu.cursor = 999;
         assert_eq!(menu.select(), None);
