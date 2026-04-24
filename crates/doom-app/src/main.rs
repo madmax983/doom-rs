@@ -183,6 +183,10 @@ struct Args {
     #[arg(long)]
     export_json: Option<std::path::PathBuf>,
 
+    /// Export the level layout to an ASCII text file and exit.
+    #[arg(long)]
+    export_ascii: Option<std::path::PathBuf>,
+
     /// Export the level layout to an SVG file and exit.
     #[arg(long)]
     export_svg: Option<std::path::PathBuf>,
@@ -2234,6 +2238,17 @@ fn run_doom() -> Result<()> {
         "Exported",
         "JSON report",
         "JSON report",
+    )? {
+        return Ok(());
+    }
+
+    if handle_export(
+        args.export_ascii.as_deref(),
+        || doom_map::export_map_to_ascii(&level, 80, 40),
+        "🌟",
+        "Exported",
+        "ASCII art",
+        "ASCII art file",
     )? {
         return Ok(());
     }
