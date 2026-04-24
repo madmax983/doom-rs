@@ -2893,21 +2893,26 @@ fn run_doom() -> Result<()> {
     // Client (netplay) mode: wrap DoomGame in a NetGameApp for network-aware input.
     if let Some(ref addr_str) = args.connect {
         let client = doom_net::NetClient::connect(addr_str, 0)
-            .map_err(|e| anyhow::anyhow!("Failed to connect to server {addr_str}: {e}"))?;
+            .map_err(|e| match e.kind() {
+                std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset => {
+                    anyhow::anyhow!("Connection Failed: The relay server at {} is not responding.", addr_str)
+                }
+                _ => anyhow::anyhow!("Connection Failed: {}", e),
+            })?;
         let mut net_app = net_mode::NetGameApp::new(app, client);
 
         let mut event_loop = DoomEventLoop::new()
-            .map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("Terminal Initialization Failed: {}", e))?;
         event_loop.set_turn_based_mode(args.turn_based);
         event_loop
             .run(&mut net_app, &blit_palette)
-            .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("Terminal Display Failed: {}", e))?;
         return Ok(());
     }
 
     // Start the terminal event loop and run until the user quits (Q or Esc).
     let mut event_loop =
-        DoomEventLoop::new().map_err(|e| anyhow::anyhow!("Failed to initialize terminal: {e}"))?;
+        DoomEventLoop::new().map_err(|e| anyhow::anyhow!("Terminal Initialization Failed: {}", e))?;
     event_loop.set_turn_based_mode(args.turn_based);
 
     // Set renderer mode from --renderer flag.
@@ -2943,7 +2948,7 @@ fn run_doom() -> Result<()> {
         let mut playback_app = demo_mode::DemoPlaybackApp::new_with_compat(app, player, compat);
         event_loop
             .run(&mut playback_app, &blit_palette)
-            .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("Terminal Display Failed: {}", e))?;
 
         #[cfg(feature = "telemetry")]
         if let Some(path) = args.telemetry_out.as_deref() {
@@ -2966,7 +2971,7 @@ fn run_doom() -> Result<()> {
             demo_mode::DemoRecordingWrapper::new_with_compat(app, recorder, record_path, compat);
         event_loop
             .run(&mut recording_app, &blit_palette)
-            .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("Terminal Display Failed: {}", e))?;
 
         #[cfg(feature = "telemetry")]
         if let Some(path) = args.telemetry_out.as_deref() {
@@ -2982,7 +2987,7 @@ fn run_doom() -> Result<()> {
         let mut app = app;
         event_loop
             .run(&mut app, &blit_palette)
-            .map_err(|e| anyhow::anyhow!("Event loop error: {e}"))?;
+            .map_err(|e| anyhow::anyhow!("Terminal Display Failed: {}", e))?;
 
         #[cfg(feature = "telemetry")]
         if let Some(path) = args.telemetry_out.as_deref() {
@@ -3001,22 +3006,22 @@ fn main() {
     if let Err(err) = run_doom() {
         use crossterm::style::Stylize;
         if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-            eprintln!("\n❌ {}: {}", "Fatal Error".red().bold(), err);
+            eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
 
             let mut causes = err.chain().skip(1).peekable();
             if causes.peek().is_some() {
-                eprintln!("\n↳ {}:", "Caused by".red().bold());
+                eprintln!("\n↳ {}:", "Reason".red().bold());
                 for cause in causes {
                     eprintln!("    {}", cause);
                 }
             }
             eprintln!();
         } else {
-            eprintln!("Fatal Error: {}", err);
+            eprintln!("Engine Failure: {}", err);
 
             let mut causes = err.chain().skip(1).peekable();
             if causes.peek().is_some() {
-                eprintln!("Caused by:");
+                eprintln!("Reason:");
                 for cause in causes {
                     eprintln!("    {}", cause);
                 }
