@@ -364,12 +364,12 @@ pub(crate) fn rasterize_line(
     let gx2 = (x2 - origin_x) / cell_size;
     let gy2 = (y2 - origin_y) / cell_size;
 
-    let mut result = Vec::new();
-
     let mut cx = gx1;
     let mut cy = gy1;
     let dx = (gx2 - gx1).abs();
     let dy = -(gy2 - gy1).abs();
+
+    let mut result = Vec::with_capacity((dx + dy.abs() + 1) as usize);
     let sx: i32 = if gx1 < gx2 { 1 } else { -1 };
     let sy: i32 = if gy1 < gy2 { 1 } else { -1 };
     let mut err = dx + dy;
