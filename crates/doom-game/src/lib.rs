@@ -11,6 +11,8 @@
 //! - `player.ammo[i] ≤ MAX_AMMO[i]` for all i.
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
+#[cfg(feature = "achievements")]
+pub mod achievements;
 pub mod actions;
 pub mod automap;
 pub mod cheats;
@@ -50,6 +52,8 @@ pub mod trace;
 pub mod weapon_fire;
 pub mod weapons;
 
+#[cfg(feature = "achievements")]
+pub use achievements::*;
 pub use actions::{Action, dispatch_action, p_move, p_new_chase_dir};
 pub use automap::{
     AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
