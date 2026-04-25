@@ -192,7 +192,11 @@ impl DemoPlaybackApp {
         self.inner.gs.tick(cmd, Some(&mut self.inner.level));
         self.inner.player_view_height = super::next_player_view_height(
             self.inner.player_view_height,
-            self.inner.gs.player.is_dead(),
+            if self.inner.gs.player.is_dead() {
+                crate::PlayerLifeState::Dead
+            } else {
+                crate::PlayerLifeState::Alive
+            },
         );
         self.inner.tick_weapon_anim();
     }

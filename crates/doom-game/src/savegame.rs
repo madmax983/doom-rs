@@ -906,9 +906,10 @@ fn save_game_doomrs(gs: &GameState, level_name: &[u8; 8], skill: u8, description
     w.write_bytes(name_bytes);
 
     // --- Exit request ---
-    match gs.exit_request {
-        None => w.write_u8(0),
-        Some(req) => w.write_u8(req as u8 + 1),
+    if let Some(req) = gs.exit_request {
+        w.write_u8(req as u8 + 1);
+    } else {
+        w.write_u8(0);
     }
 
     // --- Door movers ---
@@ -1060,9 +1061,11 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
     };
 
     // --- Exit request ---
-    let exit_request = match r.read_u8()? {
-        0 => None,
-        disc => Some(ExitRequest::from_repr(disc - 1).ok_or(SaveError::Truncated)?),
+    let disc = r.read_u8()?;
+    let exit_request = if disc == 0 {
+        None
+    } else {
+        Some(ExitRequest::from_repr(disc - 1).ok_or(SaveError::Truncated)?)
     };
 
     // --- Door movers ---

@@ -380,25 +380,18 @@ pub(crate) fn weapon_fire_sfx_lump(weapon: doom_types::weapons::WeaponType) -> &
 pub(crate) fn sound_request_sfx(
     req: doom_game::SoundRequest,
 ) -> Option<(&'static str, SfxPriority)> {
+    use doom_game::SoundRequest::*;
     match req {
-        doom_game::SoundRequest::MonsterWake(kind, _, _, _) => {
-            Some((monster_wake_lump(kind), SfxPriority::High))
-        }
-        doom_game::SoundRequest::MonsterAttack(kind, _, _, _) => {
-            Some((monster_attack_lump(kind), SfxPriority::Medium))
-        }
-        doom_game::SoundRequest::MonsterDie(kind, _, _, _) => {
-            Some((monster_death_lump(kind), SfxPriority::High))
-        }
-        doom_game::SoundRequest::PlayerWeaponFire(weapon) => {
-            Some((weapon_fire_sfx_lump(weapon), SfxPriority::Weapon))
-        }
-        doom_game::SoundRequest::PlayerSuperShotgunOpen => Some(("DSDBOPN", SfxPriority::Weapon)),
-        doom_game::SoundRequest::PlayerSuperShotgunLoad => Some(("DSDBLOAD", SfxPriority::Weapon)),
-        doom_game::SoundRequest::PlayerSuperShotgunClose => Some(("DSDBCLS", SfxPriority::Weapon)),
-        doom_game::SoundRequest::PlayerDie => Some(("DSPLDETH", SfxPriority::Weapon)),
-        doom_game::SoundRequest::PlayerUseFail => Some(("DSNOWAY", SfxPriority::High)),
-        doom_game::SoundRequest::PlayerUseLockedDoor(_) => Some(("DSOOF", SfxPriority::High)),
+        MonsterWake(kind, _, _, _) => Some((monster_wake_lump(kind), SfxPriority::High)),
+        MonsterAttack(kind, _, _, _) => Some((monster_attack_lump(kind), SfxPriority::Medium)),
+        MonsterDie(kind, _, _, _) => Some((monster_death_lump(kind), SfxPriority::High)),
+        PlayerWeaponFire(weapon) => Some((weapon_fire_sfx_lump(weapon), SfxPriority::Weapon)),
+        PlayerSuperShotgunOpen => Some(("DSDBOPN", SfxPriority::Weapon)),
+        PlayerSuperShotgunLoad => Some(("DSDBLOAD", SfxPriority::Weapon)),
+        PlayerSuperShotgunClose => Some(("DSDBCLS", SfxPriority::Weapon)),
+        PlayerDie => Some(("DSPLDETH", SfxPriority::Weapon)),
+        PlayerUseFail => Some(("DSNOWAY", SfxPriority::High)),
+        PlayerUseLockedDoor(_) => Some(("DSOOF", SfxPriority::High)),
     }
 }
 

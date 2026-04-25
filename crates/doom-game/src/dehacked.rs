@@ -605,9 +605,9 @@ impl DehPatch {
     fn parse_i32(s: &str) -> Result<i32, DehError> {
         s.parse::<i32>()
             .or_else(|_| {
-                s.parse::<f64>().and_then(|v| {
+                s.parse::<f64>().map_err(|_| ()).and_then(|v| {
                     if v.is_nan() {
-                        Err("".parse::<f64>().unwrap_err()) // dummy error to fail through
+                        Err(())
                     } else if v.is_infinite() {
                         if v.is_sign_positive() {
                             Ok(i32::MAX)
@@ -625,17 +625,17 @@ impl DehPatch {
     fn parse_u32(s: &str) -> Result<u32, DehError> {
         s.parse::<u32>()
             .or_else(|_| {
-                s.parse::<f64>().and_then(|v| {
+                s.parse::<f64>().map_err(|_| ()).and_then(|v| {
                     if v.is_nan() {
-                        Err("".parse::<f64>().unwrap_err())
+                        Err(())
                     } else if v.is_infinite() {
                         if v.is_sign_positive() {
                             Ok(u32::MAX)
                         } else {
-                            Ok(0)
+                            Ok(u32::MIN)
                         }
                     } else {
-                        Ok(v.clamp(0.0, u32::MAX as f64) as u32)
+                        Ok(v.clamp(u32::MIN as f64, u32::MAX as f64) as u32)
                     }
                 })
             })
@@ -645,17 +645,17 @@ impl DehPatch {
     fn parse_u16(s: &str) -> Result<u16, DehError> {
         s.parse::<u16>()
             .or_else(|_| {
-                s.parse::<f64>().and_then(|v| {
+                s.parse::<f64>().map_err(|_| ()).and_then(|v| {
                     if v.is_nan() {
-                        Err("".parse::<f64>().unwrap_err())
+                        Err(())
                     } else if v.is_infinite() {
                         if v.is_sign_positive() {
                             Ok(u16::MAX)
                         } else {
-                            Ok(0)
+                            Ok(u16::MIN)
                         }
                     } else {
-                        Ok(v.clamp(0.0, u16::MAX as f64) as u16)
+                        Ok(v.clamp(u16::MIN as f64, u16::MAX as f64) as u16)
                     }
                 })
             })
@@ -665,17 +665,17 @@ impl DehPatch {
     fn parse_u8(s: &str) -> Result<u8, DehError> {
         s.parse::<u8>()
             .or_else(|_| {
-                s.parse::<f64>().and_then(|v| {
+                s.parse::<f64>().map_err(|_| ()).and_then(|v| {
                     if v.is_nan() {
-                        Err("".parse::<f64>().unwrap_err())
+                        Err(())
                     } else if v.is_infinite() {
                         if v.is_sign_positive() {
                             Ok(u8::MAX)
                         } else {
-                            Ok(0)
+                            Ok(u8::MIN)
                         }
                     } else {
-                        Ok(v.clamp(0.0, u8::MAX as f64) as u8)
+                        Ok(v.clamp(u8::MIN as f64, u8::MAX as f64) as u8)
                     }
                 })
             })

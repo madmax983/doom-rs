@@ -326,12 +326,27 @@ pub(crate) struct DoomGame {
 
 const DEAD_PLAYER_VIEW_HEIGHT: i32 = 6;
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum PlayerLifeState {
+    Alive,
+    Dead,
+}
+
+impl From<bool> for PlayerLifeState {
+    fn from(is_dead: bool) -> Self {
+        if is_dead {
+            PlayerLifeState::Dead
+        } else {
+            PlayerLifeState::Alive
+        }
+    }
+}
+
 #[inline]
-fn next_player_view_height(current: i32, player_dead: bool) -> i32 {
-    if player_dead {
-        current.saturating_sub(1).max(DEAD_PLAYER_VIEW_HEIGHT)
-    } else {
-        PLAYER_HEIGHT
+fn next_player_view_height(current: i32, life_state: PlayerLifeState) -> i32 {
+    match life_state {
+        PlayerLifeState::Dead => current.saturating_sub(1).max(DEAD_PLAYER_VIEW_HEIGHT),
+        PlayerLifeState::Alive => PLAYER_HEIGHT,
     }
 }
 
@@ -1187,8 +1202,14 @@ impl DoomApp for DoomGame {
 
         if !paused {
             self.gs.tick(cmd, Some(&mut self.level));
-            self.player_view_height =
-                next_player_view_height(self.player_view_height, self.gs.player.is_dead());
+            self.player_view_height = next_player_view_height(
+                self.player_view_height,
+                if self.gs.player.is_dead() {
+                    PlayerLifeState::Dead
+                } else {
+                    PlayerLifeState::Alive
+                },
+            );
             self.tick_weapon_anim();
             self.phase_controller.tick(&mut self.gs);
         }
@@ -2892,13 +2913,15 @@ fn run_doom() -> Result<()> {
 
     // Client (netplay) mode: wrap DoomGame in a NetGameApp for network-aware input.
     if let Some(ref addr_str) = args.connect {
-        let client = doom_net::NetClient::connect(addr_str, 0)
-            .map_err(|e| match e.kind() {
-                std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset => {
-                    anyhow::anyhow!("Connection Failed: The relay server at {} is not responding.", addr_str)
-                }
-                _ => anyhow::anyhow!("Connection Failed: {}", e),
-            })?;
+        let client = doom_net::NetClient::connect(addr_str, 0).map_err(|e| match e.kind() {
+            std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset => {
+                anyhow::anyhow!(
+                    "Connection Failed: The relay server at {} is not responding.",
+                    addr_str
+                )
+            }
+            _ => anyhow::anyhow!("Connection Failed: {}", e),
+        })?;
         let mut net_app = net_mode::NetGameApp::new(app, client);
 
         let mut event_loop = DoomEventLoop::new()
@@ -2911,8 +2934,8 @@ fn run_doom() -> Result<()> {
     }
 
     // Start the terminal event loop and run until the user quits (Q or Esc).
-    let mut event_loop =
-        DoomEventLoop::new().map_err(|e| anyhow::anyhow!("Terminal Initialization Failed: {}", e))?;
+    let mut event_loop = DoomEventLoop::new()
+        .map_err(|e| anyhow::anyhow!("Terminal Initialization Failed: {}", e))?;
     event_loop.set_turn_based_mode(args.turn_based);
 
     // Set renderer mode from --renderer flag.
