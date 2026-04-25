@@ -1,6 +1,0 @@
-🛡️ Sentry: Replace unwrap() with expect()
-
-🎯 Target: Multiple locations across `telemetry.rs`, `audio_system.rs`, `tile_grid.rs`, and `analyzer.rs`.
-💣 Risk: `unwrap()` calls that could potentially panic obscure test failure context or lead to uninformative panics.
-🧪 Strategy: Replaced `.unwrap()` with `.expect("...")` providing explicit failure messages, making assertions clearer when parsing WAD data or managing the audio system.
-🔬 Verification: Run `cargo test --all-targets --all-features`.
