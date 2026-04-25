@@ -5,8 +5,19 @@
 //! title-screen demo cycle (TITLEPIC -> Demo -> CREDIT -> Demo -> ...).
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Specifies the version of the game engine (Doom 1 vs Doom 2)
+///
+/// # Examples
+/// ```
+/// use doom_game::menu::GameVersion;
+///
+/// let version1 = GameVersion::Doom1;
+/// let version2 = GameVersion::Doom2;
+/// ```
 pub enum GameVersion {
+    /// The original Doom 1 (Ultimate Doom) engine behavior.
     Doom1,
+    /// The Doom 2 engine behavior (adds Super Shotgun, megaspheres, etc).
     Doom2,
 }
 

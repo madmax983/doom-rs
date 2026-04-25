@@ -23,6 +23,7 @@ pub mod menu;
 pub mod mobj;
 pub mod mobjinfo;
 pub mod movement;
+/// Mover structures and functions for things like doors, ceilings, and floors.
 pub mod movers;
 pub mod phase;
 pub mod pickups;
@@ -34,11 +35,13 @@ mod savegame_vanilla;
 pub mod sight;
 pub mod snapshot;
 pub mod sound;
+/// Sound propagation and audio request structs.
 pub mod sound_prop;
 pub mod spawn;
 pub mod specials;
 pub mod state;
 pub mod states;
+/// Level statistics tracking (kills, items, secrets, etc).
 pub mod stats;
 #[cfg(feature = "style_meter")]
 pub mod style;
