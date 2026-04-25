@@ -48,3 +48,6 @@
 **[Extract GameState sub-components to reduce state.rs bloat]**
 **Tangle:** The `doom-game/src/state.rs` file was a huge "God Struct" holding everything from `LevelStats` to `SectorMovers` and `SoundPropagation`, creating a sprawling mess of responsibilities.
 **Blueprint:** Extracted `LevelStats` to `stats.rs`, `SectorMovers` and all related structures to `movers.rs`, and `SoundPropagation` to `sound_prop.rs`. Updated `state.rs` to import these components, significantly improving code cohesion and module boundaries.
+**[Extract GameMode and Skill to Shared Primitives]**
+**Tangle:** The `GameMode` and `Skill` enums were defined in `doom-game/src/spawn.rs`, but used in presentation crates like `doom-app` for configuring the game state and main loop. This caused UI components to depend directly on the entire game engine crate just for basic enums, creating tight coupling between rendering and core game state.
+**Blueprint:** Extracted `GameMode` and `Skill` into `doom-types/src/game_mode.rs` and `doom-types/src/skill.rs`. `doom-game/src/spawn.rs` now imports them and `doom-game/src/lib.rs` re-exports them for backwards compatibility. This creates a clean dependency hierarchy where presentation relies on foundational types instead of game logic.

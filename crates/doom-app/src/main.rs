@@ -408,7 +408,7 @@ impl DoomGame {
         // Capture initial player health for pain-flash delta detection.
         let initial_health = gs.player.health();
 
-        let mut menu = doom_game::menu::GameMenu::new(doom_game::menu::GameVersion::Doom1); // false = Doom 1 mode
+        let mut menu = doom_game::menu::GameMenu::new(doom_types::game_version::GameVersion::Doom1); // false = Doom 1 mode
         let title_screen = if show_title {
             menu.open();
             Some(TitleScreen::new())
@@ -536,7 +536,7 @@ impl DoomGame {
 
     fn enter_title_screen(&mut self) {
         self.title_screen = Some(TitleScreen::new());
-        self.menu = doom_game::menu::GameMenu::new(doom_game::menu::GameVersion::Doom1);
+        self.menu = doom_game::menu::GameMenu::new(doom_types::game_version::GameVersion::Doom1);
         self.menu.open();
         self.intermission_renderer = None;
     }
@@ -588,7 +588,7 @@ impl DoomGame {
             &mut gs,
             &level,
             self.skill,
-            doom_game::GameMode::SinglePlayer,
+            doom_types::game_mode::GameMode::SinglePlayer,
         );
 
         if let (Some(mut player), Some(handle)) = (carried_player, player_handle) {
@@ -939,7 +939,7 @@ impl DoomApp for DoomGame {
                                 &mut self.gs,
                                 &self.level,
                                 sk,
-                                doom_game::GameMode::SinglePlayer,
+                                doom_types::game_mode::GameMode::SinglePlayer,
                             );
                             init_scrolling_walls(&mut self.gs, &self.level);
                             init_conveyors(&mut self.gs, &self.level);
@@ -2574,7 +2574,7 @@ fn run_doom() -> Result<()> {
             &mut gs,
             &level,
             Skill::Medium,
-            doom_game::GameMode::SinglePlayer,
+            doom_types::game_mode::GameMode::SinglePlayer,
         );
         let stats = gs.compute_intermission_stats();
 
@@ -2682,7 +2682,12 @@ fn run_doom() -> Result<()> {
         .checked_sub(1)
         .and_then(Skill::from_num)
         .unwrap_or(Skill::Medium);
-    spawn_level_things(&mut gs, &level, skill, doom_game::GameMode::SinglePlayer);
+    spawn_level_things(
+        &mut gs,
+        &level,
+        skill,
+        doom_types::game_mode::GameMode::SinglePlayer,
+    );
 
     // Apply DeHackEd patch if one was specified.
     if let Some(ref deh_path) = args.deh {
@@ -2892,13 +2897,15 @@ fn run_doom() -> Result<()> {
 
     // Client (netplay) mode: wrap DoomGame in a NetGameApp for network-aware input.
     if let Some(ref addr_str) = args.connect {
-        let client = doom_net::NetClient::connect(addr_str, 0)
-            .map_err(|e| match e.kind() {
-                std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset => {
-                    anyhow::anyhow!("Connection Failed: The relay server at {} is not responding.", addr_str)
-                }
-                _ => anyhow::anyhow!("Connection Failed: {}", e),
-            })?;
+        let client = doom_net::NetClient::connect(addr_str, 0).map_err(|e| match e.kind() {
+            std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset => {
+                anyhow::anyhow!(
+                    "Connection Failed: The relay server at {} is not responding.",
+                    addr_str
+                )
+            }
+            _ => anyhow::anyhow!("Connection Failed: {}", e),
+        })?;
         let mut net_app = net_mode::NetGameApp::new(app, client);
 
         let mut event_loop = DoomEventLoop::new()
@@ -2911,8 +2918,8 @@ fn run_doom() -> Result<()> {
     }
 
     // Start the terminal event loop and run until the user quits (Q or Esc).
-    let mut event_loop =
-        DoomEventLoop::new().map_err(|e| anyhow::anyhow!("Terminal Initialization Failed: {}", e))?;
+    let mut event_loop = DoomEventLoop::new()
+        .map_err(|e| anyhow::anyhow!("Terminal Initialization Failed: {}", e))?;
     event_loop.set_turn_based_mode(args.turn_based);
 
     // Set renderer mode from --renderer flag.

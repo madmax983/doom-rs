@@ -4,11 +4,7 @@
 //! selection, Load/Save game, and Options.  `TitleScreen` manages the
 //! title-screen demo cycle (TITLEPIC -> Demo -> CREDIT -> Demo -> ...).
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GameVersion {
-    Doom1,
-    Doom2,
-}
+pub use doom_types::game_version::GameVersion;
 
 // ---------------------------------------------------------------------------
 // MenuPage
