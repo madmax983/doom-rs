@@ -376,7 +376,7 @@ mod tests {
 
         let reject_size = (n_sectors * n_sectors).div_ceil(8);
         let reject_data = vec![0u8; reject_size]; // all visible
-        let reject = Reject::parse_lump(&reject_data, n_sectors).unwrap();
+        let reject = Reject::parse_lump(&reject_data, n_sectors).expect("value must exist in test");
 
         // Minimal blockmap.
         let mut bm_data = vec![0u8; 14];
@@ -387,7 +387,7 @@ mod tests {
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("value must exist in test");
 
         Level {
             name: "TEST".to_string(),
@@ -820,7 +820,7 @@ mod tests {
         // bit 3: (1,1) = 0
         // = 0b0000_0110 = 0x06
         let reject_data = vec![0x06u8];
-        let reject = Reject::parse_lump(&reject_data, 2).unwrap();
+        let reject = Reject::parse_lump(&reject_data, 2).expect("value must exist in test");
 
         let mut bm_data = vec![0u8; 14];
         bm_data[0..2].copy_from_slice(&0i16.to_le_bytes());
@@ -830,7 +830,7 @@ mod tests {
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("value must exist in test");
 
         // Need one node to split into two subsectors.
         let nodes = vec![doom_map::Node {

@@ -687,7 +687,7 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 100, 0);
         // Trooper starts with 20 health; deal 5 damage.
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 5);
-        assert_eq!(gs.mobjslab.get(trooper).unwrap().health, 15);
+        assert_eq!(gs.mobjslab.get(trooper).expect("value must exist in test").health, 15);
     }
 
     #[test]
@@ -695,13 +695,13 @@ mod tests {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
         let player = gs.player.handle;
-        let spawn_state = gs.mobjslab.get(trooper).unwrap().state;
+        let spawn_state = gs.mobjslab.get(trooper).expect("value must exist in test").state;
         let see_state = crate::mobjinfo::MOBJINFO[MobjKind::Trooper as usize].see_state;
 
         gs.rng.set_index(3); // 220 >= trooper pain chance, so no pain-state detour.
         damage_mobj(&mut gs, trooper, player, 5);
 
-        let mo = gs.mobjslab.get(trooper).unwrap();
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
         assert_eq!(
             mo.target, player,
             "monster should retaliate against the attacker"
@@ -739,7 +739,7 @@ mod tests {
         gs.rng.set_index(0); // 0 < 200, so the trooper definitely enters pain.
         damage_mobj(&mut gs, trooper, player, 5);
 
-        let mo = gs.mobjslab.get(trooper).unwrap();
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
         assert_eq!(
             mo.state, pain_state,
             "damage should enter the pain state first"
@@ -753,7 +753,7 @@ mod tests {
             gs.tick(TicCmd::default(), None);
         }
 
-        let mo = gs.mobjslab.get(trooper).unwrap();
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
         assert_ne!(
             mo.state, pain_state,
             "monster should leave pain after its pain tics expire"
@@ -780,7 +780,7 @@ mod tests {
         // Deal more damage than the trooper has health — should clamp to 0.
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 9999);
         assert_eq!(
-            gs.mobjslab.get(trooper).unwrap().health,
+            gs.mobjslab.get(trooper).expect("value must exist in test").health,
             0,
             "health must clamp to 0, not go negative"
         );
@@ -791,12 +791,12 @@ mod tests {
         let mut gs = make_game_state();
         // Spawn a trooper but strip MF_SHOOTABLE.
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        gs.mobjslab.get_mut(trooper).unwrap().flags &= !flags::MF_SHOOTABLE;
+        gs.mobjslab.get_mut(trooper).expect("value must exist in test").flags &= !flags::MF_SHOOTABLE;
 
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 10);
         // Health must be unchanged (still 20).
         assert_eq!(
-            gs.mobjslab.get(trooper).unwrap().health,
+            gs.mobjslab.get(trooper).expect("value must exist in test").health,
             20,
             "non-shootable actor must not take damage"
         );
@@ -809,7 +809,7 @@ mod tests {
         let inflictor = MobjHandle::NULL;
         // Test with massive damage
         damage_mobj(&mut gs, target, inflictor, i32::MAX);
-        let health = gs.mobjslab.get(target).unwrap().health;
+        let health = gs.mobjslab.get(target).expect("value must exist in test").health;
         assert_eq!(health, 0);
     }
 
@@ -822,7 +822,7 @@ mod tests {
         damage_mobj(&mut gs, trooper, player_handle, 5);
 
         assert_eq!(
-            gs.mobjslab.get(trooper).unwrap().target,
+            gs.mobjslab.get(trooper).expect("value must exist in test").target,
             player_handle,
             "inflictor must be set as the target"
         );
@@ -840,7 +840,7 @@ mod tests {
         // Deal exactly lethal damage (20 hp → 0).
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 20);
 
-        let mo = gs.mobjslab.get(trooper).unwrap();
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
         assert_eq!(
             mo.state,
             crate::mobj::StateNum(ids::S_POSS_DIE1),
@@ -857,7 +857,7 @@ mod tests {
         // Deal non-lethal damage (5/20 hp).
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 5);
 
-        let mo = gs.mobjslab.get(trooper).unwrap();
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
         assert_eq!(
             mo.state,
             crate::mobj::StateNum(ids::S_POSS_PAIN),
@@ -873,12 +873,12 @@ mod tests {
 
         // Kill the trooper.
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 20);
-        let state_after_kill = gs.mobjslab.get(trooper).unwrap().state;
+        let state_after_kill = gs.mobjslab.get(trooper).expect("value must exist in test").state;
 
         // Apply more damage — must be a no-op.
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 5);
 
-        let mo = gs.mobjslab.get(trooper).unwrap();
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
         assert_eq!(mo.health, 0, "health must remain 0");
         assert_eq!(
             mo.state, state_after_kill,
@@ -895,7 +895,7 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 100, 0);
 
         assert_eq!(
-            gs.mobjslab.get(trooper).unwrap().flags & crate::mobj::flags::MF_SCREAMED,
+            gs.mobjslab.get(trooper).expect("value must exist in test").flags & crate::mobj::flags::MF_SCREAMED,
             0,
             "MF_SCREAMED must be clear before kill"
         );
@@ -903,7 +903,7 @@ mod tests {
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 20);
 
         assert_ne!(
-            gs.mobjslab.get(trooper).unwrap().flags & crate::mobj::flags::MF_SCREAMED,
+            gs.mobjslab.get(trooper).expect("value must exist in test").flags & crate::mobj::flags::MF_SCREAMED,
             0,
             "lethal damage must set MF_SCREAMED (A_Scream fired by p_set_mobj_state)"
         );
@@ -977,7 +977,7 @@ mod tests {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
         // Kill the trooper first.
-        gs.mobjslab.get_mut(trooper).unwrap().health = 0;
+        gs.mobjslab.get_mut(trooper).expect("value must exist in test").health = 0;
 
         let src = gs.player.handle;
         // Even if trig tables were initialized and the geometry lined up,
@@ -1020,7 +1020,7 @@ mod tests {
         );
 
         assert_eq!(result, Some(trooper));
-        assert!(gs.mobjslab.get(trooper).unwrap().health < 20);
+        assert!(gs.mobjslab.get(trooper).expect("value must exist in test").health < 20);
     }
 
     // -----------------------------------------------------------------------
@@ -1036,7 +1036,7 @@ mod tests {
         // Explode at origin with radius 200 — trooper is well within range.
         p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(200), None);
 
-        let health = gs.mobjslab.get(trooper).unwrap().health;
+        let health = gs.mobjslab.get(trooper).expect("value must exist in test").health;
         assert!(
             health < 20,
             "trooper health {health} must decrease from splash damage"
@@ -1085,7 +1085,7 @@ mod tests {
         // directly: pain_chance=0 means the `pain_chance > 0` guard fails.
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        let original_state = gs.mobjslab.get(trooper).unwrap().state;
+        let original_state = gs.mobjslab.get(trooper).expect("value must exist in test").state;
 
         // Override the trooper's kind is not possible, but we can test by
         // putting the RNG into a state where roll >= pain_chance.
@@ -1094,7 +1094,7 @@ mod tests {
         gs.rng.set_index(3);
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 5);
 
-        let mo = gs.mobjslab.get(trooper).unwrap();
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
         assert_eq!(
             mo.state, original_state,
             "when p_random() >= pain_chance, actor must NOT enter pain state"
@@ -1118,7 +1118,7 @@ mod tests {
             let trooper = spawn_trooper(&mut gs, 100 + i as i32, 0);
             gs.rng.set_index(i);
             damage_mobj(&mut gs, trooper, MobjHandle::NULL, 5);
-            let mo = gs.mobjslab.get(trooper).unwrap();
+            let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
             if mo.state == crate::mobj::StateNum(ids::S_POSS_PAIN) {
                 pain_count += 1;
             }
@@ -1141,12 +1141,12 @@ mod tests {
 
         // Kill the trooper.
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 20);
-        let state_after_death = gs.mobjslab.get(trooper).unwrap().state;
+        let state_after_death = gs.mobjslab.get(trooper).expect("value must exist in test").state;
 
         // Try to damage again — dead actor should be ignored entirely.
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 5);
 
-        let mo = gs.mobjslab.get(trooper).unwrap();
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
         assert_eq!(mo.health, 0, "dead actor health must remain 0");
         assert_eq!(
             mo.state, state_after_death,
@@ -1160,13 +1160,13 @@ mod tests {
         // Non-lethal damage should NOT change state to pain.
         let mut gs = make_game_state();
         let wolfss = spawn_wolfss(&mut gs, 100, 0);
-        let original_state = gs.mobjslab.get(wolfss).unwrap().state;
+        let original_state = gs.mobjslab.get(wolfss).expect("value must exist in test").state;
 
         // Set RNG to index 0 (value=0), so 0 < 170 would be true.
         gs.rng.set_index(0);
         damage_mobj(&mut gs, wolfss, MobjHandle::NULL, 5);
 
-        let mo = gs.mobjslab.get(wolfss).unwrap();
+        let mo = gs.mobjslab.get(wolfss).expect("value must exist in test");
         // State must not change because pain_state is S_NULL.
         assert_eq!(
             mo.state, original_state,
@@ -1188,7 +1188,7 @@ mod tests {
         let player_handle = gs.player.handle;
         p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
 
-        let health = gs.mobjslab.get(trooper).unwrap().health;
+        let health = gs.mobjslab.get(trooper).expect("value must exist in test").health;
         assert_eq!(
             health, 20,
             "trooper outside blast radius must be unaffected"
@@ -1316,7 +1316,7 @@ mod tests {
             "without trig tables, ray has zero direction → no hit"
         );
         // Verify trooper is unharmed.
-        assert_eq!(gs.mobjslab.get(trooper).unwrap().health, 20);
+        assert_eq!(gs.mobjslab.get(trooper).expect("value must exist in test").health, 20);
     }
 
     #[test]
@@ -1350,7 +1350,7 @@ mod tests {
         );
         assert!(result.is_none(), "wall should block hitscan");
         assert_eq!(
-            gs.mobjslab.get(trooper).unwrap().health,
+            gs.mobjslab.get(trooper).expect("value must exist in test").health,
             20,
             "trooper behind wall must be unharmed"
         );
@@ -1388,7 +1388,7 @@ mod tests {
         );
         // With uninitialized trig, result is None.
         assert!(result.is_none());
-        assert_eq!(gs.mobjslab.get(trooper).unwrap().health, 20);
+        assert_eq!(gs.mobjslab.get(trooper).expect("value must exist in test").health, 20);
     }
 
     #[test]
@@ -1421,7 +1421,7 @@ mod tests {
         );
         // Regardless of trig tables, short range = miss.
         assert!(result.is_none());
-        assert_eq!(gs.mobjslab.get(trooper).unwrap().health, 20);
+        assert_eq!(gs.mobjslab.get(trooper).expect("value must exist in test").health, 20);
     }
 
     #[test]
@@ -1459,7 +1459,7 @@ mod tests {
         );
 
         assert_eq!(result, Some(trooper));
-        assert!(gs.mobjslab.get(trooper).unwrap().health < 20);
+        assert!(gs.mobjslab.get(trooper).expect("value must exist in test").health < 20);
     }
 
     #[test]
@@ -1472,10 +1472,10 @@ mod tests {
         let level = make_open_combat_level();
         let mut gs = make_game_state();
         let player_h = gs.player.handle;
-        gs.mobjslab.get_mut(player_h).unwrap().z = Fixed16_16::from_int(128);
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").z = Fixed16_16::from_int(128);
 
         let low_trooper = spawn_trooper(&mut gs, 128, 0);
-        gs.mobjslab.get_mut(low_trooper).unwrap().z = Fixed16_16::ZERO;
+        gs.mobjslab.get_mut(low_trooper).expect("value must exist in test").z = Fixed16_16::ZERO;
 
         let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
@@ -1492,7 +1492,7 @@ mod tests {
             result.is_none(),
             "target entirely below the autoaim window should not be hit"
         );
-        assert_eq!(gs.mobjslab.get(low_trooper).unwrap().health, 20);
+        assert_eq!(gs.mobjslab.get(low_trooper).expect("value must exist in test").health, 20);
     }
 
     #[test]
@@ -1505,13 +1505,13 @@ mod tests {
         let level = make_open_combat_level();
         let mut gs = make_game_state();
         let player_h = gs.player.handle;
-        gs.mobjslab.get_mut(player_h).unwrap().z = Fixed16_16::from_int(128);
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").z = Fixed16_16::from_int(128);
 
         let low_near = spawn_trooper(&mut gs, 96, 0);
-        gs.mobjslab.get_mut(low_near).unwrap().z = Fixed16_16::ZERO;
+        gs.mobjslab.get_mut(low_near).expect("value must exist in test").z = Fixed16_16::ZERO;
 
         let high_far = spawn_trooper(&mut gs, 160, 0);
-        gs.mobjslab.get_mut(high_far).unwrap().z = Fixed16_16::from_int(128);
+        gs.mobjslab.get_mut(high_far).expect("value must exist in test").z = Fixed16_16::from_int(128);
 
         let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
@@ -1529,8 +1529,8 @@ mod tests {
             Some(high_far),
             "shot should ignore the low near actor and hit the farther actor in the autoaim lane"
         );
-        assert_eq!(gs.mobjslab.get(low_near).unwrap().health, 20);
-        assert!(gs.mobjslab.get(high_far).unwrap().health < 20);
+        assert_eq!(gs.mobjslab.get(low_near).expect("value must exist in test").health, 20);
+        assert!(gs.mobjslab.get(high_far).expect("value must exist in test").health < 20);
     }
 
     // -----------------------------------------------------------------------
@@ -1550,7 +1550,7 @@ mod tests {
         let player_handle = gs.player.handle;
         p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
 
-        let health = gs.mobjslab.get(trooper).unwrap().health;
+        let health = gs.mobjslab.get(trooper).expect("value must exist in test").health;
         assert!(
             health < 20,
             "Euclidean distance ~99 < radius 100 → should take damage, health={health}"
@@ -1568,7 +1568,7 @@ mod tests {
         let player_handle = gs.player.handle;
         p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
 
-        let health = gs.mobjslab.get(trooper).unwrap().health;
+        let health = gs.mobjslab.get(trooper).expect("value must exist in test").health;
         assert_eq!(
             health, 20,
             "Euclidean distance ~113 >= radius 100 → no damage"
@@ -1584,14 +1584,14 @@ mod tests {
 
         // Give both actors enough health to survive the blast so we can
         // compare remaining health (troopers default to 20 which is too low).
-        gs.mobjslab.get_mut(close_trooper).unwrap().health = 200;
-        gs.mobjslab.get_mut(far_trooper).unwrap().health = 200;
+        gs.mobjslab.get_mut(close_trooper).expect("value must exist in test").health = 200;
+        gs.mobjslab.get_mut(far_trooper).expect("value must exist in test").health = 200;
 
         let player_handle = gs.player.handle;
         p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
 
-        let close_health = gs.mobjslab.get(close_trooper).unwrap().health;
-        let far_health = gs.mobjslab.get(far_trooper).unwrap().health;
+        let close_health = gs.mobjslab.get(close_trooper).expect("value must exist in test").health;
+        let far_health = gs.mobjslab.get(far_trooper).expect("value must exist in test").health;
         assert!(
             close_health < far_health,
             "closer actor should take more damage: close_health={close_health}, far_health={far_health}"
@@ -1625,7 +1625,7 @@ mod tests {
             Some(&level),
         );
 
-        let health = gs.mobjslab.get(trooper).unwrap().health;
+        let health = gs.mobjslab.get(trooper).expect("value must exist in test").health;
         assert_eq!(
             health, 20,
             "trooper behind wall should not take splash damage"
@@ -1659,7 +1659,7 @@ mod tests {
             Some(&level),
         );
 
-        let health = gs.mobjslab.get(trooper).unwrap().health;
+        let health = gs.mobjslab.get(trooper).expect("value must exist in test").health;
         assert!(
             health < 20,
             "trooper with clear LOS should take splash damage, health={health}"

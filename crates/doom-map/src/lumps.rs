@@ -631,7 +631,7 @@ mod prop_tests {
             // All-zero reject: every bit is 0 → all pairs visible.
             let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0u8; size];
-            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            let reject = Reject::parse_lump(&data, n_sectors).expect("value must exist in test");
             let vis_ab = reject.visible(a, b);
             let vis_ba = reject.visible(b, a);
             prop_assert!(
@@ -651,7 +651,7 @@ mod prop_tests {
             let a = a % n_sectors;
             let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0u8; size];
-            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            let reject = Reject::parse_lump(&data, n_sectors).expect("value must exist in test");
             prop_assert!(
                 reject.visible(a, a),
                 "sector {} should be visible from itself", a
@@ -667,7 +667,7 @@ mod prop_tests {
         ) {
             let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0u8; size];
-            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            let reject = Reject::parse_lump(&data, n_sectors).expect("value must exist in test");
             // a and b are deliberately far out of range.
             prop_assert!(!reject.visible(a, b));
         }
@@ -684,7 +684,7 @@ mod prop_tests {
             let b = b % n_sectors;
             let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0xFFu8; size];
-            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            let reject = Reject::parse_lump(&data, n_sectors).expect("value must exist in test");
             prop_assert!(
                 !reject.visible(a, b),
                 "all-ones reject must report not-visible for ({},{})", a, b
@@ -749,7 +749,7 @@ mod tests {
         data[4..6].copy_from_slice(&90u16.to_le_bytes());
         data[6..8].copy_from_slice(&1u16.to_le_bytes());
         data[8..10].copy_from_slice(&7u16.to_le_bytes());
-        let things = Thing::parse_lump(&data).unwrap();
+        let things = Thing::parse_lump(&data).expect("value must exist in test");
         assert_eq!(things.len(), 1);
         assert_eq!(things[0].x, 100);
         assert_eq!(things[0].y, 200);
@@ -762,7 +762,7 @@ mod tests {
         data[2..4].copy_from_slice(&20i16.to_le_bytes());
         data[4..6].copy_from_slice(&30i16.to_le_bytes());
         data[6..8].copy_from_slice(&(-40i16).to_le_bytes());
-        let verts = Vertex::parse_lump(&data).unwrap();
+        let verts = Vertex::parse_lump(&data).expect("value must exist in test");
         assert_eq!(verts.len(), 2);
         assert_eq!(verts[0], Vertex { x: -10, y: 20 });
         assert_eq!(verts[1], Vertex { x: 30, y: -40 });
@@ -788,7 +788,7 @@ mod tests {
     fn reject_visible_symmetry() {
         // All-zero reject → everything visible.
         let data = vec![0u8; (4usize * 4).div_ceil(8)]; // 4 sectors
-        let reject = Reject::parse_lump(&data, 4).unwrap();
+        let reject = Reject::parse_lump(&data, 4).expect("value must exist in test");
         for i in 0..4 {
             for j in 0..4 {
                 assert!(reject.visible(i, j));

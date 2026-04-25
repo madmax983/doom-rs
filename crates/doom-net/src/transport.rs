@@ -412,7 +412,7 @@ mod tests {
         let connecting = ConnectionState::Connecting;
         let connected = ConnectionState::Connected {
             player_slot: 0,
-            remote_addr: "127.0.0.1:5029".parse().unwrap(),
+            remote_addr: "127.0.0.1:5029".parse().expect("value must exist in test"),
         };
         let timed_out = ConnectionState::TimedOut;
 
@@ -428,14 +428,14 @@ mod tests {
 
     #[test]
     fn connect_to_invalid_address_fails() {
-        let mut transport = NetTransport::bind("127.0.0.1:0").unwrap();
+        let mut transport = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
         let err = transport.connect_to("invalid").unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
 
     #[test]
     fn send_packet_without_connect_fails() {
-        let mut transport = NetTransport::bind("127.0.0.1:0").unwrap();
+        let mut transport = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
         let pkt = TicPacket {
             tic: 0,
             sender: 0,
@@ -452,11 +452,11 @@ mod tests {
 
     #[test]
     fn recv_packet_malformed_returns_none_silently() {
-        let mut sender = NetTransport::bind("127.0.0.1:0").unwrap();
-        let mut receiver = NetTransport::bind("127.0.0.1:0").unwrap();
-        let recv_addr = receiver.local_addr().unwrap();
+        let mut sender = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let mut receiver = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let recv_addr = receiver.local_addr().expect("value must exist in test");
         let bad_data = b"bad packet";
-        sender.send_raw(bad_data, &recv_addr).unwrap();
+        sender.send_raw(bad_data, &recv_addr).expect("value must exist in test");
 
         // Use a polling loop instead of thread::sleep
         let start = std::time::Instant::now();
@@ -468,7 +468,7 @@ mod tests {
             if start.elapsed().as_millis() > 100 {
                 break;
             }
-            let res = receiver.recv_packet().unwrap();
+            let res = receiver.recv_packet().expect("value must exist in test");
             assert!(res.is_none());
         }
     }
@@ -477,7 +477,7 @@ mod tests {
     fn transport_bind_on_localhost_succeeds() {
         let transport = NetTransport::bind("127.0.0.1:0");
         assert!(transport.is_ok(), "bind to 127.0.0.1:0 must succeed");
-        let t = transport.unwrap();
+        let t = transport.expect("value must exist in test");
         assert!(!t.is_connected(), "fresh transport must not be connected");
         assert_eq!(*t.state(), ConnectionState::Disconnected);
     }
@@ -485,7 +485,7 @@ mod tests {
     #[test]
 
     fn transport_set_nonblocking_works() {
-        let t = NetTransport::bind("127.0.0.1:0").unwrap();
+        let t = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
         // Already set to nonblocking by bind, toggle off and back on.
         assert!(t.set_nonblocking(false).is_ok());
         assert!(t.set_nonblocking(true).is_ok());
@@ -494,10 +494,10 @@ mod tests {
     #[test]
     fn send_and_recv_packet_loopback() {
         // Bind two transports on loopback with OS-assigned ports.
-        let mut sender = NetTransport::bind("127.0.0.1:0").unwrap();
-        let mut receiver = NetTransport::bind("127.0.0.1:0").unwrap();
+        let mut sender = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let mut receiver = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
 
-        let recv_addr = receiver.local_addr().unwrap();
+        let recv_addr = receiver.local_addr().expect("value must exist in test");
 
         let pkt = TicPacket {
             tic: 42,
@@ -509,24 +509,24 @@ mod tests {
 
         // Send via send_raw to the receiver's address.
         let data = pkt.to_bytes();
-        let sent = sender.send_raw(&data, &recv_addr).unwrap();
+        let sent = sender.send_raw(&data, &recv_addr).expect("value must exist in test");
         assert_eq!(sent, TIC_PACKET_SIZE);
 
         // Receive on the other end.
-        let result = receiver.recv_packet().unwrap();
+        let result = receiver.recv_packet().expect("value must exist in test");
         assert!(result.is_some(), "must receive the packet");
-        let (received_pkt, from_addr) = result.unwrap();
+        let (received_pkt, from_addr) = result.expect("value must exist in test");
         assert_eq!(received_pkt.tic, 42);
         assert_eq!(received_pkt.sender, 1);
         assert_eq!(received_pkt.ack_tic, 40);
         assert_eq!(received_pkt.state_checksum, 0xCAFE);
-        assert_eq!(from_addr, sender.local_addr().unwrap());
+        assert_eq!(from_addr, sender.local_addr().expect("value must exist in test"));
     }
 
     #[test]
     fn recv_packet_on_empty_socket_returns_none() {
-        let mut t = NetTransport::bind("127.0.0.1:0").unwrap();
-        let result = t.recv_packet().unwrap();
+        let mut t = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let result = t.recv_packet().expect("value must exist in test");
         assert!(result.is_none(), "recv on empty socket must return None");
     }
 
@@ -543,9 +543,9 @@ mod tests {
 
     #[test]
     fn net_stats_tracks_sent_packets() {
-        let mut sender = NetTransport::bind("127.0.0.1:0").unwrap();
-        let receiver = NetTransport::bind("127.0.0.1:0").unwrap();
-        let recv_addr = receiver.local_addr().unwrap();
+        let mut sender = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let receiver = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let recv_addr = receiver.local_addr().expect("value must exist in test");
 
         let pkt = TicPacket {
             tic: 1,
@@ -556,8 +556,8 @@ mod tests {
         };
 
         let data = pkt.to_bytes();
-        sender.send_raw(&data, &recv_addr).unwrap();
-        sender.send_raw(&data, &recv_addr).unwrap();
+        sender.send_raw(&data, &recv_addr).expect("value must exist in test");
+        sender.send_raw(&data, &recv_addr).expect("value must exist in test");
 
         let stats = sender.stats();
         assert_eq!(stats.packets_sent, 2, "must track 2 sent packets");

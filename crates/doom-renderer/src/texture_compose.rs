@@ -1087,7 +1087,7 @@ mod tests {
     #[test]
     fn blit_at_origin_copies_directly() {
         let data = make_patch_data(2, 2, 44);
-        let img = parse_patch(&data).unwrap();
+        let img = parse_patch(&data).expect("value must exist in test");
         let mut columns: Vec<Vec<u8>> = vec![vec![0; 2]; 2];
         blit_patch(&mut columns, 2, 2, &img, 0, 0);
         assert!(columns[0].iter().all(|&p| p == 44));
@@ -1097,7 +1097,7 @@ mod tests {
     #[test]
     fn blit_positive_offset_shifts_pixels() {
         let data = make_patch_data(1, 1, 77);
-        let img = parse_patch(&data).unwrap();
+        let img = parse_patch(&data).expect("value must exist in test");
         let mut columns: Vec<Vec<u8>> = vec![vec![0; 3]; 3];
         blit_patch(&mut columns, 3, 3, &img, 2, 1);
         assert_eq!(columns[2][1], 77);
@@ -1111,7 +1111,7 @@ mod tests {
     #[test]
     fn blit_negative_offset_clips_left_top() {
         let data = make_patch_data(3, 3, 55);
-        let img = parse_patch(&data).unwrap();
+        let img = parse_patch(&data).expect("value must exist in test");
         let mut columns: Vec<Vec<u8>> = vec![vec![0; 3]; 3];
         blit_patch(&mut columns, 3, 3, &img, -1, -1);
         // Patch columns 1,2 map to dest columns 0,1; rows 1,2 map to rows 0,1.
@@ -1127,7 +1127,7 @@ mod tests {
     fn blit_multiple_posts_transparent_gaps() {
         let posts = vec![vec![(0u8, vec![10, 11]), (5u8, vec![50, 51])]];
         let data = make_patch_with_posts(1, 8, &posts);
-        let img = parse_patch(&data).unwrap();
+        let img = parse_patch(&data).expect("value must exist in test");
         let mut columns: Vec<Vec<u8>> = vec![vec![0; 8]];
         blit_patch(&mut columns, 1, 8, &img, 0, 0);
         assert_eq!(columns[0][0], 10);
@@ -1143,7 +1143,7 @@ mod tests {
     #[test]
     fn blit_patch_wider_than_texture_clips_right() {
         let data = make_patch_data(5, 2, 33);
-        let img = parse_patch(&data).unwrap();
+        let img = parse_patch(&data).expect("value must exist in test");
         let mut columns: Vec<Vec<u8>> = vec![vec![0; 2]; 3]; // texture is only 3 wide
         blit_patch(&mut columns, 3, 2, &img, 0, 0);
         // Only first 3 columns should be filled.
@@ -1180,8 +1180,8 @@ mod tests {
         let dir = TextureDirectory::new(&tex1_data, None, &pnames_data);
         let tex = dir.get(&name8("BRICK1"));
         assert!(tex.is_some());
-        assert_eq!(tex.unwrap().width, 64);
-        assert_eq!(tex.unwrap().height, 128);
+        assert_eq!(tex.expect("value must exist in test").width, 64);
+        assert_eq!(tex.expect("value must exist in test").height, 128);
     }
 
     #[test]
@@ -1431,7 +1431,7 @@ mod tests {
         let tex2_data = make_texture_lump(&[("DUP", 64, 64, &[(0, 0, 0)])]);
         let dir = TextureDirectory::new(&tex1_data, Some(&tex2_data), &pnames_data);
         // TEXTURE2 entry comes second, so it overwrites in the HashMap.
-        let tex = dir.get(&name8("DUP")).unwrap();
+        let tex = dir.get(&name8("DUP")).expect("value must exist in test");
         assert_eq!(tex.width, 64);
     }
 

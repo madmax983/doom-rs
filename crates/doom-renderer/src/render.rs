@@ -3539,7 +3539,7 @@ mod tests {
     fn clip_seg_one_behind_clips_correctly() {
         let result = clip_seg_to_near_plane(-2, 0, 4, 6);
         assert!(result.is_some());
-        let (cx1, _cy1, cx2, cy2) = result.unwrap();
+        let (cx1, _cy1, cx2, cy2) = result.expect("value must exist in test");
         assert_eq!(cx1, 1);
         assert_eq!(cx2, 4);
         assert_eq!(cy2, 6);

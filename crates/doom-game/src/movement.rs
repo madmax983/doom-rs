@@ -499,9 +499,9 @@ mod tests {
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes()); // sentinel
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes()); // terminator
-        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).unwrap();
+        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).expect("value must exist in test");
 
-        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).expect("value must exist in test");
 
         doom_map::Level {
             name: "TEST".to_string(),
@@ -578,8 +578,8 @@ mod tests {
             bm_data.extend_from_slice(&(ld_idx as u16).to_le_bytes());
         }
         bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes()); // terminator
-        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
-        let reject = Reject::parse_lump(&[0u8], 1).unwrap();
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("value must exist in test");
+        let reject = Reject::parse_lump(&[0u8], 1).expect("value must exist in test");
 
         doom_map::Level {
             name: "TEST".to_string(),
@@ -658,8 +658,8 @@ mod tests {
         bm_data.extend_from_slice(&0u16.to_le_bytes());
         bm_data.extend_from_slice(&0u16.to_le_bytes());
         bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
-        let reject = Reject::parse_lump(&[0u8], 2).unwrap();
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("value must exist in test");
+        let reject = Reject::parse_lump(&[0u8], 2).expect("value must exist in test");
 
         doom_map::Level {
             name: "STEP".to_string(),
@@ -809,8 +809,8 @@ mod tests {
         bm_data.extend_from_slice(&0u16.to_le_bytes());
         bm_data.extend_from_slice(&1u16.to_le_bytes());
         bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
-        let reject = Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("value must exist in test");
+        let reject = Reject::parse_lump(&[0u8; 1], 2).expect("value must exist in test");
 
         doom_map::Level {
             name: "DROP".to_string(),
@@ -880,7 +880,7 @@ mod tests {
     fn noclip_bypasses_any_check() {
         let level = make_open_level();
         let (mut slab, handle) = make_player_slab();
-        slab.get_mut(handle).unwrap().flags |= flags::MF_NOCLIP;
+        slab.get_mut(handle).expect("value must exist in test").flags |= flags::MF_NOCLIP;
         // Even with impossible coordinates, noclip always succeeds.
         assert!(p_try_move(
             &slab,
@@ -1005,7 +1005,7 @@ mod tests {
     fn step_height_uses_current_sector_floor_when_mobj_z_is_stale() {
         let level = make_two_sided_step_level(16, 32);
         let (mut slab, handle) = make_player_slab();
-        let mo = slab.get_mut(handle).unwrap();
+        let mo = slab.get_mut(handle).expect("value must exist in test");
         mo.x = Fixed16_16::from_int(48);
         mo.y = Fixed16_16::from_int(64);
         mo.z = Fixed16_16::ZERO;
@@ -1043,7 +1043,7 @@ mod tests {
     fn player_with_dropoff_flag_can_step_to_ledge_edge() {
         let level = make_partition_step_level(64, 0);
         let (mut slab, handle) = make_player_slab();
-        let mo = slab.get_mut(handle).unwrap();
+        let mo = slab.get_mut(handle).expect("value must exist in test");
         mo.flags |= flags::MF_DROPOFF;
         mo.x = Fixed16_16::from_int(96);
         mo.y = Fixed16_16::ZERO;

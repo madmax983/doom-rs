@@ -247,7 +247,7 @@ mod tests {
         let lmp = record_n_tics(5);
         let player = DemoPlayer::from_lmp(&lmp);
         assert!(player.is_some());
-        let player = player.unwrap();
+        let player = player.expect("value must exist in test");
         assert_eq!(player.total_tics(), 5);
     }
 
@@ -272,15 +272,15 @@ mod tests {
             }]);
         }
         let lmp = rec.to_lmp();
-        let mut player = DemoPlayer::from_lmp(&lmp).unwrap();
+        let mut player = DemoPlayer::from_lmp(&lmp).expect("value must exist in test");
 
-        let t0 = player.next_tic_cmds().unwrap();
+        let t0 = player.next_tic_cmds().expect("value must exist in test");
         assert_eq!(t0[0].forward_move, 0);
 
-        let t1 = player.next_tic_cmds().unwrap();
+        let t1 = player.next_tic_cmds().expect("value must exist in test");
         assert_eq!(t1[0].forward_move, 10);
 
-        let t2 = player.next_tic_cmds().unwrap();
+        let t2 = player.next_tic_cmds().expect("value must exist in test");
         assert_eq!(t2[0].forward_move, 20);
 
         assert!(player.next_tic_cmds().is_none());
@@ -290,7 +290,7 @@ mod tests {
     #[test]
     fn is_finished_after_all_tics_consumed() {
         let lmp = record_n_tics(3);
-        let mut player = DemoPlayer::from_lmp(&lmp).unwrap();
+        let mut player = DemoPlayer::from_lmp(&lmp).expect("value must exist in test");
         assert!(!player.is_finished());
         for _ in 0..3 {
             player.next_tic();
@@ -302,7 +302,7 @@ mod tests {
     #[test]
     fn reset_rewinds_to_start() {
         let lmp = record_n_tics(5);
-        let mut player = DemoPlayer::from_lmp(&lmp).unwrap();
+        let mut player = DemoPlayer::from_lmp(&lmp).expect("value must exist in test");
 
         // Consume 3 tics.
         for _ in 0..3 {
@@ -326,7 +326,7 @@ mod tests {
     #[test]
     fn peek_tic_does_not_advance() {
         let lmp = record_n_tics(3);
-        let player = DemoPlayer::from_lmp(&lmp).unwrap();
+        let player = DemoPlayer::from_lmp(&lmp).expect("value must exist in test");
 
         assert_eq!(player.current_tic(), 0);
         let peeked = player.peek_tic();
@@ -361,9 +361,9 @@ mod tests {
             buttons: bt::BT_ATTACK | bt::BT_USE,
         }]);
         let lmp = rec.to_lmp();
-        let mut player = DemoPlayer::from_lmp(&lmp).unwrap();
+        let mut player = DemoPlayer::from_lmp(&lmp).expect("value must exist in test");
 
-        let cmd: TicCmd = player.next_tic().unwrap();
+        let cmd: TicCmd = player.next_tic().expect("value must exist in test");
         assert_eq!(cmd.forward_move, 42);
         assert_eq!(cmd.side_move, -7);
         assert_eq!(cmd.angle_turn, 0x1200);
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn peek_after_finish_returns_none() {
         let lmp = record_n_tics(1);
-        let mut player = DemoPlayer::from_lmp(&lmp).unwrap();
+        let mut player = DemoPlayer::from_lmp(&lmp).expect("value must exist in test");
         player.next_tic();
         assert!(player.peek_tic().is_none());
     }

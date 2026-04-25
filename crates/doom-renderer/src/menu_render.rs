@@ -653,7 +653,7 @@ mod tests {
         // Most pixels should have been darkened (shifted right).
         // Check a pixel that is NOT part of any text rendering.
         // Bottom-right corner should just be darkened.
-        let px = fb.get_pixel(319, 199).unwrap();
+        let px = fb.get_pixel(319, 199).expect("value must exist in test");
         // 200 >> 1 = 100.  But the menu text might also be drawn, so just
         // verify the pixel changed from 200.
         assert_ne!(px, 200, "Pixels should have been darkened");

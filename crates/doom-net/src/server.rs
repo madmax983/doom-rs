@@ -271,17 +271,17 @@ mod tests {
             server.is_ok(),
             "RelayServer::bind must succeed on 127.0.0.1:0"
         );
-        let s = server.unwrap();
+        let s = server.expect("value must exist in test");
         assert_eq!(s.connected_count(), 0);
     }
 
     #[test]
     fn accept_connection_assigns_sequential_slots() {
-        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
+        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
 
-        let addr1: SocketAddr = "127.0.0.1:10001".parse().unwrap();
-        let addr2: SocketAddr = "127.0.0.1:10002".parse().unwrap();
-        let addr3: SocketAddr = "127.0.0.1:10003".parse().unwrap();
+        let addr1: SocketAddr = "127.0.0.1:10001".parse().expect("value must exist in test");
+        let addr2: SocketAddr = "127.0.0.1:10002".parse().expect("value must exist in test");
+        let addr3: SocketAddr = "127.0.0.1:10003".parse().expect("value must exist in test");
 
         assert_eq!(server.accept_connection(addr1), Some(0));
         assert_eq!(server.accept_connection(addr2), Some(1));
@@ -295,17 +295,17 @@ mod tests {
             max_players: 4,
             ..test_config()
         };
-        let mut server = RelayServer::bind("127.0.0.1:0", config).unwrap();
+        let mut server = RelayServer::bind("127.0.0.1:0", config).expect("value must exist in test");
 
         for i in 0..4u16 {
-            let addr: SocketAddr = format!("127.0.0.1:{}", 10001 + i).parse().unwrap();
+            let addr: SocketAddr = format!("127.0.0.1:{}", 10001 + i).parse().expect("value must exist in test");
             assert!(
                 server.accept_connection(addr).is_some(),
                 "slot {i} must be assignable"
             );
         }
 
-        let overflow: SocketAddr = "127.0.0.1:10005".parse().unwrap();
+        let overflow: SocketAddr = "127.0.0.1:10005".parse().expect("value must exist in test");
         assert_eq!(
             server.accept_connection(overflow),
             None,
@@ -315,10 +315,10 @@ mod tests {
 
     #[test]
     fn disconnect_player_clears_slot() {
-        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
-        let addr: SocketAddr = "127.0.0.1:10001".parse().unwrap();
+        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let addr: SocketAddr = "127.0.0.1:10001".parse().expect("value must exist in test");
 
-        let slot = server.accept_connection(addr).unwrap();
+        let slot = server.accept_connection(addr).expect("value must exist in test");
         assert_eq!(server.connected_count(), 1);
 
         server.disconnect_player(slot);
@@ -329,7 +329,7 @@ mod tests {
         );
 
         // Slot should be reusable.
-        let new_addr: SocketAddr = "127.0.0.1:10002".parse().unwrap();
+        let new_addr: SocketAddr = "127.0.0.1:10002".parse().expect("value must exist in test");
         assert_eq!(
             server.accept_connection(new_addr),
             Some(0),
@@ -339,11 +339,11 @@ mod tests {
 
     #[test]
     fn connected_count_reflects_active_connections() {
-        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
+        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
         assert_eq!(server.connected_count(), 0);
 
-        let addr1: SocketAddr = "127.0.0.1:10001".parse().unwrap();
-        let addr2: SocketAddr = "127.0.0.1:10002".parse().unwrap();
+        let addr1: SocketAddr = "127.0.0.1:10001".parse().expect("value must exist in test");
+        let addr2: SocketAddr = "127.0.0.1:10002".parse().expect("value must exist in test");
 
         server.accept_connection(addr1);
         assert_eq!(server.connected_count(), 1);
@@ -363,16 +363,16 @@ mod tests {
         use doom_types::TicCmd;
 
         // Create a server and two "client" transports.
-        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
+        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
 
-        let mut client1 = NetTransport::bind("127.0.0.1:0").unwrap();
-        let mut client2 = NetTransport::bind("127.0.0.1:0").unwrap();
+        let mut client1 = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let mut client2 = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
 
-        let addr1 = client1.local_addr().unwrap();
-        let addr2 = client2.local_addr().unwrap();
+        let addr1 = client1.local_addr().expect("value must exist in test");
+        let addr2 = client2.local_addr().expect("value must exist in test");
 
-        let slot1 = server.accept_connection(addr1).unwrap();
-        let _slot2 = server.accept_connection(addr2).unwrap();
+        let slot1 = server.accept_connection(addr1).expect("value must exist in test");
+        let _slot2 = server.accept_connection(addr2).expect("value must exist in test");
 
         let pkt = TicPacket {
             tic: 10,
@@ -383,16 +383,16 @@ mod tests {
         };
 
         // Broadcast excluding sender (slot 1 / client 1).
-        server.broadcast_packet(&pkt, Some(slot1)).unwrap();
+        server.broadcast_packet(&pkt, Some(slot1)).expect("value must exist in test");
 
         // Client 2 should receive the packet.
-        let recv2 = client2.recv_packet().unwrap();
+        let recv2 = client2.recv_packet().expect("value must exist in test");
         assert!(recv2.is_some(), "client2 must receive the broadcast");
-        let (received, _) = recv2.unwrap();
+        let (received, _) = recv2.expect("value must exist in test");
         assert_eq!(received.tic, 10);
 
         // Client 1 should NOT receive the packet.
-        let recv1 = client1.recv_packet().unwrap();
+        let recv1 = client1.recv_packet().expect("value must exist in test");
         assert!(recv1.is_none(), "sender must be excluded from broadcast");
     }
 
@@ -402,9 +402,9 @@ mod tests {
             timeout_ms: 1, // 1ms timeout for fast testing
             ..test_config()
         };
-        let mut server = RelayServer::bind("127.0.0.1:0", config).unwrap();
+        let mut server = RelayServer::bind("127.0.0.1:0", config).expect("value must exist in test");
 
-        let addr: SocketAddr = "127.0.0.1:10001".parse().unwrap();
+        let addr: SocketAddr = "127.0.0.1:10001".parse().expect("value must exist in test");
         server.accept_connection(addr);
         assert_eq!(server.connected_count(), 1);
 

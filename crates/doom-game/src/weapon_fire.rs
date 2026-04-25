@@ -556,7 +556,7 @@ mod tests {
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("value must exist in test");
 
         Level {
             name: "TEST".to_string(),
@@ -601,7 +601,7 @@ mod tests {
                 special: 0,
                 tag: 0,
             }],
-            reject: Reject::parse_lump(&[0u8], 1).unwrap(),
+            reject: Reject::parse_lump(&[0u8], 1).expect("value must exist in test"),
             blockmap,
         }
     }
@@ -746,7 +746,7 @@ mod tests {
         p_fire_pistol(&mut gs, None);
 
         assert!(
-            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            gs.mobjslab.get(target_handle).expect("value must exist in test").health < 20,
             "first pistol shot after release should be accurate"
         );
     }
@@ -763,7 +763,7 @@ mod tests {
         p_fire_pistol(&mut gs, None);
 
         assert_eq!(
-            gs.mobjslab.get(target_handle).unwrap().health,
+            gs.mobjslab.get(target_handle).expect("value must exist in test").health,
             20,
             "refire pistol shot should still use spread"
         );
@@ -782,7 +782,7 @@ mod tests {
         p_fire_pistol(&mut gs, Some(&level));
 
         assert!(
-            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            gs.mobjslab.get(target_handle).expect("value must exist in test").health < 20,
             "pistol autoaim probe should acquire a target within Doom's side-angle search"
         );
     }
@@ -800,7 +800,7 @@ mod tests {
         p_fire_pistol(&mut gs, Some(&level));
 
         assert!(
-            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            gs.mobjslab.get(target_handle).expect("value must exist in test").health < 20,
             "pistol autoaim probe should search both sides of center"
         );
     }
@@ -891,7 +891,7 @@ mod tests {
         p_fire_chaingun(&mut gs, None);
 
         assert!(
-            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            gs.mobjslab.get(target_handle).expect("value must exist in test").health < 20,
             "first chaingun shot after release should be accurate"
         );
     }
@@ -908,7 +908,7 @@ mod tests {
         p_fire_chaingun(&mut gs, None);
 
         assert_eq!(
-            gs.mobjslab.get(target_handle).unwrap().health,
+            gs.mobjslab.get(target_handle).expect("value must exist in test").health,
             20,
             "held chaingun shots should keep spread"
         );
@@ -927,7 +927,7 @@ mod tests {
         p_fire_chaingun(&mut gs, Some(&level));
 
         assert!(
-            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            gs.mobjslab.get(target_handle).expect("value must exist in test").health < 20,
             "chaingun should reuse the same Doom bullet autoaim probe as the pistol"
         );
     }
@@ -1015,17 +1015,17 @@ mod tests {
 
         let mut gs = make_game_state();
         let target_handle = spawn_shootable_target(&mut gs, 32, 16, 20, 20);
-        let before = gs.mobjslab.get(gs.player.handle).unwrap().angle;
+        let before = gs.mobjslab.get(gs.player.handle).expect("value must exist in test").angle;
 
         p_fire_fist(&mut gs, None);
 
-        let after = gs.mobjslab.get(gs.player.handle).unwrap().angle;
+        let after = gs.mobjslab.get(gs.player.handle).expect("value must exist in test").angle;
         assert_ne!(
             after, before,
             "fist hit should turn the player toward the target"
         );
         assert!(
-            gs.mobjslab.get(target_handle).unwrap().health < 20,
+            gs.mobjslab.get(target_handle).expect("value must exist in test").health < 20,
             "fist snap regression should hit the melee target"
         );
     }

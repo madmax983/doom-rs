@@ -340,7 +340,7 @@ mod tests {
             .expect("should have at least one negative-offset column");
 
         for y in 0..FB_HEIGHT {
-            let pixel = fb.get_pixel(neg_col, y).unwrap();
+            let pixel = fb.get_pixel(neg_col, y).expect("value must exist in test");
             assert_eq!(
                 pixel, 100,
                 "before tick, column {neg_col} should show start_screen"
@@ -368,7 +368,7 @@ mod tests {
         for y in 0..FB_HEIGHT {
             for x in 0..FB_WIDTH {
                 assert_eq!(
-                    fb.get_pixel(x, y).unwrap(),
+                    fb.get_pixel(x, y).expect("value must exist in test"),
                     250,
                     "after wipe complete, pixel ({x},{y}) should be end_screen value"
                 );
@@ -402,7 +402,7 @@ mod tests {
             // Above the split: end_screen.
             for y in 0..split {
                 assert_eq!(
-                    fb.get_pixel(x, y).unwrap(),
+                    fb.get_pixel(x, y).expect("value must exist in test"),
                     200,
                     "above split at column {x}, row {y} should be end_screen"
                 );
@@ -410,7 +410,7 @@ mod tests {
             // Below the split: start_screen (shifted).
             for y in split..FB_HEIGHT {
                 assert_eq!(
-                    fb.get_pixel(x, y).unwrap(),
+                    fb.get_pixel(x, y).expect("value must exist in test"),
                     10,
                     "below split at column {x}, row {y} should be start_screen"
                 );
@@ -441,7 +441,7 @@ mod tests {
             let off = wipe.y_offsets()[x];
             if off <= 0 {
                 assert_eq!(
-                    fb.get_pixel(x, 0).unwrap(),
+                    fb.get_pixel(x, 0).expect("value must exist in test"),
                     30,
                     "column {x} at offset {off} should show start_screen"
                 );
@@ -510,7 +510,7 @@ mod tests {
                 let idx = y * FB_WIDTH + x;
                 let expected = (idx % 256) as u8;
                 assert_eq!(
-                    fb.get_pixel(x, y).unwrap(),
+                    fb.get_pixel(x, y).expect("value must exist in test"),
                     expected,
                     "pixel ({x},{y}) should match start_screen pattern"
                 );

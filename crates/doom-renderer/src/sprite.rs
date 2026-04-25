@@ -1745,7 +1745,7 @@ mod tests {
         // Lookup via exact byte array name (null-padded).
         let found = cache.get(b"TROOA1\0\0");
         assert!(found.is_some(), "TROOA1 should be found in cache");
-        let f = found.unwrap();
+        let f = found.expect("value must exist in test");
         assert_eq!(f.width, 2);
         assert_eq!(f.height, 2);
 
@@ -1771,7 +1771,7 @@ mod tests {
         assert_eq!(cache.len(), 1, "one sprite lump expected");
         let frame = cache.get(b"PISGA0\0\0");
         assert!(frame.is_some(), "PISGA0 should be in cache");
-        assert_eq!(frame.unwrap().pixels[0], Some(7));
+        assert_eq!(frame.expect("value must exist in test").pixels[0], Some(7));
     }
 
     #[test]

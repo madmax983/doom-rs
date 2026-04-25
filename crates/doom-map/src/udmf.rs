@@ -1046,7 +1046,7 @@ mod tests {
     #[test]
     fn parse_bare_true_false_values() {
         let map = UdmfMap::parse(b"namespace = \"doom\"; vertex { is_cool = true; bad = false; }")
-            .unwrap();
+            .expect("value must exist in test");
         assert!(matches!(
             map.blocks[0].fields[0].value,
             UdmfValue::Bool(true)

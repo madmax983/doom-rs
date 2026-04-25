@@ -3822,12 +3822,12 @@ mod tests {
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes()); // sentinel
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes()); // terminator
-        doom_map::Blockmap::parse_lump(&bm_data).unwrap()
+        doom_map::Blockmap::parse_lump(&bm_data).expect("value must exist in test")
     }
 
     /// Build a level with one sector that has the given special, no linedefs.
     fn make_damage_level(floor_height: i16, special: u16) -> doom_map::Level {
-        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).expect("value must exist in test");
         doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],
@@ -3876,7 +3876,7 @@ mod tests {
     /// - Linedef 0: two-sided (FLAG_TWO_SIDED=4), special=`special`, right=0, left=1.
     fn make_door_level_with_special(door_ceil: i16, special: u16) -> doom_map::Level {
         // Reject for 2 sectors: ceil(4/8) = 1 byte.
-        let reject = doom_map::Reject::parse_lump(&[0u8], 2).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).expect("value must exist in test");
 
         let sectors = vec![
             doom_map::Sector {
@@ -3965,7 +3965,7 @@ mod tests {
 
         tick_sector_specials(&mut gs, &level, handle);
 
-        let health = gs.mobjslab.get(handle).unwrap().health;
+        let health = gs.mobjslab.get(handle).expect("value must exist in test").health;
         assert_eq!(health, 90, "lava (special 5) must deal 10 damage per tic");
     }
 
@@ -3984,7 +3984,7 @@ mod tests {
             "player state must track sector damage"
         );
         assert_eq!(
-            gs.mobjslab.get(handle).unwrap().health,
+            gs.mobjslab.get(handle).expect("value must exist in test").health,
             90,
             "player mobj health must stay aligned with player state"
         );
@@ -3998,7 +3998,7 @@ mod tests {
 
         tick_sector_specials(&mut gs, &level, handle);
 
-        let health = gs.mobjslab.get(handle).unwrap().health;
+        let health = gs.mobjslab.get(handle).expect("value must exist in test").health;
         assert_eq!(health, 100, "actor above lava floor must take no damage");
     }
 
@@ -4086,7 +4086,7 @@ mod tests {
     #[test]
     fn p_use_lines_prefers_nearest_crossed_special_over_lump_order() {
         let mut gs = GameState::new("TEST");
-        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).expect("value must exist in test");
 
         let mut level = doom_map::Level {
             name: "TEST".to_string(),
@@ -4208,7 +4208,7 @@ mod tests {
     #[test]
     fn p_use_lines_closed_nonspecial_wall_blocks_special_behind_it() {
         let mut gs = GameState::new("TEST");
-        let reject = doom_map::Reject::parse_lump(&[0u8], 2).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).expect("value must exist in test");
 
         let mut level = doom_map::Level {
             name: "TEST".to_string(),
@@ -4533,7 +4533,7 @@ mod tests {
     #[test]
     fn light_toggles_after_period() {
         let mut gs = GameState::new("TEST");
-        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).expect("value must exist in test");
         let mut level = doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],
@@ -4590,7 +4590,7 @@ mod tests {
         ld_special: u16,
         ld_tag: u16,
     ) -> doom_map::Level {
-        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).expect("value must exist in test");
 
         let sectors = vec![
             doom_map::Sector {
@@ -4709,7 +4709,7 @@ mod tests {
         tag: u16,
         ld_special: u16,
     ) -> doom_map::Level {
-        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).expect("value must exist in test");
 
         let sectors = vec![
             // Sector 0: front sector (where the player stands).
@@ -5406,7 +5406,7 @@ mod tests {
         sector_tag: u16,
         ld_special: u16,
     ) -> doom_map::Level {
-        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).expect("value must exist in test");
 
         let sectors = vec![
             // Sector 0: source sector (player starts here).
@@ -5510,7 +5510,7 @@ mod tests {
             "ev_teleport must return true when destination found"
         );
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(mo.x, doom_types::Fixed16_16::from_int(500));
         assert_eq!(mo.y, doom_types::Fixed16_16::from_int(600));
     }
@@ -5523,7 +5523,7 @@ mod tests {
 
         ev_teleport(&mut gs, &level, 1, handle);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         // 180 degrees ~ 0x8000_0000 BAM. Check approximate match.
         let expected = doom_types::Bam(0x8000_0000);
         let diff = mo.angle.0.wrapping_sub(expected.0);
@@ -5542,7 +5542,7 @@ mod tests {
 
         ev_teleport(&mut gs, &level, 1, handle);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(
             mo.z,
             doom_types::Fixed16_16::from_int(64),
@@ -5559,7 +5559,7 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(
             mo.x,
             doom_types::Fixed16_16::from_int(500),
@@ -5576,7 +5576,7 @@ mod tests {
 
         activate_linedef(&mut gs, &mut level, 0);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(
             mo.x,
             doom_types::Fixed16_16::from_int(300),
@@ -5594,7 +5594,7 @@ mod tests {
         // Type 125 is monsters-only — should not teleport the player.
         activate_linedef(&mut gs, &mut level, 0);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(
             mo.x,
             doom_types::Fixed16_16::ZERO,
@@ -5617,7 +5617,7 @@ mod tests {
         gs.stats.level_time = 32;
         tick_sector_damage(&mut gs, &level);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(mo.health, 95, "hellslime (special 5) must deal 5 damage");
     }
 
@@ -5637,7 +5637,7 @@ mod tests {
             "player state must track periodic sector damage"
         );
         assert_eq!(
-            gs.mobjslab.get(handle).unwrap().health,
+            gs.mobjslab.get(handle).expect("value must exist in test").health,
             95,
             "player mobj health must stay aligned with periodic sector damage"
         );
@@ -5653,7 +5653,7 @@ mod tests {
         gs.stats.level_time = 32;
         tick_sector_damage(&mut gs, &level);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(mo.health, 98, "nukage (special 7) must deal 2 damage");
     }
 
@@ -5667,7 +5667,7 @@ mod tests {
         gs.stats.level_time = 32;
         tick_sector_damage(&mut gs, &level);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(
             mo.health, 80,
             "super hellslime (special 16) must deal 20 damage"
@@ -5686,7 +5686,7 @@ mod tests {
         gs.stats.level_time = 32;
         tick_sector_damage(&mut gs, &level);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(mo.health, 100, "RadSuit must prevent nukage damage");
     }
 
@@ -5702,7 +5702,7 @@ mod tests {
         gs.stats.level_time = 32;
         tick_sector_damage(&mut gs, &level);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(mo.health, 5, "God exit must deal 20 damage");
         assert_eq!(
             gs.exit_request,
@@ -5721,7 +5721,7 @@ mod tests {
         gs.stats.level_time = 32;
         tick_sector_damage(&mut gs, &level);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(mo.health, 100, "no damage when sector special is 0");
     }
 
@@ -5735,17 +5735,17 @@ mod tests {
         // level_time = 1 (not a multiple of 32) -- no damage.
         gs.stats.level_time = 1;
         tick_sector_damage(&mut gs, &level);
-        assert_eq!(gs.mobjslab.get(handle).unwrap().health, 100);
+        assert_eq!(gs.mobjslab.get(handle).expect("value must exist in test").health, 100);
 
         // level_time = 15 -- no damage.
         gs.stats.level_time = 15;
         tick_sector_damage(&mut gs, &level);
-        assert_eq!(gs.mobjslab.get(handle).unwrap().health, 100);
+        assert_eq!(gs.mobjslab.get(handle).expect("value must exist in test").health, 100);
 
         // level_time = 32 -- damage applied.
         gs.stats.level_time = 32;
         tick_sector_damage(&mut gs, &level);
-        assert_eq!(gs.mobjslab.get(handle).unwrap().health, 95);
+        assert_eq!(gs.mobjslab.get(handle).expect("value must exist in test").health, 95);
     }
 
     #[test]
@@ -5761,7 +5761,7 @@ mod tests {
             tick_sector_damage(&mut gs, &level);
         }
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(
             mo.health, 90,
             "5 nukage ticks at 2 damage each = 10 total damage, 100-10=90"
@@ -5776,7 +5776,7 @@ mod tests {
     #[test]
     fn init_sector_lights_creates_effects_for_specials_1_2_3() {
         let mut gs = GameState::new("TEST");
-        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).expect("value must exist in test");
         let level = doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],
@@ -5843,7 +5843,7 @@ mod tests {
     #[test]
     fn tick_sector_lights_changes_light_levels() {
         let mut gs = GameState::new("TEST");
-        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).expect("value must exist in test");
         let mut level = doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],
@@ -5916,7 +5916,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         let handle = make_actor_at_z(&mut gs, 32);
         gs.player = crate::player::PlayerState::pistol_start(handle);
-        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).expect("value must exist in test");
         let level = doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],
@@ -5979,7 +5979,7 @@ mod tests {
 
         ev_teleport(&mut gs, &level, 1, handle);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(
             mo.momx,
             doom_types::Fixed16_16::ZERO,
@@ -6024,7 +6024,7 @@ mod tests {
     #[test]
     fn init_sector_lights_creates_oscillate_and_fire_flicker() {
         let mut gs = GameState::new("TEST");
-        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).expect("value must exist in test");
         let level = doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],
@@ -6086,7 +6086,7 @@ mod tests {
         gs.stats.level_time = 32;
         tick_sector_damage(&mut gs, &level);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(
             mo.health, 80,
             "RadSuit must NOT protect from God exit (special 11)"
@@ -6107,7 +6107,7 @@ mod tests {
         gs.stats.level_time = 32;
         tick_sector_damage(&mut gs, &level);
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(mo.health, 95, "special 4 (nukage blink) must deal 5 damage");
     }
 
@@ -6122,7 +6122,7 @@ mod tests {
     /// All sectors share the same floor flat (`FLAT1`) by default.
     fn make_stair_level(sector_count: usize, base_floor: i16, tag: u16) -> doom_map::Level {
         let reject_bytes = vec![0u8; (sector_count * sector_count).div_ceil(8)];
-        let reject = doom_map::Reject::parse_lump(&reject_bytes, sector_count).unwrap();
+        let reject = doom_map::Reject::parse_lump(&reject_bytes, sector_count).expect("value must exist in test");
 
         let mut sectors = Vec::new();
         for i in 0..sector_count {
@@ -6209,7 +6209,7 @@ mod tests {
         tag: u16,
     ) -> doom_map::Level {
         let reject_bytes = vec![0u8; 2]; // 3 sectors: ceil(9/8)=2
-        let reject = doom_map::Reject::parse_lump(&reject_bytes, 3).unwrap();
+        let reject = doom_map::Reject::parse_lump(&reject_bytes, 3).expect("value must exist in test");
 
         let sectors = vec![
             doom_map::Sector {
@@ -6327,7 +6327,7 @@ mod tests {
     /// Sector 1 = platform sector (tagged).
     fn make_platform_level(adj_floor: i16, plat_floor: i16, tag: u16) -> doom_map::Level {
         let reject_bytes = vec![0u8; 1]; // 2 sectors
-        let reject = doom_map::Reject::parse_lump(&reject_bytes, 2).unwrap();
+        let reject = doom_map::Reject::parse_lump(&reject_bytes, 2).expect("value must exist in test");
 
         let sectors = vec![
             doom_map::Sector {
@@ -6766,7 +6766,7 @@ mod tests {
     /// Helper to build a tagged level with a linedef that triggers a special.
     fn make_tagged_linedef_level(special: u16, tag: u16) -> doom_map::Level {
         let reject_bytes = vec![0u8; 1]; // 2 sectors
-        let reject = doom_map::Reject::parse_lump(&reject_bytes, 2).unwrap();
+        let reject = doom_map::Reject::parse_lump(&reject_bytes, 2).expect("value must exist in test");
 
         let sectors = vec![
             doom_map::Sector {
@@ -7390,7 +7390,7 @@ mod tests {
         assert_eq!(level.sectors[1].ceil_height, 8);
 
         // Player should have taken damage.
-        let health = gs.mobjslab.get(handle).unwrap().health;
+        let health = gs.mobjslab.get(handle).expect("value must exist in test").health;
         assert!(
             health < 100,
             "player must take crush damage when ceiling is at floor+8"
@@ -7674,7 +7674,7 @@ mod tests {
     fn multiple_crushers_active_simultaneously() {
         let mut gs = GameState::new("TEST");
         // Create a level with two sectors sharing the same tag.
-        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).expect("value must exist in test");
         let mut level = doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],
@@ -7941,7 +7941,7 @@ mod tests {
     //   LD1: sector 1 ↔ sector 2 (right=SD2→sec1, left=SD3→sec2)
     // -----------------------------------------------------------------------
     fn make_lift_test_level(adj_floor: i16, ld_special: u16, tag: u16) -> doom_map::Level {
-        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).expect("value must exist in test");
 
         let sectors = vec![
             doom_map::Sector {
@@ -8521,7 +8521,7 @@ mod tests {
         let mut level_name = [0u8; 8];
         level_name[..4].copy_from_slice(b"E1M1");
         let data = save_game(&gs, &level_name, 2, "test lift save");
-        let loaded = load_game(&data).unwrap();
+        let loaded = load_game(&data).expect("value must exist in test");
 
         assert_eq!(loaded.state.movers.lifts.len(), 1, "must restore 1 lift");
         assert_eq!(loaded.state.movers.lifts[0].sector_index, 3);
@@ -8764,7 +8764,7 @@ mod tests {
     /// Build a level with linedefs having the given special types.
     /// Each linedef has a right sidedef pointing at sector 0.
     fn make_scrolling_level(specials: &[u16]) -> doom_map::Level {
-        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).expect("value must exist in test");
 
         let sectors = vec![doom_map::Sector {
             floor_height: 0,
@@ -8820,7 +8820,7 @@ mod tests {
 
     /// Build a level with a conveyor linedef (type 253) with the given sidedef offsets.
     fn make_conveyor_level(line_type: u16, x_offset: i16, y_offset: i16) -> doom_map::Level {
-        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).expect("value must exist in test");
 
         let sectors = vec![doom_map::Sector {
             floor_height: 0,
@@ -9176,7 +9176,7 @@ mod tests {
 
         tick_conveyors(&mut gs, Some(&level));
 
-        let mo = gs.mobjslab.get(handle).unwrap();
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         assert_eq!(
             mo.x,
             Fixed16_16::from_raw(256),
@@ -9253,7 +9253,7 @@ mod tests {
         let mut level_name = [0u8; 8];
         level_name[..4].copy_from_slice(b"E1M1");
         let data = crate::savegame::save_game(&gs, &level_name, 2, "test");
-        let loaded = crate::savegame::load_game(&data).unwrap();
+        let loaded = crate::savegame::load_game(&data).expect("value must exist in test");
 
         assert_eq!(loaded.state.movers.scrolling_walls.len(), 1);
         let sw = &loaded.state.movers.scrolling_walls[0];
@@ -9291,7 +9291,7 @@ mod tests {
         let mut level_name = [0u8; 8];
         level_name[..4].copy_from_slice(b"E1M1");
         let data = crate::savegame::save_game(&gs, &level_name, 2, "test");
-        let loaded = crate::savegame::load_game(&data).unwrap();
+        let loaded = crate::savegame::load_game(&data).expect("value must exist in test");
 
         assert_eq!(loaded.state.movers.conveyors.len(), 1);
         let cb = &loaded.state.movers.conveyors[0];
@@ -9423,7 +9423,7 @@ mod tests {
     #[test]
     fn shortest_lower_texture_returns_correct_value() {
         // Build a level with a lower texture on a sidedef facing sector 1.
-        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 2], 3).expect("value must exist in test");
         let sectors = vec![
             doom_map::Sector {
                 floor_height: 0,
@@ -9624,7 +9624,7 @@ mod tests {
     fn ev_floor_raise_by_texture_works() {
         let mut gs = GameState::new("TEST");
         // Build a level where sector 1 (tag=1) has a lower texture with height 48.
-        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let reject = doom_map::Reject::parse_lump(&[0u8; 1], 2).expect("value must exist in test");
         let sectors = vec![
             doom_map::Sector {
                 floor_height: 0,

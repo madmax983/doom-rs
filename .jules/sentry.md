@@ -1,6 +1,3 @@
-## Sentry's Journal
-
-**Goal:** Provide context for testing strategy.
 ## 2024-03-18 - Unreachable state in GamePhaseController
 
 **Learning:** `GamePhaseController::tick_intermission` assumes it's only called when `self.phase` is `GamePhase::Intermission`. While this is guaranteed by the current call site (`tick()`), if someone were to call `tick_intermission` directly (or change `tick()`) while in another state, it would hit an `unreachable!()` panic.
@@ -56,3 +53,6 @@
 ## 2026-04-23 - Added Missing `StateNum::NULL` test for tick_mobj fallback
 **Learning:** Found an uncovered branch related to the fallback `StateNum::NULL` handling in `tic.rs` when `unwrap_or(StateNum::NULL)` defaults due to the current state being `StateNum::NULL`.
 **Action:** Added targeted test case `tick_mobj_removes_entity_when_current_state_is_null` in `tic.rs` to reach 100% test coverage on state transitions.
+## 2024-04-25 - Prevented generic unwrap panics across the codebase
+**Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
+**Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.

@@ -475,7 +475,7 @@ mod tests {
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        Blockmap::parse_lump(&bm_data).unwrap()
+        Blockmap::parse_lump(&bm_data).expect("value must exist in test")
     }
 
     /// Build a default sector (floor=0, ceil=128).
@@ -554,7 +554,7 @@ mod tests {
             }],
             nodes: vec![],
             sectors: vec![make_sector(0, 128)],
-            reject: Reject::parse_lump(&[0u8; 1], 1).unwrap(),
+            reject: Reject::parse_lump(&[0u8; 1], 1).expect("value must exist in test"),
             blockmap: make_minimal_blockmap(),
         }
     }
@@ -608,7 +608,7 @@ mod tests {
         ];
 
         // Reject: 2 sectors, all visible.
-        let reject = Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let reject = Reject::parse_lump(&[0u8; 1], 2).expect("value must exist in test");
 
         Level {
             name: "TEST".to_string(),
@@ -672,7 +672,7 @@ mod tests {
                 first_seg: 1,
             },
         ];
-        let reject = Reject::parse_lump(&[0u8; 1], 2).unwrap();
+        let reject = Reject::parse_lump(&[0u8; 1], 2).expect("value must exist in test");
 
         Level {
             name: "TEST".to_string(),
@@ -746,7 +746,7 @@ mod tests {
         // Build a level with 2 sectors, reject table says they can't see each other.
         let sectors = vec![make_sector(0, 128), make_sector(0, 128)];
         // All-ones reject = nothing visible.
-        let reject = Reject::parse_lump(&[0xFFu8; 1], 2).unwrap();
+        let reject = Reject::parse_lump(&[0xFFu8; 1], 2).expect("value must exist in test");
         let sidedefs = vec![make_sidedef(0), make_sidedef(1)];
         let segs = vec![
             Seg {
@@ -792,7 +792,7 @@ mod tests {
 
         let (mut gs, player_h) = make_gs_with_player(32, 0);
         // Put player in subsector 0 (sector 0).
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
         // Monster in subsector 1 (sector 1).
         let monster = spawn_actor(&mut gs, 96, 0, 1, 20);
 
@@ -819,7 +819,7 @@ mod tests {
         let level = make_wall_level();
         let (mut gs, player_h) = make_gs_with_player(32, 0);
         // Player in subsector 0 (sector 0), monster in subsector 1 (sector 1).
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
         let monster = spawn_actor(&mut gs, 96, 0, 1, 20);
 
         assert!(
@@ -833,7 +833,7 @@ mod tests {
         // Two sectors with plenty of opening (floor=0, ceil=128 both sides).
         let level = make_portal_level(0, 128, 0, 128);
         let (mut gs, player_h) = make_gs_with_player(32, 0);
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
         let monster = spawn_actor(&mut gs, 96, 0, 1, 20);
 
         assert!(
@@ -848,7 +848,7 @@ mod tests {
         let level = make_portal_level(0, 64, 64, 128);
         // Opening: floor=max(0,64)=64, ceil=min(64,128)=64 -> opening=0.
         let (mut gs, player_h) = make_gs_with_player(32, 0);
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
         let monster = spawn_actor(&mut gs, 96, 0, 1, 20);
 
         assert!(
@@ -876,7 +876,7 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![make_sector(0, 128)],
-            reject: Reject::parse_lump(&[0u8; 1], 1).unwrap(),
+            reject: Reject::parse_lump(&[0u8; 1], 1).expect("value must exist in test"),
             blockmap: make_minimal_blockmap(),
         };
 
@@ -905,7 +905,7 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![make_sector(0, 128)],
-            reject: Reject::parse_lump(&[0u8; 1], 1).unwrap(),
+            reject: Reject::parse_lump(&[0u8; 1], 1).expect("value must exist in test"),
             blockmap: make_minimal_blockmap(),
         };
 
@@ -934,7 +934,7 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![make_sector(0, 128)],
-            reject: Reject::parse_lump(&[0u8; 1], 1).unwrap(),
+            reject: Reject::parse_lump(&[0u8; 1], 1).expect("value must exist in test"),
             blockmap: make_minimal_blockmap(),
         };
 
@@ -964,7 +964,7 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![make_sector(0, 128)],
-            reject: Reject::parse_lump(&[0u8; 1], 1).unwrap(),
+            reject: Reject::parse_lump(&[0u8; 1], 1).expect("value must exist in test"),
             blockmap: make_minimal_blockmap(),
         };
 
@@ -992,7 +992,7 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![make_sector(0, 128)],
-            reject: Reject::parse_lump(&[0u8; 1], 1).unwrap(),
+            reject: Reject::parse_lump(&[0u8; 1], 1).expect("value must exist in test"),
             blockmap: make_minimal_blockmap(),
         };
 
@@ -1019,7 +1019,7 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![make_sector(0, 128)],
-            reject: Reject::parse_lump(&[0u8; 1], 1).unwrap(),
+            reject: Reject::parse_lump(&[0u8; 1], 1).expect("value must exist in test"),
             blockmap: make_minimal_blockmap(),
         };
 
@@ -1042,7 +1042,7 @@ mod tests {
         let (mut gs, player_h) = make_gs_with_player(32, 32);
         let level = make_open_level();
         // Kill the player.
-        gs.mobjslab.get_mut(player_h).unwrap().health = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").health = 0;
 
         let monster = spawn_actor(&mut gs, 64, 32, 0, 20);
         assert!(
@@ -1068,7 +1068,7 @@ mod tests {
     fn look_for_players_returns_none_when_blocked() {
         let level = make_wall_level();
         let (mut gs, player_h) = make_gs_with_player(32, 0);
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
         let monster = spawn_actor(&mut gs, 96, 0, 1, 20);
 
         assert!(
@@ -1081,9 +1081,9 @@ mod tests {
     fn look_for_players_rejects_player_behind_back_outside_melee_range() {
         let level = make_open_level();
         let (mut gs, player_h) = make_gs_with_player(-200, 0);
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
         let monster = spawn_actor(&mut gs, 0, 0, 0, 20);
-        gs.mobjslab.get_mut(monster).unwrap().angle = Bam::ZERO; // facing east
+        gs.mobjslab.get_mut(monster).expect("value must exist in test").angle = Bam::ZERO; // facing east
 
         assert!(
             p_look_for_players(&gs, &level, monster).is_none(),
@@ -1115,11 +1115,11 @@ mod tests {
         // 92 < 100 -> should be blocked.
         let level = make_portal_level(0, 128, 100, 128);
         let (mut gs, player_h) = make_gs_with_player(32, 0);
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
-        gs.mobjslab.get_mut(player_h).unwrap().z = Fixed16_16::ZERO;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").z = Fixed16_16::ZERO;
 
         let monster = spawn_actor(&mut gs, 96, 0, 1, 20);
-        gs.mobjslab.get_mut(monster).unwrap().z = Fixed16_16::from_int(100);
+        gs.mobjslab.get_mut(monster).expect("value must exist in test").z = Fixed16_16::from_int(100);
 
         assert!(
             !p_check_sight(&gs, &level, player_h, monster),
@@ -1134,10 +1134,10 @@ mod tests {
         // Sight line at crossing = 42. Opening = [0, 128]. 42 is within.
         let level = make_portal_level(0, 128, 0, 128);
         let (mut gs, player_h) = make_gs_with_player(32, 0);
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
 
         let monster = spawn_actor(&mut gs, 96, 0, 1, 20);
-        gs.mobjslab.get_mut(monster).unwrap().z = Fixed16_16::ZERO;
+        gs.mobjslab.get_mut(monster).expect("value must exist in test").z = Fixed16_16::ZERO;
 
         assert!(
             p_check_sight(&gs, &level, player_h, monster),
@@ -1154,8 +1154,8 @@ mod tests {
         let (mut gs, player_h) = make_gs_with_player(0, 0);
         // Both at z=0, same height -- slope should be 0.
         let monster = spawn_actor(&mut gs, 100, 0, 0, 20);
-        gs.mobjslab.get_mut(monster).unwrap().z = Fixed16_16::ZERO;
-        gs.mobjslab.get_mut(monster).unwrap().height = Fixed16_16::from_int(56);
+        gs.mobjslab.get_mut(monster).expect("value must exist in test").z = Fixed16_16::ZERO;
+        gs.mobjslab.get_mut(monster).expect("value must exist in test").height = Fixed16_16::from_int(56);
 
         let slope = p_aim_line_slope(&gs, player_h, monster);
         assert_eq!(
@@ -1168,11 +1168,11 @@ mod tests {
     #[test]
     fn aim_slope_target_above() {
         let (mut gs, player_h) = make_gs_with_player(0, 0);
-        gs.mobjslab.get_mut(player_h).unwrap().z = Fixed16_16::ZERO;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").z = Fixed16_16::ZERO;
 
         let monster = spawn_actor(&mut gs, 100, 0, 0, 20);
-        gs.mobjslab.get_mut(monster).unwrap().z = Fixed16_16::from_int(100);
-        gs.mobjslab.get_mut(monster).unwrap().height = Fixed16_16::from_int(56);
+        gs.mobjslab.get_mut(monster).expect("value must exist in test").z = Fixed16_16::from_int(100);
+        gs.mobjslab.get_mut(monster).expect("value must exist in test").height = Fixed16_16::from_int(56);
 
         let slope = p_aim_line_slope(&gs, player_h, monster);
         assert!(
@@ -1252,7 +1252,7 @@ mod tests {
             }, // subsector 2 -> sector 2
         ];
         // 3 sectors -> ceil(9/8) = 2 bytes, all visible.
-        let reject = Reject::parse_lump(&[0u8; 2], 3).unwrap();
+        let reject = Reject::parse_lump(&[0u8; 2], 3).expect("value must exist in test");
 
         let level = Level {
             name: "TEST".to_string(),
@@ -1269,7 +1269,7 @@ mod tests {
         };
 
         let (mut gs, player_h) = make_gs_with_player(32, 0);
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
         let monster = spawn_actor(&mut gs, 160, 0, 2, 20);
 
         assert!(
@@ -1282,7 +1282,7 @@ mod tests {
     fn sight_reject_immediate_false() {
         // Level with 2 sectors, reject table says sector 0 can't see sector 1.
         let reject_data = vec![0xFFu8; 1]; // all bits set = nothing visible.
-        let reject = Reject::parse_lump(&reject_data, 2).unwrap();
+        let reject = Reject::parse_lump(&reject_data, 2).expect("value must exist in test");
 
         let level = Level {
             name: "TEST".to_string(),
@@ -1325,7 +1325,7 @@ mod tests {
         };
 
         let (mut gs, player_h) = make_gs_with_player(10, 0);
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
         let monster = spawn_actor(&mut gs, 80, 0, 1, 20);
 
         assert!(
@@ -1388,7 +1388,7 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![make_sector(0, 128)],
-            reject: Reject::parse_lump(&[0u8; 1], 1).unwrap(),
+            reject: Reject::parse_lump(&[0u8; 1], 1).expect("value must exist in test"),
             blockmap: make_minimal_blockmap(),
         };
 
@@ -1411,11 +1411,11 @@ mod tests {
         // z=20, eye = 20 + 42 = 62. 62 >= 50 -> blocked.
         let level = make_portal_level(0, 50, 0, 50);
         let (mut gs, player_h) = make_gs_with_player(32, 0);
-        gs.mobjslab.get_mut(player_h).unwrap().subsector = 0;
-        gs.mobjslab.get_mut(player_h).unwrap().z = Fixed16_16::from_int(20);
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").subsector = 0;
+        gs.mobjslab.get_mut(player_h).expect("value must exist in test").z = Fixed16_16::from_int(20);
 
         let monster = spawn_actor(&mut gs, 96, 0, 1, 20);
-        gs.mobjslab.get_mut(monster).unwrap().z = Fixed16_16::from_int(20);
+        gs.mobjslab.get_mut(monster).expect("value must exist in test").z = Fixed16_16::from_int(20);
 
         assert!(
             !p_check_sight(&gs, &level, player_h, monster),

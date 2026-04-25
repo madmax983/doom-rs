@@ -168,12 +168,12 @@ mod tests {
     #[test]
     fn net_client_struct_creation() {
         // Bind a server so we have a valid address to connect to.
-        let server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
-        let server_addr = server.local_addr().unwrap();
+        let server = RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let server_addr = server.local_addr().expect("value must exist in test");
 
         let client = NetClient::connect(&server_addr.to_string(), 0);
         assert!(client.is_ok(), "NetClient::connect must succeed");
-        let c = client.unwrap();
+        let c = client.expect("value must exist in test");
         assert!(
             !c.is_connected(),
             "fresh client must not be connected until handshake"
@@ -183,10 +183,10 @@ mod tests {
 
     #[test]
     fn net_client_disconnect() {
-        let server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
-        let server_addr = server.local_addr().unwrap();
+        let server = RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let server_addr = server.local_addr().expect("value must exist in test");
 
-        let mut client = NetClient::connect(&server_addr.to_string(), 0).unwrap();
+        let mut client = NetClient::connect(&server_addr.to_string(), 0).expect("value must exist in test");
         client.set_player_slot(1);
         assert!(client.is_connected());
 
@@ -204,20 +204,20 @@ mod tests {
         // It's easiest to mock or use an invalid configuration if possible,
         // but `NetTransport::bind` doesn't let us inject bad sockets directly.
         // Instead, we can bind a client to a server, then drop the server.
-        let server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
-        let server_addr = server.local_addr().unwrap();
+        let server = RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let server_addr = server.local_addr().expect("value must exist in test");
 
-        let mut client = NetClient::connect(&server_addr.to_string(), 0).unwrap();
+        let mut client = NetClient::connect(&server_addr.to_string(), 0).expect("value must exist in test");
         // Just verify recv_packet returns Ok(None) when nothing is sent (WouldBlock).
         let result = client.recv_packet();
         assert!(result.is_ok());
-        assert!(result.unwrap().is_none());
+        assert!(result.expect("value must exist in test").is_none());
 
         // Also verify the server_addr method returns what we passed in.
         assert_eq!(client.server_addr(), server_addr);
 
         let c_from_parts = NetClient::from_parts(
-            crate::NetTransport::bind("127.0.0.1:0").unwrap(),
+            crate::NetTransport::bind("127.0.0.1:0").expect("value must exist in test"),
             server_addr,
             3,
         );
@@ -228,10 +228,10 @@ mod tests {
 
     #[test]
     fn net_client_stats() {
-        let server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
-        let server_addr = server.local_addr().unwrap();
+        let server = RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let server_addr = server.local_addr().expect("value must exist in test");
 
-        let client = NetClient::connect(&server_addr.to_string(), 0).unwrap();
+        let client = NetClient::connect(&server_addr.to_string(), 0).expect("value must exist in test");
         let stats = client.stats();
         assert_eq!(stats.packets_sent, 0);
         assert_eq!(stats.packets_received, 0);
@@ -239,14 +239,14 @@ mod tests {
 
     #[test]
     fn net_client_send_and_server_recv() {
-        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
-        let server_addr = server.local_addr().unwrap();
+        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let server_addr = server.local_addr().expect("value must exist in test");
 
-        let mut client = NetClient::connect(&server_addr.to_string(), 0).unwrap();
-        let client_addr = client.local_addr().unwrap();
+        let mut client = NetClient::connect(&server_addr.to_string(), 0).expect("value must exist in test");
+        let client_addr = client.local_addr().expect("value must exist in test");
 
         // Manually accept the client on the server side.
-        let slot = server.accept_connection(client_addr).unwrap();
+        let slot = server.accept_connection(client_addr).expect("value must exist in test");
         client.set_player_slot(slot);
 
         // Send a packet from client to server.
@@ -257,12 +257,12 @@ mod tests {
             state_checksum: 0xBEEF,
             cmds: [TicCmd::default(); MAX_PLAYERS],
         };
-        client.send_input(&pkt).unwrap();
+        client.send_input(&pkt).expect("value must exist in test");
 
         // Server should receive it.
-        let result = server.poll_once().unwrap();
+        let result = server.poll_once().expect("value must exist in test");
         assert!(result.is_some(), "server must receive the client's packet");
-        let (received, sender_slot) = result.unwrap();
+        let (received, sender_slot) = result.expect("value must exist in test");
         assert_eq!(received.tic, 5);
         assert_eq!(sender_slot, slot);
     }
@@ -270,19 +270,19 @@ mod tests {
     #[test]
     fn handshake_round_trip() {
         // Set up server and a raw transport simulating the client side.
-        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).unwrap();
-        let server_addr = server.local_addr().unwrap();
+        let mut server = RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let server_addr = server.local_addr().expect("value must exist in test");
 
-        let mut client_transport = NetTransport::bind("127.0.0.1:0").unwrap();
-        let _client_addr = client_transport.local_addr().unwrap();
+        let mut client_transport = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let _client_addr = client_transport.local_addr().expect("value must exist in test");
 
         // Client sends a join packet to the server.
         let join_pkt = make_join_packet();
         let data = join_pkt.to_bytes();
-        client_transport.send_raw(&data, &server_addr).unwrap();
+        client_transport.send_raw(&data, &server_addr).expect("value must exist in test");
 
         // Server processes it via poll_once (which auto-handles join requests).
-        let poll_result = server.poll_once().unwrap();
+        let poll_result = server.poll_once().expect("value must exist in test");
         // poll_once returns None for handshake packets (handled internally).
         assert!(poll_result.is_none(), "join must be handled internally");
 
@@ -290,9 +290,9 @@ mod tests {
         assert_eq!(server.connected_count(), 1);
 
         // Client should receive the join response.
-        let response = client_transport.recv_packet().unwrap();
+        let response = client_transport.recv_packet().expect("value must exist in test");
         assert!(response.is_some(), "client must receive join response");
-        let (resp_pkt, _) = response.unwrap();
+        let (resp_pkt, _) = response.expect("value must exist in test");
         assert_eq!(
             resp_pkt.tic, 0xFFFF_FFFF,
             "response tic must be handshake magic"
