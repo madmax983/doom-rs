@@ -49,7 +49,6 @@ pub enum ExitRequest {
     Secret,
 }
 
-
 /// Complete, self-contained game simulation state.
 ///
 /// All simulation ticks are pure functions of this struct + the (immutable)

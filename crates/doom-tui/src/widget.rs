@@ -113,20 +113,16 @@ impl Widget for DoomFramebufferWidget<'_> {
             (ScalingMode::Nearest, None) => {
                 // Precompute coordinate tables: replaces 3 divisions per cell with
                 // table lookups.  Tables fit in L1 cache (≤220 + 2×55 = 330 usize entries).
-                let x_map: Vec<usize> = (0..term_w).map(|cx| (cx * fb_w) / term_w).collect();
-                // y_top: (cy * 2 * fb_h) / (term_h * 2) simplifies to (cy * fb_h) / term_h.
-                let y_top_map: Vec<usize> = (0..term_h).map(|cy| (cy * fb_h) / term_h).collect();
-                let y_bot_map: Vec<usize> = (0..term_h)
-                    .map(|cy| (((cy * 2 + 1) * fb_h) / (term_h * 2)).min(fb_h - 1))
-                    .collect();
-
+                // Calculates row offsets directly instead of allocating mapping vectors.
+                // This avoids multiple heap allocations per frame while maintaining cache locality.
                 for cy in 0..term_h {
                     // Row offsets computed once per outer iteration (eliminates fb_w mul in inner loop).
-                    let top_row_base = y_top_map[cy] * fb_w;
-                    let bot_row_base = y_bot_map[cy] * fb_w;
+                    let top_row_base = ((cy * fb_h) / term_h) * fb_w;
+                    let bot_row_base = (((cy * 2 + 1) * fb_h) / (term_h * 2)).min(fb_h - 1) * fb_w;
                     let row_start = area_origin_idx + cy * buf_stride;
                     let row_cells = &mut buf.content[row_start..row_start + term_w];
-                    for (cell, &fb_x) in row_cells.iter_mut().zip(x_map.iter()) {
+                    for (cx, cell) in row_cells.iter_mut().enumerate() {
+                        let fb_x = (cx * fb_w) / term_w;
                         let top = pal_slice[data[top_row_base + fb_x] as usize];
                         let bot = pal_slice[data[bot_row_base + fb_x] as usize];
                         cell.set_char('▀')
@@ -140,18 +136,15 @@ impl Widget for DoomFramebufferWidget<'_> {
                 // bottom pixel = bg), but the half-block `▀` is replaced by a
                 // luminance-mapped character.  This preserves the exact palette colors
                 // while adding character texture.
-                let x_map: Vec<usize> = (0..term_w).map(|cx| (cx * fb_w) / term_w).collect();
-                let y_top_map: Vec<usize> = (0..term_h).map(|cy| (cy * fb_h) / term_h).collect();
-                let y_bot_map: Vec<usize> = (0..term_h)
-                    .map(|cy| (((cy * 2 + 1) * fb_h) / (term_h * 2)).min(fb_h - 1))
-                    .collect();
-
+                // Calculates row offsets directly instead of allocating mapping vectors.
+                // This avoids multiple heap allocations per frame while maintaining cache locality.
                 for cy in 0..term_h {
-                    let top_row_base = y_top_map[cy] * fb_w;
-                    let bot_row_base = y_bot_map[cy] * fb_w;
+                    let top_row_base = ((cy * fb_h) / term_h) * fb_w;
+                    let bot_row_base = (((cy * 2 + 1) * fb_h) / (term_h * 2)).min(fb_h - 1) * fb_w;
                     let row_start = area_origin_idx + cy * buf_stride;
                     let row_cells = &mut buf.content[row_start..row_start + term_w];
-                    for (cell, &fb_x) in row_cells.iter_mut().zip(x_map.iter()) {
+                    for (cx, cell) in row_cells.iter_mut().enumerate() {
+                        let fb_x = (cx * fb_w) / term_w;
                         let top = pal_slice[data[top_row_base + fb_x] as usize];
                         let bot = pal_slice[data[bot_row_base + fb_x] as usize];
                         let luma = (top.r as u32 * 2126 + top.g as u32 * 7152 + top.b as u32 * 722)
@@ -166,24 +159,15 @@ impl Widget for DoomFramebufferWidget<'_> {
             (ScalingMode::Bilinear, None) => {
                 // Bilinear: precompute fixed-point coordinate tables.
                 // u64 arithmetic needed to avoid overflow before the >> 16 shift.
-                let fx_map: Vec<u32> = (0..term_w)
-                    .map(|cx| (((cx as u64 * fb_w as u64) << 16) / term_w as u64) as u32)
-                    .collect();
-                let fy_top_map: Vec<u32> = (0..term_h)
-                    .map(|cy| (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32)
-                    .collect();
-                let fy_bot_map: Vec<u32> = (0..term_h)
-                    .map(|cy| {
-                        ((((cy as u64 * 2 + 1) * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32
-                    })
-                    .collect();
-
                 for cy in 0..term_h {
-                    let fy_top = fy_top_map[cy];
-                    let fy_bot = fy_bot_map[cy];
+                    let fy_top =
+                        (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32;
+                    let fy_bot =
+                        ((((cy as u64 * 2 + 1) * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32;
                     let row_start = area_origin_idx + cy * buf_stride;
                     let row_cells = &mut buf.content[row_start..row_start + term_w];
-                    for (cell, &fx) in row_cells.iter_mut().zip(fx_map.iter()) {
+                    for (cx, cell) in row_cells.iter_mut().enumerate() {
+                        let fx = (((cx as u64 * fb_w as u64) << 16) / term_w as u64) as u32;
                         let (tr, tg, tb) = sample_bilinear(data, self.lut, pal, fx, fy_top);
                         let (br, bg, bb) = sample_bilinear(data, self.lut, pal, fx, fy_bot);
                         cell.set_char('▀')
@@ -194,24 +178,15 @@ impl Widget for DoomFramebufferWidget<'_> {
             }
             (ScalingMode::Bilinear, Some(cs)) => {
                 // Bilinear + character-mapped: same fg/bg as bilinear halfblocks.
-                let fx_map: Vec<u32> = (0..term_w)
-                    .map(|cx| (((cx as u64 * fb_w as u64) << 16) / term_w as u64) as u32)
-                    .collect();
-                let fy_top_map: Vec<u32> = (0..term_h)
-                    .map(|cy| (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32)
-                    .collect();
-                let fy_bot_map: Vec<u32> = (0..term_h)
-                    .map(|cy| {
-                        ((((cy as u64 * 2 + 1) * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32
-                    })
-                    .collect();
-
                 for cy in 0..term_h {
-                    let fy_top = fy_top_map[cy];
-                    let fy_bot = fy_bot_map[cy];
+                    let fy_top =
+                        (((cy as u64 * 2 * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32;
+                    let fy_bot =
+                        ((((cy as u64 * 2 + 1) * fb_h as u64) << 16) / (term_h as u64 * 2)) as u32;
                     let row_start = area_origin_idx + cy * buf_stride;
                     let row_cells = &mut buf.content[row_start..row_start + term_w];
-                    for (cell, &fx) in row_cells.iter_mut().zip(fx_map.iter()) {
+                    for (cx, cell) in row_cells.iter_mut().enumerate() {
+                        let fx = (((cx as u64 * fb_w as u64) << 16) / term_w as u64) as u32;
                         let (tr, tg, tb) = sample_bilinear(data, self.lut, pal, fx, fy_top);
                         let (br, bg, bb) = sample_bilinear(data, self.lut, pal, fx, fy_bot);
                         let luma = (tr as u32 * 2126 + tg as u32 * 7152 + tb as u32 * 722) / 10000;

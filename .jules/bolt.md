@@ -1,7 +1,6 @@
-## 2025-02-12 - Performance Improvements in doom-app and doom-renderer
-**Learning:** Returning references and slicing avoids `.clone()` where ownership isn't needed. Using pre-allocated buffers like `String::new()` and manually concatenating with `.push_str()` completely eliminates intermediate `.collect::<Vec<_>>()` chains and avoids heavy memory allocations, and using the `std::collections::hash_map::Entry` API prevents duplicate HashMap lookups.
-**Action:** Use references and borrowing semantics whenever the data outlives its scope. Pre-allocate `Vec` and `String` with `with_capacity()` or just iteratively write to them, avoiding `.collect()` or multiple `.join()`s, minimizing heap allocations. Use `.entry()` for single-pass HashMap access.
-
-**Pre-allocating Vecs on Hot Paths based on Logical Limits**
-**Learning:** Initializing `Vec::new()` in rendering loops that always append elements up to a mathematical bound (like `term_w * term_h` for screen rendering or `dx + dy + 1` for line tracing) causes repeated unnecessary heap allocations, degrading frame performance.
-**Action:** Always calculate the physical or mathematical limit of elements to be pushed and use `Vec::with_capacity(limit)` to pre-allocate memory.
+**[Eliminating per-frame Vec allocation in TUI widget]
+**Learning:** The TUI renderer `DoomFramebufferWidget` was allocating multiple `Vec` per frame (`x_map`, `y_top_map`, `y_bot_map`) to precompute coordinate scaling. This resulted in unnecessary heap allocations on the hot path (per frame) while yielding marginal benefits over directly calculating the simple integer math (`(c * fb_w) / term_w`) inside the loops.
+**Action:** Replaced `.collect::<Vec<_>>()` calls with inline calculations directly in the rendering loops, completely avoiding the per-frame heap allocations.
+**[Eliminating per-frame Vec allocation in TUI widget]
+**Learning:** The TUI renderer `DoomFramebufferWidget` was allocating multiple `Vec` per frame (`x_map`, `y_top_map`, `y_bot_map`) to precompute coordinate scaling. This resulted in unnecessary heap allocations on the hot path (per frame) while yielding marginal benefits over directly calculating the simple integer math (`(c * fb_w) / term_w`) inside the loops.
+**Action:** Replaced `.collect::<Vec<_>>()` calls with inline calculations directly in the rendering loops, completely avoiding the per-frame heap allocations.
