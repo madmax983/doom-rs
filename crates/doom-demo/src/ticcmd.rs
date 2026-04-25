@@ -202,7 +202,7 @@ mod tests {
             buttons: 0,
         };
         let bytes = original.to_bytes();
-        let parsed = DemoTicCmd::from_bytes(&bytes).unwrap();
+        let parsed = DemoTicCmd::from_bytes(&bytes).expect("Expected successful result in test");
         assert_eq!(original, parsed);
     }
 
@@ -221,7 +221,7 @@ mod tests {
             buttons: u8::MAX,
         };
         let bytes = original.to_bytes();
-        let parsed = DemoTicCmd::from_bytes(&bytes).unwrap();
+        let parsed = DemoTicCmd::from_bytes(&bytes).expect("Expected successful result in test");
         assert_eq!(original, parsed);
     }
 

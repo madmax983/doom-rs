@@ -79,8 +79,8 @@ impl CogmindState {
     /// # bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
     /// # bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
     /// # bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-    /// # let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
-    /// # let reject = Reject::parse_lump(&[0u8], 0).unwrap();
+    /// # let blockmap = Blockmap::parse_lump(&bm_data).expect("Expected successful result in test");
+    /// # let reject = Reject::parse_lump(&[0u8], 0).expect("Expected successful result in test");
     /// # let level = Level {
     /// #     name: "E1M1".to_string(),
     /// #     things: vec![], linedefs: vec![], sidedefs: vec![], vertexes: vec![],
@@ -126,8 +126,8 @@ impl CogmindState {
     /// # bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
     /// # bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
     /// # bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-    /// # let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
-    /// # let reject = Reject::parse_lump(&[0u8], 0).unwrap();
+    /// # let blockmap = Blockmap::parse_lump(&bm_data).expect("Expected successful result in test");
+    /// # let reject = Reject::parse_lump(&[0u8], 0).expect("Expected successful result in test");
     /// # let level = Level {
     /// #     name: "E1M1".to_string(),
     /// #     things: vec![], linedefs: vec![], sidedefs: vec![], vertexes: vec![],
@@ -175,8 +175,8 @@ impl CogmindState {
     /// # bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
     /// # bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
     /// # bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-    /// # let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
-    /// # let reject = Reject::parse_lump(&[0u8], 0).unwrap();
+    /// # let blockmap = Blockmap::parse_lump(&bm_data).expect("Expected successful result in test");
+    /// # let reject = Reject::parse_lump(&[0u8], 0).expect("Expected successful result in test");
     /// # let level = Level {
     /// #     name: "E1M1".to_string(),
     /// #     things: vec![], linedefs: vec![], sidedefs: vec![], vertexes: vec![],
@@ -578,11 +578,18 @@ mod tests {
         let level = make_bsp_test_level();
 
         state.ensure_grid(&level);
-        let grid_ptr = state.tile_grid.as_ref().unwrap() as *const TileGrid;
+        let grid_ptr = state
+            .tile_grid
+            .as_ref()
+            .expect("Expected successful result in test") as *const TileGrid;
 
         // Second call with same level name should not rebuild.
         state.ensure_grid(&level);
-        let grid_ptr2 = state.tile_grid.as_ref().unwrap() as *const TileGrid;
+        let grid_ptr2 = state
+            .tile_grid
+            .as_ref()
+            .expect("Expected successful result in test")
+            as *const TileGrid;
         assert_eq!(grid_ptr, grid_ptr2, "grid should be cached, not rebuilt");
     }
 

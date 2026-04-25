@@ -587,7 +587,10 @@ mod tests {
         gs.player.apply_damage(50);
         assert_eq!(gs.player.health(), 50);
         assert_eq!(
-            gs.mobjslab.get(gs.player.handle).unwrap().health,
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("Expected successful result in test")
+                .health,
             100,
             "setup should start desynced so the pickup path has to repair it"
         );
@@ -597,7 +600,10 @@ mod tests {
 
         assert_eq!(gs.player.health(), 51);
         assert_eq!(
-            gs.mobjslab.get(gs.player.handle).unwrap().health,
+            gs.mobjslab
+                .get(gs.player.handle)
+                .expect("Expected successful result in test")
+                .health,
             51,
             "pickup health must sync the live player mobj used by monster AI"
         );

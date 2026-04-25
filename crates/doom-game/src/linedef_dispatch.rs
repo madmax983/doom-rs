@@ -1371,11 +1371,12 @@ mod tests {
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        doom_map::Blockmap::parse_lump(&bm_data).unwrap()
+        doom_map::Blockmap::parse_lump(&bm_data).expect("Expected successful result in test")
     }
 
     fn make_test_level_with_tag(tag: u16) -> doom_map::Level {
-        let reject = doom_map::Reject::parse_lump(&[0u8], 2).unwrap();
+        let reject =
+            doom_map::Reject::parse_lump(&[0u8], 2).expect("Expected successful result in test");
         let sectors = vec![
             doom_map::Sector {
                 floor_height: 0,
@@ -2047,7 +2048,8 @@ mod tests {
     #[test]
     fn cross_lines_reverse_crossing_order_matches_vanilla_spechit_processing() {
         let (mut gs, handle) = make_gs_with_player();
-        let reject = doom_map::Reject::parse_lump(&[0u8], 2).unwrap();
+        let reject =
+            doom_map::Reject::parse_lump(&[0u8], 2).expect("Expected successful result in test");
         let mut level = doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],

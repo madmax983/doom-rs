@@ -479,7 +479,10 @@ mod tests {
         };
         compute_hazard_glow(&mut tiles, 2, 2);
         assert!(tiles[0].glow.is_some());
-        assert_eq!(tiles[0].glow.unwrap(), NUKAGE_GLOW);
+        assert_eq!(
+            tiles[0].glow.expect("Expected successful result in test"),
+            NUKAGE_GLOW
+        );
         assert!(tiles[1].glow.is_none()); // nukage itself doesn't get glow
     }
 

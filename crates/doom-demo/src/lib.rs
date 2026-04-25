@@ -135,12 +135,16 @@ mod tests {
         assert_eq!(player.total_tics(), 2);
         assert_eq!(player.header().num_players(), 2);
 
-        let tic0 = player.next_tic_cmds().unwrap();
+        let tic0 = player
+            .next_tic_cmds()
+            .expect("Expected successful result in test");
         assert_eq!(tic0.len(), 2);
         assert_eq!(tic0[0], p1_cmd);
         assert_eq!(tic0[1], p2_cmd);
 
-        let tic1 = player.next_tic_cmds().unwrap();
+        let tic1 = player
+            .next_tic_cmds()
+            .expect("Expected successful result in test");
         assert_eq!(tic1.len(), 2);
         assert_eq!(tic1[0].forward_move, 30);
         assert_eq!(tic1[1].forward_move, 40);
@@ -205,8 +209,10 @@ mod tests {
         rec.record_tic_cmds(&cmds);
 
         let lmp = rec.to_lmp();
-        let mut player = DemoPlayer::from_lmp(&lmp).unwrap();
-        let tic = player.next_tic_cmds().unwrap();
+        let mut player = DemoPlayer::from_lmp(&lmp).expect("Expected successful result in test");
+        let tic = player
+            .next_tic_cmds()
+            .expect("Expected successful result in test");
         assert_eq!(tic.len(), 4);
         for (i, cmd) in tic.iter().enumerate() {
             assert_eq!(cmd.forward_move, (i * 10) as i8);

@@ -7,7 +7,7 @@
 //! ```rust
 //! use doom_game::dehacked::DehPatch;
 //!
-//! let patch = DehPatch::parse("Thing 1\nHit points = 200\n").unwrap();
+//! let patch = DehPatch::parse("Thing 1\nHit points = 200\n").expect("Expected successful result in test");
 //! assert_eq!(patch.things[0].hit_points, Some(200));
 //! ```
 

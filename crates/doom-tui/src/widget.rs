@@ -257,7 +257,7 @@ mod tests {
         let area = Rect::new(0, 0, 1, 1);
         let mut buf = Buffer::empty(area);
         DoomFramebufferWidget::new(&fb, &lut, 0).render(area, &mut buf);
-        let cell = buf.cell((0, 0)).unwrap();
+        let cell = buf.cell((0, 0)).expect("Failed to get cell");
         assert_eq!(cell.symbol(), "▀");
         assert_eq!(cell.fg, Color::Rgb(255, 0, 0));
         assert_eq!(cell.bg, Color::Rgb(255, 0, 0));
@@ -272,7 +272,7 @@ mod tests {
             let area = Rect::new(0, 0, 1, 1);
             let mut buf = Buffer::empty(area);
             DoomFramebufferWidget::new(&fb, &lut, pal).render(area, &mut buf);
-            let cell = buf.cell((0, 0)).unwrap();
+            let cell = buf.cell((0, 0)).expect("Failed to get cell");
             // Index 0 in grayscale = (0,0,0) in all palettes.
             assert_eq!(cell.fg, Color::Rgb(0, 0, 0));
         }
@@ -307,7 +307,7 @@ mod tests {
         DoomFramebufferWidget::new(&fb, &lut, 0).render(area, &mut buf);
         for cy in 0..10u16 {
             for cx in 0..20u16 {
-                let cell = buf.cell((cx, cy)).unwrap();
+                let cell = buf.cell((cx, cy)).expect("Failed to get cell");
                 assert_eq!(cell.symbol(), "▀", "cell ({cx},{cy}) missing ▀");
                 assert_eq!(
                     cell.fg,
@@ -331,7 +331,7 @@ mod tests {
             .render(area, &mut buf);
         for cy in 0..10u16 {
             for cx in 0..20u16 {
-                let cell = buf.cell((cx, cy)).unwrap();
+                let cell = buf.cell((cx, cy)).expect("Failed to get cell");
                 assert_eq!(cell.symbol(), "▀", "cell ({cx},{cy}) missing ▀");
                 // Uniform green: bilinear blend is still (0,255,0).
                 assert_eq!(cell.fg, Color::Rgb(0, 255, 0), "cell ({cx},{cy}) wrong fg");
@@ -388,7 +388,7 @@ mod tests {
         DoomFramebufferWidget::new(&fb, &lut, 0)
             .with_ascii_mode(true)
             .render(area, &mut buf);
-        let cell = buf.cell((0, 0)).unwrap();
+        let cell = buf.cell((0, 0)).expect("Failed to get cell");
         // top_r = 255, top_g = 0, top_b = 0 -> luma = (255 * 2126) / 10000 = 54
         // ASCII ramp has 12 chars: char_idx = (54 * 11) / 255 = 2
         // [' ', '.', ':', '+', '=', '!', '*', '?', '#', '%', '&', '@'][2] = ':'
@@ -411,7 +411,7 @@ mod tests {
             .with_scaling(ScalingMode::Bilinear)
             .with_char_set(Some(crate::charset::CharSet::Ascii))
             .render(area, &mut buf);
-        let cell = buf.cell((0, 0)).unwrap();
+        let cell = buf.cell((0, 0)).expect("Failed to get cell");
         // Bilinear blend of uniform red is still red (255, 0, 0).
         // Luma calculation: (255 * 2126) / 10000 = 54.
         // ASCII char idx = (54 * 11) / 255 = 2 -> ':'
@@ -432,7 +432,7 @@ mod tests {
             .with_scaling(ScalingMode::Nearest)
             .with_char_set(Some(crate::charset::CharSet::Ascii))
             .render(area, &mut buf);
-        let cell = buf.cell((0, 0)).unwrap();
+        let cell = buf.cell((0, 0)).expect("Failed to get cell");
         // Nearest neighbor of uniform red is red (255, 0, 0).
         // Luma calculation: (255 * 2126) / 10000 = 54.
         // ASCII char idx = (54 * 11) / 255 = 2 -> ':'

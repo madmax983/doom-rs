@@ -21,8 +21,8 @@
 //!     ssectors: vec![],
 //!     nodes: vec![],
 //!     sectors: vec![],
-//!     reject: Reject::parse_lump(&[], 0).unwrap(),
-//!     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+//!     reject: Reject::parse_lump(&[], 0).expect("Expected successful result in test"),
+//!     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).expect("Expected successful result in test"),
 //! };
 //!
 //! let json_output = export_map_to_json(&level);
@@ -70,14 +70,14 @@ mod tests {
     use crate::lumps::{Blockmap, Reject, Sector};
 
     fn make_test_level() -> Level {
-        let reject = Reject::parse_lump(&[0u8], 1).unwrap();
+        let reject = Reject::parse_lump(&[0u8], 1).expect("Expected successful result in test");
         let mut bm_data = vec![0u8; 14];
         bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
         bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("Expected successful result in test");
 
         Level {
             name: "TEST".to_owned(),

@@ -180,9 +180,15 @@ impl Sidedef {
         Self {
             x_offset: i16::from_le_bytes([b[0], b[1]]),
             y_offset: i16::from_le_bytes([b[2], b[3]]),
-            upper_texture: b[4..12].try_into().unwrap(),
-            lower_texture: b[12..20].try_into().unwrap(),
-            middle_texture: b[20..28].try_into().unwrap(),
+            upper_texture: b[4..12]
+                .try_into()
+                .expect("Expected successful result in test"),
+            lower_texture: b[12..20]
+                .try_into()
+                .expect("Expected successful result in test"),
+            middle_texture: b[20..28]
+                .try_into()
+                .expect("Expected successful result in test"),
             sector: u16::from_le_bytes([b[28], b[29]]),
         }
     }
@@ -411,8 +417,12 @@ impl Sector {
         Self {
             floor_height: i16::from_le_bytes([b[0], b[1]]),
             ceil_height: i16::from_le_bytes([b[2], b[3]]),
-            floor_flat: b[4..12].try_into().unwrap(),
-            ceil_flat: b[12..20].try_into().unwrap(),
+            floor_flat: b[4..12]
+                .try_into()
+                .expect("Expected successful result in test"),
+            ceil_flat: b[12..20]
+                .try_into()
+                .expect("Expected successful result in test"),
             light_level: i16::from_le_bytes([b[20], b[21]]),
             special: u16::from_le_bytes([b[22], b[23]]),
             tag: u16::from_le_bytes([b[24], b[25]]),
@@ -631,7 +641,7 @@ mod prop_tests {
             // All-zero reject: every bit is 0 → all pairs visible.
             let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0u8; size];
-            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            let reject = Reject::parse_lump(&data, n_sectors).expect("Expected successful result in test");
             let vis_ab = reject.visible(a, b);
             let vis_ba = reject.visible(b, a);
             prop_assert!(
@@ -651,7 +661,7 @@ mod prop_tests {
             let a = a % n_sectors;
             let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0u8; size];
-            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            let reject = Reject::parse_lump(&data, n_sectors).expect("Expected successful result in test");
             prop_assert!(
                 reject.visible(a, a),
                 "sector {} should be visible from itself", a
@@ -667,7 +677,7 @@ mod prop_tests {
         ) {
             let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0u8; size];
-            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            let reject = Reject::parse_lump(&data, n_sectors).expect("Expected successful result in test");
             // a and b are deliberately far out of range.
             prop_assert!(!reject.visible(a, b));
         }
@@ -684,7 +694,7 @@ mod prop_tests {
             let b = b % n_sectors;
             let size = (n_sectors * n_sectors).div_ceil(8);
             let data = vec![0xFFu8; size];
-            let reject = Reject::parse_lump(&data, n_sectors).unwrap();
+            let reject = Reject::parse_lump(&data, n_sectors).expect("Expected successful result in test");
             prop_assert!(
                 !reject.visible(a, b),
                 "all-ones reject must report not-visible for ({},{})", a, b
@@ -749,7 +759,7 @@ mod tests {
         data[4..6].copy_from_slice(&90u16.to_le_bytes());
         data[6..8].copy_from_slice(&1u16.to_le_bytes());
         data[8..10].copy_from_slice(&7u16.to_le_bytes());
-        let things = Thing::parse_lump(&data).unwrap();
+        let things = Thing::parse_lump(&data).expect("Expected successful result in test");
         assert_eq!(things.len(), 1);
         assert_eq!(things[0].x, 100);
         assert_eq!(things[0].y, 200);
@@ -762,7 +772,7 @@ mod tests {
         data[2..4].copy_from_slice(&20i16.to_le_bytes());
         data[4..6].copy_from_slice(&30i16.to_le_bytes());
         data[6..8].copy_from_slice(&(-40i16).to_le_bytes());
-        let verts = Vertex::parse_lump(&data).unwrap();
+        let verts = Vertex::parse_lump(&data).expect("Expected successful result in test");
         assert_eq!(verts.len(), 2);
         assert_eq!(verts[0], Vertex { x: -10, y: 20 });
         assert_eq!(verts[1], Vertex { x: 30, y: -40 });
@@ -788,7 +798,7 @@ mod tests {
     fn reject_visible_symmetry() {
         // All-zero reject → everything visible.
         let data = vec![0u8; (4usize * 4).div_ceil(8)]; // 4 sectors
-        let reject = Reject::parse_lump(&data, 4).unwrap();
+        let reject = Reject::parse_lump(&data, 4).expect("Expected successful result in test");
         for i in 0..4 {
             for j in 0..4 {
                 assert!(reject.visible(i, j));

@@ -319,9 +319,11 @@ mod tests {
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).unwrap();
+        let blockmap =
+            doom_map::Blockmap::parse_lump(&bm_data).expect("Expected successful result in test");
 
-        let reject = doom_map::Reject::parse_lump(&[0u8], 1).unwrap();
+        let reject =
+            doom_map::Reject::parse_lump(&[0u8], 1).expect("Expected successful result in test");
         doom_map::Level {
             name: "TEST".to_string(),
             things: vec![],

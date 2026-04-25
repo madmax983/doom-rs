@@ -1,6 +1,3 @@
-## Sentry's Journal
-
-**Goal:** Provide context for testing strategy.
 ## 2024-03-18 - Unreachable state in GamePhaseController
 
 **Learning:** `GamePhaseController::tick_intermission` assumes it's only called when `self.phase` is `GamePhase::Intermission`. While this is guaranteed by the current call site (`tick()`), if someone were to call `tick_intermission` directly (or change `tick()`) while in another state, it would hit an `unreachable!()` panic.
@@ -56,3 +53,7 @@
 ## 2026-04-23 - Added Missing `StateNum::NULL` test for tick_mobj fallback
 **Learning:** Found an uncovered branch related to the fallback `StateNum::NULL` handling in `tic.rs` when `unwrap_or(StateNum::NULL)` defaults due to the current state being `StateNum::NULL`.
 **Action:** Added targeted test case `tick_mobj_removes_entity_when_current_state_is_null` in `tic.rs` to reach 100% test coverage on state transitions.
+
+## 2026-05-01 - Missing test coverage for p_random_range bounds handling
+**Learning:** Identified a test coverage gap in `doom-game/src/state.rs` concerning `p_random_range`. The boundary checks, such as returning the minimum value if `min >= max`, and generating a random value in bounds, were not tested, which could result in regressions and unexpected determinism flaws.
+**Action:** Targeted test cases like `test_p_random_range` should be added to assert boundary conditions and verify randomly selected output stays within the expected bounds.
