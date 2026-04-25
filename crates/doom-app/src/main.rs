@@ -2892,13 +2892,15 @@ fn run_doom() -> Result<()> {
 
     // Client (netplay) mode: wrap DoomGame in a NetGameApp for network-aware input.
     if let Some(ref addr_str) = args.connect {
-        let client = doom_net::NetClient::connect(addr_str, 0)
-            .map_err(|e| match e.kind() {
-                std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset => {
-                    anyhow::anyhow!("Connection Failed: The relay server at {} is not responding.", addr_str)
-                }
-                _ => anyhow::anyhow!("Connection Failed: {}", e),
-            })?;
+        let client = doom_net::NetClient::connect(addr_str, 0).map_err(|e| match e.kind() {
+            std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset => {
+                anyhow::anyhow!(
+                    "Connection Failed: The relay server at {} is not responding.",
+                    addr_str
+                )
+            }
+            _ => anyhow::anyhow!("Connection Failed: {}", e),
+        })?;
         let mut net_app = net_mode::NetGameApp::new(app, client);
 
         let mut event_loop = DoomEventLoop::new()
@@ -2911,8 +2913,8 @@ fn run_doom() -> Result<()> {
     }
 
     // Start the terminal event loop and run until the user quits (Q or Esc).
-    let mut event_loop =
-        DoomEventLoop::new().map_err(|e| anyhow::anyhow!("Terminal Initialization Failed: {}", e))?;
+    let mut event_loop = DoomEventLoop::new()
+        .map_err(|e| anyhow::anyhow!("Terminal Initialization Failed: {}", e))?;
     event_loop.set_turn_based_mode(args.turn_based);
 
     // Set renderer mode from --renderer flag.

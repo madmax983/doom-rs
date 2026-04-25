@@ -52,3 +52,6 @@
 **Refactoring large match statements using from_repr**
 **Learning:** `tick_sector_specials` and `tick_sector_damage` used redundant, hardcoded magic numbers inside match blocks across `SectorDamageType`.
 **Action:** Extract magic numbers into explicitly named constants (e.g., `LEGACY_DAMAGE_HELLSLIME`) to self-document the values, and replace duplicated health-reduction inline logic with calls to a common `apply_sector_damage` helper function to enforce DRY principles without altering runtime behavior.
+## 2024-05-16 - Refactored parse_* in DeHackEd parser
+**Learning:** Returning a dummy error using `"".parse::<f64>().unwrap_err()` to fail through an `and_then` block is a strange hack and reduces code readability.
+**Action:** Replace dummy error hacks by mapping the errors properly, or replacing `unwrap_err` with standard idiomatic Rust error handling constructs.
