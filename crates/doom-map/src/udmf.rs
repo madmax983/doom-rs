@@ -44,6 +44,14 @@ const SIDEDEF_NONE: u16 = 0xFFFF;
 /// Universal Doom Map Format allows variables to have these dynamic types.
 /// The parser will decode numeric literals according to whether a decimal point
 /// or exponent is present, otherwise they become integers.
+///
+/// ## Examples
+/// ```
+/// use doom_map::udmf::UdmfValue;
+///
+/// let val = UdmfValue::Int(42);
+/// let str_val = UdmfValue::Str("doom".to_string());
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum UdmfValue {
     /// Quoted string.
@@ -60,6 +68,17 @@ pub enum UdmfValue {
 ///
 /// A field is the smallest semantic unit in UDMF. For example, in the assignment `x = 10.0;`,
 /// the key is `"x"` and the value is `10.0`.
+///
+/// ## Examples
+/// ```
+/// use doom_map::udmf::{UdmfField, UdmfValue};
+///
+/// let field = UdmfField {
+///     key: "x".to_string(),
+///     value: UdmfValue::Float(10.0),
+/// };
+/// assert_eq!(field.key, "x");
+/// ```
 #[derive(Debug, Clone)]
 pub struct UdmfField {
     /// The property name (e.g., `"x"`, `"heightfloor"`, `"textureceiling"`).
@@ -75,6 +94,19 @@ pub struct UdmfField {
 /// vertex { x = 10.0; y = 20.0; }
 /// ```
 /// The kind here is `"vertex"`, and it contains two [`UdmfField`]s.
+///
+/// ## Examples
+/// ```
+/// use doom_map::udmf::{UdmfBlock, UdmfField, UdmfValue};
+///
+/// let block = UdmfBlock {
+///     kind: "vertex".to_string(),
+///     fields: vec![
+///         UdmfField { key: "x".to_string(), value: UdmfValue::Int(0) }
+///     ],
+/// };
+/// assert_eq!(block.kind, "vertex");
+/// ```
 #[derive(Debug, Clone)]
 pub struct UdmfBlock {
     /// The entity type identifier (e.g., `"vertex"`, `"linedef"`, `"sector"`, `"thing"`).
@@ -112,6 +144,19 @@ pub struct UdmfMap {
 /// that the rest of the engine expects. It is identical in shape to what a classic
 /// binary Doom format WAD would provide, allowing the engine to be completely agnostic
 /// to how the map was loaded.
+///
+/// ## Examples
+/// ```
+/// use doom_map::udmf::UdmfMap;
+///
+/// let map = UdmfMap::parse(br#"
+/// namespace = "doom";
+/// vertex { x = 0; y = 0; }
+/// "#).unwrap();
+///
+/// let data = map.into_level_data().unwrap();
+/// assert_eq!(data.vertexes.len(), 1);
+/// ```
 #[derive(Debug)]
 pub struct UdmfLevelData {
     /// Monsters, players, items, and decorations placed in the map.
@@ -131,6 +176,14 @@ pub struct UdmfLevelData {
 /// This covers both syntax errors encountered while parsing the text into an AST,
 /// and semantic errors encountered when compiling the AST into classic arrays
 /// (like missing fields or overflowing limits).
+///
+/// ## Examples
+/// ```
+/// use doom_map::udmf::{UdmfMap, UdmfError};
+///
+/// let err = UdmfMap::parse(b"namespace").unwrap_err();
+/// assert!(matches!(err, UdmfError::ParseFailed { .. }));
+/// ```
 #[derive(Debug, thiserror::Error)]
 pub enum UdmfError {
     /// The `TEXTMAP` lump must be valid UTF-8.
