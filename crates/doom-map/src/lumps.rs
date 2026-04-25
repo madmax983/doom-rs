@@ -21,6 +21,13 @@
 use thiserror::Error;
 
 /// Errors from map-lump parsing.
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::LumpParseError;
+///
+/// let err = LumpParseError::BadLength { lump: "VERTEXES", entry_size: 10, actual: 5 };
+/// ```
 #[derive(Debug, Error)]
 pub enum LumpParseError {
     /// Lump byte count is not divisible by the expected entry size.
@@ -69,6 +76,16 @@ pub const FLAG_DONTPEGBOTTOM: u16 = 0x0010;
 pub const SIDEDEF_NONE: u16 = 0xFFFF;
 
 /// A map thing (monster, item, player start, etc.).
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::Thing;
+///
+/// let thing = Thing {
+///     x: 1056, y: -3616, angle: 90, kind: 3004, flags: 0,
+/// };
+/// assert_eq!(thing.kind, 3004);
+/// ```
 #[derive(Clone, Debug)]
 pub struct Thing {
     /// X position in map units (i16 range).
@@ -107,6 +124,17 @@ impl Thing {
 // ---------------------------------------------------------------------------
 
 /// A map linedef: connects two vertices, has up to two sidedefs.
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::Linedef;
+///
+/// let linedef = Linedef {
+///     from_vertex: 0, to_vertex: 1, flags: 1, special: 0, tag: 0,
+///     right_sidedef: 0, left_sidedef: 0xFFFF,
+/// };
+/// assert_eq!(linedef.from_vertex, 0);
+/// ```
 #[derive(Clone, Debug)]
 pub struct Linedef {
     /// Index into VERTEXES for the start point.
@@ -157,6 +185,20 @@ impl Linedef {
 // ---------------------------------------------------------------------------
 
 /// A map sidedef: texture info + sector reference for one side of a linedef.
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::Sidedef;
+///
+/// let sidedef = Sidedef {
+///     x_offset: 0, y_offset: 0,
+///     upper_texture: *b"-\x00\x00\x00\x00\x00\x00\x00",
+///     lower_texture: *b"-\x00\x00\x00\x00\x00\x00\x00",
+///     middle_texture: *b"BROWN1\x00\x00",
+///     sector: 0,
+/// };
+/// assert_eq!(&sidedef.middle_texture[..6], b"BROWN1");
+/// ```
 #[derive(Clone, Debug)]
 pub struct Sidedef {
     /// Horizontal texture offset.
@@ -198,6 +240,14 @@ impl Sidedef {
 // ---------------------------------------------------------------------------
 
 /// A map vertex: raw (x, y) in i16 map-unit coordinates.
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::Vertex;
+///
+/// let v = Vertex { x: 1088, y: -3680 };
+/// assert_eq!(v.x, 1088);
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Vertex {
     /// The X position in the map's coordinate space.
@@ -227,6 +277,16 @@ impl Vertex {
 // ---------------------------------------------------------------------------
 
 /// A BSP seg: a portion of a linedef used during rendering.
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::Seg;
+///
+/// let seg = Seg {
+///     from_vertex: 0, to_vertex: 1, angle: 16384, linedef: 0, direction: 0, offset: 0,
+/// };
+/// assert_eq!(seg.linedef, 0);
+/// ```
 #[derive(Clone, Debug)]
 pub struct Seg {
     /// Index into VERTEXES for the seg start.
@@ -268,6 +328,16 @@ impl Seg {
 // ---------------------------------------------------------------------------
 
 /// A BSP leaf: a convex sub-region of the map covered by a run of segs.
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::Ssector;
+///
+/// let ssector = Ssector {
+///     seg_count: 5, first_seg: 0,
+/// };
+/// assert_eq!(ssector.seg_count, 5);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct Ssector {
     /// Number of segs in this subsector.
@@ -309,6 +379,16 @@ pub const NODE_SUBSECTOR_BIT: u16 = 0x8000;
 pub const NODE_INDEX_MASK: u16 = 0x7FFF;
 
 /// An axis-aligned bounding box in node format (ymax, ymin, xmin, xmax).
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::NodeBBox;
+///
+/// let bbox = NodeBBox {
+///     ymax: 100, ymin: 0, xmin: 0, xmax: 100,
+/// };
+/// assert_eq!(bbox.ymax, 100);
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct NodeBBox {
     /// The upper edge (North) of the bounding box.
@@ -339,6 +419,20 @@ impl NodeBBox {
 }
 
 /// A BSP node: a partition line and two child pointers.
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::{Node, NodeBBox};
+///
+/// let node = Node {
+///     x: 0, y: 0, dx: 64, dy: 64,
+///     right_bbox: NodeBBox { ymax: 64, ymin: 0, xmin: 0, xmax: 64 },
+///     left_bbox: NodeBBox { ymax: 64, ymin: 0, xmin: 0, xmax: 64 },
+///     right_child: 0,
+///     left_child: 1,
+/// };
+/// assert_eq!(node.dx, 64);
+/// ```
 #[derive(Clone, Debug)]
 pub struct Node {
     /// X coordinate of the partition line's starting point.
@@ -386,6 +480,19 @@ impl Node {
 // ---------------------------------------------------------------------------
 
 /// A map sector: floor/ceiling heights, textures, light level, specials.
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::Sector;
+///
+/// let sector = Sector {
+///     floor_height: 0, ceil_height: 128,
+///     floor_flat: *b"FLOOR4_8",
+///     ceil_flat: *b"CEIL3_5\x00",
+///     light_level: 144, special: 0, tag: 0,
+/// };
+/// assert_eq!(sector.floor_height, 0);
+/// ```
 #[derive(Clone, Debug)]
 pub struct Sector {
     /// Floor height in map units.
@@ -435,6 +542,15 @@ impl Sector {
 /// see sector `j` — the engine can skip LOS checks between them.
 ///
 /// Size: `ceil(n_sectors² / 8)` bytes.
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::Reject;
+///
+/// let data = vec![0b00000000];
+/// let reject = Reject::parse_lump(&data, 2).unwrap();
+/// assert!(reject.visible(0, 1));
+/// ```
 #[derive(Clone, Debug)]
 pub struct Reject {
     n_sectors: usize,
@@ -495,6 +611,23 @@ impl Reject {
 ///
 /// The blockmap divides the map into 128×128 unit cells.
 /// Each cell has a list of linedefs that cross it (used for collision detection).
+///
+/// ## Examples
+/// ```
+/// use doom_map::lumps::Blockmap;
+///
+/// let mut data = vec![0u8; 14];
+/// // Setup minimal blockmap: origin (0, 0), columns=1, rows=1
+/// data[4..6].copy_from_slice(&1u16.to_le_bytes());
+/// data[6..8].copy_from_slice(&1u16.to_le_bytes());
+/// data[8..10].copy_from_slice(&5u16.to_le_bytes()); // offset
+/// data[10..12].copy_from_slice(&0u16.to_le_bytes()); // list start
+/// data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes()); // list end
+///
+/// let blockmap = Blockmap::parse_lump(&data).unwrap();
+/// let mut it = blockmap.block_linedefs(0, 0);
+/// assert_eq!(it.next(), None);
+/// ```
 #[derive(Clone, Debug)]
 pub struct Blockmap {
     /// X origin of the grid.

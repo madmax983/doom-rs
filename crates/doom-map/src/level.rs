@@ -29,6 +29,13 @@ use doom_wad::{MapLumpGroup, WadFile, WadStack};
 use thiserror::Error;
 
 /// Errors from level loading.
+///
+/// ## Examples
+/// ```
+/// use doom_map::level::LevelError;
+///
+/// let err = LevelError::NotFound("E1M1".to_string());
+/// ```
 #[derive(Debug, Error)]
 pub enum LevelError {
     /// The map marker lump was not found.
@@ -511,6 +518,16 @@ impl Level {
     }
 
     /// Print a one-line geometry summary (used by the Phase 3 CLI gate).
+    ///
+    /// ## Examples
+    /// ```no_run
+    /// use doom_map::level::Level;
+    /// use doom_wad::WadFile;
+    ///
+    /// let wad = WadFile::parse(std::fs::read("doom1.wad").unwrap()).unwrap();
+    /// let level = Level::from_wad(&wad, "E1M1").unwrap();
+    /// level.print_stats();
+    /// ```
     pub fn print_stats(&self) {
         let bsp = self.bsp();
         println!(
