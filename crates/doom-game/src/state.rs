@@ -10,6 +10,7 @@ use crate::mobj::MobjSlab;
 use crate::player::PlayerState;
 use crate::spawn::Skill;
 
+use crate::random::DoomRng;
 use crate::stats::LevelStats;
 
 pub use crate::sound_prop::{SoundPropagation, SoundRequest};
@@ -48,7 +49,6 @@ pub enum ExitRequest {
     /// Secret exit (secret map).
     Secret,
 }
-
 
 /// Complete, self-contained game simulation state.
 ///
@@ -265,7 +265,7 @@ mod tests {
 
     #[test]
     fn rng_table_has_256_entries() {
-        assert_eq!(RNG_TABLE.len(), 256);
+        assert_eq!(crate::random::RNG_TABLE.len(), 256);
     }
 
     #[test]
