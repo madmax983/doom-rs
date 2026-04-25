@@ -792,8 +792,8 @@ mod tests {
             &sky_tex,
         );
 
-        let px1 = fb1.get_pixel(160, 0).unwrap();
-        let px2 = fb2.get_pixel(160, 0).unwrap();
+        let px1 = fb1.get_pixel(160, 0).expect("value must exist in test");
+        let px2 = fb2.get_pixel(160, 0).expect("value must exist in test");
         assert_ne!(
             px1, px2,
             "different player angles should produce different sky pixels at center column (got {} vs {})",

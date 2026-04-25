@@ -944,7 +944,7 @@ thing { x = 0; y = 0; angle = 0; type = 1; special = 80; arg0str = "lift_down"; 
     #[test]
     fn missing_map_errors() {
         let wad_bytes = build_minimal_wad_bytes();
-        let wad = doom_wad::WadFile::parse(wad_bytes).unwrap();
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("value must exist in test");
         assert!(matches!(
             Level::from_wad(&wad, "E2M1"),
             Err(LevelError::NotFound(_))
@@ -954,22 +954,22 @@ thing { x = 0; y = 0; angle = 0; type = 1; special = 80; arg0str = "lift_down"; 
     #[test]
     fn level_stats_smoke() {
         let wad_bytes = build_minimal_wad_bytes();
-        let wad = doom_wad::WadFile::parse(wad_bytes).unwrap();
-        let level = Level::from_wad(&wad, "E1M1").unwrap();
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("value must exist in test");
+        let level = Level::from_wad(&wad, "E1M1").expect("value must exist in test");
         // Just ensure print_stats doesn't panic.
         level.print_stats();
     }
 
     #[test]
     fn subsector_sector_index_respects_seg_direction() {
-        let reject = Reject::parse_lump(&[0u8], 2).unwrap();
+        let reject = Reject::parse_lump(&[0u8], 2).expect("value must exist in test");
         let mut bm_data = vec![0u8; 14];
         bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
         bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("value must exist in test");
 
         let level = Level {
             name: "TEST".to_string(),
@@ -1078,8 +1078,8 @@ thing { x = 0; y = 0; angle = 0; type = 1; special = 80; arg0str = "lift_down"; 
     #[test]
     fn subsector_index_at_returns_leaf_index() {
         let wad_bytes = build_minimal_wad_bytes();
-        let wad = doom_wad::WadFile::parse(wad_bytes).unwrap();
-        let level = Level::from_wad(&wad, "E1M1").unwrap();
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("value must exist in test");
+        let level = Level::from_wad(&wad, "E1M1").expect("value must exist in test");
 
         assert_eq!(level.subsector_index_at(10, 10), Some(0));
     }
@@ -1087,8 +1087,8 @@ thing { x = 0; y = 0; angle = 0; type = 1; special = 80; arg0str = "lift_down"; 
     #[test]
     fn sector_index_at_uses_subsector_sector_in_valid_level() {
         let wad_bytes = build_minimal_wad_bytes();
-        let wad = doom_wad::WadFile::parse(wad_bytes).unwrap();
-        let level = Level::from_wad(&wad, "E1M1").unwrap();
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("value must exist in test");
+        let level = Level::from_wad(&wad, "E1M1").expect("value must exist in test");
 
         assert_eq!(level.sector_index_at(10, 10), Some(0));
         assert_eq!(level.floor_at(10, 10), Some(0));

@@ -46,7 +46,7 @@ mod tests {
             buttons: 0x1f,
         }]);
         let lmp = rec.to_lmp();
-        let mut player = DemoPlayer::from_lmp(&lmp).unwrap();
+        let mut player = DemoPlayer::from_lmp(&lmp).expect("value must exist in test");
 
         let csv = export_demo_to_csv(&mut player);
         assert!(csv.contains("tic,player,forward_move,side_move,angle_turn,buttons"));

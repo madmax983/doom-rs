@@ -789,7 +789,7 @@ mod tests {
 
         let result = cache.get_frame("TROO", 0, 3);
         assert!(result.is_some(), "should find TROOA3");
-        let (_, mirrored) = result.unwrap();
+        let (_, mirrored) = result.expect("value must exist in test");
         assert!(!mirrored, "direct rotation should not be mirrored");
     }
 
@@ -809,7 +809,7 @@ mod tests {
         // Lookup rotation 8 should fall back to mirror (rotation 2).
         let result = cache.get_frame("POSS", 0, 8);
         assert!(result.is_some(), "should find mirror of POSSA8 -> POSSA2");
-        let (_, mirrored) = result.unwrap();
+        let (_, mirrored) = result.expect("value must exist in test");
         assert!(mirrored, "mirror fallback should set mirrored=true");
     }
 
@@ -829,7 +829,7 @@ mod tests {
         // Lookup rotation 5 should fall back to rotation 0.
         let result = cache.get_frame("SARG", 0, 5);
         assert!(result.is_some(), "should fall back to SARGA0");
-        let (_, mirrored) = result.unwrap();
+        let (_, mirrored) = result.expect("value must exist in test");
         assert!(!mirrored, "fallback to rotation 0 should not be mirrored");
     }
 

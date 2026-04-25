@@ -111,7 +111,7 @@ mod tests {
         ring.save(5, "hello".to_string());
         let got = ring.get(5);
         assert!(got.is_some());
-        assert_eq!(got.unwrap(), "hello");
+        assert_eq!(got.expect("value must exist in test"), "hello");
     }
 
     #[test]

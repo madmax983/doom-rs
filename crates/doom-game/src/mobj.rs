@@ -495,7 +495,7 @@ mod tests {
         let mut slab = MobjSlab::new();
         let handle = slab.alloc(make_player_mobj());
         assert!(slab.get(handle).is_some());
-        assert_eq!(slab.get(handle).unwrap().kind, MobjKind::Player);
+        assert_eq!(slab.get(handle).expect("value must exist in test").kind, MobjKind::Player);
     }
 
     #[test]
@@ -553,10 +553,10 @@ mod tests {
         let mut slab = MobjSlab::new();
         let handle = slab.alloc(make_player_mobj());
         let mut slab2 = slab.clone();
-        slab2.get_mut(handle).unwrap().health = 50;
+        slab2.get_mut(handle).expect("value must exist in test").health = 50;
         // Original unchanged.
-        assert_eq!(slab.get(handle).unwrap().health, 100);
-        assert_eq!(slab2.get(handle).unwrap().health, 50);
+        assert_eq!(slab.get(handle).expect("value must exist in test").health, 100);
+        assert_eq!(slab2.get(handle).expect("value must exist in test").health, 50);
     }
 
     #[test]
@@ -573,8 +573,8 @@ mod tests {
     fn get_mut_allows_mutation() {
         let mut slab = MobjSlab::new();
         let handle = slab.alloc(make_player_mobj());
-        slab.get_mut(handle).unwrap().health = 42;
-        assert_eq!(slab.get(handle).unwrap().health, 42);
+        slab.get_mut(handle).expect("value must exist in test").health = 42;
+        assert_eq!(slab.get(handle).expect("value must exist in test").health, 42);
     }
 
     #[test]

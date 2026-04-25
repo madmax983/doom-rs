@@ -218,7 +218,7 @@ mod tests {
         log.record(5, cmds);
         let got = log.get(5);
         assert!(got.is_some());
-        assert_eq!(got.unwrap()[0].forward_move, 42);
+        assert_eq!(got.expect("value must exist in test")[0].forward_move, 42);
     }
 
     #[test]
@@ -238,7 +238,7 @@ mod tests {
         log.set_authoritative(3, auth_cmds);
         assert!(log.has_authoritative(3), "must be authoritative after set");
         assert_eq!(
-            log.get(3).unwrap()[0].forward_move,
+            log.get(3).expect("value must exist in test")[0].forward_move,
             99,
             "authoritative cmds must overwrite predicted"
         );
@@ -272,7 +272,7 @@ mod tests {
         // tic 8 collides with slot 0.
         log.record(8, make_cmds(20));
         assert!(log.get(0).is_none(), "tic 0 evicted by tic 8");
-        assert_eq!(log.get(8).unwrap()[0].forward_move, 20);
+        assert_eq!(log.get(8).expect("value must exist in test")[0].forward_move, 20);
     }
 
     #[test]
@@ -280,7 +280,7 @@ mod tests {
         let mut log = InputLog::new(8);
         log.set_authoritative(4, make_cmds(77));
         assert!(log.has_authoritative(4));
-        assert_eq!(log.get(4).unwrap()[0].forward_move, 77);
+        assert_eq!(log.get(4).expect("value must exist in test")[0].forward_move, 77);
     }
 
     #[test]

@@ -274,7 +274,7 @@ mod tests {
     fn near_clip_one_behind_clips() {
         let result = clip_seg_to_near_plane(-2, 0, 4, 6);
         assert!(result.is_some());
-        let (vx1, _vy1, vx2, _vy2) = result.unwrap();
+        let (vx1, _vy1, vx2, _vy2) = result.expect("value must exist in test");
         assert!(vx1 >= 1 && vx2 >= 1);
     }
 

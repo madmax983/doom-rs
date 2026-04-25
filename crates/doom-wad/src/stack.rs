@@ -273,13 +273,13 @@ mod tests {
         let pwad_bytes = make_wad(b"PWAD", &[("DEMO", b"pwad_data")]);
 
         let mut stack = WadStack::new();
-        stack.push_iwad(iwad_bytes).unwrap();
-        stack.push_pwad(pwad_bytes).unwrap();
+        stack.push_iwad(iwad_bytes).expect("value must exist in test");
+        stack.push_pwad(pwad_bytes).expect("value must exist in test");
 
         // PWAD wins for "DEMO"
-        assert_eq!(stack.lump_data("DEMO").unwrap(), b"pwad_data");
+        assert_eq!(stack.lump_data("DEMO").expect("value must exist in test"), b"pwad_data");
         // IWAD lump not in PWAD is still accessible
-        assert_eq!(stack.lump_data("UNIQUE").unwrap(), b"only_in_iwad");
+        assert_eq!(stack.lump_data("UNIQUE").expect("value must exist in test"), b"only_in_iwad");
     }
 
     #[test]
@@ -298,8 +298,8 @@ mod tests {
         let iwad = make_wad(b"IWAD", &[("A", b"a"), ("B", b"b")]);
         let pwad = make_wad(b"PWAD", &[("C", b"c")]);
         let mut stack = WadStack::new();
-        stack.push_iwad(iwad).unwrap();
-        stack.push_pwad(pwad).unwrap();
+        stack.push_iwad(iwad).expect("value must exist in test");
+        stack.push_pwad(pwad).expect("value must exist in test");
         // 2 IWAD + 1 PWAD = 3 total (even though "A" and "B" are unique)
         assert_eq!(stack.total_lump_count(), 3);
     }
@@ -308,7 +308,7 @@ mod tests {
     fn missing_lump_returns_none() {
         let iwad = make_wad(b"IWAD", &[("DEMO", b"data")]);
         let mut stack = WadStack::new();
-        stack.push_iwad(iwad).unwrap();
+        stack.push_iwad(iwad).expect("value must exist in test");
         assert!(stack.lump_data("NOSUCHLUMP").is_none());
     }
 
@@ -316,7 +316,7 @@ mod tests {
     fn verify_invariants_always_true() {
         let iwad = make_wad(b"IWAD", &[("X", b"hello")]);
         let mut stack = WadStack::new();
-        stack.push_iwad(iwad).unwrap();
+        stack.push_iwad(iwad).expect("value must exist in test");
         assert!(stack.verify_invariants());
     }
 
@@ -326,14 +326,14 @@ mod tests {
         let iwad = make_wad(b"IWAD", &[("A", b"a"), ("B", b"b"), ("C", b"c")]);
         let pwad = make_wad(b"PWAD", &[("B", b"b_override")]);
         let mut stack = WadStack::new();
-        stack.push_iwad(iwad).unwrap();
-        stack.push_pwad(pwad).unwrap();
+        stack.push_iwad(iwad).expect("value must exist in test");
+        stack.push_pwad(pwad).expect("value must exist in test");
 
         // All original lumps still reachable
         assert!(stack.lump_data("A").is_some(), "A should still be in stack");
         assert!(stack.lump_data("C").is_some(), "C should still be in stack");
         // But B is overridden
-        assert_eq!(stack.lump_data("B").unwrap(), b"b_override");
+        assert_eq!(stack.lump_data("B").expect("value must exist in test"), b"b_override");
     }
 
     #[test]
@@ -341,7 +341,7 @@ mod tests {
         let mut stack = WadStack::new();
         assert!(!stack.has_iwad());
         let iwad = make_wad(b"IWAD", &[("TEST", b"data")]);
-        stack.push_iwad(iwad).unwrap();
+        stack.push_iwad(iwad).expect("value must exist in test");
         assert!(stack.has_iwad());
     }
 
@@ -350,8 +350,8 @@ mod tests {
         let iwad = make_wad(b"IWAD", &[("LUMP1", b"data1")]);
         let pwad = make_wad(b"PWAD", &[("LUMP2", b"data2")]);
         let mut stack = WadStack::new();
-        stack.push_iwad(iwad).unwrap();
-        stack.push_pwad(pwad).unwrap();
+        stack.push_iwad(iwad).expect("value must exist in test");
+        stack.push_pwad(pwad).expect("value must exist in test");
 
         let lumps: Vec<_> = stack
             .all_lumps()
@@ -398,10 +398,10 @@ mod tests {
         );
 
         let mut stack = WadStack::new();
-        stack.push_iwad(iwad).unwrap();
-        stack.push_pwad(pwad).unwrap();
+        stack.push_iwad(iwad).expect("value must exist in test");
+        stack.push_pwad(pwad).expect("value must exist in test");
 
-        let (wad, group) = stack.find_map_lump_group("MAP01").unwrap();
+        let (wad, group) = stack.find_map_lump_group("MAP01").expect("value must exist in test");
 
         // Ensure the WAD returned is the PWAD.
         assert_eq!(wad.kind(), WadKind::Pwad);
@@ -442,10 +442,10 @@ mod tests {
         );
 
         let mut stack = WadStack::new();
-        stack.push_iwad(iwad).unwrap();
-        stack.push_pwad(pwad).unwrap();
+        stack.push_iwad(iwad).expect("value must exist in test");
+        stack.push_pwad(pwad).expect("value must exist in test");
 
-        let (wad, group) = stack.find_map_lump_group("MAP01").unwrap();
+        let (wad, group) = stack.find_map_lump_group("MAP01").expect("value must exist in test");
 
         assert_eq!(wad.kind(), WadKind::Pwad);
 
@@ -467,7 +467,7 @@ mod tests {
         iwad_data[4..8].copy_from_slice(&0i32.to_le_bytes()); // 0 lumps
         iwad_data[8..12].copy_from_slice(&12i32.to_le_bytes()); // offset 12
 
-        stack.push_iwad(iwad_data).unwrap();
+        stack.push_iwad(iwad_data).expect("value must exist in test");
         assert_eq!(stack.wad_count(), 1);
     }
 
@@ -478,7 +478,7 @@ mod tests {
         iwad_data[0..4].copy_from_slice(b"IWAD");
         iwad_data[4..8].copy_from_slice(&0i32.to_le_bytes()); // 0 lumps
         iwad_data[8..12].copy_from_slice(&12i32.to_le_bytes()); // offset 12
-        stack.push_iwad(iwad_data).unwrap();
+        stack.push_iwad(iwad_data).expect("value must exist in test");
 
         assert!(stack.map_lump_group("E1M1").is_none());
     }

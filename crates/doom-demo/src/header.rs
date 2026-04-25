@@ -240,7 +240,7 @@ mod tests {
             players_present: [true, false, true, false],
         };
         let bytes = header.to_bytes();
-        let parsed = LmpHeader::from_bytes(&bytes).unwrap();
+        let parsed = LmpHeader::from_bytes(&bytes).expect("value must exist in test");
         assert_eq!(header, parsed);
     }
 

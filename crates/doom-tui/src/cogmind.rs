@@ -328,7 +328,7 @@ mod tests {
         assert_eq!(frame.height(), 5);
         for y in 0..5 {
             for x in 0..10 {
-                let cell = frame.get(x, y).unwrap();
+                let cell = frame.get(x, y).expect("value must exist in test");
                 assert_eq!(*cell, CogmindCell::default());
             }
         }
@@ -343,7 +343,7 @@ mod tests {
             bg: (0, 0, 128),
         };
         frame.set(2, 3, cell);
-        assert_eq!(*frame.get(2, 3).unwrap(), cell);
+        assert_eq!(*frame.get(2, 3).expect("value must exist in test"), cell);
     }
 
     #[test]
@@ -361,7 +361,7 @@ mod tests {
         // Frame should still be all defaults.
         for y in 0..4 {
             for x in 0..4 {
-                assert_eq!(*frame.get(x, y).unwrap(), CogmindCell::default());
+                assert_eq!(*frame.get(x, y).expect("value must exist in test"), CogmindCell::default());
             }
         }
     }
@@ -400,12 +400,12 @@ mod tests {
         let mut buf = Buffer::empty(area);
         CogmindWidget::new(&frame).render(area, &mut buf);
 
-        let c00 = buf.cell((0, 0)).unwrap();
+        let c00 = buf.cell((0, 0)).expect("value must exist in test");
         assert_eq!(c00.symbol(), "@");
         assert_eq!(c00.fg, Color::Rgb(255, 0, 0));
         assert_eq!(c00.bg, Color::Rgb(0, 255, 0));
 
-        let c10 = buf.cell((1, 0)).unwrap();
+        let c10 = buf.cell((1, 0)).expect("value must exist in test");
         assert_eq!(c10.symbol(), "#");
         assert_eq!(c10.fg, Color::Rgb(0, 0, 255));
         assert_eq!(c10.bg, Color::Rgb(128, 128, 128));
@@ -438,7 +438,7 @@ mod tests {
 
         for y in 0..3u16 {
             for x in 0..3u16 {
-                let cell = buf.cell((x, y)).unwrap();
+                let cell = buf.cell((x, y)).expect("value must exist in test");
                 assert_eq!(cell.symbol(), " ", "cell ({x},{y}) should be space");
                 assert_eq!(
                     cell.fg,
@@ -474,7 +474,7 @@ mod tests {
         // The 'X' at (3, 3) should be clipped and not written to the buffer.
         // It's out of bounds, so cell(3,3) doesn't exist.
         // Also checking that (0,0) is default.
-        let cell = buf.cell((0, 0)).unwrap();
+        let cell = buf.cell((0, 0)).expect("value must exist in test");
         assert_eq!(cell.symbol(), " ");
     }
 
@@ -497,7 +497,7 @@ mod tests {
         CogmindWidget::new(&frame).render(area, &mut buf);
 
         // At 5,5 frame.get() returns None, shouldn't crash
-        let cell = buf.cell((5, 5)).unwrap();
+        let cell = buf.cell((5, 5)).expect("value must exist in test");
         assert_eq!(cell.symbol(), " ");
     }
 
@@ -520,12 +520,12 @@ mod tests {
         CogmindWidget::new(&frame).render(area, &mut buf);
 
         // The 'X' should appear at (2, 2) in the buffer.
-        let cell = buf.cell((2, 2)).unwrap();
+        let cell = buf.cell((2, 2)).expect("value must exist in test");
         assert_eq!(cell.symbol(), "X");
         assert_eq!(cell.fg, Color::Rgb(255, 255, 255));
 
         // Origin (0,0) should still be the default reset character.
-        let origin = buf.cell((0, 0)).unwrap();
+        let origin = buf.cell((0, 0)).expect("value must exist in test");
         assert_ne!(origin.symbol(), "X");
     }
 

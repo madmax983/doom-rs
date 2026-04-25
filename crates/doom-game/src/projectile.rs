@@ -455,7 +455,7 @@ mod tests {
 
     #[test]
     fn rocket_has_correct_stats() {
-        let info = projectile_info(MobjKind::Rocket).unwrap();
+        let info = projectile_info(MobjKind::Rocket).expect("value must exist in test");
         assert_eq!(info.speed, Fixed16_16::from_int(20));
         assert_eq!(info.radius, Fixed16_16::from_int(11));
         assert_eq!(info.damage, 20);
@@ -478,7 +478,7 @@ mod tests {
             MobjKind::Tracer,
         ];
         for kind in projectile_kinds {
-            let info = projectile_info(kind).unwrap();
+            let info = projectile_info(kind).expect("value must exist in test");
             assert_ne!(
                 info.flags & flags::MF_MISSILE,
                 0,
@@ -501,7 +501,7 @@ mod tests {
         let proj_h = p_spawn_missile(&mut gs, source, target, MobjKind::ImpFireball);
         assert!(proj_h.is_some(), "must create a projectile");
 
-        let proj = gs.mobjslab.get(proj_h.unwrap()).unwrap();
+        let proj = gs.mobjslab.get(proj_h.expect("value must exist in test")).expect("value must exist in test");
         assert_eq!(proj.kind, MobjKind::ImpFireball);
         assert_ne!(proj.flags & flags::MF_MISSILE, 0);
         // Target is east of source: momx should be positive, momy ~0.
@@ -520,8 +520,8 @@ mod tests {
         let source = gs.player.handle;
         let target = spawn_target(&mut gs, 100, 0, 60);
 
-        let proj_h = p_spawn_missile(&mut gs, source, target, MobjKind::ImpFireball).unwrap();
-        let proj = gs.mobjslab.get(proj_h).unwrap();
+        let proj_h = p_spawn_missile(&mut gs, source, target, MobjKind::ImpFireball).expect("value must exist in test");
+        let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
         let info = &MOBJINFO[MobjKind::ImpFireball as usize];
 
         assert_eq!(info.spawn_state, StateNum(ids::S_TBALL1));
@@ -570,7 +570,7 @@ mod tests {
         let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket);
         assert!(proj_h.is_some());
 
-        let proj = gs.mobjslab.get(proj_h.unwrap()).unwrap();
+        let proj = gs.mobjslab.get(proj_h.expect("value must exist in test")).expect("value must exist in test");
         assert_eq!(proj.kind, MobjKind::Rocket);
         assert_ne!(proj.flags & flags::MF_MISSILE, 0);
         // Since angle.cos() and angle.sin() return 0 when trig tables are not
@@ -598,8 +598,8 @@ mod tests {
         let mut gs = make_game_state();
         let source = gs.player.handle;
 
-        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::PlasmaBall).unwrap();
-        let proj = gs.mobjslab.get(proj_h).unwrap();
+        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::PlasmaBall).expect("value must exist in test");
+        let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
         // Player z=0, height=56, so chest height = 56/2 = 28.
         assert_eq!(proj.z, Fixed16_16::from_int(28));
     }
@@ -609,8 +609,8 @@ mod tests {
         let mut gs = make_game_state();
         let source = gs.player.handle;
 
-        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket).unwrap();
-        let proj = gs.mobjslab.get(proj_h).unwrap();
+        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket).expect("value must exist in test");
+        let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
         let info = &MOBJINFO[MobjKind::Rocket as usize];
 
         assert_eq!(info.spawn_state, StateNum(ids::S_ROCKET));
@@ -645,7 +645,7 @@ mod tests {
         // Move projectiles (no level = no wall collision).
         p_move_projectiles(&mut gs, None);
 
-        let proj = gs.mobjslab.get(proj_h).unwrap();
+        let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
         assert_eq!(
             proj.x,
             Fixed16_16::from_int(60),
@@ -681,7 +681,7 @@ mod tests {
         p_move_projectiles(&mut gs, None);
 
         // Target should have taken damage.
-        let target = gs.mobjslab.get(target_h).unwrap();
+        let target = gs.mobjslab.get(target_h).expect("value must exist in test");
         assert!(
             target.health < 60,
             "target health {} must decrease from projectile hit",
@@ -719,7 +719,7 @@ mod tests {
         p_move_projectiles(&mut gs, None);
 
         // Player should not be damaged (projectile skips source).
-        let player = gs.mobjslab.get(player_h).unwrap();
+        let player = gs.mobjslab.get(player_h).expect("value must exist in test");
         assert_eq!(
             player.health, 100,
             "source must not be hit by own projectile"
@@ -750,7 +750,7 @@ mod tests {
         p_move_projectiles(&mut gs, None);
 
         // Non-missile actors must not be moved by p_move_projectiles.
-        let imp = gs.mobjslab.get(imp_h).unwrap();
+        let imp = gs.mobjslab.get(imp_h).expect("value must exist in test");
         assert_eq!(
             imp.x,
             Fixed16_16::from_int(50),
@@ -794,11 +794,11 @@ mod tests {
 
         p_move_projectiles(&mut gs, None);
 
-        let m1 = gs.mobjslab.get(h1).unwrap();
+        let m1 = gs.mobjslab.get(h1).expect("value must exist in test");
         assert_eq!(m1.x, Fixed16_16::from_int(25));
         assert_eq!(m1.y, Fixed16_16::ZERO);
 
-        let m2 = gs.mobjslab.get(h2).unwrap();
+        let m2 = gs.mobjslab.get(h2).expect("value must exist in test");
         assert_eq!(m2.x, Fixed16_16::ZERO);
         assert_eq!(m2.y, Fixed16_16::from_int(10));
     }

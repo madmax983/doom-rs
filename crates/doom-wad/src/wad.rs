@@ -653,7 +653,7 @@ mod prop_tests {
             // (WadStack is in stack.rs; here we test WadFile-level semantics.)
             let pwad = WadFile::parse(pwad_bytes).expect("PWAD parse failed");
             prop_assert_eq!(
-                pwad.find_lump_data("BASE").unwrap(),
+                pwad.find_lump_data("BASE").expect("value must exist in test"),
                 b"override",
                 "PWAD must override BASE"
             );
@@ -746,8 +746,8 @@ mod tests {
         let wad = WadFile::parse(wad_bytes).expect("parse failed");
         assert_eq!(wad.kind(), WadKind::Iwad);
         assert_eq!(wad.lump_count(), 1);
-        assert_eq!(wad.find_lump("TEST").unwrap().name.as_str(), "TEST");
-        assert_eq!(wad.find_lump_data("TEST").unwrap(), b"HELLO");
+        assert_eq!(wad.find_lump("TEST").expect("value must exist in test").name.as_str(), "TEST");
+        assert_eq!(wad.find_lump_data("TEST").expect("value must exist in test"), b"HELLO");
     }
 
     #[test]
@@ -771,7 +771,7 @@ mod tests {
     #[test]
     fn find_lump_case_insensitive() {
         let wad_bytes = make_iwad(&[("PLAYPAL", b"palette_data")]);
-        let wad = WadFile::parse(wad_bytes).unwrap();
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
         assert!(wad.find_lump("playpal").is_some());
         assert!(wad.find_lump("PLAYPAL").is_some());
     }
@@ -784,16 +784,16 @@ mod tests {
         // numlumps = 0, infotableofs = 12 (points just past header)
         data[4..8].copy_from_slice(&0i32.to_le_bytes());
         data[8..12].copy_from_slice(&12i32.to_le_bytes());
-        let wad = WadFile::parse(data).unwrap();
+        let wad = WadFile::parse(data).expect("value must exist in test");
         assert_eq!(wad.lump_count(), 0);
     }
 
     #[test]
     fn multiple_lumps_same_name_last_wins() {
         let wad_bytes = make_iwad(&[("DEMO", b"first"), ("OTHER", b"other"), ("DEMO", b"second")]);
-        let wad = WadFile::parse(wad_bytes).unwrap();
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
         // find_lump returns last occurrence
-        assert_eq!(wad.find_lump_data("DEMO").unwrap(), b"second");
+        assert_eq!(wad.find_lump_data("DEMO").expect("value must exist in test"), b"second");
     }
 
     #[test]
@@ -804,7 +804,7 @@ mod tests {
             ("ZNODES", b"not_relevant_here"),
             ("ENDMAP", b""),
         ]);
-        let wad = WadFile::parse(wad_bytes).unwrap();
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
 
         let group = wad.map_lump_group("MAP01").expect("map group");
 
@@ -828,7 +828,7 @@ mod tests {
             // Missing LINEDEFS
             ("SIDEDEFS", b"iwad_sidedefs"),
         ]);
-        let wad = WadFile::parse(wad_bytes).unwrap();
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
         assert!(wad.map_lump_group("MAP01").is_none());
     }
 
@@ -847,8 +847,8 @@ mod tests {
             ("REJECT", b""),
             ("BLOCKMAP", b""),
         ]);
-        let wad = WadFile::parse(wad_bytes).unwrap();
-        match wad.map_lump_group("MAP01").unwrap() {
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
+        match wad.map_lump_group("MAP01").expect("value must exist in test") {
             MapLumpGroup::Classic(c) => {
                 assert_eq!(c.marker.name.as_str(), "MAP01");
                 assert_eq!(c.lumps[0].name.as_str(), "THINGS");
@@ -869,7 +869,7 @@ mod tests {
     #[test]
     fn find_lump_data_returns_none_if_missing() {
         let wad_bytes = make_iwad(&[("TEST", b"data")]);
-        let wad = WadFile::parse(wad_bytes).unwrap();
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
         assert!(wad.find_lump_data("MISSING").is_none());
     }
 
@@ -881,7 +881,7 @@ mod tests {
             ("FLAT2", b"flat2_data"),
             ("F_END", b""),
         ]);
-        let wad = WadFile::parse(wad_bytes).unwrap();
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
         let flats: Vec<_> = wad
             .lumps_between("F_START", "F_END")
             .map(|l| l.name.as_str().to_string())
@@ -1014,7 +1014,7 @@ mod tests {
             },
         ]);
 
-        let found = dir.find("LUMP1").unwrap();
+        let found = dir.find("LUMP1").expect("value must exist in test");
         assert_eq!(found.size, 10);
         assert!(dir.find("LUMP3").is_none());
     }
@@ -1035,7 +1035,7 @@ mod tests {
         lumps.push(("BLOCKMAP", b""));
 
         let wad_bytes = make_iwad(&lumps);
-        let wad = WadFile::parse(wad_bytes).unwrap();
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
         assert!(wad.map_lump_group("MAP01").is_none());
     }
 
@@ -1047,14 +1047,14 @@ mod tests {
             ("ZNODES", b""),
             ("ENDMAP", b""),
         ]);
-        let wad = WadFile::parse(wad_bytes).unwrap();
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
 
-        let group = wad.map_lump_group("MAP01").unwrap();
+        let group = wad.map_lump_group("MAP01").expect("value must exist in test");
         assert!(matches!(group, MapLumpGroup::Udmf(_)));
         if let MapLumpGroup::Udmf(udmf) = group {
             assert_eq!(udmf.aux_lumps().len(), 1);
             assert_eq!(udmf.aux_lumps()[0].name.as_str(), "ZNODES");
-            assert_eq!(udmf.find_lump("ZNODES").unwrap().name.as_str(), "ZNODES");
+            assert_eq!(udmf.find_lump("ZNODES").expect("value must exist in test").name.as_str(), "ZNODES");
             assert!(udmf.find_lump("NONEXISTENT").is_none());
         }
     }

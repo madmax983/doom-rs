@@ -617,7 +617,7 @@ mod tests {
 
         // Since we can't `try_unwrap` easily when the underlying type might
         // be `loom::sync::Arc`, we just lock it and extract the data we need for the tests
-        let count = mixer.lock().unwrap().active_count();
+        let count = mixer.lock().expect("value must exist in test").active_count();
         drop(driver); // make sure driver lives long enough
         count
     }

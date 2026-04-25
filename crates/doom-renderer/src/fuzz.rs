@@ -129,7 +129,7 @@ mod tests {
         // Fill a region with a known value so fuzz has something to darken.
         fb.fill_rect(100, 50, 20, 20, 128);
 
-        let original = fb.get_pixel(110, 60).unwrap();
+        let original = fb.get_pixel(110, 60).expect("value must exist in test");
         assert_eq!(original, 128);
 
         let mut fuzz_pos = 0;
@@ -138,7 +138,7 @@ mod tests {
         // At least one pixel in the column should have changed.
         let mut any_changed = false;
         for y in 55..=65 {
-            if fb.get_pixel(110, y).unwrap() != 128 {
+            if fb.get_pixel(110, y).expect("value must exist in test") != 128 {
                 any_changed = true;
                 break;
             }
@@ -158,7 +158,7 @@ mod tests {
         let mut fuzz_pos = 0;
         draw_fuzz_column(&mut fb, 50, 10, 10, &mut fuzz_pos, None);
 
-        let pixel = fb.get_pixel(50, 10).unwrap();
+        let pixel = fb.get_pixel(50, 10).expect("value must exist in test");
         // Fuzz reads from offset row (FUZZ_TABLE[0] = +1 → row 11, value 200).
         // fallback_darken(200) = 100.
         assert_eq!(
@@ -169,7 +169,7 @@ mod tests {
         // The pixel at the offset position (row 11) should be unchanged since
         // we only drew fuzz at row 10.
         assert_eq!(
-            fb.get_pixel(50, 11).unwrap(),
+            fb.get_pixel(50, 11).expect("value must exist in test"),
             200,
             "pixels not in the fuzz column should be unmodified"
         );
@@ -210,14 +210,14 @@ mod tests {
         let mut fuzz_pos = 1; // Start at entry -1 so offset is -1.
         draw_fuzz_column(&mut fb, 10, 0, 0, &mut fuzz_pos, None);
         // Should not panic (the clamp prevents negative index).
-        let pixel = fb.get_pixel(10, 0).unwrap();
+        let pixel = fb.get_pixel(10, 0).expect("value must exist in test");
         assert_eq!(pixel, 75, "fallback_darken(150) = 75");
 
         // Draw fuzz at the very bottom row (y=199).
         let mut fuzz_pos = 0; // Entry +1 from row 199 should clamp to row 199.
         draw_fuzz_column(&mut fb, 10, 199, 199, &mut fuzz_pos, None);
         // Should not panic.
-        let pixel = fb.get_pixel(10, 199).unwrap();
+        let pixel = fb.get_pixel(10, 199).expect("value must exist in test");
         // The pixel was already modified at row 0 for x=10, but row 199 was 150.
         // fallback_darken(150) = 75.
         assert_eq!(pixel, 75, "fallback_darken(150) = 75");
@@ -233,7 +233,7 @@ mod tests {
         draw_fuzz_column(&mut fb, 100, 50, 60, &mut fuzz_pos, None);
 
         for y in 50..=60 {
-            let pixel = fb.get_pixel(100, y).unwrap();
+            let pixel = fb.get_pixel(100, y).expect("value must exist in test");
             assert!(
                 pixel < 200,
                 "fuzz pixel at y={y} should be darker than original (got {pixel})"
@@ -259,7 +259,7 @@ mod tests {
         draw_fuzz_column(&mut fb, 50, 10, 15, &mut fuzz_pos, Some(&cm));
 
         for y in 10..=15 {
-            let pixel = fb.get_pixel(50, y).unwrap();
+            let pixel = fb.get_pixel(50, y).expect("value must exist in test");
             assert_eq!(pixel, 42, "with colormap, fuzz should map to 42 (y={y})");
         }
     }

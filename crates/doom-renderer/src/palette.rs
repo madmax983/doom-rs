@@ -228,7 +228,7 @@ mod tests {
         raw[PLAYPAL_COLORS * 3] = 40;
         raw[PLAYPAL_COLORS * 3 + 1] = 50;
         raw[PLAYPAL_COLORS * 3 + 2] = 60;
-        let lut = PaletteLut::from_playpal(&raw).unwrap();
+        let lut = PaletteLut::from_playpal(&raw).expect("value must exist in test");
         assert_eq!(lut.get(0, 0), Rgb::new(10, 20, 30));
         assert_eq!(lut.get(1, 0), Rgb::new(40, 50, 60));
     }
