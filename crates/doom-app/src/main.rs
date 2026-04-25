@@ -2126,6 +2126,7 @@ fn handle_export(
     success_verb: &str,
     success_noun: &str,
     error_noun: &str,
+    is_json: bool,
 ) -> Result<bool> {
     let Some(path) = export_path else {
         return Ok(false);
@@ -2140,17 +2141,26 @@ fn handle_export(
         )
     })?;
 
-    use crossterm::style::Stylize;
-    if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-        println!(
-            "{} {} {} to {}",
-            success_icon.green(),
-            success_verb.green().bold(),
+    if is_json {
+        let json_data = format!(
+            r#"{{"status":"success","action":"export","type":"{}","file":{:?}}}"#,
             success_noun,
-            path.display().to_string().cyan()
+            path.display().to_string()
         );
+        println!("{json_data}");
     } else {
-        println!("{} {} to {}", success_verb, success_noun, path.display());
+        use crossterm::style::Stylize;
+        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+            println!(
+                "{} {} {} to {}",
+                success_icon.green(),
+                success_verb.green().bold(),
+                success_noun,
+                path.display().to_string().cyan()
+            );
+        } else {
+            println!("{} {} to {}", success_verb, success_noun, path.display());
+        }
     }
 
     Ok(true)
@@ -2223,6 +2233,7 @@ fn run_doom() -> Result<()> {
         "Exported",
         "HTML report",
         "HTML report",
+        args.json,
     )? {
         return Ok(());
     }
@@ -2234,6 +2245,7 @@ fn run_doom() -> Result<()> {
         "Exported",
         "JSON report",
         "JSON report",
+        args.json,
     )? {
         return Ok(());
     }
@@ -2245,6 +2257,7 @@ fn run_doom() -> Result<()> {
         "Exported",
         "layout",
         "SVG layout",
+        args.json,
     )? {
         return Ok(());
     }
@@ -2256,6 +2269,7 @@ fn run_doom() -> Result<()> {
         "Exported",
         "GeoJSON",
         "GeoJSON file",
+        args.json,
     )? {
         return Ok(());
     }
@@ -2267,6 +2281,7 @@ fn run_doom() -> Result<()> {
         "Exported",
         "Graphviz DOT",
         "Graphviz DOT file",
+        args.json,
     )? {
         return Ok(());
     }
@@ -2278,6 +2293,7 @@ fn run_doom() -> Result<()> {
         "Exported",
         "3D model",
         "3D model",
+        args.json,
     )? {
         return Ok(());
     }
@@ -2293,32 +2309,48 @@ fn run_doom() -> Result<()> {
                 output_path.display()
             )
         })?;
-        use crossterm::style::Stylize;
-        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} demo CSV to {}",
-                "🌟".green(),
-                "Exported".green().bold(),
-                output_path.display().to_string().cyan()
+        if args.json {
+            let json_data = format!(
+                r#"{{"status":"success","action":"export","type":"demo CSV","file":{:?}}}"#,
+                output_path.display().to_string()
             );
+            println!("{json_data}");
         } else {
-            println!("Exported demo CSV to {}", output_path.display());
+            use crossterm::style::Stylize;
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                println!(
+                    "{} {} demo CSV to {}",
+                    "🌟".green(),
+                    "Exported".green().bold(),
+                    output_path.display().to_string().cyan()
+                );
+            } else {
+                println!("Exported demo CSV to {}", output_path.display());
+            }
         }
         return Ok(());
     }
 
     if let Some(ref wav_path) = args.export_music_wav {
         export_music_wav_for_map(&wad_stack, warp_str, args.music_loops, wav_path)?;
-        use crossterm::style::Stylize;
-        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} music WAV to {}",
-                "🎵".green(),
-                "Exported".green().bold(),
-                wav_path.display().to_string().cyan()
+        if args.json {
+            let json_data = format!(
+                r#"{{"status":"success","action":"export","type":"music WAV","file":{:?}}}"#,
+                wav_path.display().to_string()
             );
+            println!("{json_data}");
         } else {
-            println!("Exported music WAV to {}", wav_path.display());
+            use crossterm::style::Stylize;
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                println!(
+                    "{} {} music WAV to {}",
+                    "🎵".green(),
+                    "Exported".green().bold(),
+                    wav_path.display().to_string().cyan()
+                );
+            } else {
+                println!("Exported music WAV to {}", wav_path.display());
+            }
         }
         return Ok(());
     }
@@ -2329,16 +2361,24 @@ fn run_doom() -> Result<()> {
             .as_deref()
             .ok_or_else(|| anyhow::anyhow!("--sfx-name is required when using --export-sfx-wav"))?;
         export_sfx_wav_for_name(&wad_stack, sfx_name, sfx_wav_path)?;
-        use crossterm::style::Stylize;
-        if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} SFX WAV to {}",
-                "🔊".green(),
-                "Exported".green().bold(),
-                sfx_wav_path.display().to_string().cyan()
+        if args.json {
+            let json_data = format!(
+                r#"{{"status":"success","action":"export","type":"SFX WAV","file":{:?}}}"#,
+                sfx_wav_path.display().to_string()
             );
+            println!("{json_data}");
         } else {
-            println!("Exported SFX WAV to {}", sfx_wav_path.display());
+            use crossterm::style::Stylize;
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                println!(
+                    "{} {} SFX WAV to {}",
+                    "🔊".green(),
+                    "Exported".green().bold(),
+                    sfx_wav_path.display().to_string().cyan()
+                );
+            } else {
+                println!("Exported SFX WAV to {}", sfx_wav_path.display());
+            }
         }
         return Ok(());
     }
