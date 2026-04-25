@@ -15,8 +15,8 @@ use crate::mobj::{Mobj, MobjHandle, MobjSlab, StateNum};
 use crate::player::{PlayerState, PspriteState};
 use crate::savegame_vanilla;
 use crate::state::{
-    CeilingMover, CeilingType, ConveyorBelt, DoomRng, DoorMover, ExitRequest, FloorMover,
-    FloorType, GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
+    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
+    GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
     PlatformStatus, ScrollingWall,
 };
 use doom_types::limits::{NUM_POWERS, NUM_PSPRITES};
@@ -1029,7 +1029,7 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- RNG ---
     let rng_index = r.read_u32()?;
-    let mut rng = DoomRng::new();
+    let mut rng = crate::random::DoomRng::new();
     rng.set_index(rng_index);
 
     // --- Counters ---
