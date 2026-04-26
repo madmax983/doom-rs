@@ -84,6 +84,7 @@ pub use player::PlayerState;
 pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
 };
+pub use random::{DoomRng, RNG_TABLE};
 pub use random::{p_damage_with_variance, p_missile_angle_spread, p_random_chance, randomize_tics};
 pub use savegame::{
     MAX_SAVE_SLOTS, SAVE_MAGIC, SaveError, SaveFormat, SaveGame, SaveHeader, detect_save_format,
@@ -111,7 +112,7 @@ pub use specials::{
     tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
     tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
-pub use state::{DoomRng, ExitRequest, GameState, LockedDoorColor, RNG_TABLE};
+pub use state::{ExitRequest, GameState, LockedDoorColor};
 pub use states::STATES;
 pub use states::sprite_names;
 pub use stats::LevelStats;

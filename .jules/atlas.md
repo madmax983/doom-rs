@@ -48,3 +48,6 @@
 **[Extract GameState sub-components to reduce state.rs bloat]**
 **Tangle:** The `doom-game/src/state.rs` file was a huge "God Struct" holding everything from `LevelStats` to `SectorMovers` and `SoundPropagation`, creating a sprawling mess of responsibilities.
 **Blueprint:** Extracted `LevelStats` to `stats.rs`, `SectorMovers` and all related structures to `movers.rs`, and `SoundPropagation` to `sound_prop.rs`. Updated `state.rs` to import these components, significantly improving code cohesion and module boundaries.
+**[Extract DoomRng to random.rs]**
+**Tangle:** The `DoomRng` struct and its associated `RNG_TABLE` were embedded inside `movers.rs`, despite being general-purpose random number generators used throughout the simulation. This created an illogical dependency where combat and movement code had to pull RNG logic out of the sector movers module, violating cohesion.
+**Blueprint:** Extracted `DoomRng` and `RNG_TABLE` from `movers.rs` into `random.rs`, matching their domain responsibility. Updated `state.rs`, `savegame.rs`, and the crate root (`lib.rs`) to import and re-export the RNG components from `random.rs`.

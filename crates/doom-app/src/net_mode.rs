@@ -224,6 +224,7 @@ impl NetGameApp {
 
     /// Borrow the inner `DoomGame` (for tests).
     #[cfg(test)]
+    #[allow(dead_code)]
     pub(crate) fn inner(&self) -> &DoomGame {
         &self.inner
     }

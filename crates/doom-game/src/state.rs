@@ -4,6 +4,7 @@
 //! It must never contain `Arc`, `Rc`, raw pointers, `HashMap`, or any
 //! non-deterministic source (no `Instant::now()`, no OS calls).
 
+use crate::random::DoomRng;
 use doom_types::Fixed16_16;
 
 use crate::mobj::MobjSlab;
@@ -48,7 +49,6 @@ pub enum ExitRequest {
     /// Secret exit (secret map).
     Secret,
 }
-
 
 /// Complete, self-contained game simulation state.
 ///
@@ -262,6 +262,7 @@ impl GameState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::random::RNG_TABLE;
 
     #[test]
     fn rng_table_has_256_entries() {
