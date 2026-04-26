@@ -53,6 +53,11 @@ pub mod trace;
 pub mod weapon_fire;
 pub mod weapons;
 
+#[cfg(feature = "director")]
+pub mod director;
+#[cfg(feature = "director")]
+pub use director::*;
+
 pub use actions::{Action, dispatch_action, p_move, p_new_chase_dir};
 pub use automap::{
     AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
