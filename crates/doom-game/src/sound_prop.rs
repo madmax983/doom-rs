@@ -1,3 +1,9 @@
+//! Sound propagation and audio mechanics.
+//!
+//! This module simulates the classic Doom sound engine logic, including
+//! distance-based attenuation, stereo panning calculations, and
+//! prioritized channel allocation for active sound effects.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

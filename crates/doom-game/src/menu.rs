@@ -5,8 +5,20 @@
 //! title-screen demo cycle (TITLEPIC -> Demo -> CREDIT -> Demo -> ...).
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The specific game version or IWAD currently loaded.
+///
+/// Doom 1 and Doom 2 have different episode structures and menu layouts.
+///
+/// ## Examples
+/// ```
+/// use doom_game::menu::GameVersion;
+/// let version = GameVersion::Doom1;
+/// assert_eq!(version, GameVersion::Doom1);
+/// ```
 pub enum GameVersion {
+    /// Classic Doom 1: "Knee-Deep in the Dead", "The Shores of Hell", "Inferno".
     Doom1,
+    /// Doom 2: "Hell on Earth" (a continuous 30-level campaign).
     Doom2,
 }
 

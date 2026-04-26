@@ -1,3 +1,9 @@
+//! Moving sectors and level geometry updates.
+//!
+//! Handles all dynamic map elements: doors, platforms, elevators,
+//! crushers, and scrolling walls. This module runs the update loop
+//! for linedef specials that mutate sector heights.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

@@ -1,3 +1,8 @@
+//! Level statistics tracking for the intermission screen.
+//!
+//! Records kills, items picked up, and secrets discovered to be displayed
+//! on the summary screen at the end of each map.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {
