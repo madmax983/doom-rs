@@ -2156,7 +2156,7 @@ fn handle_export(
     Ok(true)
 }
 
-fn run_doom() -> Result<()> {
+fn run_doom(args: Args) -> Result<()> {
     // Initialize trig tables (required for sin/cos in the game simulation).
     // SAFETY: called exactly once at startup, single-threaded, before any
     // Bam::sin() or Bam::cos() calls.
@@ -2164,7 +2164,6 @@ fn run_doom() -> Result<()> {
         doom_types::Bam::init_trig_tables();
     }
 
-    let args = Args::parse();
     let compat = args.compat;
 
     let iwad_bytes = std::fs::read(&args.iwad).with_context(|| {
@@ -2892,13 +2891,15 @@ fn run_doom() -> Result<()> {
 
     // Client (netplay) mode: wrap DoomGame in a NetGameApp for network-aware input.
     if let Some(ref addr_str) = args.connect {
-        let client = doom_net::NetClient::connect(addr_str, 0)
-            .map_err(|e| match e.kind() {
-                std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset => {
-                    anyhow::anyhow!("Connection Failed: The relay server at {} is not responding.", addr_str)
-                }
-                _ => anyhow::anyhow!("Connection Failed: {}", e),
-            })?;
+        let client = doom_net::NetClient::connect(addr_str, 0).map_err(|e| match e.kind() {
+            std::io::ErrorKind::ConnectionRefused | std::io::ErrorKind::ConnectionReset => {
+                anyhow::anyhow!(
+                    "Connection Failed: The relay server at {} is not responding.",
+                    addr_str
+                )
+            }
+            _ => anyhow::anyhow!("Connection Failed: {}", e),
+        })?;
         let mut net_app = net_mode::NetGameApp::new(app, client);
 
         let mut event_loop = DoomEventLoop::new()
@@ -2911,8 +2912,8 @@ fn run_doom() -> Result<()> {
     }
 
     // Start the terminal event loop and run until the user quits (Q or Esc).
-    let mut event_loop =
-        DoomEventLoop::new().map_err(|e| anyhow::anyhow!("Terminal Initialization Failed: {}", e))?;
+    let mut event_loop = DoomEventLoop::new()
+        .map_err(|e| anyhow::anyhow!("Terminal Initialization Failed: {}", e))?;
     event_loop.set_turn_based_mode(args.turn_based);
 
     // Set renderer mode from --renderer flag.
@@ -3003,27 +3004,49 @@ fn run_doom() -> Result<()> {
 }
 
 fn main() {
-    if let Err(err) = run_doom() {
-        use crossterm::style::Stylize;
-        if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-            eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
+    let args = match Args::try_parse() {
+        Ok(a) => a,
+        Err(e) => {
+            e.exit();
+        }
+    };
+    let is_json = args.json;
 
+    if let Err(err) = run_doom(args) {
+        if is_json {
+            // Memory: manually serialize without serde using format!("{:?}", ...) for escaping
+            let mut error_msg = format!("{}", err);
             let mut causes = err.chain().skip(1).peekable();
             if causes.peek().is_some() {
-                eprintln!("\n↳ {}:", "Reason".red().bold());
+                error_msg.push_str(" \nReason:\n");
                 for cause in causes {
-                    eprintln!("    {}", cause);
+                    error_msg.push_str(&format!("    {}\n", cause));
                 }
             }
-            eprintln!();
+            let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());
+            println!("{json_data}");
         } else {
-            eprintln!("Engine Failure: {}", err);
+            use crossterm::style::Stylize;
+            if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+                eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
 
-            let mut causes = err.chain().skip(1).peekable();
-            if causes.peek().is_some() {
-                eprintln!("Reason:");
-                for cause in causes {
-                    eprintln!("    {}", cause);
+                let mut causes = err.chain().skip(1).peekable();
+                if causes.peek().is_some() {
+                    eprintln!("\n↳ {}:", "Reason".red().bold());
+                    for cause in causes {
+                        eprintln!("    {}", cause);
+                    }
+                }
+                eprintln!();
+            } else {
+                eprintln!("Engine Failure: {}", err);
+
+                let mut causes = err.chain().skip(1).peekable();
+                if causes.peek().is_some() {
+                    eprintln!("Reason:");
+                    for cause in causes {
+                        eprintln!("    {}", cause);
+                    }
                 }
             }
         }
