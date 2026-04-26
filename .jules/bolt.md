@@ -5,3 +5,6 @@
 **Pre-allocating Vecs on Hot Paths based on Logical Limits**
 **Learning:** Initializing `Vec::new()` in rendering loops that always append elements up to a mathematical bound (like `term_w * term_h` for screen rendering or `dx + dy + 1` for line tracing) causes repeated unnecessary heap allocations, degrading frame performance.
 **Action:** Always calculate the physical or mathematical limit of elements to be pushed and use `Vec::with_capacity(limit)` to pre-allocate memory.
+**Pre-allocate VisplaneSet planes**
+**Learning:** `VisplaneSet` in `crates/doom-renderer/src/visplane.rs` was reallocating `planes` dynamically every frame instead of reserving space.
+**Action:** Changed `VisplaneSet::new` to initialize `planes` with `Vec::with_capacity(128)` to avoid multiple heap reallocations per frame on the hot rendering path.

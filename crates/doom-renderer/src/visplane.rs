@@ -159,8 +159,13 @@ impl VisplaneSet {
     /// assert_eq!(planes.planes().len(), 0);
     /// ```
     #[must_use]
+    /// ⚡ Bolt Optimization:
+    /// Pre-allocate capacity for visplanes to avoid multiple heap reallocations
+    /// per frame during the hot wall rendering loop.
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            planes: Vec::with_capacity(128),
+        }
     }
 
     /// Returns a reference to the active slice of visplanes.

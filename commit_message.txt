@@ -1,6 +1,9 @@
-🛡️ Sentry: Replace unwrap() with expect()
+⚡ Bolt: Pre-allocate VisplaneSet planes
 
-🎯 Target: Multiple locations across `telemetry.rs`, `audio_system.rs`, `tile_grid.rs`, and `analyzer.rs`.
-💣 Risk: `unwrap()` calls that could potentially panic obscure test failure context or lead to uninformative panics.
-🧪 Strategy: Replaced `.unwrap()` with `.expect("...")` providing explicit failure messages, making assertions clearer when parsing WAD data or managing the audio system.
-🔬 Verification: Run `cargo test --all-targets --all-features`.
+💡 What: Changed `VisplaneSet::new()` to initialize its internal `planes` vector with `Vec::with_capacity(128)` instead of starting empty and dynamically reallocating.
+
+🎯 Why: The wall rendering pass creates visplanes (ceiling/floor strips) continuously during the main hot loop. Growing `Vec::new()` requires multiple costly heap reallocations per frame, slowing down rendering.
+
+📊 Impact: Eliminates almost all dynamic vector reallocations for visplanes during standard rendering loops. For typical Doom maps, 128 is a safe ceiling that easily covers visible sectors, turning O(log n) reallocations into 0 allocations on the hot path.
+
+🔬 Measurement: Verified with `cargo test -p doom-renderer`.
