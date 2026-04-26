@@ -102,3 +102,10 @@ path = "fuzz_targets/fuzz_target_analyzer.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_target_savegame_doomrs"
+path = "fuzz_targets/fuzz_target_savegame_doomrs.rs"
+test = false
+doc = false
+bench = false
