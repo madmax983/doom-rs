@@ -541,6 +541,86 @@ impl DoomGame {
         self.intermission_renderer = None;
     }
 
+
+    fn handle_menu_result(&mut self, result: doom_game::menu::MenuResult) {
+        match result {
+            doom_game::menu::MenuResult::StartGame { episode: _, skill } => {
+                // Map skill index to Skill enum (0=Baby..4=Nightmare).
+                let sk = Skill::from_num(skill).unwrap_or(Skill::Medium);
+                // Re-spawn the level with the chosen skill.
+                self.gs = GameState::new(&self.gs.level_name.clone());
+                spawn_level_things(
+                    &mut self.gs,
+                    &self.level,
+                    sk,
+                    doom_game::GameMode::SinglePlayer,
+                );
+                init_scrolling_walls(&mut self.gs, &self.level);
+                init_conveyors(&mut self.gs, &self.level);
+                init_sector_lights(&mut self.gs, &self.level);
+                self.player_view_height = PLAYER_HEIGHT;
+                self.prev_health = self.gs.player.health();
+                self.skill = sk;
+                self.phase_controller
+                    .start_new_game(Self::map_id_from_level_name(
+                        self.gs.level_name.as_str(),
+                    ));
+                self.intermission_renderer = None;
+                self.menu.close();
+                self.title_screen = None;
+                self.start_level_music();
+            }
+            doom_game::menu::MenuResult::Quit => {
+                // Can't stop the event loop from here; just close the menu.
+                self.menu.close();
+                self.title_screen = None;
+            }
+            doom_game::menu::MenuResult::LoadGame(slot) => {
+                let path = format!("doom_save_{slot}.bin");
+                match savegame::load_game(std::path::Path::new(&path), self.compat) {
+                    Ok((_header, payload)) => {
+                        if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
+                            self.console.print(format!("Load failed: {e}"));
+                            self.hud_messages.push(format!("Load failed: {e}"), 105);
+                        } else {
+                            self.player_view_height = if self.gs.player.is_dead() {
+                                DEAD_PLAYER_VIEW_HEIGHT
+                            } else {
+                                PLAYER_HEIGHT
+                            };
+                            self.console.print("Game loaded.".to_string());
+                            self.hud_messages.push("Game loaded.".to_string(), 105);
+                            self.start_level_music();
+                            self.menu.close();
+                        }
+                    }
+                    Err(e) => {
+                        self.console.print(format!("Load failed: {e}"));
+                        self.hud_messages.push(format!("Load failed: {e}"), 105);
+                    }
+                }
+            }
+            doom_game::menu::MenuResult::SaveGame(slot) => {
+                let path = format!("doom_save_{slot}.bin");
+                if let Err(e) = savegame::save_game(
+                    std::path::Path::new(&path),
+                    &self.gs,
+                    slot,
+                    self.compat,
+                ) {
+                    self.console.print(format!("Save failed: {e}"));
+                    self.hud_messages.push(format!("Save failed: {e}"), 105);
+                } else {
+                    self.console.print(format!("Saved to slot {slot}."));
+                    self.hud_messages
+                        .push(format!("Saved to slot {slot}."), 105);
+                    self.menu.close();
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn update_intermission_renderer(&mut self) {
         match self.phase_controller.phase() {
             GamePhase::Intermission { stats, next_map } => {
@@ -929,40 +1009,7 @@ impl DoomApp for DoomGame {
             // Enter = select; Backspace = back.
             if input.menu_select {
                 if let Some(result) = self.menu.select() {
-                    match result {
-                        doom_game::menu::MenuResult::StartGame { episode: _, skill } => {
-                            // Map skill index to Skill enum (0=Baby..4=Nightmare).
-                            let sk = Skill::from_num(skill).unwrap_or(Skill::Medium);
-                            // Re-spawn the level with the chosen skill.
-                            self.gs = GameState::new(&self.gs.level_name.clone());
-                            spawn_level_things(
-                                &mut self.gs,
-                                &self.level,
-                                sk,
-                                doom_game::GameMode::SinglePlayer,
-                            );
-                            init_scrolling_walls(&mut self.gs, &self.level);
-                            init_conveyors(&mut self.gs, &self.level);
-                            init_sector_lights(&mut self.gs, &self.level);
-                            self.player_view_height = PLAYER_HEIGHT;
-                            self.prev_health = self.gs.player.health();
-                            self.skill = sk;
-                            self.phase_controller
-                                .start_new_game(Self::map_id_from_level_name(
-                                    self.gs.level_name.as_str(),
-                                ));
-                            self.intermission_renderer = None;
-                            self.menu.close();
-                            self.title_screen = None;
-                            self.start_level_music();
-                        }
-                        doom_game::menu::MenuResult::Quit => {
-                            // Can't stop the event loop from here; just close the menu.
-                            self.menu.close();
-                            self.title_screen = None;
-                        }
-                        _ => {}
-                    }
+                    self.handle_menu_result(result);
                 }
             } else if let Some('\x08') = input.console_char {
                 // Backspace = back in menu (alternative to Escape).
@@ -1028,56 +1075,7 @@ impl DoomApp for DoomGame {
             }
             if input.menu_select {
                 if let Some(result) = self.menu.select() {
-                    match result {
-                        doom_game::menu::MenuResult::Quit => {
-                            // Signal quit; can't reach event loop directly, so
-                            // we just close the menu — user can press Q to exit.
-                            self.menu.close();
-                        }
-                        doom_game::menu::MenuResult::LoadGame(slot) => {
-                            let path = format!("doom_save_{slot}.bin");
-                            match savegame::load_game(std::path::Path::new(&path), self.compat) {
-                                Ok((_header, payload)) => {
-                                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                                        self.console.print(format!("Load failed: {e}"));
-                                        self.hud_messages.push(format!("Load failed: {e}"), 105);
-                                    } else {
-                                        self.player_view_height = if self.gs.player.is_dead() {
-                                            DEAD_PLAYER_VIEW_HEIGHT
-                                        } else {
-                                            PLAYER_HEIGHT
-                                        };
-                                        self.console.print("Game loaded.".to_string());
-                                        self.hud_messages.push("Game loaded.".to_string(), 105);
-                                        self.start_level_music();
-                                        self.menu.close();
-                                    }
-                                }
-                                Err(e) => {
-                                    self.console.print(format!("Load failed: {e}"));
-                                    self.hud_messages.push(format!("Load failed: {e}"), 105);
-                                }
-                            }
-                        }
-                        doom_game::menu::MenuResult::SaveGame(slot) => {
-                            let path = format!("doom_save_{slot}.bin");
-                            if let Err(e) = savegame::save_game(
-                                std::path::Path::new(&path),
-                                &self.gs,
-                                slot,
-                                self.compat,
-                            ) {
-                                self.console.print(format!("Save failed: {e}"));
-                                self.hud_messages.push(format!("Save failed: {e}"), 105);
-                            } else {
-                                self.console.print(format!("Saved to slot {slot}."));
-                                self.hud_messages
-                                    .push(format!("Saved to slot {slot}."), 105);
-                                self.menu.close();
-                            }
-                        }
-                        _ => {}
-                    }
+                    self.handle_menu_result(result);
                 }
             }
         }
