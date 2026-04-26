@@ -74,6 +74,16 @@ impl RelayServer {
     /// # Errors
     ///
     /// Returns an [`io::Error`] if binding to the specific address fails.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{RelayServer, NetConfig};
+    ///
+    /// // Bind the server to an OS-assigned port on localhost.
+    /// let server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).unwrap();
+    /// assert_eq!(server.connected_count(), 0);
+    /// ```
     pub fn bind(addr: &str, config: NetConfig) -> io::Result<Self> {
         let transport = NetTransport::bind(addr)?;
         Ok(Self {
@@ -87,6 +97,20 @@ impl RelayServer {
     ///
     /// Returns `Some(slot_number)` on success, or `None` if the server is full.
     /// If the address is already connected, returns the existing slot.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{RelayServer, NetConfig};
+    /// use std::net::SocketAddr;
+    ///
+    /// let mut server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).unwrap();
+    /// let client_addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+    ///
+    /// // The server manually accepts the connection and returns the slot
+    /// let slot = server.accept_connection(client_addr);
+    /// assert_eq!(slot, Some(0));
+    /// ```
     pub fn accept_connection(&mut self, addr: SocketAddr) -> Option<u8> {
         // Check if this address is already connected.
         for s in self.slots.iter().flatten() {
@@ -127,6 +151,26 @@ impl RelayServer {
     /// # Errors
     ///
     /// Returns an [`io::Error`] if sending the packet via the underlying transport fails.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{RelayServer, NetConfig, TicPacket};
+    /// use doom_types::TicCmd;
+    ///
+    /// let mut server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).unwrap();
+    ///
+    /// let packet = TicPacket {
+    ///     tic: 10,
+    ///     sender: 0,
+    ///     ack_tic: 9,
+    ///     state_checksum: 0,
+    ///     cmds: [TicCmd::default(); doom_net::MAX_PLAYERS],
+    /// };
+    ///
+    /// // Broadcast to everyone except the sender (slot 0)
+    /// server.broadcast_packet(&packet, Some(0)).unwrap();
+    /// ```
     pub fn broadcast_packet(
         &mut self,
         packet: &TicPacket,
@@ -169,6 +213,18 @@ impl RelayServer {
     /// # Errors
     ///
     /// Returns an [`io::Error`] if reading from the socket fails.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{RelayServer, NetConfig};
+    ///
+    /// let mut server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).unwrap();
+    ///
+    /// // Receive incoming packets. Will return None if no traffic exists.
+    /// let result = server.poll_once().unwrap();
+    /// assert!(result.is_none());
+    /// ```
     pub fn poll_once(&mut self) -> io::Result<Option<(TicPacket, u8)>> {
         let recv = self.transport.recv_packet()?;
         let Some((pkt, addr)) = recv else {
