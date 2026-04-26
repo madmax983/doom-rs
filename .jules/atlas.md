@@ -48,3 +48,6 @@
 **[Extract GameState sub-components to reduce state.rs bloat]**
 **Tangle:** The `doom-game/src/state.rs` file was a huge "God Struct" holding everything from `LevelStats` to `SectorMovers` and `SoundPropagation`, creating a sprawling mess of responsibilities.
 **Blueprint:** Extracted `LevelStats` to `stats.rs`, `SectorMovers` and all related structures to `movers.rs`, and `SoundPropagation` to `sound_prop.rs`. Updated `state.rs` to import these components, significantly improving code cohesion and module boundaries.
+**[Hide MapAnalyzer from core doom-map interface]**
+**Tangle:** The `MapAnalyzer` topology utility was coupled with the core map parsing crate `doom-map` and exported as part of its public API. This bloated the data layer with tactical analysis logic that was only actually consumed by the application (`doom-app`).
+**Blueprint:** Moved `analyzer.rs` out of `doom-map` and into `doom-app/src/analyzer.rs`, updating `main.rs` to include it as a `pub(crate) mod`. The external integration tests in `doom-map/tests/havoc_analyzer.rs` were migrated into the new file as inline unit tests since binary crates cannot be imported from `tests/`. This keeps `doom-map` focused strictly on data extraction and validation while reducing coupling.
