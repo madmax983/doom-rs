@@ -56,3 +56,7 @@
 ## 2026-04-23 - Added Missing `StateNum::NULL` test for tick_mobj fallback
 **Learning:** Found an uncovered branch related to the fallback `StateNum::NULL` handling in `tic.rs` when `unwrap_or(StateNum::NULL)` defaults due to the current state being `StateNum::NULL`.
 **Action:** Added targeted test case `tick_mobj_removes_entity_when_current_state_is_null` in `tic.rs` to reach 100% test coverage on state transitions.
+
+## 2024-05-18 - Remove unwrap() in tests and modules
+**Learning:** The use of `unwrap()` in test files and internal logic obscures test failure context by panicking with a generic error message.
+**Action:** Always replace `unwrap()` with `expect()` in tests and other files to provide meaningful context and explicitly document the invariant.

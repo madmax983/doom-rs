@@ -1338,7 +1338,7 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
     // Visplanes were built inline during the wall pass (Steps 3-4).
     // Each visplane already has correct per-column top/bottom bounds,
     // so no additional clip_plane_span_runs pass is needed.
-    if flat_cache.is_none() {
+    let Some(cache) = flat_cache else {
         return RenderOut {
             z_buf,
             clip_top: wall_clip_top,
@@ -1349,8 +1349,7 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
             clip_bot_history: wall_clip_bot_history,
             masked_columns,
         };
-    }
-    let cache = flat_cache.unwrap();
+    };
 
     for plane in visplanes.planes() {
         let resolved = anim.map_or(plane.flat_name, |a| a.resolve_flat(&plane.flat_name));

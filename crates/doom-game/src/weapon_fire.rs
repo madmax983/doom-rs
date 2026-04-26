@@ -556,7 +556,7 @@ mod tests {
         bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
         bm_data[10..12].copy_from_slice(&0u16.to_le_bytes());
         bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-        let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("blockmap must parse");
 
         Level {
             name: "TEST".to_string(),
@@ -601,7 +601,7 @@ mod tests {
                 special: 0,
                 tag: 0,
             }],
-            reject: Reject::parse_lump(&[0u8], 1).unwrap(),
+            reject: Reject::parse_lump(&[0u8], 1).expect("reject must parse"),
             blockmap,
         }
     }

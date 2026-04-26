@@ -741,7 +741,7 @@ mod tests {
         // Wall from (100, -50) to (100, 50). Ray from (0, 0) direction (1, 0).
         let t = ray_linedef_intersection(0.0, 0.0, 1.0, 0.0, 100.0, -50.0, 100.0, 50.0);
         assert!(t.is_some(), "should hit perpendicular wall");
-        let t = t.unwrap();
+        let t = t.expect("checked is_some");
         assert!((t - 100.0).abs() < 0.01, "t should be ~100, got {t}");
     }
 
@@ -758,7 +758,7 @@ mod tests {
         // Ray should hit at t=50 (the endpoint at y=0).
         let t = ray_linedef_intersection(0.0, 0.0, 1.0, 0.0, 50.0, -50.0, 50.0, 0.0);
         assert!(t.is_some(), "should hit segment at endpoint");
-        let t = t.unwrap();
+        let t = t.expect("checked is_some");
         assert!((t - 50.0).abs() < 0.01, "t should be ~50, got {t}");
     }
 
@@ -781,7 +781,7 @@ mod tests {
         // Diagonal wall from (0, 100) to (100, 0). Ray from (0, 0) going (1, 1).
         let t = ray_linedef_intersection(0.0, 0.0, 1.0, 1.0, 0.0, 100.0, 100.0, 0.0);
         assert!(t.is_some(), "should hit diagonal wall");
-        let t = t.unwrap();
+        let t = t.expect("checked is_some");
         assert!((t - 50.0).abs() < 0.1, "t should be ~50, got {t}");
     }
 
@@ -805,7 +805,7 @@ mod tests {
         // Wall from (0, 50) to (100, 50). Ray from (25, 0) direction (0, 1).
         let t = ray_linedef_intersection(25.0, 0.0, 0.0, 1.0, 0.0, 50.0, 100.0, 50.0);
         assert!(t.is_some(), "should hit horizontal wall");
-        let t = t.unwrap();
+        let t = t.expect("checked is_some");
         assert!((t - 50.0).abs() < 0.01, "t should be ~50, got {t}");
     }
 
@@ -814,7 +814,7 @@ mod tests {
         // Ray going right, wall at x=99. Range direction is 100 units.
         let t = ray_linedef_intersection(0.0, 0.0, 100.0, 0.0, 99.0, -50.0, 99.0, 50.0);
         assert!(t.is_some(), "should hit wall within range");
-        let t = t.unwrap();
+        let t = t.expect("checked is_some");
         // t is in ray-direction units: 99.0 / 100.0 = 0.99
         assert!((t - 0.99).abs() < 0.01, "t should be ~0.99, got {t}");
     }
@@ -852,7 +852,7 @@ mod tests {
 
         let opening = line_opening(&level, &ld);
         assert!(opening.is_some());
-        let (bottom, top) = opening.unwrap();
+        let (bottom, top) = opening.expect("checked is_some");
         assert_eq!(bottom, 0, "same floor heights -> bottom = 0");
         assert_eq!(top, 128, "same ceil heights -> top = 128");
     }
@@ -880,7 +880,7 @@ mod tests {
 
         let opening = line_opening(&level, &ld);
         assert!(opening.is_some());
-        let (bottom, top) = opening.unwrap();
+        let (bottom, top) = opening.expect("checked is_some");
         assert_eq!(bottom, 32, "open_bottom = max(0, 32) = 32");
         assert_eq!(top, 128, "open_top = min(128, 128) = 128");
     }
@@ -909,7 +909,7 @@ mod tests {
 
         let opening = line_opening(&level, &ld);
         assert!(opening.is_some());
-        let (bottom, top) = opening.unwrap();
+        let (bottom, top) = opening.expect("checked is_some");
         assert_eq!(bottom, 100);
         assert_eq!(top, 100);
         assert!(top <= bottom, "gap is zero — should block");
@@ -1398,7 +1398,7 @@ mod tests {
         // Ray from (0,0) going right, actor at (50, 0) radius 10.
         let t = ray_actor_intersection(0.0, 0.0, 1.0, 0.0, 50.0, 0.0, 10.0);
         assert!(t.is_some());
-        let t = t.unwrap();
+        let t = t.expect("checked is_some");
         assert!(
             (t - 40.0).abs() < 0.1,
             "should hit at t=~40 (50-10), got {t}"
@@ -1424,7 +1424,7 @@ mod tests {
         // Ray starts inside the actor's bounding box.
         let t = ray_actor_intersection(50.0, 0.0, 1.0, 0.0, 50.0, 0.0, 20.0);
         assert!(t.is_some(), "should hit when starting inside actor");
-        let t = t.unwrap();
+        let t = t.expect("checked is_some");
         assert!(t >= 0.0, "t should be >= 0");
     }
 

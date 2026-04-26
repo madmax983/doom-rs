@@ -880,7 +880,7 @@ mod tests {
     fn noclip_bypasses_any_check() {
         let level = make_open_level();
         let (mut slab, handle) = make_player_slab();
-        slab.get_mut(handle).unwrap().flags |= flags::MF_NOCLIP;
+        slab.get_mut(handle).expect("player must exist").flags |= flags::MF_NOCLIP;
         // Even with impossible coordinates, noclip always succeeds.
         assert!(p_try_move(
             &slab,
