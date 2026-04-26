@@ -153,7 +153,7 @@ pub fn actors_in_cell(
     cell_y: i32,
     origin_x: i32,
     origin_y: i32,
-    actor_positions: &[(i32, i32, i32, i32, bool)],
+    actor_positions: &[ActorTraceData],
     result: &mut Vec<usize>,
 ) {
     let cell_min_x = cell_x * 128 + origin_x;
@@ -162,7 +162,10 @@ pub fn actors_in_cell(
     let cell_max_y = cell_min_y + 128;
 
     result.clear();
-    for (i, &(ax, ay, radius, _height, _shootable)) in actor_positions.iter().enumerate() {
+    for (i, actor) in actor_positions.iter().enumerate() {
+        let ax = actor.x;
+        let ay = actor.y;
+        let radius = actor.radius;
         // Bounding-box overlap: actor extends from (ax - radius) to (ax + radius).
         if ax + radius >= cell_min_x
             && ax - radius < cell_max_x
@@ -253,6 +256,16 @@ fn ray_actor_intersection(
 /// # Returns
 /// The closest hit along the ray (wall, actor, or nothing).
 ///
+/// Data for a single actor in the trace check.
+#[derive(Clone, Copy, Debug)]
+pub struct ActorTraceData {
+    pub x: i32,
+    pub y: i32,
+    pub radius: i32,
+    pub height: i32,
+    pub shootable: bool,
+}
+
 /// Defines how actors should be checked during a ray trace.
 #[derive(Clone, Copy)]
 pub enum ActorCheck<'a> {
@@ -262,8 +275,8 @@ pub enum ActorCheck<'a> {
     Check {
         /// Optional index of the shooter to ignore (prevents self-hit).
         shooter_index: Option<usize>,
-        /// Slice of actors to check: `(x, y, radius, height, shootable)`.
-        actor_positions: &'a [(i32, i32, i32, i32, bool)],
+        /// Slice of actors to check.
+        actor_positions: &'a [ActorTraceData],
     },
 }
 
@@ -481,7 +494,11 @@ pub fn trace_ray(
                         continue;
                     }
 
-                    let (ax, ay, radius, _height, shootable) = actor_positions[actor_idx];
+                    let actor = actor_positions[actor_idx];
+                    let ax = actor.x;
+                    let ay = actor.y;
+                    let radius = actor.radius;
+                    let shootable = actor.shootable;
 
                     // Skip non-shootable or dead actors.
                     if !shootable {
@@ -922,7 +939,7 @@ mod tests {
     #[test]
     fn actors_in_correct_cell() {
         // Cell (0,0) covers [0, 128) x [0, 128). Actor at (64, 64) with radius 16.
-        let actors = vec![(64, 64, 16, 56, true)];
+        let actors = vec![ActorTraceData { x: 64, y: 64, radius: 16, height: 56, shootable: true }];
         let mut result = Vec::new();
         actors_in_cell(0, 0, 0, 0, &actors, &mut result);
         assert_eq!(result, vec![0], "actor at (64,64) should be in cell (0,0)");
@@ -931,7 +948,7 @@ mod tests {
     #[test]
     fn actors_in_adjacent_cell_excluded() {
         // Cell (1,0) covers [128, 256) x [0, 128). Actor at (64, 64) radius 16.
-        let actors = vec![(64, 64, 16, 56, true)];
+        let actors = vec![ActorTraceData { x: 64, y: 64, radius: 16, height: 56, shootable: true }];
         let mut result = Vec::new();
         actors_in_cell(1, 0, 0, 0, &actors, &mut result);
         assert!(
@@ -942,7 +959,7 @@ mod tests {
 
     #[test]
     fn empty_cell_returns_empty() {
-        let actors: Vec<(i32, i32, i32, i32, bool)> = vec![];
+        let actors: Vec<ActorTraceData> = vec![];
         let mut result = Vec::new();
         actors_in_cell(0, 0, 0, 0, &actors, &mut result);
         assert!(result.is_empty(), "no actors -> empty result");
@@ -951,7 +968,7 @@ mod tests {
     #[test]
     fn actor_on_cell_boundary_overlap() {
         // Actor at (120, 64), radius 20. Extends to x=140 which overlaps cell(1,0) = [128,256).
-        let actors = vec![(120, 64, 20, 56, true)];
+        let actors = vec![ActorTraceData { x: 120, y: 64, radius: 20, height: 56, shootable: true }];
 
         let mut result0 = Vec::new();
         actors_in_cell(0, 0, 0, 0, &actors, &mut result0);
@@ -969,9 +986,9 @@ mod tests {
     #[test]
     fn multiple_actors_in_same_cell() {
         let actors = vec![
-            (32, 32, 10, 56, true),
-            (96, 96, 10, 56, true),
-            (200, 200, 10, 56, true), // in cell (1,1)
+            ActorTraceData { x: 32, y: 32, radius: 10, height: 56, shootable: true },
+            ActorTraceData { x: 96, y: 96, radius: 10, height: 56, shootable: true },
+            ActorTraceData { x: 200, y: 200, radius: 10, height: 56, shootable: true }, // in cell (1,1)
         ];
         let mut result = Vec::new();
         actors_in_cell(0, 0, 0, 0, &actors, &mut result);
@@ -983,7 +1000,7 @@ mod tests {
     #[test]
     fn actors_with_nonzero_origin() {
         // Origin at (-128, -128). Cell(0,0) covers [-128, 0) x [-128, 0).
-        let actors = vec![(-64, -64, 10, 56, true)];
+        let actors = vec![ActorTraceData { x: -64, y: -64, radius: 10, height: 56, shootable: true }];
         let mut result = Vec::new();
         actors_in_cell(0, 0, -128, -128, &actors, &mut result);
         assert!(
@@ -1186,7 +1203,7 @@ mod tests {
     fn ray_hits_actor_before_wall() {
         let level = make_wall_level(); // wall at y=64
         // Actor at (64, 32) with radius 10 — between shooter and wall.
-        let actors = vec![(64, 32, 10, 56, true)];
+        let actors = vec![ActorTraceData { x: 64, y: 32, radius: 10, height: 56, shootable: true }];
         let result = trace_ray(
             &level,
             64,
@@ -1211,7 +1228,7 @@ mod tests {
     fn ray_hits_wall_before_actor() {
         let level = make_wall_level(); // wall at y=64
         // Actor at (64, 100) with radius 10 — behind the wall.
-        let actors = vec![(64, 100, 10, 56, true)];
+        let actors = vec![ActorTraceData { x: 64, y: 100, radius: 10, height: 56, shootable: true }];
         let result = trace_ray(
             &level,
             64,
@@ -1237,8 +1254,8 @@ mod tests {
         let level = make_wall_level();
         // Two actors in the path: actor 0 (shooter) and actor 1 (target).
         let actors = vec![
-            (64, 0, 10, 56, true),  // actor 0: the shooter
-            (64, 32, 10, 56, true), // actor 1: in the line of fire
+            ActorTraceData { x: 64, y: 0, radius: 10, height: 56, shootable: true },  // actor 0: the shooter
+            ActorTraceData { x: 64, y: 32, radius: 10, height: 56, shootable: true }, // actor 1: in the line of fire
         ];
         let result = trace_ray(
             &level,
@@ -1264,7 +1281,7 @@ mod tests {
     fn ray_ignores_dead_non_shootable_actors() {
         let level = make_wall_level();
         // Actor with shootable=false.
-        let actors = vec![(64, 32, 10, 56, false)];
+        let actors = vec![ActorTraceData { x: 64, y: 32, radius: 10, height: 56, shootable: false }];
         let result = trace_ray(
             &level,
             64,
@@ -1298,7 +1315,7 @@ mod tests {
             vec![vec![], vec![], vec![], vec![]],
         );
 
-        let actors = vec![(64, 100, 20, 56, true)];
+        let actors = vec![ActorTraceData { x: 64, y: 100, radius: 20, height: 56, shootable: true }];
         let result = trace_ray(
             &level,
             64,
@@ -1333,7 +1350,7 @@ mod tests {
         );
 
         // Actor at (64, 500) — beyond max_range of 200.
-        let actors = vec![(64, 500, 20, 56, true)];
+        let actors = vec![ActorTraceData { x: 64, y: 500, radius: 20, height: 56, shootable: true }];
         let result = trace_ray(
             &level,
             64,
@@ -1366,8 +1383,8 @@ mod tests {
         );
 
         let actors = vec![
-            (64, 100, 20, 56, true), // actor 0: farther
-            (64, 50, 20, 56, true),  // actor 1: closer
+            ActorTraceData { x: 64, y: 100, radius: 20, height: 56, shootable: true }, // actor 0: farther
+            ActorTraceData { x: 64, y: 50, radius: 20, height: 56, shootable: true },  // actor 1: closer
         ];
         let result = trace_ray(
             &level,

@@ -52,3 +52,7 @@
 **Refactoring large match statements using from_repr**
 **Learning:** `tick_sector_specials` and `tick_sector_damage` used redundant, hardcoded magic numbers inside match blocks across `SectorDamageType`.
 **Action:** Extract magic numbers into explicitly named constants (e.g., `LEGACY_DAMAGE_HELLSLIME`) to self-document the values, and replace duplicated health-reduction inline logic with calls to a common `apply_sector_damage` helper function to enforce DRY principles without altering runtime behavior.
+
+**Refactor trace_ray actor checking to resolve Tuple/Boolean Blindness**
+**Learning:** `actors_in_cell` and `ActorCheck::Check` used a raw tuple `(i32, i32, i32, i32, bool)` to pass actor data around. This forced reviewers to remember the order of the fields and created Boolean Blindness for the last parameter.
+**Action:** Created an explicit `ActorTraceData` struct with named fields (`x`, `y`, `radius`, `height`, `shootable`) to strongly type the data, making the call sites and destructuring code immediately self-documenting.
