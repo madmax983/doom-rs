@@ -29,6 +29,7 @@
 **Refactored Boolean Blindness in door and floor specials**
 **Learning:** Functions like `open_door(gs, level, idx, true)` and `ev_build_stairs(gs, level, idx, type, false)` suffer from Boolean Blindness, hiding the true intent (`OpenWaitClose` and `CrushBehavior::NoCrush`).
 **Action:** Replace `bool` with descriptive enums like `DoorBehavior` (`OpenStay` vs `OpenWaitClose`) and `CrushBehavior` (`Crush` vs `NoCrush`) to strongly type API boundaries and self-document the code at the call site.
+
 **Refactored duplicated `match` statements over `SoundRequest` in `handle_sound_events`**
 **Learning:** Redundant `match` statements that extract values from an enum based on its variant create code duplication and visual noise, especially when the same matching logic is repeated within the same function or module.
 **Action:** Extract the matching logic into helper methods (e.g., `emitter(&self)` and `origin_handle(&self)`) on the enum itself using an `impl` block to encapsulate the behavior and simplify the call sites.
@@ -40,7 +41,7 @@
 **Refactor sidedef sector extraction guard clauses**
 **Learning:** `activate_doors` repeatedly used two lines to extract a `sector_idx` from `left_sidedef`: `let Some(sd) = level.sidedefs.get(left_sidedef as usize) else { return; }; let sector_idx = sd.sector as usize;`. This pattern was repeated 16 times inside a `match` statement, creating verbose boilerplate.
 **Action:** Use `.map(|sd| sd.sector as usize)` directly in the guard clause: `let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else { return; };` to eliminate the unused intermediate `sd` variable and compress the boilerplate into a single statement.
-**[Refactored Boolean Blindness in weapon_anim]**\n**Learning:**  using mutually exclusive booleans  and  allowed impossible states (both true) and complicated the update logic across multiple modules.\n**Action:** Replaced boolean state flags with a strictly typed  enum (, , ) to enforce valid states and clean up update/check conditionals.
+
 **[Refactored Boolean Blindness in weapon_anim]**
 **Learning:** `WeaponSprite` using mutually exclusive booleans `raising` and `lowering` allowed impossible states (both true) and complicated the update logic across multiple modules.
 **Action:** Replaced boolean state flags with a strictly typed `WeaponTransition` enum (`None`, `Raising`, `Lowering`) to enforce valid states and clean up update/check conditionals.
@@ -52,6 +53,11 @@
 **Refactoring large match statements using from_repr**
 **Learning:** `tick_sector_specials` and `tick_sector_damage` used redundant, hardcoded magic numbers inside match blocks across `SectorDamageType`.
 **Action:** Extract magic numbers into explicitly named constants (e.g., `LEGACY_DAMAGE_HELLSLIME`) to self-document the values, and replace duplicated health-reduction inline logic with calls to a common `apply_sector_damage` helper function to enforce DRY principles without altering runtime behavior.
+
 ## 2024-05-16 - Refactored parse_* in DeHackEd parser
 **Learning:** Returning a dummy error using `"".parse::<f64>().unwrap_err()` to fail through an `and_then` block is a strange hack and reduces code readability.
 **Action:** Replace dummy error hacks by mapping the errors properly, or replacing `unwrap_err` with standard idiomatic Rust error handling constructs.
+
+**Refactor unwrap_or on Option field extractions**
+**Learning:** Extracting inner fields via chained `.map(|x| x.field).unwrap_or(false)` or `.unwrap_or_default()` causes Boolean Blindness and unnecessary intermediate value evaluations that are confusing and immediately consumed.
+**Action:** Use an idiomatic `if let Some(x) = ...` or `let Some(x) = ... else { ... }` block to directly access the inner value.

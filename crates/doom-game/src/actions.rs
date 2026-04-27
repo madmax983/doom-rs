@@ -588,17 +588,11 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         if let Some(actor_sector) = actor_sector {
             if let Some(sound_target) = crate::sound::get_sound_target(gs, actor_sector) {
                 // Verify the sound target is alive.
-                let target_alive = gs
-                    .mobjslab
-                    .get(sound_target)
-                    .map(|t| !t.is_dead())
-                    .unwrap_or(false);
-
-                if target_alive
-                    && (!is_ambush || crate::sight::p_check_sight(gs, lv, handle, sound_target))
-                {
-                    transition_to_see_state(gs, handle, mo_kind, sound_target);
-                    return;
+                if let Some(target) = gs.mobjslab.get(sound_target) {
+                    if !target.is_dead() && (!is_ambush || crate::sight::p_check_sight(gs, lv, handle, sound_target)) {
+                        transition_to_see_state(gs, handle, mo_kind, sound_target);
+                        return;
+                    }
                 }
             }
         }
@@ -606,15 +600,8 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     // --- Step 2: Look for players by line-of-sight ---
     // Check the player exists and is alive.
-    let player_alive = gs
-        .mobjslab
-        .get(player_handle)
-        .map(|p| !p.is_dead())
-        .unwrap_or(false);
-
-    if !player_alive {
-        return;
-    }
+    let Some(player) = gs.mobjslab.get(player_handle) else { return; };
+    if player.is_dead() { return; }
 
     // Use the full p_check_sight from sight.rs if we have a level, otherwise
     // fall back to the local simplified version.
@@ -887,13 +874,8 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         a_look(gs, handle, level);
 
         // Check if a_look found a new target.
-        let found_target = gs
-            .mobjslab
-            .get(handle)
-            .map(|mo| mo.target != MobjHandle::NULL)
-            .unwrap_or(false);
-
-        if !found_target {
+        let Some(mo) = gs.mobjslab.get(handle) else { return; };
+        if mo.target == MobjHandle::NULL {
             // Revert to idle spawn state.
             let spawn_sn = mobjinfo::MOBJINFO
                 .get(mo_kind as usize)
@@ -1655,10 +1637,11 @@ fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
         .mobjslab
         .iter_handles()
         .filter(|h| {
-            gs.mobjslab
-                .get(*h)
-                .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
-                .unwrap_or(false)
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::LostSoul && m.health > 0
+            } else {
+                false
+            }
         })
         .count();
 
@@ -3841,10 +3824,11 @@ mod tests {
 
         // Find the Rocket.
         let rocket = gs.mobjslab.iter_handles().find(|h| {
-            gs.mobjslab
-                .get(*h)
-                .map(|m| m.kind == MobjKind::Rocket)
-                .unwrap_or(false)
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::Rocket
+            } else {
+                false
+            }
         });
         assert!(rocket.is_some(), "must spawn a Rocket MobjKind");
     }
@@ -3859,10 +3843,11 @@ mod tests {
         a_skel_missile(&mut gs, skel);
 
         let tracer = gs.mobjslab.iter_handles().find(|h| {
-            gs.mobjslab
-                .get(*h)
-                .map(|m| m.kind == MobjKind::Tracer)
-                .unwrap_or(false)
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::Tracer
+            } else {
+                false
+            }
         });
         assert!(tracer.is_some(), "must spawn a Tracer MobjKind");
     }
@@ -3877,10 +3862,11 @@ mod tests {
         a_bspi_attack(&mut gs, bspi);
 
         let plaz = gs.mobjslab.iter_handles().find(|h| {
-            gs.mobjslab
-                .get(*h)
-                .map(|m| m.kind == MobjKind::ArachPlaz)
-                .unwrap_or(false)
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::ArachPlaz
+            } else {
+                false
+            }
         });
         assert!(plaz.is_some(), "must spawn an ArachPlaz MobjKind");
     }
@@ -3907,11 +3893,12 @@ mod tests {
             .mobjslab
             .iter_handles()
             .filter(|h| {
-                gs.mobjslab
-                    .get(*h)
-                    .map(|m| m.kind == MobjKind::FatShot)
-                    .unwrap_or(false)
-            })
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::FatShot
+            } else {
+                false
+            }
+        })
             .count();
         assert_eq!(fatshot_count, 2, "both projectiles must be FatShot");
     }
@@ -3927,11 +3914,12 @@ mod tests {
             .mobjslab
             .iter_handles()
             .filter(|h| {
-                gs.mobjslab
-                    .get(*h)
-                    .map(|m| m.kind == MobjKind::FatShot)
-                    .unwrap_or(false)
-            })
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::FatShot
+            } else {
+                false
+            }
+        })
             .count();
         assert_eq!(fatshot_count, 2, "fat_attack2 must spawn 2 FatShots");
     }
@@ -3947,11 +3935,12 @@ mod tests {
             .mobjslab
             .iter_handles()
             .filter(|h| {
-                gs.mobjslab
-                    .get(*h)
-                    .map(|m| m.kind == MobjKind::FatShot)
-                    .unwrap_or(false)
-            })
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::FatShot
+            } else {
+                false
+            }
+        })
             .count();
         assert_eq!(fatshot_count, 2, "fat_attack3 must spawn 2 FatShots");
     }
@@ -4007,11 +3996,12 @@ mod tests {
             .mobjslab
             .iter_handles()
             .filter(|h| {
-                gs.mobjslab
-                    .get(*h)
-                    .map(|m| m.kind == MobjKind::LostSoul)
-                    .unwrap_or(false)
-            })
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::LostSoul
+            } else {
+                false
+            }
+        })
             .count();
 
         a_pain_attack(&mut gs, pe);
@@ -4020,11 +4010,12 @@ mod tests {
             .mobjslab
             .iter_handles()
             .filter(|h| {
-                gs.mobjslab
-                    .get(*h)
-                    .map(|m| m.kind == MobjKind::LostSoul)
-                    .unwrap_or(false)
-            })
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::LostSoul
+            } else {
+                false
+            }
+        })
             .count();
 
         assert_eq!(
@@ -4056,11 +4047,12 @@ mod tests {
             .mobjslab
             .iter_handles()
             .filter(|h| {
-                gs.mobjslab
-                    .get(*h)
-                    .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
-                    .unwrap_or(false)
-            })
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::LostSoul && m.health > 0
+            } else {
+                false
+            }
+        })
             .count();
 
         a_pain_attack(&mut gs, pe);
@@ -4069,11 +4061,12 @@ mod tests {
             .mobjslab
             .iter_handles()
             .filter(|h| {
-                gs.mobjslab
-                    .get(*h)
-                    .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
-                    .unwrap_or(false)
-            })
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::LostSoul && m.health > 0
+            } else {
+                false
+            }
+        })
             .count();
 
         assert_eq!(
@@ -4107,11 +4100,12 @@ mod tests {
             .mobjslab
             .iter_handles()
             .filter(|h| {
-                gs.mobjslab
-                    .get(*h)
-                    .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
-                    .unwrap_or(false)
-            })
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::LostSoul && m.health > 0
+            } else {
+                false
+            }
+        })
             .count();
 
         assert_eq!(count, 21, "pain attack should spawn 1 more (20->21)");
@@ -4324,10 +4318,11 @@ mod tests {
         );
 
         let fire = gs.mobjslab.iter_handles().find(|h| {
-            gs.mobjslab
-                .get(*h)
-                .map(|m| m.kind == MobjKind::VileFire)
-                .unwrap_or(false)
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::VileFire
+            } else {
+                false
+            }
         });
         assert!(fire.is_some(), "must spawn a VileFire MobjKind");
     }
@@ -4547,10 +4542,11 @@ mod tests {
         );
 
         let cube = gs.mobjslab.iter_handles().find(|h| {
-            gs.mobjslab
-                .get(*h)
-                .map(|m| m.kind == MobjKind::BossCube)
-                .unwrap_or(false)
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::BossCube
+            } else {
+                false
+            }
         });
         assert!(cube.is_some(), "must spawn a BossCube MobjKind");
     }
@@ -4622,10 +4618,11 @@ mod tests {
 
         // SpawnFire fog should exist.
         let fog = gs.mobjslab.iter_handles().find(|h| {
-            gs.mobjslab
-                .get(*h)
-                .map(|m| m.kind == MobjKind::SpawnFire)
-                .unwrap_or(false)
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind == MobjKind::SpawnFire
+            } else {
+                false
+            }
         });
         assert!(fog.is_some(), "must spawn a SpawnFire fog effect");
     }
@@ -4652,15 +4649,14 @@ mod tests {
 
         // Find the spawned monster (not SpawnFire, not player, not cube).
         let monster = gs.mobjslab.iter_handles().find(|h| {
-            gs.mobjslab
-                .get(*h)
-                .map(|m| {
-                    m.kind != MobjKind::Player
-                        && m.kind != MobjKind::SpawnFire
-                        && m.kind != MobjKind::BossCube
-                        && BOSS_SPAWN_TYPES.contains(&m.kind)
-                })
-                .unwrap_or(false)
+            if let Some(m) = gs.mobjslab.get(*h) {
+                m.kind != MobjKind::Player
+                    && m.kind != MobjKind::SpawnFire
+                    && m.kind != MobjKind::BossCube
+                    && BOSS_SPAWN_TYPES.contains(&m.kind)
+            } else {
+                false
+            }
         });
         assert!(
             monster.is_some(),

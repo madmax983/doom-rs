@@ -605,9 +605,9 @@ impl DehPatch {
     fn parse_i32(s: &str) -> Result<i32, DehError> {
         s.parse::<i32>()
             .or_else(|_| {
-                let v = s.parse::<f64>().map_err(|_| ())?;
+                let v = s.parse::<f64>().map_err(|_| DehError::BadField(format!("expected valid number, got {s:?}")))?;
                 if v.is_nan() {
-                    Err(())
+                    Err(DehError::BadField(format!("expected valid number, got {s:?}")))
                 } else if v.is_infinite() {
                     if v.is_sign_positive() {
                         Ok(i32::MAX)
@@ -624,9 +624,9 @@ impl DehPatch {
     fn parse_u32(s: &str) -> Result<u32, DehError> {
         s.parse::<u32>()
             .or_else(|_| {
-                let v = s.parse::<f64>().map_err(|_| ())?;
+                let v = s.parse::<f64>().map_err(|_| DehError::BadField(format!("expected valid number, got {s:?}")))?;
                 if v.is_nan() {
-                    Err(())
+                    Err(DehError::BadField(format!("expected valid number, got {s:?}")))
                 } else if v.is_infinite() {
                     if v.is_sign_positive() {
                         Ok(u32::MAX)
@@ -643,9 +643,9 @@ impl DehPatch {
     fn parse_u16(s: &str) -> Result<u16, DehError> {
         s.parse::<u16>()
             .or_else(|_| {
-                let v = s.parse::<f64>().map_err(|_| ())?;
+                let v = s.parse::<f64>().map_err(|_| DehError::BadField(format!("expected valid number, got {s:?}")))?;
                 if v.is_nan() {
-                    Err(())
+                    Err(DehError::BadField(format!("expected valid number, got {s:?}")))
                 } else if v.is_infinite() {
                     if v.is_sign_positive() {
                         Ok(u16::MAX)
@@ -662,9 +662,9 @@ impl DehPatch {
     fn parse_u8(s: &str) -> Result<u8, DehError> {
         s.parse::<u8>()
             .or_else(|_| {
-                let v = s.parse::<f64>().map_err(|_| ())?;
+                let v = s.parse::<f64>().map_err(|_| DehError::BadField(format!("expected valid number, got {s:?}")))?;
                 if v.is_nan() {
-                    Err(())
+                    Err(DehError::BadField(format!("expected valid number, got {s:?}")))
                 } else if v.is_infinite() {
                     if v.is_sign_positive() {
                         Ok(u8::MAX)
@@ -681,9 +681,9 @@ impl DehPatch {
     fn parse_usize(s: &str) -> Result<usize, DehError> {
         s.parse::<usize>()
             .or_else(|_| {
-                let v = s.parse::<f64>().map_err(|_| ())?;
+                let v = s.parse::<f64>().map_err(|_| DehError::BadField(format!("expected valid number, got {s:?}")))?;
                 if v.is_nan() {
-                    Err(())
+                    Err(DehError::BadField(format!("expected valid number, got {s:?}")))
                 } else if v.is_infinite() {
                     if v.is_sign_positive() {
                         Ok(usize::MAX)
