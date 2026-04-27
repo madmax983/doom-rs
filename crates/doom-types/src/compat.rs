@@ -50,3 +50,33 @@ impl FromStr for CompatibilityProfile {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use core::str::FromStr;
+
+    #[test]
+    fn compat_profile_as_str() {
+        assert_eq!(CompatibilityProfile::Extended.as_str(), "extended");
+        assert_eq!(CompatibilityProfile::VanillaStrict.as_str(), "vanilla-strict");
+    }
+
+    #[test]
+    fn compat_profile_display() {
+        assert_eq!(format!("{}", CompatibilityProfile::Extended), "extended");
+        assert_eq!(format!("{}", CompatibilityProfile::VanillaStrict), "vanilla-strict");
+    }
+
+    #[test]
+    fn compat_profile_from_str() {
+        assert_eq!(CompatibilityProfile::from_str("extended"), Ok(CompatibilityProfile::Extended));
+        assert_eq!(CompatibilityProfile::from_str("vanilla-strict"), Ok(CompatibilityProfile::VanillaStrict));
+        assert!(CompatibilityProfile::from_str("other").is_err());
+    }
+
+    #[test]
+    fn compat_profile_default() {
+        assert_eq!(CompatibilityProfile::default(), CompatibilityProfile::Extended);
+    }
+}

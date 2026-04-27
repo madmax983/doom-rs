@@ -63,3 +63,28 @@ impl WeaponType {
         u8::try_from(n).ok().and_then(Self::from_repr)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn weapon_type_from_num_valid() {
+        assert_eq!(WeaponType::from_num(0), Some(WeaponType::Fist));
+        assert_eq!(WeaponType::from_num(1), Some(WeaponType::Pistol));
+        assert_eq!(WeaponType::from_num(2), Some(WeaponType::Shotgun));
+        assert_eq!(WeaponType::from_num(3), Some(WeaponType::Chaingun));
+        assert_eq!(WeaponType::from_num(4), Some(WeaponType::RocketLauncher));
+        assert_eq!(WeaponType::from_num(5), Some(WeaponType::PlasmaRifle));
+        assert_eq!(WeaponType::from_num(6), Some(WeaponType::Bfg));
+        assert_eq!(WeaponType::from_num(7), Some(WeaponType::Chainsaw));
+        assert_eq!(WeaponType::from_num(8), Some(WeaponType::SuperShotgun));
+    }
+
+    #[test]
+    fn weapon_type_from_num_invalid() {
+        assert_eq!(WeaponType::from_num(9), None);
+        assert_eq!(WeaponType::from_num(100), None);
+        assert_eq!(WeaponType::from_num(usize::MAX), None);
+    }
+}
