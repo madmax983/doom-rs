@@ -3071,15 +3071,16 @@ fn main() {
                 }
                 eprintln!();
             } else {
-                eprintln!("Engine Failure: {}", err);
+                eprintln!("❌ Engine Failure: {}", err);
 
                 let mut causes = err.chain().skip(1).peekable();
                 if causes.peek().is_some() {
-                    eprintln!("Reason:");
+                    eprintln!("↳ Reason:");
                     for cause in causes {
                         eprintln!("    {}", cause);
                     }
                 }
+                eprintln!();
             }
         }
         std::process::exit(1);
