@@ -272,7 +272,10 @@ mod tests {
         // tic 8 collides with slot 0.
         log.record(8, make_cmds(20));
         assert!(log.get(0).is_none(), "tic 0 evicted by tic 8");
-        assert_eq!(log.get(8).expect("value must exist in test")[0].forward_move, 20);
+        assert_eq!(
+            log.get(8).expect("value must exist in test")[0].forward_move,
+            20
+        );
     }
 
     #[test]
@@ -280,7 +283,10 @@ mod tests {
         let mut log = InputLog::new(8);
         log.set_authoritative(4, make_cmds(77));
         assert!(log.has_authoritative(4));
-        assert_eq!(log.get(4).expect("value must exist in test")[0].forward_move, 77);
+        assert_eq!(
+            log.get(4).expect("value must exist in test")[0].forward_move,
+            77
+        );
     }
 
     #[test]

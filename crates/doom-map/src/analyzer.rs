@@ -1,13 +1,8 @@
-//! Map topology analysis tools.
+//! Map topology analyzer for finding chokepoints and isolated areas.
 //!
-//! This module provides the [`MapAnalyzer`] utility, which performs topological
-//! graph analysis on a [`SectorGraph`] to identify tactical features.
-//!
-//! # Features
-//! - **Chokepoints**: Identifies articulation points in the map—sectors that, if
-//!   removed, would split the map into separate, disconnected areas. These are
-//!   often critical doorways or hallways.
-//! - **Isolated Areas**: Finds distinct disconnected clusters of sectors within the map.
+//! The `MapAnalyzer` uses standard graph algorithms to detect critical map features.
+//! **Chokepoints**: (Articulation Points) Ssectors that, if removed, would split the map into two disconnected halves.
+//! **Isolated Areas**: Finds distinct disconnected clusters of sectors within the map.
 //!
 //! # Examples
 //! ```
@@ -76,82 +71,64 @@ impl<'a> MapAnalyzer<'a> {
 
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
-                self.ap_util(
-                    node,
-                    &mut visited,
-                    &mut discovery_time,
-                    &mut low_time,
-                    &mut parent,
-                    &mut articulation_points,
-                    &mut time,
-                );
+                // Iterative DFS to avoid stack overflow on deep graphs.
+                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+
+                visited.insert(node);
+                time += 1;
+                discovery_time.insert(node, time);
+                low_time.insert(node, time);
+                let mut children_map: HashMap<usize, usize> = HashMap::new();
+
+                while let Some((u, mut neighbors_iter)) = stack.pop() {
+                    let mut pushed_child = false;
+
+                    while let Some(&v) = neighbors_iter.next() {
+                        if !self.graph.adjacency_list.contains_key(&v) {
+                            continue;
+                        }
+                        if !visited.contains(&v) {
+                            *children_map.entry(u).or_default() += 1;
+                            parent.insert(v, u);
+
+                            visited.insert(v);
+                            time += 1;
+                            discovery_time.insert(v, time);
+                            low_time.insert(v, time);
+
+                            stack.push((u, neighbors_iter));
+                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            pushed_child = true;
+                            break;
+                        } else if parent.get(&u) != Some(&v) {
+                            let low_u = *low_time.get(&u).unwrap();
+                            let disc_v = *discovery_time.get(&v).unwrap();
+                            low_time.insert(u, low_u.min(disc_v));
+                        }
+                    }
+
+                    if !pushed_child {
+                        // After visiting all neighbors of u, if u is not root, update parent's low_time
+                        if let Some(&p) = parent.get(&u) {
+                            let low_u = *low_time.get(&u).unwrap();
+                            let low_p = *low_time.get(&p).unwrap();
+                            low_time.insert(p, low_p.min(low_u));
+
+                            let disc_p = *discovery_time.get(&p).unwrap();
+                            if low_u >= disc_p && parent.contains_key(&p) {
+                                articulation_points.insert(p);
+                            }
+                        } else if *children_map.get(&u).unwrap_or(&0) > 1 {
+                            articulation_points.insert(u);
+                        }
+                    }
+                }
             }
         }
 
         let mut ap_vec: Vec<usize> = articulation_points.into_iter().collect();
         ap_vec.sort_unstable();
         ap_vec
-    }
-
-    fn ap_util(
-        &self,
-        u: usize,
-        visited: &mut HashSet<usize>,
-        discovery_time: &mut HashMap<usize, usize>,
-        low_time: &mut HashMap<usize, usize>,
-        parent: &mut HashMap<usize, usize>,
-        ap: &mut HashSet<usize>,
-        time: &mut usize,
-    ) {
-        let mut children = 0;
-        visited.insert(u);
-        *time += 1;
-        discovery_time.insert(u, *time);
-        low_time.insert(u, *time);
-
-        if let Some(neighbors) = self.graph.adjacency_list.get(&u) {
-            for &v in neighbors {
-                // Ignore missing target nodes (malformed graph handling)
-                if !self.graph.adjacency_list.contains_key(&v) {
-                    continue;
-                }
-                if !visited.contains(&v) {
-                    children += 1;
-                    parent.insert(v, u);
-                    self.ap_util(v, visited, discovery_time, low_time, parent, ap, time);
-
-                    // Since we check contains_key above, these nodes are guaranteed to have been
-                    // visited and added to low_time.
-                    let low_v = *low_time
-                        .get(&v)
-                        .expect("Visited node must have low_time set");
-                    let low_u = *low_time
-                        .get(&u)
-                        .expect("Visited node must have low_time set");
-                    low_time.insert(u, low_u.min(low_v));
-
-                    if parent.get(&u).is_none() && children > 1 {
-                        ap.insert(u);
-                    }
-                    if parent.get(&u).is_some()
-                        && low_v
-                            >= *discovery_time
-                                .get(&u)
-                                .expect("Visited node must have discovery_time set")
-                    {
-                        ap.insert(u);
-                    }
-                } else if parent.get(&u) != Some(&v) {
-                    let low_u = *low_time
-                        .get(&u)
-                        .expect("Visited node must have low_time set");
-                    let disc_v = *discovery_time
-                        .get(&v)
-                        .expect("Visited node must have discovery_time set");
-                    low_time.insert(u, low_u.min(disc_v));
-                }
-            }
-        }
     }
 
     /// Finds distinct disconnected areas of the map.
@@ -293,5 +270,25 @@ mod tests {
         assert_eq!(areas.len(), 1);
         assert!(areas[0].contains(&0));
         assert!(areas[0].contains(&1));
+    }
+
+    #[test]
+    fn test_chokepoints_large_linear() {
+        // Havoc: Trigger stack overflow without iterative rewrite
+        let mut adj = HashMap::new();
+        for i in 0..10000 {
+            adj.insert(i, HashSet::from([i + 1]));
+        }
+        adj.insert(10000, HashSet::from([9999]));
+        for i in 1..10000 {
+            adj.get_mut(&i).unwrap().insert(i - 1);
+        }
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let chokes = analyzer.chokepoints();
+        assert_eq!(chokes.len(), 9999);
     }
 }

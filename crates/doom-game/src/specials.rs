@@ -3965,7 +3965,11 @@ mod tests {
 
         tick_sector_specials(&mut gs, &level, handle);
 
-        let health = gs.mobjslab.get(handle).expect("value must exist in test").health;
+        let health = gs
+            .mobjslab
+            .get(handle)
+            .expect("value must exist in test")
+            .health;
         assert_eq!(health, 90, "lava (special 5) must deal 10 damage per tic");
     }
 
@@ -3984,7 +3988,10 @@ mod tests {
             "player state must track sector damage"
         );
         assert_eq!(
-            gs.mobjslab.get(handle).expect("value must exist in test").health,
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .health,
             90,
             "player mobj health must stay aligned with player state"
         );
@@ -3998,7 +4005,11 @@ mod tests {
 
         tick_sector_specials(&mut gs, &level, handle);
 
-        let health = gs.mobjslab.get(handle).expect("value must exist in test").health;
+        let health = gs
+            .mobjslab
+            .get(handle)
+            .expect("value must exist in test")
+            .health;
         assert_eq!(health, 100, "actor above lava floor must take no damage");
     }
 
@@ -5637,7 +5648,10 @@ mod tests {
             "player state must track periodic sector damage"
         );
         assert_eq!(
-            gs.mobjslab.get(handle).expect("value must exist in test").health,
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .health,
             95,
             "player mobj health must stay aligned with periodic sector damage"
         );
@@ -5735,17 +5749,35 @@ mod tests {
         // level_time = 1 (not a multiple of 32) -- no damage.
         gs.stats.level_time = 1;
         tick_sector_damage(&mut gs, &level);
-        assert_eq!(gs.mobjslab.get(handle).expect("value must exist in test").health, 100);
+        assert_eq!(
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .health,
+            100
+        );
 
         // level_time = 15 -- no damage.
         gs.stats.level_time = 15;
         tick_sector_damage(&mut gs, &level);
-        assert_eq!(gs.mobjslab.get(handle).expect("value must exist in test").health, 100);
+        assert_eq!(
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .health,
+            100
+        );
 
         // level_time = 32 -- damage applied.
         gs.stats.level_time = 32;
         tick_sector_damage(&mut gs, &level);
-        assert_eq!(gs.mobjslab.get(handle).expect("value must exist in test").health, 95);
+        assert_eq!(
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .health,
+            95
+        );
     }
 
     #[test]
@@ -6122,7 +6154,8 @@ mod tests {
     /// All sectors share the same floor flat (`FLAT1`) by default.
     fn make_stair_level(sector_count: usize, base_floor: i16, tag: u16) -> doom_map::Level {
         let reject_bytes = vec![0u8; (sector_count * sector_count).div_ceil(8)];
-        let reject = doom_map::Reject::parse_lump(&reject_bytes, sector_count).expect("value must exist in test");
+        let reject = doom_map::Reject::parse_lump(&reject_bytes, sector_count)
+            .expect("value must exist in test");
 
         let mut sectors = Vec::new();
         for i in 0..sector_count {
@@ -6209,7 +6242,8 @@ mod tests {
         tag: u16,
     ) -> doom_map::Level {
         let reject_bytes = vec![0u8; 2]; // 3 sectors: ceil(9/8)=2
-        let reject = doom_map::Reject::parse_lump(&reject_bytes, 3).expect("value must exist in test");
+        let reject =
+            doom_map::Reject::parse_lump(&reject_bytes, 3).expect("value must exist in test");
 
         let sectors = vec![
             doom_map::Sector {
@@ -6327,7 +6361,8 @@ mod tests {
     /// Sector 1 = platform sector (tagged).
     fn make_platform_level(adj_floor: i16, plat_floor: i16, tag: u16) -> doom_map::Level {
         let reject_bytes = vec![0u8; 1]; // 2 sectors
-        let reject = doom_map::Reject::parse_lump(&reject_bytes, 2).expect("value must exist in test");
+        let reject =
+            doom_map::Reject::parse_lump(&reject_bytes, 2).expect("value must exist in test");
 
         let sectors = vec![
             doom_map::Sector {
@@ -6766,7 +6801,8 @@ mod tests {
     /// Helper to build a tagged level with a linedef that triggers a special.
     fn make_tagged_linedef_level(special: u16, tag: u16) -> doom_map::Level {
         let reject_bytes = vec![0u8; 1]; // 2 sectors
-        let reject = doom_map::Reject::parse_lump(&reject_bytes, 2).expect("value must exist in test");
+        let reject =
+            doom_map::Reject::parse_lump(&reject_bytes, 2).expect("value must exist in test");
 
         let sectors = vec![
             doom_map::Sector {
@@ -7390,7 +7426,11 @@ mod tests {
         assert_eq!(level.sectors[1].ceil_height, 8);
 
         // Player should have taken damage.
-        let health = gs.mobjslab.get(handle).expect("value must exist in test").health;
+        let health = gs
+            .mobjslab
+            .get(handle)
+            .expect("value must exist in test")
+            .health;
         assert!(
             health < 100,
             "player must take crush damage when ceiling is at floor+8"

@@ -918,7 +918,9 @@ mod tests {
     #[test]
     fn switch_get_opposite_sw1exit_returns_sw2exit() {
         let switches = SwitchList::new();
-        let result = switches.get_opposite(b"SW1EXIT\0").expect("value must exist in test");
+        let result = switches
+            .get_opposite(b"SW1EXIT\0")
+            .expect("value must exist in test");
         assert!(
             names_equal(&result, b"SW2EXIT\0"),
             "SW1EXIT should map to SW2EXIT, got {:?}",
@@ -931,7 +933,9 @@ mod tests {
     #[test]
     fn switch_get_opposite_sw2exit_returns_sw1exit() {
         let switches = SwitchList::new();
-        let result = switches.get_opposite(b"SW2EXIT\0").expect("value must exist in test");
+        let result = switches
+            .get_opposite(b"SW2EXIT\0")
+            .expect("value must exist in test");
         assert!(
             names_equal(&result, b"SW1EXIT\0"),
             "SW2EXIT should map to SW1EXIT, got {:?}",
@@ -1149,6 +1153,9 @@ mod tests {
         // names_equal is case-insensitive, so lowercase should work.
         let result = switches.get_opposite(b"sw1exit\0");
         assert!(result.is_some(), "case-insensitive lookup should work");
-        assert!(names_equal(&result.expect("value must exist in test"), b"SW2EXIT\0"));
+        assert!(names_equal(
+            &result.expect("value must exist in test"),
+            b"SW2EXIT\0"
+        ));
     }
 }
