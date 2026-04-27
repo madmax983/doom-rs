@@ -456,7 +456,9 @@ mod tests {
         let mut receiver = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
         let recv_addr = receiver.local_addr().expect("value must exist in test");
         let bad_data = b"bad packet";
-        sender.send_raw(bad_data, &recv_addr).expect("value must exist in test");
+        sender
+            .send_raw(bad_data, &recv_addr)
+            .expect("value must exist in test");
 
         // Use a polling loop instead of thread::sleep
         let start = std::time::Instant::now();
@@ -509,7 +511,9 @@ mod tests {
 
         // Send via send_raw to the receiver's address.
         let data = pkt.to_bytes();
-        let sent = sender.send_raw(&data, &recv_addr).expect("value must exist in test");
+        let sent = sender
+            .send_raw(&data, &recv_addr)
+            .expect("value must exist in test");
         assert_eq!(sent, TIC_PACKET_SIZE);
 
         // Receive on the other end.
@@ -520,7 +524,10 @@ mod tests {
         assert_eq!(received_pkt.sender, 1);
         assert_eq!(received_pkt.ack_tic, 40);
         assert_eq!(received_pkt.state_checksum, 0xCAFE);
-        assert_eq!(from_addr, sender.local_addr().expect("value must exist in test"));
+        assert_eq!(
+            from_addr,
+            sender.local_addr().expect("value must exist in test")
+        );
     }
 
     #[test]
@@ -556,8 +563,12 @@ mod tests {
         };
 
         let data = pkt.to_bytes();
-        sender.send_raw(&data, &recv_addr).expect("value must exist in test");
-        sender.send_raw(&data, &recv_addr).expect("value must exist in test");
+        sender
+            .send_raw(&data, &recv_addr)
+            .expect("value must exist in test");
+        sender
+            .send_raw(&data, &recv_addr)
+            .expect("value must exist in test");
 
         let stats = sender.stats();
         assert_eq!(stats.packets_sent, 2, "must track 2 sent packets");

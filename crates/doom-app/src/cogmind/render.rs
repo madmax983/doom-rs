@@ -578,11 +578,13 @@ mod tests {
         let level = make_bsp_test_level();
 
         state.ensure_grid(&level);
-        let grid_ptr = state.tile_grid.as_ref().expect("value must exist in test") as *const TileGrid;
+        let grid_ptr =
+            state.tile_grid.as_ref().expect("value must exist in test") as *const TileGrid;
 
         // Second call with same level name should not rebuild.
         state.ensure_grid(&level);
-        let grid_ptr2 = state.tile_grid.as_ref().expect("value must exist in test") as *const TileGrid;
+        let grid_ptr2 =
+            state.tile_grid.as_ref().expect("value must exist in test") as *const TileGrid;
         assert_eq!(grid_ptr, grid_ptr2, "grid should be cached, not rebuilt");
     }
 

@@ -501,7 +501,10 @@ mod tests {
         let proj_h = p_spawn_missile(&mut gs, source, target, MobjKind::ImpFireball);
         assert!(proj_h.is_some(), "must create a projectile");
 
-        let proj = gs.mobjslab.get(proj_h.expect("value must exist in test")).expect("value must exist in test");
+        let proj = gs
+            .mobjslab
+            .get(proj_h.expect("value must exist in test"))
+            .expect("value must exist in test");
         assert_eq!(proj.kind, MobjKind::ImpFireball);
         assert_ne!(proj.flags & flags::MF_MISSILE, 0);
         // Target is east of source: momx should be positive, momy ~0.
@@ -520,7 +523,8 @@ mod tests {
         let source = gs.player.handle;
         let target = spawn_target(&mut gs, 100, 0, 60);
 
-        let proj_h = p_spawn_missile(&mut gs, source, target, MobjKind::ImpFireball).expect("value must exist in test");
+        let proj_h = p_spawn_missile(&mut gs, source, target, MobjKind::ImpFireball)
+            .expect("value must exist in test");
         let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
         let info = &MOBJINFO[MobjKind::ImpFireball as usize];
 
@@ -570,7 +574,10 @@ mod tests {
         let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket);
         assert!(proj_h.is_some());
 
-        let proj = gs.mobjslab.get(proj_h.expect("value must exist in test")).expect("value must exist in test");
+        let proj = gs
+            .mobjslab
+            .get(proj_h.expect("value must exist in test"))
+            .expect("value must exist in test");
         assert_eq!(proj.kind, MobjKind::Rocket);
         assert_ne!(proj.flags & flags::MF_MISSILE, 0);
         // Since angle.cos() and angle.sin() return 0 when trig tables are not
@@ -598,7 +605,8 @@ mod tests {
         let mut gs = make_game_state();
         let source = gs.player.handle;
 
-        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::PlasmaBall).expect("value must exist in test");
+        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::PlasmaBall)
+            .expect("value must exist in test");
         let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
         // Player z=0, height=56, so chest height = 56/2 = 28.
         assert_eq!(proj.z, Fixed16_16::from_int(28));
@@ -609,7 +617,8 @@ mod tests {
         let mut gs = make_game_state();
         let source = gs.player.handle;
 
-        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket).expect("value must exist in test");
+        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket)
+            .expect("value must exist in test");
         let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
         let info = &MOBJINFO[MobjKind::Rocket as usize];
 

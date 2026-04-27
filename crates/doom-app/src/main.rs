@@ -541,7 +541,6 @@ impl DoomGame {
         self.intermission_renderer = None;
     }
 
-
     fn handle_menu_result(&mut self, result: doom_game::menu::MenuResult) {
         match result {
             doom_game::menu::MenuResult::StartGame { episode: _, skill } => {
@@ -562,9 +561,7 @@ impl DoomGame {
                 self.prev_health = self.gs.player.health();
                 self.skill = sk;
                 self.phase_controller
-                    .start_new_game(Self::map_id_from_level_name(
-                        self.gs.level_name.as_str(),
-                    ));
+                    .start_new_game(Self::map_id_from_level_name(self.gs.level_name.as_str()));
                 self.intermission_renderer = None;
                 self.menu.close();
                 self.title_screen = None;
@@ -602,12 +599,9 @@ impl DoomGame {
             }
             doom_game::menu::MenuResult::SaveGame(slot) => {
                 let path = format!("doom_save_{slot}.bin");
-                if let Err(e) = savegame::save_game(
-                    std::path::Path::new(&path),
-                    &self.gs,
-                    slot,
-                    self.compat,
-                ) {
+                if let Err(e) =
+                    savegame::save_game(std::path::Path::new(&path), &self.gs, slot, self.compat)
+                {
                     self.console.print(format!("Save failed: {e}"));
                     self.hud_messages.push(format!("Save failed: {e}"), 105);
                 } else {
