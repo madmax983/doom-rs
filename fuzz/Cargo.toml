@@ -109,3 +109,13 @@ path = "fuzz_targets/fuzz_target_savegame_doomrs.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "fuzz_target_cheats"
+path = "fuzz_targets/fuzz_target_cheats.rs"
+test = false
+doc = false
+bench = false
+
+[dependencies.doom-app]
+path = "../crates/doom-app"
