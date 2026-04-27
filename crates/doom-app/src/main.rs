@@ -25,6 +25,7 @@
 //!
 //! Usage: doom-app --iwad doom1.wad [--pwad mod.wad] [--warp E1M1]
 
+mod arena_cli;
 mod audio_system;
 mod cheats;
 mod cogmind;
@@ -90,12 +91,17 @@ fn parse_compatibility_profile(value: &str) -> Result<CompatibilityProfile, &'st
     value.parse()
 }
 
+#[derive(clap::Subcommand, Debug)]
+enum AppCommand {
+    Arena(arena_cli::ArenaArgs),
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "doom-app", about = "Doom engine (doom-rs)", styles = cli_styles())]
 struct Args {
     /// Path to IWAD file (doom1.wad, doom2.wad, freedoom1.wad, etc.).
     #[arg(long, alias = "wad")]
-    iwad: std::path::PathBuf,
+    iwad: Option<std::path::PathBuf>,
 
     /// Optional PWAD overlay(s). Repeat to stack multiple patch WADs.
     #[arg(long)]
@@ -194,6 +200,8 @@ struct Args {
     /// Export the level layout to a GeoJSON file and exit.
     #[arg(long)]
     export_geojson: Option<std::path::PathBuf>,
+    #[command(subcommand)]
+    command: Option<AppCommand>,
 
     /// Save telemetry data for the session as a GeoJSON file upon exit.
     #[cfg(feature = "telemetry")]
@@ -2168,10 +2176,10 @@ fn run_doom(args: Args) -> Result<()> {
 
     let compat = args.compat;
 
-    let iwad_bytes = std::fs::read(&args.iwad).with_context(|| {
+    let iwad_bytes = std::fs::read(args.iwad.as_ref().unwrap()).with_context(|| {
         format!(
             "Could not locate the IWAD file '{}'. Please check the path and try again.",
-            args.iwad.display()
+            args.iwad.as_ref().unwrap().display()
         )
     })?;
 
@@ -2180,7 +2188,7 @@ fn run_doom(args: Args) -> Result<()> {
     wad_stack.push_iwad(iwad_bytes).with_context(|| {
         format!(
             "The IWAD file '{}' could not be parsed. It may be corrupted.",
-            args.iwad.display()
+            args.iwad.as_ref().unwrap().display()
         )
     })?;
 
@@ -3036,6 +3044,25 @@ fn run_doom(args: Args) -> Result<()> {
 }
 
 fn main() {
+    let args = match Args::try_parse() {
+        Ok(a) => a,
+        Err(e) => {
+            e.exit();
+        }
+    };
+    if let Some(AppCommand::Arena(arena_args)) = &args.command {
+        if let Err(e) = arena_cli::run_arena(arena_args) {
+            eprintln!("Arena error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    if args.iwad.is_none() {
+        eprintln!("error: The following required arguments were not provided:\n  --iwad <IWAD>\n\nUsage: doom-app --iwad <IWAD>\n\nFor more information, try '--help'.");
+        std::process::exit(1);
+    }
+
     let args = match Args::try_parse() {
         Ok(a) => a,
         Err(e) => {
@@ -4813,7 +4840,7 @@ mod tests {
         ])
         .expect("args with explicit IWAD/PWAD flags should parse");
 
-        assert_eq!(args.iwad, std::path::PathBuf::from("doom2.wad"));
+        assert_eq!(args.iwad, Some(std::path::PathBuf::from("doom2.wad")));
         assert_eq!(
             args.pwad,
             vec![

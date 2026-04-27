@@ -20,7 +20,15 @@
 /// assert_eq!(monster as u16, 3);
 /// ```
 #[derive(
-    Clone, Copy, Debug, PartialEq, Eq, Hash, strum_macros::FromRepr, strum_macros::EnumIter,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash,
+    strum_macros::FromRepr,
+    strum_macros::EnumIter,
+    strum_macros::EnumString,
 )]
 #[repr(u16)]
 pub enum MobjKind {
