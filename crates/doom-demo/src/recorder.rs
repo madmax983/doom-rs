@@ -168,7 +168,10 @@ mod tests {
         let mut rec = singleplayer_recorder();
         rec.record_tic_cmds(&[DemoTicCmd::default()]);
         let lmp = rec.to_lmp();
-        assert_eq!(*lmp.last().expect("value must exist in test"), LMP_TERMINATOR);
+        assert_eq!(
+            *lmp.last().expect("value must exist in test"),
+            LMP_TERMINATOR
+        );
     }
 
     // Test 16: finish produces valid LMP
@@ -187,7 +190,10 @@ mod tests {
         // 13-byte header + 4-byte tic + 1-byte terminator = 18
         assert_eq!(lmp.len(), 18);
         assert_eq!(lmp[0], LMP_VERSION_1_9);
-        assert_eq!(*lmp.last().expect("value must exist in test"), LMP_TERMINATOR);
+        assert_eq!(
+            *lmp.last().expect("value must exist in test"),
+            LMP_TERMINATOR
+        );
     }
 
     #[test]

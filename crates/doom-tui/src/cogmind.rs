@@ -361,7 +361,10 @@ mod tests {
         // Frame should still be all defaults.
         for y in 0..4 {
             for x in 0..4 {
-                assert_eq!(*frame.get(x, y).expect("value must exist in test"), CogmindCell::default());
+                assert_eq!(
+                    *frame.get(x, y).expect("value must exist in test"),
+                    CogmindCell::default()
+                );
             }
         }
     }

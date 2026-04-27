@@ -606,7 +606,10 @@ mod tests {
         let mut gs = GameState::new("E1M1");
         let handle = spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         assert!(handle.is_some());
-        let mo = gs.mobjslab.get(handle.expect("value must exist in test")).expect("value must exist in test");
+        let mo = gs
+            .mobjslab
+            .get(handle.expect("value must exist in test"))
+            .expect("value must exist in test");
         assert_eq!(mo.kind, MobjKind::Player);
         assert_eq!(mo.x, Fixed16_16::from_int(100));
         assert_eq!(mo.y, Fixed16_16::from_int(200));
@@ -638,8 +641,8 @@ mod tests {
             flags: 7,
         }]);
         let mut gs = GameState::new("E1M1");
-        let handle =
-            spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer).expect("value must exist in test");
+        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer)
+            .expect("value must exist in test");
         let mo = gs.mobjslab.get(handle).expect("value must exist in test");
         // Player MOBJINFO: health=100, radius=16, height=56
         assert_eq!(mo.health, 100);
@@ -661,8 +664,8 @@ mod tests {
         );
         let mut gs = GameState::new("E1M1");
 
-        let handle =
-            spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer).expect("value must exist in test");
+        let handle = spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer)
+            .expect("value must exist in test");
         let mo = gs.mobjslab.get(handle).expect("value must exist in test");
 
         assert_eq!(mo.z, Fixed16_16::from_int(24));
@@ -1460,11 +1463,23 @@ mod tests {
 
         // First call: movecount goes from 0 to 1, returns false.
         assert!(!p_nightmare_respawn(&mut gs, None, handle));
-        assert_eq!(gs.mobjslab.get(handle).expect("value must exist in test").movecount, 1);
+        assert_eq!(
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .movecount,
+            1
+        );
 
         // Second call: movecount goes to 2.
         assert!(!p_nightmare_respawn(&mut gs, None, handle));
-        assert_eq!(gs.mobjslab.get(handle).expect("value must exist in test").movecount, 2);
+        assert_eq!(
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .movecount,
+            2
+        );
     }
 
     #[test]
@@ -1473,12 +1488,18 @@ mod tests {
         let handle = make_dead_trooper_corpse(&mut gs);
 
         // Set movecount just below threshold.
-        gs.mobjslab.get_mut(handle).expect("value must exist in test").movecount = NIGHTMARE_RESPAWN_TICS - 1;
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("value must exist in test")
+            .movecount = NIGHTMARE_RESPAWN_TICS - 1;
 
         // One more increment, still not at threshold.
         assert!(!p_nightmare_respawn(&mut gs, None, handle));
         assert_eq!(
-            gs.mobjslab.get(handle).expect("value must exist in test").movecount,
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .movecount,
             NIGHTMARE_RESPAWN_TICS
         );
 
@@ -1495,7 +1516,10 @@ mod tests {
         let handle = make_dead_trooper_corpse(&mut gs);
 
         // Set movecount to threshold so respawn fires immediately.
-        gs.mobjslab.get_mut(handle).expect("value must exist in test").movecount = NIGHTMARE_RESPAWN_TICS;
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("value must exist in test")
+            .movecount = NIGHTMARE_RESPAWN_TICS;
 
         let initial_count = gs.mobjslab.len();
         assert!(p_nightmare_respawn(&mut gs, None, handle));
@@ -1516,7 +1540,10 @@ mod tests {
             })
             .expect("Fresh trooper should exist after respawn");
 
-        let fresh = gs.mobjslab.get(fresh_handle).expect("value must exist in test");
+        let fresh = gs
+            .mobjslab
+            .get(fresh_handle)
+            .expect("value must exist in test");
 
         // Verify spawn point position.
         assert_eq!(fresh.x, Fixed16_16::from_int(200));
@@ -1536,7 +1563,10 @@ mod tests {
         let level = make_test_level_with_things_and_floor(vec![], 40);
         let mut gs = GameState::new("TEST");
         let handle = make_dead_trooper_corpse(&mut gs);
-        gs.mobjslab.get_mut(handle).expect("value must exist in test").movecount = NIGHTMARE_RESPAWN_TICS;
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("value must exist in test")
+            .movecount = NIGHTMARE_RESPAWN_TICS;
 
         assert!(p_nightmare_respawn(&mut gs, Some(&level), handle));
 
@@ -1565,7 +1595,10 @@ mod tests {
     fn nightmare_respawn_spawns_teleport_fog() {
         let mut gs = GameState::new("TEST");
         let handle = make_dead_trooper_corpse(&mut gs);
-        gs.mobjslab.get_mut(handle).expect("value must exist in test").movecount = NIGHTMARE_RESPAWN_TICS;
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("value must exist in test")
+            .movecount = NIGHTMARE_RESPAWN_TICS;
 
         assert!(p_nightmare_respawn(&mut gs, None, handle));
 
@@ -1587,7 +1620,10 @@ mod tests {
     fn nightmare_respawn_fails_when_spawn_spot_is_blocked_by_solid_actor() {
         let mut gs = GameState::new("TEST");
         let handle = make_dead_trooper_corpse(&mut gs);
-        gs.mobjslab.get_mut(handle).expect("value must exist in test").movecount = NIGHTMARE_RESPAWN_TICS;
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("value must exist in test")
+            .movecount = NIGHTMARE_RESPAWN_TICS;
 
         let mut blocker = Mobj::new(
             MobjKind::Trooper,
@@ -1646,12 +1682,21 @@ mod tests {
 
         // Monster should still be alive in the slab (corpse).
         assert!(gs.mobjslab.get(handle).is_some());
-        assert_eq!(gs.mobjslab.get(handle).expect("value must exist in test").movecount, 419);
+        assert_eq!(
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .movecount,
+            419
+        );
 
         // 420th call pushes to threshold.
         assert!(!p_nightmare_respawn(&mut gs, None, handle));
         assert_eq!(
-            gs.mobjslab.get(handle).expect("value must exist in test").movecount,
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .movecount,
             NIGHTMARE_RESPAWN_TICS
         );
 
@@ -1677,7 +1722,10 @@ mod tests {
 
         // Spawn a dead trooper with spawn data.
         let handle = make_dead_trooper_corpse(&mut gs);
-        gs.mobjslab.get_mut(handle).expect("value must exist in test").movecount = NIGHTMARE_RESPAWN_TICS;
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("value must exist in test")
+            .movecount = NIGHTMARE_RESPAWN_TICS;
 
         // Run tick_all_mobjs — should trigger respawn on Nightmare.
         crate::tic::tick_all_mobjs(&mut gs, None);
@@ -1713,7 +1761,10 @@ mod tests {
         gs.player = crate::player::PlayerState::pistol_start(player_handle);
 
         let handle = make_dead_trooper_corpse(&mut gs);
-        gs.mobjslab.get_mut(handle).expect("value must exist in test").movecount = NIGHTMARE_RESPAWN_TICS;
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("value must exist in test")
+            .movecount = NIGHTMARE_RESPAWN_TICS;
 
         // Run tick_all_mobjs on Hard — should NOT trigger respawn.
         crate::tic::tick_all_mobjs(&mut gs, None);
