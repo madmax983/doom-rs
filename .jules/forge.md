@@ -55,3 +55,7 @@
 ## 2024-05-16 - Refactored parse_* in DeHackEd parser
 **Learning:** Returning a dummy error using `"".parse::<f64>().unwrap_err()` to fail through an `and_then` block is a strange hack and reduces code readability.
 **Action:** Replace dummy error hacks by mapping the errors properly, or replacing `unwrap_err` with standard idiomatic Rust error handling constructs.
+
+## 2024-05-17 - Refactored `parse_*` float fallback hacks in `dehacked.rs`
+**Learning:** When refactoring error-handling closures in Rust (such as `or_else(|_| ...)` or `map_err(|_| ...)`), you may encounter `error[E0282]: type annotations needed` if the new code removes the type constraints the compiler relied on.
+**Action:** Resolve this by explicitly annotating the closure parameter type (e.g., `|_: std::num::ParseIntError|` or `|_: ()|`).
