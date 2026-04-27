@@ -11,50 +11,50 @@
 //! - `player.ammo[i] ≤ MAX_AMMO[i]` for all i.
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
-pub mod actions;
+pub(crate) mod actions;
 pub mod automap;
-pub mod cheats;
-pub mod combat;
-pub mod dehacked;
-pub mod face;
-pub mod intermission;
-pub mod linedef_dispatch;
-pub mod menu;
-pub mod mobj;
-pub mod mobjinfo;
-pub mod movement;
+pub(crate) mod cheats;
+pub(crate) mod combat;
+pub(crate) mod dehacked;
+pub(crate) mod face;
+pub(crate) mod intermission;
+pub(crate) mod linedef_dispatch;
+pub(crate) mod menu;
+pub(crate) mod mobj;
+pub(crate) mod mobjinfo;
+pub(crate) mod movement;
 /// Mover structures and functions for things like doors, ceilings, and floors.
-pub mod movers;
-pub mod phase;
-pub mod pickups;
+pub(crate) mod movers;
+pub(crate) mod phase;
+pub(crate) mod pickups;
 pub mod player;
-pub mod projectile;
-pub mod random;
+pub(crate) mod projectile;
+pub(crate) mod random;
 pub mod savegame;
 mod savegame_vanilla;
-pub mod sight;
-pub mod snapshot;
-pub mod sound;
+pub(crate) mod sight;
+pub(crate) mod snapshot;
+pub(crate) mod sound;
 /// Sound propagation and audio request structs.
-pub mod sound_prop;
-pub mod spawn;
-pub mod specials;
-pub mod state;
-pub mod states;
+pub(crate) mod sound_prop;
+pub(crate) mod spawn;
+pub(crate) mod specials;
+pub(crate) mod state;
+pub(crate) mod states;
 /// Level statistics tracking (kills, items, secrets, etc).
-pub mod stats;
+pub(crate) mod stats;
 #[cfg(feature = "style_meter")]
-pub mod style;
-pub mod switch;
+pub(crate) mod style;
+pub(crate) mod switch;
 #[cfg(feature = "telemetry")]
-pub mod telemetry;
-pub mod tic;
-pub mod trace;
-pub mod weapon_fire;
-pub mod weapons;
+pub(crate) mod telemetry;
+pub(crate) mod tic;
+pub(crate) mod trace;
+pub(crate) mod weapon_fire;
+pub(crate) mod weapons;
 
 #[cfg(feature = "director")]
-pub mod director;
+pub(crate) mod director;
 #[cfg(feature = "director")]
 pub use director::*;
 
@@ -64,7 +64,7 @@ pub use automap::{
     draw_grid, draw_line, draw_thing_marker, init_seen_lines, line_color, mark_lines_seen,
     mark_subsector_lines_seen, thing_marker_color, world_to_screen,
 };
-pub use cheats::{CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
+pub use cheats::{CHEAT_BEHOLD_PREFIX, CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
 pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
@@ -143,3 +143,12 @@ pub use weapon_fire::{
     select_next_weapon, weapon_ammo_cost,
 };
 pub use weapons::{fire_weapon, player_can_fire, setup_psprites, tick_psprites};
+
+// Re-exports for downstream crates (doom-app, doom-renderer, doom-tui, etc)
+pub use player::{KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD, KEY_YELLOW_SKULL};
+pub use player::{powers, psprite_slots};
+pub use mobj::MobjStateEntry;
+pub use states::ids;
+pub use specials::{ev_floor_lower_to_nearest, ev_floor_raise_to_ceiling, next_highest_floor_above, spawn_level_specials};
+pub use weapon_fire::weapon_refire_tics;
+pub use menu::GameVersion;

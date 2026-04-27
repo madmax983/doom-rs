@@ -1,11 +1,6 @@
-**Smell:**
-There were two heavily duplicated `match result { ... }` blocks inside `tick` within `crates/doom-app/src/main.rs`, handling the same menu results (`StartGame`, `Quit`, `LoadGame`, `SaveGame`) repeatedly in both the title screen state and the in-game menu state. This violated DRY principles, increased cognitive load, and created a large "Pyramid of Doom" directly inside the game's core `tick` loop.
+🗺️ Atlas: Make internal modules of doom-game pub(crate) to enforce boundaries
 
-**Solution:**
-Extracted the duplicated code into a cohesive, private helper function `fn handle_menu_result(&mut self, result: doom_game::menu::MenuResult)`. Replaced both matching blocks inside `tick` with simple `self.handle_menu_result(result)` calls.
-
-**Benefit:**
-Reduces technical debt, shrinks the size of the 350+ line `tick` function by over 100 lines, removes duplicated logic entirely, and standardizes menu side-effect handling to exactly one location.
-
-**Verification:**
-Tests passed. `cargo clippy --all-targets --all-features -- -D warnings` and `cargo test` run clean. No runtime logic changed, this is purely a zero-behavior-change structural refactor.
+🕸️ Tangle: doom-game's internal modules were publicly exported, leading to downstream crates depending on internal implementation details and creating a leaky abstraction.
+📐 Blueprint: Changed internal mod declarations in doom-game to pub(crate), and updated all downstream dependents (doom-app, doom-renderer, doom-tui) to use the correct exported symbols from the root of doom-game instead of reaching into internal modules.
+🧱 Stability: Reduces coupling across crates and enforces the root of doom-game as a true facade.
+🔬 Verification: Builds successfully and passes all tests and clippy checks without regressions.

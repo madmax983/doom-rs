@@ -257,7 +257,7 @@ pub(crate) fn apply_save(gs: &mut GameState, payload: &SaveGame) -> Result<(), S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_game::savegame::{SAVE_MAGIC, SaveFormat};
+    use doom_game::{SAVE_MAGIC, SaveFormat};
     use doom_game::{Mobj, PlayerState};
     use doom_types::CompatibilityProfile;
     use doom_types::mobj_kind::MobjKind;

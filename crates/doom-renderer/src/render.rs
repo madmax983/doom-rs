@@ -3212,7 +3212,7 @@ mod tests {
 
     #[test]
     fn masked_midtexture_sprite_ordering_keeps_grate_in_front() {
-        use doom_game::states::sprite_names;
+        use doom_game::sprite_names;
         use doom_types::{ANG90, Fixed16_16};
 
         init_trig();
@@ -3285,7 +3285,7 @@ mod tests {
 
     #[test]
     fn sprite_between_nested_top_portals_keeps_near_clip_context() {
-        use doom_game::states::sprite_names;
+        use doom_game::sprite_names;
         use doom_types::{ANG90, Fixed16_16};
 
         init_trig();

@@ -8,8 +8,8 @@
 //! with a state-driven approach that correctly handles animation frames and
 //! the fullbright flag.
 
-use doom_game::mobj::MobjStateEntry;
-use doom_game::states::sprite_names;
+use doom_game::MobjStateEntry;
+use doom_game::sprite_names;
 
 use crate::render_flags::RenderFlag;
 
@@ -195,7 +195,7 @@ pub fn sprite_lump_name_with_mirror(sprite_name: &str, frame: u8, rotation: u8) 
 /// Fullbright is determined by the state's frame field (bit 0x80).
 /// Fuzz is determined by the mobj's `MF_SHADOW` flag.
 pub fn render_flag_from_state(frame: u8, mobj_flags: u32) -> RenderFlag {
-    use doom_game::mobj::flags::MF_SHADOW;
+    use doom_game::flags::MF_SHADOW;
 
     if mobj_flags & MF_SHADOW != 0 {
         RenderFlag::Fuzz
@@ -285,8 +285,8 @@ fn mirror_rotation_lookup(rotation: u8) -> Option<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_game::mobj::MobjStateEntry;
-    use doom_game::states::{STATES, ids, sprite_names};
+    use doom_game::MobjStateEntry;
+    use doom_game::{STATES, ids, sprite_names};
 
     // ======================================================================
     // resolve_sprite tests
@@ -614,7 +614,7 @@ mod tests {
     #[test]
     fn render_flag_fuzz_takes_priority() {
         // MF_SHADOW overrides even fullbright.
-        let flag = render_flag_from_state(0x80, doom_game::mobj::flags::MF_SHADOW);
+        let flag = render_flag_from_state(0x80, doom_game::flags::MF_SHADOW);
         assert_eq!(flag, RenderFlag::Fuzz);
     }
 

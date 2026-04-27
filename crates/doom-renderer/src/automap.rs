@@ -2381,7 +2381,7 @@ mod tests {
 
             render_automap(&mut fb, &level, 500, 500, Bam(0), 0.5, true, false, &[true]);
 
-            // Grid uses doom_game::COLOR_GRID.
+            // Grid uses doom_game::automap::COLOR_GRID.
             let grid_count = fb
                 .data
                 .iter()
