@@ -1228,7 +1228,12 @@ pub fn check_cross_lines(
     // is accepted. We do not have the original spechit array here, so we use
     // crossed-line distance along the movement path as the closest deterministic
     // approximation and dispatch the farthest hit first.
-    let mut walk_lines: Vec<(i64, i64, usize, u16)> = level
+    // Eliminates dynamic heap allocation on this hot path by replacing `Vec` with `SmallVec`.
+    // `check_cross_lines` is called multiple times per tic during actor and player movement.
+    // Allocating a new `Vec` each time generates excessive memory churn. Since actors rarely
+    // cross more than a few walk lines in a single tic, `SmallVec<[T; 8]>` keeps the
+    // data on the stack entirely in almost all cases.
+    let mut walk_lines: smallvec::SmallVec<[(i64, i64, usize, u16); 8]> = level
         .linedefs
         .iter()
         .enumerate()
