@@ -746,8 +746,18 @@ mod tests {
         let wad = WadFile::parse(wad_bytes).expect("parse failed");
         assert_eq!(wad.kind(), WadKind::Iwad);
         assert_eq!(wad.lump_count(), 1);
-        assert_eq!(wad.find_lump("TEST").expect("value must exist in test").name.as_str(), "TEST");
-        assert_eq!(wad.find_lump_data("TEST").expect("value must exist in test"), b"HELLO");
+        assert_eq!(
+            wad.find_lump("TEST")
+                .expect("value must exist in test")
+                .name
+                .as_str(),
+            "TEST"
+        );
+        assert_eq!(
+            wad.find_lump_data("TEST")
+                .expect("value must exist in test"),
+            b"HELLO"
+        );
     }
 
     #[test]
@@ -793,7 +803,11 @@ mod tests {
         let wad_bytes = make_iwad(&[("DEMO", b"first"), ("OTHER", b"other"), ("DEMO", b"second")]);
         let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
         // find_lump returns last occurrence
-        assert_eq!(wad.find_lump_data("DEMO").expect("value must exist in test"), b"second");
+        assert_eq!(
+            wad.find_lump_data("DEMO")
+                .expect("value must exist in test"),
+            b"second"
+        );
     }
 
     #[test]
@@ -848,7 +862,10 @@ mod tests {
             ("BLOCKMAP", b""),
         ]);
         let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
-        match wad.map_lump_group("MAP01").expect("value must exist in test") {
+        match wad
+            .map_lump_group("MAP01")
+            .expect("value must exist in test")
+        {
             MapLumpGroup::Classic(c) => {
                 assert_eq!(c.marker.name.as_str(), "MAP01");
                 assert_eq!(c.lumps[0].name.as_str(), "THINGS");
@@ -1049,12 +1066,20 @@ mod tests {
         ]);
         let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
 
-        let group = wad.map_lump_group("MAP01").expect("value must exist in test");
+        let group = wad
+            .map_lump_group("MAP01")
+            .expect("value must exist in test");
         assert!(matches!(group, MapLumpGroup::Udmf(_)));
         if let MapLumpGroup::Udmf(udmf) = group {
             assert_eq!(udmf.aux_lumps().len(), 1);
             assert_eq!(udmf.aux_lumps()[0].name.as_str(), "ZNODES");
-            assert_eq!(udmf.find_lump("ZNODES").expect("value must exist in test").name.as_str(), "ZNODES");
+            assert_eq!(
+                udmf.find_lump("ZNODES")
+                    .expect("value must exist in test")
+                    .name
+                    .as_str(),
+                "ZNODES"
+            );
             assert!(udmf.find_lump("NONEXISTENT").is_none());
         }
     }

@@ -180,12 +180,18 @@ mod tests {
         let snap = gs.save_snapshot();
 
         // Mutate the live state after snapshot.
-        gs.mobjslab.get_mut(handle).expect("value must exist in test").health = 50;
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("value must exist in test")
+            .health = 50;
         gs.restore_snapshot(snap);
 
         // Should be restored to 0 (initial health in Mobj::new).
         assert_eq!(
-            gs.mobjslab.get(handle).expect("value must exist in test").health,
+            gs.mobjslab
+                .get(handle)
+                .expect("value must exist in test")
+                .health,
             0,
             "health must revert to snapshot value"
         );

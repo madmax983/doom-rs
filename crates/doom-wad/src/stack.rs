@@ -273,13 +273,23 @@ mod tests {
         let pwad_bytes = make_wad(b"PWAD", &[("DEMO", b"pwad_data")]);
 
         let mut stack = WadStack::new();
-        stack.push_iwad(iwad_bytes).expect("value must exist in test");
-        stack.push_pwad(pwad_bytes).expect("value must exist in test");
+        stack
+            .push_iwad(iwad_bytes)
+            .expect("value must exist in test");
+        stack
+            .push_pwad(pwad_bytes)
+            .expect("value must exist in test");
 
         // PWAD wins for "DEMO"
-        assert_eq!(stack.lump_data("DEMO").expect("value must exist in test"), b"pwad_data");
+        assert_eq!(
+            stack.lump_data("DEMO").expect("value must exist in test"),
+            b"pwad_data"
+        );
         // IWAD lump not in PWAD is still accessible
-        assert_eq!(stack.lump_data("UNIQUE").expect("value must exist in test"), b"only_in_iwad");
+        assert_eq!(
+            stack.lump_data("UNIQUE").expect("value must exist in test"),
+            b"only_in_iwad"
+        );
     }
 
     #[test]
@@ -333,7 +343,10 @@ mod tests {
         assert!(stack.lump_data("A").is_some(), "A should still be in stack");
         assert!(stack.lump_data("C").is_some(), "C should still be in stack");
         // But B is overridden
-        assert_eq!(stack.lump_data("B").expect("value must exist in test"), b"b_override");
+        assert_eq!(
+            stack.lump_data("B").expect("value must exist in test"),
+            b"b_override"
+        );
     }
 
     #[test]
@@ -401,7 +414,9 @@ mod tests {
         stack.push_iwad(iwad).expect("value must exist in test");
         stack.push_pwad(pwad).expect("value must exist in test");
 
-        let (wad, group) = stack.find_map_lump_group("MAP01").expect("value must exist in test");
+        let (wad, group) = stack
+            .find_map_lump_group("MAP01")
+            .expect("value must exist in test");
 
         // Ensure the WAD returned is the PWAD.
         assert_eq!(wad.kind(), WadKind::Pwad);
@@ -445,7 +460,9 @@ mod tests {
         stack.push_iwad(iwad).expect("value must exist in test");
         stack.push_pwad(pwad).expect("value must exist in test");
 
-        let (wad, group) = stack.find_map_lump_group("MAP01").expect("value must exist in test");
+        let (wad, group) = stack
+            .find_map_lump_group("MAP01")
+            .expect("value must exist in test");
 
         assert_eq!(wad.kind(), WadKind::Pwad);
 
@@ -467,7 +484,9 @@ mod tests {
         iwad_data[4..8].copy_from_slice(&0i32.to_le_bytes()); // 0 lumps
         iwad_data[8..12].copy_from_slice(&12i32.to_le_bytes()); // offset 12
 
-        stack.push_iwad(iwad_data).expect("value must exist in test");
+        stack
+            .push_iwad(iwad_data)
+            .expect("value must exist in test");
         assert_eq!(stack.wad_count(), 1);
     }
 
@@ -478,7 +497,9 @@ mod tests {
         iwad_data[0..4].copy_from_slice(b"IWAD");
         iwad_data[4..8].copy_from_slice(&0i32.to_le_bytes()); // 0 lumps
         iwad_data[8..12].copy_from_slice(&12i32.to_le_bytes()); // offset 12
-        stack.push_iwad(iwad_data).expect("value must exist in test");
+        stack
+            .push_iwad(iwad_data)
+            .expect("value must exist in test");
 
         assert!(stack.map_lump_group("E1M1").is_none());
     }

@@ -516,9 +516,9 @@ pub struct SpriteClip<'a> {
     /// The view depth of the portal that established the bottom clip.
     pub bottom_depth: &'a [f32; SCREEN_W],
     /// The history of top-clip changes, allowing sprites to correctly clip behind partial portal overlaps.
-    pub top_history: Option<&'a [Vec<crate::render::SpriteClipStep>]>,
+    pub top_history: Option<&'a [crate::sprite_clip::SpriteClipHistory]>,
     /// The history of bottom-clip changes, allowing sprites to correctly clip behind partial portal overlaps.
-    pub bottom_history: Option<&'a [Vec<crate::render::SpriteClipStep>]>,
+    pub bottom_history: Option<&'a [crate::sprite_clip::SpriteClipHistory]>,
 }
 
 impl<'a> SpriteClip<'a> {
@@ -3081,8 +3081,8 @@ mod tests {
         bottom.fill(120);
         bottom_depth.fill(256.0);
 
-        let mut bottom_history: [Vec<crate::render::SpriteClipStep>; SCREEN_W] =
-            [const { Vec::new() }; SCREEN_W];
+        let mut bottom_history: [crate::sprite_clip::SpriteClipHistory; SCREEN_W] =
+            [const { crate::sprite_clip::SpriteClipHistory::new() }; SCREEN_W];
         for history in &mut bottom_history {
             history.push(crate::render::SpriteClipStep {
                 depth: 128.0,
@@ -3151,8 +3151,8 @@ mod tests {
         let bottom = [SCREEN_H as i32 - 1; SCREEN_W];
         let top_depth = [f32::MAX; SCREEN_W];
         let bottom_depth = [f32::MAX; SCREEN_W];
-        let mut bottom_history: [Vec<crate::render::SpriteClipStep>; SCREEN_W] =
-            [const { Vec::new() }; SCREEN_W];
+        let mut bottom_history: [crate::sprite_clip::SpriteClipHistory; SCREEN_W] =
+            [const { crate::sprite_clip::SpriteClipHistory::new() }; SCREEN_W];
         for history in &mut bottom_history {
             history.push(crate::render::SpriteClipStep {
                 depth: 64.0,
@@ -3231,8 +3231,8 @@ mod tests {
         let bottom = [SCREEN_H as i32 - 1; SCREEN_W];
         let top_depth = [f32::MAX; SCREEN_W];
         let bottom_depth = [f32::MAX; SCREEN_W];
-        let mut top_history: [Vec<crate::render::SpriteClipStep>; SCREEN_W] =
-            [const { Vec::new() }; SCREEN_W];
+        let mut top_history: [crate::sprite_clip::SpriteClipHistory; SCREEN_W] =
+            [const { crate::sprite_clip::SpriteClipHistory::new() }; SCREEN_W];
         for history in &mut top_history {
             history.push(crate::render::SpriteClipStep {
                 depth: 64.0,

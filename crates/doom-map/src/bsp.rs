@@ -430,7 +430,9 @@ mod tests {
         let nodes = vec![node];
         let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
         let tree = BspTree::validate(&nodes, &ssectors, 2).expect("value must exist in test");
-        let ss = tree.point_in_subsector(10, 5).expect("value must exist in test");
+        let ss = tree
+            .point_in_subsector(10, 5)
+            .expect("value must exist in test");
         assert_eq!(ss.first_seg, 0); // right subsector
     }
 
@@ -446,7 +448,9 @@ mod tests {
         let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
         let tree = BspTree::validate(&nodes, &ssectors, 2).expect("value must exist in test");
 
-        let ss = tree.point_in_subsector(0, 5).expect("value must exist in test");
+        let ss = tree
+            .point_in_subsector(0, 5)
+            .expect("value must exist in test");
         assert_eq!(
             ss.first_seg, 1,
             "point on partition line should follow Doom's side tie-break"
@@ -465,7 +469,9 @@ mod tests {
         let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
         let tree = BspTree::validate(&nodes, &ssectors, 2).expect("value must exist in test");
 
-        let ss = tree.point_in_subsector(5, 0).expect("value must exist in test");
+        let ss = tree
+            .point_in_subsector(5, 0)
+            .expect("value must exist in test");
         assert_eq!(
             ss.first_seg, 0,
             "point on partition line should follow Doom's side tie-break"
