@@ -1649,20 +1649,31 @@ fn draw_console_overlay(fb: &mut Framebuffer, console: &console::Console) {
     }
 
     // Draw "> input_" prompt at the bottom of the panel.
-    let prompt = format!("> {}_", console.input);
     let prompt_y = PANEL_H.saturating_sub(CHAR_H + 2);
-    draw_mini_string(fb, prompt_y, &prompt, COLOR_PROMPT);
+    // ⚡ Bolt Optimization:
+    // Avoids an unnecessary `format!` string allocation per frame by
+    // chaining iterators and drawing the characters directly.
+    draw_mini_string_chained(
+        fb,
+        prompt_y,
+        "> ".chars()
+            .chain(console.input.chars())
+            .chain(std::iter::once('_')),
+        COLOR_PROMPT,
+    );
 }
 
-/// Draw a string using the mini 4x6 glyph font at `(2, y)`.
-///
-/// Characters that overflow the 320-pixel width are clipped.
-fn draw_mini_string(fb: &mut Framebuffer, y: usize, text: &str, color: u8) {
+fn draw_mini_string_chained(
+    fb: &mut Framebuffer,
+    y: usize,
+    chars: impl Iterator<Item = char>,
+    color: u8,
+) {
     const FB_W: usize = 320;
     const CHAR_W: usize = 5;
     const GLYPH_ROWS: usize = 6;
 
-    for (ci, ch) in text.chars().enumerate() {
+    for (ci, ch) in chars.enumerate() {
         let glyph = mini_glyph(ch);
         let cx = 2 + ci * CHAR_W;
         for (row, &bits) in glyph.iter().enumerate().take(GLYPH_ROWS) {
@@ -1680,6 +1691,13 @@ fn draw_mini_string(fb: &mut Framebuffer, y: usize, text: &str, color: u8) {
             }
         }
     }
+}
+
+/// Draw a string using the mini 4x6 glyph font at `(2, y)`.
+///
+/// Characters that overflow the 320-pixel width are clipped.
+fn draw_mini_string(fb: &mut Framebuffer, y: usize, text: &str, color: u8) {
+    draw_mini_string_chained(fb, y, text.chars(), color);
 }
 
 // ---------------------------------------------------------------------------
