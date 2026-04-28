@@ -99,6 +99,7 @@ impl CheatDetector {
     ///
     /// Returns the matched cheat name if the buffer now ends with a known
     /// sequence, otherwise returns `None`.
+    #[allow(dead_code)]
     pub(crate) fn feed(&mut self, ch: char) -> Option<&'static str> {
         if ch.is_ascii_alphabetic() || ch.is_ascii_digit() {
             self.buffer.push(ch.to_ascii_lowercase());
@@ -137,6 +138,7 @@ impl Default for CheatDetector {
 ///
 /// Returns a static message string to display, or an empty string if the
 /// cheat name is not recognised.
+#[allow(dead_code)]
 pub(crate) fn apply_cheat(gs: &mut GameState, cheat_name: &str) -> &'static str {
     match cheat_name {
         "IDDQD" => {

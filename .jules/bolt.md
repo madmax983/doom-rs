@@ -14,3 +14,6 @@
 **[Sprite Clip Optimization]
 **Learning:** Re-allocating empty `Vec`s 640 times per frame via `[const { Vec::new() }; 320]` causes performance drag in the hot render path. `SmallVec` or custom `ArrayVec` cannot easily be initialized using array repeat syntax without `const fn new()` implementation issues on external traits. A manual `ArrayVec`-like struct using `Default` inside `std::array::from_fn` works perfectly to maintain bounds without heap allocations.
 **Action:** Use fixed-size stack arrays wrapped in custom tracker structs instead of raw `Vec`s for short-lived, bounds-known data structures instantiated repeatedly in hot loops.
+## 2024-04-28 - Zero-Cost Menu String Rendering
+**Learning:** `clippy` correctly points out `dead_code` issues, but using `&str.chars().take(N).collect::<String>()` dynamically on hot loops allocating heap memory won't be caught by clippy. You can use standard `text.lines()` alongside tracking characters manually, using `ch.encode_utf8(&mut buf)` to translate `char` back to an ad-hoc byte buffer for functions that take `&str`, avoiding string allocations.
+**Action:** When drawing strings dynamically (progressive reveals), never collect to `String`. Use line or char iterators and map individual characters to stack-allocated `[u8; 4]` buffers for API compatibility.
