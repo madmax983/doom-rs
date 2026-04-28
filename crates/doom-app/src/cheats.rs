@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 //! Cheat code detection and application.
 //!
 //! Cheats are typed during normal gameplay by watching the running stream of

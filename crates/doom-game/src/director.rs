@@ -1,3 +1,7 @@
+//! Module director
+//!
+//! Module documentation for director.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

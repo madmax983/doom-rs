@@ -1,3 +1,7 @@
+//! Module stats
+//!
+//! Module documentation for stats.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {

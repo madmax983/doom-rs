@@ -1,3 +1,7 @@
+//! Module sprite_clip
+//!
+//! Module documentation for sprite_clip.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
