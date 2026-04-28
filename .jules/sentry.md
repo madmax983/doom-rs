@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-04-28 - Removed Dead CheatDetector Code
+**Learning:** The application had an unused custom `CheatDetector` struct implementing identical logic as `doom-game`'s `CheatBuffer`. Removing the duplication reduced lines of code and resolved several dead-code clippy warnings.
+**Action:** Always favor existing centralized game-logic functions over standalone re-implementations in peripheral binaries.

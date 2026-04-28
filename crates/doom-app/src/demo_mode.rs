@@ -53,13 +53,14 @@ pub(crate) struct DemoRecordingWrapper {
 }
 
 impl DemoRecordingWrapper {
+    #[allow(dead_code)]
     pub(crate) fn inner(&self) -> &DoomGame {
         &self.inner
     }
     /// Create a new recording wrapper.
     #[allow(dead_code)]
     pub(crate) fn new(
-        inner: DoomGame,
+        #[allow(dead_code)] inner: DoomGame,
         recorder: DemoRecorder,
         save_path: std::path::PathBuf,
     ) -> Self {
@@ -68,7 +69,7 @@ impl DemoRecordingWrapper {
 
     /// Create a new recording wrapper with an explicit compatibility profile.
     pub(crate) fn new_with_compat(
-        inner: DoomGame,
+        #[allow(dead_code)] inner: DoomGame,
         recorder: DemoRecorder,
         save_path: std::path::PathBuf,
         compat: CompatibilityProfile,
@@ -157,6 +158,7 @@ pub(crate) struct DemoPlaybackApp {
 }
 
 impl DemoPlaybackApp {
+    #[allow(dead_code)]
     pub(crate) fn inner(&self) -> &DoomGame {
         &self.inner
     }
@@ -168,7 +170,7 @@ impl DemoPlaybackApp {
 
     /// Create a new playback app with an explicit compatibility profile.
     pub(crate) fn new_with_compat(
-        inner: DoomGame,
+        #[allow(dead_code)] inner: DoomGame,
         player: DemoPlayer,
         compat: CompatibilityProfile,
     ) -> Self {

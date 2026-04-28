@@ -324,3 +324,10 @@ mod tests {
         assert!(TicPacket::from_bytes(&bytes).is_none());
     }
 }
+
+#[test]
+fn from_bytes_rejects_malformed_empty_payload() {
+    let mut bytes = vec![0u8; TIC_PACKET_SIZE];
+    bytes.truncate(TIC_PACKET_SIZE - 2);
+    assert!(TicPacket::from_bytes(&bytes).is_none());
+}
