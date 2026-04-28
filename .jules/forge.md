@@ -59,3 +59,7 @@
 ## 2024-05-17 - Refactored `parse_*` float fallback hacks in `dehacked.rs`
 **Learning:** When refactoring error-handling closures in Rust (such as `or_else(|_| ...)` or `map_err(|_| ...)`), you may encounter `error[E0282]: type annotations needed` if the new code removes the type constraints the compiler relied on.
 **Action:** Resolve this by explicitly annotating the closure parameter type (e.g., `|_: std::num::ParseIntError|` or `|_: ()|`).
+
+## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
+**Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
+**Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.

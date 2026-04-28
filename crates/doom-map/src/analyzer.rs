@@ -101,22 +101,31 @@ impl<'a> MapAnalyzer<'a> {
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
-                            let low_u = *low_time.get(&u).unwrap();
-                            let disc_v = *discovery_time.get(&v).unwrap();
-                            low_time.insert(u, low_u.min(disc_v));
+                            let (low_u, disc_v) =
+                                (low_time.get(&u).copied(), discovery_time.get(&v).copied());
+                            if let (Some(low_u), Some(disc_v)) = (low_u, disc_v) {
+                                let new_low = low_u.min(disc_v);
+                                low_time.insert(u, new_low);
+                            }
                         }
                     }
 
                     if !pushed_child {
                         // After visiting all neighbors of u, if u is not root, update parent's low_time
                         if let Some(&p) = parent.get(&u) {
-                            let low_u = *low_time.get(&u).unwrap();
-                            let low_p = *low_time.get(&p).unwrap();
-                            low_time.insert(p, low_p.min(low_u));
+                            let (low_u, low_p, disc_p) = (
+                                low_time.get(&u).copied(),
+                                low_time.get(&p).copied(),
+                                discovery_time.get(&p).copied(),
+                            );
+                            if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p)
+                            {
+                                let new_low = low_p.min(low_u);
+                                low_time.insert(p, new_low);
 
-                            let disc_p = *discovery_time.get(&p).unwrap();
-                            if low_u >= disc_p && parent.contains_key(&p) {
-                                articulation_points.insert(p);
+                                if low_u >= disc_p && parent.contains_key(&p) {
+                                    articulation_points.insert(p);
+                                }
                             }
                         } else if *children_map.get(&u).unwrap_or(&0) > 1 {
                             articulation_points.insert(u);
