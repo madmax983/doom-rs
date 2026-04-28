@@ -26,7 +26,6 @@
 //! Usage: doom-app --iwad doom1.wad [--pwad mod.wad] [--warp E1M1]
 
 mod audio_system;
-mod cheats;
 mod cogmind;
 mod console;
 mod demo_mode;
@@ -250,7 +249,6 @@ struct Args {
 pub(crate) struct DoomGame {
     pub(crate) gs: GameState,
     pub(crate) level: Level,
-    cheat_detector: cheats::CheatDetector,
     /// Chatchar-based cheat buffer (doom-game's ring-buffer cheat detector).
     /// Processes raw `chatchar` bytes from TicInput for classic Doom cheat entry.
     cheat_buffer: game_cheats::CheatBuffer,
@@ -425,7 +423,6 @@ impl DoomGame {
         let mut game = Self {
             gs,
             level,
-            cheat_detector: cheats::CheatDetector::new(),
             cheat_buffer: game_cheats::CheatBuffer::new(),
             hud_messages: doom_renderer::HudMessageQueue::new(4),
             console: console::Console::new(),
@@ -1084,13 +1081,7 @@ impl DoomApp for DoomGame {
                     // Enter: submit the line, try to apply as a cheat.
                     let line = self.console.submit();
                     if !line.is_empty() {
-                        let upper = line.to_uppercase();
-                        let msg = cheats::apply_cheat(&mut self.gs, &upper);
-                        let display = if msg.is_empty() {
-                            format!("(ERR) UNKNOWN COMMAND {}", line)
-                        } else {
-                            format!("(OK) {}", msg)
-                        };
+                        let display = format!("(ERR) UNKNOWN COMMAND {}", line);
                         self.console.print(display);
                     }
                 } else {
@@ -1098,17 +1089,6 @@ impl DoomApp for DoomGame {
                 }
             } else {
                 // Console is closed: feed character to the cheat detector.
-                if let Some(cheat_name) = self.cheat_detector.feed(ch) {
-                    let msg = cheats::apply_cheat(&mut self.gs, cheat_name);
-                    // IDDT toggles full automap reveal.
-                    if cheat_name == "IDDT" {
-                        self.automap_full_reveal = !self.automap_full_reveal;
-                    }
-                    if !msg.is_empty() {
-                        self.hud_messages.push(msg.to_string(), 105); // 3 sec @ 35 tics/sec
-                        self.console.print(msg.to_string());
-                    }
-                }
             }
         }
 
@@ -1122,7 +1102,12 @@ impl DoomApp for DoomGame {
         // gameplay are matched against known sequences (iddqd, idkfa, etc.).
         if input.chatchar != 0 {
             self.cheat_buffer.push(input.chatchar);
-            if let Some(code) = game_cheats::check_cheats(&self.cheat_buffer) {
+            // We have to parse IDDT specially because the game_cheats module doesn't handle application-level state.
+            if self.cheat_buffer.check(b"iddt") {
+                self.automap_full_reveal = !self.automap_full_reveal;
+                self.hud_messages.push("Map Revealed".to_string(), 105);
+                self.cheat_buffer.clear();
+            } else if let Some(code) = game_cheats::check_cheats(&self.cheat_buffer) {
                 game_cheats::apply_cheat(&mut self.gs, code);
                 let msg = game_cheats::cheat_message(code).to_string();
                 self.hud_messages.push(msg, 105); // 3 seconds at 35 tics/sec
@@ -3844,6 +3829,7 @@ mod tests {
             !game.automap_full_reveal,
             "automap_full_reveal must start false"
         );
+
         assert!(
             game.hud_messages.is_empty(),
             "cheat_message must start None"
