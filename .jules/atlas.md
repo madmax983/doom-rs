@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Deduplicate cheat detection logic]**
+**Tangle:** The `doom-app` crate maintained a separate `CheatDetector` structure inside `cheats.rs` while `doom-game` already had a fully implemented `CheatBuffer` and cheat detection logic (`check_cheats`, `apply_cheat`). This resulted in dead code warnings and a violation of the DRY principle, keeping two separate sources of truth for game cheats.
+**Blueprint:** Removed `crates/doom-app/src/cheats.rs` completely and integrated the console/chat cheat detection directly into `doom-game`'s `CheatBuffer` implementation inside `doom-app/src/main.rs`. Removed the `cheat_detector` field from the main game struct in favor of the existing `cheat_buffer`.

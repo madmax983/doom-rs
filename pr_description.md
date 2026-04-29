@@ -1,11 +1,6 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🕸️ Tangle: The `doom-app` crate maintained a separate `CheatDetector` structure inside `cheats.rs` while `doom-game` already had a fully implemented `CheatBuffer` and cheat detection logic (`check_cheats`, `apply_cheat`). This resulted in dead code warnings and a violation of the DRY principle, keeping two separate sources of truth for game cheats.
+📐 Blueprint: Removed `crates/doom-app/src/cheats.rs` completely and integrated the console/chat cheat detection directly into `doom-game`'s `CheatBuffer` implementation inside `doom-app/src/main.rs`. Removed the `cheat_detector` field from the main game struct in favor of the existing `cheat_buffer`.
+🧱 Stability: Reduced duplicate code and fixed clippy warnings, improving maintainability.
+🔬 Verification: `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo fmt --all` pass successfully.
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+**Assumptions**: I assumed that removing the `cheats.rs` logic in `doom-app` was the best structural improvement since it completely eliminated redundant code and `doom-game`'s `CheatBuffer` covered all functionality (including `IDDT`).
