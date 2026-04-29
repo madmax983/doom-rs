@@ -20,10 +20,13 @@ use crate::net_mode::ticinput_to_ticcmd;
 
 /// Wraps [`DoomGame`] and records each tic's [`TicCmd`] to a [`DemoRecorder`].
 ///
-/// When the wrapper is dropped the accumulated demo is written to `save_path`.
+/// This implements `DoomApp` and intercepts all local ticks. It forwards the tick to
+/// the underlying simulation while simultaneously appending the tic commands to a `DemoRecorder`.
+/// When dropped, the recorded demo is automatically flushed to the disk file specified.
 ///
 /// # Examples
 /// ```no_run
+/// // Assume `game` and `recorder` exist
 /// # use doom_app::demo_mode::DemoRecordingWrapper;
 /// # use doom_app::DoomGame;
 /// # use doom_demo::{DemoRecorder, LmpHeader};
@@ -32,8 +35,8 @@ use crate::net_mode::ticinput_to_ticcmd;
 /// # let doom_game: DoomGame = unsafe { std::mem::zeroed() };
 /// # let dir = std::env::temp_dir();
 /// # let path = dir.join("my_demo.lmp");
-/// let header = LmpHeader::new_singleplayer(3, 1, 1);
-/// let recorder = DemoRecorder::new(header);
+/// # let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// # let recorder = DemoRecorder::new(header);
 /// let mut wrapper = DemoRecordingWrapper::new(
 ///     doom_game,
 ///     recorder,
@@ -53,6 +56,7 @@ pub(crate) struct DemoRecordingWrapper {
 }
 
 impl DemoRecordingWrapper {
+    #[allow(dead_code)]
     pub(crate) fn inner(&self) -> &DoomGame {
         &self.inner
     }
@@ -132,8 +136,9 @@ impl Drop for DemoRecordingWrapper {
 
 /// Wraps [`DoomGame`] and replays a [`DemoPlayer`], ignoring live input.
 ///
-/// When the demo is exhausted the last rendered frame stays frozen until the
-/// user quits (Q/Esc via the event loop).
+/// This mode implements `DoomApp`. On each tick, it consumes one tic from the `DemoPlayer`
+/// and feeds it to the `DoomGame` simulation. Local `TicInput` (keyboard/mouse) is completely ignored.
+/// Once the demo finishes, further ticks are ignored and the simulation state pauses.
 ///
 /// # Examples
 /// ```no_run
@@ -157,6 +162,7 @@ pub(crate) struct DemoPlaybackApp {
 }
 
 impl DemoPlaybackApp {
+    #[allow(dead_code)]
     pub(crate) fn inner(&self) -> &DoomGame {
         &self.inner
     }

@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-11-20 - [Clarified doom-app Orchestration and demo modes]
+**Confusion:** The `doom-app` crate root (`main.rs`) and the `demo_mode` structs (`DemoRecordingWrapper`, `DemoPlaybackApp`) lacked narrative documentation explaining how the decoupled components form the "Grand Assembly" and how they intercept the game loop.
+**Clarification:** Added a story-driven module-level `//!` block to `main.rs` detailing the application's orchestration role. Added executable `///` doc-tests to the demo wrappers to show how they initialize and pump the `DoomEventLoop` with `TicInput` without needing to trace into `demo_mode.rs`.
