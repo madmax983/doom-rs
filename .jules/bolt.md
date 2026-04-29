@@ -14,3 +14,6 @@
 **[Sprite Clip Optimization]
 **Learning:** Re-allocating empty `Vec`s 640 times per frame via `[const { Vec::new() }; 320]` causes performance drag in the hot render path. `SmallVec` or custom `ArrayVec` cannot easily be initialized using array repeat syntax without `const fn new()` implementation issues on external traits. A manual `ArrayVec`-like struct using `Default` inside `std::array::from_fn` works perfectly to maintain bounds without heap allocations.
 **Action:** Use fixed-size stack arrays wrapped in custom tracker structs instead of raw `Vec`s for short-lived, bounds-known data structures instantiated repeatedly in hot loops.
+**Eliminate Per-Ray Heap Allocations**
+**Learning:** Instantiating `Vec::with_capacity` inside a hot-path function like `trace_ray` creates a heap allocation on every single ray cast. Even if the capacity is small, this overhead compounds significantly during LOS checks or shotgun blasts.
+**Action:** Replace `Vec::new()` or `Vec::with_capacity()` with `smallvec::SmallVec` for temporary buffers that are typically small and short-lived. This keeps the data entirely on the stack for the vast majority of cases, resulting in zero-cost abstraction.
