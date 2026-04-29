@@ -154,7 +154,7 @@ pub fn actors_in_cell(
     origin_x: i32,
     origin_y: i32,
     actor_positions: &[(i32, i32, i32, i32, bool)],
-    result: &mut Vec<usize>,
+    result: &mut smallvec::SmallVec<[usize; 16]>,
 ) {
     let cell_min_x = cell_x * 128 + origin_x;
     let cell_min_y = cell_y * 128 + origin_y;
@@ -385,14 +385,14 @@ pub fn trace_ray(
     // ⚡ Bolt: Using a small vector of visited indices instead of a level-sized
     // boolean array saves massive allocations on large maps, as a ray typically
     // tests fewer than 32 lines.
-    let mut tested_lines = Vec::with_capacity(32);
+    let mut tested_lines = smallvec::SmallVec::<[usize; 32]>::new();
 
     // Maximum cells to visit (safety limit against infinite loops).
     let max_cells = (cols + rows) as usize * 2 + 4;
 
     // Buffer for actor overlap tests to avoid per-cell allocations.
     // ⚡ Bolt: Pre-allocate a small capacity to avoid multiple reallocations.
-    let mut cell_actors = Vec::with_capacity(16);
+    let mut cell_actors = smallvec::SmallVec::<[usize; 16]>::new();
 
     for _step in 0..max_cells {
         // Only process cells within the blockmap grid.
@@ -923,16 +923,20 @@ mod tests {
     fn actors_in_correct_cell() {
         // Cell (0,0) covers [0, 128) x [0, 128). Actor at (64, 64) with radius 16.
         let actors = vec![(64, 64, 16, 56, true)];
-        let mut result = Vec::new();
+        let mut result = smallvec::SmallVec::new();
         actors_in_cell(0, 0, 0, 0, &actors, &mut result);
-        assert_eq!(result, vec![0], "actor at (64,64) should be in cell (0,0)");
+        assert_eq!(
+            &result[..],
+            &[0],
+            "actor at (64,64) should be in cell (0,0)"
+        );
     }
 
     #[test]
     fn actors_in_adjacent_cell_excluded() {
         // Cell (1,0) covers [128, 256) x [0, 128). Actor at (64, 64) radius 16.
         let actors = vec![(64, 64, 16, 56, true)];
-        let mut result = Vec::new();
+        let mut result = smallvec::SmallVec::new();
         actors_in_cell(1, 0, 0, 0, &actors, &mut result);
         assert!(
             result.is_empty(),
@@ -943,7 +947,7 @@ mod tests {
     #[test]
     fn empty_cell_returns_empty() {
         let actors: Vec<(i32, i32, i32, i32, bool)> = vec![];
-        let mut result = Vec::new();
+        let mut result = smallvec::SmallVec::new();
         actors_in_cell(0, 0, 0, 0, &actors, &mut result);
         assert!(result.is_empty(), "no actors -> empty result");
     }
@@ -953,10 +957,10 @@ mod tests {
         // Actor at (120, 64), radius 20. Extends to x=140 which overlaps cell(1,0) = [128,256).
         let actors = vec![(120, 64, 20, 56, true)];
 
-        let mut result0 = Vec::new();
+        let mut result0 = smallvec::SmallVec::new();
         actors_in_cell(0, 0, 0, 0, &actors, &mut result0);
 
-        let mut result1 = Vec::new();
+        let mut result1 = smallvec::SmallVec::new();
         actors_in_cell(1, 0, 0, 0, &actors, &mut result1);
 
         assert!(result0.contains(&0), "actor should be in cell(0,0)");
@@ -973,7 +977,7 @@ mod tests {
             (96, 96, 10, 56, true),
             (200, 200, 10, 56, true), // in cell (1,1)
         ];
-        let mut result = Vec::new();
+        let mut result = smallvec::SmallVec::new();
         actors_in_cell(0, 0, 0, 0, &actors, &mut result);
         assert_eq!(result.len(), 2);
         assert!(result.contains(&0));
@@ -984,7 +988,7 @@ mod tests {
     fn actors_with_nonzero_origin() {
         // Origin at (-128, -128). Cell(0,0) covers [-128, 0) x [-128, 0).
         let actors = vec![(-64, -64, 10, 56, true)];
-        let mut result = Vec::new();
+        let mut result = smallvec::SmallVec::new();
         actors_in_cell(0, 0, -128, -128, &actors, &mut result);
         assert!(
             result.contains(&0),
