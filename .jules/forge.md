@@ -59,3 +59,7 @@
 ## 2024-05-17 - Refactored `parse_*` float fallback hacks in `dehacked.rs`
 **Learning:** When refactoring error-handling closures in Rust (such as `or_else(|_| ...)` or `map_err(|_| ...)`), you may encounter `error[E0282]: type annotations needed` if the new code removes the type constraints the compiler relied on.
 **Action:** Resolve this by explicitly annotating the closure parameter type (e.g., `|_: std::num::ParseIntError|` or `|_: ()|`).
+
+**[Boolean Blindness in next_map]**
+**Learning:** `next_map` and related functions in `phase.rs` took a boolean parameter `secret_exit: bool` which obscures intent.
+**Action:** Replaced `bool` with the existing `ExitRequest` enum to enforce correct usage and clarify intent.
