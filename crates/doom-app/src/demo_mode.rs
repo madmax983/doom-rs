@@ -53,6 +53,7 @@ pub(crate) struct DemoRecordingWrapper {
 }
 
 impl DemoRecordingWrapper {
+    #[allow(dead_code)]
     pub(crate) fn inner(&self) -> &DoomGame {
         &self.inner
     }
@@ -157,6 +158,7 @@ pub(crate) struct DemoPlaybackApp {
 }
 
 impl DemoPlaybackApp {
+    #[allow(dead_code)]
     pub(crate) fn inner(&self) -> &DoomGame {
         &self.inner
     }
