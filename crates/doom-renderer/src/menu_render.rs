@@ -594,11 +594,28 @@ pub fn draw_finale_wad(
     };
 
     // Reveal `text_index` characters of the text.
-    let visible: String = text.chars().take(text_index).collect();
     let x = 10i32;
     let mut y = 10i32;
-    for line in visible.lines() {
-        font.draw_string(fb, x, y, line, 4);
+    let mut char_count = 0;
+
+    for line in text.lines() {
+        let mut cx = x;
+        for ch in line.chars() {
+            if char_count >= text_index {
+                break;
+            }
+            if ch.is_ascii() {
+                let mut b = [0; 4];
+                let s = ch.encode_utf8(&mut b);
+                font.draw_string(fb, cx, y, s, 4);
+            }
+            cx += i32::from(font.char_width);
+            char_count += 1;
+        }
+        if char_count >= text_index {
+            break;
+        }
+        char_count += 1; // Count the newline character
         y += 11;
         if y > 190 {
             break;
