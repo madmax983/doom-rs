@@ -17,3 +17,6 @@
 ## 2024-04-28 - Zero-Cost Menu String Rendering
 **Learning:** `clippy` correctly points out `dead_code` issues, but using `&str.chars().take(N).collect::<String>()` dynamically on hot loops allocating heap memory won't be caught by clippy. You can use standard `text.lines()` alongside tracking characters manually, using `ch.encode_utf8(&mut buf)` to translate `char` back to an ad-hoc byte buffer for functions that take `&str`, avoiding string allocations.
 **Action:** When drawing strings dynamically (progressive reveals), never collect to `String`. Use line or char iterators and map individual characters to stack-allocated `[u8; 4]` buffers for API compatibility.
+**SmallVec for Walk Lines Allocation**
+**Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
+**Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.

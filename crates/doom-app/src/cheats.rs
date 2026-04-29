@@ -12,8 +12,9 @@ use doom_types::limits::MAX_AMMO;
 
 /// A cheat code definition.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct CheatDef {
-    pub(crate) name: &'static str,
+    pub name: &'static str,
     /// The keypress sequence to match (lowercase ASCII).
     pub(crate) sequence: &'static str,
 }
@@ -79,10 +80,11 @@ pub(crate) const CHEATS: &[CheatDef] = &[
 /// The detector maintains a rolling buffer of recent printable characters and
 /// checks whether the buffer ends with any known cheat sequence after each
 /// character is fed in.
+#[allow(dead_code)]
 pub(crate) struct CheatDetector {
     /// Rolling buffer of recent keypresses (max length = longest cheat + 1).
     buffer: String,
-    max_len: usize,
+    pub max_len: usize,
 }
 
 impl CheatDetector {
