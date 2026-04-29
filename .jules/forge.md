@@ -59,3 +59,6 @@
 ## 2024-05-17 - Refactored `parse_*` float fallback hacks in `dehacked.rs`
 **Learning:** When refactoring error-handling closures in Rust (such as `or_else(|_| ...)` or `map_err(|_| ...)`), you may encounter `error[E0282]: type annotations needed` if the new code removes the type constraints the compiler relied on.
 **Action:** Resolve this by explicitly annotating the closure parameter type (e.g., `|_: std::num::ParseIntError|` or `|_: ()|`).
+## 2024-04-29 - [Removed duplicate module declaration causing false-positive dead_code]
+**Learning:** In Rust workspaces, declaring a module in both a library (`src/lib.rs`) via `pub mod module_name;` and a binary (`src/main.rs`) via `mod module_name;` within the same crate causes the module to be compiled twice. This dual compilation can trigger false-positive `dead_code` Clippy warnings in the library target if the module's items are only consumed by the binary.
+**Action:** Removed the library export if the module is binary-only to avoid duplicate compilation and false warnings.
