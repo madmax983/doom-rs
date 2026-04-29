@@ -12,6 +12,7 @@ use doom_types::limits::MAX_AMMO;
 
 /// A cheat code definition.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub(crate) struct CheatDef {
     pub(crate) name: &'static str,
     /// The keypress sequence to match (lowercase ASCII).
@@ -79,6 +80,7 @@ pub(crate) const CHEATS: &[CheatDef] = &[
 /// The detector maintains a rolling buffer of recent printable characters and
 /// checks whether the buffer ends with any known cheat sequence after each
 /// character is fed in.
+#[allow(dead_code)]
 pub(crate) struct CheatDetector {
     /// Rolling buffer of recent keypresses (max length = longest cheat + 1).
     buffer: String,
@@ -99,6 +101,7 @@ impl CheatDetector {
     ///
     /// Returns the matched cheat name if the buffer now ends with a known
     /// sequence, otherwise returns `None`.
+    #[allow(dead_code)]
     pub(crate) fn feed(&mut self, ch: char) -> Option<&'static str> {
         if ch.is_ascii_alphabetic() || ch.is_ascii_digit() {
             self.buffer.push(ch.to_ascii_lowercase());
@@ -137,6 +140,7 @@ impl Default for CheatDetector {
 ///
 /// Returns a static message string to display, or an empty string if the
 /// cheat name is not recognised.
+#[allow(dead_code)]
 pub(crate) fn apply_cheat(gs: &mut GameState, cheat_name: &str) -> &'static str {
     match cheat_name {
         "IDDQD" => {
