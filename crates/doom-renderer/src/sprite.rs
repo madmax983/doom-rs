@@ -3307,9 +3307,6 @@ mod tests {
         use doom_types::ANG90;
 
         // Need trig tables for render_level.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
 
         let level = make_render_level_one_sided();
         let mut fb = Framebuffer::new();
@@ -3512,10 +3509,6 @@ mod tests {
     #[test]
     fn zbuf_two_sided_seg_does_not_write() {
         use doom_types::ANG90;
-
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
 
         let level = make_render_level_two_sided();
         let mut fb = Framebuffer::new();
@@ -3790,10 +3783,6 @@ mod tests {
     // ------------------------------------------------------------------
     #[test]
     fn zbuf_render_level_empty_returns_max() {
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
-
         // A level with no visible walls from the player's position should
         // return a z_buffer filled with f32::MAX.
         let level = make_test_level(vec![]);

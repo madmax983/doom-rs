@@ -288,7 +288,6 @@ mod tests {
     use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
     use std::env;
-    use std::sync::Once;
 
     // -----------------------------------------------------------------------
     // Helpers
@@ -353,12 +352,7 @@ mod tests {
         DemoPlayer::parse(bytes).expect("parse must succeed")
     }
 
-    fn init_trig_tables_once() {
-        static INIT: Once = Once::new();
-        INIT.call_once(|| unsafe {
-            Bam::init_trig_tables();
-        });
-    }
+    fn init_trig_tables_once() {}
 
     // -----------------------------------------------------------------------
     // DemoRecordingWrapper tests

@@ -31,17 +31,8 @@ use crate::fixed::Fixed16_16;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bam(pub u32);
 
-/// Precomputed sin/cos tables (2048 entries covering 0..π/2, mirrored for full circle).
-///
-/// Populated at startup from the WAD ANGLETOFINESHIFT + finesine data,
-/// or from the compile-time table in this module.
-///
-/// 2048 entries covering 90°, fine-shifted angle = `bam >> 19` (2048 steps per 90°).
-const FINE_TABLE_SIZE: usize = 8192; // 2048 * 4 quadrants
-static FINESINE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
-
-/// Lookup table populated at runtime.
-static mut SINE_TABLE: [Fixed16_16; FINE_TABLE_SIZE] = [Fixed16_16(0); FINE_TABLE_SIZE];
+const FINE_TABLE_SIZE: usize = 8192;
+include!("trig_table.rs");
 
 /// Shift to convert a `Bam` to a fine-angle index (0..8191).
 pub const BAM_TO_FINE_SHIFT: u32 = 32 - 13; // >> 19 gives index in 0..8191
@@ -157,11 +148,7 @@ impl Bam {
     /// assert_eq!(ANG90.sin(), FIXED_ONE);
     /// ```
     pub fn sin(self) -> Fixed16_16 {
-        if !FINESINE.load(core::sync::atomic::Ordering::Acquire) {
-            return Fixed16_16::ZERO;
-        }
-        // SAFETY: SINE_TABLE is only mutated once at init, before any reads.
-        unsafe { SINE_TABLE[self.fine_angle()] }
+        SINE_TABLE[self.fine_angle()]
     }
 
     /// Cos lookup (sin shifted by 90°).
@@ -191,20 +178,8 @@ impl Bam {
     /// unsafe { Bam::init_trig_tables(); }
     /// assert_eq!(ANG90.sin(), FIXED_ONE);
     /// ```
-    pub unsafe fn init_trig_tables() {
-        use core::f64::consts::PI;
-        // SAFETY: single-threaded init before any reads.
-        #[allow(clippy::needless_range_loop)]
-        unsafe {
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..FINE_TABLE_SIZE {
-                let angle = (i as f64) * (2.0 * PI) / (FINE_TABLE_SIZE as f64);
-                let sin_val = angle.sin();
-                core::ptr::addr_of_mut!(SINE_TABLE[i])
-                    .write(Fixed16_16((sin_val * (1 << 16) as f64) as i32));
-            }
-        }
-        FINESINE.store(true, core::sync::atomic::Ordering::Release);
+    pub fn init_trig_tables() {
+        // No-op
     }
 }
 
@@ -243,14 +218,6 @@ impl core::fmt::Display for Bam {
 mod tests {
     use super::*;
 
-    static INIT: std::sync::Once = std::sync::Once::new();
-
-    fn ensure_trig_init() {
-        INIT.call_once(|| unsafe {
-            Bam::init_trig_tables();
-        });
-    }
-
     #[test]
     fn bam_raw_returns_internal_value() {
         let a = Bam::from_raw(0xDEAD_BEEF);
@@ -261,7 +228,6 @@ mod tests {
     fn sin_cos_before_and_after_init() {
         // We can't guarantee before init because tests run in parallel,
         // but we can ensure it returns something sane after init.
-        ensure_trig_init();
         let sin90 = ANG90.sin();
         assert_eq!(sin90.to_int(), 1); // sin(90) = 1.0
 

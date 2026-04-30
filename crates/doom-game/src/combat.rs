@@ -957,7 +957,7 @@ mod tests {
     // -----------------------------------------------------------------------
     // p_line_attack tests
     //
-    // Note: Bam::init_trig_tables() is NOT called here, so sin()/cos() return
+    // Note:  is NOT called here, so sin()/cos() return
     // 0.  With cos=0 and sin=0 the ray projection t = 0 for all actors, which
     // means no actor passes the `t > 0` guard — matching the documented
     // behaviour in the task spec (skip or #[ignore] trig-dependent tests).
@@ -991,7 +991,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires Bam::init_trig_tables() which is unsafe and not called in unit tests"]
+    #[ignore = "requires  which is unsafe and not called in unit tests"]
     fn line_attack_hits_actor_directly_ahead() {
         // This test requires trig tables.  Skipped per task spec.
         let mut gs = make_game_state();
@@ -1040,9 +1040,6 @@ mod tests {
     #[test]
     fn line_attack_fallback_hits_fractional_angle_actor() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
 
         let mut gs = make_game_state();
         let src = gs.player.handle;
@@ -1515,9 +1512,7 @@ mod tests {
     #[test]
     fn line_attack_with_level_hits_fractional_angle_actor() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+
         let level = make_open_combat_level();
 
         let mut gs = GameState::new("test");
@@ -1559,9 +1554,6 @@ mod tests {
     #[test]
     fn line_attack_with_level_skips_target_below_autoaim_window() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
 
         let level = make_open_combat_level();
         let mut gs = make_game_state();
@@ -1604,9 +1596,6 @@ mod tests {
     #[test]
     fn line_attack_with_level_skips_low_near_target_and_hits_far_target_in_lane() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
 
         let level = make_open_combat_level();
         let mut gs = make_game_state();

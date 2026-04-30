@@ -2180,9 +2180,6 @@ fn run_doom(args: Args) -> Result<()> {
     // Initialize trig tables (required for sin/cos in the game simulation).
     // SAFETY: called exactly once at startup, single-threaded, before any
     // Bam::sin() or Bam::cos() calls.
-    unsafe {
-        doom_types::Bam::init_trig_tables();
-    }
 
     let compat = args.compat;
 
