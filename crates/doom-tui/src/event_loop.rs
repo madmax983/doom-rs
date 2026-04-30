@@ -484,11 +484,13 @@ impl DoomEventLoop {
     }
 
     fn drain_ready_tics<A: DoomApp>(&mut self, app: &mut A) {
-        while self.tic_accumulator >= TIC_DURATION {
+        if self.tic_accumulator >= TIC_DURATION {
             self.sync_sampled_modifiers();
-            let tic_input = self.input.to_tic_input();
-            app.tick(tic_input);
-            self.tic_accumulator -= TIC_DURATION;
+            while self.tic_accumulator >= TIC_DURATION {
+                let tic_input = self.input.to_tic_input();
+                app.tick(tic_input);
+                self.tic_accumulator -= TIC_DURATION;
+            }
         }
     }
 
@@ -1095,7 +1097,7 @@ mod tests {
     }
 
     #[test]
-    fn drain_ready_tics_samples_modifiers_once_per_tic() {
+    fn drain_ready_tics_samples_modifiers_once_per_frame() {
         let mut loop_ = make_test_event_loop();
         let _guard = MODIFIER_COUNT_LOCK
             .lock()
@@ -1108,7 +1110,7 @@ mod tests {
         loop_.drain_ready_tics(&mut app);
 
         assert_eq!(app.ticks, 2);
-        assert_eq!(modifier_sample_count(), 2);
+        assert_eq!(modifier_sample_count(), 1);
         assert_eq!(loop_.tic_accumulator, TIC_DURATION / 2);
     }
 

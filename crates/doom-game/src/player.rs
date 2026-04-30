@@ -559,6 +559,31 @@ mod prop_tests {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn player_has_key_correctly_checks_mask() {
+        let mut p = PlayerState::pistol_start(MobjHandle {
+            index: 0,
+            generation: 1,
+        });
+        p.keys = KEY_BLUE_CARD | KEY_RED_SKULL;
+        assert!(p.has_key(KEY_BLUE_CARD));
+        assert!(!p.has_key(KEY_YELLOW_CARD));
+        assert!(p.has_key(KEY_RED_SKULL));
+    }
+
+    #[test]
+    fn player_give_ammo() {
+        let mut p = PlayerState::pistol_start(MobjHandle {
+            index: 0,
+            generation: 1,
+        });
+        p.ammo[AmmoType::Bullets as usize] = 0;
+        let given = p.give_ammo(AmmoType::Bullets as usize, 10);
+        assert!(given);
+        assert_eq!(p.ammo[AmmoType::Bullets as usize], 10);
+    }
+
     use super::*;
 
     #[test]

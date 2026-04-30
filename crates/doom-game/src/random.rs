@@ -132,6 +132,13 @@ pub fn p_missile_angle_spread(gs: &mut GameState) -> i32 {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn p_damage_with_variance_zero() {
+        let mut gs = GameState::new("test");
+        assert_eq!(p_damage_with_variance(&mut gs, 0), 0);
+    }
+
     use super::*;
     use crate::state::GameState;
 

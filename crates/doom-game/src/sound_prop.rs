@@ -170,3 +170,83 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn should_return_correct_emitter_coordinates() {
+        use doom_types::Bam;
+        use doom_types::Fixed16_16;
+        let px = Fixed16_16::from_int(10);
+        let py = Fixed16_16::from_int(20);
+
+        // Monster sound
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            doom_types::mobj_kind::MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let handle = slab.alloc(mobj);
+
+        let mx = Fixed16_16::from_int(100);
+        let my = Fixed16_16::from_int(200);
+
+        let req =
+            SoundRequest::MonsterWake(doom_types::mobj_kind::MobjKind::Player, handle, mx, my);
+        assert_eq!(req.emitter(px, py), Some((mx, my)));
+
+        // Player weapon sound
+        let req = SoundRequest::PlayerWeaponFire(doom_types::weapons::WeaponType::Shotgun);
+        assert_eq!(req.emitter(px, py), Some((px, py)));
+
+        // No emitter sound
+        let req = SoundRequest::PlayerUseFail;
+        assert_eq!(req.emitter(px, py), None);
+    }
+
+    #[test]
+    fn should_return_correct_origin_handle() {
+        use doom_types::Bam;
+        use doom_types::Fixed16_16;
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            doom_types::mobj_kind::MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let monster_handle = slab.alloc(mobj);
+
+        let mobj = crate::mobj::Mobj::new(
+            doom_types::mobj_kind::MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let player_handle = slab.alloc(mobj);
+
+        let mx = Fixed16_16::from_int(100);
+        let my = Fixed16_16::from_int(200);
+
+        // Monster sound
+        let req = SoundRequest::MonsterDie(
+            doom_types::mobj_kind::MobjKind::Player,
+            monster_handle,
+            mx,
+            my,
+        );
+        assert_eq!(req.origin_handle(Some(player_handle)), Some(monster_handle));
+
+        // Player weapon sound
+        let req = SoundRequest::PlayerWeaponFire(doom_types::weapons::WeaponType::Shotgun);
+        assert_eq!(req.origin_handle(Some(player_handle)), Some(player_handle));
+
+        // No origin sound
+        let req = SoundRequest::PlayerDie;
+        assert_eq!(req.origin_handle(Some(player_handle)), None);
+    }
+}
