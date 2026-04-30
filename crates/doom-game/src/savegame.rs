@@ -1946,6 +1946,30 @@ mod tests {
         assert_eq!(r.read_u8(), Err(SaveError::Truncated));
     }
 
+    // --- Havoc Test: ReadCursor read_i16 out of bounds ---
+    #[test]
+    fn read_cursor_i16_out_of_bounds() {
+        let data = [0u8; 1];
+        let mut r = ReadCursor::new(&data);
+        assert_eq!(r.read_i16(), Err(SaveError::Truncated));
+    }
+
+    // --- Havoc Test: ReadCursor read_u16 out of bounds ---
+    #[test]
+    fn read_cursor_u16_out_of_bounds() {
+        let data = [0u8; 1];
+        let mut r = ReadCursor::new(&data);
+        assert_eq!(r.read_u16(), Err(SaveError::Truncated));
+    }
+
+    // --- Havoc Test: ReadCursor read_u32 out of bounds ---
+    #[test]
+    fn read_cursor_u32_out_of_bounds() {
+        let data = [0u8; 3];
+        let mut r = ReadCursor::new(&data);
+        assert_eq!(r.read_u32(), Err(SaveError::Truncated));
+    }
+
     // --- Test 30: ReadCursor read_i32 out of bounds ---
     #[test]
     fn read_cursor_i32_out_of_bounds() {

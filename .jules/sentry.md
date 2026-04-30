@@ -56,3 +56,7 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-06-03 - Test boundaries in SaveGame ReadCursor
+
+**Learning:** Bounds checking on `ReadCursor` primitive reading methods lacked explicit test coverage.
+**Action:** Added targeted `havoc` tests (`read_cursor_i16_out_of_bounds`, `read_cursor_u16_out_of_bounds`, `read_cursor_u32_out_of_bounds`, `read_cursor_i32_out_of_bounds`) to verify graceful error return on truncated save payload buffers.
