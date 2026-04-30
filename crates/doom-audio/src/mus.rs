@@ -170,11 +170,15 @@ impl MusScore {
         let mut events: Vec<(u32, MusEvent)> = Vec::new();
         let mut pending_delta: u32 = 0;
 
+        let read_byte =
+            |data: &[u8], cursor: &mut usize, msg: &'static str| -> Result<u8, AudioError> {
+                let b = *data.get(*cursor).ok_or(AudioError::InvalidMus(msg))?;
+                *cursor += 1;
+                Ok(b)
+            };
+
         loop {
-            let event_byte = *data
-                .get(cursor)
-                .ok_or(AudioError::InvalidMus("unexpected end of event stream"))?;
-            cursor += 1;
+            let event_byte = read_byte(data, &mut cursor, "unexpected end of event stream")?;
 
             let last_in_group = (event_byte & 0x80) != 0;
             let event_type = (event_byte >> 4) & 0x07;
@@ -183,10 +187,7 @@ impl MusScore {
             let event = match event_type {
                 // 0: Release note — 1 extra byte: note (bits 0-6)
                 0 => {
-                    let note_byte = *data
-                        .get(cursor)
-                        .ok_or(AudioError::InvalidMus("truncated release-note event"))?;
-                    cursor += 1;
+                    let note_byte = read_byte(data, &mut cursor, "truncated release-note event")?;
                     MusEvent::ReleaseNote {
                         channel,
                         note: note_byte & 0x7F,
@@ -195,18 +196,11 @@ impl MusScore {
 
                 // 1: Play note — 1 byte (bit7=has_volume, bits0-6=note) + optional volume
                 1 => {
-                    let note_byte = *data
-                        .get(cursor)
-                        .ok_or(AudioError::InvalidMus("truncated play-note event"))?;
-                    cursor += 1;
+                    let note_byte = read_byte(data, &mut cursor, "truncated play-note event")?;
                     let has_volume = (note_byte & 0x80) != 0;
                     let note = note_byte & 0x7F;
                     let volume = if has_volume {
-                        let v = *data
-                            .get(cursor)
-                            .ok_or(AudioError::InvalidMus("truncated play-note volume"))?;
-                        cursor += 1;
-                        Some(v)
+                        Some(read_byte(data, &mut cursor, "truncated play-note volume")?)
                     } else {
                         None
                     };
@@ -219,19 +213,13 @@ impl MusScore {
 
                 // 2: Pitch wheel — 1 extra byte
                 2 => {
-                    let value = *data
-                        .get(cursor)
-                        .ok_or(AudioError::InvalidMus("truncated pitch-wheel event"))?;
-                    cursor += 1;
+                    let value = read_byte(data, &mut cursor, "truncated pitch-wheel event")?;
                     MusEvent::PitchWheel { channel, value }
                 }
 
                 // 3: System event — 1 extra byte
                 3 => {
-                    let controller = *data
-                        .get(cursor)
-                        .ok_or(AudioError::InvalidMus("truncated system event"))?;
-                    cursor += 1;
+                    let controller = read_byte(data, &mut cursor, "truncated system event")?;
                     MusEvent::SystemEvent {
                         channel,
                         controller,
@@ -240,14 +228,9 @@ impl MusScore {
 
                 // 4: Controller — 2 extra bytes
                 4 => {
-                    let controller = *data.get(cursor).ok_or(AudioError::InvalidMus(
-                        "truncated controller event (controller)",
-                    ))?;
-                    cursor += 1;
-                    let value = *data
-                        .get(cursor)
-                        .ok_or(AudioError::InvalidMus("truncated controller event (value)"))?;
-                    cursor += 1;
+                    let controller =
+                        read_byte(data, &mut cursor, "truncated controller event (controller)")?;
+                    let value = read_byte(data, &mut cursor, "truncated controller event (value)")?;
                     MusEvent::Controller {
                         channel,
                         controller,
@@ -276,10 +259,7 @@ impl MusScore {
                 let mut delta: u32 = 0;
                 let mut shift: u32 = 0;
                 loop {
-                    let b = *data
-                        .get(cursor)
-                        .ok_or(AudioError::InvalidMus("truncated delta-time"))?;
-                    cursor += 1;
+                    let b = read_byte(data, &mut cursor, "truncated delta-time")?;
                     if shift >= 32 {
                         return Err(AudioError::InvalidMus("delta-time overflow"));
                     }
