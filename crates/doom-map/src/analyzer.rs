@@ -72,7 +72,10 @@ impl<'a> MapAnalyzer<'a> {
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let Some(neighbors) = self.graph.adjacency_list.get(&node) else {
+                    continue;
+                };
+                let mut stack = vec![(node, neighbors.iter())];
 
                 visited.insert(node);
                 time += 1;
@@ -97,7 +100,9 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            if let Some(neighbors) = self.graph.adjacency_list.get(&v) {
+                                stack.push((v, neighbors.iter()));
+                            }
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -300,4 +305,31 @@ mod tests {
         let chokes = analyzer.chokepoints();
         assert_eq!(chokes.len(), 9999);
     }
+}
+
+#[test]
+fn havoc_test_analyzer_does_not_panic_on_asymmetric_edges() {
+    let mut adj = HashMap::new();
+    adj.insert(1, HashSet::from([2]));
+    adj.insert(2, HashSet::new());
+
+    let graph = SectorGraph {
+        adjacency_list: adj,
+    };
+    let analyzer = MapAnalyzer::new(&graph);
+    let chokes = analyzer.chokepoints();
+
+    assert!(chokes.len() <= 2);
+}
+
+#[test]
+fn havoc_test_analyzer_missing_back_edges() {
+    let mut adj = HashMap::new();
+    adj.insert(1, HashSet::from([2]));
+
+    let graph = SectorGraph {
+        adjacency_list: adj,
+    };
+    let analyzer = MapAnalyzer::new(&graph);
+    let _chokes = analyzer.chokepoints();
 }

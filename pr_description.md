@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🎯 Target: `MapAnalyzer::chokepoints` in `crates/doom-map/src/analyzer.rs`.
+💣 Risk: The analysis routine previously unwrapped when traversing adjacency lists. If topological maps were malformed, including asymmetric back-edges or simply completely missing child nodes, the loop would hit an `unwrap()` panic, crashing map loading entirely.
+🧪 Strategy: Replaced the panic points with `if let Some(neighbors)` and `let Some(neighbors) = ... else { continue; }` guards to gracefully handle or skip missing connections. Additionally, wrote targeted Havoc chaos tests `havoc_test_analyzer_does_not_panic_on_asymmetric_edges` and `havoc_test_analyzer_missing_back_edges` to codify the missing edge boundaries and protect the system against future regressions.
+🔭 Verification: Run `cargo test -p doom-map` to verify the new edge-case tests pass, and `cargo test --all-targets --all-features`.
