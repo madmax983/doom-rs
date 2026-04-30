@@ -334,6 +334,27 @@ impl MobjSlab {
     }
 
     /// Allocate a slot for `mobj`, returning a stable handle.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::mobj::{Mobj, MobjSlab};
+    /// use doom_types::mobj_kind::MobjKind;
+    /// use doom_types::{Fixed16_16, Bam};
+    ///
+    /// let mut slab = MobjSlab::new();
+    /// let trooper = Mobj::new(
+    ///     MobjKind::Trooper,
+    ///     Fixed16_16::ZERO,
+    ///     Fixed16_16::ZERO,
+    ///     Bam::ZERO,
+    /// );
+    ///
+    /// let handle = slab.alloc(trooper);
+    /// assert_eq!(slab.slot_count(), 1);
+    ///
+    /// let mobj_ref = slab.get(handle).unwrap();
+    /// assert_eq!(mobj_ref.kind, MobjKind::Trooper);
+    /// ```
     pub fn alloc(&mut self, mobj: Mobj) -> MobjHandle {
         let new_gen = self.next_generation;
         // Advance generation, skip 0 (reserved as null sentinel).

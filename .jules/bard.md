@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2024-04-30 - Added Doc Tests for Combat and Mobj Functions
+**Confusion:** Public core functions in `doom-game`, specifically `damage_mobj`, `p_radius_attack`, and `MobjSlab::alloc`, lacked executable `## Examples` doc-tests, leaving users to infer how the engine processes actor interactions, damage formulas, and memory allocations.
+**Clarification:** Added explicit executable `## Examples` sections demonstrating object initialization with `GameState` or `MobjSlab` and how damage is assessed or how slot count increments upon allocation. This verifies that structural assumptions hold true.

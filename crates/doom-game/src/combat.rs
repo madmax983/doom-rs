@@ -174,6 +174,30 @@ fn sort_hitscan_intercepts(intercepts: &mut [HitscanIntercept]) {
 ///
 /// Returns immediately if `target` does not have `MF_SHOOTABLE` or is
 /// already dead.
+///
+/// ## Examples
+/// ```
+/// use doom_game::state::GameState;
+/// use doom_game::mobj::{Mobj, MobjHandle, flags};
+/// use doom_types::mobj_kind::MobjKind;
+/// use doom_types::{Fixed16_16, Bam};
+///
+/// let mut gs = GameState::new("test");
+/// let mut trooper = Mobj::new(
+///     MobjKind::Trooper,
+///     Fixed16_16::ZERO,
+///     Fixed16_16::ZERO,
+///     Bam::ZERO,
+/// );
+/// trooper.health = 20;
+/// trooper.flags = flags::MF_SHOOTABLE | flags::MF_SOLID;
+/// let handle = gs.mobjslab.alloc(trooper);
+///
+/// // Deal 5 damage
+/// doom_game::combat::damage_mobj(&mut gs, handle, MobjHandle::NULL, 5);
+///
+/// assert_eq!(gs.mobjslab.get(handle).unwrap().health, 15);
+/// ```
 pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle, damage: i32) {
     // Guard: must exist, be shootable, and be alive.
     {
@@ -487,6 +511,43 @@ pub fn p_line_attack(
 /// When `level` is `Some`, a LOS check is performed (via `trace_ray` with
 /// `check_actors=false`) to ensure walls don't block the blast. When `None`,
 /// no LOS check is performed (fallback for unit tests).
+///
+/// ## Examples
+/// ```
+/// use doom_game::state::GameState;
+/// use doom_game::mobj::{Mobj, MobjHandle, flags};
+/// use doom_types::mobj_kind::MobjKind;
+/// use doom_types::{Fixed16_16, Bam};
+///
+/// let mut gs = GameState::new("test");
+///
+/// // Center of the explosion
+/// let mut source = Mobj::new(
+///     MobjKind::Rocket,
+///     Fixed16_16::ZERO,
+///     Fixed16_16::ZERO,
+///     Bam::ZERO,
+/// );
+/// let source_handle = gs.mobjslab.alloc(source);
+///
+/// // Target within blast radius
+/// let mut trooper = Mobj::new(
+///     MobjKind::Trooper,
+///     Fixed16_16::from_int(50),
+///     Fixed16_16::ZERO,
+///     Bam::ZERO,
+/// );
+/// trooper.health = 20;
+/// trooper.flags = flags::MF_SHOOTABLE | flags::MF_SOLID;
+/// let target_handle = gs.mobjslab.alloc(trooper);
+///
+/// // Deal 128 splash damage with radius 128
+/// doom_game::combat::p_radius_attack(&mut gs, source_handle, 128, Fixed16_16::from_int(128), None);
+///
+/// // Distance is 50, damage is 128 - 50 = 78
+/// // Health is 20 - 78 = -58 (clamped to 0)
+/// assert_eq!(gs.mobjslab.get(target_handle).unwrap().health, 0);
+/// ```
 pub fn p_radius_attack(
     gs: &mut GameState,
     source: MobjHandle,
