@@ -1,11 +1,9 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+⚒️ Forge: Resolve Boolean Blindness in hitscan_shot_angle
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+🚰 Smell: `hitscan_shot_angle` taking a boolean flag `accurate_first_shot` creates Boolean Blindness, hiding the intent of the parameter (`accurate_first_shot: true` vs `false`) at call sites in `weapon_fire.rs`.
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+✨ Solution: Replaced the boolean flag with a strongly typed enum `ShotAccuracy::Accurate` and `ShotAccuracy::Spread` to enforce correct usage at compile time and clarify intent at call sites. Also, shotgun spread calculations were cleanly refactored to use this function instead of duplicating math inline.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🧼 Benefit: Improves readability and intent clarification at call sites, making it explicit whether a shot should be accurate or use spread. Avoids duplication.
+
+🛡️ Verification: Tests passed. No logic changed.

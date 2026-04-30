@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactor hitscan_shot_angle to resolve Boolean Blindness**
+**Learning:** `hitscan_shot_angle` taking a boolean flag `accurate_first_shot` creates Boolean Blindness, hiding the intent of the parameter (`accurate_first_shot: true` vs `false`) at call sites in `weapon_fire.rs`.
+**Action:** Replaced the boolean flag with a strongly typed enum `ShotAccuracy::Accurate` and `ShotAccuracy::Spread` to enforce correct usage at compile time and clarify intent at call sites. Also deduplicated spread calculation in shotgun methods.

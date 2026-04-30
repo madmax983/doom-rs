@@ -109,14 +109,25 @@ fn player_angle(gs: &GameState) -> Option<Bam> {
     gs.mobjslab.get(gs.player.handle).map(|mo| mo.angle)
 }
 
-#[inline]
-fn hitscan_shot_angle(gs: &mut GameState, base_angle: Bam, accurate_first_shot: bool) -> Bam {
-    if accurate_first_shot && !gs.player.attack_down {
-        return base_angle;
-    }
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum ShotAccuracy {
+    Accurate,
+    Spread(u8),
+}
 
-    let spread = gs.p_subrandom() << 18;
-    Bam(base_angle.0.wrapping_add(spread as u32))
+#[inline]
+fn hitscan_shot_angle(gs: &mut GameState, base_angle: Bam, accuracy: ShotAccuracy) -> Bam {
+    match accuracy {
+        ShotAccuracy::Accurate if !gs.player.attack_down => base_angle,
+        ShotAccuracy::Spread(shift) => {
+            let spread = gs.p_subrandom() << shift;
+            Bam(base_angle.0.wrapping_add(spread as u32))
+        }
+        ShotAccuracy::Accurate => {
+            let spread = gs.p_subrandom() << 18;
+            Bam(base_angle.0.wrapping_add(spread as u32))
+        }
+    }
 }
 
 fn bullet_autoaim_angle(
@@ -212,7 +223,7 @@ pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
 
     let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
-    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
+    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, ShotAccuracy::Accurate);
     let damage = p_damage_with_variance(gs, 5);
 
     p_line_attack(
@@ -244,8 +255,7 @@ pub fn p_fire_shotgun(gs: &mut GameState, level: Option<&Level>) {
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
 
     for _ in 0..7 {
-        let spread = gs.p_subrandom() << 18;
-        let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
+        let shot_angle = hitscan_shot_angle(gs, autoaim_angle, ShotAccuracy::Spread(18));
         let damage = p_damage_with_variance(gs, 5);
         p_line_attack(
             gs,
@@ -278,8 +288,7 @@ pub fn p_fire_super_shotgun(gs: &mut GameState, level: Option<&Level>) {
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
 
     for _ in 0..20 {
-        let spread = gs.p_subrandom() << 19;
-        let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
+        let shot_angle = hitscan_shot_angle(gs, autoaim_angle, ShotAccuracy::Spread(19));
         let damage = p_damage_with_variance(gs, 5);
         p_line_attack(
             gs,
@@ -310,7 +319,7 @@ pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
 
     let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
-    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
+    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, ShotAccuracy::Accurate);
     let damage = p_damage_with_variance(gs, 5);
 
     p_line_attack(
