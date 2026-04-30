@@ -36,6 +36,18 @@ pub enum LockedDoorColor {
 // Exit request
 // ---------------------------------------------------------------------------
 
+/// Icon of Sin (Boss Brain) state tracking.
+#[derive(Clone, Debug, Default)]
+pub struct BossBrainState {
+    /// Set `true` once the Boss Brain's see state fires; cubes only
+    /// start spawning after this flag is set.
+    pub awake: bool,
+    /// Spawn spot positions collected from DoomEd thing type 87.
+    pub targets: Vec<(Fixed16_16, Fixed16_16)>,
+    /// Round-robin index into `targets` for the next cube.
+    pub target_index: usize,
+}
+
 /// The type of level exit the player triggered.
 ///
 /// Set by `activate_linedef` when a switch or walk-trigger exit line is
@@ -102,13 +114,7 @@ pub struct GameState {
     pub skill: Skill,
 
     // --- Boss Brain (Icon of Sin) ---
-    /// Set `true` once the Boss Brain's see state fires; cubes only
-    /// start spawning after this flag is set.
-    pub brain_awake: bool,
-    /// Spawn spot positions collected from DoomEd thing type 87.
-    pub brain_targets: Vec<(Fixed16_16, Fixed16_16)>,
-    /// Round-robin index into `brain_targets` for the next cube.
-    pub brain_target_index: usize,
+    pub boss_brain: BossBrainState,
     /// The style meter, which tracks rapid multi-kills and assigns a DMC-like style rank.
     #[cfg(feature = "style_meter")]
     pub style: crate::style::StyleMeter,
@@ -137,9 +143,7 @@ impl GameState {
             exit_request: None,
             seen_lines: Vec::new(),
             skill: Skill::Medium,
-            brain_awake: false,
-            brain_targets: Vec::new(),
-            brain_target_index: 0,
+            boss_brain: BossBrainState::default(),
             #[cfg(feature = "style_meter")]
             style: crate::style::StyleMeter::new(),
             #[cfg(feature = "telemetry")]

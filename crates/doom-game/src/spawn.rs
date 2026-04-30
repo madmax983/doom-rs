@@ -189,6 +189,12 @@ pub fn spawn_level_things(
         let x = Fixed16_16::from_int(thing.x as i32);
         let y = Fixed16_16::from_int(thing.y as i32);
 
+        // --- Boss Brain targets (Thing type 87) ---
+        if thing.kind == 87 {
+            gs.boss_brain.targets.push((x, y));
+            continue;
+        }
+
         // --- Player start ---
         if kind == MobjKind::Player {
             let mut mo = Mobj::new(kind, x, y, angle);

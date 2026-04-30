@@ -1913,7 +1913,7 @@ const BOSS_SPAWN_TYPES: [MobjKind; 11] = [
 ///
 /// Sets the `brain_awake` flag on GameState so cubes start spawning.
 fn a_brain_awake(gs: &mut GameState) {
-    gs.brain_awake = true;
+    gs.boss_brain.awake = true;
 }
 
 /// Port of `A_BrainSpit` from Doom's `p_enemy.c`.
@@ -1924,14 +1924,14 @@ fn a_brain_awake(gs: &mut GameState) {
 /// flight velocity and store the destination in the cube's `x`/`y` at
 /// spawn time, then compute velocity toward the target.
 fn a_brain_spit(gs: &mut GameState, handle: MobjHandle) {
-    if !gs.brain_awake || gs.brain_targets.is_empty() {
+    if !gs.boss_brain.awake || gs.boss_brain.targets.is_empty() {
         return;
     }
 
     // Round-robin target selection.
-    let idx = gs.brain_target_index % gs.brain_targets.len();
-    gs.brain_target_index = idx + 1;
-    let (dest_x, dest_y) = gs.brain_targets[idx];
+    let idx = gs.boss_brain.target_index % gs.boss_brain.targets.len();
+    gs.boss_brain.target_index = idx + 1;
+    let (dest_x, dest_y) = gs.boss_brain.targets[idx];
 
     // Spawn the cube at the brain's position.
     let Some(mo) = gs.mobjslab.get(handle) else {
@@ -1972,14 +1972,14 @@ fn a_brain_spit(gs: &mut GameState, handle: MobjHandle) {
 /// type from `BOSS_SPAWN_TYPES`, spawns it at the destination, then
 /// removes the cube and spawns a `SpawnFire` fog effect.
 fn a_spawn_fly(gs: &mut GameState, handle: MobjHandle) {
-    // Determine spawn position from the brain_targets list.
+    // Determine spawn position from the boss_brain.targets list.
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
     let target_idx = mo.reactiontime as usize;
 
-    let (dest_x, dest_y) = if target_idx < gs.brain_targets.len() {
-        gs.brain_targets[target_idx]
+    let (dest_x, dest_y) = if target_idx < gs.boss_brain.targets.len() {
+        gs.boss_brain.targets[target_idx]
     } else {
         // Fallback: use the cube's current position.
         let Some(mo) = gs.mobjslab.get(handle) else {
@@ -4493,15 +4493,16 @@ mod tests {
     #[test]
     fn brain_awake_sets_flag() {
         let mut gs = make_game_state();
-        assert!(!gs.brain_awake);
+        assert!(!gs.boss_brain.awake);
         a_brain_awake(&mut gs);
-        assert!(gs.brain_awake, "brain_awake must set the flag");
+        assert!(gs.boss_brain.awake, "brain_awake must set the flag");
     }
 
     #[test]
     fn brain_spit_does_nothing_when_not_awake() {
         let mut gs = make_game_state();
-        gs.brain_targets
+        gs.boss_brain
+            .targets
             .push((Fixed16_16::from_int(500), Fixed16_16::from_int(500)));
         let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
 
@@ -4517,7 +4518,7 @@ mod tests {
     #[test]
     fn brain_spit_does_nothing_without_targets() {
         let mut gs = make_game_state();
-        gs.brain_awake = true;
+        gs.boss_brain.awake = true;
         let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
 
         let count_before = gs.mobjslab.len();
@@ -4525,15 +4526,16 @@ mod tests {
         assert_eq!(
             gs.mobjslab.len(),
             count_before,
-            "brain_spit must do nothing without brain_targets"
+            "brain_spit must do nothing without boss_brain.targets"
         );
     }
 
     #[test]
     fn brain_spit_spawns_cube() {
         let mut gs = make_game_state();
-        gs.brain_awake = true;
-        gs.brain_targets
+        gs.boss_brain.awake = true;
+        gs.boss_brain
+            .targets
             .push((Fixed16_16::from_int(500), Fixed16_16::from_int(500)));
         let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
 
@@ -4558,28 +4560,30 @@ mod tests {
     #[test]
     fn brain_spit_round_robins_targets() {
         let mut gs = make_game_state();
-        gs.brain_awake = true;
-        gs.brain_targets
+        gs.boss_brain.awake = true;
+        gs.boss_brain
+            .targets
             .push((Fixed16_16::from_int(100), Fixed16_16::from_int(100)));
-        gs.brain_targets
+        gs.boss_brain
+            .targets
             .push((Fixed16_16::from_int(500), Fixed16_16::from_int(500)));
         let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
 
-        assert_eq!(gs.brain_target_index, 0);
+        assert_eq!(gs.boss_brain.target_index, 0);
         a_brain_spit(&mut gs, brain);
         assert_eq!(
-            gs.brain_target_index, 1,
+            gs.boss_brain.target_index, 1,
             "first spit uses index 0, advances to 1"
         );
         a_brain_spit(&mut gs, brain);
         assert_eq!(
-            gs.brain_target_index, 2,
+            gs.boss_brain.target_index, 2,
             "second spit uses index 1, advances to 2"
         );
         // Third spit should wrap around (2 % 2 == 0).
         a_brain_spit(&mut gs, brain);
         assert_eq!(
-            gs.brain_target_index, 1,
+            gs.boss_brain.target_index, 1,
             "third spit wraps to index 0, advances to 1"
         );
     }
@@ -4587,8 +4591,9 @@ mod tests {
     #[test]
     fn spawn_fly_spawns_monster_and_fog() {
         let mut gs = make_game_state();
-        gs.brain_awake = true;
-        gs.brain_targets
+        gs.boss_brain.awake = true;
+        gs.boss_brain
+            .targets
             .push((Fixed16_16::from_int(500), Fixed16_16::from_int(500)));
 
         // Create a cube with reactiontime pointing to target index 0.
@@ -4633,8 +4638,9 @@ mod tests {
     #[test]
     fn spawn_fly_monster_has_reaction_time() {
         let mut gs = make_game_state();
-        gs.brain_awake = true;
-        gs.brain_targets
+        gs.boss_brain.awake = true;
+        gs.boss_brain
+            .targets
             .push((Fixed16_16::from_int(500), Fixed16_16::from_int(500)));
 
         let mut cube = Mobj::new(
@@ -4726,7 +4732,7 @@ mod tests {
         let mut gs = make_game_state();
         let brain = spawn_monster_targeting_player(&mut gs, MobjKind::BossBrain, 200, 0, 250);
         dispatch_action(&mut gs, brain, Action::BrainAwake as u8, None);
-        assert!(gs.brain_awake);
+        assert!(gs.boss_brain.awake);
     }
 
     #[test]

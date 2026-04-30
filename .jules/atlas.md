@@ -52,3 +52,6 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+**[Extract BossBrainState from GameState]**
+**Tangle:** The `GameState` struct in `crates/doom-game/src/state.rs` directly held fields related to the Icon of Sin (Boss Brain) such as `brain_awake`, `brain_targets`, and `brain_target_index`. This broke cohesion by polluting the top-level state with specific boss logic.
+**Blueprint:** Extracted these fields into a dedicated `BossBrainState` struct and placed it inside `GameState` as a single `boss_brain` field. Updated `crates/doom-game/src/actions.rs` to use this new nested structure, improving domain encapsulation.
