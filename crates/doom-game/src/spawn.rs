@@ -220,6 +220,11 @@ pub fn spawn_level_things(
         mo.spawn_angle = angle;
         mo.spawn_type = thing.kind;
 
+        // Collect Boss Brain targets (Spawn spots - DoomEd type 87)
+        if thing.kind == 87 {
+            gs.boss_brain.targets.push((x, y));
+        }
+
         let handle = gs.mobjslab.alloc(mo);
 
         // --- Track totals for intermission screen ---

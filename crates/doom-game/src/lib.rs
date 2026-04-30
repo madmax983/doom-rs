@@ -13,6 +13,7 @@
 
 pub mod actions;
 pub mod automap;
+pub mod boss_brain;
 pub mod cheats;
 pub mod combat;
 pub mod dehacked;
