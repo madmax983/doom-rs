@@ -47,13 +47,18 @@ pub fn collect_front_to_back_seg_indices(
     // Trivial BSP: one subsector.
     if bsp.nodes().is_empty() {
         if let Some(ss) = bsp.ssectors().first() {
-            return ordered_subsector_segs(
+            let mut out = Vec::with_capacity(level.segs.len());
+            let mut seen = vec![false; level.segs.len()];
+            push_ordered_subsector_segs(
                 level,
                 ss.first_seg as usize,
                 ss.seg_count as usize,
                 player_x,
                 player_y,
+                &mut out,
+                &mut seen,
             );
+            return out;
         }
         return (0..level.segs.len()).collect();
     }
@@ -68,19 +73,15 @@ pub fn collect_front_to_back_seg_indices(
         match child {
             BspChild::Subsector(ss_idx) => {
                 if let Some(ss) = bsp.ssectors().get(ss_idx as usize) {
-                    let segs = ordered_subsector_segs(
+                    push_ordered_subsector_segs(
                         level,
                         ss.first_seg as usize,
                         ss.seg_count as usize,
                         player_x,
                         player_y,
+                        &mut out,
+                        &mut seen,
                     );
-                    for seg_idx in segs {
-                        if !seen[seg_idx] {
-                            seen[seg_idx] = true;
-                            out.push(seg_idx);
-                        }
-                    }
                 }
             }
             BspChild::Node(node_idx) => {
@@ -114,20 +115,29 @@ pub fn collect_front_to_back_seg_indices(
     }
 }
 
-fn ordered_subsector_segs(
+fn push_ordered_subsector_segs(
     level: &Level,
     first_seg: usize,
     seg_count: usize,
     player_x: i32,
     player_y: i32,
-) -> Vec<usize> {
+    out: &mut Vec<usize>,
+    seen: &mut [bool],
+) {
     let end = first_seg.saturating_add(seg_count).min(level.segs.len());
-    let mut segs: Vec<usize> = (first_seg..end).collect();
-    if !subsector_needs_hardening_sort(level, first_seg, end - first_seg) {
-        return segs;
+    let start_idx = out.len();
+
+    #[allow(clippy::needless_range_loop)]
+    for seg_idx in first_seg..end {
+        if !seen[seg_idx] {
+            seen[seg_idx] = true;
+            out.push(seg_idx);
+        }
     }
-    segs.sort_by_key(|&seg_idx| seg_sort_key(level, seg_idx, player_x, player_y));
-    segs
+
+    if subsector_needs_hardening_sort(level, first_seg, end - first_seg) {
+        out[start_idx..].sort_by_key(|&seg_idx| seg_sort_key(level, seg_idx, player_x, player_y));
+    }
 }
 
 fn subsector_needs_hardening_sort(level: &Level, first_seg: usize, seg_count: usize) -> bool {

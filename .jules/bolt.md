@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Eliminating intermediate Vec allocations in recursive/nested paths**
+**Learning:** Returning a temporary `Vec` (e.g. from `collect()`) inside a loop just to immediately append its contents and drop it creates unnecessary memory allocator churn, especially on hot paths like BSP traversal which touches many small subsectors per frame.
+**Action:** Instead of returning a `Vec`, pass a `&mut Vec` (or `&mut SmallVec`) down the call stack so the inner function can `.push()` or `.extend()` directly into the final collection. For sorting, `[T]::sort_by_key()` can be called on a slice of the newly appended elements `out[start_idx..]`.
