@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Eliminate Per-Frame Heap Allocations in Sprite Lookup**
+**Learning:** `format!("{}{}{}", sprite_name, frame_char, rotation)` inside `sprite_lump_name_str` caused per-frame dynamic String heap allocations. Since Sprite lookups evaluate to an 8-byte array matching `[u8; 8]`, we can return a stack-allocated byte array padded with nulls without involving Strings or `format!`.
+**Action:** Always replace `format!` macros inside high-frequency iteration loops with stack-allocated byte buffers, custom wrappers like `[u8; N]`, or explicit memory formatting, completely bypassing String allocations.

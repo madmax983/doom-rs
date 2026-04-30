@@ -82,7 +82,7 @@ pub use sprite::{
 };
 pub use sprite_lookup::{
     ActorRenderInfo, ResolvedSprite, compute_rotation, render_flag_from_state, resolve_sprite,
-    sprite_lump_name_str, sprite_lump_name_with_mirror,
+    sprite_lump_name_bytes, sprite_lump_name_with_mirror_bytes,
 };
 pub use statusbar::{
     StatusBarData, draw_status_bar, draw_status_bar_data, draw_status_bar_wad, draw_stnum,

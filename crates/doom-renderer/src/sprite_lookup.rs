@@ -151,12 +151,17 @@ pub fn compute_rotation(thing_angle: u32, viewer_angle: u32) -> u8 {
 ///
 /// # Examples
 /// ```ignore
-/// assert_eq!(sprite_lump_name_str("POSS", 0, 0), "POSSA0");
-/// assert_eq!(sprite_lump_name_str("TROO", 1, 3), "TROOB3");
+/// assert_eq!(sprite_lump_name_bytes("POSS", 0, 0), *b"POSSA0\0\0");
+/// assert_eq!(sprite_lump_name_bytes("TROO", 1, 3), *b"TROOB3\0\0");
 /// ```
-pub fn sprite_lump_name_str(sprite_name: &str, frame: u8, rotation: u8) -> String {
-    let frame_char = b'A'.saturating_add(frame) as char;
-    format!("{}{}{}", sprite_name, frame_char, rotation)
+pub fn sprite_lump_name_bytes(sprite_name: &str, frame: u8, rotation: u8) -> [u8; 8] {
+    let mut buf = [0u8; 8];
+    for (i, byte) in sprite_name.bytes().take(4).enumerate() {
+        buf[i] = byte.to_ascii_uppercase();
+    }
+    buf[4] = b'A'.saturating_add(frame);
+    buf[5] = b'0'.saturating_add(rotation);
+    buf
 }
 
 #[cfg(test)]
@@ -164,8 +169,8 @@ mod havoc_tests {
     use super::*;
 
     #[test]
-    fn test_sprite_lump_name_str_overflow() {
-        let _ = sprite_lump_name_str("POSS", 200, 1);
+    fn test_sprite_lump_name_bytes_overflow() {
+        let _ = sprite_lump_name_bytes("POSS", 200, 1);
     }
 }
 
@@ -177,8 +182,12 @@ mod havoc_tests {
 /// `SpriteCache` fallback logic.
 ///
 /// Returns `(lump_name, mirrored)`.
-pub fn sprite_lump_name_with_mirror(sprite_name: &str, frame: u8, rotation: u8) -> (String, bool) {
-    let direct = sprite_lump_name_str(sprite_name, frame, rotation);
+pub fn sprite_lump_name_with_mirror_bytes(
+    sprite_name: &str,
+    frame: u8,
+    rotation: u8,
+) -> ([u8; 8], bool) {
+    let direct = sprite_lump_name_bytes(sprite_name, frame, rotation);
 
     // Rotation 0 (no rotation) never mirrors.
     if rotation == 0 {
@@ -237,23 +246,23 @@ impl crate::sprite::SpriteCache {
         rotation: u8,
     ) -> Option<(&crate::sprite::SpriteFrame, bool)> {
         // Try direct rotation.
-        let direct = sprite_lump_name_str(sprite_name, frame, rotation);
-        if let Some(f) = self.get_by_name(&direct) {
+        let direct = sprite_lump_name_bytes(sprite_name, frame, rotation);
+        if let Some(f) = self.get(&direct) {
             return Some((f, false));
         }
 
         // Try mirrored rotation.
         if let Some(mirror_rot) = mirror_rotation_lookup(rotation) {
-            let mirror = sprite_lump_name_str(sprite_name, frame, mirror_rot);
-            if let Some(f) = self.get_by_name(&mirror) {
+            let mirror = sprite_lump_name_bytes(sprite_name, frame, mirror_rot);
+            if let Some(f) = self.get(&mirror) {
                 return Some((f, true));
             }
         }
 
         // Fall back to rotation 0 (non-directional).
         if rotation != 0 {
-            let fallback = sprite_lump_name_str(sprite_name, frame, 0);
-            if let Some(f) = self.get_by_name(&fallback) {
+            let fallback = sprite_lump_name_bytes(sprite_name, frame, 0);
+            if let Some(f) = self.get(&fallback) {
                 return Some((f, false));
             }
         }
@@ -480,64 +489,64 @@ mod tests {
     }
 
     // ======================================================================
-    // sprite_lump_name_str tests
+    // sprite_lump_name_bytes tests
     // ======================================================================
 
     #[test]
     fn lump_name_poss_frame_a_rot0() {
-        assert_eq!(sprite_lump_name_str("POSS", 0, 0), "POSSA0");
+        assert_eq!(sprite_lump_name_bytes("POSS", 0, 0), *b"POSSA0\0\0");
     }
 
     #[test]
     fn lump_name_troo_frame_b_rot3() {
-        assert_eq!(sprite_lump_name_str("TROO", 1, 3), "TROOB3");
+        assert_eq!(sprite_lump_name_bytes("TROO", 1, 3), *b"TROOB3\0\0");
     }
 
     #[test]
     fn lump_name_sarg_frame_c_rot7() {
-        assert_eq!(sprite_lump_name_str("SARG", 2, 7), "SARGC7");
+        assert_eq!(sprite_lump_name_bytes("SARG", 2, 7), *b"SARGC7\0\0");
     }
 
     #[test]
     fn lump_name_high_frame() {
         // Frame K (index 10) is valid in Doom.
-        assert_eq!(sprite_lump_name_str("SKUL", 10, 0), "SKULK0");
+        assert_eq!(sprite_lump_name_bytes("SKUL", 10, 0), *b"SKULK0\0\0");
     }
 
     #[test]
     fn lump_name_rotation_8() {
-        assert_eq!(sprite_lump_name_str("POSS", 0, 8), "POSSA8");
+        assert_eq!(sprite_lump_name_bytes("POSS", 0, 8), *b"POSSA8\0\0");
     }
 
     #[test]
     fn lump_name_frame_wraps_for_high_values() {
         // Frame 25 => 'A' + 25 = 'Z'.
-        assert_eq!(sprite_lump_name_str("TEST", 25, 0), "TESTZ0");
+        assert_eq!(sprite_lump_name_bytes("TEST", 25, 0), *b"TESTZ0\0\0");
     }
 
     // ======================================================================
-    // sprite_lump_name_with_mirror tests
+    // sprite_lump_name_with_mirror_bytes tests
     // ======================================================================
 
     #[test]
     fn mirror_rotation_0_never_mirrors() {
-        let (name, mirrored) = sprite_lump_name_with_mirror("POSS", 0, 0);
-        assert_eq!(name, "POSSA0");
+        let (name, mirrored) = sprite_lump_name_with_mirror_bytes("POSS", 0, 0);
+        assert_eq!(name, *b"POSSA0\0\0");
         assert!(!mirrored);
     }
 
     #[test]
     fn mirror_direct_rotations_dont_mirror() {
         for rot in 1..=8 {
-            let (_, mirrored) = sprite_lump_name_with_mirror("POSS", 0, rot);
+            let (_, mirrored) = sprite_lump_name_with_mirror_bytes("POSS", 0, rot);
             assert!(!mirrored, "rotation {rot} should not mirror at this level");
         }
     }
 
     #[test]
     fn mirror_returns_correct_lump_name() {
-        let (name, _) = sprite_lump_name_with_mirror("TROO", 2, 5);
-        assert_eq!(name, "TROOC5");
+        let (name, _) = sprite_lump_name_with_mirror_bytes("TROO", 2, 5);
+        assert_eq!(name, *b"TROOC5\0\0");
     }
 
     // ======================================================================
