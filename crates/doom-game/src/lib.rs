@@ -13,6 +13,8 @@
 
 pub mod actions;
 pub mod automap;
+#[cfg(feature = "bestiary")]
+pub mod bestiary;
 pub mod cheats;
 pub mod combat;
 pub mod dehacked;
@@ -64,6 +66,8 @@ pub use automap::{
     draw_grid, draw_line, draw_thing_marker, init_seen_lines, line_color, mark_lines_seen,
     mark_subsector_lines_seen, thing_marker_color, world_to_screen,
 };
+#[cfg(feature = "bestiary")]
+pub use bestiary::{Bestiary, UnlockLevel};
 pub use cheats::{CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
 pub use dehacked::{
