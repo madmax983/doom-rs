@@ -1,3 +1,8 @@
+//! Level completion statistics.
+//!
+//! Tracks player performance metrics for the intermission screen, including
+//! kill percentages, item collection, and secret discovery.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {

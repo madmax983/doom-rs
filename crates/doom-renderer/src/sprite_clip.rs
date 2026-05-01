@@ -1,3 +1,8 @@
+//! Sprite clipping data structures.
+//!
+//! Provides the [`SpriteClipHistory`] collection used by the renderer to handle
+//! sprites that are partially occluded by map geometry (like doorways or ledges).
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.

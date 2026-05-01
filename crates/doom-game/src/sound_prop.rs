@@ -1,3 +1,9 @@
+//! Audio event propagation and requests.
+//!
+//! Because the `doom-game` crate is decoupled from actual audio playback, it uses
+//! [`SoundRequest`]s to signal that a noise occurred. These requests are queued in the
+//! [`GameState`](crate::state::GameState) and later consumed by the audio subsystem.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

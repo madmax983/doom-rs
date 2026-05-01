@@ -1,3 +1,10 @@
+//! Interactive map geometry: Doors, Elevators, and Crushers.
+//!
+//! This module contains the state tracking for all dynamic level geometry.
+//! When a player interacts with a switch or walks over a linedef trigger,
+//! a mover (e.g., [`DoorMover`] or [`PlatformStatus`]) is spawned and added to
+//! the [`GameState`](crate::state::GameState) to animate the sector over multiple tics.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

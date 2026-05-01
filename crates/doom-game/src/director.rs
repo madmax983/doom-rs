@@ -1,19 +1,57 @@
+//! The AI Director monitors player performance to dynamically adjust difficulty.
+//!
+//! This system continuously evaluates the player's health and alters the game's
+//! spawning behavior. If the player is doing exceptionally well (health > 80%), it will
+//! attempt to spawn ambushes to keep the tension high. Conversely, if the player is
+//! struggling (health < 30%), it provides relief to avoid frustrating deaths.
+
 use crate::PlayerState;
 
+/// Actions the AI Director can take to adjust the game's pacing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirectorAction {
+    /// Increase difficulty by spawning additional enemies.
     SpawnAmbush,
+    /// Decrease difficulty by pausing spawns or providing health.
     SpawnRelief,
+    /// Keep the current game state as is.
     Maintain,
 }
 
+/// A system that monitors the player and decides on pacing adjustments.
 pub struct AiDirector;
 
 impl AiDirector {
+    /// Creates a new `AiDirector`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_game::director::AiDirector;
+    /// let director = AiDirector::new();
+    /// ```
     pub fn new() -> Self {
         Self
     }
 
+    /// Evaluates the player's state and returns the appropriate pacing action.
+    ///
+    /// # Panics
+    ///
+    /// This function does not panic.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_game::director::{AiDirector, DirectorAction};
+    /// use doom_game::player::PlayerState;
+    /// use doom_game::mobj::MobjHandle;
+    ///
+    /// let mut director = AiDirector::new();
+    /// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
+    ///
+    /// // If health is > 80, it spawns an ambush
+    /// player.set_health_capped(100, 100);
+    /// assert_eq!(director.tick(&player), DirectorAction::SpawnAmbush);
+    /// ```
     pub fn tick(&mut self, player: &PlayerState) -> DirectorAction {
         let health = player.health();
 
