@@ -30,7 +30,7 @@ The Automap is a critical tool for players, especially in labyrinthine classic m
   - The map must toggle on and off with the `Tab` key (or bound equivalent).
   - The map must support zooming in and out.
   - The map must support panning independently of the player's position.
-  - The "Follow Mode" (toggleable) must lock the camera to the player, updating the center coordinates dynamically as verified in `crates/doom-app/src/main.rs`.
+  - The "Follow Mode" (toggleable) must lock the camera to the player, updating the center coordinates dynamically.
 
 ### 3. Cheat Parity (IDDT)
 - **Success Metric:** The `IDDT` cheat must cycle through the correct reveal states.
@@ -47,4 +47,4 @@ The Automap is a critical tool for players, especially in labyrinthine classic m
 
 ## ⚖️ Gap Analysis
 
-The current engine has a basic `AutomapState` verified in `crates/doom-app/src/main.rs` that handles tracking the active toggle and following the player's position. However, the drawing logic (`draw_automap_full` and `draw_automap_ex`) currently implements a simplified version of the visual representation. The cheat logic for `IDDT` needs to be fully integrated with the automap state to correctly cycle through the reveal tiers, and the rendering functions must be audited to ensure strict adherence to vanilla line coloring and marker logic.
+The current engine has a basic Automap implementation that handles tracking the active toggle and following the player's position. However, the drawing logic currently implements a simplified version of the visual representation. The cheat logic for `IDDT` needs to be fully integrated with the automap state to correctly cycle through the reveal tiers, and the rendering functions must be audited to ensure strict adherence to vanilla line coloring and marker logic.
