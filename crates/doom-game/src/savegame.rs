@@ -1901,10 +1901,9 @@ mod tests {
         // The save file may be truncated due to the invalid description if loaded
         if let Ok(loaded) = load_game(&data) {
             let desc = &loaded.header.description;
-            let desc_str = core::str::from_utf8(desc)
-                .unwrap_or("")
-                .trim_end_matches('\0');
-            assert_eq!(desc_str, "");
+            let raw_desc = String::from_utf8_lossy(desc);
+            let desc_str = raw_desc.trim_end_matches('\0');
+            assert_eq!(desc_str, "\u{FFFD}y Cool Save");
         }
     }
 
@@ -1915,9 +1914,8 @@ mod tests {
         let loaded = load_game(&data).expect("load must succeed");
         // Description should start with "My Cool Save" then be null-padded.
         let desc = &loaded.header.description;
-        let desc_str = core::str::from_utf8(desc)
-            .unwrap_or("")
-            .trim_end_matches('\0');
+        let raw_desc = String::from_utf8_lossy(desc);
+        let desc_str = raw_desc.trim_end_matches('\0');
         assert_eq!(desc_str, "My Cool Save");
         assert_eq!(loaded.header.skill, 3);
     }

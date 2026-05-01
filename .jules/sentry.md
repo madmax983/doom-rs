@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-01 - Safe Lossy Parsing
+**Learning:** Found multiple usages of `unwrap_or("")` when parsing text fields from legacy binary data formats (like savegames). Returning an empty string on invalid UTF-8 means that a malformed description will result in data loss rather than lossy parsing.
+**Action:** Replaced `core::str::from_utf8(desc).unwrap_or("")` with `String::from_utf8_lossy(desc)` in `savegame.rs` and its tests, allowing safe, non-panicking, and lossy parsing.
