@@ -477,7 +477,7 @@ fn p_check_missile_range(
         dist = 160;
     }
 
-    dist <= 0 || i32::from(gs.p_random()) >= dist
+    dist <= 0 || i32::from(gs.rng.p_random()) >= dist
 }
 
 // ---------------------------------------------------------------------------
@@ -994,7 +994,7 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     // --- Step 7: Active sound ---
     // ~1/85 chance per tic (p_random returns 0-255, check < 3).
-    let rng_val = gs.p_random();
+    let rng_val = gs.rng.p_random();
     if rng_val < 3 {
         // Active sound would be played here. For now, just a no-op placeholder
         // since the audio system is decoupled. The caller (game loop) can check
@@ -1358,9 +1358,9 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     };
     let angle = mo.angle;
 
-    let spread = crate::random::p_missile_angle_spread(gs);
+    let spread = crate::random::p_missile_angle_spread(&mut gs.rng);
     let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
-    let damage = crate::random::p_damage_with_variance(gs, 3);
+    let damage = crate::random::p_damage_with_variance(&mut gs.rng, 3);
     let cpos_kind = gs
         .mobjslab
         .get(handle)
@@ -1614,9 +1614,9 @@ fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     };
     let angle = mo.angle;
 
-    let spread = crate::random::p_missile_angle_spread(gs);
+    let spread = crate::random::p_missile_angle_spread(&mut gs.rng);
     let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
-    let damage = crate::random::p_damage_with_variance(gs, 3);
+    let damage = crate::random::p_damage_with_variance(&mut gs.rng, 3);
     let mut intercepts = smallvec::SmallVec::new();
     crate::combat::p_line_attack(
         gs,
@@ -1989,7 +1989,7 @@ fn a_spawn_fly(gs: &mut GameState, handle: MobjHandle) {
     };
 
     // Random monster type selection.
-    let r = gs.p_random() as usize;
+    let r = gs.rng.p_random() as usize;
     let kind = BOSS_SPAWN_TYPES[r % BOSS_SPAWN_TYPES.len()];
     let kind_idx = kind as usize;
     let info = &mobjinfo::MOBJINFO[kind_idx];
@@ -2038,7 +2038,7 @@ fn a_brain_scream(gs: &mut GameState, handle: MobjHandle) {
         let ex = bx - 196 + i * 16;
         let ey = by - 320;
         // Random Z offset in [0, 319].
-        let r = gs.p_random() as i32;
+        let r = gs.rng.p_random() as i32;
         let ez = bz + 128 + (r * 2);
         let mut exp = crate::mobj::Mobj::new(
             MobjKind::BulletPuff, // reuse BulletPuff as explosion visual
@@ -2050,7 +2050,7 @@ fn a_brain_scream(gs: &mut GameState, handle: MobjHandle) {
         exp.flags = flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY;
         exp.health = 1;
         // Random tics to stagger the animations.
-        exp.tics = gs.p_random() as i16 & 7;
+        exp.tics = gs.rng.p_random() as i16 & 7;
         gs.mobjslab.alloc(exp);
     }
 }
@@ -2064,9 +2064,9 @@ fn a_brain_explode(gs: &mut GameState, handle: MobjHandle) {
     };
     let (bx, by, bz) = (mo.x.to_int(), mo.y.to_int(), mo.z.to_int());
 
-    let r = gs.p_random() as i32;
+    let r = gs.rng.p_random() as i32;
     let ex = bx + (r - 128) * 2;
-    let rz = gs.p_random() as i32;
+    let rz = gs.rng.p_random() as i32;
     let ez = bz + 128 + rz * 2;
 
     let mut exp = crate::mobj::Mobj::new(
@@ -2078,8 +2078,8 @@ fn a_brain_explode(gs: &mut GameState, handle: MobjHandle) {
     exp.z = Fixed16_16::from_int(ez);
     exp.flags = flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY;
     exp.health = 1;
-    exp.momz = Fixed16_16::from_int(gs.p_random() as i32 / 64);
-    exp.tics = gs.p_random() as i16 & 7;
+    exp.momz = Fixed16_16::from_int(gs.rng.p_random() as i32 / 64);
+    exp.tics = gs.rng.p_random() as i16 & 7;
     gs.mobjslab.alloc(exp);
 }
 

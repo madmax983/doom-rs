@@ -52,3 +52,6 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+**[Break state <-> random circular dependency]**
+**Tangle:** The `random.rs` utility module depended on `GameState` to accept `&mut GameState` in functions like `p_damage_with_variance`, causing a circular dependency between `state.rs` and `random.rs` because `state.rs` also instantiates `DoomRng`.
+**Blueprint:** Abstracted `p_random`, `p_random_range`, and `p_subrandom` methods from `GameState` directly into `DoomRng`. Updated `random.rs` functions to accept `&mut DoomRng` instead of `&mut GameState`, removing the `GameState` import and successfully breaking the cycle.

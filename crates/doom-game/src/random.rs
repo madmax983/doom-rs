@@ -4,8 +4,6 @@
 //! `GameState`, ensuring identical results across network peers and demo
 //! playback.
 
-use crate::state::GameState;
-
 /// Doom's original 256-entry pseudo-random number table (from `m_random.c`).
 ///
 /// The sequence is deterministic and identical on all network peers, making
@@ -62,6 +60,41 @@ impl DoomRng {
     pub fn set_index(&mut self, index: u32) {
         self.index = index & 255;
     }
+
+    /// Return the next random byte from Doom's deterministic RNG table and
+    /// advance the index.
+    ///
+    /// Port of `P_Random()` from `m_random.c`.
+    #[inline]
+    pub fn p_random(&mut self) -> u8 {
+        self.next_byte()
+    }
+
+    /// Return a random value in `[min, max]` using `p_random`.
+    ///
+    /// If `min >= max`, returns `min`.
+    pub fn p_random_range(&mut self, min: i32, max: i32) -> i32 {
+        if min >= max {
+            return min;
+        }
+        let span = min.abs_diff(max).saturating_add(1);
+        let r = self.p_random() as u32;
+        let offset = r % span;
+        let result = (min as i64) + (offset as i64);
+        result.clamp(i32::MIN as i64, i32::MAX as i64) as i32
+    }
+
+    /// Return `p_random() as i32 - p_random() as i32`.
+    ///
+    /// Result is in `[-255, 255]`.  Used for angle spread and other symmetric
+    /// randomness (e.g. bullet spread, melee miss offset).
+    ///
+    /// Port of `P_SubRandom()` from various Doom source files.
+    pub fn p_subrandom(&mut self) -> i32 {
+        let a = self.p_random() as i32;
+        let b = self.p_random() as i32;
+        a - b
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -75,11 +108,11 @@ impl DoomRng {
 ///
 /// Port of the inline `damage *= ...` patterns found throughout `p_map.c`,
 /// `p_inter.c`, and weapon code.
-pub fn p_damage_with_variance(gs: &mut GameState, base_damage: i32) -> i32 {
+pub fn p_damage_with_variance(rng: &mut DoomRng, base_damage: i32) -> i32 {
     if base_damage == 0 {
         return 0;
     }
-    let multiplier = (gs.p_random() as i32 % 8) + 1;
+    let multiplier = (rng.p_random() as i32 % 8) + 1;
     base_damage * multiplier
 }
 
@@ -93,8 +126,8 @@ pub fn p_damage_with_variance(gs: &mut GameState, base_damage: i32) -> i32 {
 /// that spawn at the same time.  Not applied to attack/pain/death states.
 ///
 /// Port of the `P_Random()&3` patterns in `P_SetMobjState`.
-pub fn randomize_tics(gs: &mut GameState, base_tics: i32) -> i32 {
-    base_tics + (gs.p_random() as i32 & 3)
+pub fn randomize_tics(rng: &mut DoomRng, base_tics: i32) -> i32 {
+    base_tics + (rng.p_random() as i32 & 3)
 }
 
 // ---------------------------------------------------------------------------
@@ -108,8 +141,8 @@ pub fn randomize_tics(gs: &mut GameState, base_tics: i32) -> i32 {
 /// `false` for threshold 255).
 ///
 /// Used for pain chance, dodge chance, monster infighting probability, etc.
-pub fn p_random_chance(gs: &mut GameState, threshold: u8) -> bool {
-    gs.p_random() < threshold
+pub fn p_random_chance(rng: &mut DoomRng, threshold: u8) -> bool {
+    rng.p_random() < threshold
 }
 
 // ---------------------------------------------------------------------------
@@ -122,8 +155,8 @@ pub fn p_random_chance(gs: &mut GameState, threshold: u8) -> bool {
 /// adding to a monster's aim angle to simulate weapon inaccuracy.
 ///
 /// Used by zombiemen, shotgun guys, and other hitscan monsters.
-pub fn p_missile_angle_spread(gs: &mut GameState) -> i32 {
-    gs.p_subrandom() << 20
+pub fn p_missile_angle_spread(rng: &mut DoomRng) -> i32 {
+    rng.p_subrandom() << 20
 }
 
 // ---------------------------------------------------------------------------
@@ -133,7 +166,6 @@ pub fn p_missile_angle_spread(gs: &mut GameState) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::GameState;
 
     // -----------------------------------------------------------------------
     // p_random basics
@@ -141,17 +173,17 @@ mod tests {
 
     #[test]
     fn p_random_returns_first_table_entry() {
-        let mut gs = GameState::new("test");
-        let val = gs.p_random();
+        let mut rng = DoomRng::new();
+        let val = rng.p_random();
         assert_eq!(val, RNG_TABLE[0], "first p_random must return RNG_TABLE[0]");
     }
 
     #[test]
     fn p_random_advances_rng_index() {
-        let mut gs = GameState::new("test");
-        gs.p_random();
+        let mut rng = DoomRng::new();
+        rng.p_random();
         assert_eq!(
-            gs.rng.index(),
+            rng.index(),
             1,
             "rng index must be 1 after one p_random call"
         );
@@ -159,26 +191,26 @@ mod tests {
 
     #[test]
     fn p_random_wraps_at_256() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         for _ in 0..256 {
-            gs.p_random();
+            rng.p_random();
         }
         assert_eq!(
-            gs.rng.index(),
+            rng.index(),
             0,
             "rng index must wrap to 0 after 256 p_random calls"
         );
         // Next call must return RNG_TABLE[0] again.
-        let val = gs.p_random();
+        let val = rng.p_random();
         assert_eq!(val, RNG_TABLE[0]);
     }
 
     #[test]
     fn p_random_is_deterministic() {
-        let mut gs1 = GameState::new("test");
-        let mut gs2 = GameState::new("test");
-        let seq1: Vec<u8> = (0..50).map(|_| gs1.p_random()).collect();
-        let seq2: Vec<u8> = (0..50).map(|_| gs2.p_random()).collect();
+        let mut gs1 = DoomRng::new();
+        let mut gs2 = DoomRng::new();
+        let seq1: Vec<u8> = (0..50).map(|_| gs1.next_byte()).collect();
+        let seq2: Vec<u8> = (0..50).map(|_| gs2.next_byte()).collect();
         assert_eq!(
             seq1, seq2,
             "two fresh GameStates must produce identical sequences"
@@ -187,9 +219,9 @@ mod tests {
 
     #[test]
     fn multiple_p_random_calls_produce_different_values() {
-        let mut gs = GameState::new("test");
-        let a = gs.p_random();
-        let b = gs.p_random();
+        let mut rng = DoomRng::new();
+        let a = rng.p_random();
+        let b = rng.p_random();
         // RNG_TABLE[0]=0, RNG_TABLE[1]=8 — they differ.
         assert_ne!(
             a, b,
@@ -203,9 +235,9 @@ mod tests {
 
     #[test]
     fn p_random_range_returns_value_within_bounds() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         for _ in 0..256 {
-            let val = gs.p_random_range(10, 20);
+            let val = rng.p_random_range(10, 20);
             assert!(val >= 10, "p_random_range value {val} must be >= 10");
             assert!(val <= 20, "p_random_range value {val} must be <= 20");
         }
@@ -213,9 +245,9 @@ mod tests {
 
     #[test]
     fn p_random_range_min_equals_max_returns_that_value() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         for _ in 0..10 {
-            let val = gs.p_random_range(42, 42);
+            let val = rng.p_random_range(42, 42);
             assert_eq!(val, 42, "min==max must always return that value");
         }
     }
@@ -226,9 +258,9 @@ mod tests {
 
     #[test]
     fn p_subrandom_range_is_minus255_to_255() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         for _ in 0..512 {
-            let val = gs.p_subrandom();
+            let val = rng.p_subrandom();
             assert!(
                 (-255..=255).contains(&val),
                 "p_subrandom value {val} must be in [-255, 255]"
@@ -238,8 +270,8 @@ mod tests {
 
     #[test]
     fn p_subrandom_is_symmetric_around_zero_on_average() {
-        let mut gs = GameState::new("test");
-        let sum: i64 = (0..1024).map(|_| gs.p_subrandom() as i64).sum();
+        let mut rng = DoomRng::new();
+        let sum: i64 = (0..1024).map(|_| rng.p_subrandom() as i64).sum();
         // With 1024 samples, the absolute average should be reasonably small.
         // We allow generous bounds since the table is small and will cycle.
         let avg = sum.abs() as f64 / 1024.0;
@@ -255,9 +287,9 @@ mod tests {
 
     #[test]
     fn damage_variance_applies_multiplier_1_to_8() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         for _ in 0..256 {
-            let dmg = p_damage_with_variance(&mut gs, 10);
+            let dmg = p_damage_with_variance(&mut rng, 10);
             assert!(dmg >= 10, "damage {dmg} must be >= base 10");
             assert!(dmg <= 80, "damage {dmg} must be <= base*8 = 80");
             assert_eq!(dmg % 10, 0, "damage {dmg} must be a multiple of base 10");
@@ -266,18 +298,18 @@ mod tests {
 
     #[test]
     fn damage_variance_with_base_zero_returns_zero() {
-        let mut gs = GameState::new("test");
-        let dmg = p_damage_with_variance(&mut gs, 0);
+        let mut rng = DoomRng::new();
+        let dmg = p_damage_with_variance(&mut rng, 0);
         assert_eq!(dmg, 0, "base 0 must return 0");
     }
 
     #[test]
     fn damage_variance_with_base_10_returns_10_to_80() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         let mut min_seen = i32::MAX;
         let mut max_seen = i32::MIN;
         for _ in 0..256 {
-            let dmg = p_damage_with_variance(&mut gs, 10);
+            let dmg = p_damage_with_variance(&mut rng, 10);
             min_seen = min_seen.min(dmg);
             max_seen = max_seen.max(dmg);
         }
@@ -292,10 +324,10 @@ mod tests {
 
     #[test]
     fn p_random_chance_threshold_0_returns_false() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         for _ in 0..256 {
             assert!(
-                !p_random_chance(&mut gs, 0),
+                !p_random_chance(&mut rng, 0),
                 "threshold 0 must always return false"
             );
         }
@@ -303,8 +335,8 @@ mod tests {
 
     #[test]
     fn p_random_chance_threshold_255_returns_true_for_most_values() {
-        let mut gs = GameState::new("test");
-        let true_count: usize = (0..256).filter(|_| p_random_chance(&mut gs, 255)).count();
+        let mut rng = DoomRng::new();
+        let true_count: usize = (0..256).filter(|_| p_random_chance(&mut rng, 255)).count();
         // Only entries with value 255 in the table return false.
         // There is 1 entry with value 255 in the table (index 33).
         assert!(
@@ -319,9 +351,9 @@ mod tests {
 
     #[test]
     fn randomize_tics_adds_0_to_3_to_base() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         for _ in 0..256 {
-            let result = randomize_tics(&mut gs, 10);
+            let result = randomize_tics(&mut rng, 10);
             assert!(result >= 10, "result {result} must be >= base 10");
             assert!(result <= 13, "result {result} must be <= base+3 = 13");
         }
@@ -329,9 +361,9 @@ mod tests {
 
     #[test]
     fn randomize_tics_with_base_0_returns_0_to_3() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         for _ in 0..256 {
-            let result = randomize_tics(&mut gs, 0);
+            let result = randomize_tics(&mut rng, 0);
             assert!(result >= 0, "result {result} must be >= 0");
             assert!(result <= 3, "result {result} must be <= 3");
         }
@@ -343,9 +375,9 @@ mod tests {
 
     #[test]
     fn missile_angle_spread_returns_bam_compatible_values() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         for _ in 0..256 {
-            let spread = p_missile_angle_spread(&mut gs);
+            let spread = p_missile_angle_spread(&mut rng);
             // p_subrandom is [-255, 255], shifted left 20 bits.
             let max_mag = 255i32 << 20;
             assert!(
@@ -361,20 +393,20 @@ mod tests {
 
     #[test]
     fn rng_state_is_deterministic_across_save_load() {
-        let mut gs = GameState::new("test");
+        let mut rng = DoomRng::new();
         // Consume some random bytes.
         for _ in 0..77 {
-            gs.p_random();
+            rng.p_random();
         }
         // Save the RNG index.
-        let saved_index = gs.rng.index();
+        let saved_index = rng.index();
         // Generate a sequence.
-        let seq1: Vec<u8> = (0..20).map(|_| gs.p_random()).collect();
+        let seq1: Vec<u8> = (0..20).map(|_| rng.p_random()).collect();
 
         // Simulate restore: create fresh state, set index to saved value.
-        let mut gs2 = GameState::new("test");
-        gs2.rng.set_index(saved_index);
-        let seq2: Vec<u8> = (0..20).map(|_| gs2.p_random()).collect();
+        let mut gs2 = DoomRng::new();
+        gs2.set_index(saved_index);
+        let seq2: Vec<u8> = (0..20).map(|_| gs2.next_byte()).collect();
 
         assert_eq!(
             seq1, seq2,

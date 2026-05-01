@@ -205,7 +205,7 @@ pub fn spawn_level_things(
         let mut mo = Mobj::new(kind, x, y, angle);
         apply_mobjinfo_defaults(&mut mo);
         if mo.tics > 0 && skill != Skill::Nightmare {
-            mo.tics = 1 + i16::from(gs.p_random() % (mo.tics as u8));
+            mo.tics = 1 + i16::from(gs.rng.p_random() % (mo.tics as u8));
         }
         sync_mobj_to_level(level, &mut mo);
 
