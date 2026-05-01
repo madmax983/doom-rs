@@ -563,61 +563,55 @@ fn try_open_door(gs: &mut GameState, level: &Level, blocking_linedef: Option<usi
 ///    - `MF_AMBUSH` monsters only react to sound if they also have LOS to the target.
 /// 2. Otherwise, call `p_look_for_players` to scan for visible players.
 ///    - If player found within sight, set as target, enter `see_state`.
+fn a_look_check_sound_targets(
+    gs: &mut GameState,
+    handle: MobjHandle,
+    level: &Level,
+    mo_x: Fixed16_16,
+    mo_y: Fixed16_16,
+    mo_subsector: usize,
+    is_ambush: bool,
+    mo_kind: MobjKind,
+) -> Option<()> {
+    let actor_sector =
+        crate::sight::sector_from_position_or_subsector(level, mo_x, mo_y, mo_subsector)?;
+    let sound_target = crate::sound::get_sound_target(gs, actor_sector)?;
+
+    let target_alive = gs.mobjslab.get(sound_target).is_some_and(|t| !t.is_dead());
+    if target_alive && (!is_ambush || crate::sight::p_check_sight(gs, level, handle, sound_target))
+    {
+        transition_to_see_state(gs, handle, mo_kind, sound_target);
+        return Some(());
+    }
+    None
+}
+
 fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let player_handle = gs.player.handle;
 
-    // Read monster data.
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
     let mo_kind = mo.kind;
     let mo_flags = mo.flags;
-    let mo_x = mo.x;
-    let mo_y = mo.y;
+    let (mo_x, mo_y) = (mo.x, mo.y);
     let mo_subsector = mo.subsector as usize;
 
     let is_ambush = mo_flags & flags::MF_AMBUSH != 0;
 
-    // --- Step 1: Check sound targets ---
-    // --- Step 1: Check sound targets ---
     if let Some(lv) = level {
-        // Resolve the monster's sector from its current position, but keep a
-        // subsector fallback for synthetic/unit-test maps.
-        let actor_sector =
-            crate::sight::sector_from_position_or_subsector(lv, mo_x, mo_y, mo_subsector);
-        if let Some(actor_sector) = actor_sector {
-            if let Some(sound_target) = crate::sound::get_sound_target(gs, actor_sector) {
-                // Verify the sound target is alive.
-                let target_alive = gs
-                    .mobjslab
-                    .get(sound_target)
-                    .map(|t| !t.is_dead())
-                    .unwrap_or(false);
-
-                if target_alive
-                    && (!is_ambush || crate::sight::p_check_sight(gs, lv, handle, sound_target))
-                {
-                    transition_to_see_state(gs, handle, mo_kind, sound_target);
-                    return;
-                }
-            }
+        if a_look_check_sound_targets(gs, handle, lv, mo_x, mo_y, mo_subsector, is_ambush, mo_kind)
+            .is_some()
+        {
+            return;
         }
     }
 
-    // --- Step 2: Look for players by line-of-sight ---
-    // Check the player exists and is alive.
-    let player_alive = gs
-        .mobjslab
-        .get(player_handle)
-        .map(|p| !p.is_dead())
-        .unwrap_or(false);
-
+    let player_alive = gs.mobjslab.get(player_handle).is_some_and(|p| !p.is_dead());
     if !player_alive {
         return;
     }
 
-    // Use the full p_check_sight from sight.rs if we have a level, otherwise
-    // fall back to the local simplified version.
     let can_see = if let Some(lv) = level {
         crate::sight::p_check_sight(gs, lv, handle, player_handle)
     } else {
@@ -732,46 +726,27 @@ fn try_move_in_dir(
 ///
 /// If the chosen direction is blocked, falls back to the next candidate in
 /// order.  Finally, if all four fail, tries any direction (cycled via RNG).
-pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    // Get target handle and monster position.
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return;
-    };
-    let spd = mobjinfo::MOBJINFO
-        .get(mo.kind as usize)
-        .map(|i| i.speed)
-        .unwrap_or(Fixed16_16::ZERO);
-    let (target_handle, mo_x, mo_y, speed) = (mo.target, mo.x, mo.y, spd);
-
-    // If no target, set NODIR and return.
+fn p_new_chase_dir_get_target(
+    gs: &GameState,
+    handle: MobjHandle,
+) -> Option<(MobjHandle, Fixed16_16, Fixed16_16)> {
+    let target_handle = gs.mobjslab.get(handle)?.target;
     if target_handle == MobjHandle::NULL {
-        if let Some(mo) = gs.mobjslab.get_mut(handle) {
-            mo.movedir = DI_NODIR;
-        }
-        return;
+        return None;
     }
+    let t = gs.mobjslab.get(target_handle)?;
+    Some((target_handle, t.x, t.y))
+}
 
-    let Some(t) = gs.mobjslab.get(target_handle) else {
-        if let Some(mo) = gs.mobjslab.get_mut(handle) {
-            mo.movedir = DI_NODIR;
-        }
-        return;
-    };
-    let tx = t.x;
-    let ty = t.y;
-
-    let dx = (tx - mo_x).to_int();
-    let dy = (ty - mo_y).to_int();
-
-    // Determine pure x-direction and y-direction components.
-    let d_x: u8 = if dx > 0 {
+fn p_new_chase_dir_candidates(dx: i32, dy: i32) -> [u8; 4] {
+    let d_x = if dx > 0 {
         DI_EAST
     } else if dx < 0 {
         DI_WEST
     } else {
         DI_NODIR
     };
-    let d_y: u8 = if dy > 0 {
+    let d_y = if dy > 0 {
         DI_NORTH
     } else if dy < 0 {
         DI_SOUTH
@@ -779,12 +754,9 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
         DI_NODIR
     };
 
-    // Primary candidate: diagonal combining both directions.
-    let diag: u8 = if d_x == DI_NODIR || d_y == DI_NODIR {
-        // No diagonal possible — use whichever pure direction exists.
+    let diag = if d_x == DI_NODIR || d_y == DI_NODIR {
         if d_x != DI_NODIR { d_x } else { d_y }
     } else {
-        // Choose the diagonal that matches (d_x, d_y).
         match (d_x, d_y) {
             (DI_EAST, DI_NORTH) => DI_NORTHEAST,
             (DI_EAST, DI_SOUTH) => DI_SOUTHEAST,
@@ -794,21 +766,39 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
         }
     };
 
-    // Secondary/tertiary: prefer the axis with larger absolute displacement.
     let (sec, tert) = if dx.abs() > dy.abs() {
-        (d_x, d_y) // larger x → prefer x-dir, then y-dir
+        (d_x, d_y)
     } else {
-        (d_y, d_x) // larger y → prefer y-dir, then x-dir
+        (d_y, d_x)
     };
 
-    // Try candidates in order: primary → secondary → tertiary → nodir.
-    let candidates = [diag, sec, tert, DI_NODIR];
+    [diag, sec, tert, DI_NODIR]
+}
+
+pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
+    };
+    let speed = mobjinfo::MOBJINFO
+        .get(mo.kind as usize)
+        .map(|i| i.speed)
+        .unwrap_or(Fixed16_16::ZERO);
+    let (mo_x, mo_y) = (mo.x, mo.y);
+
+    let Some((_target_handle, tx, ty)) = p_new_chase_dir_get_target(gs, handle) else {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.movedir = DI_NODIR;
+        }
+        return;
+    };
+
+    let candidates = p_new_chase_dir_candidates((tx - mo_x).to_int(), (ty - mo_y).to_int());
+
     for &cand in &candidates {
         if cand == DI_NODIR {
             break;
         }
         if try_move_in_dir(gs, handle, cand, speed, level) {
-            // Reset movecount so monster won't re-evaluate direction for a while.
             let rng_val = gs.rng.next_byte() as i32;
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
                 mo.movecount = 8 + (rng_val & 7);
@@ -817,8 +807,6 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
         }
     }
 
-    // All preferred directions blocked: try any direction round-robin.
-    // Cycle through all 8 directions starting from a random offset.
     let start_dir = gs.rng.next_byte() % 8;
     for i in 0u8..8 {
         let dir = (start_dir + i) % 8;
@@ -831,7 +819,6 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
         }
     }
 
-    // Truly stuck: set NODIR.
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.movedir = DI_NODIR;
         mo.movecount = 0;
@@ -856,99 +843,98 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
 ///    - Enter `missile_state` and set `MF_JUSTATTACKED`.
 /// 6. Movement: call `P_Move`; if blocked, call `P_NewChaseDir`.
 /// 7. Active sound: randomly play `active_sound` (p_random < 3).
+fn a_chase_try_look_for_target(
+    gs: &mut GameState,
+    handle: MobjHandle,
+    level: Option<&Level>,
+    mo_kind: MobjKind,
+) -> bool {
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.target = MobjHandle::NULL;
+    }
+
+    a_look(gs, handle, level);
+
+    let found_target = gs
+        .mobjslab
+        .get(handle)
+        .is_some_and(|mo| mo.target != MobjHandle::NULL);
+
+    if !found_target {
+        let spawn_sn = mobjinfo::MOBJINFO
+            .get(mo_kind as usize)
+            .map(|i| i.spawn_state)
+            .unwrap_or_default();
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.target = MobjHandle::NULL;
+            mo.state = spawn_sn;
+            if let Some(e) = states::STATES.get(spawn_sn.0 as usize) {
+                mo.tics = e.tics;
+            }
+        }
+    }
+
+    found_target
+}
+
+fn a_chase_can_missile(
+    gs: &mut GameState,
+    handle: MobjHandle,
+    current_target: MobjHandle,
+    level: Option<&Level>,
+    missile_sn: crate::mobj::StateNum,
+    reactiontime: i32,
+) -> bool {
+    if missile_sn == crate::mobj::StateNum::NULL || reactiontime != 0 {
+        return false;
+    }
+    let cur_movecount = gs.mobjslab.get(handle).map(|mo| mo.movecount).unwrap_or(0);
+    cur_movecount <= 0 && p_check_missile_range(gs, handle, current_target, level)
+}
+
 fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    // --- Step 1: Decrement reaction_time ---
-    {
-        let Some(mo) = gs.mobjslab.get_mut(handle) else {
-            return;
-        };
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
         if mo.reactiontime > 0 {
             mo.reactiontime -= 1;
         }
     }
 
-    // --- Gather monster data ---
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
     let mo_kind = mo.kind;
-    let _movecount = mo.movecount;
     let mo_flags = mo.flags;
 
-    // --- Step 2: Check target still exists and is alive ---
-    if get_alive_target(gs, handle).is_none() {
-        // Try to find a new target via A_Look logic.
-        // First clear the old target.
-        if let Some(mo) = gs.mobjslab.get_mut(handle) {
-            mo.target = MobjHandle::NULL;
-        }
-
-        // Try to look for a new target.
-        a_look(gs, handle, level);
-
-        // Check if a_look found a new target.
-        let found_target = gs
-            .mobjslab
-            .get(handle)
-            .map(|mo| mo.target != MobjHandle::NULL)
-            .unwrap_or(false);
-
-        if !found_target {
-            // Revert to idle spawn state.
-            let spawn_sn = mobjinfo::MOBJINFO
-                .get(mo_kind as usize)
-                .map(|i| i.spawn_state)
-                .unwrap_or_default();
-            if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.target = MobjHandle::NULL;
-                mo.state = spawn_sn;
-                if let Some(e) = states::STATES.get(spawn_sn.0 as usize) {
-                    mo.tics = e.tics;
-                }
-            }
-            return;
-        }
-        // If a_look found a target, it already set see_state; but we continue
-        // the chase loop with the new target. We need to re-read the target.
+    if get_alive_target(gs, handle).is_none()
+        && !a_chase_try_look_for_target(gs, handle, level, mo_kind)
+    {
+        return;
     }
 
-    // --- Step 3: MF_JUSTATTACKED cooldown ---
     if mo_flags & flags::MF_JUSTATTACKED != 0 {
-        // Clear the flag and skip attack checks this tic.
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
             mo.flags &= !flags::MF_JUSTATTACKED;
         }
-        // Still do movement.
         do_chase_movement(gs, handle, level);
         return;
     }
 
-    // --- Read target info for attack checks ---
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
     let current_target = mo.target;
+    let (mo_x, mo_y) = (mo.x, mo.y);
 
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return;
-    };
-    let mo_x = mo.x;
-    let mo_y = mo.y;
     let Some(t) = gs.mobjslab.get(current_target) else {
         do_chase_movement(gs, handle, level);
         return;
     };
-    let tx = t.x;
-    let ty = t.y;
 
-    let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
+    let dist = (t.x - mo_x).to_int().abs() + (t.y - mo_y).to_int().abs();
 
-    let info = match mobjinfo::MOBJINFO.get(mo_kind as usize) {
-        Some(i) => i,
-        None => {
-            do_chase_movement(gs, handle, level);
-            return;
-        }
+    let Some(info) = mobjinfo::MOBJINFO.get(mo_kind as usize) else {
+        do_chase_movement(gs, handle, level);
+        return;
     };
 
     let melee_sn = info.melee_state;
@@ -959,41 +945,23 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         .map(|mo| mo.reactiontime)
         .unwrap_or(0);
 
-    // --- Step 4: Melee check ---
     if melee_sn != crate::mobj::StateNum::NULL && dist <= MELEE_THRESHOLD {
-        // Face the target before entering melee.
         a_face_target(gs, handle);
         set_mobj_state(gs, handle, melee_sn);
         return;
     }
 
-    // --- Step 5: Missile check ---
-    if missile_sn != crate::mobj::StateNum::NULL && reactiontime == 0 {
-        // Re-read movecount (might have changed).
-        let cur_movecount = gs.mobjslab.get(handle).map(|mo| mo.movecount).unwrap_or(0);
-
-        // Don't fire if still moving from last direction change (gives monsters
-        // a movement phase between attacks), unless movecount has expired.
-        let can_fire =
-            cur_movecount <= 0 && p_check_missile_range(gs, handle, current_target, level);
-
-        if can_fire {
-            // Face the target and enter missile state.
-            a_face_target(gs, handle);
-            set_mobj_state(gs, handle, missile_sn);
-            // Set MF_JUSTATTACKED so we skip attack next tic.
-            if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.flags |= flags::MF_JUSTATTACKED;
-            }
-            return;
+    if a_chase_can_missile(gs, handle, current_target, level, missile_sn, reactiontime) {
+        a_face_target(gs, handle);
+        set_mobj_state(gs, handle, missile_sn);
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.flags |= flags::MF_JUSTATTACKED;
         }
+        return;
     }
 
-    // --- Step 6: Movement ---
     do_chase_movement(gs, handle, level);
 
-    // --- Step 7: Active sound ---
-    // ~1/85 chance per tic (p_random returns 0-255, check < 3).
     let rng_val = gs.p_random();
     if rng_val < 3 {
         // Active sound would be played here. For now, just a no-op placeholder
@@ -1643,49 +1611,26 @@ const LOST_SOUL_MAX: usize = 21;
 ///
 /// Faces the target, then spawns a `LostSoul` if the current count of Lost
 /// Souls in the level is below `LOST_SOUL_MAX` (21).
-fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
-    let Some(target) = get_alive_target(gs, handle) else {
-        return;
-    };
-
-    a_face_target(gs, handle);
-
-    // Count existing Lost Souls. If at cap, do not spawn.
-    let lost_soul_count = gs
-        .mobjslab
+fn a_pain_attack_get_lost_soul_count(gs: &GameState) -> usize {
+    gs.mobjslab
         .iter_handles()
         .filter(|h| {
             gs.mobjslab
                 .get(*h)
-                .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
-                .unwrap_or(false)
+                .is_some_and(|m| m.kind == MobjKind::LostSoul && m.health > 0)
         })
-        .count();
+        .count()
+}
 
-    if lost_soul_count >= LOST_SOUL_MAX {
-        return;
-    }
-
-    // Spawn a new Lost Soul at the Pain Elemental's position, aimed at the target.
-    // We use the angle of the PE to spawn the skull slightly forward.
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return;
-    };
-    let sx = mo.x;
-    let sy = mo.y;
-    let sz = mo.z;
-    let s_angle = mo.angle;
-
-    // Spawn the Lost Soul slightly ahead of the Pain Elemental.
-    // Use f64 for the offset direction calculation (non-deterministic path — spawn position only).
-    let angle_rad = s_angle.0 as f64 / (u32::MAX as f64 + 1.0) * std::f64::consts::TAU;
-    let offset = 4; // map units forward
-    let spawn_x = sx + Fixed16_16::from_int((angle_rad.cos() * offset as f64) as i32);
-    let spawn_y = sy + Fixed16_16::from_int((angle_rad.sin() * offset as f64) as i32);
-
+fn a_pain_attack_create_skull(
+    spawn_x: Fixed16_16,
+    spawn_y: Fixed16_16,
+    sz: Fixed16_16,
+    s_angle: Bam,
+) -> crate::mobj::Mobj {
     let mut skull = crate::mobj::Mobj::new(MobjKind::LostSoul, spawn_x, spawn_y, s_angle);
-    skull.z = sz + Fixed16_16::from_int(8); // spawn slightly above PE
-    skull.health = 100; // default Lost Soul health
+    skull.z = sz + Fixed16_16::from_int(8);
+    skull.health = 100;
     skull.flags = flags::MF_SOLID
         | flags::MF_SHOOTABLE
         | flags::MF_NOGRAVITY
@@ -1694,17 +1639,39 @@ fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
         | flags::MF_SKULLFLY;
     skull.radius = Fixed16_16::from_int(16);
     skull.height = Fixed16_16::from_int(56);
+    skull
+}
 
-    // Set momentum toward target (skull attack charge).
+fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
+    let Some(target) = get_alive_target(gs, handle) else {
+        return;
+    };
+    a_face_target(gs, handle);
+
+    if a_pain_attack_get_lost_soul_count(gs) >= LOST_SOUL_MAX {
+        return;
+    }
+
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
+    };
+    let (sx, sy, sz, s_angle) = (mo.x, mo.y, mo.z, mo.angle);
+
+    let angle_rad = s_angle.0 as f64 / (u32::MAX as f64 + 1.0) * std::f64::consts::TAU;
+    let offset = 4;
+    let spawn_x = sx + Fixed16_16::from_int((angle_rad.cos() * offset as f64) as i32);
+    let spawn_y = sy + Fixed16_16::from_int((angle_rad.sin() * offset as f64) as i32);
+
+    let mut skull = a_pain_attack_create_skull(spawn_x, spawn_y, sz, s_angle);
+
     let Some(t) = gs.mobjslab.get(target) else {
         return;
     };
-    let tx = t.x;
-    let ty = t.y;
-    let dx_f = (tx - spawn_x).to_int() as f32;
-    let dy_f = (ty - spawn_y).to_int() as f32;
+    let dx_f = (t.x - spawn_x).to_int() as f32;
+    let dy_f = (t.y - spawn_y).to_int() as f32;
     let dist = (dx_f * dx_f + dy_f * dy_f).sqrt().max(1.0);
     let speed = SKULLSPEED as f32;
+
     skull.momx = Fixed16_16::from_int((dx_f / dist * speed) as i32);
     skull.momy = Fixed16_16::from_int((dy_f / dist * speed) as i32);
     skull.target = target;

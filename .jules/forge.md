@@ -63,3 +63,14 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+**[Extracted `a_chase` and `p_new_chase_dir` components]
+**Learning:** Functions like `a_chase` and `p_new_chase_dir` in `actions.rs` were long (100+ lines) and deeply nested, violating the "God Functions" smell. By extracting target searching, missile checking, and candidate selection into smaller, named helper functions (`a_chase_try_look_for_target`, `a_chase_can_missile`, `p_new_chase_dir_get_target`, `p_new_chase_dir_candidates`), the main loops became much flatter and readable.
+**Action:** Always look for distinct phases in long functions (e.g. initialization vs. checks vs. execution) and extract them into separate private helpers.
+
+**[Guard clauses vs nested if-let]
+**Learning:** `a_look` had deeply nested blocks for checking sound targets, adding up to 5 levels of indentation. Extracting the inner block (`a_look_check_sound_targets`) and replacing nested logic with a flat `if let Some(lv) = level { if a_look_check_sound_targets(...) { return; } }` improved readability.
+**Action:** Use early returns and guard clauses instead of heavily nested blocks.
+
+**[Extract early returns and object creation]
+**Learning:** `a_pain_attack` had long object creation logic mixed with condition checks and math. Extracting the list filter (`a_pain_attack_get_lost_soul_count`) and object creation (`a_pain_attack_create_skull`) reduced the main function body to just the core coordinate math and state assignments, improving readability.
+**Action:** Extract large structure instantiations into simple constructors, especially when they include magic numbers or bitflag math.
