@@ -3054,10 +3054,27 @@ fn run_doom(args: Args) -> Result<()> {
 }
 
 fn main() {
+    let mut is_json = false;
+    // Inspect arguments directly before parsing to see if --json was requested.
+    // This allows us to format clap errors as JSON if requested.
+    for arg in std::env::args() {
+        if arg == "--json" {
+            is_json = true;
+            break;
+        }
+    }
+
     let args = match Args::try_parse() {
         Ok(a) => a,
         Err(e) => {
-            e.exit();
+            if is_json {
+                // Return a JSON formatted error for CLI parsing failure
+                let json_data = format!(r#"{{"error": {:?}}}"#, e.to_string());
+                println!("{}", json_data);
+                std::process::exit(1);
+            } else {
+                e.exit();
+            }
         }
     };
     let is_json = args.json;
