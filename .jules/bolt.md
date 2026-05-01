@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Optimize sectors_by_tag allocation**
+**Learning:** `sectors_by_tag` allocated a `Vec<usize>` on a hot path during game logic dispatch. Attempting to use `impl Iterator` to avoid the heap allocation caused a borrow checker violation because the iterator borrowed `level` immutably, while the caller used the iterator to mutate `level`.
+**Action:** Replace `Vec` collection with `smallvec::SmallVec<[usize; 8]>` to avoid heap allocations entirely while retaining the ability to decouple the borrow from the `level` so it can be mutated later, matching optimizations done in `combat.rs` and `trace.rs`.
