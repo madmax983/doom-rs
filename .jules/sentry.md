@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-18 - Replacing strict UTF-8 checking in savegame parsing with lossy parsing
+**Learning:** Found that `savegame.rs` performed strict UTF-8 validation (`core::str::from_utf8(&description).is_err()`) when reading savegame descriptions and level names. This caused a crash (or failed to load) when legacy or corrupted save files contained invalid UTF-8 bytes.
+**Action:** Replaced `core::str::from_utf8(&description).is_err()` with `String::from_utf8_lossy(&description)` to gracefully handle non-UTF-8 characters in descriptions and level names, and updated the `havoc_test_invalid_utf8_description` test to verify that the save loads and the corrupted string is handled via lossy parsing.
