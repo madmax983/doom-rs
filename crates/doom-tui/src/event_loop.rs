@@ -66,9 +66,6 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
-#[cfg(test)]
-use std::sync::atomic::AtomicUsize;
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,7 +214,9 @@ struct ModifierSnapshot {
 }
 
 #[cfg(test)]
-static MODIFIER_SAMPLE_COUNT: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    static MODIFIER_SAMPLE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Error type
@@ -396,7 +395,7 @@ fn query_refresh_rate() -> u32 {
 
 fn sampled_modifier_snapshot() -> ModifierSnapshot {
     #[cfg(test)]
-    MODIFIER_SAMPLE_COUNT.fetch_add(1, Ordering::Relaxed);
+    MODIFIER_SAMPLE_COUNT.with(|c| c.set(c.get() + 1));
 
     #[cfg(target_os = "windows")]
     {
@@ -748,37 +747,33 @@ impl DoomEventLoop {
 
                     match key.kind {
                         KeyEventKind::Press => {
-                            if key.code == KeyCode::Char('q') {
-                                self.is_running = false;
-                            }
-                            if key.code == KeyCode::Esc {
-                                self.input.push_escape();
-                            }
-                            if key.code == KeyCode::F(2) {
-                                self.cycle_renderer_mode();
-                            } else if key.code == KeyCode::F(5) {
-                                self.input.push_f5();
-                            } else if key.code == KeyCode::F(9) {
-                                self.input.push_f9();
-                            } else if key.code == KeyCode::Tab {
-                                self.input.push_tab();
-                            }
-                            if key.code == KeyCode::Up {
-                                self.input.push_menu_up();
-                            } else if key.code == KeyCode::Down {
-                                self.input.push_menu_down();
-                            } else if key.code == KeyCode::Enter {
-                                self.input.push_menu_select();
-                            }
-                            if let KeyCode::Char(ch) = key.code {
-                                self.input.push_console_char(ch);
-                                if ch == '.' {
+                            match key.code {
+                                KeyCode::Char('q') => {
+                                    self.is_running = false;
+                                    self.input.push_console_char('q');
+                                }
+                                KeyCode::Char('.') => {
+                                    self.input.push_console_char('.');
                                     self.input.push_wait();
                                 }
-                            } else if key.code == KeyCode::Enter {
-                                self.input.push_console_char('\n');
-                            } else if key.code == KeyCode::Backspace {
-                                self.input.push_console_char('\x08');
+                                KeyCode::Char(ch) => {
+                                    self.input.push_console_char(ch);
+                                }
+                                KeyCode::Esc => self.input.push_escape(),
+                                KeyCode::F(2) => {
+                                    self.cycle_renderer_mode();
+                                }
+                                KeyCode::F(5) => self.input.push_f5(),
+                                KeyCode::F(9) => self.input.push_f9(),
+                                KeyCode::Tab => self.input.push_tab(),
+                                KeyCode::Up => self.input.push_menu_up(),
+                                KeyCode::Down => self.input.push_menu_down(),
+                                KeyCode::Enter => {
+                                    self.input.push_menu_select();
+                                    self.input.push_console_char('\n');
+                                }
+                                KeyCode::Backspace => self.input.push_console_char('\x08'),
+                                _ => {}
                             }
                             self.input.key_down(key.code);
                         }
@@ -980,14 +975,12 @@ impl Drop for DoomEventLoop {
 mod tests {
     use super::*;
 
-    static MODIFIER_COUNT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
     fn reset_modifier_sample_count() {
-        MODIFIER_SAMPLE_COUNT.store(0, Ordering::Relaxed);
+        MODIFIER_SAMPLE_COUNT.with(|c| c.set(0));
     }
 
     fn modifier_sample_count() -> usize {
-        MODIFIER_SAMPLE_COUNT.load(Ordering::Relaxed)
+        MODIFIER_SAMPLE_COUNT.with(|c| c.get())
     }
 
     fn make_test_event_loop() -> DoomEventLoop {
@@ -1082,9 +1075,6 @@ mod tests {
     #[test]
     fn poll_events_does_not_sample_modifiers() {
         let mut loop_ = make_test_event_loop();
-        let _guard = MODIFIER_COUNT_LOCK
-            .lock()
-            .expect("value must exist in test");
         reset_modifier_sample_count();
 
         loop_.poll_events();
@@ -1097,9 +1087,6 @@ mod tests {
     #[test]
     fn drain_ready_tics_samples_modifiers_once_per_tic() {
         let mut loop_ = make_test_event_loop();
-        let _guard = MODIFIER_COUNT_LOCK
-            .lock()
-            .expect("value must exist in test");
         reset_modifier_sample_count();
 
         let mut app = CountingApp { ticks: 0 };

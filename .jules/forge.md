@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactor sequential if/else if blocks over a single value**
+**Learning:** Using sequential `if` and `else if` statements to check the same variable (like `key.code`) hides intent, allows implicit fall-through bugs if multiple conditions match, and is unnecessarily verbose.
+**Action:** Replace sequential `if/else if` blocks matching against the same enum or value with a single `match` statement. This enforces exhaustiveness, makes overlapping conditions explicit, and drastically improves readability.
