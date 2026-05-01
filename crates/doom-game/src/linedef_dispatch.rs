@@ -1233,34 +1233,34 @@ pub fn check_cross_lines(
     // Allocating a new `Vec` each time generates excessive memory churn. Since actors rarely
     // cross more than a few walk lines in a single tic, `SmallVec<[T; 8]>` keeps the
     // data on the stack entirely in almost all cases.
-    let mut walk_lines: smallvec::SmallVec<[(i64, i64, usize, u16); 8]> = level
-        .linedefs
-        .iter()
-        .enumerate()
-        .filter_map(|(i, ld)| {
-            if ld.special == 0 {
-                return None;
-            }
-            match classify_trigger(ld.special) {
-                Some(TriggerType::WalkOnce) | Some(TriggerType::WalkRepeat) => {
-                    let v1 = &level.vertexes[ld.from_vertex as usize];
-                    let v2 = &level.vertexes[ld.to_vertex as usize];
-                    segment_intersection_frac(
-                        old_x,
-                        old_y,
-                        new_x,
-                        new_y,
-                        v1.x as i32,
-                        v1.y as i32,
-                        v2.x as i32,
-                        v2.y as i32,
-                    )
-                    .map(|(num, denom)| (num, denom, i, ld.special))
+    // ⚡ Bolt Performance Optimization:
+    // Replaced iterator `.filter_map(...).collect()` chain with a manual `for` loop pushing
+    // into a `SmallVec` to eliminate iterator overhead on this critical physics hot path.
+    let mut walk_lines: smallvec::SmallVec<[(i64, i64, usize, u16); 8]> = smallvec::SmallVec::new();
+    for (i, ld) in level.linedefs.iter().enumerate() {
+        if ld.special == 0 {
+            continue;
+        }
+        match classify_trigger(ld.special) {
+            Some(TriggerType::WalkOnce) | Some(TriggerType::WalkRepeat) => {
+                let v1 = &level.vertexes[ld.from_vertex as usize];
+                let v2 = &level.vertexes[ld.to_vertex as usize];
+                if let Some((num, denom)) = segment_intersection_frac(
+                    old_x,
+                    old_y,
+                    new_x,
+                    new_y,
+                    v1.x as i32,
+                    v1.y as i32,
+                    v2.x as i32,
+                    v2.y as i32,
+                ) {
+                    walk_lines.push((num, denom, i, ld.special));
                 }
-                _ => None,
             }
-        })
-        .collect();
+            _ => continue,
+        }
+    }
 
     walk_lines.sort_by(|a, b| {
         let lhs = i128::from(a.0) * i128::from(b.1);

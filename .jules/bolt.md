@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Remove intermediate .collect() chain for smallvec in hot path**
+**Learning:** Returning a `SmallVec` built from a `.filter_map(|...| ...).collect()` in a hot loop (like `check_cross_lines`) causes unnecessary iterator overhead when we can just push directly. Similar thing for `Vec` allocations in `render_things_impl`.
+**Action:** Replace `let col: SmallVec<_> = iter.filter_map(...).collect()` with a pre-allocated `SmallVec` or `Vec` and a loop using `push()`.

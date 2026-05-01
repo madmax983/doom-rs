@@ -1113,20 +1113,18 @@ fn render_things_impl(
     let mut fuzz_pos: usize = 0;
 
     // ---------- Collect visible things with their view-space depths ----------
-    let mut visible: Vec<(f32, &doom_map::Thing)> = things
-        .iter()
-        .filter_map(|thing| {
-            let dx = thing.x as f32 - px;
-            let dy = thing.y as f32 - py;
-            // Rotate into view space.
-            let vx = dx * cos_a + dy * sin_a; // depth (forward)
-            if vx > 0.5 {
-                Some((vx, thing))
-            } else {
-                None // behind or too close
-            }
-        })
-        .collect();
+    // ⚡ Bolt Performance Optimization:
+    // Replaced iterator `.filter_map(...).collect()` with a pre-allocated `Vec` (via `Vec::with_capacity`
+    // or manual loop) to eliminate iterator overhead and reallocation churn per frame on this hot path.
+    let mut visible: Vec<(f32, &doom_map::Thing)> = Vec::with_capacity(things.len());
+    for thing in things {
+        let dx = thing.x as f32 - px;
+        let dy = thing.y as f32 - py;
+        let vx = dx * cos_a + dy * sin_a;
+        if vx > 0.5 {
+            visible.push((vx, thing));
+        }
+    }
 
     // Painter's algorithm: draw farthest things first so nearer ones overdraw.
     visible.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
