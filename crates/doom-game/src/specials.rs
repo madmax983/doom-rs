@@ -89,10 +89,10 @@ pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandl
             continue;
         }
 
-        let dmg: i32 = match crate::state::SectorDamageType::from_repr(sector.special) {
-            Some(crate::state::SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
-            Some(crate::state::SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
-            Some(crate::state::SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
+        let dmg: i32 = match crate::movers::SectorDamageType::from_repr(sector.special) {
+            Some(crate::movers::SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
+            Some(crate::movers::SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
+            Some(crate::movers::SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
             _ => continue,
         };
 
@@ -149,16 +149,16 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
             continue;
         }
 
-        let Some(damage_type) = crate::state::SectorDamageType::from_repr(sector.special) else {
+        let Some(damage_type) = crate::movers::SectorDamageType::from_repr(sector.special) else {
             continue;
         };
 
         let (damage, ignores_radsuit) = match damage_type {
-            crate::state::SectorDamageType::NukageBlink => (PERIODIC_DAMAGE_NUKAGE_BLINK, false),
-            crate::state::SectorDamageType::Hellslime => (PERIODIC_DAMAGE_HELLSLIME, false),
-            crate::state::SectorDamageType::Nukage => (PERIODIC_DAMAGE_NUKAGE, false),
-            crate::state::SectorDamageType::GodExit => (PERIODIC_DAMAGE_GOD_EXIT, true),
-            crate::state::SectorDamageType::SuperHellslime => {
+            crate::movers::SectorDamageType::NukageBlink => (PERIODIC_DAMAGE_NUKAGE_BLINK, false),
+            crate::movers::SectorDamageType::Hellslime => (PERIODIC_DAMAGE_HELLSLIME, false),
+            crate::movers::SectorDamageType::Nukage => (PERIODIC_DAMAGE_NUKAGE, false),
+            crate::movers::SectorDamageType::GodExit => (PERIODIC_DAMAGE_GOD_EXIT, true),
+            crate::movers::SectorDamageType::SuperHellslime => {
                 (PERIODIC_DAMAGE_SUPER_HELLSLIME, false)
             }
         };
@@ -168,7 +168,7 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
         }
 
         // God exit specific behavior
-        if damage_type == crate::state::SectorDamageType::GodExit {
+        if damage_type == crate::movers::SectorDamageType::GodExit {
             if let Some(mo) = gs.mobjslab.get(handle) {
                 if mo.health <= 10 {
                     gs.exit_request = Some(ExitRequest::Normal);
