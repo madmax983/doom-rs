@@ -1744,7 +1744,7 @@ mod tests {
     #[test]
     fn exit_request_cleared_at_tick_start() {
         let mut gs = make_game_state();
-        gs.exit_request = Some(crate::state::ExitRequest::Normal);
+        gs.exit_request = Some(doom_types::primitives::ExitRequest::Normal);
         gs.tick(TicCmd::default(), None);
         assert_eq!(
             gs.exit_request, None,
@@ -2163,7 +2163,7 @@ mod tests {
 
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(doom_types::primitives::ExitRequest::Normal),
             "walk-trigger exits should be processed during the game tick, not only in the app wrapper"
         );
     }
@@ -2174,7 +2174,7 @@ mod tests {
 
     #[test]
     fn exit_request_clone_copy_partial_eq() {
-        use crate::state::ExitRequest;
+        use doom_types::primitives::ExitRequest;
         let a = ExitRequest::Normal;
         let b = a; // Copy
         let c = a; // Clone

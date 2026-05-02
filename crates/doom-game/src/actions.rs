@@ -2021,7 +2021,7 @@ fn a_spawn_fly(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Triggers a normal level exit.
 fn a_brain_die(gs: &mut GameState) {
-    gs.exit_request = Some(crate::state::ExitRequest::Normal);
+    gs.exit_request = Some(doom_types::primitives::ExitRequest::Normal);
 }
 
 /// Port of `A_BrainScream` from Doom's `p_enemy.c`.
@@ -4684,7 +4684,7 @@ mod tests {
         a_brain_die(&mut gs);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(doom_types::primitives::ExitRequest::Normal),
             "brain_die must trigger a normal exit"
         );
     }

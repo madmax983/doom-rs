@@ -1,6 +1,6 @@
 use crate::mobj::MobjHandle;
-use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;
+use doom_types::primitives::LockedDoorColor;
 
 /// A sound event emitted by the game simulation.
 ///

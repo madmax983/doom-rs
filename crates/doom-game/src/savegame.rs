@@ -15,9 +15,9 @@ use crate::mobj::{Mobj, MobjHandle, MobjSlab, StateNum};
 use crate::player::{PlayerState, PspriteState};
 use crate::savegame_vanilla;
 use crate::state::{
-    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
-    GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
-    PlatformStatus, ScrollingWall,
+    CeilingMover, CeilingType, ConveyorBelt, DoorMover, FloorMover, FloorType, GameState,
+    LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus,
+    ScrollingWall,
 };
 use doom_types::limits::{NUM_POWERS, NUM_PSPRITES};
 use doom_types::mobj_kind::MobjKind;
@@ -1062,7 +1062,9 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
     // --- Exit request ---
     let exit_request = match r.read_u8()? {
         0 => None,
-        disc => Some(ExitRequest::from_repr(disc - 1).ok_or(SaveError::Truncated)?),
+        disc => Some(
+            doom_types::primitives::ExitRequest::from_repr(disc - 1).ok_or(SaveError::Truncated)?,
+        ),
     };
 
     // --- Door movers ---
@@ -1568,20 +1570,26 @@ mod tests {
     #[test]
     fn roundtrip_exit_request_normal() {
         let mut gs = test_game_state();
-        gs.exit_request = Some(ExitRequest::Normal);
+        gs.exit_request = Some(doom_types::primitives::ExitRequest::Normal);
         let data = save_game(&gs, &test_level_name(), 2, "exit normal");
         let loaded = load_game(&data).expect("load must succeed");
-        assert_eq!(loaded.state.exit_request, Some(ExitRequest::Normal));
+        assert_eq!(
+            loaded.state.exit_request,
+            Some(doom_types::primitives::ExitRequest::Normal)
+        );
     }
 
     // --- Test 15c: Roundtrip preserves exit_request (Secret) ---
     #[test]
     fn roundtrip_exit_request_secret() {
         let mut gs = test_game_state();
-        gs.exit_request = Some(ExitRequest::Secret);
+        gs.exit_request = Some(doom_types::primitives::ExitRequest::Secret);
         let data = save_game(&gs, &test_level_name(), 2, "exit secret");
         let loaded = load_game(&data).expect("load must succeed");
-        assert_eq!(loaded.state.exit_request, Some(ExitRequest::Secret));
+        assert_eq!(
+            loaded.state.exit_request,
+            Some(doom_types::primitives::ExitRequest::Secret)
+        );
     }
 
     // --- Test 16: Roundtrip with door movers preserves count ---

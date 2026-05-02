@@ -69,6 +69,7 @@ pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_
 pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
+pub use doom_types::primitives::{ExitRequest, LockedDoorColor};
 pub use face::{FaceDir, FaceKind, FaceState, face_patch_name, health_tier};
 pub use intermission::{IntermissionStats, par_time};
 pub use linedef_dispatch::{
@@ -120,7 +121,7 @@ pub use specials::{
     tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
     tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
-pub use state::{ExitRequest, GameState, LockedDoorColor};
+pub use state::GameState;
 pub use states::STATES;
 pub use states::sprite_names;
 pub use stats::LevelStats;

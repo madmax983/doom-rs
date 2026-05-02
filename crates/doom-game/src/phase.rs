@@ -7,7 +7,8 @@
 //! next map for both Doom 1 (ExMy) and Doom 2 (MAPxx) progression.
 
 use crate::intermission::{self, IntermissionStats};
-use crate::state::{ExitRequest, GameState};
+use crate::state::GameState;
+use doom_types::primitives::ExitRequest;
 
 // ---------------------------------------------------------------------------
 // MapId

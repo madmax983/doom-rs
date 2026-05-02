@@ -20,9 +20,9 @@ use doom_types::{FIXED_ONE, Fixed16_16};
 
 use crate::mobj::MobjHandle;
 use crate::state::{
-    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
-    GameState, LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection,
-    PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
+    CeilingMover, CeilingType, ConveyorBelt, DoorMover, FloorMover, FloorType, GameState,
+    LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection, PerpetualPlatform,
+    PlatformStatus, ScrollingWall, SectorLightEffect,
 };
 
 // ---------------------------------------------------------------------------
@@ -171,7 +171,7 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
         if damage_type == crate::state::SectorDamageType::GodExit {
             if let Some(mo) = gs.mobjslab.get(handle) {
                 if mo.health <= 10 {
-                    gs.exit_request = Some(ExitRequest::Normal);
+                    gs.exit_request = Some(doom_types::primitives::ExitRequest::Normal);
                 }
             }
         }
@@ -2825,22 +2825,22 @@ fn activate_exits(
     match special {
         // --- Type 11: S1 Exit (normal) ---
         11 => {
-            gs.exit_request = Some(ExitRequest::Normal);
+            gs.exit_request = Some(doom_types::primitives::ExitRequest::Normal);
         }
 
         // --- Type 51: S1 Secret Exit ---
         51 => {
-            gs.exit_request = Some(ExitRequest::Secret);
+            gs.exit_request = Some(doom_types::primitives::ExitRequest::Secret);
         }
 
         // --- Type 52: W1 Exit (walk trigger, normal) ---
         52 => {
-            gs.exit_request = Some(ExitRequest::Normal);
+            gs.exit_request = Some(doom_types::primitives::ExitRequest::Normal);
         }
 
         // --- Type 124: W1 Secret Exit (walk trigger) ---
         124 => {
-            gs.exit_request = Some(ExitRequest::Secret);
+            gs.exit_request = Some(doom_types::primitives::ExitRequest::Secret);
         }
         _ => {}
     }
@@ -5351,7 +5351,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(doom_types::primitives::ExitRequest::Normal),
             "type 11 must set ExitRequest::Normal"
         );
     }
@@ -5364,7 +5364,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Secret),
+            Some(doom_types::primitives::ExitRequest::Secret),
             "type 51 must set ExitRequest::Secret"
         );
     }
@@ -5377,7 +5377,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(doom_types::primitives::ExitRequest::Normal),
             "type 52 (walk trigger) must set ExitRequest::Normal"
         );
     }
@@ -5390,7 +5390,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Secret),
+            Some(doom_types::primitives::ExitRequest::Secret),
             "type 124 (walk trigger) must set ExitRequest::Secret"
         );
     }
@@ -5720,7 +5720,7 @@ mod tests {
         assert_eq!(mo.health, 5, "God exit must deal 20 damage");
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(doom_types::primitives::ExitRequest::Normal),
             "God exit must set ExitRequest::Normal when health <= 10"
         );
     }
