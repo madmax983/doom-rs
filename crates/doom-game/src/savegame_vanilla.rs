@@ -107,3 +107,75 @@ fn version_string(bytes: &[u8]) -> Option<&str> {
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     core::str::from_utf8(&bytes[..end]).ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn looks_like_vanilla_dsg_rejects_short_data() {
+        assert!(!looks_like_vanilla_dsg(&[0; 10]));
+    }
+
+    #[test]
+    fn looks_like_vanilla_dsg_accepts_valid_header() {
+        let mut data = [0u8; VANILLA_HEADER_LEN];
+        // Description
+        data[0..24].copy_from_slice(b"My Savegame             ");
+        // Version
+        data[24..40].copy_from_slice(b"version 109\0\0\0\0\0");
+        assert!(looks_like_vanilla_dsg(&data));
+    }
+
+    #[test]
+    fn parse_header_rejects_invalid_utf8_version() {
+        let mut data = [0u8; VANILLA_HEADER_LEN];
+        data[0..24].copy_from_slice(b"My Savegame             ");
+
+        // Put invalid UTF-8 in the version string.
+        let mut version = *b"version 109\0\0\0\0\0";
+        version[0] = 0x80;
+        data[24..40].copy_from_slice(&version);
+
+        let res = parse_header(&data);
+        assert_eq!(res.expect_err("should fail parsing"), SaveError::BadMagic);
+    }
+
+    #[test]
+    fn parse_header_rejects_bad_version_string() {
+        let mut data = [0u8; VANILLA_HEADER_LEN];
+        data[0..24].copy_from_slice(b"My Savegame             ");
+        data[24..40].copy_from_slice(b"version 108\0\0\0\0\0");
+
+        let res = parse_header(&data);
+        assert_eq!(
+            res.expect_err("should fail parsing due to wrong version"),
+            SaveError::BadVersion
+        );
+    }
+
+    #[test]
+    fn parse_header_rejects_short_data() {
+        let res = parse_header(&[0; 10]);
+        assert_eq!(res.expect_err("should fail parsing"), SaveError::TooShort);
+    }
+
+    #[test]
+    fn parse_header_accepts_valid_data() {
+        let mut data = [0u8; VANILLA_HEADER_LEN];
+        data[0..24].copy_from_slice(b"My Savegame\0\0\0\0\0\0\0\0\0\0\0\0\0");
+        data[24..40].copy_from_slice(b"version 109\0\0\0\0\0");
+        data[40] = 2; // skill
+        data[41] = 1; // episode
+        data[42] = 1; // map
+        data[43..47].copy_from_slice(&[1, 0, 0, 0]); // players
+        data[47..50].copy_from_slice(&[0x23, 0x01, 0x00]); // time
+
+        let header = parse_header(&data).expect("should parse successfully");
+        assert_eq!(header.skill, 2);
+        assert_eq!(header.episode, 1);
+        assert_eq!(header.map, 1);
+        assert_eq!(header.players_in_game, [1, 0, 0, 0]);
+        assert_eq!(header.level_time, 0x0123);
+    }
+}

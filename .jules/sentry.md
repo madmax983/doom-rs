@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-20 - Ensure safe fallback parsing for `.dsg` vanilla save headers
+**Learning:** Found uncovered edge cases related to parsing vanilla Doom `.dsg` savegame headers in `doom-game/src/savegame_vanilla.rs`. Specifically, if the version string was truncated or contained invalid UTF-8 bytes without a null terminator, `core::str::from_utf8` silently returned an error leading to a default `None` fallback, dropping down to `BadVersion`. We lacked specific tests proving this gracefulness over panic.
+**Action:** Always add dedicated invalid UTF-8 test cases for file parsers that depend on `from_utf8`, ensuring `expect_err` gracefully reports structural failures like `SaveError::BadVersion` or `SaveError::BadMagic` rather than panicking.
