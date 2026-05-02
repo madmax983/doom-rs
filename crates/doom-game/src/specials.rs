@@ -21,7 +21,7 @@ use doom_types::{FIXED_ONE, Fixed16_16};
 use crate::mobj::MobjHandle;
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
-    GameState, LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection,
+    GameState, LiftMover, LiftStatus, LightEffectType, MoveDirection,
     PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
 };
 
@@ -42,10 +42,10 @@ const DOOR_WAIT: i32 = 120;
 const BLAZING_DOOR_SPEED: i16 = 8;
 
 /// Period for fast blinking lights (tics).
-const BLINK_FAST_PERIOD: i32 = 15;
+pub const BLINK_FAST_PERIOD: i32 = 15;
 
 /// Period for slow blinking lights (tics).
-const BLINK_SLOW_PERIOD: i32 = 35;
+pub const BLINK_SLOW_PERIOD: i32 = 35;
 
 // Sector damage constants (legacy per tic)
 const LEGACY_DAMAGE_HELLSLIME: i32 = 10;
@@ -312,25 +312,8 @@ pub fn init_sector_lights(gs: &mut GameState, level: &Level) {
             continue;
         };
 
-        let min_light = match effect_type {
-            LightEffectType::BlinkRandom => 0,
-            LightEffectType::Blink05s => 0,
-            LightEffectType::Blink1s => 35,
-            LightEffectType::Oscillate => sector.light_level / 2,
-            LightEffectType::BlinkSync05s => 0,
-            LightEffectType::BlinkSync1s => 35,
-            LightEffectType::FireFlicker => sector.light_level.saturating_sub(16).max(0),
-        };
-
-        let timer = match effect_type {
-            LightEffectType::BlinkRandom => BLINK_SLOW_PERIOD as u32,
-            LightEffectType::Blink05s => BLINK_FAST_PERIOD as u32,
-            LightEffectType::Blink1s => BLINK_SLOW_PERIOD as u32,
-            LightEffectType::Oscillate => 1,
-            LightEffectType::BlinkSync05s => BLINK_FAST_PERIOD as u32,
-            LightEffectType::BlinkSync1s => BLINK_SLOW_PERIOD as u32,
-            LightEffectType::FireFlicker => 4,
-        };
+        let min_light = effect_type.min_light(sector.light_level);
+        let timer = effect_type.initial_timer();
 
         gs.movers.sector_lights.push(SectorLightEffect {
             sector_index: i,
@@ -550,41 +533,8 @@ pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
             continue;
         };
 
-        match effect_type {
-            LightEffectType::BlinkRandom => {
-                // Random off: slow blink, goes dark.
-                gs.movers.active_lights.push(LightSpecial {
-                    sector: i,
-                    timer: BLINK_SLOW_PERIOD,
-                    period: BLINK_SLOW_PERIOD,
-                    bright: sector.light_level,
-                    dark: 0,
-                    is_bright: true,
-                });
-            }
-            LightEffectType::Blink05s => {
-                // Fast strobe.
-                gs.movers.active_lights.push(LightSpecial {
-                    sector: i,
-                    timer: BLINK_FAST_PERIOD,
-                    period: BLINK_FAST_PERIOD,
-                    bright: sector.light_level,
-                    dark: 0,
-                    is_bright: true,
-                });
-            }
-            LightEffectType::Blink1s => {
-                // Slow strobe: dim but not fully dark.
-                gs.movers.active_lights.push(LightSpecial {
-                    sector: i,
-                    timer: BLINK_SLOW_PERIOD,
-                    period: BLINK_SLOW_PERIOD,
-                    bright: sector.light_level,
-                    dark: 35,
-                    is_bright: true,
-                });
-            }
-            _ => {} // Other specials handled by tick_sector_specials.
+        if let Some(special) = effect_type.to_light_special(i, sector.light_level) {
+            gs.movers.active_lights.push(special);
         }
     }
 }

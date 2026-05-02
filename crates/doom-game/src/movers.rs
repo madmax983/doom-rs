@@ -308,6 +308,65 @@ pub enum LightEffectType {
     FireFlicker = 17,
 }
 
+impl LightEffectType {
+    /// Gets the minimum light level for this effect type given the sector's base light level.
+    pub fn min_light(self, base_light: i16) -> i16 {
+        match self {
+            Self::BlinkRandom | Self::Blink05s | Self::BlinkSync05s => 0,
+            Self::Blink1s | Self::BlinkSync1s => 35,
+            Self::Oscillate => base_light / 2,
+            Self::FireFlicker => base_light.saturating_sub(16).max(0),
+        }
+    }
+
+    /// Gets the initial timer value for this effect type.
+    pub fn initial_timer(self) -> u32 {
+        match self {
+            Self::Oscillate => 1,
+            Self::FireFlicker => 4,
+            Self::BlinkRandom | Self::Blink1s | Self::BlinkSync1s => {
+                crate::specials::BLINK_SLOW_PERIOD as u32
+            }
+            Self::Blink05s | Self::BlinkSync05s => crate::specials::BLINK_FAST_PERIOD as u32,
+        }
+    }
+
+    /// Converts this effect type into a `LightSpecial` if applicable.
+    pub fn to_light_special(
+        self,
+        sector_index: usize,
+        base_light: i16,
+    ) -> Option<crate::state::LightSpecial> {
+        match self {
+            Self::BlinkRandom => Some(crate::state::LightSpecial {
+                sector: sector_index,
+                timer: crate::specials::BLINK_SLOW_PERIOD,
+                period: crate::specials::BLINK_SLOW_PERIOD,
+                bright: base_light,
+                dark: 0,
+                is_bright: true,
+            }),
+            Self::Blink05s => Some(crate::state::LightSpecial {
+                sector: sector_index,
+                timer: crate::specials::BLINK_FAST_PERIOD,
+                period: crate::specials::BLINK_FAST_PERIOD,
+                bright: base_light,
+                dark: 0,
+                is_bright: true,
+            }),
+            Self::Blink1s => Some(crate::state::LightSpecial {
+                sector: sector_index,
+                timer: crate::specials::BLINK_SLOW_PERIOD,
+                period: crate::specials::BLINK_SLOW_PERIOD,
+                bright: base_light,
+                dark: 35,
+                is_bright: true,
+            }),
+            _ => None,
+        }
+    }
+}
+
 /// Extended sector light effect with per-sector state tracking.
 ///
 /// Created by `specials::init_sector_lights` from sector specials.
