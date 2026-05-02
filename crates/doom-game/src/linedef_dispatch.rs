@@ -1194,7 +1194,11 @@ fn min_neighbor_light(level: &Level, tag: u16) -> i16 {
 // ---------------------------------------------------------------------------
 
 /// Collect all sector indices matching `tag`.
-fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
+/// ⚡ Bolt Optimization:
+/// Replaces `Vec<usize>` with `smallvec::SmallVec<[usize; 8]>` to eliminate dynamic heap allocations
+/// when discovering sectors matching a tag. Tagged triggers are evaluated extremely frequently
+/// (doors, stairs, teleports), and typically only affect a small handful of sectors.
+fn sectors_by_tag(level: &Level, tag: u16) -> smallvec::SmallVec<[usize; 8]> {
     level
         .sectors
         .iter()

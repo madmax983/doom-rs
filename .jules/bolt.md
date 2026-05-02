@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**[Eliminate dynamic allocations in sector tag lookups]
+**Learning:** Returning `impl Iterator` from an immutable helper function like `sectors_by_tag` might seem like the purest zero-cost abstraction, but it extends the immutable borrow of `&Level` for the lifetime of the iteration. If the iteration block attempts to mutate `GameState` which conceptually alters the world, this can lead to complex borrow checker conflicts if the state holds a mutable reference to `Level` or if the iteration is too broad.
+**Action:** When a helper gathers indices for subsequent mutation, prefer eagerly collecting the indices into a `smallvec::SmallVec` instead of returning a lazy iterator. This immediately drops the immutable borrow while still keeping small collections (like discovering a few tagged doors or stairs) entirely on the stack, bypassing heap allocation overhead.
