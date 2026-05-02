@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2026-05-02 - [Clarified AiDirector role and pacing]
+**Confusion:** The `doom-game` crate's `director.rs` lacked module-level documentation explaining the concept of dynamic difficulty and an example for `AiDirector::tick`.
+**Clarification:** Added a module-level story explaining the invisible orchestrator and an executable `## Examples` block demonstrating dynamic threats and relief.
