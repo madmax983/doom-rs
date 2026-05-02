@@ -178,6 +178,9 @@ struct Args {
     /// Export the level layout and statistics to a standalone HTML report and exit.
     #[arg(long)]
     export_html: Option<std::path::PathBuf>,
+    /// Export the level layout to an interactive 3D HTML file and exit.
+    #[arg(long)]
+    export_3d_html: Option<std::path::PathBuf>,
 
     /// Export the level layout and statistics to a standalone JSON file and exit.
     #[arg(long)]
@@ -2234,6 +2237,18 @@ fn run_doom(args: Args) -> Result<()> {
             "Could not load the map '{warp_str}'. Please ensure it exists in the provided WADs."
         )
     })?;
+
+    if handle_export(
+        args.export_3d_html.as_deref(),
+        || doom_map::export_map_to_html3d(&level),
+        "🌟",
+        "Exported",
+        "3D HTML",
+        "3D HTML view",
+        args.json,
+    )? {
+        return Ok(());
+    }
 
     if handle_export(
         args.export_html.as_deref(),
