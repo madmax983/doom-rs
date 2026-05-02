@@ -52,3 +52,6 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+**[Extract inline tests to fix The Blob]**
+**Tangle:** The `crates/doom-game/src/specials.rs` module grew to nearly 10,000 lines ("The Blob"), severely hampering navigability. Roughly 6,200 of those lines were inline unit tests contained within a `#[cfg(test)] mod tests` block at the bottom of the file.
+**Blueprint:** Converted `specials.rs` into a directory module `specials/mod.rs` and extracted the ~6,200 lines of tests into `specials/tests.rs`. Included the test file via `#[cfg(test)] mod tests;` in `mod.rs`. This drastically reduces the primary file size and improves maintainability without requiring any changes to external imports or parent module declarations.
