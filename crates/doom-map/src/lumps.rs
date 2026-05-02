@@ -219,13 +219,20 @@ impl Sidedef {
     const BYTE_SIZE: usize = 30;
 
     fn from_bytes(b: &[u8]) -> Self {
+        let mut upper_texture = [0u8; 8];
+        if b.len() >= 12 { upper_texture.copy_from_slice(&b[4..12]); }
+        let mut lower_texture = [0u8; 8];
+        if b.len() >= 20 { lower_texture.copy_from_slice(&b[12..20]); }
+        let mut middle_texture = [0u8; 8];
+        if b.len() >= 28 { middle_texture.copy_from_slice(&b[20..28]); }
+
         Self {
-            x_offset: i16::from_le_bytes([b[0], b[1]]),
-            y_offset: i16::from_le_bytes([b[2], b[3]]),
-            upper_texture: b[4..12].try_into().unwrap(),
-            lower_texture: b[12..20].try_into().unwrap(),
-            middle_texture: b[20..28].try_into().unwrap(),
-            sector: u16::from_le_bytes([b[28], b[29]]),
+            x_offset: if b.len() >= 2 { i16::from_le_bytes([b[0], b[1]]) } else { 0 },
+            y_offset: if b.len() >= 4 { i16::from_le_bytes([b[2], b[3]]) } else { 0 },
+            upper_texture,
+            lower_texture,
+            middle_texture,
+            sector: if b.len() >= 30 { u16::from_le_bytes([b[28], b[29]]) } else { 0 },
         }
     }
 
@@ -515,14 +522,19 @@ impl Sector {
     const BYTE_SIZE: usize = 26;
 
     fn from_bytes(b: &[u8]) -> Self {
+        let mut floor_flat = [0u8; 8];
+        if b.len() >= 12 { floor_flat.copy_from_slice(&b[4..12]); }
+        let mut ceil_flat = [0u8; 8];
+        if b.len() >= 20 { ceil_flat.copy_from_slice(&b[12..20]); }
+
         Self {
-            floor_height: i16::from_le_bytes([b[0], b[1]]),
-            ceil_height: i16::from_le_bytes([b[2], b[3]]),
-            floor_flat: b[4..12].try_into().unwrap(),
-            ceil_flat: b[12..20].try_into().unwrap(),
-            light_level: i16::from_le_bytes([b[20], b[21]]),
-            special: u16::from_le_bytes([b[22], b[23]]),
-            tag: u16::from_le_bytes([b[24], b[25]]),
+            floor_height: if b.len() >= 2 { i16::from_le_bytes([b[0], b[1]]) } else { 0 },
+            ceil_height: if b.len() >= 4 { i16::from_le_bytes([b[2], b[3]]) } else { 0 },
+            floor_flat,
+            ceil_flat,
+            light_level: if b.len() >= 22 { i16::from_le_bytes([b[20], b[21]]) } else { 0 },
+            special: if b.len() >= 24 { u16::from_le_bytes([b[22], b[23]]) } else { 0 },
+            tag: if b.len() >= 26 { u16::from_le_bytes([b[24], b[25]]) } else { 0 },
         }
     }
 
@@ -871,6 +883,20 @@ mod prop_tests {
 // ---------------------------------------------------------------------------
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_sidedef_from_bytes_truncation_safe() {
+        let b = vec![0u8; 10]; // Short slice
+        let s = Sidedef::from_bytes(&b);
+        assert_eq!(s.x_offset, 0);
+    }
+
+    #[test]
+    fn test_sector_from_bytes_truncation_safe() {
+        let b = vec![0u8; 10]; // Short slice
+        let s = Sector::from_bytes(&b);
+        assert_eq!(s.floor_height, 0);
+    }
+
     use super::*;
 
     #[test]

@@ -1,0 +1,20 @@
+🛡️ Sentry: [test coverage improvement]
+
+🎯 Target:
+- `crates/doom-map/src/lumps.rs` (Slice parsing)
+- `crates/doom-map/src/analyzer.rs` (Sector graph traversal)
+- `crates/doom-tui/src/sixel.rs` (Formatting unwraps)
+
+💣 Risk:
+- Using `try_into().unwrap()` on slices when parsing arrays for lumps panics if the lump buffer isn't exactly the right length, breaking robustness when dealing with corrupted WAD data.
+- The MapAnalyzer assumes bidirectional edge integrity and panics if an adjacency isn't found.
+- The Sixel formatter unwraps standard format results implicitly creating a crashpoint.
+
+🧪 Strategy:
+- Eliminated `.unwrap()` across these files.
+- For lumps parsing, used length checks and `.copy_from_slice()` with default array initialization. Added new unit tests `test_sidedef_from_bytes_truncation_safe` and `test_sector_from_bytes_truncation_safe` to verify that short slices do not panic but parse safely.
+- For MapAnalyzer, used safe `if let Some(...)` to traverse only valid edges.
+- For Sixel formatting, bound the `write!` macro results to `.expect("writing to String cannot fail unless OOM")` to clarify intention. Added new unit test `test_sixel_encode_no_panic` to ensure the formatting executes without aborting.
+
+🔬 Verification:
+`cargo test --all-targets --all-features`

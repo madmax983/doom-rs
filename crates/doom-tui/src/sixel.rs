@@ -191,7 +191,7 @@ pub fn encode_doom_sixel(
     let mut out = String::with_capacity(8192 + dst_w * 16);
 
     // DCS header: aspect-ratio=7 (1:1), background=0 (no change).
-    write!(out, "\x1bP7;0;{}q", area_w).unwrap();
+    out.write_fmt(format_args!("\x1bP7;0;{}q", area_w)).expect("writing to String cannot fail unless OOM");
 
     // Color register definitions: #n;2;R;G;B (values 0-100).
     for (i, is_used) in used.iter().enumerate() {
@@ -202,7 +202,7 @@ pub fn encode_doom_sixel(
         let r = (rgb.r as u32 * 100 + 127) / 255;
         let g = (rgb.g as u32 * 100 + 127) / 255;
         let b = (rgb.b as u32 * 100 + 127) / 255;
-        write!(out, "#{};2;{};{};{}", i, r, g, b).unwrap();
+        out.write_fmt(format_args!("#{};2;{};{};{}", i, r, g, b)).expect("writing to String cannot fail unless OOM");
     }
 
     // ── Band loop ─────────────────────────────────────────────────────────
@@ -282,7 +282,7 @@ pub fn encode_doom_sixel(
             }
             first_in_band = false;
 
-            write!(out, "#{}", color).unwrap();
+            out.write_fmt(format_args!("#{}", color)).expect("writing to String cannot fail unless OOM");
 
             // RLE-encode sixel characters for this color's columns.
             let mut run_ch = slice[0] + 63;
@@ -310,7 +310,7 @@ pub fn encode_doom_sixel(
 #[inline]
 fn emit_rle(out: &mut String, ch: u8, count: usize) {
     if count >= 4 {
-        write!(out, "!{}{}", count, ch as char).unwrap();
+        out.write_fmt(format_args!("!{}{}", count, ch as char)).expect("writing to String cannot fail unless OOM");
     } else {
         for _ in 0..count {
             out.push(ch as char);
@@ -320,6 +320,13 @@ fn emit_rle(out: &mut String, ch: u8, count: usize) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn test_sixel_encode_no_panic() {
+        let data = vec![0u8; 100];
+        let lut = doom_renderer::PaletteLut::grayscale();
+        let _out = encode_doom_sixel(&data, &lut, 0, 10, 10, 10, 10, 10);
+    }
+
     use super::*;
 
     #[test]
