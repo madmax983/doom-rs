@@ -1194,7 +1194,12 @@ fn min_neighbor_light(level: &Level, tag: u16) -> i16 {
 // ---------------------------------------------------------------------------
 
 /// Collect all sector indices matching `tag`.
-fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
+///
+/// ⚡ Bolt Optimization: Uses `SmallVec` instead of `Vec` to avoid heap allocations
+/// during linedef dispatch. We can't use a lazy iterator here because iterating
+/// while passing `gs` and `level` around causes borrow checker conflicts.
+/// Since tags usually only match 1 or 2 sectors, an inline capacity of 16 is plenty.
+fn sectors_by_tag(level: &Level, tag: u16) -> smallvec::SmallVec<[usize; 16]> {
     level
         .sectors
         .iter()
