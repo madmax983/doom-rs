@@ -1194,6 +1194,9 @@ fn min_neighbor_light(level: &Level, tag: u16) -> i16 {
 // ---------------------------------------------------------------------------
 
 /// Collect all sector indices matching `tag`.
+///
+/// ⚡ Bolt Optimization:
+/// Uses `SmallVec` to eliminate heap allocations when fetching matching sectors.
 fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
     level
         .sectors
