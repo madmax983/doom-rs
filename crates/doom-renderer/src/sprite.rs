@@ -815,22 +815,23 @@ pub fn render_actors_with_masked_and_fixed_colormap_ex<'a, I, T>(
     }
 
     // Collect and depth-sort sprites and masked midtextures back-to-front.
-    let mut visible: Vec<VisibleElement<'_>> = actors
-        .into_iter()
-        .filter_map(|a| {
-            let a_ref = a.borrow();
-            let ax = a_ref.x as f32 / 65536.0;
-            let ay = a_ref.y as f32 / 65536.0;
-            let dx = ax - px;
-            let dy = ay - py;
-            let vx = dx * cos_a + dy * sin_a;
-            if vx > 0.5 {
-                Some(VisibleElement::Actor(vx, *a_ref))
-            } else {
-                None
-            }
-        })
-        .collect();
+    // ⚡ Bolt: Using a pre-allocated Vec and for loop avoids reallocation churn from `.filter_map(...).collect()`.
+    let actors_iter = actors.into_iter();
+    let lower_bound = actors_iter.size_hint().0;
+    let capacity = lower_bound + masked_columns.map_or(0, |m| m.len());
+    let mut visible = Vec::with_capacity(capacity);
+
+    for a in actors_iter {
+        let a_ref = a.borrow();
+        let ax = a_ref.x as f32 / 65536.0;
+        let ay = a_ref.y as f32 / 65536.0;
+        let dx = ax - px;
+        let dy = ay - py;
+        let vx = dx * cos_a + dy * sin_a;
+        if vx > 0.5 {
+            visible.push(VisibleElement::Actor(vx, *a_ref));
+        }
+    }
     if let Some(masked) = masked_columns {
         visible.extend(masked.iter().map(VisibleElement::Masked));
     }
@@ -1113,20 +1114,17 @@ fn render_things_impl(
     let mut fuzz_pos: usize = 0;
 
     // ---------- Collect visible things with their view-space depths ----------
-    let mut visible: Vec<(f32, &doom_map::Thing)> = things
-        .iter()
-        .filter_map(|thing| {
-            let dx = thing.x as f32 - px;
-            let dy = thing.y as f32 - py;
-            // Rotate into view space.
-            let vx = dx * cos_a + dy * sin_a; // depth (forward)
-            if vx > 0.5 {
-                Some((vx, thing))
-            } else {
-                None // behind or too close
-            }
-        })
-        .collect();
+    // ⚡ Bolt: Using a pre-allocated Vec and for loop avoids reallocation churn from `.filter_map(...).collect()`.
+    let mut visible: Vec<(f32, &doom_map::Thing)> = Vec::with_capacity(things.len());
+    for thing in things.iter() {
+        let dx = thing.x as f32 - px;
+        let dy = thing.y as f32 - py;
+        // Rotate into view space.
+        let vx = dx * cos_a + dy * sin_a; // depth (forward)
+        if vx > 0.5 {
+            visible.push((vx, thing));
+        }
+    }
 
     // Painter's algorithm: draw farthest things first so nearer ones overdraw.
     visible.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
