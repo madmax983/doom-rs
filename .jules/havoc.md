@@ -8,3 +8,6 @@
 **Havoc: Bounds-checking allocations**
 **Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
 **Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+**Fuzzing Custom Formats**
+**Learning:** Adding explicit fuzz targets like `cargo-fuzz` for custom format deserializers (like savegames) quickly exposes out-of-bounds reads and panics.
+**Action:** When implementing new custom formats, immediately write a corresponding `libfuzzer-sys` target to torture the parser with garbage data.

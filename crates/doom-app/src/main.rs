@@ -3054,9 +3054,16 @@ fn run_doom(args: Args) -> Result<()> {
 }
 
 fn main() {
+    let is_json = std::env::args().any(|a| a == "--json");
     let args = match Args::try_parse() {
         Ok(a) => a,
         Err(e) => {
+            if is_json {
+                let msg = e.to_string();
+                let json_data = format!("{{\"error\": {:?}}}", msg.trim_end());
+                println!("{}", json_data);
+                std::process::exit(1);
+            }
             e.exit();
         }
     };
