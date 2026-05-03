@@ -2457,11 +2457,20 @@ fn run_doom(args: Args) -> Result<()> {
             if chokepoints.is_empty() {
                 chokepoints_str.push_str("None");
             } else {
+                let mut line_len = 0;
                 for (i, s) in chokepoints.iter().enumerate() {
+                    let s_str = s.to_string();
                     if i > 0 {
-                        chokepoints_str.push_str(", ");
+                        if line_len + s_str.len() + 2 > 60 {
+                            chokepoints_str.push_str(",\n");
+                            line_len = 0;
+                        } else {
+                            chokepoints_str.push_str(", ");
+                            line_len += 2;
+                        }
                     }
-                    chokepoints_str.push_str(&s.to_string());
+                    chokepoints_str.push_str(&s_str);
+                    line_len += s_str.len();
                 }
             }
 
@@ -2487,11 +2496,20 @@ fn run_doom(args: Args) -> Result<()> {
                 ]);
                 for (i, area) in areas.iter().enumerate() {
                     let mut area_str = String::new();
+                    let mut line_len = 0;
                     for (j, s) in area.iter().enumerate() {
+                        let s_str = s.to_string();
                         if j > 0 {
-                            area_str.push_str(", ");
+                            if line_len + s_str.len() + 2 > 60 {
+                                area_str.push_str(",\n");
+                                line_len = 0;
+                            } else {
+                                area_str.push_str(", ");
+                                line_len += 2;
+                            }
                         }
-                        area_str.push_str(&s.to_string());
+                        area_str.push_str(&s_str);
+                        line_len += s_str.len();
                     }
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
@@ -2509,11 +2527,20 @@ fn run_doom(args: Args) -> Result<()> {
                 ]);
                 for (i, area) in areas.iter().enumerate() {
                     let mut area_str = String::new();
+                    let mut line_len = 0;
                     for (j, s) in area.iter().enumerate() {
+                        let s_str = s.to_string();
                         if j > 0 {
-                            area_str.push_str(", ");
+                            if line_len + s_str.len() + 2 > 60 {
+                                area_str.push_str(",\n");
+                                line_len = 0;
+                            } else {
+                                area_str.push_str(", ");
+                                line_len += 2;
+                            }
                         }
-                        area_str.push_str(&s.to_string());
+                        area_str.push_str(&s_str);
+                        line_len += s_str.len();
                     }
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
