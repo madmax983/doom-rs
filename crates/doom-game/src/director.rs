@@ -1,3 +1,10 @@
+//! Dynamic AI direction and pacing.
+//!
+//! This module introduces the `AiDirector`, an experimental system that monitors
+//! the player's performance (such as health) to dynamically adjust the intensity
+//! of the gameplay. It can trigger ambushes when the player is doing well or provide
+//! relief when the player is struggling.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

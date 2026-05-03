@@ -1,3 +1,10 @@
+//! Active sector geometry and environmental effects.
+//!
+//! This module defines the state structures for all active elements in the map that
+//! alter geometry or sector properties over time. This includes doors, lifts,
+//! crushing ceilings, moving platforms, lighting effects (flickering, strobing),
+//! scrolling walls, and conveyor belts.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

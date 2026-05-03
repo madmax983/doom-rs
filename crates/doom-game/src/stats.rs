@@ -1,3 +1,9 @@
+//! Level completion statistics tracking.
+//!
+//! This module defines the `LevelStats` struct used to record the player's performance
+//! throughout a level, capturing the classic metrics: Kills, Items, Secrets, and Time.
+//! These statistics are typically displayed during the intermission screen.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {

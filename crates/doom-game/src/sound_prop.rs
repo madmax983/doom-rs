@@ -1,3 +1,13 @@
+//! Sound event propagation and emission.
+//!
+//! The game core is completely decoupled from any actual audio backend. Instead of
+//! directly playing sounds, entities and events emit [`SoundRequest`]s into a queue.
+//! This module defines the requests and how sound traverses the map's sector graph
+//! to alert monsters (sound propagation).
+//!
+//! The outer orchestrator (`doom-app`) drains these queues each tic to trigger
+//! physical sound playback.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

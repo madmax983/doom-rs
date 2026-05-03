@@ -1,3 +1,10 @@
+//! Sprite clip history buffer.
+//!
+//! This module provides a fast, fixed-size `SpriteClipHistory` used to track how
+//! sprites clip against walls and portals during rendering. By using a stack-allocated
+//! array rather than a `Vec`, it avoids expensive heap allocations on the hot path
+//! of the rendering loop.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
