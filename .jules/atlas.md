@@ -52,3 +52,6 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+**[Remove legacy tick_sector_specials]**
+**Tangle:** The `tick_sector_specials` function in `crates/doom-game/src/specials.rs` was marked as legacy and kept for backward compatibility/isolated tests only, but it was not called by any game code (only its own tests). `tick_sector_damage` is the actual logic that processes sector damage. This dead code and its associated unused constants and tests added unnecessary bloat.
+**Blueprint:** Removed `tick_sector_specials`, its legacy constants (`LEGACY_DAMAGE_HELLSLIME`, etc.), its dedicated tests, and its re-export from `crates/doom-game/src/lib.rs`. Cleaned up matching comments.

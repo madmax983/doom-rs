@@ -3,7 +3,6 @@
 //! Port of Doom's `p_spec.c` and `p_ceilng.c` / `p_doors.c` (simplified).
 //!
 //! # Implemented
-//! - `tick_sector_specials`: damage floors (specials 5, 7, 16) with periodic damage and RadSuit.
 //! - `tick_sector_damage`: periodic damage (every 32 tics), RadSuit protection, God exit (special 11).
 //! - `tick_doors`: advance active door/floor movers.
 //! - `tick_lights`: advance light specials.
@@ -48,9 +47,6 @@ const BLINK_FAST_PERIOD: i32 = 15;
 const BLINK_SLOW_PERIOD: i32 = 35;
 
 // Sector damage constants (legacy per tic)
-const LEGACY_DAMAGE_HELLSLIME: i32 = 10;
-const LEGACY_DAMAGE_NUKAGE: i32 = 5;
-const LEGACY_DAMAGE_SUPER_HELLSLIME: i32 = 20;
 
 // Sector damage constants (periodic every 32 tics)
 const PERIODIC_DAMAGE_NUKAGE_BLINK: i32 = 5;
@@ -60,49 +56,6 @@ const PERIODIC_DAMAGE_GOD_EXIT: i32 = 20;
 const PERIODIC_DAMAGE_SUPER_HELLSLIME: i32 = 20;
 
 // ---------------------------------------------------------------------------
-// tick_sector_specials (legacy, kept for backward compatibility)
-// ---------------------------------------------------------------------------
-
-/// Apply sector special damage to the actor each tic (legacy version).
-///
-/// Simplified port of `P_PlayerInSpecialSector`.
-///
-/// Sector containment is approximated: the actor is considered to be "in" a
-/// special sector if `actor.z.to_int() == sector.floor_height as i32`.
-///
-/// Damage sectors update both the player state and player mobj health so
-/// monster AI sees the same liveness the HUD does.
-pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandle) {
-    // Read actor position.
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return;
-    };
-    let (az, _ax, _ay) = (mo.z.to_int(), mo.x.to_int(), mo.y.to_int());
-
-    for sector in &level.sectors {
-        if sector.special == 0 {
-            continue;
-        }
-
-        // Only apply damage if actor is standing on this floor.
-        if az != sector.floor_height as i32 {
-            continue;
-        }
-
-        let dmg: i32 = match crate::state::SectorDamageType::from_repr(sector.special) {
-            Some(crate::state::SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
-            Some(crate::state::SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
-            Some(crate::state::SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
-            _ => continue,
-        };
-
-        apply_sector_damage(gs, handle, dmg);
-
-        // Only apply one sector's damage per tic (first match wins).
-        return;
-    }
-}
-
 // ---------------------------------------------------------------------------
 // tick_sector_damage (periodic, with RadSuit and God exit)
 // ---------------------------------------------------------------------------
@@ -584,7 +537,7 @@ pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
                     is_bright: true,
                 });
             }
-            _ => {} // Other specials handled by tick_sector_specials.
+            _ => {}
         }
     }
 }
@@ -3951,66 +3904,6 @@ mod tests {
     /// Convenience: door level with special=1 (the original helper).
     fn make_door_level(door_ceil: i16) -> doom_map::Level {
         make_door_level_with_special(door_ceil, 1)
-    }
-
-    // -----------------------------------------------------------------------
-    // Tests: tick_sector_specials
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn damage_floor_hurts_actor_standing_on_it() {
-        let mut gs = GameState::new("TEST");
-        let level = make_damage_level(0, 5); // special 5 = lava, floor=0
-        let handle = make_actor_at_z(&mut gs, 0); // z matches floor_height
-
-        tick_sector_specials(&mut gs, &level, handle);
-
-        let health = gs
-            .mobjslab
-            .get(handle)
-            .expect("value must exist in test")
-            .health;
-        assert_eq!(health, 90, "lava (special 5) must deal 10 damage per tic");
-    }
-
-    #[test]
-    fn damage_floor_syncs_player_state_health() {
-        let mut gs = GameState::new("TEST");
-        let level = make_damage_level(0, 5); // special 5 = lava, floor=0
-        let handle = make_actor_at_z(&mut gs, 0);
-        gs.player = crate::player::PlayerState::pistol_start(handle);
-
-        tick_sector_specials(&mut gs, &level, handle);
-
-        assert_eq!(
-            gs.player.health(),
-            90,
-            "player state must track sector damage"
-        );
-        assert_eq!(
-            gs.mobjslab
-                .get(handle)
-                .expect("value must exist in test")
-                .health,
-            90,
-            "player mobj health must stay aligned with player state"
-        );
-    }
-
-    #[test]
-    fn damage_floor_ignores_actor_above_it() {
-        let mut gs = GameState::new("TEST");
-        let level = make_damage_level(0, 5); // lava at floor=0
-        let handle = make_actor_at_z(&mut gs, 10); // actor z=10, not on the floor
-
-        tick_sector_specials(&mut gs, &level, handle);
-
-        let health = gs
-            .mobjslab
-            .get(handle)
-            .expect("value must exist in test")
-            .health;
-        assert_eq!(health, 100, "actor above lava floor must take no damage");
     }
 
     // -----------------------------------------------------------------------

@@ -118,7 +118,7 @@ pub use specials::{
     init_conveyors, init_scrolling_walls, init_sector_lights, lowest_adjacent_ceiling,
     lowest_adjacent_floor, next_highest_floor, p_use_lines, player_sector_index, sector_linedefs,
     tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
-    tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
+    tick_sector_damage, tick_sector_lights, tick_sector_secrets,
 };
 pub use state::{ExitRequest, GameState, LockedDoorColor};
 pub use states::STATES;
