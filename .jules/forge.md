@@ -63,3 +63,8 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+
+**Resolve 'Blob' anti-pattern in `specials.rs`**
+**Learning:** `crates/doom-game/src/specials.rs` grew to almost 10,000 lines, mostly due to over 6,000 lines of inline unit tests. This causes significant navigability issues (the 'Blob' anti-pattern).
+**Action:** Convert `specials.rs` into a directory module `specials/mod.rs` and extract the tests into `specials/tests.rs` (included via `#[cfg(test)] mod tests;` in `mod.rs`). This dramatically improves code navigability without altering public exports or requiring changes to the parent module declaration.
