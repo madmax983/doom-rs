@@ -404,6 +404,13 @@ impl GameState {
         tick_world(self, level);
         #[cfg(feature = "style_meter")]
         self.style.tick(self.tic_num);
+
+        #[cfg(feature = "achievements")]
+        {
+            let mut a = self.achievements.clone();
+            a.update(self);
+            self.achievements = a;
+        }
     }
 
     // -----------------------------------------------------------------------

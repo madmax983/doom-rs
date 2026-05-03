@@ -115,6 +115,8 @@ pub struct GameState {
     #[cfg(feature = "telemetry")]
     /// Tracks spatial player path data over the session.
     pub telemetry: crate::telemetry::SessionTelemetry,
+    #[cfg(feature = "achievements")]
+    pub achievements: crate::achievements::AchievementTracker,
 }
 
 impl GameState {
@@ -144,6 +146,8 @@ impl GameState {
             style: crate::style::StyleMeter::new(),
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
+            #[cfg(feature = "achievements")]
+            achievements: crate::achievements::AchievementTracker::new(),
         }
     }
 
