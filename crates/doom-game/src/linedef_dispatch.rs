@@ -750,8 +750,10 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                     gs,
                     level,
                     idx,
-                    crate::specials::StairType::Build8,
-                    crate::state::CrushBehavior::NoCrush,
+                    crate::specials::StairParams {
+                        stair_type: crate::specials::StairType::Build8,
+                        crush: crate::state::CrushBehavior::NoCrush,
+                    },
                 );
             }
             true
@@ -763,8 +765,10 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                     gs,
                     level,
                     idx,
-                    crate::specials::StairType::Turbo16,
-                    crate::state::CrushBehavior::NoCrush,
+                    crate::specials::StairParams {
+                        stair_type: crate::specials::StairType::Turbo16,
+                        crush: crate::state::CrushBehavior::NoCrush,
+                    },
                 );
             }
             true

@@ -1036,6 +1036,13 @@ pub enum StairType {
     Turbo16,
 }
 
+/// Parameters for building stairs.
+#[derive(Clone, Copy, Debug)]
+pub struct StairParams {
+    pub stair_type: StairType,
+    pub crush: crate::state::CrushBehavior,
+}
+
 /// Build stairs starting from `start_sector`, walking adjacent sectors via
 /// two-sided linedefs. Each successive sector's floor is raised by `step_size`.
 ///
@@ -1050,10 +1057,9 @@ pub fn ev_build_stairs(
     gs: &mut GameState,
     level: &Level,
     start_sector: usize,
-    stair_type: StairType,
-    crush: crate::state::CrushBehavior,
+    params: StairParams,
 ) -> usize {
-    let (step_size, speed): (i16, i16) = match stair_type {
+    let (step_size, speed): (i16, i16) = match params.stair_type {
         StairType::Build8 => (8, 2),
         StairType::Turbo16 => (16, 4),
     };
@@ -1081,7 +1087,7 @@ pub fn ev_build_stairs(
             return_height: level.sectors[start_sector].floor_height,
             waiting: false,
             wait_remaining: 0,
-            crush,
+            crush: params.crush,
             tag: 0,
             floor_type: FloorType::RaiseToNearest,
         });
@@ -1139,7 +1145,7 @@ pub fn ev_build_stairs(
                 return_height: other_sec.floor_height,
                 waiting: false,
                 wait_remaining: 0,
-                crush,
+                crush: params.crush,
                 tag: 0,
                 floor_type: FloorType::RaiseToNearest,
             });
@@ -3404,8 +3410,10 @@ fn activate_stairs(
                     gs,
                     level,
                     idx,
-                    StairType::Build8,
-                    crate::state::CrushBehavior::NoCrush,
+                    StairParams {
+                        stair_type: StairType::Build8,
+                        crush: crate::state::CrushBehavior::NoCrush,
+                    },
                 );
             }
         }
@@ -3424,8 +3432,10 @@ fn activate_stairs(
                     gs,
                     level,
                     idx,
-                    StairType::Turbo16,
-                    crate::state::CrushBehavior::NoCrush,
+                    StairParams {
+                        stair_type: StairType::Turbo16,
+                        crush: crate::state::CrushBehavior::NoCrush,
+                    },
                 );
             }
         }
@@ -3444,8 +3454,10 @@ fn activate_stairs(
                     gs,
                     level,
                     idx,
-                    StairType::Turbo16,
-                    crate::state::CrushBehavior::Crush,
+                    StairParams {
+                        stair_type: StairType::Turbo16,
+                        crush: crate::state::CrushBehavior::Crush,
+                    },
                 );
             }
         }
@@ -3464,8 +3476,10 @@ fn activate_stairs(
                     gs,
                     level,
                     idx,
-                    StairType::Turbo16,
-                    crate::state::CrushBehavior::NoCrush,
+                    StairParams {
+                        stair_type: StairType::Turbo16,
+                        crush: crate::state::CrushBehavior::NoCrush,
+                    },
                 );
             }
         }
@@ -6476,8 +6490,10 @@ mod tests {
             &mut gs,
             &level,
             0,
-            StairType::Build8,
-            crate::state::CrushBehavior::NoCrush,
+            StairParams {
+                stair_type: StairType::Build8,
+                crush: crate::state::CrushBehavior::NoCrush,
+            },
         );
 
         // Should create 4 floor movers (sectors 0, 1, 2, 3).
@@ -6504,8 +6520,10 @@ mod tests {
             &mut gs,
             &level,
             0,
-            StairType::Turbo16,
-            crate::state::CrushBehavior::NoCrush,
+            StairParams {
+                stair_type: StairType::Turbo16,
+                crush: crate::state::CrushBehavior::NoCrush,
+            },
         );
 
         assert_eq!(count, 3, "3 sectors should get stair movers");
@@ -6526,8 +6544,10 @@ mod tests {
             &mut gs,
             &level,
             0,
-            StairType::Turbo16,
-            crate::state::CrushBehavior::Crush,
+            StairParams {
+                stair_type: StairType::Turbo16,
+                crush: crate::state::CrushBehavior::Crush,
+            },
         );
 
         assert!(
@@ -6551,8 +6571,10 @@ mod tests {
             &mut gs,
             &level,
             0,
-            StairType::Build8,
-            crate::state::CrushBehavior::NoCrush,
+            StairParams {
+                stair_type: StairType::Build8,
+                crush: crate::state::CrushBehavior::NoCrush,
+            },
         );
 
         // Should create only 2 movers (sectors 0 and 1). Sector 2 has different
@@ -7078,8 +7100,10 @@ mod tests {
             &mut gs,
             &level,
             0,
-            StairType::Build8,
-            crate::state::CrushBehavior::NoCrush,
+            StairParams {
+                stair_type: StairType::Build8,
+                crush: crate::state::CrushBehavior::NoCrush,
+            },
         );
 
         assert_eq!(
