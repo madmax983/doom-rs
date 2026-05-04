@@ -1194,7 +1194,9 @@ fn min_neighbor_light(level: &Level, tag: u16) -> i16 {
 // ---------------------------------------------------------------------------
 
 /// Collect all sector indices matching `tag`.
-fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
+/// Avoids an intermediate heap allocation by collecting into a `SmallVec`
+/// as the number of matching sectors is usually very small.
+fn sectors_by_tag(level: &Level, tag: u16) -> smallvec::SmallVec<[usize; 8]> {
     level
         .sectors
         .iter()
