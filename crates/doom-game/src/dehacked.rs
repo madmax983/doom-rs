@@ -284,7 +284,9 @@ impl DehPatch {
                 remaining = remaining
                     .get(total..)
                     .ok_or_else(|| DehError::BadHeader("Invalid text byte boundary".to_owned()))?;
-                if remaining.starts_with('\n') {
+                if remaining.starts_with("\r\n") {
+                    remaining = &remaining[2..];
+                } else if remaining.starts_with('\n') {
                     remaining = &remaining[1..];
                 }
                 continue;
