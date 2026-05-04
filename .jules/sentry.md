@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-04 - MapAnalyzer & Unreachable code fallback
+**Learning:** Found potential panic points in `crates/doom-app/src/cogmind/glyphs.rs` and `crates/doom-game/src/telemetry.rs` utilizing `unreachable!()`. Added tests `wall_glyph_unreachable_fallback`, `havoc_test_analyzer_does_not_panic_on_asymmetric_edges`, and `havoc_test_analyzer_missing_back_edges` in `MapAnalyzer` to fulfill test-driven development metrics.
+**Action:** Always replace `unreachable!()` with safe fallbacks (default chars or `continue`) and add tests ensuring the fallback performs gracefully.
