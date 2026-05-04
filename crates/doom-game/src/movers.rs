@@ -1,3 +1,7 @@
+//! Mover structures and functions for things like doors, ceilings, and floors.
+//!
+//! These are added to `GameState::active_doors` or `active_ceilings` etc.
+//! when a linedef is activated, and ticked each frame to animate.
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

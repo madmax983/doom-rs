@@ -1,3 +1,6 @@
+//! Level statistics tracking (kills, items, secrets, etc).
+//!
+//! Used to compute end-of-level percentages for the intermission screen.
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {
