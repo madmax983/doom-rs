@@ -21,6 +21,13 @@ use thiserror::Error;
 /// Errors from BSP structural validation.
 #[derive(Debug, Error)]
 pub enum BspError {
+    /// A cycle was detected in the BSP tree.
+    #[error("BSP node {node_idx} creates a cycle (points to itself or an ancestor)")]
+    CyclicTree {
+        /// The index of the BSP node that causes the cycle.
+        node_idx: usize,
+    },
+
     /// The leaf-count invariant is violated.
     #[error("BSP invariant violated: N_SSECTORS ({ssectors}) != N_NODES ({nodes}) + 1")]
     LeafCountMismatch {
@@ -127,6 +134,9 @@ impl<'a> BspTree<'a> {
         // Invariant 2 & 3: all child pointers in bounds
         tree.validate_child_bounds()?;
 
+        // Invariant: The BSP tree must be a Directed Acyclic Graph.
+        tree.validate_acyclic()?;
+
         // Invariant 4: all node bboxes non-degenerate
         tree.validate_bboxes()?;
 
@@ -138,7 +148,49 @@ impl<'a> BspTree<'a> {
 
     // -- individual checks ---------------------------------------------------
 
-    /// Verifies `N_SSECTORS == N_NODES + 1`.
+    /// Verifies that the BSP tree is a Directed Acyclic Graph (DAG).
+    ///
+    /// If any node points to itself or an ancestor, this will return `Err(BspError::CyclicTree)`.
+    fn validate_acyclic(&self) -> Result<(), BspError> {
+        if self.nodes.is_empty() {
+            return Ok(());
+        }
+
+        let mut visited = vec![false; self.nodes.len()];
+        let mut in_stack = vec![false; self.nodes.len()];
+
+        let root_idx = self.nodes.len() - 1;
+
+        let mut stack = vec![(root_idx, 0)];
+
+        while let Some((node_idx, state)) = stack.pop() {
+            if state == 0 {
+                visited[node_idx] = true;
+                in_stack[node_idx] = true;
+
+                let node = &self.nodes[node_idx];
+
+                stack.push((node_idx, 1));
+
+                for raw_child in [node.right_child, node.left_child] {
+                    if let BspChild::Node(child_idx) = BspChild::decode(raw_child) {
+                        let c_idx = child_idx as usize;
+                        if in_stack[c_idx] {
+                            return Err(BspError::CyclicTree { node_idx });
+                        }
+                        if !visited[c_idx] {
+                            stack.push((c_idx, 0));
+                        }
+                    }
+                }
+            } else {
+                in_stack[node_idx] = false;
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn validate_leaf_count(&self) -> Result<(), BspError> {
         let n = self.nodes.len();
         let s = self.ssectors.len();
@@ -504,5 +556,30 @@ mod tests {
         let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1), make_ssector(2, 1)];
         let tree = BspTree::validate(&nodes, &ssectors, 3).expect("valid");
         assert_eq!(tree.max_depth(), 2);
+    }
+
+    #[test]
+    fn test_cyclic_bsp_depth_stack_overflow() {
+        let bbox = crate::lumps::NodeBBox {
+            ymax: 0,
+            ymin: 0,
+            xmin: 0,
+            xmax: 0,
+        };
+        let cyclic_node = Node {
+            x: 0,
+            y: 0,
+            dx: 1,
+            dy: 1,
+            right_bbox: bbox,
+            left_bbox: bbox,
+            right_child: 0, // Points to itself!
+            left_child: 0,  // Points to itself!
+        };
+        let nodes = vec![cyclic_node];
+        let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
+        // Will fail once fixed
+        let result = BspTree::validate(&nodes, &ssectors, 1);
+        assert!(matches!(result, Err(BspError::CyclicTree { .. })));
     }
 }
