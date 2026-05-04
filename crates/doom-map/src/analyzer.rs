@@ -68,11 +68,13 @@ impl<'a> MapAnalyzer<'a> {
         let mut parent = HashMap::new();
         let mut articulation_points = HashSet::new();
         let mut time = 0;
+        let empty_set = HashSet::new();
 
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let neighbors = self.graph.adjacency_list.get(&node).unwrap_or(&empty_set);
+                let mut stack = vec![(node, neighbors.iter())];
 
                 visited.insert(node);
                 time += 1;
@@ -96,8 +98,9 @@ impl<'a> MapAnalyzer<'a> {
                             discovery_time.insert(v, time);
                             low_time.insert(v, time);
 
+                            let neighbors = self.graph.adjacency_list.get(&v).unwrap_or(&empty_set);
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((v, neighbors.iter()));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -299,5 +302,20 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let chokes = analyzer.chokepoints();
         assert_eq!(chokes.len(), 9999);
+    }
+
+    #[test]
+    fn test_chokepoints_malformed_graph_does_not_panic() {
+        // Havoc: Trigger `unwrap()` on an edge going to a nonexistent neighbor
+        let mut adj = HashMap::new();
+        // Node 0 points to Node 1, but Node 1 is not in the graph
+        adj.insert(0, HashSet::from([1]));
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let chokes = analyzer.chokepoints();
+        // Since there is no valid traversal to a real child that could act as a bridge, there are no chokepoints.
+        assert_eq!(chokes.len(), 0);
     }
 }
