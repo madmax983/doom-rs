@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Eliminate UI List Rendering Allocation**
+**Learning:** `List::new()` in Ratatui accepts any `IntoIterator`, so passing a `Vec` created via `.collect()` in a hot loop is an unnecessary heap allocation.
+**Action:** Remove `.collect::<Vec<_>>()` and pass the chained iterator directly into `List::new()` to save a heap allocation per UI render tick.
