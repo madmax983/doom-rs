@@ -187,6 +187,18 @@ struct Args {
     #[arg(long)]
     export_svg: Option<std::path::PathBuf>,
 
+    /// Export the level layout to an ASCII art file and exit.
+    #[arg(long)]
+    export_ascii: Option<std::path::PathBuf>,
+
+    /// Width of the exported ASCII art grid (default: 80).
+    #[arg(long, default_value = "80")]
+    ascii_width: usize,
+
+    /// Height of the exported ASCII art grid (default: 40).
+    #[arg(long, default_value = "40")]
+    ascii_height: usize,
+
     /// Export the level layout to an OBJ 3D model file and exit.
     #[arg(long)]
     export_obj: Option<std::path::PathBuf>,
@@ -2266,6 +2278,18 @@ fn run_doom(args: Args) -> Result<()> {
         "Exported",
         "layout",
         "SVG layout",
+        args.json,
+    )? {
+        return Ok(());
+    }
+
+    if handle_export(
+        args.export_ascii.as_deref(),
+        || doom_map::export_map_to_ascii(&level, args.ascii_width, args.ascii_height),
+        "🌟",
+        "Exported",
+        "layout",
+        "ASCII layout",
         args.json,
     )? {
         return Ok(());

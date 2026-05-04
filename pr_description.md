@@ -1,11 +1,11 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+💡 The Spark:
+"We have a function `export_map_to_ascii` in `doom-map/src/ascii.rs`, but it isn't wired up in the `doom-app` executable. A text-based representation of Doom maps fits perfectly into the terminal-based theme of the project."
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+🚀 The Feature:
+"Added `--export-ascii <FILE>`, `--ascii-width <WIDTH>`, and `--ascii-height <HEIGHT>` flags to `doom-app` to output an ASCII representation of the level."
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+🔮 The Potential:
+"This allows for quick, dependencies-free visualization of maps directly from the terminal or text editors without specialized software. It serves as a fun addition that plays into the ASCII-art theme."
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+⚠️ Risk:
+"Low. Purely an additive feature to `doom-app`'s CLI arguments and export logic. Tests and existing features remain unaffected."
