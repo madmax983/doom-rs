@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**[Optimizing Buffer State Transitions with `std::mem::take`]
+**Learning:** Using `let copy = buf.clone(); buf.clear();` forces a heap allocation for the copied `String` or `Vec`. `std::mem::take(&mut buf)` takes ownership of the original buffer and replaces it with `Default::default()` (an empty, unallocated buffer) in-place without any reallocation overhead.
+**Action:** Always prefer `std::mem::take` when clearing and returning a buffer from a mutable reference to avoid unnecessary allocations on hot paths.

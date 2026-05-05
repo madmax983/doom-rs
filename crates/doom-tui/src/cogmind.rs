@@ -195,7 +195,7 @@ pub struct CogmindHud {
     /// The total number of monsters present in the current level.
     pub total_monsters: u32,
     /// Level name (e.g. "E1M3" or "MAP07").
-    pub level_name: String,
+    pub level_name: std::borrow::Cow<'static, str>,
     /// The current style rank.
     #[cfg(feature = "style_meter")]
     pub style_rank: Option<doom_game::style::StyleRank>,
@@ -545,7 +545,7 @@ mod tests {
             keys: [true, false, false, false, false, true],
             kill_count: 12,
             total_monsters: 45,
-            level_name: "E1M3".to_owned(),
+            level_name: "E1M3".into(),
             #[cfg(feature = "style_meter")]
             style_rank: None,
         }
