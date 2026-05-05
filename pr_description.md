@@ -1,11 +1,7 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🕸️ Tangle: The `ExitRequest` and `LockedDoorColor` enums were defined in `doom-game/src/state.rs` but widely used in presentation crates like `doom-app` for rendering UI messages and orchestrating game loops. This caused UI and outer orchestrator components to depend on the core game engine logic just for basic enum definitions, coupling presentation with the simulation loop.
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+📐 Blueprint: Extracted `ExitRequest` and `LockedDoorColor` into `doom-types/src/game_enums.rs` (a new file). Updated `doom-game/src/state.rs` and `doom-game/src/lib.rs` to re-export them for internal backward compatibility, and updated `doom-app` imports to reference the primitive shared types directly.
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+🧱 Stability: Reduced coupling between the orchestration layer (`doom-app`) and the simulation layer (`doom-game`). Presentation now depends on foundational types instead of core game logic, enforcing cleaner domain boundaries and slightly faster compile times.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🔬 Verification: Code compiles successfully. All existing tests pass. Verified the imports in `doom-app` accurately point to `doom-types`.
