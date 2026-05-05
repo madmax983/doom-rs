@@ -858,25 +858,26 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
 /// 7. Active sound: randomly play `active_sound` (p_random < 3).
 fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     // --- Step 1: Decrement reaction_time ---
-    {
+    let (mo_kind, mo_flags, reactiontime, cur_movecount, mo_x, mo_y, current_target) = {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
             return;
         };
         if mo.reactiontime > 0 {
             mo.reactiontime -= 1;
         }
-    }
-
-    // --- Gather monster data ---
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return;
+        (
+            mo.kind,
+            mo.flags,
+            mo.reactiontime,
+            mo.movecount,
+            mo.x,
+            mo.y,
+            mo.target,
+        )
     };
-    let mo_kind = mo.kind;
-    let _movecount = mo.movecount;
-    let mo_flags = mo.flags;
 
     // --- Step 2: Check target still exists and is alive ---
-    if get_alive_target(gs, handle).is_none() {
+    let current_target = if get_alive_target(gs, handle).is_none() {
         // Try to find a new target via A_Look logic.
         // First clear the old target.
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
@@ -887,13 +888,8 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         a_look(gs, handle, level);
 
         // Check if a_look found a new target.
-        let found_target = gs
-            .mobjslab
-            .get(handle)
-            .map(|mo| mo.target != MobjHandle::NULL)
-            .unwrap_or(false);
-
-        if !found_target {
+        let updated_target = gs.mobjslab.get(handle).map(|mo| mo.target).unwrap_or(MobjHandle::NULL);
+        if updated_target == MobjHandle::NULL {
             // Revert to idle spawn state.
             let spawn_sn = mobjinfo::MOBJINFO
                 .get(mo_kind as usize)
@@ -910,7 +906,10 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         }
         // If a_look found a target, it already set see_state; but we continue
         // the chase loop with the new target. We need to re-read the target.
-    }
+        updated_target
+    } else {
+        current_target
+    };
 
     // --- Step 3: MF_JUSTATTACKED cooldown ---
     if mo_flags & flags::MF_JUSTATTACKED != 0 {
@@ -924,16 +923,6 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     }
 
     // --- Read target info for attack checks ---
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return;
-    };
-    let current_target = mo.target;
-
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return;
-    };
-    let mo_x = mo.x;
-    let mo_y = mo.y;
     let Some(t) = gs.mobjslab.get(current_target) else {
         do_chase_movement(gs, handle, level);
         return;
@@ -953,11 +942,6 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     let melee_sn = info.melee_state;
     let missile_sn = info.missile_state;
-    let reactiontime = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| mo.reactiontime)
-        .unwrap_or(0);
 
     // --- Step 4: Melee check ---
     if melee_sn != crate::mobj::StateNum::NULL && dist <= MELEE_THRESHOLD {
@@ -969,8 +953,8 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     // --- Step 5: Missile check ---
     if missile_sn != crate::mobj::StateNum::NULL && reactiontime == 0 {
-        // Re-read movecount (might have changed).
-        let cur_movecount = gs.mobjslab.get(handle).map(|mo| mo.movecount).unwrap_or(0);
+        // Re-read movecount (might have changed during a_look/etc).
+        let cur_movecount = gs.mobjslab.get(handle).map(|mo| mo.movecount).unwrap_or(cur_movecount);
 
         // Don't fire if still moving from last direction change (gives monsters
         // a movement phase between attacks), unless movecount has expired.

@@ -63,3 +63,14 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+>> Refactored Boolean Blindness in door and floor specials
+**Learning:** Functions like `open_door(gs, level, idx, true)` and `ev_build_stairs(gs, level, idx, type, false)` suffer from Boolean Blindness, hiding the true intent.
+**Action:** Replace `bool` with descriptive enums to self-document the code at the call site.
+
+**Extracted repetitive pattern blocks using single guard clauses**
+**Learning:** Repeating `let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else { return; };` across multiple match arms creates large boilerplate.
+**Action:** Extract this single guard clause before the match arm to vastly reduce duplicated boilerplate while retaining short-circuit semantics.
+
+**Flattened unnecessary Mobj multiple reads**
+**Learning:** Extracting `Mobj` properties multiple times using `gs.mobjslab.get(handle)` spread throughout a function adds cognitive load and unnecessary verbosity.
+**Action:** Extract all necessary properties into local variables once at the start of the function and remove all subsequent redundant lookups.
