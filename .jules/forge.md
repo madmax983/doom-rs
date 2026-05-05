@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactored Boolean Blindness in DoorMover is_ceiling and Option extraction**
+**Learning:** `is_ceiling: bool` on `DoorMover` created boolean blindness because it was unclear whether true meant ceiling or floor. Also, using `.map(|mo| ...).unwrap_or(...)` when extracting tuple structs from options creates verbose boolean blindness.
+**Action:** Replace `is_ceiling: bool` with `is_ceiling: MoverTarget` enum (`Ceiling` or `Floor`). Flatten Option extraction into clean `if let Some` blocks.

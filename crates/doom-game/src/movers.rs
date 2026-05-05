@@ -13,7 +13,7 @@ pub struct DoorMover {
     /// Speed in map units per tic (positive = opening/rising, negative = closing/lowering).
     pub speed: i16,
     /// `true` = this mover operates on ceiling height, `false` = floor height.
-    pub is_ceiling: bool,
+    pub is_ceiling: crate::specials::MoverTarget,
     /// Tics to wait at top/bottom before reversing (0 = no wait, no reverse).
     pub wait_tics: i32,
     /// Countdown until the door starts closing again (−1 = permanent open/close).

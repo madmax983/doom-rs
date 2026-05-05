@@ -791,12 +791,11 @@ impl DoomGame {
             return;
         };
 
-        let (pl_x, pl_y, pl_angle) = self
-            .gs
-            .mobjslab
-            .get(self.gs.player.handle)
-            .map(|mo| (mo.x, mo.y, mo.angle))
-            .unwrap_or_default();
+        let (pl_x, pl_y, pl_angle) = if let Some(mo) = self.gs.mobjslab.get(self.gs.player.handle) {
+            (mo.x, mo.y, mo.angle)
+        } else {
+            Default::default()
+        };
         let player_origin = Some(self.gs.player.handle);
 
         for ev in events {
@@ -857,12 +856,11 @@ impl DoomGame {
         if self.debug_log.is_none() {
             return;
         }
-        let (px, py, pa) = self
-            .gs
-            .mobjslab
-            .get(self.gs.player.handle)
-            .map(|mo| (mo.x.to_int(), mo.y.to_int(), mo.angle.0))
-            .unwrap_or((0, 0, 0));
+        let (px, py, pa) = if let Some(mo) = self.gs.mobjslab.get(self.gs.player.handle) {
+            (mo.x.to_int(), mo.y.to_int(), mo.angle.0)
+        } else {
+            (0, 0, 0)
+        };
         let hp = self.gs.player.health();
         let arm = self.gs.player.armor();
         let kills = self.gs.player.kill_count;
