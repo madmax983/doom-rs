@@ -12,6 +12,7 @@
 pub mod ascii;
 pub mod bsp;
 pub mod geojson;
+pub mod geometry;
 pub mod graph;
 pub mod html;
 pub mod json;
@@ -37,3 +38,4 @@ pub use svg::export_map_to_svg;
 
 pub mod analyzer;
 pub use analyzer::MapAnalyzer;
+pub use geometry::{GeometryAnalyzer, SectorGeometry};

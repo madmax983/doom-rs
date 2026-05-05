@@ -2398,6 +2398,9 @@ fn run_doom(args: Args) -> Result<()> {
         let chokepoints = analyzer.chokepoints();
         let areas = analyzer.isolated_areas();
 
+        let geom_analyzer = doom_map::GeometryAnalyzer::new(&level);
+        let geometries = geom_analyzer.sector_geometries();
+
         if args.json {
             // ⚡ Bolt Optimization:
             // Formats the JSON array inline directly into a single `String` buffer.
@@ -2430,13 +2433,27 @@ fn run_doom(args: Args) -> Result<()> {
             }
             areas_json.push(']');
 
+            let mut geom_json = String::new();
+            geom_json.push('[');
+            for (i, g) in geometries.iter().enumerate() {
+                if i > 0 {
+                    geom_json.push_str(", ");
+                }
+                geom_json.push_str(&format!(
+                    r#"{{"area": {:.1}, "cx": {:.1}, "cy": {:.1}}}"#,
+                    g.area, g.centroid_x, g.centroid_y
+                ));
+            }
+            geom_json.push(']');
+
             let json_data = format!(
                 r#"{{
   "map": "{}",
   "chokepoints": {},
-  "isolated_areas": {}
+  "isolated_areas": {},
+  "sector_geometries": {}
 }}"#,
-                warp_str, chokepoints_json, areas_json
+                warp_str, chokepoints_json, areas_json, geom_json
             );
             println!("{json_data}");
         } else {
