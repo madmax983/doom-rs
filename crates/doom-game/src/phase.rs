@@ -371,7 +371,7 @@ impl GamePhaseController {
             // Extract next_map before transitioning
             let next_map = match &self.phase {
                 GamePhase::Intermission { next_map, .. } => *next_map,
-                _ => unreachable!(),
+                _ => self.current_map, // Fallback if erroneously called outside Intermission
             };
             self.current_map = next_map;
             self.pending_load = Some(next_map);
@@ -1198,14 +1198,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "internal error: entered unreachable code")]
-    fn tick_intermission_unreachable_panic() {
+    fn tick_intermission_fallback() {
         let mut ctrl = GamePhaseController::new(MapId::new(1, 1));
 
         // Force state into Playing while skip is requested.
-        // This triggers the first branch of tick_intermission but fails the match
+        // This triggers the first branch of tick_intermission but fails the match, using the fallback.
         ctrl.phase = GamePhase::Playing;
         ctrl.skip_requested = true;
         ctrl.tick_intermission();
+
+        assert_eq!(ctrl.current_map, MapId::new(1, 1)); // It should fallback to current_map
     }
 }
