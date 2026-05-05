@@ -17,9 +17,6 @@
 **[Stop TicCmd Re-export Leak]**
 **Tangle:** `doom-game/src/lib.rs` was unnecessarily re-exporting `doom_types::{TicCmd, bt}` via `pub use`. This caused presentation and utility crates like `doom-app` and `doom-demo` to depend on the game engine `doom-game` just to use basic shared data types. This violated the boundary isolation.
 **Blueprint:** Removed the re-export from `doom-game` and updated `doom-demo` and `doom-app` to import `TicCmd` and `bt` constants directly from the foundational `doom-types` crate. This enforces cleaner dependency arrows where higher-level crates fetch domain primitives directly from the shared types crate rather than pulling them through the game logic.
-**[Fix clone on copy clippy warning]
-**Tangle:** The  crate had a  on  which implements .
-**Blueprint:** Removed the  method call and let the compiler figure it out, as it implements . It was causing a clippy warning.
 **[Fix clone on copy clippy warning]**
 **Tangle:** The `doom-renderer` crate had a `clone()` on `LumpName` which implements `Copy`.
 **Blueprint:** Removed the `clone()` method call and let the compiler figure it out, as it implements `Copy`. It was causing a clippy warning.
@@ -52,3 +49,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Extract Blob files]**
+**Tangle:** The `actions.rs` and `specials.rs` files inside `doom-game` were massive God-like blobs of code spanning roughly 5k and 10k lines respectively. Over half of these files were inline `#[cfg(test)]` modules, causing poor code navigation, extreme bloat, and slower developer velocity when searching through the file.
+**Blueprint:** Created `specials/mod.rs` & `specials/tests.rs` and `actions/mod.rs` & `actions/tests.rs` using the `mod` system to extract the tests out of the main logic blob without altering any actual code or touching the API or imports. This reduced file bloat tremendously and organized the massive list of tests cleanly into a separate file within the module boundary.
