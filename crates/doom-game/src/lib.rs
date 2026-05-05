@@ -54,6 +54,7 @@ pub mod weapon_fire;
 pub mod weapons;
 
 #[cfg(feature = "director")]
+/// Left 4 Dead style AI Director for dynamic difficulty adjustment and monster spawning.
 pub mod director;
 #[cfg(feature = "director")]
 pub use director::*;

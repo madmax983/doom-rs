@@ -39,3 +39,9 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-05-05 - [AI Director & SpriteClipHistory Documentation]
+**Confusion:** The  and  types lacked explanations of their purpose, usage, and why they exist (e.g., preventing heap allocations).
+**Clarification:** Added module-level explanations and multiple executable doctests demonstrating intended usage and edge cases.
+## 2026-05-05 - [AI Director and SpriteClipHistory Documentation]
+**Confusion:** The AiDirector and SpriteClipHistory types lacked explanations of their purpose, usage, and why they exist (e.g., preventing heap allocations).
+**Clarification:** Added module-level explanations and multiple executable doctests demonstrating intended usage and edge cases.
