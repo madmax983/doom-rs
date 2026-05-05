@@ -11,6 +11,66 @@ use crate::{Level, export_map_to_svg};
 /// This generates a single HTML file containing an interactive visual
 /// representation of the map (using embedded SVG) alongside a dashboard
 /// of statistics about the map's geometry, entities, and environment.
+///
+/// This is highly useful for automated map validation and CI pipelines,
+/// allowing designers to visually verify level geometry without loading
+/// the entire game engine.
+///
+/// ## Returns
+/// A `String` containing the raw, valid HTML5 document source.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_map::{Level, lumps::{Blockmap, Linedef, Reject, Sector, Sidedef, Vertex}};
+/// use doom_map::export_map_to_html;
+///
+/// // 1. Construct a minimal Level
+/// let reject = Reject::parse_lump(&[0u8], 1).unwrap();
+/// let blockmap = Blockmap::parse_lump(&{
+///     let mut data = vec![0u8; 14];
+///     data[4..6].copy_from_slice(&1u16.to_le_bytes());
+///     data[6..8].copy_from_slice(&1u16.to_le_bytes());
+///     data[8..10].copy_from_slice(&5u16.to_le_bytes());
+///     data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+///     data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+///     data
+/// }).unwrap();
+///
+/// let level = Level {
+///     name: "TEST".to_owned(),
+///     things: vec![],
+///     vertexes: vec![Vertex { x: 0, y: 0 }, Vertex { x: 64, y: 0 }],
+///     linedefs: vec![
+///         Linedef {
+///             from_vertex: 0,
+///             to_vertex: 1,
+///             flags: 0x0004,
+///             special: 0,
+///             tag: 0,
+///             right_sidedef: 0,
+///             left_sidedef: 1,
+///         },
+///     ],
+///     sidedefs: vec![
+///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"WALL1\0\0\0", lower_texture: *b"WALL2\0\0\0", middle_texture: *b"WALL3\0\0\0", sector: 0 },
+///         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"WALL1\0\0\0", lower_texture: *b"WALL2\0\0\0", middle_texture: *b"WALL3\0\0\0", sector: 1 },
+///     ],
+///     sectors: vec![
+///         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT2\0\0\0", light_level: 192, special: 0, tag: 0 },
+///         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT2\0\0\0", light_level: 192, special: 0, tag: 0 },
+///     ],
+///     segs: vec![], ssectors: vec![], nodes: vec![],
+///     reject, blockmap,
+/// };
+///
+/// // 2. Export the document
+/// let html = export_map_to_html(&level);
+///
+/// // 3. The resulting string is a valid HTML file
+/// assert!(html.starts_with("<!DOCTYPE html>"));
+/// assert!(html.contains("TEST")); // Includes our map name
+/// ```
 pub fn export_map_to_html(level: &Level) -> String {
     let svg = export_map_to_svg(level);
 
