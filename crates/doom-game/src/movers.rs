@@ -1,3 +1,10 @@
+//! # Environmental Movers and Interactions
+//!
+//! This module defines the state and logic for interactive map features:
+//! moving floors, ceilings, doors, lifts, lighting effects, crushers, and scrolling walls.
+//! These "movers" are actively updated each game tic and change the physical
+//! structure or appearance of the level over time.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

@@ -1,3 +1,9 @@
+//! # Level Statistics
+//!
+//! Tracks player progress through a level, including the number of kills,
+//! collected items, and secrets found. These metrics are commonly displayed on
+//! the tally screen at the end of a map.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {

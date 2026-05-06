@@ -1,3 +1,8 @@
+//! # AI Director
+//!
+//! Provides high-level decision making for spawning encounters and dynamically
+//! adjusting difficulty based on the player's current status, health, and resources.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

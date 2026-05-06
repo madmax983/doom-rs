@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-05-19 - [Added missing module docs]
+**Confusion:** The "Black Box": Many modules in `doom-game` and `doom-renderer` lacked module-level (`//!`) documentation explaining the high-level concept, making it hard for users to understand their purpose without reading the code.
+**Clarification:** Added module-level documentation to `director.rs`, `movers.rs`, `sound_prop.rs`, `stats.rs`, and `sprite_clip.rs` to explain *what* these modules do and *why* they exist.

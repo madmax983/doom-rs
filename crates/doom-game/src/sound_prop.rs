@@ -1,3 +1,10 @@
+//! # Sound Propagation and Events
+//!
+//! This module handles the in-game propagation of sound events (like a monster waking up
+//! or a weapon firing) without directly depending on the audio engine. The game state
+//! builds a queue of `SoundRequest` events during each tic, which the outer orchestrator
+//! (like `doom-app`) drains and converts into actual audio playback commands.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;
