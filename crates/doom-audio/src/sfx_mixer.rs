@@ -723,3 +723,46 @@ mod tests {
         assert_eq!(mixer.active_count(), 0);
     }
 }
+
+#[cfg(all(test, feature = "loom"))]
+mod loom_tests {
+    use super::*;
+    use loom::sync::{Arc, Mutex};
+    use loom::thread;
+
+    #[test]
+    fn havoc_loom_mixer_play_and_update_and_mix() {
+        loom::model(|| {
+            let mixer = Arc::new(Mutex::new(SfxMixer::new()));
+            let mixer1 = mixer.clone();
+            let mixer2 = mixer.clone();
+            let mixer3 = mixer.clone();
+
+            let t1 = thread::spawn(move || {
+                let mut m = mixer1.lock().expect("value must exist in test");
+                m.play(
+                    1,
+                    std::sync::Arc::<[u8]>::from(vec![0; 10]),
+                    1.0,
+                    0.0,
+                    SfxPriority::Medium,
+                );
+            });
+
+            let t2 = thread::spawn(move || {
+                let mut m = mixer2.lock().expect("value must exist in test");
+                m.update_spatial(1, 0.5, 0.5);
+            });
+
+            let t3 = thread::spawn(move || {
+                let mut m = mixer3.lock().expect("value must exist in test");
+                let mut buf = [0.0; 2];
+                m.mix(&mut buf, 44100);
+            });
+
+            t1.join().expect("value must exist in test");
+            t2.join().expect("value must exist in test");
+            t3.join().expect("value must exist in test");
+        });
+    }
+}
