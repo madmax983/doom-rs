@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Returning slices from demo playback**
+**Learning:** `Vec::clone` was happening on every single tic read (35 times a second) when reading input commands from `doom-demo`. Since the tic data array is completely owned and never modified during playback, we could simply return a slice `&[DemoTicCmd]` instead of cloning a `Vec`.
+**Action:** Replaced `Option<Vec<DemoTicCmd>>` with `Option<&[DemoTicCmd]>` in `next_tic_cmds` to eliminate per-frame allocations.
