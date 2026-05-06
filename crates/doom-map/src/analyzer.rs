@@ -69,10 +69,17 @@ impl<'a> MapAnalyzer<'a> {
         let mut articulation_points = HashSet::new();
         let mut time = 0;
 
+        let empty_hashset = HashSet::new();
+
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let neighbors = self
+                    .graph
+                    .adjacency_list
+                    .get(&node)
+                    .unwrap_or(&empty_hashset);
+                let mut stack = vec![(node, neighbors.iter())];
 
                 visited.insert(node);
                 time += 1;
@@ -84,9 +91,6 @@ impl<'a> MapAnalyzer<'a> {
                     let mut pushed_child = false;
 
                     while let Some(&v) = neighbors_iter.next() {
-                        if !self.graph.adjacency_list.contains_key(&v) {
-                            continue;
-                        }
                         if !visited.contains(&v) {
                             *children_map.entry(u).or_default() += 1;
                             parent.insert(v, u);
@@ -97,7 +101,9 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            let v_neighbors =
+                                self.graph.adjacency_list.get(&v).unwrap_or(&empty_hashset);
+                            stack.push((v, v_neighbors.iter()));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -290,7 +296,9 @@ mod tests {
         }
         adj.insert(10000, HashSet::from([9999]));
         for i in 1..10000 {
-            adj.get_mut(&i).unwrap().insert(i - 1);
+            adj.get_mut(&i)
+                .expect("expected node in large linear test")
+                .insert(i - 1);
         }
 
         let graph = SectorGraph {
@@ -299,5 +307,35 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let chokes = analyzer.chokepoints();
         assert_eq!(chokes.len(), 9999);
+    }
+
+    #[test]
+    fn havoc_test_analyzer_does_not_panic_on_asymmetric_edges() {
+        let mut adj = HashMap::new();
+        // 0 connects to 1, but 1 doesn't know about 0
+        adj.insert(0, HashSet::from([1]));
+        adj.insert(1, HashSet::from([2]));
+        adj.insert(2, HashSet::new());
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        // The algorithm shouldn't panic, but its exact output on an invalid graph
+        // (asymmetric edges) is technically undefined and could depend on iteration order.
+        // What's important is it doesn't crash or go into an infinite loop.
+        let _chokes = analyzer.chokepoints();
+    }
+
+    #[test]
+    fn havoc_test_analyzer_missing_back_edges() {
+        let mut adj = HashMap::new();
+        // 0 connects to 1, but 1 is completely missing from the graph!
+        adj.insert(0, HashSet::from([1]));
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let chokes = analyzer.chokepoints();
+        assert_eq!(chokes, vec![]);
     }
 }
