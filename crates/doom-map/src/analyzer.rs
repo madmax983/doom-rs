@@ -68,6 +68,7 @@ impl<'a> MapAnalyzer<'a> {
         let mut parent = HashMap::new();
         let mut articulation_points = HashSet::new();
         let mut time = 0;
+        let empty_set = HashSet::new();
 
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
@@ -84,9 +85,6 @@ impl<'a> MapAnalyzer<'a> {
                     let mut pushed_child = false;
 
                     while let Some(&v) = neighbors_iter.next() {
-                        if !self.graph.adjacency_list.contains_key(&v) {
-                            continue;
-                        }
                         if !visited.contains(&v) {
                             *children_map.entry(u).or_default() += 1;
                             parent.insert(v, u);
@@ -97,7 +95,9 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            let v_neighbors =
+                                self.graph.adjacency_list.get(&v).unwrap_or(&empty_set);
+                            stack.push((v, v_neighbors.iter()));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -299,5 +299,39 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let chokes = analyzer.chokepoints();
         assert_eq!(chokes.len(), 9999);
+    }
+
+    #[test]
+    fn havoc_test_analyzer_does_not_panic_on_asymmetric_edges() {
+        let mut adj = HashMap::new();
+        // 0 -> 1 but 1 doesn't point back (or doesn't even exist as a key)
+        adj.insert(0, HashSet::from([1]));
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        // Should not panic due to unwraps on missing node '1'
+        let _ = analyzer.chokepoints();
+        let _ = analyzer.isolated_areas();
+    }
+
+    #[test]
+    fn havoc_test_analyzer_missing_back_edges() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1, 2]));
+        adj.insert(1, HashSet::from([2])); // 1 connects 0 and 2
+        adj.insert(2, HashSet::from([])); // 2 has no back edges
+        // If 2 is missing entirely:
+        // adj.insert(0, HashSet::from([1]));
+        // adj.insert(1, HashSet::from([3]));
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        // Should not panic and should handle iteration correctly
+        let _chokes = analyzer.chokepoints();
+        // Just verify it doesn't crash
     }
 }
