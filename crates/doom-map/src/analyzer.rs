@@ -68,6 +68,7 @@ impl<'a> MapAnalyzer<'a> {
         let mut parent = HashMap::new();
         let mut articulation_points = HashSet::new();
         let mut time = 0;
+        let empty_set = HashSet::new();
 
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
@@ -97,7 +98,14 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((
+                                v,
+                                self.graph
+                                    .adjacency_list
+                                    .get(&v)
+                                    .unwrap_or(&empty_set)
+                                    .iter(),
+                            ));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -279,6 +287,41 @@ mod tests {
         assert_eq!(areas.len(), 1);
         assert!(areas[0].contains(&0));
         assert!(areas[0].contains(&1));
+    }
+
+    #[test]
+    fn havoc_test_analyzer_does_not_panic_on_asymmetric_edges() {
+        let mut adj = HashMap::new();
+        // 0 connects to 1, but 1 doesn't connect back to 0.
+        // It connects to 2, which doesn't connect back to 1.
+        adj.insert(0, HashSet::from([1]));
+        adj.insert(1, HashSet::from([2]));
+        adj.insert(2, HashSet::from([]));
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+
+        // These shouldn't panic
+        let _chokes = analyzer.chokepoints();
+        let _areas = analyzer.isolated_areas();
+    }
+
+    #[test]
+    fn havoc_test_analyzer_missing_back_edges() {
+        let mut adj = HashMap::new();
+        // 0 connects to 1, but 1 is completely missing from the adjacency list!
+        adj.insert(0, HashSet::from([1]));
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+
+        // These shouldn't panic
+        let _chokes = analyzer.chokepoints();
+        let _areas = analyzer.isolated_areas();
     }
 
     #[test]
