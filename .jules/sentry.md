@@ -56,3 +56,11 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+
+## 2026-05-20 - Null bytes in Python strings corrupting Rust files
+**Learning:** Using `\0` in a standard Python string evaluates to a literal null byte, which, when injected into a Rust file, turns the file into a binary according to Git.
+**Action:** Always use raw strings (`r"..."`) or double-escape (`\\0`) when writing Python scripts to inject Rust string literals containing escape sequences like `\0`.
+
+## 2026-05-20 - Uncovered fallback branches for StateNum::NULL and iterators
+**Learning:** Found several edge cases handling `unwrap_or(StateNum::NULL)` transitions and missing checks for isolated sectors in `specials.rs` that weren't tested, violating Sentry guidelines.
+**Action:** Always write explicit tests to guarantee fallback behaviors don't mask deeper bugs or crash unexpectedly (e.g. testing isolated sectors against `highest_adjacent_floor`).

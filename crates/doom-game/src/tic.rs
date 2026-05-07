@@ -940,6 +940,26 @@ mod tests {
         tick_all_mobjs(&mut gs, None);
     }
 
+
+    #[test]
+    fn tick_all_mobjs_skips_nightmare_respawn_when_entity_freed() {
+        let mut gs = make_game_state();
+        gs.skill = crate::Skill::Nightmare;
+
+        let mut t1 = make_trooper(StateNum(ids::S_POSS_STND), 5);
+        t1.health = 0; // dead
+        t1.flags |= crate::mobj::flags::MF_COUNTKILL;
+        t1.spawn_type = 1; // trigger nightmare respawn logic
+
+        let h1 = gs.mobjslab.alloc(t1);
+
+        // Free it directly before iteration reaches it
+        gs.mobjslab.free(h1);
+
+        // This will collect all handles, iterate, and the nightmare respawn block will hit the `unwrap_or(false)`
+        tick_all_mobjs(&mut gs, None);
+    }
+
     #[test]
     fn tick_all_mobjs_skips_freed_mobjs() {
         let mut gs = make_game_state();

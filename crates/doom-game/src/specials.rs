@@ -9979,6 +9979,38 @@ mod tests {
         );
     }
 
+
+    #[test]
+    fn highest_adjacent_floor_isolated_sector_returns_own_floor() {
+        let level = super::tests::make_damage_level(100, 0);
+        assert_eq!(highest_adjacent_floor(&level, 0), 100);
+    }
+
+    #[test]
+    fn lowest_adjacent_ceiling_isolated_sector_returns_own_ceiling() {
+        let mut level = super::tests::make_damage_level(100, 0);
+        level.sectors[0].ceil_height = 300;
+        assert_eq!(lowest_adjacent_ceiling(&level, 0), 300);
+    }
+
+    #[test]
+    fn next_highest_floor_isolated_sector_returns_own_floor() {
+        let level = super::tests::make_damage_level(50, 0);
+        assert_eq!(next_highest_floor(&level, 0), 50);
+    }
+
+    #[test]
+    fn next_highest_floor_above_isolated_sector_returns_current_height() {
+        let level = super::tests::make_damage_level(50, 0);
+        assert_eq!(next_highest_floor_above(&level, 0, 75), 75);
+    }
+
+    #[test]
+    fn shortest_lower_texture_isolated_sector_returns_zero() {
+        let level = super::tests::make_damage_level(50, 0);
+        assert_eq!(shortest_lower_texture(&level, 0), 0);
+    }
+
     #[test]
     fn ev_floor_lower_to_nearest_works() {
         let mut gs = GameState::new("TEST");

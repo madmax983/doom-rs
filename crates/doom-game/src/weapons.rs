@@ -1379,6 +1379,25 @@ mod tests {
         );
     }
 
+
+    #[test]
+    fn tick_psprite_with_invalid_next_state_goes_to_null() {
+        let mut gs = make_game_state();
+        let slot = psprite_slots::WEAPON;
+
+        let invalid_state = StateNum(crate::states::STATES.len() as u16 + 10);
+        gs.player.psprites[slot].state = invalid_state;
+        gs.player.psprites[slot].tics = 1;
+
+        tick_psprite_slot(&mut gs, slot, TicCmd::default(), None);
+
+        assert_eq!(
+            gs.player.psprites[slot].state,
+            StateNum::NULL,
+            "When the current state is invalid, the psprite should transition to StateNum::NULL"
+        );
+    }
+
     #[test]
     fn super_shotgun_empty_after_firing_lowers_at_reload_check() {
         let mut gs = make_game_state();

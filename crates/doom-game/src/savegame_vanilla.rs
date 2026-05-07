@@ -107,3 +107,24 @@ fn version_string(bytes: &[u8]) -> Option<&str> {
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     core::str::from_utf8(&bytes[..end]).ok()
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_string_handles_missing_null_terminator() {
+        // Provide bytes that don't have a null byte, forcing `unwrap_or` to use `bytes.len()`.
+        let bytes = b"NO_NULL_HERE";
+        let result = version_string(bytes);
+        assert_eq!(result, Some("NO_NULL_HERE"));
+    }
+
+    #[test]
+    fn version_string_handles_null_terminator() {
+        let bytes = b"HAVE_NULL\0IGNORE";
+        let result = version_string(bytes);
+        assert_eq!(result, Some("HAVE_NULL"));
+    }
+}
