@@ -1,7 +1,7 @@
 //! Demo-format tic command: 4 bytes per player per tic.
 //!
 //! The LMP format stores `forward_move`, `side_move`, a one-byte turn value,
-//! and `buttons` per player per tic. The full game [`TicCmd`] also carries
+//! and `buttons` per player per tic. The full game [`doom_types::ticcmd::TicCmd`] also carries
 //! `chatchar`, but that field is not part of the LMP wire format.
 
 use doom_types::TicCmd;
@@ -11,7 +11,7 @@ pub const DEMO_TIC_SIZE: usize = 4;
 
 /// 4-byte per-player per-tic entry in the LMP stream.
 ///
-/// Unlike the full [`TicCmd`], the LMP format stores only movement, the
+/// Unlike the full [`doom_types::ticcmd::TicCmd`], the LMP format stores only movement, the
 /// quantized turn byte, and action buttons. Chat characters are not stored.
 ///
 /// ```text
@@ -60,7 +60,7 @@ impl DemoTicCmd {
         })
     }
 
-    /// Convert a full [`TicCmd`] to a [`DemoTicCmd`].
+    /// Convert a full [`doom_types::ticcmd::TicCmd`] to a [`DemoTicCmd`].
     ///
     /// This is lossy by design: only the high byte of `angle_turn` is
     /// retained, so the lower 8 bits are dropped when serializing to LMP.
@@ -91,7 +91,7 @@ impl DemoTicCmd {
         }
     }
 
-    /// Convert this [`DemoTicCmd`] to a full [`TicCmd`].
+    /// Convert this [`DemoTicCmd`] to a full [`doom_types::ticcmd::TicCmd`].
     ///
     /// The demo turn byte is expanded back into engine units by shifting it
     /// into the high byte. The lower 8 bits are zeroed by design. `buttons`

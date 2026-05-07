@@ -6,13 +6,21 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![allow(unexpected_cfgs)]
 
+/// Angle math and conversions.
 pub mod angle;
+/// Bounding boxes.
 pub mod bbox;
+/// Compatibility flags.
 pub mod compat;
+/// Fixed point math.
 pub mod fixed;
+/// Engine limits.
 pub mod limits;
+/// Primitive types.
 pub mod primitives;
+/// Ticcmd structure.
 pub mod ticcmd;
+/// 2D vectors.
 pub mod vec2;
 
 pub use angle::{ANG45, ANG90, ANG180, ANG270, Bam};
@@ -23,6 +31,7 @@ pub use ticcmd::{TicCmd, bt};
 pub use vec2::Vec2Fixed;
 
 // Verus spine proofs (only processed by verus, not rustc).
+/// Mobj kind definitions.
 pub mod mobj_kind;
 #[allow(unexpected_cfgs)]
 #[cfg(verus_keep_ghost)]

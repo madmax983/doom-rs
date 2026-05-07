@@ -180,7 +180,7 @@ impl DemoPlayer {
     }
 
     /// Advance the playback cursor and return the first player's command as a
-    /// [`TicCmd`].
+    /// [`doom_types::ticcmd::TicCmd`].
     ///
     /// This is the primary playback entry point for doom-app (single-player
     /// demos). For multi-player demos, use [`next_tic_cmds`](Self::next_tic_cmds).

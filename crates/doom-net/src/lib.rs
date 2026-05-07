@@ -13,13 +13,25 @@
 //! imported from `doom-types` so that it can be shared across the workspace.
 //! `doom-net` depends only on `doom-types`, not `doom-game`.
 
+/// State checksumming.
 pub mod checksum;
+/// Network client.
+///
+/// Connects to a server and handles packets.
 pub mod client;
+/// Input logging and replay.
 pub mod input_log;
+/// Network packet structures.
+///
+/// Tic commands and other data packets.
 pub mod packet;
+/// Rollback netcode management.
 pub mod rollback;
+/// Network relay server.
 pub mod server;
+/// State snapshotting.
 pub mod snapshot;
+/// Network transport layer.
 pub mod transport;
 
 pub use checksum::{CRC32_TABLE, checksums_match, compute_checksum};

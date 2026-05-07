@@ -11,10 +11,15 @@
 //! - [`recorder`] — [`DemoRecorder`]: accumulates tics and writes an LMP file
 //! - [`player`] — [`DemoPlayer`]: parses an LMP file and replays tics
 
+/// CSV export.
 pub mod csv;
+/// Demo header structures.
 pub mod header;
+/// Demo playback.
 pub mod player;
+/// Demo recording.
 pub mod recorder;
+/// Demo ticcmd parsing.
 pub mod ticcmd;
 
 // Re-export primary types at crate root for convenience.

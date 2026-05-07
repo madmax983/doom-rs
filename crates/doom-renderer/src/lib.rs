@@ -4,36 +4,61 @@
 //! Hot path — no Verus proofs in this crate.
 //! `Framebuffer` and `PaletteLut` are the primary types consumed by `doom-tui`.
 
+/// Texture animation.
 pub mod anim;
+/// Automap rendering.
+///
+/// - **Stateful**: Create an `AutomapState`, call `draw_automap_ex` for
+///   grid overlay, and thing markers via the `AutomapCanvas` trait bridge.
 pub mod automap;
+/// Solid wall clipping.
 pub mod clip;
+/// Colormap parsing and lookups.
 pub mod colormap;
+/// Column rendering.
 pub mod column;
+/// Flat cache.
 pub mod flat_cache;
 pub mod font;
 pub mod framebuffer;
 pub mod fuzz;
 pub mod hud_messages;
 pub mod intermission;
+/// Sector lighting.
 pub mod lighting;
 pub mod menu_render;
+/// Palette definitions.
 pub mod palette;
+/// Palette flash effects.
 pub mod palette_flash;
 pub mod patch_cache;
+/// Core rendering loop.
 pub mod render;
 pub mod render_flags;
 pub mod seg;
+/// Sky rendering.
 pub mod sky;
+/// Flat span rendering.
 pub mod span;
+/// Sprite rendering.
 pub mod sprite;
+/// Sprite clipping history.
 pub mod sprite_clip;
+/// Sprite lookup tables.
 pub mod sprite_lookup;
+/// Status bar rendering.
 pub mod statusbar;
+/// Wall texture rendering.
 pub mod texture;
+/// Texture composition.
 pub mod texture_compose;
+/// Visplane generation.
 pub mod visplane;
+/// Font parsing and rendering.
 pub mod wad_font;
+/// Weapon animation rendering.
 pub mod weapon_anim;
+/// Screen wipe effects.
 pub mod wipe;
 
 pub use anim::{AnimSequence, AnimState, AnimType, SwitchList};

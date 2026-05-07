@@ -1084,7 +1084,7 @@ mod tests {
         let mut loop_ = make_test_event_loop();
         let _guard = MODIFIER_COUNT_LOCK
             .lock()
-            .expect("value must exist in test");
+            .unwrap_or_else(|e| e.into_inner());
         reset_modifier_sample_count();
 
         loop_.poll_events();
@@ -1099,7 +1099,7 @@ mod tests {
         let mut loop_ = make_test_event_loop();
         let _guard = MODIFIER_COUNT_LOCK
             .lock()
-            .expect("value must exist in test");
+            .unwrap_or_else(|e| e.into_inner());
         reset_modifier_sample_count();
 
         let mut app = CountingApp { ticks: 0 };

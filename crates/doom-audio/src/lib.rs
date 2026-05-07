@@ -3,6 +3,7 @@
 
 pub mod driver;
 pub mod midi;
+/// Audio mixing.
 pub mod mixer;
 pub mod mus;
 pub mod opl;

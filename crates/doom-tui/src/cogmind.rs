@@ -4,7 +4,7 @@
 //! palette-indexed framebuffer entirely.  Each [`CogmindCell`] carries its own
 //! glyph, foreground, and background RGB color.
 //!
-//! [`CogmindWidget`] is a dumb ratatui [`Widget`] that blits a `CogmindFrame`
+//! [`crate::cogmind::CogmindHudWidget`] is a dumb ratatui [`ratatui::widgets::Widget`] that blits a `CogmindFrame`
 //! to the terminal buffer, centering it if the frame is smaller than the
 //! available area.
 

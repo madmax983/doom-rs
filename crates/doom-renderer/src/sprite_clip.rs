@@ -15,6 +15,15 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new empty `SpriteClipHistory`.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// let history = SpriteClipHistory::new();
+    /// assert_eq!(history.iter().count(), 0);
+    /// ```
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {
@@ -26,6 +35,21 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Pushes a new clipping step onto the history.
+    ///
+    /// If the internal array is full, additional pushes are silently ignored
+    /// (dropped) to avoid heap allocations.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    ///
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 10, silhouette_height: 50.0 });
+    /// assert_eq!(history.iter().count(), 1);
+    /// ```
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +59,20 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns a reference to the last inserted clipping step, if any.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    ///
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 10, silhouette_height: 50.0 });
+    ///
+    /// let last = history.last().unwrap();
+    /// assert_eq!(last.depth, 100.0);
+    /// ```
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +81,21 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns an iterator over the clipping steps in the history.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    ///
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 10, silhouette_height: 50.0 });
+    ///
+    /// for step in history.iter() {
+    ///     println!("{}", step.depth);
+    /// }
+    /// ```
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }

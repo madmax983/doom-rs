@@ -1,19 +1,50 @@
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Represents the discrete actions the `AiDirector` can mandate.
 pub enum DirectorAction {
     SpawnAmbush,
     SpawnRelief,
     Maintain,
 }
 
+/// `AiDirector` observes the player's condition and decides what action
+/// the game should take to keep the tension high but fair.
 pub struct AiDirector;
 
 impl AiDirector {
+    /// Creates a new `AiDirector` instance.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_game::AiDirector;
+    /// let director = AiDirector::new();
+    /// ```
     pub fn new() -> Self {
         Self
     }
 
+    /// Determines the next action the AI director should take based on the player's state.
+    ///
+    /// Evaluates the player's current health to decide whether to spawn an ambush
+    /// (if health is high), provide relief (if health is low), or simply maintain the
+    /// current state of affairs.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_game::{AiDirector, DirectorAction, PlayerState};
+    /// use doom_game::mobj::MobjHandle;
+    /// use doom_types::limits::MAX_HEALTH;
+    ///
+    /// let mut director = AiDirector::new();
+    /// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
+    /// player.set_health_capped(100, MAX_HEALTH);
+    ///
+    /// // The director spawns an ambush because health is high.
+    /// assert_eq!(director.tick(&player), DirectorAction::SpawnAmbush);
+    /// ```
     pub fn tick(&mut self, player: &PlayerState) -> DirectorAction {
         let health = player.health();
 

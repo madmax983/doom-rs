@@ -1,6 +1,6 @@
 //! Network client for doom-net multiplayer.
 //!
-//! [`NetClient`] connects to a [`super::server::RelayServer`], performs the
+//! [`crate::client::NetClient`] connects to a [`crate::server::RelayServer`], performs the
 //! handshake to obtain a player slot, and provides send/recv for gameplay
 //! [`TicPacket`]s.
 

@@ -58,7 +58,7 @@ impl DemoRecorder {
         }
     }
 
-    /// Append one tic from a single [`TicCmd`] (single-player convenience).
+    /// Append one tic from a single [`doom_types::ticcmd::TicCmd`] (single-player convenience).
     ///
     /// This is the primary recording entry point for doom-app, which records
     /// one `TicCmd` per tic for the console player.

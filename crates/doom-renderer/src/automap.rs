@@ -10,11 +10,11 @@
 //! # Usage
 //! The automap supports three modes:
 //! - **Legacy**: Call [`draw_automap`] directly with player coords (auto-fit zoom).
-//! - **Stateful**: Create an [`AutomapState`], call [`draw_automap_ex`] for
+//! - **Stateful**: Create an [`doom_game::automap::AutomapState`], call [`doom_game::automap::draw_automap_full`] for
 //!   interactive zoom/pan/follow.
 //! - **Full integration**: Use [`RendererAutomapCanvas`] with
 //!   [`doom_game::draw_automap_full`] to leverage game-side visibility tracking,
-//!   grid overlay, and thing markers via the [`AutomapCanvas`] trait bridge.
+//!   grid overlay, and thing markers via the [`doom_game::automap::AutomapCanvas`] trait bridge.
 //!
 //! # Automap colour palette
 //! The `automap_colors` module exposes classic Doom automap palette indices
@@ -357,7 +357,7 @@ pub fn draw_automap(
 // Public API -- stateful entry point
 // ---------------------------------------------------------------------------
 
-/// Render a 2D overhead automap using the interactive [`AutomapState`].
+/// Render a 2D overhead automap using the interactive [`doom_game::automap::AutomapState`].
 ///
 /// This is the preferred entry point for interactive automap usage with
 /// zoom/pan controls.
@@ -1020,7 +1020,7 @@ mod tests {
     // Public API -- stateful entry point
     // ---------------------------------------------------------------------------
 
-    /// Render a 2D overhead automap using the interactive [`AutomapState`].
+    /// Render a 2D overhead automap using the interactive [`doom_game::automap::AutomapState`].
     ///
     /// This is the preferred entry point for interactive automap usage with
     /// zoom/pan controls.

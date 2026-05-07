@@ -11,49 +11,83 @@
 //! - `player.ammo[i] ≤ MAX_AMMO[i]` for all i.
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
+/// Mobj actions.
 pub mod actions;
+/// Automap drawing and state.
 pub mod automap;
+/// Cheat codes and parsing.
 pub mod cheats;
+/// Combat simulation.
 pub mod combat;
+/// Dehacked patch parsing.
 pub mod dehacked;
+/// Status bar face rendering logic.
 pub mod face;
+/// Intermission screen logic.
 pub mod intermission;
+/// Linedef trigger dispatch.
 pub mod linedef_dispatch;
+/// Menu drawing and state.
 pub mod menu;
+/// Mobj structs and arena allocator.
 pub mod mobj;
+/// Mobj info tables.
 pub mod mobjinfo;
+/// Player and mobj movement.
 pub mod movement;
 /// Mover structures and functions for things like doors, ceilings, and floors.
 pub mod movers;
+/// Game phases and transitions.
 pub mod phase;
+/// Item pickups and touching.
 pub mod pickups;
+/// Player state and inputs.
 pub mod player;
+/// Projectile spawning and logic.
 pub mod projectile;
+/// Doom's deterministic RNG.
 pub mod random;
+/// Savegame loading and saving.
 pub mod savegame;
+/// Vanilla savegame loading.
 mod savegame_vanilla;
+/// Line of sight checking.
 pub mod sight;
+/// Deep copy snapshotting for rollback.
 pub mod snapshot;
+/// Sound generation and targets.
 pub mod sound;
 /// Sound propagation and audio request structs.
 pub mod sound_prop;
+/// Level spawning and setup.
 pub mod spawn;
+/// Sector specials and triggers.
 pub mod specials;
+/// Core game state struct.
 pub mod state;
+/// State machine definitions.
 pub mod states;
 /// Level statistics tracking (kills, items, secrets, etc).
 pub mod stats;
 #[cfg(feature = "style_meter")]
+/// Optional style meter tracking.
 pub mod style;
+/// Switch interactions and logic.
 pub mod switch;
 #[cfg(feature = "telemetry")]
+/// Optional gameplay telemetry.
 pub mod telemetry;
+/// Main tic update loop.
 pub mod tic;
+/// Raycasting and hitscan.
 pub mod trace;
+/// Weapon firing functions.
 pub mod weapon_fire;
+/// Weapon state machines.
 pub mod weapons;
 
 #[cfg(feature = "director")]
+/// AI Director for adaptive difficulty.
 pub mod director;
 #[cfg(feature = "director")]
 pub use director::*;

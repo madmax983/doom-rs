@@ -23,6 +23,12 @@
     Clone, Copy, Debug, PartialEq, Eq, Hash, strum_macros::FromRepr, strum_macros::EnumIter,
 )]
 #[repr(u16)]
+/// Represents the fundamental type or 'species' of a Map Object (`Mobj`).
+///
+/// This enum enumerates every distinct entity type in the Doom engine, from players and
+/// monsters to projectiles, items, and visual effects like puffs of smoke or explosions.
+/// It is used extensively to map a generic `Mobj` to its specific state machine
+/// properties (defined in `MobjInfo`).
 pub enum MobjKind {
     // Players
     /// The human-controlled space marine.

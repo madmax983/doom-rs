@@ -4,7 +4,7 @@
 //! server.  Serialisation is manual little-endian, no `serde` or `bincode` on
 //! the hot path.
 //!
-//! [`TicCmd`] is the wire-format player input command. It is imported from `doom-types`
+//! [`doom_types::ticcmd::TicCmd`] is the wire-format player input command. It is imported from `doom-types`
 //! so that it can be shared across the entire workspace.
 
 use doom_types::TicCmd;
@@ -19,7 +19,7 @@ pub const MAX_ROLLBACK_TICS: usize = 8;
 // TicCmd wire size
 // ---------------------------------------------------------------------------
 
-/// Wire size of one [`TicCmd`] when serialized:
+/// Wire size of one [`doom_types::ticcmd::TicCmd`] when serialized:
 /// `i8 + i8 + i16 + u8 + u8` = 6 bytes.
 const TICCMD_WIRE_SIZE: usize = 6;
 

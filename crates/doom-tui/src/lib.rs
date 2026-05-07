@@ -10,10 +10,13 @@
 //! - [`DoomApp`] — implement this trait to plug your game in
 
 pub mod charset;
+/// Cogmind HUD.
 pub mod cogmind;
 pub mod event_loop;
+/// TUI input handling.
 pub mod input;
 pub mod scaler;
+/// Sixel rendering.
 pub mod sixel;
 pub mod widget;
 
