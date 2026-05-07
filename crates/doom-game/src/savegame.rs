@@ -1010,10 +1010,7 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
     let header_level_time = r.read_u32()?;
     let description: [u8; 24] = r.read_bytes()?;
 
-    // 👹 Havoc: Guard against corrupted descriptions
-    if core::str::from_utf8(&description).is_err() {
-        return Err(SaveError::Truncated);
-    }
+    // 👹 Havoc: Guard against corrupted descriptions (Lossy parsing allowed, no strict utf8 validation)
 
     let header = SaveHeader {
         magic,
@@ -1053,9 +1050,6 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
     let level_name_str = {
         let bytes = &r.data[r.pos..r.pos + name_len];
         r.pos += name_len;
-        if core::str::from_utf8(bytes).is_err() {
-            return Err(SaveError::Truncated);
-        }
         String::from_utf8_lossy(bytes).into_owned()
     };
 
@@ -2045,6 +2039,35 @@ mod tests {
     }
 
     // --- Test 33: Havoc malicious string size ---
+
+    // --- Havoc Test: Level name is invalid UTF-8 and loads gracefully ---
+    #[test]
+    fn havoc_test_lossy_utf8_level_name_loads_successfully() {
+        let gs = test_game_state();
+        let mut data = save_game(&gs, b"E1M1\x80\0\0\0", 3, "My Cool Save");
+
+        // Overwrite the level name string embedded in the payload
+        // Format: length u32 + bytes. Let's find the E1M1 payload string.
+        for i in 0..(data.len() - 4) {
+            if data[i] == 4
+                && data[i + 1] == 0
+                && data[i + 2] == 0
+                && data[i + 3] == 0
+                && &data[i + 4..i + 8] == b"E1M1"
+            {
+                data[i + 7] = 0x80; // Invalid UTF-8 byte
+                break;
+            }
+        }
+
+        // The save file should NOT be truncated due to the invalid level name.
+        // It should load gracefully.
+        let loaded = load_game(&data).expect("load must succeed with lossy utf8 level name");
+        assert_eq!(
+            loaded.state.level_name.trim_end_matches('\0'),
+            "E1M\u{FFFD}"
+        ); // lossy char
+    }
     #[test]
     fn load_game_malicious_string_length() {
         let gs = test_game_state();
@@ -2052,16 +2075,18 @@ mod tests {
 
         for i in 0..(data.len() - 4) {
             // Find the string length
-            if data[i] == 4 && data[i + 1] == 0 && data[i + 2] == 0 && data[i + 3] == 0 {
-                // Confirm it's followed by E1M1
-                if &data[i + 4..i + 8] == b"E1M1" {
-                    // Set length to u32::MAX
-                    data[i] = 0xFF;
-                    data[i + 1] = 0xFF;
-                    data[i + 2] = 0xFF;
-                    data[i + 3] = 0xFF;
-                    break;
-                }
+            if data[i] == 4
+                && data[i + 1] == 0
+                && data[i + 2] == 0
+                && data[i + 3] == 0
+                && &data[i + 4..i + 8] == b"E1M1"
+            {
+                // Set length to u32::MAX
+                data[i] = 0xFF;
+                data[i + 1] = 0xFF;
+                data[i + 2] = 0xFF;
+                data[i + 3] = 0xFF;
+                break;
             }
         }
 
