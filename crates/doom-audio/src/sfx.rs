@@ -2,7 +2,7 @@
 //!
 //! Provides [`SfxCache`] for storing decoded [`PcmSample`] lumps keyed by
 //! their Doom SFX ID, and [`play_sfx`] for dispatching a sound effect onto
-//! the nearest available [`Mixer`] channel.
+//! the nearest available `Mixer` channel.
 
 #[cfg(feature = "loom")]
 use loom::sync::Arc;
@@ -78,7 +78,7 @@ impl SfxCache {
 // play_sfx
 // ---------------------------------------------------------------------------
 
-/// Dispatch sound effect `sfx_id` onto the [`Mixer`] at the given `volume`
+/// Dispatch sound effect `sfx_id` onto the `Mixer` at the given `volume`
 /// (0–127).
 ///
 /// Channel selection:

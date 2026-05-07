@@ -11,49 +11,82 @@
 //! - `player.ammo[i] ≤ MAX_AMMO[i]` for all i.
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
+/// Mobj thinker actions (A_* functions).
 pub mod actions;
+/// Automap rendering and state.
 pub mod automap;
+/// Cheat code logic.
 pub mod cheats;
+/// Combat mechanics (damage, targeting).
 pub mod combat;
+/// DeHackEd patch parsing and application.
 pub mod dehacked;
+/// Status bar face state machine.
 pub mod face;
+/// Intermission (stats screen) logic.
 pub mod intermission;
+/// Linedef action dispatch (specials).
 pub mod linedef_dispatch;
+/// Game menu logic.
 pub mod menu;
+/// Map object (Mobj) definition and slab allocator.
 pub mod mobj;
+/// Mobj class metadata (health, speed, etc).
 pub mod mobjinfo;
+/// Mobj movement and collision logic.
 pub mod movement;
 /// Mover structures and functions for things like doors, ceilings, and floors.
 pub mod movers;
+/// Game phase definitions (Title, Play, Intermission).
 pub mod phase;
+/// Item pickup logic.
 pub mod pickups;
+/// Player state and attributes.
 pub mod player;
+/// Projectile spawning and movement.
 pub mod projectile;
+/// Deterministic RNG.
 pub mod random;
+/// Save/Load game logic.
 pub mod savegame;
 mod savegame_vanilla;
+/// Line of sight calculations.
 pub mod sight;
+/// Rollback snapshot logic.
 pub mod snapshot;
+/// Sound propagation and alerting logic.
 pub mod sound;
 /// Sound propagation and audio request structs.
 pub mod sound_prop;
+/// Level spawn logic (things, monsters).
 pub mod spawn;
+/// Sector specials (doors, lifts, crushers).
 pub mod specials;
+/// Core GameState and simulation types.
 pub mod state;
+/// State machine definitions for mobjs.
 pub mod states;
 /// Level statistics tracking (kills, items, secrets, etc).
 pub mod stats;
 #[cfg(feature = "style_meter")]
+/// Style meter tracking (optional feature).
 pub mod style;
+/// Switch and texture toggling logic.
 pub mod switch;
 #[cfg(feature = "telemetry")]
+/// Telemetry tracking (optional feature).
 pub mod telemetry;
+/// Main tick loop and world update.
 pub mod tic;
+/// Raycasting and hit detection.
 pub mod trace;
+/// Weapon firing logic (hitscan, projectiles).
 pub mod weapon_fire;
+/// Weapon switching and PSPRITE states.
 pub mod weapons;
 
 #[cfg(feature = "director")]
+/// AI Director for dynamic difficulty adjustment.
 pub mod director;
 #[cfg(feature = "director")]
 pub use director::*;

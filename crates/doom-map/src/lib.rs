@@ -9,16 +9,27 @@
 //! - All sidedef sector refs in bounds
 //! - Reject size == `ceil(N_SECTORS² / 8)`
 
+/// ASCII rendering and exporting.
 pub mod ascii;
+/// Binary Space Partitioning tree structures.
 pub mod bsp;
+/// Export maps to GeoJSON format.
 pub mod geojson;
+/// Topological graph representing sector connectivity.
 pub mod graph;
+/// Export maps to HTML format.
 pub mod html;
+/// Export maps to JSON format.
 pub mod json;
+/// Core level definition and loading mechanics.
 pub mod level;
+/// Raw WAD lump parsing and structures.
 pub mod lumps;
+/// Export maps to OBJ 3D format.
 pub mod obj;
+/// Export maps to SVG format.
 pub mod svg;
+/// Universal Doom Map Format (UDMF) parsing.
 pub mod udmf;
 
 pub use ascii::export_map_to_ascii;
@@ -35,5 +46,6 @@ pub use lumps::{
 pub use obj::export_map_to_obj;
 pub use svg::export_map_to_svg;
 
+/// Structural analysis for Doom maps.
 pub mod analyzer;
 pub use analyzer::MapAnalyzer;

@@ -11,10 +11,15 @@
 //! - [`recorder`] — [`DemoRecorder`]: accumulates tics and writes an LMP file
 //! - [`player`] — [`DemoPlayer`]: parses an LMP file and replays tics
 
+/// CSV conversion utilities for demo data.
 pub mod csv;
+/// Demo file header parsing and validation.
 pub mod header;
+/// Demo playback engine.
 pub mod player;
+/// Demo recording engine.
 pub mod recorder;
+/// Ticcmd parsing and handling.
 pub mod ticcmd;
 
 // Re-export primary types at crate root for convenience.

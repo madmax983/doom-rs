@@ -78,7 +78,7 @@ impl PcmSample {
 // MixChannel
 // ---------------------------------------------------------------------------
 
-/// One slot in the [`Mixer`] voice table.
+/// One slot in the `Mixer` voice table.
 pub struct MixChannel {
     /// The sample currently assigned to this channel, if any.
     pub sample: Option<Arc<PcmSample>>,

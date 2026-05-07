@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+📖 Chapter: The "Missing" Link - `lib.rs` files
+🔦 Insight: Added missing `//!` module documentation to `doom-app` to set the context of the crate, and added `///` to every public module export across the workspace (`doom-map`, `doom-net`, `doom-renderer`, `doom-demo`, `doom-wad`, `doom-audio`, `doom-game`, `doom-tui`) to resolve missing documentation gaps. Also resolved warnings regarding broken intra-doc links by replacing brackets with code tags or fixing scopes.
+🧪 Example: Added documentation for the `sprite_clip` struct `SpriteClipHistory` functions (`push`, `last`, `iter`) to explain that extra clips are silently dropped to avoid heap allocations. Re-wrote `director.rs`'s `AiDirector` to include detailed module-level storytelling and an executable code example.
+🖼️ Preview: All `cargo doc` warnings and missing documentation resolved.

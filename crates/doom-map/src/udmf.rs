@@ -11,8 +11,8 @@
 //! # The Conversion Pipeline
 //!
 //! To understand this module, you must follow the data's journey:
-//! 1. **Parsing ([`UdmfMap::parse`])**: We read the raw UTF-8 bytes of a `TEXTMAP` and parse it into an Abstract Syntax Tree (AST). This is represented by [`UdmfMap`], containing raw [`UdmfBlock`]s and [`UdmfField`]s.
-//! 2. **Conversion ([`UdmfMap::into_level_data`])**: The engine doesn't want an AST; it wants flat, fast arrays of vertices, sectors, and sidedefs to render at 60 FPS. We convert the raw UDMF AST into [`UdmfLevelData`], which matches the classic binary shape the engine expects.
+//! 1. **Parsing (`UdmfMap::parse`)**: We read the raw UTF-8 bytes of a `TEXTMAP` and parse it into an Abstract Syntax Tree (AST). This is represented by `UdmfMap`, containing raw `UdmfBlock`s and `UdmfField`s.
+//! 2. **Conversion (`UdmfMap::into_level_data`)**: The engine doesn't want an AST; it wants flat, fast arrays of vertices, sectors, and sidedefs to render at 60 FPS. We convert the raw UDMF AST into `UdmfLevelData`, which matches the classic binary shape the engine expects.
 //! 3. **Validation**: The rest of the engine (in [`crate::level::Level`]) takes this flat data and validates its BSP trees and geometry.
 //!
 //! # Limitations
@@ -93,7 +93,7 @@ pub struct UdmfField {
 /// ```text
 /// vertex { x = 10.0; y = 20.0; }
 /// ```
-/// The kind here is `"vertex"`, and it contains two [`UdmfField`]s.
+/// The kind here is `"vertex"`, and it contains two `UdmfField`s.
 ///
 /// ## Examples
 /// ```
@@ -119,7 +119,7 @@ pub struct UdmfBlock {
 ///
 /// This represents a raw, unvalidated AST (Abstract Syntax Tree) of the `TEXTMAP` file.
 /// It holds the exact structure of the text but doesn't yet mean anything to the Doom engine.
-/// To convert this AST into usable map geometry, you must "compile" it by calling [`UdmfMap::into_level_data`].
+/// To convert this AST into usable map geometry, you must "compile" it by calling `UdmfMap::into_level_data`.
 /// ## Examples
 /// ```
 /// use doom_map::udmf::{UdmfMap, UdmfBlock};
@@ -359,7 +359,7 @@ impl UdmfMap {
     ///
     /// The engine was built to iterate over continuous blocks of memory at 60 FPS,
     /// so the flexible, string-keyed properties of a `TEXTMAP` are far too slow.
-    /// This function acts as the "compiler"—it reads the raw [`UdmfMap`] AST and
+    /// This function acts as the "compiler"—it reads the raw `UdmfMap` AST and
     /// squashes all those string properties down into the exact same packed binary
     /// structs (like `Linedef` and `Sector`) that classic Doom WADs use.
     ///

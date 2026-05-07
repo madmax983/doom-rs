@@ -3,7 +3,7 @@
 //! [`NetTransport`] wraps a [`std::net::UdpSocket`] with non-blocking I/O,
 //! packet serialization via [`TicPacket`], connection state tracking, and
 //! traffic statistics.  This is the low-level building block used by both
-//! [`super::server::RelayServer`] and [`super::client::NetClient`].
+//! `RelayServer` and `NetClient`.
 
 use std::io;
 use std::net::{SocketAddr, UdpSocket};

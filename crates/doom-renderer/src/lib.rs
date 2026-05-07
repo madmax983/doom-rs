@@ -4,36 +4,67 @@
 //! Hot path — no Verus proofs in this crate.
 //! `Framebuffer` and `PaletteLut` are the primary types consumed by `doom-tui`.
 
+/// Animation definitions and timing.
 pub mod anim;
+/// Automap rendering.
 pub mod automap;
+/// Screen clipping for 2D elements.
 pub mod clip;
+/// Colormap parsing and management.
 pub mod colormap;
+/// Column rendering for walls.
 pub mod column;
+/// Flat caching for floors and ceilings.
 pub mod flat_cache;
+/// Font rendering.
 pub mod font;
+/// Core framebuffer management.
 pub mod framebuffer;
+/// Fuzz effect rendering (Spectres).
 pub mod fuzz;
+/// HUD message rendering.
 pub mod hud_messages;
+/// Intermission screen rendering.
 pub mod intermission;
+/// Sector lighting calculations.
 pub mod lighting;
+/// Menu rendering.
 pub mod menu_render;
+/// Palette parsing and management.
 pub mod palette;
+/// Palette flash effects (damage, pickup).
 pub mod palette_flash;
+/// Patch caching for sprites and textures.
 pub mod patch_cache;
+/// Core rendering loop and dispatch.
 pub mod render;
+/// Rendering flags and options.
 pub mod render_flags;
+/// Seg rendering (walls).
 pub mod seg;
+/// Sky rendering.
 pub mod sky;
+/// Span rendering for floors and ceilings.
 pub mod span;
+/// Sprite rendering.
 pub mod sprite;
+/// Sprite clipping bounds.
 pub mod sprite_clip;
+/// Sprite lookup dictionaries.
 pub mod sprite_lookup;
+/// Status bar rendering.
 pub mod statusbar;
+/// Texture parsing and management.
 pub mod texture;
+/// Multi-patch texture composition.
 pub mod texture_compose;
+/// Visplane parsing and rendering.
 pub mod visplane;
+/// WAD font parsing.
 pub mod wad_font;
+/// Weapon animation rendering.
 pub mod weapon_anim;
+/// Screen wipe effects.
 pub mod wipe;
 
 pub use anim::{AnimSequence, AnimState, AnimType, SwitchList};

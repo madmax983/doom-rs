@@ -1,6 +1,6 @@
 //! MUS→OPL2 sequencer.
 //!
-//! Drives an [`OplChip`] from a decoded [`MusScore`].  Maps MUS channels to
+//! Drives an `OplChip` from a decoded [`MusScore`].  Maps MUS channels to
 //! OPL2 hardware channels and translates [`MusEvent`] values into OPL2
 //! register writes.
 //!
@@ -289,7 +289,7 @@ enum LoopAction {
 // MidiPlayer
 // ---------------------------------------------------------------------------
 
-/// Drives an [`OplChip`] from a stream of [`MusEvent`] values.
+/// Drives an `OplChip` from a stream of [`MusEvent`] values.
 ///
 /// Channel allocation uses round-robin assignment of the 9 OPL2 hardware
 /// channels.  MUS channel 15 (percussion) is treated as a no-op.

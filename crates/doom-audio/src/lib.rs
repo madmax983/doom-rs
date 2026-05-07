@@ -1,14 +1,23 @@
 //! OPL2/3 FM synthesis, MUS→MIDI conversion, PCM SFX mixing,
 //! positional audio, and cpal audio output driver.
 
+/// Hardware audio output via `cpal`.
 pub mod driver;
+/// MIDI playback and instruments.
 pub mod midi;
+/// Core audio mixing primitives.
 pub mod mixer;
+/// MUS format parsing.
 pub mod mus;
+/// Software emulation of OPL hardware synthesis.
 pub mod opl;
+/// Sound effect definitions and playback.
 pub mod sfx;
+/// Sound effect channel mixing.
 pub mod sfx_mixer;
+/// Positional audio (panning and distance attenuation).
 pub mod spatial;
+/// WAV file exporting.
 pub mod wav;
 
 pub use driver::AudioDriver;
