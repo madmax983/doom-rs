@@ -533,11 +533,8 @@ impl MidiPlayer {
         } else if n_samples > 0 {
             let step = OPL_RATE as f64 / sample_rate as f64;
             let start_pos = self.resample_frac;
-            let last_pos = start_pos + step * (n_samples.saturating_sub(1) as f64);
-
-            let max_interp_idx = last_pos.floor() as usize + 1;
-            let consumed_idx = (start_pos + step * n_samples as f64).floor() as usize;
-            let max_needed = max_interp_idx.max(consumed_idx);
+            let end_pos = start_pos + step * n_samples as f64;
+            let max_needed = end_pos.ceil() as usize;
 
             let mut src = vec![0.0f32; max_needed + 1];
             src[0] = if self.resample_initialized {
@@ -554,15 +551,14 @@ impl MidiPlayer {
                 let pos = start_pos + step * i as f64;
                 let idx = pos.floor() as usize;
                 let frac = (pos - idx as f64) as f32;
-                let a = src[idx];
-                let b = src[idx + 1];
+                let a = src.get(idx).copied().unwrap_or(0.0);
+                let b = src.get(idx + 1).copied().unwrap_or(a);
                 *out = a + (b - a) * frac;
             }
 
-            let end_pos = start_pos + step * n_samples as f64;
             let drop = end_pos.floor() as usize;
             self.resample_frac = end_pos - drop as f64;
-            self.resample_prev = src[drop];
+            self.resample_prev = src.get(drop).copied().unwrap_or(0.0);
         }
 
         self.sample_count = sample_count_end;
@@ -642,14 +638,13 @@ impl MidiPlayer {
                         self.channel_program[idx] = *value;
                     }
                     // MUS controller 3 = volume.
-                    3 => {
-                        if self.channel_map[idx] != 0xFF {
-                            let opl_ch = self.channel_map[idx];
-                            let tl = 63u8.saturating_sub(*value / 2);
-                            let car_reg = opl2_car_reg(opl_ch);
-                            self.opl.write(0x40 + car_reg, tl.min(63));
-                        }
+                    3 if self.channel_map[idx] != 0xFF => {
+                        let opl_ch = self.channel_map[idx];
+                        let tl = 63u8.saturating_sub(*value / 2);
+                        let car_reg = opl2_car_reg(opl_ch);
+                        self.opl.write(0x40 + car_reg, tl.min(63));
                     }
+                    3 => {}
                     _ => {}
                 }
             }

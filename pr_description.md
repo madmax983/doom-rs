@@ -1,11 +1,10 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
+**The Trigger:** Running Fuzzing across `doom-audio` components.
+**The Stack Trace:**
 ```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
+thread 'havoc_repro' panicked at crates/doom-audio/src/midi.rs:559:28:
+index out of bounds: the len is 578 but the index is 578
 ```
+**Reproduction:**
+Running focused resampling test in `havoc_repro.rs` using original values extracted from a `cargo fuzz` crash. The issue triggers when `max_needed` calculation rounds down improperly for interpolation boundaries.
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+**Comment:** "You thought your resampling logic was robust against arbitrary input rates. You were wrong."
