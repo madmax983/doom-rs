@@ -1,3 +1,8 @@
+//! Environmental movers and interactive level specials.
+//!
+//! Handles moving sectors like doors, lifts, platforms, and crushers, as well
+//! as scrolling walls and conveyor belts.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

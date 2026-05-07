@@ -1,3 +1,8 @@
+//! Fuzz target for Dehacked patch parsing.
+//!
+//! Feeds random byte sequences into `DehPatch::parse` to ensure it does not panic
+//! on malformed input.
+
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;

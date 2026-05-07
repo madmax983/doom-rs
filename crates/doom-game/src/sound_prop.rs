@@ -1,3 +1,8 @@
+//! Sound propagation and auditory event management.
+//!
+//! This module handles how sounds are emitted by entities and how they travel
+//! through the level's sectors to alert monsters.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;
