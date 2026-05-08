@@ -465,7 +465,7 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
         // ── Move toward target ──
         let speed = door.speed;
         let target = door.target_height;
-        let is_ceiling = door.is_ceiling;
+        let is_ceiling = door.target == crate::movers::MoverTarget::Ceiling;
         let reopen_height = door.reopen_height;
         let wait_tics = door.wait_tics;
 
@@ -2064,7 +2064,7 @@ fn open_door(
         target_height: target,
         current_height: sector.ceil_height,
         speed: DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: if behavior == crate::linedef_dispatch::DoorBehavior::OpenWaitClose {
             DOOR_WAIT
         } else {
@@ -2141,7 +2141,7 @@ fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         target_height: target,
         current_height: sector.ceil_height,
         speed: -DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: -1,
         countdown: -1,
         reopen_height: 0,
@@ -2171,7 +2171,7 @@ fn close_wait_open_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         target_height: sector.floor_height,
         current_height: sector.ceil_height,
         speed: -DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: -1,
         countdown: -1,
         reopen_height: reopen_h,
@@ -2209,7 +2209,7 @@ fn open_blazing_door(
         target_height: target,
         current_height: sector.ceil_height,
         speed: BLAZING_DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: if behavior == crate::linedef_dispatch::DoorBehavior::OpenWaitClose {
             DOOR_WAIT
         } else {
@@ -2244,7 +2244,7 @@ fn close_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         target_height: target,
         current_height: sector.ceil_height,
         speed: -BLAZING_DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: -1,
         countdown: -1,
         reopen_height: 0,
@@ -8728,8 +8728,8 @@ mod tests {
         assert_eq!(gs.movers.active_doors.len(), 1);
         let door = &gs.movers.active_doors[0];
         assert_eq!(door.speed, -DOOR_SPEED);
-        assert_eq!(door.target_height, 0); // floor height
-        assert!(door.is_ceiling);
+        assert_eq!(door.target_height, 0);
+        assert_eq!(door.target, crate::movers::MoverTarget::Ceiling);
         // Wait is calculated internally; just verify it's a valid mover.
     }
 
@@ -8746,7 +8746,7 @@ mod tests {
         let door = &gs.movers.active_doors[0];
         assert_eq!(door.speed, -DOOR_SPEED);
         assert_eq!(door.target_height, 0);
-        assert!(door.is_ceiling);
+        assert_eq!(door.target, crate::movers::MoverTarget::Ceiling);
     }
 
     // -----------------------------------------------------------------------

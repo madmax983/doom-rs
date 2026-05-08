@@ -12,8 +12,8 @@ pub struct DoorMover {
     pub current_height: i16,
     /// Speed in map units per tic (positive = opening/rising, negative = closing/lowering).
     pub speed: i16,
-    /// `true` = this mover operates on ceiling height, `false` = floor height.
-    pub is_ceiling: bool,
+    /// Which plane this mover operates on (ceiling or floor).
+    pub target: MoverTarget,
     /// Tics to wait at top/bottom before reversing (0 = no wait, no reverse).
     pub wait_tics: i32,
     /// Countdown until the door starts closing again (−1 = permanent open/close).
@@ -27,6 +27,15 @@ pub struct DoorMover {
 // ---------------------------------------------------------------------------
 // Ceiling / floor mover types
 // ---------------------------------------------------------------------------
+
+/// Target plane for a mover (ceiling or floor).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MoverTarget {
+    /// Operates on ceiling height.
+    Ceiling,
+    /// Operates on floor height.
+    Floor,
+}
 
 /// Direction a ceiling or floor is currently moving.
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]

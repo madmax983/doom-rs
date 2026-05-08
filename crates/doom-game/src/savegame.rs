@@ -596,7 +596,7 @@ fn write_door_mover(w: &mut WriteCursor, d: &DoorMover) {
     w.write_i16(d.target_height);
     w.write_i16(d.current_height);
     w.write_i16(d.speed);
-    w.write_bool(d.is_ceiling);
+    w.write_bool(d.target == crate::movers::MoverTarget::Ceiling);
     w.write_i32(d.wait_tics);
     w.write_i32(d.countdown);
     w.write_i16(d.reopen_height);
@@ -609,7 +609,11 @@ fn read_door_mover(r: &mut ReadCursor<'_>) -> Result<DoorMover, SaveError> {
         target_height: r.read_i16()?,
         current_height: r.read_i16()?,
         speed: r.read_i16()?,
-        is_ceiling: r.read_bool()?,
+        target: if r.read_bool()? {
+            crate::movers::MoverTarget::Ceiling
+        } else {
+            crate::movers::MoverTarget::Floor
+        },
         wait_tics: r.read_i32()?,
         countdown: r.read_i32()?,
         reopen_height: r.read_i16()?,
@@ -1593,7 +1597,7 @@ mod tests {
             target_height: 128,
             current_height: 64,
             speed: 2,
-            is_ceiling: true,
+            target: crate::movers::MoverTarget::Ceiling,
             wait_tics: 120,
             countdown: 60,
             reopen_height: 0,
@@ -1604,7 +1608,7 @@ mod tests {
             target_height: 0,
             current_height: 100,
             speed: -2,
-            is_ceiling: true,
+            target: crate::movers::MoverTarget::Ceiling,
             wait_tics: 0,
             countdown: -1,
             reopen_height: 0,
