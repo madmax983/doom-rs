@@ -1194,7 +1194,11 @@ fn min_neighbor_light(level: &Level, tag: u16) -> i16 {
 // ---------------------------------------------------------------------------
 
 /// Collect all sector indices matching `tag`.
-fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
+///
+/// **Optimization:** Replaced `Vec` with `SmallVec` to eliminate dynamic heap allocations
+/// during cross-line triggers (e.g., doors, stairs), which happen frequently per tic.
+/// Tags typically map to a small number of sectors.
+fn sectors_by_tag(level: &Level, tag: u16) -> smallvec::SmallVec<[usize; 4]> {
     level
         .sectors
         .iter()
