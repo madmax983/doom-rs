@@ -168,16 +168,13 @@ pub(crate) fn run_server(port: u16) -> Result<()> {
                         .label(format!("{} / {}", count, MAX_PLAYERS));
                     f.render_widget(gauge, chunks[1]);
 
-                    let items: Vec<ListItem> = logs
-                        .iter()
-                        .rev()
-                        .map(|msg| ListItem::new(Span::raw(msg)))
-                        .collect();
-                    let list = List::new(items).block(
-                        Block::default()
-                            .title("Recent Events")
-                            .borders(Borders::ALL),
-                    );
+                    let list =
+                        List::new(logs.iter().rev().map(|msg| ListItem::new(Span::raw(msg))))
+                            .block(
+                                Block::default()
+                                    .title("Recent Events")
+                                    .borders(Borders::ALL),
+                            );
                     f.render_widget(list, chunks[2]);
                 })?;
                 needs_draw = false;
