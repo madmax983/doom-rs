@@ -1,19 +1,59 @@
+//! AI Director for adjusting game difficulty dynamically based on player performance.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Action determined by the AI Director to affect gameplay.
 pub enum DirectorAction {
     SpawnAmbush,
     SpawnRelief,
     Maintain,
 }
 
+/// The AI Director monitors player performance and adjusts gameplay.
+///
+/// ## Examples
+/// ```
+/// use doom_game::director::{AiDirector, DirectorAction};
+/// use doom_game::PlayerState;
+/// use doom_game::mobj::MobjHandle;
+///
+/// let mut director = AiDirector::new();
+/// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
+/// player.set_health_capped(10, 100);
+///
+/// // Low health triggers relief
+/// assert_eq!(director.tick(&player), DirectorAction::SpawnRelief);
+/// ```
 pub struct AiDirector;
 
 impl AiDirector {
+    /// Creates a new `AiDirector`.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::director::AiDirector;
+    /// let director = AiDirector::new();
+    /// ```
     pub fn new() -> Self {
         Self
     }
 
+    /// Evaluates the player's current state and decides on a `DirectorAction`.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::director::{AiDirector, DirectorAction};
+    /// use doom_game::PlayerState;
+    /// use doom_game::mobj::MobjHandle;
+    ///
+    /// let mut director = AiDirector::new();
+    /// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
+    /// player.set_health_capped(90, 100);
+    ///
+    /// // High health triggers an ambush
+    /// assert_eq!(director.tick(&player), DirectorAction::SpawnAmbush);
+    /// ```
     pub fn tick(&mut self, player: &PlayerState) -> DirectorAction {
         let health = player.health();
 

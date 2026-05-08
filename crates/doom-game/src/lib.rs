@@ -11,46 +11,79 @@
 //! - `player.ammo[i] ≤ MAX_AMMO[i]` for all i.
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
+/// Monster and actor action functions.
 pub mod actions;
+/// Automap rendering and visibility tracking.
 pub mod automap;
+/// Cheat code processing and activation.
 pub mod cheats;
+/// Combat calculations, damage, and line-of-sight attacks.
 pub mod combat;
+/// DeHackEd patch parsing and application.
 pub mod dehacked;
+/// Status bar face rendering and state machine.
 pub mod face;
+/// End-of-level intermission screens and stats.
 pub mod intermission;
+/// Linedef action parsing and execution.
 pub mod linedef_dispatch;
+/// In-game menu system and title screen.
 pub mod menu;
+/// Map object (actor) structs and generational arena slab.
 pub mod mobj;
+/// Static properties for all map object types.
 pub mod mobjinfo;
+/// Actor movement, sliding, and collision detection.
 pub mod movement;
 /// Mover structures and functions for things like doors, ceilings, and floors.
 pub mod movers;
+/// High-level game phase tracking (Title, Game, Intermission).
 pub mod phase;
+/// Item and weapon pickup logic.
 pub mod pickups;
+/// Player-specific state, health, and ammo tracking.
 pub mod player;
+/// Projectile spawning and flight mechanics.
 pub mod projectile;
+/// Deterministic random number generator for Doom.
 pub mod random;
+/// Save and load functionality.
 pub mod savegame;
-mod savegame_vanilla;
+#[doc(hidden)]
+pub mod savegame_vanilla;
+/// Line of sight and sector visibility algorithms.
 pub mod sight;
+/// Deterministic state rollback snapshots.
 pub mod snapshot;
+/// Sound emission and propagation.
 pub mod sound;
 /// Sound propagation and audio request structs.
 pub mod sound_prop;
+/// Actor spawning during level initialization.
 pub mod spawn;
+/// Sector specials like doors, crushers, and teleports.
 pub mod specials;
+/// Core GameState structure containing the whole world.
 pub mod state;
+/// State definitions for all actor animation frames.
 pub mod states;
 /// Level statistics tracking (kills, items, secrets, etc).
 pub mod stats;
 #[cfg(feature = "style_meter")]
+/// Optional style meter tracking for showing a Devil May Cry style rank system.
 pub mod style;
+/// Switch states and texture toggling.
 pub mod switch;
 #[cfg(feature = "telemetry")]
+/// Player spatial telemetry tracking and GeoJSON export.
 pub mod telemetry;
+/// The core thinker loop that ticks the game forward.
 pub mod tic;
+/// Ray tracing and hitscan calculations.
 pub mod trace;
+/// Weapon firing logic, ammo consumption, and hitscan.
 pub mod weapon_fire;
+/// Weapon definitions and player sprite animations.
 pub mod weapons;
 
 #[cfg(feature = "director")]

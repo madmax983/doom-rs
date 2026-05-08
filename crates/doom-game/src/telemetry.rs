@@ -52,11 +52,26 @@ pub struct SessionTelemetry {
 impl SessionTelemetry {
     /// Create a new empty telemetry tracker.
     #[must_use]
+    /// Create a new empty telemetry tracker.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::telemetry::SessionTelemetry;
+    /// let tracker = SessionTelemetry::new();
+    /// ```
     pub fn new() -> Self {
         Self { events: Vec::new() }
     }
 
     /// Register a new event.
+    /// Register a new event.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::telemetry::{SessionTelemetry, TelemetryKind};
+    /// let mut tracker = SessionTelemetry::new();
+    /// tracker.record(10, 100, 200, TelemetryKind::Position);
+    /// ```
     pub fn record(&mut self, tic: u32, x: i32, y: i32, kind: TelemetryKind) {
         self.events.push(TelemetryEvent { tic, x, y, kind });
     }
@@ -64,6 +79,17 @@ impl SessionTelemetry {
     /// Exports the telemetry data as a GeoJSON FeatureCollection string.
     /// Player path is exported as a LineString, and significant events as Points.
     #[must_use]
+    /// Exports the telemetry data as a GeoJSON FeatureCollection string.
+    /// Player path is exported as a LineString, and significant events as Points.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::telemetry::{SessionTelemetry, TelemetryKind};
+    /// let mut tracker = SessionTelemetry::new();
+    /// tracker.record(10, 100, 200, TelemetryKind::Position);
+    /// let geojson = tracker.export_to_geojson();
+    /// assert!(geojson.contains("FeatureCollection"));
+    /// ```
     pub fn export_to_geojson(&self) -> String {
         let mut features = Vec::new();
         let mut path_coords = Vec::new();

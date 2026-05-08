@@ -41,6 +41,13 @@ impl StyleRank {
     /// let rank = StyleRank::SmokinSexyStyle;
     /// assert_eq!(rank.name(), "Smokin Sexy Style!!");
     /// ```
+    /// Gets the display name of the style rank.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::style::StyleRank;
+    /// assert_eq!(StyleRank::Dull.name(), "Dull");
+    /// ```
     pub fn name(&self) -> &'static str {
         match self {
             StyleRank::Dismal => "Dismal",
@@ -90,6 +97,13 @@ impl StyleMeter {
     /// let meter = StyleMeter::new();
     /// assert_eq!(meter.score, 0);
     /// ```
+    /// Creates a new style meter.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::style::StyleMeter;
+    /// let meter = StyleMeter::new();
+    /// ```
     pub fn new() -> Self {
         Self {
             score: 0,
@@ -112,6 +126,14 @@ impl StyleMeter {
     /// let mut meter = StyleMeter::new();
     /// meter.register_kill(10);
     /// assert_eq!(meter.score, 100);
+    /// ```
+    /// Registers a kill to increase style.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::style::StyleMeter;
+    /// let mut meter = StyleMeter::new();
+    /// meter.register_kill(10);
     /// ```
     pub fn register_kill(&mut self, current_tic: u32) {
         if current_tic <= self.last_kill_tic.saturating_add(Self::COMBO_WINDOW_TICS) {
@@ -143,6 +165,14 @@ impl StyleMeter {
     /// meter.tick(100); // Beyond the combo window
     /// assert_eq!(meter.score, 95);
     /// ```
+    /// Ticks the style meter, decaying score over time.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::style::StyleMeter;
+    /// let mut meter = StyleMeter::new();
+    /// meter.tick(10);
+    /// ```
     pub fn tick(&mut self, current_tic: u32) {
         if current_tic > self.last_kill_tic.saturating_add(Self::COMBO_WINDOW_TICS) {
             // Decay score
@@ -163,6 +193,14 @@ impl StyleMeter {
     ///
     /// let meter = StyleMeter::new();
     /// assert_eq!(meter.rank(), StyleRank::Dismal);
+    /// ```
+    /// Gets the current style rank.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::style::{StyleMeter, StyleRank};
+    /// let meter = StyleMeter::new();
+    /// assert_eq!(meter.rank(), StyleRank::Dull);
     /// ```
     pub fn rank(&self) -> StyleRank {
         if self.score >= Self::SSS_SCORE {

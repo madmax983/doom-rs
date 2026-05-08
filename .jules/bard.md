@@ -39,3 +39,11 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2026-05-15 - [Added missing module docs and struct examples]
+**Confusion:** Several modules in `doom-game` like `director`, `movers`, `stats`, and `sound_prop` were missing `//!` documentation. Many structs and functions in `telemetry.rs` and `style.rs` lacked `## Examples` and standard comments. In addition, internal modules shouldn't be exposed with `#[doc(hidden)]` public API leaking, but in cases like `savegame_vanilla` where we don't want it heavily documented, `#[doc(hidden)]` is used per convention if necessary.
+**Clarification:** Added comprehensive `//!` documentation, detailed function/struct comments, and fully executable `## Examples` across `director.rs`, `style.rs`, `telemetry.rs`, and `savegame_vanilla.rs` using standard TDD principles to ensure they pass tests.
+
+## 2026-05-15 - [Added missing module docs and struct examples]
+**Confusion:** Several modules in `doom-game` like `director`, `movers`, `stats`, and `sound_prop` were missing `//!` documentation. Many structs and functions in `telemetry.rs` and `style.rs` lacked `## Examples` and standard comments. In addition, internal modules shouldn't be exposed with `#[doc(hidden)]` public API leaking, but in cases like `savegame_vanilla` where we don't want it heavily documented, `#[doc(hidden)]` is used per convention if necessary.
+**Clarification:** Added comprehensive `//!` documentation, detailed function/struct comments, and fully executable `## Examples` across `director.rs`, `style.rs`, `telemetry.rs`, and `savegame_vanilla.rs` using standard TDD principles to ensure they pass tests.

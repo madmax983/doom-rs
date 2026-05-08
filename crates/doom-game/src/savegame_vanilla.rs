@@ -35,6 +35,14 @@ pub struct VanillaSaveHeader {
 }
 
 /// Return true when `data` looks like a vanilla/chocolate Doom savegame header.
+///
+/// ## Examples
+/// ```
+/// use doom_game::savegame_vanilla::looks_like_vanilla_dsg;
+/// let mut data = [0u8; 40];
+/// data[24..35].copy_from_slice(b"version 109");
+/// assert!(looks_like_vanilla_dsg(&data));
+/// ```
 #[must_use]
 pub fn looks_like_vanilla_dsg(data: &[u8]) -> bool {
     if data.len() < DESCRIPTION_LEN + VERSION_LEN {
@@ -46,6 +54,15 @@ pub fn looks_like_vanilla_dsg(data: &[u8]) -> bool {
 }
 
 /// Parse the fixed vanilla savegame header.
+///
+/// ## Examples
+/// ```
+/// use doom_game::savegame_vanilla::parse_header;
+/// let mut data = [0u8; 52];
+/// data[24..35].copy_from_slice(b"version 109");
+/// let header = parse_header(&data).unwrap();
+/// assert_eq!(header.skill, 0);
+/// ```
 pub fn parse_header(data: &[u8]) -> Result<VanillaSaveHeader, SaveError> {
     if data.len() < VANILLA_HEADER_LEN {
         return Err(SaveError::TooShort);
@@ -88,12 +105,29 @@ pub fn parse_header(data: &[u8]) -> Result<VanillaSaveHeader, SaveError> {
 
 /// Recognize a vanilla savegame header, then fail explicitly until payload
 /// parity work lands.
+///
+/// ## Examples
+/// ```
+/// use doom_game::savegame_vanilla::load_game;
+/// let mut data = [0u8; 45];
+/// data[24..35].copy_from_slice(b"version 109");
+/// assert!(load_game(&data).is_err());
+/// ```
 pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     let _header = parse_header(data)?;
     Err(SaveError::UnsupportedVanillaDsg)
 }
 
 /// Writing a faithful vanilla payload is not implemented in this pass.
+///
+/// ## Examples
+/// ```
+/// use doom_game::savegame_vanilla::save_game;
+/// use doom_game::state::GameState;
+/// let gs = GameState::new("E1M1");
+/// let level_name = b"E1M1\0\0\0\0";
+/// assert!(save_game(&gs, level_name, 2, "Test").is_err());
+/// ```
 pub fn save_game(
     _gs: &GameState,
     _level_name: &[u8; 8],

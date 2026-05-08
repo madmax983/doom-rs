@@ -1,3 +1,5 @@
+//! Sound propagation and audio event queues.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

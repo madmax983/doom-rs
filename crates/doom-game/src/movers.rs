@@ -1,3 +1,5 @@
+//! Active level geometry movers (doors, lifts, crushers, scrolling walls).
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.
