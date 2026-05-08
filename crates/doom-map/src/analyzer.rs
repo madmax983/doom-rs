@@ -72,7 +72,15 @@ impl<'a> MapAnalyzer<'a> {
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let empty_set = HashSet::new();
+                let mut stack = vec![(
+                    node,
+                    self.graph
+                        .adjacency_list
+                        .get(&node)
+                        .unwrap_or(&empty_set)
+                        .iter(),
+                )];
 
                 visited.insert(node);
                 time += 1;
@@ -97,7 +105,14 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((
+                                v,
+                                self.graph
+                                    .adjacency_list
+                                    .get(&v)
+                                    .unwrap_or(&empty_set)
+                                    .iter(),
+                            ));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -299,5 +314,23 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let chokes = analyzer.chokepoints();
         assert_eq!(chokes.len(), 9999);
+    }
+
+    #[test]
+    fn test_chokepoints_missing_node() {
+        let mut adj = HashMap::new();
+        // Node 0 connects to 1 and 2
+        adj.insert(0, HashSet::from([1, 2]));
+        // Node 1 connects to 0 and 2
+        adj.insert(1, HashSet::from([0, 2]));
+        // Node 2 is missing from the adjacency list!
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let chokes = analyzer.chokepoints();
+        // Neither 0 nor 1 are chokepoints
+        assert_eq!(chokes, vec![]);
     }
 }
