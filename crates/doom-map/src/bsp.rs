@@ -93,6 +93,17 @@ pub enum BspChild {
 
 impl BspChild {
     /// Decode a raw 16-bit child pointer.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_map::bsp::BspChild;
+    ///
+    /// let node = BspChild::decode(5);
+    /// assert_eq!(node, BspChild::Node(5));
+    ///
+    /// let subsector = BspChild::decode(0x8000 | 2);
+    /// assert_eq!(subsector, BspChild::Subsector(2));
+    /// ```
     #[inline]
     pub fn decode(raw: u16) -> Self {
         if raw & NODE_SUBSECTOR_BIT != 0 {
@@ -114,6 +125,17 @@ impl<'a> BspTree<'a> {
     ///
     /// # Errors
     /// Returns the first invariant violation encountered.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_map::lumps::{Node, Ssector};
+    /// use doom_map::bsp::BspTree;
+    ///
+    /// let nodes: Vec<Node> = vec![];
+    /// let ssectors: Vec<Ssector> = vec![Ssector { first_seg: 0, seg_count: 1 }];
+    /// // Minimal valid BSP tree is empty nodes and 1 subsector
+    /// let bsp = BspTree::validate(&nodes, &ssectors, 1).unwrap();
+    /// ```
     pub fn validate(
         nodes: &'a [Node],
         ssectors: &'a [Ssector],

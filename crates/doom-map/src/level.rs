@@ -477,10 +477,23 @@ impl Level {
 
     /// Convenience: access the validated BSP tree.
     ///
-    /// # Panics
+    /// ## Panics
     /// Panics if the BSP invariant is violated post-load, which indicates a
     /// memory corruption or bug because it was successfully validated
     /// upon map load.
+    ///
+    /// ## Examples
+    /// ```no_run
+    /// use doom_map::level::Level;
+    /// use doom_wad::WadFile;
+    ///
+    /// let bytes = std::fs::read("doom1.wad").unwrap();
+    /// let wad = WadFile::parse(bytes).unwrap();
+    /// let level = Level::from_wad(&wad, "E1M1").unwrap();
+    ///
+    /// let bsp = level.bsp();
+    /// assert!(bsp.max_depth() > 0);
+    /// ```
     pub fn bsp(&self) -> BspTree<'_> {
         // Already validated at load time, so this cannot fail.
         BspTree::validate(&self.nodes, &self.ssectors, self.segs.len())
@@ -491,6 +504,20 @@ impl Level {
     ///
     /// Returns `None` if the level has no BSP nodes, or if any index is
     /// out of bounds.
+    ///
+    /// ## Examples
+    /// ```no_run
+    /// use doom_map::level::Level;
+    /// use doom_wad::WadFile;
+    ///
+    /// let bytes = std::fs::read("doom1.wad").unwrap();
+    /// let wad = WadFile::parse(bytes).unwrap();
+    /// let level = Level::from_wad(&wad, "E1M1").unwrap();
+    ///
+    /// // E1M1 start position is roughly (1056, -3616)
+    /// let sector_idx = level.sector_index_at(1056, -3616);
+    /// assert!(sector_idx.is_some());
+    /// ```
     #[must_use]
     pub fn sector_index_at(&self, x: i32, y: i32) -> Option<usize> {
         let subsector_idx = self.subsector_index_at(x, y)?;
@@ -501,6 +528,20 @@ impl Level {
     ///
     /// Uses BSP traversal to find the subsector.  Returns `None` if the
     /// level geometry is incomplete.
+    ///
+    /// ## Examples
+    /// ```no_run
+    /// use doom_map::level::Level;
+    /// use doom_wad::WadFile;
+    ///
+    /// let bytes = std::fs::read("doom1.wad").unwrap();
+    /// let wad = WadFile::parse(bytes).unwrap();
+    /// let level = Level::from_wad(&wad, "E1M1").unwrap();
+    ///
+    /// // Floor height at start position
+    /// let height = level.floor_at(1056, -3616);
+    /// assert_eq!(height, Some(0)); // E1M1 starting room floor is at 0
+    /// ```
     #[must_use]
     pub fn floor_at(&self, x: i32, y: i32) -> Option<i16> {
         let si = self.sector_index_at(x, y)?;
@@ -508,6 +549,20 @@ impl Level {
     }
 
     /// Return the subsector index containing world point `(x, y)`.
+    ///
+    /// ## Examples
+    /// ```no_run
+    /// use doom_map::level::Level;
+    /// use doom_wad::WadFile;
+    ///
+    /// let bytes = std::fs::read("doom1.wad").unwrap();
+    /// let wad = WadFile::parse(bytes).unwrap();
+    /// let level = Level::from_wad(&wad, "E1M1").unwrap();
+    ///
+    /// // Subsector at start position
+    /// let ss_idx = level.subsector_index_at(1056, -3616);
+    /// assert!(ss_idx.is_some());
+    /// ```
     #[must_use]
     pub fn subsector_index_at(&self, x: i32, y: i32) -> Option<usize> {
         let bsp = BspTree::validate(&self.nodes, &self.ssectors, self.segs.len()).ok()?;

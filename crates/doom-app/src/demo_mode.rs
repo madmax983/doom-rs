@@ -1,8 +1,8 @@
 //! Demo recording and playback wrappers for `DoomApp`.
 //!
-//! - [`DemoRecordingWrapper`] — wraps a [`DoomGame`], captures each [`TicCmd`],
+//! - [`DemoRecordingWrapper`] — wraps a `DoomGame`, captures each [`TicCmd`],
 //!   and writes an LMP file on `Drop`.
-//! - [`DemoPlaybackApp`] — wraps a [`DoomGame`] and replays a pre-recorded
+//! - [`DemoPlaybackApp`] — wraps a `DoomGame` and replays a pre-recorded
 //!   [`DemoPlayer`] instead of consuming live keyboard input.
 
 use doom_demo::{DemoPlayer, DemoRecorder};
@@ -18,7 +18,7 @@ use crate::net_mode::ticinput_to_ticcmd;
 // DemoRecordingWrapper
 // ---------------------------------------------------------------------------
 
-/// Wraps [`DoomGame`] and records each tic's [`TicCmd`] to a [`DemoRecorder`].
+/// Wraps `DoomGame` and records each tic's [`TicCmd`] to a [`DemoRecorder`].
 ///
 /// When the wrapper is dropped the accumulated demo is written to `save_path`.
 ///
@@ -131,7 +131,7 @@ impl Drop for DemoRecordingWrapper {
 // DemoPlaybackApp
 // ---------------------------------------------------------------------------
 
-/// Wraps [`DoomGame`] and replays a [`DemoPlayer`], ignoring live input.
+/// Wraps `DoomGame` and replays a [`DemoPlayer`], ignoring live input.
 ///
 /// When the demo is exhausted the last rendered frame stays frozen until the
 /// user quits (Q/Esc via the event loop).
