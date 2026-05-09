@@ -9,9 +9,7 @@ use doom_types::Bam;
 
 fn bench_bam_sin(c: &mut Criterion) {
     // SAFETY: init_trig_tables must be called before sin/cos.
-    unsafe {
-        Bam::init_trig_tables();
-    }
+    Bam::init_trig_tables();
     let angle = Bam(0x4000_0000); // 90 degrees
     c.bench_function("Bam::sin", |bencher| {
         bencher.iter(|| black_box(angle).sin())
@@ -20,9 +18,7 @@ fn bench_bam_sin(c: &mut Criterion) {
 
 fn bench_bam_cos(c: &mut Criterion) {
     // init_trig_tables is idempotent (AtomicBool guard), safe to call again.
-    unsafe {
-        Bam::init_trig_tables();
-    }
+    Bam::init_trig_tables();
     let angle = Bam(0x4000_0000); // 90 degrees
     c.bench_function("Bam::cos", |bencher| {
         bencher.iter(|| black_box(angle).cos())
@@ -47,9 +43,7 @@ fn bench_bam_fine_angle(c: &mut Criterion) {
 
 fn bench_bam_sin_loop(c: &mut Criterion) {
     // Simulate a renderer sweeping angles across a horizontal FOV.
-    unsafe {
-        Bam::init_trig_tables();
-    }
+    Bam::init_trig_tables();
     let step = Bam(0x0040_0000); // roughly 0.3 degrees per step
     c.bench_function("Bam::sin sweep x320", |bencher| {
         bencher.iter(|| {

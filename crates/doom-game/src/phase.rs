@@ -56,9 +56,9 @@ impl MapId {
     pub fn from_name(level_name: &str) -> Option<Self> {
         let upper = level_name.trim().to_ascii_uppercase();
         if let Some(rest) = upper.strip_prefix('E') {
-            if let Some(mid) = rest.find('M') {
-                let episode = rest[..mid].parse::<u8>().ok()?;
-                let map = rest[mid + 1..].parse::<u8>().ok()?;
+            if let Some((ep_str, map_str)) = rest.split_once('M') {
+                let episode = ep_str.parse::<u8>().ok()?;
+                let map = map_str.parse::<u8>().ok()?;
                 return Some(Self::new(episode, map));
             }
         }
@@ -1208,5 +1208,16 @@ mod tests {
         ctrl.tick_intermission();
 
         assert_eq!(ctrl.current_map, MapId::new(1, 1)); // It should fallback to current_map
+    }
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+
+    #[test]
+    fn havoc_panic_from_name() {
+        let name = "E❤M1";
+        MapId::from_name(name);
     }
 }

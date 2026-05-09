@@ -1040,9 +1040,7 @@ mod tests {
     #[test]
     fn line_attack_fallback_hits_fractional_angle_actor() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
 
         let mut gs = make_game_state();
         let src = gs.player.handle;
@@ -1515,9 +1513,7 @@ mod tests {
     #[test]
     fn line_attack_with_level_hits_fractional_angle_actor() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
         let level = make_open_combat_level();
 
         let mut gs = GameState::new("test");
@@ -1559,9 +1555,7 @@ mod tests {
     #[test]
     fn line_attack_with_level_skips_target_below_autoaim_window() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
 
         let level = make_open_combat_level();
         let mut gs = make_game_state();
@@ -1604,9 +1598,7 @@ mod tests {
     #[test]
     fn line_attack_with_level_skips_low_near_target_and_hits_far_target_in_lane() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
 
         let level = make_open_combat_level();
         let mut gs = make_game_state();
