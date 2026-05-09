@@ -1,0 +1,4 @@
+🚮 Smell: The `activate_doors` and `activate_floors` functions in `specials.rs` were massively repetitive, extracting the target `sector_idx` for every single linedef special and using individual `match` arms for triggers that called the exact same behavior (e.g. `open_door`, `ev_floor_raise_24`).
+✨ Solution: Extracted the redundant `let Some(sector_idx)` query to run before the `match` statement in `activate_doors`. Grouped identical match block cases using the Rust `|` and `..=` pattern syntax for both `activate_doors` and `activate_floors`.
+🧼 Benefit: Significantly reduces boilerplate and lines of code. It makes maintaining the linedef specials cleaner by directly mapping similar switch actions to single lines, improving vertical reading clarity.
+🛡️ Verification: All vanilla parity unit tests passed. No logic or runtime behavior was changed.

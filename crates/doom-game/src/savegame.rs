@@ -987,6 +987,26 @@ pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     }
 }
 
+fn read_movers_vec<T, F>(
+    r: &mut ReadCursor<'_>,
+    item_size: usize,
+    mut read_item: F,
+) -> Result<Vec<T>, SaveError>
+where
+    F: FnMut(&mut ReadCursor<'_>) -> Result<T, SaveError>,
+{
+    let count = r.read_u32()? as usize;
+    let max_items = r.data.len().saturating_sub(r.pos) / item_size;
+    if count > max_items {
+        return Err(SaveError::Truncated);
+    }
+    let mut items = Vec::with_capacity(count);
+    for _ in 0..count {
+        items.push(read_item(r)?);
+    }
+    Ok(items)
+}
+
 fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
     // Minimum header size: 4 (magic) + 4 (version) + 8 (level_name) + 1 (skill) + 4 (level_time) + 24 (desc) = 45
     const HEADER_SIZE: usize = 4 + 4 + 8 + 1 + 4 + 24;
@@ -1066,92 +1086,28 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
     };
 
     // --- Door movers ---
-    let door_count = r.read_u32()? as usize;
-    let max_doors = (r.data.len().saturating_sub(r.pos)) / 36;
-    if door_count > max_doors {
-        return Err(SaveError::Truncated);
-    }
-    let mut active_doors = Vec::with_capacity(door_count);
-    for _ in 0..door_count {
-        active_doors.push(read_door_mover(&mut r)?);
-    }
+    let active_doors = read_movers_vec(&mut r, 36, read_door_mover)?;
 
     // --- Light specials ---
-    let light_count = r.read_u32()? as usize;
-    let max_lights = (r.data.len().saturating_sub(r.pos)) / 16;
-    if light_count > max_lights {
-        return Err(SaveError::Truncated);
-    }
-    let mut active_lights = Vec::with_capacity(light_count);
-    for _ in 0..light_count {
-        active_lights.push(read_light_special(&mut r)?);
-    }
+    let active_lights = read_movers_vec(&mut r, 16, read_light_special)?;
 
     // --- Ceiling movers ---
-    let ceiling_count = r.read_u32()? as usize;
-    let max_ceilings = (r.data.len().saturating_sub(r.pos)) / 36;
-    if ceiling_count > max_ceilings {
-        return Err(SaveError::Truncated);
-    }
-    let mut active_ceilings = Vec::with_capacity(ceiling_count);
-    for _ in 0..ceiling_count {
-        active_ceilings.push(read_ceiling_mover(&mut r)?);
-    }
+    let active_ceilings = read_movers_vec(&mut r, 36, read_ceiling_mover)?;
 
     // --- Floor movers ---
-    let floor_count = r.read_u32()? as usize;
-    let max_floors = (r.data.len().saturating_sub(r.pos)) / 36;
-    if floor_count > max_floors {
-        return Err(SaveError::Truncated);
-    }
-    let mut active_floors = Vec::with_capacity(floor_count);
-    for _ in 0..floor_count {
-        active_floors.push(read_floor_mover(&mut r)?);
-    }
+    let active_floors = read_movers_vec(&mut r, 36, read_floor_mover)?;
 
     // --- Perpetual platforms ---
-    let platform_count = r.read_u32()? as usize;
-    let max_platforms = (r.data.len().saturating_sub(r.pos)) / 28;
-    if platform_count > max_platforms {
-        return Err(SaveError::Truncated);
-    }
-    let mut active_platforms = Vec::with_capacity(platform_count);
-    for _ in 0..platform_count {
-        active_platforms.push(read_perpetual_platform(&mut r)?);
-    }
+    let active_platforms = read_movers_vec(&mut r, 28, read_perpetual_platform)?;
 
     // --- Lifts ---
-    let lift_count = r.read_u32()? as usize;
-    let max_lifts = (r.data.len().saturating_sub(r.pos)) / 28;
-    if lift_count > max_lifts {
-        return Err(SaveError::Truncated);
-    }
-    let mut lifts = Vec::with_capacity(lift_count);
-    for _ in 0..lift_count {
-        lifts.push(read_lift_mover(&mut r)?);
-    }
+    let lifts = read_movers_vec(&mut r, 28, read_lift_mover)?;
 
     // --- Scrolling walls ---
-    let scroller_count = r.read_u32()? as usize;
-    let max_scrollers = (r.data.len().saturating_sub(r.pos)) / 12;
-    if scroller_count > max_scrollers {
-        return Err(SaveError::Truncated);
-    }
-    let mut scrolling_walls = Vec::with_capacity(scroller_count);
-    for _ in 0..scroller_count {
-        scrolling_walls.push(read_scrolling_wall(&mut r)?);
-    }
+    let scrolling_walls = read_movers_vec(&mut r, 12, read_scrolling_wall)?;
 
     // --- Conveyor belts ---
-    let conveyor_count = r.read_u32()? as usize;
-    let max_conveyors = (r.data.len().saturating_sub(r.pos)) / 12;
-    if conveyor_count > max_conveyors {
-        return Err(SaveError::Truncated);
-    }
-    let mut conveyors = Vec::with_capacity(conveyor_count);
-    for _ in 0..conveyor_count {
-        conveyors.push(read_conveyor_belt(&mut r)?);
-    }
+    let conveyors = read_movers_vec(&mut r, 12, read_conveyor_belt)?;
 
     // --- Mobjs ---
     let mobj_count = r.read_u32()? as usize;
