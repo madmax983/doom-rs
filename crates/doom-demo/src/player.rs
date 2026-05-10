@@ -85,7 +85,15 @@ impl DemoPlayer {
         let num_players = header.num_players();
         let tic_stride = header.tic_size(); // 4 * num_players
 
-        let mut tics = Vec::new();
+        // We can estimate the number of tics based on the remaining file size
+        let remaining_bytes = data.len().saturating_sub(LMP_HEADER_SIZE);
+        let estimated_tics = if tic_stride > 0 {
+            remaining_bytes / tic_stride
+        } else {
+            0
+        };
+
+        let mut tics = Vec::with_capacity(estimated_tics);
         let mut offset = LMP_HEADER_SIZE;
 
         if num_players == 0 {
@@ -198,13 +206,14 @@ impl DemoPlayer {
     ///
     /// Returns one [`DemoTicCmd`] per present player. Returns `None` once all
     /// recorded tics have been consumed.
-    pub fn next_tic_cmds(&mut self) -> Option<Vec<DemoTicCmd>> {
+    #[inline]
+    pub fn next_tic_cmds(&mut self) -> Option<&[DemoTicCmd]> {
         if self.current_tic >= self.tics.len() {
             return None;
         }
-        let cmds = self.tics[self.current_tic].clone();
+        let cmds = &self.tics[self.current_tic];
         self.current_tic += 1;
-        Some(cmds)
+        Some(cmds.as_slice())
     }
 
     /// Look at the current tic's commands without advancing the cursor.
