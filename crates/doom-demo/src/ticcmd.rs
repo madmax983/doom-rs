@@ -1,7 +1,7 @@
 //! Demo-format tic command: 4 bytes per player per tic.
 //!
 //! The LMP format stores `forward_move`, `side_move`, a one-byte turn value,
-//! and `buttons` per player per tic. The full game [`TicCmd`] also carries
+//! and `buttons` per player per tic. The full game [`doom_types::TicCmd`] also carries
 //! `chatchar`, but that field is not part of the LMP wire format.
 
 use doom_types::TicCmd;
