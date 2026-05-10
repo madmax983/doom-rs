@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Consolidating repetitive integer match block arms**
+**Learning:** Found massively duplicated execution blocks for linedef specials inside of several `activate_*` methods using large integer match statements.
+**Action:** Used a python script to parse and extract duplicated code blocks, combining their integer keys with multi-pattern match arms using `|`. This resulted in a reduction of over 300 lines of redundant code with zero behavior change, fully adhering to standard rust idioms. Used `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo fmt --all` to verify the logic remained identical.

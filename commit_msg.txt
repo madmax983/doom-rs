@@ -1,0 +1,9 @@
+⚒️ Forge: Consolidate redundant match arms in specials dispatch
+
+🚮 Smell: Massive, highly repetitive `match` statements in `activate_doors`, `activate_exits`, `activate_ceilings`, `activate_lifts`, `activate_floors`, `activate_stairs`, `activate_platforms`, `activate_teleports`, and `activate_misc` in `crates/doom-game/src/specials.rs` resulting in nearly 400 redundant lines of duplicated execution blocks.
+
+✨ Solution: Parsed the source programmatically to group identical code blocks and combine their integer match keys into multi-pattern arms (e.g. `14 | 67 => { ... }`). Handled cleanly to avoid triggering any side effects or behavior changes.
+
+🧼 Benefit: Dramatically reduces lines of code, cognitive load, and eliminates hundreds of duplicate lines of boilerplate logic in Doom's special linedef switchboard.
+
+🛡️ Verification: `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo fmt --all` all pass successfully. No logic was altered.
