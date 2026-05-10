@@ -1,3 +1,38 @@
+//! Map Analysis Tools
+//!
+//! The `analyzer` module provides tools for cartographic analysis of Doom maps.
+//! It is used to process a `SectorGraph` to discover structural properties of the map,
+//! such as "chokepoints" (articulation points) and isolated zones. This analysis
+//! is critical for understanding the tactical flow of a map, predicting player
+//! movement, and identifying potential traps.
+//!
+//! # Examples
+//!
+//! ```
+//! use doom_map::SectorGraph;
+//! use doom_map::analyzer::MapAnalyzer;
+//! use std::collections::{HashMap, HashSet};
+//!
+//! // Create a simple map with a chokepoint and an isolated area
+//! let mut adj = HashMap::new();
+//! // Connected component with a chokepoint at node 1
+//! adj.insert(0, HashSet::from([1]));
+//! adj.insert(1, HashSet::from([0, 2]));
+//! adj.insert(2, HashSet::from([1]));
+//! // Isolated area
+//! adj.insert(3, HashSet::from([4]));
+//! adj.insert(4, HashSet::from([3]));
+//!
+//! let graph = SectorGraph { adjacency_list: adj };
+//! let analyzer = MapAnalyzer::new(&graph);
+//!
+//! // Sector 1 connects 0 and 2
+//! assert_eq!(analyzer.chokepoints(), vec![1]);
+//!
+//! // {0, 1, 2} and {3, 4}
+//! assert_eq!(analyzer.isolated_areas().len(), 2);
+//! ```
+
 //! Map topology analyzer for finding chokepoints and isolated areas.
 //!
 //! The `MapAnalyzer` uses standard graph algorithms to detect critical map features.
@@ -61,6 +96,33 @@ impl<'a> MapAnalyzer<'a> {
     }
 
     /// Finds articulation points (sectors that, if removed, disconnect parts of the map).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_map::SectorGraph;
+    /// use doom_map::analyzer::MapAnalyzer;
+    /// use std::collections::{HashMap, HashSet};
+    ///
+    /// let mut adj = HashMap::new();
+    /// adj.insert(0, HashSet::from([1, 2]));
+    /// adj.insert(1, HashSet::from([0, 2]));
+    /// adj.insert(2, HashSet::from([0, 1, 3])); // 2 connects {0,1} and {3}
+    /// adj.insert(3, HashSet::from([2, 4])); // 3 connects {2} and {4}
+    /// adj.insert(4, HashSet::from([3]));
+    /// let graph = SectorGraph { adjacency_list: adj };
+    ///
+    /// let analyzer = MapAnalyzer::new(&graph);
+    /// let mut chokes = analyzer.chokepoints();
+    /// chokes.sort();
+    /// assert_eq!(chokes, vec![2, 3]);
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// Panics if a node present in the `adjacency_list` keys is not present in the graph when
+    /// subsequently fetched via `.get(&node).unwrap()`. This implies an invalid `SectorGraph`
+    /// representation where the keys and values are desynchronized.
     pub fn chokepoints(&self) -> Vec<usize> {
         let mut visited = HashSet::new();
         let mut discovery_time = HashMap::new();
