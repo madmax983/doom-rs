@@ -222,9 +222,9 @@ impl Sidedef {
         Self {
             x_offset: i16::from_le_bytes([b[0], b[1]]),
             y_offset: i16::from_le_bytes([b[2], b[3]]),
-            upper_texture: b[4..12].try_into().unwrap(),
-            lower_texture: b[12..20].try_into().unwrap(),
-            middle_texture: b[20..28].try_into().unwrap(),
+            upper_texture: [b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]],
+            lower_texture: [b[12], b[13], b[14], b[15], b[16], b[17], b[18], b[19]],
+            middle_texture: [b[20], b[21], b[22], b[23], b[24], b[25], b[26], b[27]],
             sector: u16::from_le_bytes([b[28], b[29]]),
         }
     }
@@ -518,8 +518,8 @@ impl Sector {
         Self {
             floor_height: i16::from_le_bytes([b[0], b[1]]),
             ceil_height: i16::from_le_bytes([b[2], b[3]]),
-            floor_flat: b[4..12].try_into().unwrap(),
-            ceil_flat: b[12..20].try_into().unwrap(),
+            floor_flat: [b[4], b[5], b[6], b[7], b[8], b[9], b[10], b[11]],
+            ceil_flat: [b[12], b[13], b[14], b[15], b[16], b[17], b[18], b[19]],
             light_level: i16::from_le_bytes([b[20], b[21]]),
             special: u16::from_le_bytes([b[22], b[23]]),
             tag: u16::from_le_bytes([b[24], b[25]]),
@@ -939,5 +939,30 @@ mod tests {
     #[test]
     fn bad_lump_length_errors() {
         assert!(Thing::parse_lump(&[0u8; 7]).is_err()); // 7 not divisible by 10
+    }
+
+    #[test]
+    fn should_parse_sidedef_from_bytes_without_panic() {
+        let bytes = [0u8; Sidedef::BYTE_SIZE];
+        let sidedef = Sidedef::from_bytes(&bytes);
+        assert_eq!(sidedef.x_offset, 0);
+        assert_eq!(sidedef.y_offset, 0);
+        assert_eq!(sidedef.upper_texture, [0; 8]);
+        assert_eq!(sidedef.lower_texture, [0; 8]);
+        assert_eq!(sidedef.middle_texture, [0; 8]);
+        assert_eq!(sidedef.sector, 0);
+    }
+
+    #[test]
+    fn should_parse_sector_from_bytes_without_panic() {
+        let bytes = [0u8; Sector::BYTE_SIZE];
+        let sector = Sector::from_bytes(&bytes);
+        assert_eq!(sector.floor_height, 0);
+        assert_eq!(sector.ceil_height, 0);
+        assert_eq!(sector.floor_flat, [0; 8]);
+        assert_eq!(sector.ceil_flat, [0; 8]);
+        assert_eq!(sector.light_level, 0);
+        assert_eq!(sector.special, 0);
+        assert_eq!(sector.tag, 0);
     }
 }
