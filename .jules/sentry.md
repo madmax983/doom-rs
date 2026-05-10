@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-10 - MapAnalyzer Graph Backtracking Safe Fallbacks
+**Learning:** Found multiple instances of `.unwrap()` in `MapAnalyzer` iteratively walking DFS on adjacency lists (`crates/doom-map/src/analyzer.rs`). These assumed the structural integrity of graph nodes representing sectors. However, as demonstrated by manual testing, if a malformed `SectorGraph` contains edges referencing non-existent nodes, attempting to push the iterator onto the stack triggers a panic. When resolving this for DFS, pushing an empty iterator via `.unwrap_or(&empty_set)` rather than skipping the node is required so that the node is still processed and later popped, correctly triggering the algorithm's backtracking phase (e.g., updating `low_time`).
+**Action:** Replaced `.unwrap()` with safe fallbacks (using an empty `HashSet`) to guarantee safe, graceful topological evaluation during chokepoint and isolated area analysis without breaking iterative backtracking logic.

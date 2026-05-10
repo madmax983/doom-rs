@@ -55,3 +55,51 @@ fn havoc_test_analyzer_missing_back_edges() {
     let analyzer = MapAnalyzer::new(&graph);
     let _ = analyzer.chokepoints();
 }
+
+#[test]
+fn test_missing_child_node() {
+    let mut adj = HashMap::new();
+    adj.insert(0, HashSet::from([1]));
+    let graph = SectorGraph {
+        adjacency_list: adj,
+    };
+    let analyzer = MapAnalyzer::new(&graph);
+    let chokes = analyzer.chokepoints();
+    // Explicitly verify the output instead of just printing it
+    assert_eq!(chokes.len(), 0);
+}
+
+#[test]
+fn test_missing_child_node2() {
+    let mut adj = HashMap::new();
+    adj.insert(0, HashSet::from([1, 2]));
+    adj.insert(1, HashSet::from([0]));
+    // Node 2 is referenced by 0, but is missing from adjacency_list!
+    let graph = SectorGraph {
+        adjacency_list: adj,
+    };
+    let analyzer = MapAnalyzer::new(&graph);
+    let chokes = analyzer.chokepoints();
+    // Explicitly verify the output instead of just printing it
+    assert_eq!(chokes.len(), 0);
+}
+
+
+#[test]
+fn test_missing_child_logic() {
+    let mut adj = HashMap::new();
+    // 0 -> 1 -> 2
+    // 2 -> 0 (backedge to root)
+    // 1 -> 3 (missing node)
+    adj.insert(0, HashSet::from([1]));
+    adj.insert(1, HashSet::from([2, 3]));
+    adj.insert(2, HashSet::from([0]));
+
+    let graph = SectorGraph {
+        adjacency_list: adj,
+    };
+    let analyzer = MapAnalyzer::new(&graph);
+    let chokes = analyzer.chokepoints();
+    // Explicitly verify the output instead of just printing it
+    assert_eq!(chokes.len(), 0);
+}
