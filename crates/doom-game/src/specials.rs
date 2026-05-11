@@ -1014,10 +1014,13 @@ pub fn sector_linedefs(level: &Level, sector_index: usize) -> impl Iterator<Item
         .iter()
         .enumerate()
         .filter_map(move |(i, ld)| {
-            if let Some(sd) = level.sidedefs.get(ld.right_sidedef as usize) {
-                if sd.sector as usize == sector_index {
-                    return Some(i);
-                }
+            if level
+                .sidedefs
+                .get(ld.right_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+                == Some(sector_index)
+            {
+                return Some(i);
             }
             None
         })
@@ -1102,10 +1105,13 @@ pub fn ev_build_stairs(
                 continue;
             }
             // The "other" sector is on the left side of the linedef.
-            let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+            let Some(other_sector) = level
+                .sidedefs
+                .get(ld.left_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+            else {
                 continue;
             };
-            let other_sector = sd.sector as usize;
             // Skip if it's the same sector.
             if other_sector == current_sector {
                 continue;
@@ -1193,10 +1199,13 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
             continue;
         }
         // The "donut hole" is on the back side.
-        let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+        let Some(hole_sector) = level
+            .sidedefs
+            .get(ld.left_sidedef as usize)
+            .map(|sd| sd.sector as usize)
+        else {
             continue;
         };
-        let hole_sector = sd.sector as usize;
 
         if hole_sector == trigger_sector {
             continue;
@@ -1213,10 +1222,13 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
             if hld.left_sidedef == SIDEDEF_NONE {
                 continue;
             }
-            let Some(sd) = level.sidedefs.get(hld.left_sidedef as usize) else {
+            let Some(ring_sector) = level
+                .sidedefs
+                .get(hld.left_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+            else {
                 continue;
             };
-            let ring_sector = sd.sector as usize;
             if ring_sector != hole_sector && ring_sector != trigger_sector {
                 if let Some(s) = level.sectors.get(ring_sector) {
                     ring_floor = Some(s.floor_height);
@@ -2096,10 +2108,13 @@ pub fn monster_activate_door_linedef(
         return false;
     }
 
-    let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+    let Some(sector_idx) = level
+        .sidedefs
+        .get(ld.left_sidedef as usize)
+        .map(|sd| sd.sector as usize)
+    else {
         return false;
     };
-    let sector_idx = sd.sector as usize;
     if sector_idx >= level.sectors.len() {
         return false;
     }
