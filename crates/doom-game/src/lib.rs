@@ -54,6 +54,7 @@ pub mod weapon_fire;
 pub mod weapons;
 
 #[cfg(feature = "director")]
+/// Dynamic adjustment of game difficulty based on player state.
 pub mod director;
 #[cfg(feature = "director")]
 pub use director::*;
