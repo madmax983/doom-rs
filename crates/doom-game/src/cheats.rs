@@ -41,6 +41,8 @@ pub const CHEAT_BEHOLD_PREFIX: &[u8] = b"idbehold";
 pub const CHEAT_LEVELWARP: &[u8] = b"idclev";
 /// Music change prefix: IDMUS (followed by 2 digits)
 pub const CHEAT_MUSIC: &[u8] = b"idmus";
+/// Full map reveal: IDDT
+pub const CHEAT_IDDT: &[u8] = b"iddt";
 
 /// Duration for timed power-ups: 60 seconds at 35 tics/sec.
 const POWER_DURATION_60S: u32 = 60 * 35;
@@ -72,6 +74,8 @@ pub enum CheatCode {
     RadSuit,
     /// IDBEHOLDA -- toggle all-map.
     AllMap,
+    /// IDDT -- toggle full automap reveal.
+    FullMapReveal,
     /// IDBEHOLDL -- toggle light amplification.
     LightAmp,
     /// IDCLEV + 2 digits -- warp to level.
@@ -195,6 +199,11 @@ pub fn check_cheats(buffer: &CheatBuffer) -> Option<CheatCode> {
         return Some(CheatCode::GodMode);
     }
 
+    // IDDT (4 chars)
+    if buffer.check(CHEAT_IDDT) {
+        return Some(CheatCode::FullMapReveal);
+    }
+
     // IDKFA (5 chars)
     if buffer.check(CHEAT_IDKFA) {
         return Some(CheatCode::AllWeaponsAmmoKeys);
@@ -278,6 +287,11 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
             true
         }
 
+        CheatCode::FullMapReveal => {
+            // Handled externally by the app orchestrator.
+            true
+        }
+
         CheatCode::AllMap => {
             // AllMap is permanent (tics = 1 means "active indefinitely").
             toggle_power(&mut gs.player.powers[powers::PW_ALLMAP], 1);
@@ -336,6 +350,7 @@ pub fn cheat_message(code: CheatCode) -> &'static str {
         CheatCode::Strength => "Berserk!",
         CheatCode::Invisibility => "Partial Invisibility",
         CheatCode::RadSuit => "Radiation Shielding Suit On",
+        CheatCode::FullMapReveal => "Map Revealed",
         CheatCode::AllMap => "Computer Area Map",
         CheatCode::LightAmp => "Light Amplification Visor On",
         CheatCode::LevelWarp => "Changing Level...",
@@ -642,6 +657,7 @@ mod tests {
             CheatCode::Invisibility,
             CheatCode::RadSuit,
             CheatCode::AllMap,
+            CheatCode::FullMapReveal,
             CheatCode::LightAmp,
             CheatCode::LevelWarp,
             CheatCode::MusicChange,
