@@ -283,12 +283,14 @@ fn parse_texture_lump<'a, F>(
         let mut texdata = vec![0u8; width as usize * height_pow2 as usize];
 
         // Blit each patch into the texture.
+        // OPTIMIZATION: We borrow `patch_name` as a `&str` instead of cloning the String
+        // from `pnames`. This eliminates a heap allocation per patch across all textures.
         for mp in &patches {
             let patch_name = match pnames.get(mp.patch as usize) {
-                Some(n) => n.clone(),
+                Some(n) => n.as_str(),
                 None => continue,
             };
-            let patch_data = match find_patch(&patch_name) {
+            let patch_data = match find_patch(patch_name) {
                 Some(d) => d,
                 None => continue,
             };

@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**[Avoiding String Clone during Texture Parsing]
+**Learning:** `pnames.get(mp.patch as usize)` returned a `String`, which was being cloned just to pass it to `find_patch`. This creates unnecessary heap allocations inside a tight parsing loop.
+**Action:** Use `.as_str()` instead of `.clone()` to pass a string slice `&str` to `find_patch`, avoiding the allocation entirely.
