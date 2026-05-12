@@ -3613,12 +3613,12 @@ fn segment_intersection_frac(
     lx2: i32,
     ly2: i32,
 ) -> Option<(i64, i64)> {
-    let rdx = i64::from(bx - ax);
-    let rdy = i64::from(by - ay);
-    let sdx = i64::from(lx2 - lx1);
-    let sdy = i64::from(ly2 - ly1);
-    let qpx = i64::from(lx1 - ax);
-    let qpy = i64::from(ly1 - ay);
+    let rdx = i64::from(bx) - i64::from(ax);
+    let rdy = i64::from(by) - i64::from(ay);
+    let sdx = i64::from(lx2) - i64::from(lx1);
+    let sdy = i64::from(ly2) - i64::from(ly1);
+    let qpx = i64::from(lx1) - i64::from(ax);
+    let qpy = i64::from(ly1) - i64::from(ay);
 
     let denom = rdx * sdy - rdy * sdx;
     if denom == 0 {
@@ -9995,5 +9995,18 @@ mod tests {
             gs.movers.active_floors[0].floor_type,
             FloorType::LowerToNearest
         );
+    }
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+
+    #[test]
+    fn havoc_test_segment_intersection_frac_no_overflow() {
+        // Attempt to trigger subtract with overflow panic
+        let ax = i32::MIN;
+        let bx = i32::MAX;
+        let _ = segment_intersection_frac(ax, 0, bx, 0, 0, 0, 0, 0);
     }
 }
