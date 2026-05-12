@@ -1,3 +1,16 @@
+//!
+//! # Architecture
+//! The core struct is `DoomApp`, which implements `DoomEventLoop`. It holds:
+//! - The `DoomGame` state machine (the simulation).
+//! - The `WadStack` and `EngineCaches` (assets).
+//! - The `DoomRenderer` (visuals).
+//! - The `AudioDriver` (sound).
+//! - Network or demo wrappers that intercept the event loop.
+//!
+//! `main.rs` is responsible for CLI parsing, initializing these systems, and
+//! picking the correct "mode" wrapper (e.g., `NetPlayClientApp`, `DemoRecordingWrapper`)
+//! before entering the `tui::run` loop.
+
 //! Doom engine entry point and master orchestrator.
 //!
 //! # The Grand Assembly
