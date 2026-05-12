@@ -3,7 +3,7 @@
 ## 👤 User Story
 As a Player, I want to be able to change my game settings (like Sound Volume, Music Volume, and Controls) in the Options menu and have them persist across sessions, so that I don't have to reconfigure the game every time I launch it.
 
-## ❓ So What?
+## 🎯 The "So What?" Ask
 Currently, the Options menu contains placeholder items (`Sound Volume`, `Music Volume`, `Controls`) that do nothing (`MenuAction::Noop`), and there is no configuration file to save user preferences. This leads to a frustrating user experience where players cannot adjust their audio levels or controls, and any future settings would be lost upon closing the app. A persistent settings system is foundational for a good user experience.
 
 ## 📏 Metric Definition
@@ -13,7 +13,7 @@ Currently, the Options menu contains placeholder items (`Sound Volume`, `Music V
   - The game loads the settings on startup and applies them automatically.
   - Error handling gracefully falls back to default settings if the configuration file is missing or corrupted.
 
-## 🔍 Gap Analysis
+## ⚖️ Gap Analysis
 - **Current State:** The game hardcodes default behaviors (e.g., audio volumes are fixed or not adjustable via UI). The settings menu is visually present but functionally a stub (`MenuAction::Noop`).
 - **Standard Libs / Market:** Most terminal-based Rust games or applications use lightweight serialization crates like `serde` with `toml` or `json` to manage configurations locally in a standard user directory (e.g., via the `directories` crate). Implementing this is a standard and expected pattern for any modern source port or engine clone.
 
