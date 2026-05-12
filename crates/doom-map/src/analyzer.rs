@@ -68,11 +68,19 @@ impl<'a> MapAnalyzer<'a> {
         let mut parent = HashMap::new();
         let mut articulation_points = HashSet::new();
         let mut time = 0;
+        let empty_set = HashSet::new();
 
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let mut stack = vec![(
+                    node,
+                    self.graph
+                        .adjacency_list
+                        .get(&node)
+                        .unwrap_or(&empty_set)
+                        .iter(),
+                )];
 
                 visited.insert(node);
                 time += 1;
@@ -97,7 +105,14 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((
+                                v,
+                                self.graph
+                                    .adjacency_list
+                                    .get(&v)
+                                    .unwrap_or(&empty_set)
+                                    .iter(),
+                            ));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -299,5 +314,36 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let chokes = analyzer.chokepoints();
         assert_eq!(chokes.len(), 9999);
+    }
+
+    #[test]
+    fn test_chokepoints_dangling_node() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1, 2]));
+        adj.insert(1, HashSet::from([0]));
+        adj.insert(2, HashSet::from([0, 3]));
+        // 3 is MISSING from adjacency_list!
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let chokes = analyzer.chokepoints();
+        assert_eq!(chokes, vec![0]);
+    }
+
+    #[test]
+    fn test_isolated_areas_dangling_node() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1, 2]));
+        adj.insert(1, HashSet::from([0]));
+        // 2 is MISSING
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let areas = analyzer.isolated_areas();
+        assert_eq!(areas.len(), 1);
+        assert!(areas[0].contains(&0));
+        assert!(areas[0].contains(&1));
     }
 }
