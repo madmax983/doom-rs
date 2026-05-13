@@ -112,6 +112,8 @@ pub struct GameState {
     /// The style meter, which tracks rapid multi-kills and assigns a DMC-like style rank.
     #[cfg(feature = "style_meter")]
     pub style: crate::style::StyleMeter,
+    #[cfg(feature = "director")]
+    pub director: crate::director::AiDirector,
     #[cfg(feature = "telemetry")]
     /// Tracks spatial player path data over the session.
     pub telemetry: crate::telemetry::SessionTelemetry,
@@ -142,6 +144,8 @@ impl GameState {
             brain_target_index: 0,
             #[cfg(feature = "style_meter")]
             style: crate::style::StyleMeter::new(),
+            #[cfg(feature = "director")]
+            director: crate::director::AiDirector::new(),
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
         }

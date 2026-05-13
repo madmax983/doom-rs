@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Integrate AiDirector]**
+**Tangle:** The `AiDirector` struct was added to `crates/doom-game/src/director.rs` but was never integrated into the game loop.
+**Blueprint:** Implemented `Clone` and `Debug` traits for `AiDirector`, added it to `GameState` under the `director` feature flag, and integrated it into the `tick_world` game loop.
