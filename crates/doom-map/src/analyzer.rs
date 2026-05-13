@@ -68,10 +68,12 @@ impl<'a> MapAnalyzer<'a> {
         let mut parent = HashMap::new();
         let mut articulation_points = HashSet::new();
         let mut time = 0;
+        let empty_set = HashSet::new();
 
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
+                // `node` is guaranteed to exist because it comes from `keys()`
                 let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
 
                 visited.insert(node);
@@ -97,35 +99,42 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((
+                                v,
+                                self.graph
+                                    .adjacency_list
+                                    .get(&v)
+                                    .unwrap_or(&empty_set)
+                                    .iter(),
+                            ));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
-                            let (low_u, disc_v) =
-                                (low_time.get(&u).copied(), discovery_time.get(&v).copied());
-                            if let (Some(low_u), Some(disc_v)) = (low_u, disc_v) {
-                                let new_low = low_u.min(disc_v);
-                                low_time.insert(u, new_low);
-                            }
+                            let (Some(low_u), Some(disc_v)) =
+                                (low_time.get(&u).copied(), discovery_time.get(&v).copied())
+                            else {
+                                continue;
+                            };
+                            let new_low = low_u.min(disc_v);
+                            low_time.insert(u, new_low);
                         }
                     }
 
                     if !pushed_child {
                         // After visiting all neighbors of u, if u is not root, update parent's low_time
                         if let Some(&p) = parent.get(&u) {
-                            let (low_u, low_p, disc_p) = (
+                            let (Some(low_u), Some(low_p), Some(disc_p)) = (
                                 low_time.get(&u).copied(),
                                 low_time.get(&p).copied(),
                                 discovery_time.get(&p).copied(),
-                            );
-                            if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p)
-                            {
-                                let new_low = low_p.min(low_u);
-                                low_time.insert(p, new_low);
+                            ) else {
+                                continue;
+                            };
+                            let new_low = low_p.min(low_u);
+                            low_time.insert(p, new_low);
 
-                                if low_u >= disc_p && parent.contains_key(&p) {
-                                    articulation_points.insert(p);
-                                }
+                            if low_u >= disc_p && parent.contains_key(&p) {
+                                articulation_points.insert(p);
                             }
                         } else if *children_map.get(&u).unwrap_or(&0) > 1 {
                             articulation_points.insert(u);
