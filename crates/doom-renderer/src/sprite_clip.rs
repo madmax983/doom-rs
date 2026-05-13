@@ -1,3 +1,8 @@
+//! Sprite Clipping Logic
+//!
+//! Handles vertical clipping boundaries for sprites to correctly occlude them
+//! behind floors and ceilings in 2.5D space.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
@@ -15,6 +20,7 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new, empty [`SpriteClipHistory`].
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {
@@ -26,6 +32,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Adds a new clipping step to the history.
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +42,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns the most recently added clipping step, if any exist.
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +51,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns an iterator over the recorded clipping steps.
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }

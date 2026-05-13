@@ -54,7 +54,9 @@ pub mod weapon_fire;
 pub mod weapons;
 
 #[cfg(feature = "director")]
+/// AI director logic.
 pub mod director;
+
 #[cfg(feature = "director")]
 pub use director::*;
 
