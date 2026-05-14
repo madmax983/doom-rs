@@ -8,8 +8,9 @@ fuzz_target!(|data: &[u8]| {
     if let Ok(mut midi) = driver.midi.lock() {
         if let Ok(score) = doom_audio::mus::MusScore::parse(data) {
             midi.load_score(score);
-            let mut buf = vec![0.0; 1024];
-            midi.advance_samples(1024, 44100, &mut buf);
+            let mut buf = vec![0.0; 4096];
+            // Fuzz advance_samples
+            midi.advance_samples(4096, 44100, &mut buf);
         }
     }
 });

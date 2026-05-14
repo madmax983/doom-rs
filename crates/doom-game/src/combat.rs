@@ -573,7 +573,12 @@ pub fn p_radius_attack(
         }
 
         let dist_i = dist_f as i32;
-        let actual = (damage * (radius_int - dist_i) / radius_int).max(1);
+
+        // Havoc 👺: Defend against overflow in damage calculation.
+        // Convert to i64 to safely calculate, then clamp back to i32.
+        let actual = (i64::from(damage) * i64::from(radius_int - dist_i) / i64::from(radius_int))
+            .clamp(1, i32::MAX as i64) as i32;
+
         damage_mobj(gs, handle, source, actual);
     }
 }

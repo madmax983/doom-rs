@@ -120,7 +120,7 @@ pub fn shade_column(
     let fb_height = if fb_width == 0 {
         0
     } else {
-        fb_data.len() / fb_width
+        fb_data.len().checked_div(fb_width).unwrap_or(0)
     };
     let top = y_top.min(fb_height.saturating_sub(1));
     let bot = y_bot.min(fb_height.saturating_sub(1));
@@ -150,7 +150,7 @@ pub fn shade_span(
     if fb_width == 0 {
         return;
     }
-    let fb_height = fb_data.len() / fb_width;
+    let fb_height = fb_data.len().checked_div(fb_width).unwrap_or(0);
     if y >= fb_height {
         return;
     }

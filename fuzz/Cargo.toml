@@ -110,12 +110,44 @@ test = false
 doc = false
 bench = false
 
+
+[dependencies.doom-app]
+path = "../crates/doom-app"
 [[bin]]
-name = "fuzz_target_cheats"
-path = "fuzz_targets/fuzz_target_cheats.rs"
+name = "fuzz_str_parse"
+path = "fuzz_targets/fuzz_str_parse.rs"
 test = false
 doc = false
 bench = false
 
-[dependencies.doom-app]
-path = "../crates/doom-app"
+[dependencies.doom-tui]
+path = "../crates/doom-tui"
+
+[[bin]]
+name = "fuzz_map_lumps"
+path = "fuzz_targets/fuzz_map_lumps.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_udmf"
+path = "fuzz_targets/fuzz_udmf.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_target_engine"
+path = "fuzz_targets/fuzz_target_engine.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "fuzz_combat"
+path = "fuzz_targets/fuzz_combat.rs"
+test = false
+doc = false
+bench = false
+

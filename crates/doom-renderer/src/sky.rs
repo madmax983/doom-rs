@@ -372,7 +372,7 @@ pub fn sky_texel_column(x: usize, player_angle: Bam, tex_w: u32) -> u32 {
         return 0;
     }
     let view_angle = player_angle + column_to_angle(x);
-    ((view_angle.0 >> 22) as u32) % tex_w
+    (view_angle.0 >> 22) % tex_w
 }
 
 // ---------------------------------------------------------------------------

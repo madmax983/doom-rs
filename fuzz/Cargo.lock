@@ -865,6 +865,7 @@ dependencies = [
  "doom-audio",
  "doom-game",
  "doom-map",
+ "doom-tui",
  "doom-types",
  "doom-wad",
  "libfuzzer-sys",
