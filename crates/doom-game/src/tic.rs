@@ -195,6 +195,92 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
     let player_handle = gs.player.handle;
     let is_nightmare = gs.skill == crate::spawn::Skill::Nightmare;
 
+    #[cfg(feature = "director")]
+    let director_action = {
+        let mut director = crate::director::AiDirector::new();
+        #[cfg(feature = "style_meter")]
+        let action = director.tick(&gs.player, &gs.style);
+        #[cfg(not(feature = "style_meter"))]
+        let action = director.tick(&gs.player);
+        action
+    };
+
+    #[cfg(feature = "director")]
+    if let Some(lv) = level {
+        let spawn_type = match director_action {
+            crate::director::DirectorAction::SpawnAmbush => Some(3004), // Zombieman
+            crate::director::DirectorAction::SpawnRelief => Some(2011), // Stimpack
+            crate::director::DirectorAction::Maintain => None,
+        };
+
+        if let Some(ty) = spawn_type {
+            if let Some(player_mo) = gs.mobjslab.get(player_handle) {
+                // Find a spot behind the player to spawn it
+                let angle = player_mo
+                    .angle
+                    .wrapping_add(doom_types::Bam::from_raw(0x8000_0000));
+                let dist = doom_types::Fixed16_16::from_int(100);
+                let x = player_mo.x + angle.cos().fixed_mul(dist);
+                let y = player_mo.y + angle.sin().fixed_mul(dist);
+
+                let kind = crate::pickups::doomed_type_to_kind(ty);
+                if let Some(k) = kind {
+                    let mut m = crate::mobj::Mobj::new(k, x, y, angle);
+                    m.z = player_mo.z;
+                    crate::spawn::apply_mobjinfo_defaults(&mut m);
+                    m.spawn_type = ty;
+
+                    // Simple collision check - snap to floor
+                    let bsp = lv.bsp();
+                    let ssector = bsp.point_in_subsector(x.to_int(), y.to_int());
+                    if let Some(ss) = ssector {
+                        if !lv.segs.is_empty() && (ss.first_seg as usize) < lv.segs.len() {
+                            let seg = &lv.segs[ss.first_seg as usize];
+                            if (seg.linedef as usize) < lv.linedefs.len() {
+                                let ld = &lv.linedefs[seg.linedef as usize];
+                                let sector_idx = if seg.direction == 0 {
+                                    if (ld.right_sidedef as usize) < lv.sidedefs.len() {
+                                        let sd = &lv.sidedefs[ld.right_sidedef as usize];
+                                        sd.sector
+                                    } else {
+                                        0
+                                    }
+                                } else {
+                                    if ld.left_sidedef != doom_map::lumps::SIDEDEF_NONE
+                                        && (ld.left_sidedef as usize) < lv.sidedefs.len()
+                                    {
+                                        let sd = &lv.sidedefs[ld.left_sidedef as usize];
+                                        sd.sector
+                                    } else if (ld.right_sidedef as usize) < lv.sidedefs.len() {
+                                        let sd = &lv.sidedefs[ld.right_sidedef as usize];
+                                        sd.sector
+                                    } else {
+                                        0
+                                    }
+                                };
+
+                                if (sector_idx as usize) < lv.sectors.len() {
+                                    let sector = &lv.sectors[sector_idx as usize];
+                                    m.z = doom_types::Fixed16_16::from_int(
+                                        sector.floor_height as i32,
+                                    );
+                                    // Make sure we don't spawn in walls
+                                    if m.z
+                                        <= doom_types::Fixed16_16::from_int(
+                                            sector.ceil_height as i32,
+                                        ) - m.height
+                                    {
+                                        gs.mobjslab.alloc(m.clone());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     for i in 0..initial_slot_count {
         let Some(handle) = gs.mobjslab.handle_at(i) else {
             continue;
