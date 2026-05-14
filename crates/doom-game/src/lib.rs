@@ -10,7 +10,6 @@
 //! - `player.health ≤ MAX_HEALTH` at all times.
 //! - `player.ammo[i] ≤ MAX_AMMO[i]` for all i.
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
-
 pub mod actions;
 pub mod automap;
 pub mod cheats;
@@ -52,12 +51,11 @@ pub mod tic;
 pub mod trace;
 pub mod weapon_fire;
 pub mod weapons;
-
 #[cfg(feature = "director")]
-pub mod director;
+ /// AI Director for dynamic difficulty adjustment.
+ pub mod director;
 #[cfg(feature = "director")]
 pub use director::*;
-
 pub use actions::{Action, dispatch_action, p_move, p_new_chase_dir};
 pub use automap::{
     AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,

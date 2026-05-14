@@ -26,7 +26,10 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
-pub mod sprite_clip;
+
+
+ /// Utilities for managing short histories of sprite clipping data.
+ pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
 pub mod texture;
