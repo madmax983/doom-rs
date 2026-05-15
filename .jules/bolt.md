@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Eliminate extra `WadLump` allocations**
+**Learning:** `Wad::find_lump_data` cloned a small metadata structure (`WadLump`) upon retrieval before passing it down to `self.lump_data(&lump)`. Modifying `WadLump` to just pass by reference `self.lump_data(lump)` (or implicitly coercing it if it's already a reference) completely avoided a clone, as `find_lump` already returns a reference `&WadLump`.
+**Action:** When working with references to collections or items within collections (`Vec`, Maps, arrays), directly pass down the borrowed value if the function takes a reference `&T` or `T`, instead of pointlessly cloning it.

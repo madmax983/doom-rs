@@ -294,8 +294,8 @@ impl WadFile {
     /// assert!(wad.find_lump_data("MISSING").is_none());
     /// ```
     pub fn find_lump_data(&self, name: &str) -> Option<&[u8]> {
-        let lump = self.find_lump(name)?.clone();
-        Some(self.lump_data(&lump))
+        let lump = self.find_lump(name)?;
+        Some(self.lump_data(lump))
     }
 
     /// Find all lumps between two marker lumps (e.g. `F_START`/`F_END`).
