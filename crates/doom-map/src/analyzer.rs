@@ -70,67 +70,75 @@ impl<'a> MapAnalyzer<'a> {
         let mut time = 0;
 
         for &node in self.graph.adjacency_list.keys() {
-            if !visited.contains(&node) {
-                // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+            if visited.contains(&node) {
+                continue;
+            }
 
-                visited.insert(node);
-                time += 1;
-                discovery_time.insert(node, time);
-                low_time.insert(node, time);
-                let mut children_map: HashMap<usize, usize> = HashMap::new();
+            // Iterative DFS to avoid stack overflow on deep graphs.
+            let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
 
-                while let Some((u, mut neighbors_iter)) = stack.pop() {
-                    let mut pushed_child = false;
+            visited.insert(node);
+            time += 1;
+            discovery_time.insert(node, time);
+            low_time.insert(node, time);
+            let mut children_map: HashMap<usize, usize> = HashMap::new();
 
-                    while let Some(&v) = neighbors_iter.next() {
-                        if !self.graph.adjacency_list.contains_key(&v) {
+            while let Some((u, mut neighbors_iter)) = stack.pop() {
+                let mut pushed_child = false;
+
+                while let Some(&v) = neighbors_iter.next() {
+                    if !self.graph.adjacency_list.contains_key(&v) {
+                        continue;
+                    }
+                    if !visited.contains(&v) {
+                        *children_map.entry(u).or_default() += 1;
+                        parent.insert(v, u);
+
+                        visited.insert(v);
+                        time += 1;
+                        discovery_time.insert(v, time);
+                        low_time.insert(v, time);
+
+                        stack.push((u, neighbors_iter));
+                        stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                        pushed_child = true;
+                        break;
+                    } else if parent.get(&u) != Some(&v) {
+                        let (Some(low_u), Some(disc_v)) =
+                            (low_time.get(&u).copied(), discovery_time.get(&v).copied())
+                        else {
                             continue;
-                        }
-                        if !visited.contains(&v) {
-                            *children_map.entry(u).or_default() += 1;
-                            parent.insert(v, u);
-
-                            visited.insert(v);
-                            time += 1;
-                            discovery_time.insert(v, time);
-                            low_time.insert(v, time);
-
-                            stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
-                            pushed_child = true;
-                            break;
-                        } else if parent.get(&u) != Some(&v) {
-                            let (low_u, disc_v) =
-                                (low_time.get(&u).copied(), discovery_time.get(&v).copied());
-                            if let (Some(low_u), Some(disc_v)) = (low_u, disc_v) {
-                                let new_low = low_u.min(disc_v);
-                                low_time.insert(u, new_low);
-                            }
-                        }
+                        };
+                        let new_low = low_u.min(disc_v);
+                        low_time.insert(u, new_low);
                     }
+                }
 
-                    if !pushed_child {
-                        // After visiting all neighbors of u, if u is not root, update parent's low_time
-                        if let Some(&p) = parent.get(&u) {
-                            let (low_u, low_p, disc_p) = (
-                                low_time.get(&u).copied(),
-                                low_time.get(&p).copied(),
-                                discovery_time.get(&p).copied(),
-                            );
-                            if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p)
-                            {
-                                let new_low = low_p.min(low_u);
-                                low_time.insert(p, new_low);
+                if pushed_child {
+                    continue;
+                }
 
-                                if low_u >= disc_p && parent.contains_key(&p) {
-                                    articulation_points.insert(p);
-                                }
-                            }
-                        } else if *children_map.get(&u).unwrap_or(&0) > 1 {
-                            articulation_points.insert(u);
-                        }
+                // After visiting all neighbors of u, if u is not root, update parent's low_time
+                let Some(&p) = parent.get(&u) else {
+                    if *children_map.get(&u).unwrap_or(&0) > 1 {
+                        articulation_points.insert(u);
                     }
+                    continue;
+                };
+
+                let (Some(low_u), Some(low_p), Some(disc_p)) = (
+                    low_time.get(&u).copied(),
+                    low_time.get(&p).copied(),
+                    discovery_time.get(&p).copied(),
+                ) else {
+                    continue;
+                };
+
+                let new_low = low_p.min(low_u);
+                low_time.insert(p, new_low);
+
+                if low_u >= disc_p && parent.contains_key(&p) {
+                    articulation_points.insert(p);
                 }
             }
         }
@@ -166,25 +174,29 @@ impl<'a> MapAnalyzer<'a> {
         let mut components = Vec::new();
 
         for &node in self.graph.adjacency_list.keys() {
-            if !visited.contains(&node) {
-                let mut component = HashSet::new();
-                let mut queue = vec![node];
-                visited.insert(node);
+            if visited.contains(&node) {
+                continue;
+            }
 
-                while let Some(curr) = queue.pop() {
-                    component.insert(curr);
-                    if let Some(neighbors) = self.graph.adjacency_list.get(&curr) {
-                        for &n in neighbors {
-                            // Only traverse edges to nodes that actually exist in the graph.
-                            if self.graph.adjacency_list.contains_key(&n) && !visited.contains(&n) {
-                                visited.insert(n);
-                                queue.push(n);
-                            }
-                        }
+            let mut component = HashSet::new();
+            let mut queue = vec![node];
+            visited.insert(node);
+
+            while let Some(curr) = queue.pop() {
+                component.insert(curr);
+                let Some(neighbors) = self.graph.adjacency_list.get(&curr) else {
+                    continue;
+                };
+
+                for &n in neighbors {
+                    // Only traverse edges to nodes that actually exist in the graph.
+                    if self.graph.adjacency_list.contains_key(&n) && !visited.contains(&n) {
+                        visited.insert(n);
+                        queue.push(n);
                     }
                 }
-                components.push(component);
             }
+            components.push(component);
         }
         components
     }

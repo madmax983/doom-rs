@@ -55,3 +55,19 @@ fn havoc_test_analyzer_missing_back_edges() {
     let analyzer = MapAnalyzer::new(&graph);
     let _ = analyzer.chokepoints();
 }
+#[test]
+fn havoc_trigger_stack_overflow_isolated_areas() {
+    let mut adj = std::collections::HashMap::new();
+    for i in 0..10000 {
+        adj.insert(i, std::collections::HashSet::from([i + 1]));
+    }
+    adj.insert(10000, std::collections::HashSet::from([9999]));
+    for i in 1..10000 {
+        adj.get_mut(&i).unwrap().insert(i - 1);
+    }
+    let graph = doom_map::SectorGraph {
+        adjacency_list: adj,
+    };
+    let analyzer = doom_map::analyzer::MapAnalyzer::new(&graph);
+    let _ = analyzer.isolated_areas();
+}
