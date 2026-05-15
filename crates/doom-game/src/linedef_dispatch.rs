@@ -463,8 +463,7 @@ fn dispatch_doors(
                 let sector_idx = sd.sector as usize;
                 close_wait_open_helper(gs, level, sector_idx);
             } else {
-                let indices = sectors_by_tag(level, tag);
-                for idx in indices {
+                for idx in sectors_by_tag(level, tag) {
                     close_wait_open_helper(gs, level, idx);
                 }
             }
@@ -744,8 +743,7 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
     use LinedefEffect::*;
     match effect {
         StairsBuild8 => {
-            let indices = sectors_by_tag(level, tag);
-            for idx in indices {
+            for idx in sectors_by_tag(level, tag) {
                 crate::specials::ev_build_stairs(
                     gs,
                     level,
@@ -757,8 +755,7 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
             true
         }
         StairsTurbo16 => {
-            let indices = sectors_by_tag(level, tag);
-            for idx in indices {
+            for idx in sectors_by_tag(level, tag) {
                 crate::specials::ev_build_stairs(
                     gs,
                     level,
@@ -815,8 +812,7 @@ fn dispatch_specials(
     use LinedefEffect::*;
     match effect {
         Donut => {
-            let indices = sectors_by_tag(level, tag);
-            for idx in indices {
+            for idx in sectors_by_tag(level, tag) {
                 crate::specials::ev_do_donut(gs, level, idx);
             }
             true
@@ -891,8 +887,7 @@ fn door_by_tag_or_back(
             DoorSpeed::Normal => open_door_helper(gs, level, sector_idx, behavior),
         }
     } else {
-        let indices = sectors_by_tag(level, tag);
-        for idx in indices {
+        for idx in sectors_by_tag(level, tag) {
             match speed {
                 DoorSpeed::Blazing => open_blazing_door_helper(gs, level, idx, behavior),
                 DoorSpeed::Normal => open_door_helper(gs, level, idx, behavior),
@@ -927,8 +922,7 @@ fn close_door_by_tag_or_back(
             close_door_helper(gs, level, sector_idx);
         }
     } else {
-        let indices = sectors_by_tag(level, tag);
-        for idx in indices {
+        for idx in sectors_by_tag(level, tag) {
             match speed {
                 DoorSpeed::Blazing => close_blazing_door_helper(gs, level, idx),
                 DoorSpeed::Normal => close_door_helper(gs, level, idx),
@@ -1194,14 +1188,13 @@ fn min_neighbor_light(level: &Level, tag: u16) -> i16 {
 // ---------------------------------------------------------------------------
 
 /// Collect all sector indices matching `tag`.
-fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
+fn sectors_by_tag(level: &Level, tag: u16) -> impl Iterator<Item = usize> + '_ {
     level
         .sectors
         .iter()
         .enumerate()
-        .filter(|(_, s)| s.tag == tag)
+        .filter(move |(_, s)| s.tag == tag)
         .map(|(i, _)| i)
-        .collect()
 }
 
 // ---------------------------------------------------------------------------
