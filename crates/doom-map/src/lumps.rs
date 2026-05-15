@@ -222,9 +222,15 @@ impl Sidedef {
         Self {
             x_offset: i16::from_le_bytes([b[0], b[1]]),
             y_offset: i16::from_le_bytes([b[2], b[3]]),
-            upper_texture: b[4..12].try_into().unwrap(),
-            lower_texture: b[12..20].try_into().unwrap(),
-            middle_texture: b[20..28].try_into().unwrap(),
+            upper_texture: b[4..12]
+                .try_into()
+                .expect("slice bounds guarantee exact 8 byte length"),
+            lower_texture: b[12..20]
+                .try_into()
+                .expect("slice bounds guarantee exact 8 byte length"),
+            middle_texture: b[20..28]
+                .try_into()
+                .expect("slice bounds guarantee exact 8 byte length"),
             sector: u16::from_le_bytes([b[28], b[29]]),
         }
     }
@@ -518,8 +524,12 @@ impl Sector {
         Self {
             floor_height: i16::from_le_bytes([b[0], b[1]]),
             ceil_height: i16::from_le_bytes([b[2], b[3]]),
-            floor_flat: b[4..12].try_into().unwrap(),
-            ceil_flat: b[12..20].try_into().unwrap(),
+            floor_flat: b[4..12]
+                .try_into()
+                .expect("slice bounds guarantee exact 8 byte length"),
+            ceil_flat: b[12..20]
+                .try_into()
+                .expect("slice bounds guarantee exact 8 byte length"),
             light_level: i16::from_le_bytes([b[20], b[21]]),
             special: u16::from_le_bytes([b[22], b[23]]),
             tag: u16::from_le_bytes([b[24], b[25]]),
@@ -939,5 +949,44 @@ mod tests {
     #[test]
     fn bad_lump_length_errors() {
         assert!(Thing::parse_lump(&[0u8; 7]).is_err()); // 7 not divisible by 10
+    }
+}
+
+#[cfg(test)]
+mod blockmap_tests {
+    use super::*;
+
+    #[test]
+    fn blockmap_too_short() {
+        let data = vec![0u8; 7];
+        assert!(matches!(
+            Blockmap::parse_lump(&data),
+            Err(LumpParseError::BlockmapTooShort(7))
+        ));
+    }
+
+    #[test]
+    fn blockmap_oom_prevention() {
+        // Provide valid header but claim a massive grid size
+        let mut data = vec![0u8; 12]; // 8 bytes header + 4 bytes offsets
+        data[4..6].copy_from_slice(&0xFFFFu16.to_le_bytes()); // x_count
+        data[6..8].copy_from_slice(&0xFFFFu16.to_le_bytes()); // y_count
+
+        // This should not OOM, but instead clamp offsets to physical data size (12 - 8 = 4 bytes = 2 offsets)
+        let blockmap = Blockmap::parse_lump(&data).expect("value must exist in test");
+        assert_eq!(blockmap.offsets.len(), 2);
+    }
+
+    #[test]
+    fn blockmap_out_of_bounds_offset() {
+        let mut data = vec![0u8; 10];
+        data[4..6].copy_from_slice(&1u16.to_le_bytes()); // x_count
+        data[6..8].copy_from_slice(&1u16.to_le_bytes()); // y_count
+        data[8..10].copy_from_slice(&9999u16.to_le_bytes()); // Offset far out of bounds
+
+        let blockmap = Blockmap::parse_lump(&data).expect("value must exist in test");
+        // Requesting linedefs should safely return an empty iterator
+        let mut it = blockmap.block_linedefs(0, 0);
+        assert_eq!(it.next(), None);
     }
 }
