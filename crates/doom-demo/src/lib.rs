@@ -6,16 +6,16 @@
 //! - 1-byte `0x80` terminator
 //!
 //! # Modules
-//! - [`header`] — [`LmpHeader`], constants (`LMP_VERSION_1_9`, `LMP_TERMINATOR`)
-//! - [`ticcmd`] — [`DemoTicCmd`]: 4-byte wire-format tic command
-//! - [`recorder`] — [`DemoRecorder`]: accumulates tics and writes an LMP file
-//! - [`player`] — [`DemoPlayer`]: parses an LMP file and replays tics
+//! - `header` — [`LmpHeader`], constants (`LMP_VERSION_1_9`, `LMP_TERMINATOR`)
+//! - `ticcmd` — [`DemoTicCmd`]: 4-byte wire-format tic command
+//! - `recorder` — [`DemoRecorder`]: accumulates tics and writes an LMP file
+//! - `player` — [`DemoPlayer`]: parses an LMP file and replays tics
 
-pub mod csv;
-pub mod header;
-pub mod player;
-pub mod recorder;
-pub mod ticcmd;
+pub(crate) mod csv;
+pub(crate) mod header;
+pub(crate) mod player;
+pub(crate) mod recorder;
+pub(crate) mod ticcmd;
 
 // Re-export primary types at crate root for convenience.
 pub use csv::export_demo_to_csv;

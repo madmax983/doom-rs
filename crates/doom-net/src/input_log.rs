@@ -87,7 +87,7 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, packet::MAX_PLAYERS};
+    /// use doom_net::{InputLog, MAX_PLAYERS};
     /// use doom_types::TicCmd;
     ///
     /// let mut log = InputLog::new(8);
@@ -115,7 +115,7 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, packet::MAX_PLAYERS};
+    /// use doom_net::{InputLog, MAX_PLAYERS};
     /// use doom_types::TicCmd;
     ///
     /// let mut log = InputLog::new(8);
@@ -139,7 +139,7 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, packet::MAX_PLAYERS};
+    /// use doom_net::{InputLog, MAX_PLAYERS};
     /// use doom_types::TicCmd;
     ///
     /// let mut log = InputLog::new(8);
@@ -162,7 +162,7 @@ impl InputLog {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{InputLog, packet::MAX_PLAYERS};
+    /// use doom_net::{InputLog, MAX_PLAYERS};
     /// use doom_types::TicCmd;
     ///
     /// let mut log = InputLog::new(8);

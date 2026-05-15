@@ -60,7 +60,7 @@ impl TicPacket {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{TicPacket, packet::MAX_PLAYERS};
+    /// use doom_net::{TicPacket, MAX_PLAYERS};
     /// use doom_types::TicCmd;
     ///
     /// let packet = TicPacket {
@@ -72,7 +72,7 @@ impl TicPacket {
     /// };
     ///
     /// let bytes = packet.to_bytes();
-    /// assert_eq!(bytes.len(), doom_net::packet::TIC_PACKET_SIZE);
+    /// assert_eq!(bytes.len(), doom_net::TIC_PACKET_SIZE);
     /// ```
     #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -101,7 +101,7 @@ impl TicPacket {
     /// ## Examples
     ///
     /// ```
-    /// use doom_net::{TicPacket, packet::MAX_PLAYERS};
+    /// use doom_net::{TicPacket, MAX_PLAYERS};
     /// use doom_types::TicCmd;
     ///
     /// let original = TicPacket {

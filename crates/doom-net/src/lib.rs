@@ -1,7 +1,7 @@
 //! Client-server rollback netcode for doom-rs.
 //!
 //! Wire format: [`TicPacket`] with manual little-endian serialization.
-//! Desync detection via CRC32 checksums ([`checksum`] module).
+//! Desync detection via CRC32 checksums (`checksum` module).
 //! Rollback: snapshot ring + input log + misprediction detection.
 //! UDP transport: [`transport::NetTransport`], [`server::RelayServer`],
 //! [`client::NetClient`].
@@ -13,14 +13,14 @@
 //! imported from `doom-types` so that it can be shared across the workspace.
 //! `doom-net` depends only on `doom-types`, not `doom-game`.
 
-pub mod checksum;
-pub mod client;
-pub mod input_log;
-pub mod packet;
-pub mod rollback;
-pub mod server;
-pub mod snapshot;
-pub mod transport;
+pub(crate) mod checksum;
+pub(crate) mod client;
+pub(crate) mod input_log;
+pub(crate) mod packet;
+pub(crate) mod rollback;
+pub(crate) mod server;
+pub(crate) mod snapshot;
+pub(crate) mod transport;
 
 pub use checksum::{CRC32_TABLE, checksums_match, compute_checksum};
 pub use client::NetClient;
