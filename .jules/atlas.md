@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Enforce module boundaries in doom-demo]**
+**Tangle:** The `doom-demo` crate leaked internal modules like `csv`, `header`, `player`, `recorder`, and `ticcmd` as `pub mod`s in `lib.rs` even though their necessary types are explicitly re-exported via `pub use` for public consumption. This violates the boundary isolation by unnecessarily exposing the internal module hierarchy.
+**Blueprint:** Altered the visibility of these modules in `crates/doom-demo/src/lib.rs` from `pub mod` to `pub(crate) mod`. The public API remains intact through the `pub use` statements, but the internal file structure is now properly encapsulated.
