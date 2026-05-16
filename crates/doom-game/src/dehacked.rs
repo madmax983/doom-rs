@@ -209,8 +209,8 @@ impl DehPatch {
 
         loop {
             // Peel off one line.
-            let (line, rest) = match remaining.find('\n') {
-                Some(pos) => (&remaining[..pos], &remaining[pos + 1..]),
+            let (line, rest) = match remaining.split_once('\n') {
+                Some((line, rest)) => (line, rest),
                 None => {
                     // Last line (possibly empty).
                     let line = remaining;
@@ -365,9 +365,9 @@ impl DehPatch {
                 {
                     return Ok(false);
                 }
-                if let Some(eq_pos) = trimmed.find('=') {
-                    let lhs = trimmed[..eq_pos].trim();
-                    let rhs = trimmed[eq_pos + 1..].trim();
+                if let Some((lhs, rhs)) = trimmed.split_once('=') {
+                    let lhs = lhs.trim();
+                    let rhs = rhs.trim();
                     if let Some(frame_part) = lhs.strip_prefix("Frame ") {
                         if let Ok(frame_num) = frame_part.trim().parse::<usize>() {
                             patch.code_pointers.insert(frame_num, rhs.to_owned());
@@ -578,9 +578,9 @@ impl DehPatch {
             }
             Section::Strings => {
                 // Lines like: KEY = value (key is uppercase, no spaces)
-                if let Some(eq_pos) = trimmed.find('=') {
-                    let key = trimmed[..eq_pos].trim().to_owned();
-                    let value = trimmed[eq_pos + 1..].trim().to_owned();
+                if let Some((key, value)) = trimmed.split_once('=') {
+                    let key = key.trim().to_owned();
+                    let value = value.trim().to_owned();
                     if !key.is_empty() {
                         patch.strings.insert(key, value);
                     }
@@ -594,12 +594,10 @@ impl DehPatch {
 
     /// Split `"key = value"` into `(trimmed_key, trimmed_value)`.
     fn split_field(line: &str) -> Result<(&str, &str), DehError> {
-        let pos = line
-            .find('=')
+        let (key, val) = line
+            .split_once('=')
             .ok_or_else(|| DehError::BadField(line.to_owned()))?;
-        let key = line[..pos].trim();
-        let val = line[pos + 1..].trim();
-        Ok((key, val))
+        Ok((key.trim(), val.trim()))
     }
 
     fn parse_float_fallback(s: &str) -> Result<f64, ()> {

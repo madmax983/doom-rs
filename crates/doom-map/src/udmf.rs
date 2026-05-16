@@ -553,8 +553,8 @@ impl<'a> Parser<'a> {
 
             if rest.starts_with("/*") {
                 self.offset += 2;
-                if let Some(end_idx) = self.rest().find("*/") {
-                    self.offset += end_idx + 2;
+                if let Some((_, rest)) = self.rest().split_once("*/") {
+                    self.offset = self.input.len() - rest.len();
                     continue;
                 }
                 return Err(UdmfError::ParseFailed {

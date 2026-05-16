@@ -3176,10 +3176,7 @@ fn write_bmp(
 fn parse_warp_episode_map(warp: &str) -> (u8, u8) {
     let upper = warp.to_uppercase();
     if let Some(rest) = upper.strip_prefix('E') {
-        // E{e}M{m}
-        if let Some(mid) = rest.find('M') {
-            let ep_str = &rest[..mid];
-            let map_str = &rest[mid + 1..];
+        if let Some((ep_str, map_str)) = rest.split_once('M') {
             if let (Ok(ep), Ok(map)) = (ep_str.parse::<u8>(), map_str.parse::<u8>()) {
                 return (ep, map);
             }
@@ -3189,7 +3186,6 @@ fn parse_warp_episode_map(warp: &str) -> (u8, u8) {
             return (1, map);
         }
     }
-    // Fallback
     (1, 1)
 }
 
