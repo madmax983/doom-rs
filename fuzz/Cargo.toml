@@ -119,3 +119,10 @@ bench = false
 
 [dependencies.doom-app]
 path = "../crates/doom-app"
+
+[[bin]]
+name = "wav_encode"
+path = "fuzz_targets/wav_encode.rs"
+test = false
+doc = false
+bench = false

@@ -8,3 +8,7 @@
 **Havoc: Bounds-checking allocations**
 **Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
 **Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+
+## 2026-05-16 - [Havoc: OOM on wav encode]
+**Learning:** `encode_pcm16_wav_mono` allocates a `Vec` for the entire size of the wav. A fuzzed large array length overflows `u32` for `data_size`, causing panics, and the unchecked `Vec::with_capacity` crashes when calculating `44 + data_size` as `usize` directly.
+**Action:** Always clamp allocations from uncontrolled external slice sizes, and use `.saturating_add/mul` and `u64` conversions when constructing RIFF headers.

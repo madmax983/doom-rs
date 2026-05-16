@@ -82,11 +82,13 @@ pub fn encode_pcm16_wav_mono(sample_rate: u32, samples: &[i16]) -> Vec<u8> {
     let channels: u16 = 1;
     let bits_per_sample: u16 = 16;
     let block_align: u16 = channels * (bits_per_sample / 8);
-    let byte_rate: u32 = sample_rate * u32::from(block_align);
-    let data_size: u32 = (samples.len() * 2) as u32;
-    let riff_size: u32 = 36 + data_size;
+    let byte_rate: u32 = sample_rate.saturating_mul(u32::from(block_align));
+    // Cast to u64 to prevent multiply-with-overflow panic if sample.len() > i32::MAX
+    let data_size_u64 = samples.len() as u64 * 2;
+    let data_size: u32 = data_size_u64.try_into().unwrap_or(u32::MAX);
+    let riff_size: u32 = 36u32.saturating_add(data_size);
 
-    let mut out = Vec::with_capacity(44 + data_size as usize);
+    let mut out = Vec::with_capacity(44usize.saturating_add(samples.len().saturating_mul(2)).min(2_000_000));
     out.extend_from_slice(b"RIFF");
     out.extend_from_slice(&riff_size.to_le_bytes());
     out.extend_from_slice(b"WAVE");
