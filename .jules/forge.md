@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactored redundant sector tag and sidedef lookups in specials.rs**
+**Learning:** Repeatedly writing closures like `.filter(|(_, s)| s.tag == tag)` and unwrapping sidedefs causes visual noise and reduces readability when used dozens of times across multiple trigger specials.
+**Action:** Extracted these lookup behaviors into reusable helper functions (`sectors_with_tag` and `get_sector_from_sidedef`) to DRY up the match statements and improve clarity at call sites.
