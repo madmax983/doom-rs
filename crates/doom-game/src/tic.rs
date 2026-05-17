@@ -293,6 +293,22 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
 
     // 11. Increment level time.
     gs.stats.level_time = gs.stats.level_time.wrapping_add(1);
+    #[cfg(feature = "chronos")]
+    {
+        if gs.player.health() <= 0 {
+            // Player is dead, try to auto rewind
+            let mut chronos = std::mem::take(&mut gs.chronos);
+            let _rewound = chronos.rewind(gs);
+            gs.chronos = chronos;
+
+            // If we didn't rewind (no history), the player just stays dead.
+        } else {
+            // Player is alive, record history
+            let mut chronos = std::mem::take(&mut gs.chronos);
+            chronos.tick(gs);
+            gs.chronos = chronos;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

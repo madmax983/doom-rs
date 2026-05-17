@@ -115,6 +115,9 @@ pub struct GameState {
     #[cfg(feature = "telemetry")]
     /// Tracks spatial player path data over the session.
     pub telemetry: crate::telemetry::SessionTelemetry,
+    #[cfg(feature = "chronos")]
+    /// Tracks recent game state snapshots to allow time rewind.
+    pub chronos: crate::chronos::Chronos,
 }
 
 impl GameState {
@@ -144,6 +147,8 @@ impl GameState {
             style: crate::style::StyleMeter::new(),
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
+            #[cfg(feature = "chronos")]
+            chronos: crate::chronos::Chronos::new(35, 5),
         }
     }
 

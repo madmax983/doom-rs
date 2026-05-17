@@ -5,6 +5,7 @@ edition.workspace = true
 
 [features]
 default = []
+chronos = []
 style_meter = []
 telemetry = []
 director = []
