@@ -1,0 +1,4 @@
+💡 What: Replaced a `clone()` + `clear()` pattern with `std::mem::take()` in the console's `submit` method.
+🎯 Why: Submitting a console command needlessly allocated a new `String` heap buffer just to return the value while immediately clearing the old buffer.
+📊 Impact: Eliminates one `String` heap allocation every time a console command or cheat is submitted.
+🔬 Measurement: Run `cargo test` to verify no behavior changed, and observe zero-cost abstraction semantics.

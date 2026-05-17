@@ -64,9 +64,10 @@ impl Console {
     /// Clears the input buffer and returns the submitted string so the caller
     /// can process it as a command or cheat code.
     pub(crate) fn submit(&mut self) -> String {
-        let line = self.input.clone();
-        self.input.clear();
-        line
+        // ⚡ Bolt Optimization:
+        // Use `std::mem::take` to extract the string without allocating a clone.
+        // This takes ownership of the existing heap buffer and leaves an empty String.
+        std::mem::take(&mut self.input)
     }
 
     /// Add an output message to the console.
