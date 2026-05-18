@@ -33,6 +33,15 @@ pub struct TicCmd {
 }
 
 /// Button flag constants.
+///
+/// ## Examples
+/// ```
+/// use doom_types::ticcmd::bt;
+///
+/// let mut buttons = 0;
+/// buttons |= bt::BT_ATTACK;
+/// assert_eq!(buttons, 1);
+/// ```
 pub mod bt {
     /// Fire / attack.
     pub const BT_ATTACK: u8 = 0x01;

@@ -2,6 +2,14 @@
 use crate::limits::NUM_WEAPONS;
 
 /// Weapon slots (index = selection key − 1 for keys 1-7; chainsaw = key 1 alt).
+///
+/// ## Examples
+/// ```
+/// use doom_types::weapons::WeaponType;
+///
+/// let w = WeaponType::Shotgun;
+/// assert_eq!(w as u8, 2);
+/// ```
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 #[repr(u8)]
 pub enum WeaponType {
@@ -27,6 +35,14 @@ pub enum WeaponType {
 }
 
 /// Ammo pool indices.
+///
+/// ## Examples
+/// ```
+/// use doom_types::weapons::AmmoType;
+///
+/// let a = AmmoType::Shells;
+/// assert_eq!(a as u8, 1);
+/// ```
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum AmmoType {
@@ -43,6 +59,14 @@ pub enum AmmoType {
 }
 
 /// Which ammo pool each weapon draws from.
+///
+/// ## Examples
+/// ```
+/// use doom_types::weapons::{WEAPON_AMMO, WeaponType, AmmoType};
+///
+/// let shotgun_ammo = WEAPON_AMMO[WeaponType::Shotgun as usize];
+/// assert_eq!(shotgun_ammo, AmmoType::Shells);
+/// ```
 pub const WEAPON_AMMO: [AmmoType; NUM_WEAPONS] = [
     AmmoType::None,    // Fist
     AmmoType::Bullets, // Pistol
@@ -59,6 +83,17 @@ impl WeaponType {
     /// Convert a weapon number (0–8) from `BT_WEAPONMASK` to a `WeaponType`.
     ///
     /// Returns `None` for any out-of-range value.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_types::weapons::WeaponType;
+    ///
+    /// let w = WeaponType::from_num(2);
+    /// assert_eq!(w, Some(WeaponType::Shotgun));
+    ///
+    /// let invalid = WeaponType::from_num(99);
+    /// assert_eq!(invalid, None);
+    /// ```
     pub fn from_num(n: usize) -> Option<Self> {
         u8::try_from(n).ok().and_then(Self::from_repr)
     }
