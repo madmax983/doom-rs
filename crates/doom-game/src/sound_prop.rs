@@ -170,3 +170,105 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use doom_types::Fixed16_16;
+    use doom_types::mobj_kind::MobjKind;
+    use doom_types::weapons::WeaponType;
+
+    // Helper to generate a dummy handle since we just need distinct Option<MobjHandle> values.
+    fn dummy_handle(idx: u32) -> MobjHandle {
+        MobjHandle {
+            index: idx,
+            generation: 0,
+        }
+    }
+
+    #[test]
+    fn test_emitter_and_origin_handle_monster_events() {
+        let handle = dummy_handle(1);
+        let x = Fixed16_16::from_int(50);
+        let y = Fixed16_16::from_int(-50);
+
+        let player_x = Fixed16_16::from_int(0);
+        let player_y = Fixed16_16::from_int(0);
+        let player_handle = Some(dummy_handle(99));
+
+        let events = vec![
+            SoundRequest::MonsterWake(MobjKind::Trooper, handle, x, y),
+            SoundRequest::MonsterAttack(MobjKind::Sergeant, handle, x, y),
+            SoundRequest::MonsterDie(MobjKind::Imp, handle, x, y),
+        ];
+
+        for event in events {
+            assert_eq!(
+                event.emitter(player_x, player_y),
+                Some((x, y)),
+                "Monster event should return its own (x, y) coordinates"
+            );
+
+            assert_eq!(
+                event.origin_handle(player_handle),
+                Some(handle),
+                "Monster event should return its own origin_handle"
+            );
+        }
+    }
+
+    #[test]
+    fn test_emitter_and_origin_handle_player_events() {
+        let player_x = Fixed16_16::from_int(100);
+        let player_y = Fixed16_16::from_int(200);
+        let player_handle = Some(dummy_handle(42));
+
+        let events = vec![
+            SoundRequest::PlayerWeaponFire(WeaponType::Pistol),
+            SoundRequest::PlayerSuperShotgunOpen,
+            SoundRequest::PlayerSuperShotgunLoad,
+            SoundRequest::PlayerSuperShotgunClose,
+        ];
+
+        for event in events {
+            assert_eq!(
+                event.emitter(player_x, player_y),
+                Some((player_x, player_y)),
+                "Player-originated sound should return player_x and player_y"
+            );
+
+            assert_eq!(
+                event.origin_handle(player_handle),
+                player_handle,
+                "Player-originated sound should return the provided player_handle"
+            );
+        }
+    }
+
+    #[test]
+    fn test_emitter_and_origin_handle_stateless_events() {
+        let player_x = Fixed16_16::from_int(10);
+        let player_y = Fixed16_16::from_int(20);
+        let player_handle = Some(dummy_handle(7));
+
+        let events = vec![
+            SoundRequest::PlayerDie,
+            SoundRequest::PlayerUseFail,
+            SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red),
+        ];
+
+        for event in events {
+            assert_eq!(
+                event.emitter(player_x, player_y),
+                None,
+                "Stateless/global sound should return None for emitter"
+            );
+
+            assert_eq!(
+                event.origin_handle(player_handle),
+                None,
+                "Stateless/global sound should return None for origin_handle"
+            );
+        }
+    }
+}
