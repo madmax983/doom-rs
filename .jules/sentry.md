@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-18 - Uncovered panic point when truncating savegame byte bounds
+**Learning:** The bounds checking in `savegame::ReadCursor::read_bytes` lacked explicit testing when passing a large chunk size exceeding bounds, presenting a hidden edge case.
+**Action:** Always verify array slices when parsing files and provide missing boundary condition tests using `read_bytes_out_of_bounds` and similar cases to increase safety.

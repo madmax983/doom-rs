@@ -2068,4 +2068,13 @@ mod tests {
         let res = load_game(&data);
         assert_eq!(res.expect_err("Must be an error"), SaveError::Truncated);
     }
+
+    // --- Test 34: read_bytes bounds checking ---
+    #[test]
+    fn read_bytes_out_of_bounds() {
+        let data = [1, 2, 3];
+        let mut cursor = ReadCursor::new(&data);
+        let result: Result<[u8; 4], SaveError> = cursor.read_bytes::<4>();
+        assert_eq!(result.expect_err("Must be an error"), SaveError::Truncated);
+    }
 }
