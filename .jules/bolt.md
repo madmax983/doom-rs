@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Remove unneeded clones of level_name in main.rs**
+**Learning:** Returning an `impl Iterator` instead of `.collect()` from a slice filtering function (like `sectors_by_tag`) holds onto the immutable borrow of the parent object. This causes borrow checker failures (`E0502`) if the loop immediately attempts to mutably borrow from that parent object, which is exactly what linedef dispatch handlers in Doom do. So removing the `Vec` allocation in `sectors_by_tag` broke the build, but simpler clones (like strings) were fine to optimize.
+**Action:** When removing `.collect()` to return an iterator, closely inspect the calling loop. If the caller mutates the collection owner inside the loop, the `.collect()` was likely necessary to drop the immutable borrow beforehand.

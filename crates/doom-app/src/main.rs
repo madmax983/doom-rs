@@ -547,7 +547,7 @@ impl DoomGame {
                 // Map skill index to Skill enum (0=Baby..4=Nightmare).
                 let sk = Skill::from_num(skill).unwrap_or(Skill::Medium);
                 // Re-spawn the level with the chosen skill.
-                self.gs = GameState::new(&self.gs.level_name.clone());
+                self.gs = GameState::new(&self.gs.level_name);
                 spawn_level_things(
                     &mut self.gs,
                     &self.level,
@@ -5105,7 +5105,7 @@ mod tests {
         sfx_data.extend_from_slice(&100u32.to_le_bytes()); // sample_count
         sfx_data.extend(vec![128u8; 100]); // 100 samples of silence
 
-        let stack = build_test_wad_stack_from_lumps(vec![(*b"DSPISTOL", sfx_data.clone())], vec![]);
+        let stack = build_test_wad_stack_from_lumps(vec![(*b"DSPISTOL", sfx_data)], vec![]);
 
         let temp_dir = tempfile::tempdir().expect("tempdir must succeed");
         let out_path = temp_dir.path().join("pistol.wav");
