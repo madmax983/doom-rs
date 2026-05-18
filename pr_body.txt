@@ -1,0 +1,4 @@
+🕸️ Tangle: The `crates/doom-game/src/specials.rs` file was a massive "Blob" at nearly 10,000 lines long, of which ~6,200 lines were a huge inline `mod tests` block. This caused severe file bloat and hampered structural understanding of the file's primary responsibilities.
+📐 Blueprint: Extracted the entire test module into a dedicated `crates/doom-game/src/specials/tests.rs` file to cleanly map testing boundaries to their own namespace directory, leaving `mod tests;` in the source file.
+🧱 Stability: This reduces the core logic file size drastically while properly segregating test concerns using idiomatic Rust module hierarchy, lowering cognitive overhead.
+🔬 Verification: Ran `cargo test --workspace` to ensure all functionality is correctly preserved and no module paths were broken. Tests passed perfectly.
