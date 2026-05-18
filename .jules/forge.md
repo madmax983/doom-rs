@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+## 2026-05-18 - Refactored complex iterations in `crates/doom-game/src/specials.rs`
+**Learning:** Large functions (e.g. `p_use_lines`, `ev_do_donut`, and `tick_ceilings`) that mix iteration mechanics with complex body logic (Pyramids of Doom) are difficult to read and maintain, but can be safely refactored using python scripts to extract bodies into helper functions (e.g., `check_and_activate_use_line`, `activate_donut`, `tick_ceiling_down`/`tick_ceiling_up`).
+**Action:** Write precise Python scripts to find exact function boundaries via substring matching rather than regex to replace innermost loops with helper function calls, improving readability via flattened logic without changing behavior.

@@ -1187,98 +1187,103 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
     let mut count = 0;
 
     for ld_idx in ld_indices {
-        let ld = &level.linedefs[ld_idx];
-        // Must be two-sided.
-        if ld.left_sidedef == SIDEDEF_NONE {
-            continue;
+        if activate_donut(gs, level, trigger_sector, ld_idx) {
+            count += 1;
+            break;
         }
-        // The "donut hole" is on the back side.
-        let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
-            continue;
-        };
-        let hole_sector = sd.sector as usize;
-
-        if hole_sector == trigger_sector {
-            continue;
-        }
-
-        // The ring sector provides the target height.
-        // Find it by looking at linedefs fronting the hole sector — the ring
-        // is the other sector that isn't the trigger sector.
-        let hole_ld_indices = sector_linedefs(level, hole_sector);
-        let mut ring_floor: Option<i16> = None;
-
-        for hole_ld in hole_ld_indices {
-            let hld = &level.linedefs[hole_ld];
-            if hld.left_sidedef == SIDEDEF_NONE {
-                continue;
-            }
-            let Some(sd) = level.sidedefs.get(hld.left_sidedef as usize) else {
-                continue;
-            };
-            let ring_sector = sd.sector as usize;
-            if ring_sector != hole_sector && ring_sector != trigger_sector {
-                if let Some(s) = level.sectors.get(ring_sector) {
-                    ring_floor = Some(s.floor_height);
-                    break;
-                }
-            }
-        }
-
-        let target = match ring_floor {
-            Some(h) => h,
-            None => {
-                // Fall back: use trigger sector floor as ring floor.
-                match level.sectors.get(trigger_sector) {
-                    Some(s) => s.floor_height,
-                    None => continue,
-                }
-            }
-        };
-
-        // Skip if already has a mover.
-        if gs
-            .movers
-            .active_floors
-            .iter()
-            .any(|f| f.sector_index == hole_sector)
-        {
-            continue;
-        }
-
-        let Some(s) = level.sectors.get(hole_sector) else {
-            continue;
-        };
-        let hole_sec = s;
-
-        let direction = if target >= hole_sec.floor_height {
-            MoveDirection::Up
-        } else {
-            MoveDirection::Down
-        };
-
-        gs.movers.active_floors.push(FloorMover {
-            sector_index: hole_sector,
-            target_height: target,
-            speed: 1,
-            direction,
-            wait_tics: -1,
-            return_height: hole_sec.floor_height,
-            waiting: false,
-            wait_remaining: 0,
-            crush: crate::state::CrushBehavior::NoCrush,
-            tag: 0,
-            floor_type: FloorType::LowerToLowest,
-        });
-        count += 1;
-
-        // Only create one mover per donut activation.
-        break;
     }
 
     count
 }
 
+/// Attempt to activate a donut effect for a single linedef.
+/// Returns true if the activation succeeded, so the main loop can break.
+fn activate_donut(gs: &mut GameState, level: &Level, trigger_sector: usize, ld_idx: usize) -> bool {
+    let ld = &level.linedefs[ld_idx];
+    // Must be two-sided.
+    if ld.left_sidedef == SIDEDEF_NONE {
+        return false;
+    }
+    // The "donut hole" is on the back side.
+    let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+        return false;
+    };
+    let hole_sector = sd.sector as usize;
+
+    if hole_sector == trigger_sector {
+        return false;
+    }
+
+    // The ring sector provides the target height.
+    // Find it by looking at linedefs fronting the hole sector — the ring
+    // is the other sector that isn't the trigger sector.
+    let hole_ld_indices = sector_linedefs(level, hole_sector);
+    let mut ring_floor: Option<i16> = None;
+
+    for hole_ld in hole_ld_indices {
+        let hld = &level.linedefs[hole_ld];
+        if hld.left_sidedef == SIDEDEF_NONE {
+            continue;
+        }
+        let Some(sd) = level.sidedefs.get(hld.left_sidedef as usize) else {
+            continue;
+        };
+        let ring_sector = sd.sector as usize;
+        if ring_sector != hole_sector && ring_sector != trigger_sector {
+            if let Some(s) = level.sectors.get(ring_sector) {
+                ring_floor = Some(s.floor_height);
+                break;
+            }
+        }
+    }
+
+    let target = match ring_floor {
+        Some(h) => h,
+        None => {
+            // Fall back: use trigger sector floor as ring floor.
+            match level.sectors.get(trigger_sector) {
+                Some(s) => s.floor_height,
+                None => return false,
+            }
+        }
+    };
+
+    // Skip if already has a mover.
+    if gs
+        .movers
+        .active_floors
+        .iter()
+        .any(|f| f.sector_index == hole_sector)
+    {
+        return false;
+    }
+
+    let Some(hole_sec) = level.sectors.get(hole_sector) else {
+        return false;
+    };
+
+    let direction = if target >= hole_sec.floor_height {
+        MoveDirection::Up
+    } else {
+        MoveDirection::Down
+    };
+
+    gs.movers.active_floors.push(FloorMover {
+        sector_index: hole_sector,
+        target_height: target,
+        speed: 1,
+        direction,
+        wait_tics: -1,
+        return_height: hole_sec.floor_height,
+        waiting: false,
+        wait_remaining: 0,
+        crush: crate::state::CrushBehavior::NoCrush,
+        tag: 0,
+        floor_type: FloorType::LowerToLowest,
+    });
+
+    true
+}
 // ---------------------------------------------------------------------------
 // Perpetual platforms
 // ---------------------------------------------------------------------------
@@ -1436,82 +1441,92 @@ pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
 
     active_ceilings.retain_mut(|ceiling| {
         let sector_idx = ceiling.sector_index;
-        let speed = ceiling.speed;
-        let direction = ceiling.direction;
-        let top = ceiling.top_height;
-        let bottom = ceiling.bottom_height;
-        let crush_dmg = ceiling.crush_damage;
-        let remove_when_done = ceiling.remove_when_done;
-        let normal_speed = ceiling.normal_speed;
-        let ceiling_type = ceiling.ceiling_type;
 
         if sector_idx >= level.sectors.len() {
             return false;
         }
 
-        match direction {
-            MoveDirection::Down => {
-                level.sectors[sector_idx].ceil_height -= speed;
-                let ceil = level.sectors[sector_idx].ceil_height;
-                let floor = level.sectors[sector_idx].floor_height;
-
-                // Crush damage: when ceiling is close to floor (within 8 units).
-                if ceil <= floor + 8 && crush_dmg > 0 {
-                    // Simplified: damage player if they are in this sector.
-                    // A proper implementation would iterate all mobjs in the sector.
-                    let player_handle = gs.player.handle;
-                    if let Some(pmo) = gs.mobjslab.get(player_handle) {
-                        if pmo.z.to_int() == floor as i32 {
-                            // Very simplified sector check: just damage if z matches.
-                            gs.damage_player(crush_dmg);
-                        }
-                    }
-
-                    // Slow down to speed 1 when crushing (CrushAndRaise / SilentCrush).
-                    match ceiling_type {
-                        CeilingType::CrushAndRaise | CeilingType::SilentCrush => {
-                            ceiling.speed = 1;
-                        }
-                        _ => {}
-                    }
-                }
-
-                if ceil <= bottom {
-                    level.sectors[sector_idx].ceil_height = bottom;
-                    match ceiling_type {
-                        CeilingType::LowerToFloor | CeilingType::LowerAndCrush => {
-                            // One-shot types: remove when done.
-                            return false;
-                        }
-                        _ => {
-                            // Perpetual types: reverse to Up.
-                            ceiling.direction = MoveDirection::Up;
-                        }
-                    }
-                }
-            }
-            MoveDirection::Up => {
-                // Resume normal speed when going up.
-                ceiling.speed = normal_speed;
-
-                level.sectors[sector_idx].ceil_height += normal_speed;
-                let ceil = level.sectors[sector_idx].ceil_height;
-
-                if ceil >= top {
-                    level.sectors[sector_idx].ceil_height = top;
-                    if remove_when_done {
-                        return false;
-                    }
-                    // Perpetual: reverse back to Down.
-                    ceiling.direction = MoveDirection::Down;
-                }
-            }
+        match ceiling.direction {
+            MoveDirection::Down => tick_ceiling_down(ceiling, gs, level),
+            MoveDirection::Up => tick_ceiling_up(ceiling, level),
         }
-
-        true
     });
 
     gs.movers.active_ceilings = active_ceilings;
+}
+
+/// Handle moving a ceiling downwards. Returns false if the ceiling mover should be removed.
+fn tick_ceiling_down(ceiling: &mut CeilingMover, gs: &mut GameState, level: &mut Level) -> bool {
+    let sector_idx = ceiling.sector_index;
+    let bottom = ceiling.bottom_height;
+    let crush_dmg = ceiling.crush_damage;
+    let ceiling_type = ceiling.ceiling_type;
+
+    level.sectors[sector_idx].ceil_height -= ceiling.speed;
+    let ceil = level.sectors[sector_idx].ceil_height;
+    let floor = level.sectors[sector_idx].floor_height;
+
+    // Crush damage: when ceiling is close to floor (within 8 units).
+    if ceil <= floor + 8 && crush_dmg > 0 {
+        // Simplified: damage player if they are in this sector.
+        // A proper implementation would iterate all mobjs in the sector.
+        let player_handle = gs.player.handle;
+        if let Some(pmo) = gs.mobjslab.get(player_handle) {
+            if pmo.z.to_int() == floor as i32 {
+                // Very simplified sector check: just damage if z matches.
+                gs.damage_player(crush_dmg);
+            }
+        }
+
+        // Slow down to speed 1 when crushing (CrushAndRaise / SilentCrush).
+        match ceiling_type {
+            CeilingType::CrushAndRaise | CeilingType::SilentCrush => {
+                ceiling.speed = 1;
+            }
+            _ => {}
+        }
+    }
+
+    if ceil <= bottom {
+        level.sectors[sector_idx].ceil_height = bottom;
+        match ceiling_type {
+            CeilingType::LowerToFloor | CeilingType::LowerAndCrush => {
+                // One-shot types: remove when done.
+                return false;
+            }
+            _ => {
+                // Perpetual types: reverse to Up.
+                ceiling.direction = MoveDirection::Up;
+            }
+        }
+    }
+
+    true
+}
+
+/// Handle moving a ceiling upwards. Returns false if the ceiling mover should be removed.
+fn tick_ceiling_up(ceiling: &mut CeilingMover, level: &mut Level) -> bool {
+    let sector_idx = ceiling.sector_index;
+    let normal_speed = ceiling.normal_speed;
+    let top = ceiling.top_height;
+    let remove_when_done = ceiling.remove_when_done;
+
+    // Resume normal speed when going up.
+    ceiling.speed = normal_speed;
+
+    level.sectors[sector_idx].ceil_height += normal_speed;
+    let ceil = level.sectors[sector_idx].ceil_height;
+
+    if ceil >= top {
+        level.sectors[sector_idx].ceil_height = top;
+        if remove_when_done {
+            return false;
+        }
+        // Perpetual: reverse back to Down.
+        ceiling.direction = MoveDirection::Down;
+    }
+
+    true
 }
 
 // ---------------------------------------------------------------------------
