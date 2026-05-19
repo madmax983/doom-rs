@@ -170,3 +170,326 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use doom_types::weapons::WeaponType;
+
+    #[test]
+    fn test_sound_request_emitter_monster_wake() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let handle = slab.alloc(mobj);
+
+        let req = SoundRequest::MonsterWake(
+            MobjKind::Player,
+            handle,
+            doom_types::Fixed16_16::from_int(100),
+            doom_types::Fixed16_16::from_int(200),
+        );
+
+        let px = doom_types::Fixed16_16::from_int(0);
+        let py = doom_types::Fixed16_16::from_int(0);
+
+        let (x, y) = req.emitter(px, py).expect("must exist");
+        assert_eq!(x, doom_types::Fixed16_16::from_int(100));
+        assert_eq!(y, doom_types::Fixed16_16::from_int(200));
+    }
+
+    #[test]
+    fn test_sound_request_emitter_monster_attack() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let handle = slab.alloc(mobj);
+
+        let req = SoundRequest::MonsterAttack(
+            MobjKind::Player,
+            handle,
+            doom_types::Fixed16_16::from_int(300),
+            doom_types::Fixed16_16::from_int(400),
+        );
+
+        let px = doom_types::Fixed16_16::from_int(0);
+        let py = doom_types::Fixed16_16::from_int(0);
+
+        let (x, y) = req.emitter(px, py).expect("must exist");
+        assert_eq!(x, doom_types::Fixed16_16::from_int(300));
+        assert_eq!(y, doom_types::Fixed16_16::from_int(400));
+    }
+
+    #[test]
+    fn test_sound_request_emitter_monster_die() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let handle = slab.alloc(mobj);
+
+        let req = SoundRequest::MonsterDie(
+            MobjKind::Player,
+            handle,
+            doom_types::Fixed16_16::from_int(500),
+            doom_types::Fixed16_16::from_int(600),
+        );
+
+        let px = doom_types::Fixed16_16::from_int(0);
+        let py = doom_types::Fixed16_16::from_int(0);
+
+        let (x, y) = req.emitter(px, py).expect("must exist");
+        assert_eq!(x, doom_types::Fixed16_16::from_int(500));
+        assert_eq!(y, doom_types::Fixed16_16::from_int(600));
+    }
+
+    #[test]
+    fn test_sound_request_emitter_player_weapon_fire() {
+        let req = SoundRequest::PlayerWeaponFire(WeaponType::Pistol);
+        let px = doom_types::Fixed16_16::from_int(700);
+        let py = doom_types::Fixed16_16::from_int(800);
+
+        let (x, y) = req.emitter(px, py).expect("must exist");
+        assert_eq!(x, px);
+        assert_eq!(y, py);
+    }
+
+    #[test]
+    fn test_sound_request_emitter_player_ssg_open() {
+        let req = SoundRequest::PlayerSuperShotgunOpen;
+        let px = doom_types::Fixed16_16::from_int(10);
+        let py = doom_types::Fixed16_16::from_int(20);
+
+        let (x, y) = req.emitter(px, py).expect("must exist");
+        assert_eq!(x, px);
+        assert_eq!(y, py);
+    }
+
+    #[test]
+    fn test_sound_request_emitter_player_ssg_load() {
+        let req = SoundRequest::PlayerSuperShotgunLoad;
+        let px = doom_types::Fixed16_16::from_int(30);
+        let py = doom_types::Fixed16_16::from_int(40);
+
+        let (x, y) = req.emitter(px, py).expect("must exist");
+        assert_eq!(x, px);
+        assert_eq!(y, py);
+    }
+
+    #[test]
+    fn test_sound_request_emitter_player_ssg_close() {
+        let req = SoundRequest::PlayerSuperShotgunClose;
+        let px = doom_types::Fixed16_16::from_int(50);
+        let py = doom_types::Fixed16_16::from_int(60);
+
+        let (x, y) = req.emitter(px, py).expect("must exist");
+        assert_eq!(x, px);
+        assert_eq!(y, py);
+    }
+
+    #[test]
+    fn test_sound_request_emitter_player_die() {
+        let req = SoundRequest::PlayerDie;
+        let px = doom_types::Fixed16_16::from_int(10);
+        let py = doom_types::Fixed16_16::from_int(20);
+
+        assert_eq!(req.emitter(px, py), None);
+    }
+
+    #[test]
+    fn test_sound_request_emitter_player_use_fail() {
+        let req = SoundRequest::PlayerUseFail;
+        let px = doom_types::Fixed16_16::from_int(10);
+        let py = doom_types::Fixed16_16::from_int(20);
+
+        assert_eq!(req.emitter(px, py), None);
+    }
+
+    #[test]
+    fn test_sound_request_emitter_player_use_locked_door() {
+        let req = SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red);
+        let px = doom_types::Fixed16_16::from_int(10);
+        let py = doom_types::Fixed16_16::from_int(20);
+
+        assert_eq!(req.emitter(px, py), None);
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle_monster_wake() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let handle = slab.alloc(mobj);
+
+        let req = SoundRequest::MonsterWake(
+            MobjKind::Player,
+            handle,
+            doom_types::Fixed16_16::from_int(100),
+            doom_types::Fixed16_16::from_int(200),
+        );
+
+        assert_eq!(req.origin_handle(None), Some(handle));
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle_monster_attack() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let handle = slab.alloc(mobj);
+
+        let req = SoundRequest::MonsterAttack(
+            MobjKind::Player,
+            handle,
+            doom_types::Fixed16_16::from_int(100),
+            doom_types::Fixed16_16::from_int(200),
+        );
+
+        assert_eq!(req.origin_handle(None), Some(handle));
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle_monster_die() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let handle = slab.alloc(mobj);
+
+        let req = SoundRequest::MonsterDie(
+            MobjKind::Player,
+            handle,
+            doom_types::Fixed16_16::from_int(100),
+            doom_types::Fixed16_16::from_int(200),
+        );
+
+        assert_eq!(req.origin_handle(None), Some(handle));
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle_player_weapon_fire() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let player_handle = slab.alloc(mobj);
+
+        let req = SoundRequest::PlayerWeaponFire(WeaponType::Pistol);
+        assert_eq!(req.origin_handle(Some(player_handle)), Some(player_handle));
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle_player_ssg_open() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let player_handle = slab.alloc(mobj);
+
+        let req = SoundRequest::PlayerSuperShotgunOpen;
+        assert_eq!(req.origin_handle(Some(player_handle)), Some(player_handle));
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle_player_ssg_load() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let player_handle = slab.alloc(mobj);
+
+        let req = SoundRequest::PlayerSuperShotgunLoad;
+        assert_eq!(req.origin_handle(Some(player_handle)), Some(player_handle));
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle_player_ssg_close() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let player_handle = slab.alloc(mobj);
+
+        let req = SoundRequest::PlayerSuperShotgunClose;
+        assert_eq!(req.origin_handle(Some(player_handle)), Some(player_handle));
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle_player_die() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let player_handle = slab.alloc(mobj);
+
+        let req = SoundRequest::PlayerDie;
+        assert_eq!(req.origin_handle(Some(player_handle)), None);
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle_player_use_fail() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let player_handle = slab.alloc(mobj);
+
+        let req = SoundRequest::PlayerUseFail;
+        assert_eq!(req.origin_handle(Some(player_handle)), None);
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle_player_use_locked_door() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            doom_types::Fixed16_16::from_raw(100),
+            doom_types::Fixed16_16::from_raw(200),
+            doom_types::Bam::ZERO,
+        );
+        let player_handle = slab.alloc(mobj);
+
+        let req = SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red);
+        assert_eq!(req.origin_handle(Some(player_handle)), None);
+    }
+}

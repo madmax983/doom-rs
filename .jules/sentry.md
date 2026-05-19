@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-19 - Coverage for SoundRequest methods
+**Learning:** `SoundRequest::emitter` and `SoundRequest::origin_handle` methods in `doom-game` were untested, and their behavior mapping sound events to coordinates or mobj handles lacked explicit safety verification.
+**Action:** Added targeted unit tests exercising all variants of `SoundRequest` to ensure correct extraction of coordinates and origins, achieving 100% coverage in `sound_prop.rs`.
