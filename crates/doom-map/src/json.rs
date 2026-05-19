@@ -4,7 +4,7 @@
 //! serializes a high-level summary of a [`Level`]'s statistics
 //! and composition into a JSON string.
 //!
-//! # Examples
+//! ## Examples
 //! ```
 //! use doom_map::Level;
 //! use doom_map::json::export_map_to_json;

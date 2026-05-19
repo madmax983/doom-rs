@@ -4,7 +4,7 @@
 //! **Chokepoints**: (Articulation Points) Ssectors that, if removed, would split the map into two disconnected halves.
 //! **Isolated Areas**: Finds distinct disconnected clusters of sectors within the map.
 //!
-//! # Examples
+//! ## Examples
 //! ```
 //! use doom_map::SectorGraph;
 //! use doom_map::analyzer::MapAnalyzer;
@@ -39,7 +39,7 @@ impl<'a> MapAnalyzer<'a> {
     /// map areas to discover chokepoints and isolated zones. This is vital for
     /// understanding the flow of a map and predicting where players might get trapped.
     ///
-    /// # Examples
+    /// ## Examples
     ///
     /// ```
     /// use doom_map::SectorGraph;
@@ -142,7 +142,7 @@ impl<'a> MapAnalyzer<'a> {
 
     /// Finds distinct disconnected areas of the map.
     ///
-    /// # Examples
+    /// ## Examples
     ///
     /// ```
     /// use doom_map::SectorGraph;

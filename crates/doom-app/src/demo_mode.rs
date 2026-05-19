@@ -22,7 +22,7 @@ use crate::net_mode::ticinput_to_ticcmd;
 ///
 /// When the wrapper is dropped the accumulated demo is written to `save_path`.
 ///
-/// # Examples
+/// ## Examples
 /// ```no_run
 /// # use doom_app::demo_mode::DemoRecordingWrapper;
 /// # use doom_app::DoomGame;
@@ -136,7 +136,7 @@ impl Drop for DemoRecordingWrapper {
 /// When the demo is exhausted the last rendered frame stays frozen until the
 /// user quits (Q/Esc via the event loop).
 ///
-/// # Examples
+/// ## Examples
 /// ```no_run
 /// # use doom_app::demo_mode::DemoPlaybackApp;
 /// # use doom_app::DoomGame;

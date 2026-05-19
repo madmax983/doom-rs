@@ -97,7 +97,7 @@ pub(crate) const fn save_format_for_compat(compat: CompatibilityProfile) -> Save
 /// Overwrites any existing file at `path` without mercy.
 /// The game is saved into a specific `slot` for easy retrieval.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust,no_run
 /// # use doom_app::savegame::save_game;
@@ -115,7 +115,7 @@ pub(crate) const fn save_format_for_compat(compat: CompatibilityProfile) -> Save
 ///     .expect("Failed to write save file!");
 /// ```
 ///
-/// # Errors
+/// ## Errors
 /// Returns [`SaveError::Io`] if the disk write fails (e.g., read-only filesystem).
 /// Returns [`SaveError::UnsupportedVanillaDsg`] when strict compatibility is
 /// selected before vanilla payload support exists.
@@ -161,7 +161,7 @@ pub(crate) fn save_game_with_format(
 /// compatibility profile, and returns both the parsed header and the complete
 /// [`SaveGame`] payload.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust,no_run
 /// # use doom_app::savegame::load_game;
@@ -179,7 +179,7 @@ pub(crate) fn save_game_with_format(
 /// }
 /// ```
 ///
-/// # Errors
+/// ## Errors
 /// * Returns [`SaveError::Io`] if the file cannot be read.
 /// * Returns [`SaveError::Truncated`] if the binary format is malformed or cut off.
 /// * Returns [`SaveError::BadMagic`] if the file header does not match a recognized save format.
@@ -224,7 +224,7 @@ pub(crate) fn load_game_with_format(
 /// system restores the *complete* simulation. Every Mobj, sector mover, and RNG
 /// index is brought back to the exact moment it was saved.
 ///
-/// # The Hero's Journey
+/// ## Examples
 ///
 /// ```rust,no_run
 /// # use doom_app::savegame::{load_game, apply_save};
@@ -240,7 +240,7 @@ pub(crate) fn load_game_with_format(
 /// }
 /// ```
 ///
-/// # Errors
+/// ## Errors
 /// Currently always returns `Ok(())`, but exists as a `Result` for future-proofing
 /// validation logic.
 pub(crate) fn apply_save(gs: &mut GameState, payload: &SaveGame) -> Result<(), SaveError> {
