@@ -39,3 +39,9 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-05-19 - [Added doc tests for SectorGraph module]
+**Confusion:** The  struct and its methods (, , ) lacked executable examples, making it difficult for users to understand how to construct and use the graph from a .
+**Clarification:** Added explicit  doc-tests to all public methods in , using a manually constructed  and simple graphs to demonstrate connectivity, pathfinding, and DOT export.
+## 2024-08-01 - [Added doc tests for SectorGraph module]
+**Confusion:** The `SectorGraph` struct and its methods (`build`, `shortest_path`, `to_dot`) lacked executable examples, making it difficult for users to understand how to construct and use the graph from a `Level`.
+**Clarification:** Added explicit `## Examples` doc-tests to all public methods in `doom-map::graph::SectorGraph`, using a manually constructed `Level` and simple graphs to demonstrate connectivity, pathfinding, and DOT export.

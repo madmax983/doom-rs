@@ -1,0 +1,49 @@
+   Compiling alsa-sys v0.3.1
+    Checking rand_chacha v0.3.1
+   Compiling rustix v0.38.44
+   Compiling thiserror v1.0.69
+    Checking quantette v0.5.1
+    Checking ratatui-macros v0.7.0
+    Checking ratatui-crossterm v0.1.0
+   Compiling thiserror-impl v1.0.69
+   Compiling cpal v0.15.3
+    Checking vsimd v0.8.0
+   Compiling ratatui-image v10.0.8
+    Checking linux-raw-sys v0.4.15
+    Checking utf8parse v0.2.2
+    Checking outref v0.5.2
+    Checking base64-simd v0.8.0
+    Checking anstyle-parse v1.0.0
+    Checking alsa v0.9.1
+    Checking icy_sixel v0.5.0
+    Checking ratatui v0.30.0
+    Checking rand v0.8.6
+    Checking anstyle v1.0.14
+    Checking is_terminal_polyfill v1.70.2
+    Checking colorchoice v1.0.5
+    Checking anstyle-query v1.1.5
+    Checking dasp_sample v0.11.0
+    Checking anstream v1.0.0
+    Checking doom-renderer v0.1.0 (/app/crates/doom-renderer)
+    Checking strsim v0.11.1
+    Checking clap_lex v1.1.0
+   Compiling clap_derive v4.6.1
+    Checking clap_builder v4.6.0
+    Checking doom-audio v0.1.0 (/app/crates/doom-audio)
+    Checking doom-tui v0.1.0 (/app/crates/doom-tui)
+    Checking comfy-table v7.2.2
+    Checking doom-demo v0.1.0 (/app/crates/doom-demo)
+    Checking doom-net v0.1.0 (/app/crates/doom-net)
+ Documenting doom-tui v0.1.0 (/app/crates/doom-tui)
+ Documenting doom-audio v0.1.0 (/app/crates/doom-audio)
+ Documenting doom-demo v0.1.0 (/app/crates/doom-demo)
+    Checking clap v4.6.1
+ Documenting doom-app v0.1.0 (/app/crates/doom-app)
+ Documenting doom-renderer v0.1.0 (/app/crates/doom-renderer)
+ Documenting doom-game v0.1.0 (/app/crates/doom-game)
+ Documenting doom-map v0.1.0 (/app/crates/doom-map)
+ Documenting doom-wad v0.1.0 (/app/crates/doom-wad)
+ Documenting doom-net v0.1.0 (/app/crates/doom-net)
+ Documenting doom-types v0.1.0 (/app/crates/doom-types)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.28s
+   Generated /app/target/doc/doom_app/index.html and 9 other files
