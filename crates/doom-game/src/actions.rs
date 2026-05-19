@@ -492,9 +492,16 @@ fn p_check_missile_range(
 /// gap too narrow).
 ///
 /// Port of Doom's `P_Move` from `p_enemy.c`.
-pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> bool {
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MoveResult {
+    Success,
+    Blocked,
+}
+
+pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> MoveResult {
     let Some(mo) = gs.mobjslab.get(handle) else {
-        return false;
+        return MoveResult::Blocked;
     };
     let spd = mobjinfo::MOBJINFO
         .get(mo.kind as usize)
@@ -503,7 +510,7 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
     let (mo_x, mo_y, dir, speed) = (mo.x, mo.y, mo.movedir, spd);
 
     if dir == DI_NODIR || dir > 8 {
-        return false;
+        return MoveResult::Blocked;
     }
 
     let step_x = XMOVE[dir as usize].fixed_mul(speed);
@@ -533,14 +540,14 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
                 mo.subsector = subsector as u32;
             }
         }
-        true
+        MoveResult::Success
     } else {
         // Movement failed. In vanilla Doom, if the blocking linedef is a door,
         // the monster tries to open that exact door linedef.
         if let Some(lv) = level {
             try_open_door(gs, lv, blocking_linedef);
         }
-        false
+        MoveResult::Blocked
     }
 }
 
@@ -679,12 +686,12 @@ fn try_move_in_dir(
     dir: u8,
     speed: Fixed16_16,
     level: Option<&Level>,
-) -> bool {
+) -> MoveResult {
     if dir == DI_NODIR {
-        return false;
+        return MoveResult::Blocked;
     }
     let Some(mo) = gs.mobjslab.get(handle) else {
-        return false;
+        return MoveResult::Blocked;
     };
     let mo_x = mo.x;
     let mo_y = mo.y;
@@ -716,8 +723,18 @@ fn try_move_in_dir(
                 mo.subsector = subsector as u32;
             }
         }
+        if can_move {
+            MoveResult::Success
+        } else {
+            MoveResult::Blocked
+        }
+    } else {
+        if can_move {
+            MoveResult::Success
+        } else {
+            MoveResult::Blocked
+        }
     }
-    can_move
 }
 
 /// Port of `P_NewChaseDir` from Doom's `p_enemy.c`.
@@ -807,7 +824,7 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
         if cand == DI_NODIR {
             break;
         }
-        if try_move_in_dir(gs, handle, cand, speed, level) {
+        if try_move_in_dir(gs, handle, cand, speed, level) == MoveResult::Success {
             // Reset movecount so monster won't re-evaluate direction for a while.
             let rng_val = gs.rng.next_byte() as i32;
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
@@ -822,7 +839,7 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
     let start_dir = gs.rng.next_byte() % 8;
     for i in 0u8..8 {
         let dir = (start_dir + i) % 8;
-        if try_move_in_dir(gs, handle, dir, speed, level) {
+        if try_move_in_dir(gs, handle, dir, speed, level) == MoveResult::Success {
             let rng_val = gs.rng.next_byte() as i32;
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
                 mo.movecount = 4 + (rng_val & 3);
@@ -1019,7 +1036,7 @@ fn do_chase_movement(gs: &mut GameState, handle: MobjHandle, level: Option<&Leve
         mo.movecount < 0
     };
 
-    if need_new_dir || !p_move(gs, handle, level) {
+    if need_new_dir || p_move(gs, handle, level) == MoveResult::Blocked {
         p_new_chase_dir(gs, handle, level);
     }
 }
@@ -2832,7 +2849,10 @@ mod tests {
 
         let moved = p_move(&mut gs, trooper, None);
 
-        assert!(moved, "p_move should succeed without level");
+        assert!(
+            moved == MoveResult::Success,
+            "p_move should succeed without level"
+        );
         let mo = gs.mobjslab.get(trooper).expect("item must exist in tests");
         assert!(
             mo.x < Fixed16_16::from_int(100),
@@ -2851,7 +2871,10 @@ mod tests {
 
         let moved = p_move(&mut gs, trooper, None);
 
-        assert!(!moved, "p_move with DI_NODIR should return false");
+        assert!(
+            moved == MoveResult::Blocked,
+            "p_move with DI_NODIR should return false"
+        );
     }
 
     #[test]
@@ -2862,7 +2885,10 @@ mod tests {
 
         let moved = p_move(&mut gs, trooper, None);
 
-        assert!(!moved, "p_move with stale handle should return false");
+        assert!(
+            moved == MoveResult::Blocked,
+            "p_move with stale handle should return false"
+        );
     }
 
     #[test]
@@ -2969,7 +2995,10 @@ mod tests {
 
         let moved = p_move(&mut gs, trooper, Some(&level));
 
-        assert!(!moved, "the move should be blocked by the near door");
+        assert!(
+            moved == MoveResult::Blocked,
+            "the move should be blocked by the near door"
+        );
         assert_eq!(
             gs.movers.active_doors.len(),
             1,
@@ -3601,7 +3630,11 @@ mod tests {
                 .y;
 
             let moved = p_move(&mut gs, trooper, None);
-            assert!(moved, "p_move should succeed for dir={}", dir);
+            assert!(
+                moved == MoveResult::Success,
+                "p_move should succeed for dir={}",
+                dir
+            );
 
             let mo = gs.mobjslab.get(trooper).expect("item must exist in tests");
             let dx = mo.x - old_x;

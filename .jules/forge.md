@@ -63,3 +63,6 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+**[p_move Boolean Return]**
+**Learning:** `p_move` and `try_move_in_dir` returning `bool` to indicate success vs blocked causes "Boolean Blindness". At call sites it's unclear what `true` vs `false` means without consulting docs.
+**Action:** Created a `MoveResult` enum (`Success`, `Blocked`) to self-document the code and make equality tests (`moved == MoveResult::Blocked`) explicit.
