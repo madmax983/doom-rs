@@ -124,7 +124,6 @@ impl Fixed16_16 {
     /// ```
     #[inline]
     pub fn fixed_div(self, rhs: Self) -> Self {
-        debug_assert!(rhs.0 != 0, "FixedDiv: division by zero");
         if rhs.0 == 0 {
             // Havoc 👺: Protect against division by zero in release builds
             return if self.0 >= 0 {
@@ -372,11 +371,13 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn fixed_div_by_zero_panics() {
+    fn fixed_div_by_zero_returns_safe_fallback() {
         let a = Fixed16_16::from_int(10);
         let b = Fixed16_16::ZERO;
-        let _ = a.fixed_div(b);
+        assert_eq!(a.fixed_div(b), Fixed16_16::from_raw(i32::MAX));
+
+        let c = Fixed16_16::from_int(-10);
+        assert_eq!(c.fixed_div(b), Fixed16_16::from_raw(i32::MIN));
     }
 
     #[test]
@@ -448,9 +449,7 @@ mod prop_tests {
         fn fixed_div_does_not_panic(a in any::<i32>(), b in any::<i32>()) {
             let dividend = Fixed16_16(a);
             let divisor = Fixed16_16(b);
-            if b != 0 {
-                let _ = dividend.fixed_div(divisor);
-            }
+            let _ = dividend.fixed_div(divisor);
         }
     }
 }
