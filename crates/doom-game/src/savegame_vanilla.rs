@@ -4,7 +4,7 @@
 //! parse the fixed vanilla header, but full payload read/write still returns an
 //! explicit unsupported error until the engine has a faithful serializer.
 
-use crate::savegame::{SaveError, SaveGame};
+use crate::savegame_types::{SaveError, SaveGame};
 use crate::state::GameState;
 
 /// Bytes in the fixed vanilla savegame header before the serialized payload.

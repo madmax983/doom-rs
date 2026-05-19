@@ -16,12 +16,14 @@ pub mod automap;
 pub mod cheats;
 pub mod combat;
 pub mod dehacked;
+pub mod events;
 pub mod face;
 pub mod intermission;
 pub mod linedef_dispatch;
 pub mod menu;
 pub mod mobj;
 pub mod mobjinfo;
+pub mod mode;
 pub mod movement;
 /// Mover structures and functions for things like doors, ceilings, and floors.
 pub mod movers;
@@ -30,7 +32,9 @@ pub mod pickups;
 pub mod player;
 pub mod projectile;
 pub mod random;
+pub mod rng;
 pub mod savegame;
+pub mod savegame_types;
 mod savegame_vanilla;
 pub mod sight;
 pub mod snapshot;
@@ -69,6 +73,7 @@ pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_
 pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
+pub use events::{ExitRequest, LockedDoorColor};
 pub use face::{FaceDir, FaceKind, FaceState, face_patch_name, health_tier};
 pub use intermission::{IntermissionStats, par_time};
 pub use linedef_dispatch::{
@@ -78,6 +83,7 @@ pub use linedef_dispatch::{
 pub use menu::{GameMenu, MenuAction, MenuItem, MenuPage, MenuResult, TitlePhase, TitleScreen};
 pub use mobj::{Mobj, MobjHandle, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
+pub use mode::{GameMode, Skill};
 pub use movement::{MAX_STEP_HEIGHT, p_slide_move, p_try_move};
 pub use movers::{
     CeilingMover, CeilingType, ConveyorBelt, CrushBehavior, DoorMover, FloorMover, FloorType,
@@ -109,7 +115,7 @@ pub use sound::{
     monster_should_wake, p_noise_alert,
 };
 pub use sound_prop::{SoundPropagation, SoundRequest};
-pub use spawn::{GameMode, Skill, spawn_level_things};
+pub use spawn::spawn_level_things;
 pub use specials::{
     StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_ceiling_crush_and_raise,
     ev_ceiling_crush_raise_fast, ev_ceiling_crush_stop, ev_ceiling_lower_and_crush,
@@ -120,7 +126,7 @@ pub use specials::{
     tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
     tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
-pub use state::{ExitRequest, GameState, LockedDoorColor};
+pub use state::GameState;
 pub use states::STATES;
 pub use states::sprite_names;
 pub use stats::LevelStats;

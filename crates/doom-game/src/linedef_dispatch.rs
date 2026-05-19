@@ -11,8 +11,9 @@
 
 use doom_map::Level;
 
+use crate::events::{ExitRequest, LockedDoorColor};
 use crate::mobj::MobjHandle;
-use crate::state::{ExitRequest, GameState, LockedDoorColor, SoundRequest};
+use crate::state::{GameState, SoundRequest};
 use crate::switch::KeyType;
 
 // ---------------------------------------------------------------------------

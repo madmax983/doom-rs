@@ -13,6 +13,7 @@ use doom_types::{Bam, Fixed16_16};
 
 use crate::mobj::{Mobj, MobjHandle, MobjSlab, StateNum};
 use crate::player::{PlayerState, PspriteState};
+pub use crate::savegame_types::{SaveError, SaveFormat, SaveGame, SaveHeader};
 use crate::savegame_vanilla;
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
@@ -35,73 +36,6 @@ pub const MAX_SAVE_SLOTS: usize = 6;
 
 /// Current save format version.
 const SAVE_VERSION: u32 = 3;
-
-/// Supported binary savegame formats.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SaveFormat {
-    /// The project-native `DRS1` save format.
-    DoomRs,
-    /// A vanilla Doom `.dsg` save header/payload boundary.
-    VanillaDsg,
-}
-
-// ---------------------------------------------------------------------------
-// SaveHeader
-// ---------------------------------------------------------------------------
-
-/// Header for a save file — identifies format, level, and slot description.
-#[derive(Debug, Clone)]
-pub struct SaveHeader {
-    /// Magic bytes (`SAVE_MAGIC`).
-    pub magic: [u8; 4],
-    /// Format version (currently 2).
-    pub version: u32,
-    /// Level name, null-padded to 8 bytes (e.g. `b"E1M1\0\0\0\0"`).
-    pub level_name: [u8; 8],
-    /// Skill level (0=Baby .. 4=Nightmare).
-    pub skill: u8,
-    /// Tics elapsed in the current level at save time.
-    pub level_time: u32,
-    /// Player-facing slot description, null-padded to 24 bytes.
-    pub description: [u8; 24],
-}
-
-// ---------------------------------------------------------------------------
-// SaveGame
-// ---------------------------------------------------------------------------
-
-/// The result of a successful `load_game` call.
-#[derive(Debug, Clone)]
-pub struct SaveGame {
-    /// The header read from the save data.
-    pub header: SaveHeader,
-    /// The restored game state.
-    pub state: GameState,
-}
-
-// ---------------------------------------------------------------------------
-// SaveError
-// ---------------------------------------------------------------------------
-
-/// Errors that can occur during `load_game`.
-#[derive(thiserror::Error, Debug, Clone, PartialEq, Eq)]
-pub enum SaveError {
-    /// Input data is too short to contain even a header.
-    #[error("save data too short for header")]
-    TooShort,
-    /// Save data does not match any recognized header.
-    #[error("unrecognized save file header")]
-    BadMagic,
-    /// Format version is not supported.
-    #[error("unsupported save format version")]
-    BadVersion,
-    /// Data ended before all fields could be read.
-    #[error("save data truncated")]
-    Truncated,
-    /// Vanilla DSG payload support is not implemented yet.
-    #[error("vanilla DSG payload support is not implemented yet")]
-    UnsupportedVanillaDsg,
-}
 
 // ---------------------------------------------------------------------------
 // WriteCursor — helper for serialization
