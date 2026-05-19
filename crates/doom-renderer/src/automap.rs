@@ -24,6 +24,7 @@ use doom_game::AutomapCanvas;
 use doom_game::AutomapState;
 use doom_map::Level;
 use doom_types::Bam;
+use doom_types::automap::*;
 
 use crate::framebuffer::Framebuffer;
 use crate::palette::PaletteLut;
@@ -32,30 +33,13 @@ use crate::palette::PaletteLut;
 // Screen constants (mirrors FB_WIDTH / FB_HEIGHT)
 // ---------------------------------------------------------------------------
 
-const SCREEN_W: i32 = 320;
-const SCREEN_H: i32 = 200;
-const HALF_W: i32 = SCREEN_W / 2; // 160
-const HALF_H: i32 = SCREEN_H / 2; // 100
-
 // ---------------------------------------------------------------------------
 // Palette indices -- Doom automap colour scheme (internal, for legacy API)
 // ---------------------------------------------------------------------------
 
-/// One-sided wall (solid, no left sidedef).
-const COLOR_ONE_SIDED: u8 = 176; // red
-/// Two-sided line, no height difference between sectors.
-const COLOR_TWO_SIDED: u8 = 64; // brown
-/// Two-sided line with a floor or ceiling height change.
-const COLOR_HEIGHT_CHANGE: u8 = 231; // yellow
-/// Secret line (linedef flag bit 5).
-const COLOR_SECRET: u8 = 252; // purple
 /// Player arrow marker.
-const COLOR_PLAYER: u8 = 119; // green (classic automap player arrow)
 /// Background fill.
 const COLOR_BACKGROUND: u8 = 0; // black
-
-/// Linedef flag bit 5 -- secret wall.
-const FLAG_SECRET: u16 = 0x0020;
 
 // Padding fraction applied to each side of the computed map bounds (legacy mode).
 const PADDING_FRAC: f32 = 0.05;
@@ -280,7 +264,7 @@ pub fn draw_player_arrow_on_fb(fb: &mut Framebuffer, sx: i32, sy: i32, player_an
         tail_y as i32,
         tip_x as i32,
         tip_y as i32,
-        COLOR_PLAYER,
+        COLOR_PLAYER_ARROW,
     );
     draw_line_fb(
         fb,
@@ -288,7 +272,7 @@ pub fn draw_player_arrow_on_fb(fb: &mut Framebuffer, sx: i32, sy: i32, player_an
         tip_y as i32,
         left_x as i32,
         left_y as i32,
-        COLOR_PLAYER,
+        COLOR_PLAYER_ARROW,
     );
     draw_line_fb(
         fb,
@@ -296,7 +280,7 @@ pub fn draw_player_arrow_on_fb(fb: &mut Framebuffer, sx: i32, sy: i32, player_an
         tip_y as i32,
         right_x as i32,
         right_y as i32,
-        COLOR_PLAYER,
+        COLOR_PLAYER_ARROW,
     );
 }
 
@@ -528,7 +512,7 @@ fn draw_player_arrow_internal(fb: &mut Framebuffer, px: i32, py: i32, player_ang
         tail_y as i32,
         tip_x as i32,
         tip_y as i32,
-        COLOR_PLAYER,
+        COLOR_PLAYER_ARROW,
     );
     // Draw left barb: tip -> left
     draw_line_fb(
@@ -537,7 +521,7 @@ fn draw_player_arrow_internal(fb: &mut Framebuffer, px: i32, py: i32, player_ang
         tip_y as i32,
         left_x as i32,
         left_y as i32,
-        COLOR_PLAYER,
+        COLOR_PLAYER_ARROW,
     );
     // Draw right barb: tip -> right
     draw_line_fb(
@@ -546,7 +530,7 @@ fn draw_player_arrow_internal(fb: &mut Framebuffer, px: i32, py: i32, player_ang
         tip_y as i32,
         right_x as i32,
         right_y as i32,
-        COLOR_PLAYER,
+        COLOR_PLAYER_ARROW,
     );
 }
 
@@ -943,7 +927,7 @@ mod tests {
             tail_y as i32,
             tip_x as i32,
             tip_y as i32,
-            COLOR_PLAYER,
+            COLOR_PLAYER_ARROW,
         );
         draw_line_fb(
             fb,
@@ -951,7 +935,7 @@ mod tests {
             tip_y as i32,
             left_x as i32,
             left_y as i32,
-            COLOR_PLAYER,
+            COLOR_PLAYER_ARROW,
         );
         draw_line_fb(
             fb,
@@ -959,7 +943,7 @@ mod tests {
             tip_y as i32,
             right_x as i32,
             right_y as i32,
-            COLOR_PLAYER,
+            COLOR_PLAYER_ARROW,
         );
     }
 
@@ -1191,7 +1175,7 @@ mod tests {
             tail_y as i32,
             tip_x as i32,
             tip_y as i32,
-            COLOR_PLAYER,
+            COLOR_PLAYER_ARROW,
         );
         // Draw left barb: tip -> left
         draw_line_fb(
@@ -1200,7 +1184,7 @@ mod tests {
             tip_y as i32,
             left_x as i32,
             left_y as i32,
-            COLOR_PLAYER,
+            COLOR_PLAYER_ARROW,
         );
         // Draw right barb: tip -> right
         draw_line_fb(
@@ -1209,7 +1193,7 @@ mod tests {
             tip_y as i32,
             right_x as i32,
             right_y as i32,
-            COLOR_PLAYER,
+            COLOR_PLAYER_ARROW,
         );
     }
 
@@ -2000,11 +1984,7 @@ mod tests {
             render_automap(&mut fb, &level, 100, 0, Bam(0), 1.0, true, false, &seen);
 
             // Should draw the line in UNSEEN colour (gray).
-            let unseen_count = fb
-                .data
-                .iter()
-                .filter(|&&b| b == doom_game::automap::COLOR_UNSEEN)
-                .count();
+            let unseen_count = fb.data.iter().filter(|&&b| b == COLOR_UNSEEN).count();
             assert!(
                 unseen_count > 0,
                 "show_all_lines should reveal hidden lines in unseen colour"
@@ -2274,7 +2254,7 @@ mod tests {
             let player_marker_count = fb
                 .data
                 .iter()
-                .filter(|&&b| b == doom_game::automap::COLOR_PLAYER_MARKER)
+                .filter(|&&b| b == COLOR_PLAYER_MARKER)
                 .count();
             assert!(
                 player_marker_count > 0,
@@ -2382,11 +2362,7 @@ mod tests {
             render_automap(&mut fb, &level, 500, 500, Bam(0), 0.5, true, false, &[true]);
 
             // Grid uses doom_game::COLOR_GRID.
-            let grid_count = fb
-                .data
-                .iter()
-                .filter(|&&b| b == doom_game::automap::COLOR_GRID)
-                .count();
+            let grid_count = fb.data.iter().filter(|&&b| b == COLOR_GRID).count();
             assert!(grid_count > 0, "render_automap should draw grid lines");
         }
     }

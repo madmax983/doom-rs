@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Stop Automap color and coordinate constants Re-export Leak]**
+**Tangle:** The `SCREEN_W`, `SCREEN_H`, and `COLOR_*` constants were defined inside `doom-game/src/automap.rs`. These are UI-centric primitives used across `doom-renderer` and `doom-game`. The renderer was redefining some of them and explicitly pulling others from `doom-game`, creating a dependency from the renderer and game logic just to access basic coordinate sizes and colors.
+**Blueprint:** Extracted the automap constants (`SCREEN_W`, `SCREEN_H`, `HALF_W`, `HALF_H`, `GRID_SPACING`, and `COLOR_*`) into a new file `crates/doom-types/src/automap.rs`. Updated `doom-game` and `doom-renderer` to import these UI primitives directly from the shared `doom-types` crate, resolving the duplicated definitions and enforcing a clean structural hierarchy.

@@ -7,6 +7,7 @@
 #![allow(unexpected_cfgs)]
 
 pub mod angle;
+pub mod automap;
 pub mod bbox;
 pub mod compat;
 pub mod fixed;
