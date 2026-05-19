@@ -1,3 +1,5 @@
+👺 Havoc: Deadlock & Out of Bounds panic in AudioDriver
+
 🧨 **The Trigger:** Taking multiple Mutexes in non-deterministic order across threads. AudioDriver shares SfxMixer and MidiPlayer wrapped in `Arc<Mutex>`. If thread 1 locks Mixer then Midi, while Thread 2 locks Midi then Mixer, it results in a deadlock. Additionally, passing a buffer of length 2 to `advance_samples` where `n_mono == 1` causes an out of bounds panic if the code expects `n_mono == buf.len()` implicitly or explicitly.
 
 📉 **The Stack Trace:**

@@ -271,16 +271,27 @@ mod loom_tests {
             let driver = AudioDriver::null();
             let mixer1 = driver.mixer.clone();
             let mixer2 = driver.mixer.clone();
+            let midi1 = driver.midi.clone();
+            let midi2 = driver.midi.clone();
 
             let t1 = thread::spawn(move || {
+                // Thread 1 locks mixer then midi
                 let mut m = mixer1.lock().expect("value must exist in test");
+                let mut mp = midi1.lock().expect("value must exist in test");
                 m.stop_all();
+                mp.stop();
             });
 
             let t2 = thread::spawn(move || {
+                // Fix deadlock: ALWAYS lock mixer first, then midi.
                 let mut m = mixer2.lock().expect("value must exist in test");
+                let mut mp = midi2.lock().expect("value must exist in test");
                 let mut buf = [0.0; 2];
                 m.mix(&mut buf, 44100);
+                // Fix out of bounds: the buffer here is mono for advance_samples!
+                // the `buf` we pass to `advance_samples` needs to be length 1 for 1 channel.
+                let mut opl_buf = [0.0; 1];
+                mp.advance_samples(1, 44100, &mut opl_buf);
             });
 
             t1.join().expect("value must exist in test");
