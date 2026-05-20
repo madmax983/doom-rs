@@ -1,3 +1,15 @@
+//! Sector movers: Doors, Floors, Lifts, and Crushers.
+//!
+//! # Living Architecture
+//!
+//! In Doom, the map is not static. Sectors can move up and down, changing the physical
+//! space. This module contains the state types for all moving sector machinery:
+//! `DoorMover`, `CeilingMover` (crushers), `FloorMover`, `LiftMover`, and `PerpetualPlatform`.
+//!
+//! These structs track the starting heights, target heights, speed, and delays for each
+//! moving part. They are ticked every frame by the game loop, mutating the core BSP data
+//! and potentially crushing any actors caught beneath them.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

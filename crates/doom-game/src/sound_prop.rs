@@ -1,3 +1,16 @@
+//! Sound propagation and simulation event queues.
+//!
+//! # The "What", not the "How"
+//!
+//! This module decouples the game simulation from the actual audio playback subsystem.
+//! When monsters roar, weapons fire, or doors clang shut, the game state does not interact
+//! with `cpal` or OPL chips. Instead, it emits `SoundRequest` events into a queue.
+//!
+//! Later, the `doom-app` orchestrator drains this queue, maps the semantic events
+//! (like `PlayerWeaponFire(Shotgun)`) to specific WAD lump names (`DSSHOTGN`), and dispatches
+//! them to the audio backend. This ensures the game logic remains purely deterministic
+//! and purely functional.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

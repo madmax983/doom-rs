@@ -1,3 +1,12 @@
+//! Artificial Intelligence Director.
+//!
+//! # The Puppet Master
+//!
+//! This module provides the `AiDirector`, a high-level system that observes the player's
+//! state and orchestrates the environment to maintain engagement. It monitors the player's
+//! health and decides whether to spawn ambush encounters to challenge a healthy player,
+//! or relief encounters to provide a breather to a dying one.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
