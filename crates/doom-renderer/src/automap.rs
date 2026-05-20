@@ -2003,7 +2003,7 @@ mod tests {
             let unseen_count = fb
                 .data
                 .iter()
-                .filter(|&&b| b == doom_game::automap::COLOR_UNSEEN)
+                .filter(|&&b| b == doom_game::COLOR_UNSEEN)
                 .count();
             assert!(
                 unseen_count > 0,
@@ -2274,7 +2274,7 @@ mod tests {
             let player_marker_count = fb
                 .data
                 .iter()
-                .filter(|&&b| b == doom_game::automap::COLOR_PLAYER_MARKER)
+                .filter(|&&b| b == doom_game::COLOR_PLAYER_MARKER)
                 .count();
             assert!(
                 player_marker_count > 0,
@@ -2385,7 +2385,7 @@ mod tests {
             let grid_count = fb
                 .data
                 .iter()
-                .filter(|&&b| b == doom_game::automap::COLOR_GRID)
+                .filter(|&&b| b == doom_game::COLOR_GRID)
                 .count();
             assert!(grid_count > 0, "render_automap should draw grid lines");
         }

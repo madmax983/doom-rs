@@ -11,50 +11,50 @@
 //! - `player.ammo[i] ≤ MAX_AMMO[i]` for all i.
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
-pub mod actions;
-pub mod automap;
-pub mod cheats;
-pub mod combat;
-pub mod dehacked;
-pub mod face;
-pub mod intermission;
-pub mod linedef_dispatch;
-pub mod menu;
-pub mod mobj;
-pub mod mobjinfo;
-pub mod movement;
+pub(crate) mod actions;
+pub(crate) mod automap;
+pub(crate) mod cheats;
+pub(crate) mod combat;
+pub(crate) mod dehacked;
+pub(crate) mod face;
+pub(crate) mod intermission;
+pub(crate) mod linedef_dispatch;
+pub(crate) mod menu;
+pub(crate) mod mobj;
+pub(crate) mod mobjinfo;
+pub(crate) mod movement;
 /// Mover structures and functions for things like doors, ceilings, and floors.
-pub mod movers;
-pub mod phase;
-pub mod pickups;
-pub mod player;
-pub mod projectile;
-pub mod random;
-pub mod savegame;
+pub(crate) mod movers;
+pub(crate) mod phase;
+pub(crate) mod pickups;
+pub(crate) mod player;
+pub(crate) mod projectile;
+pub(crate) mod random;
+pub(crate) mod savegame;
 mod savegame_vanilla;
-pub mod sight;
-pub mod snapshot;
-pub mod sound;
+pub(crate) mod sight;
+pub(crate) mod snapshot;
+pub(crate) mod sound;
 /// Sound propagation and audio request structs.
-pub mod sound_prop;
-pub mod spawn;
-pub mod specials;
-pub mod state;
-pub mod states;
+pub(crate) mod sound_prop;
+pub(crate) mod spawn;
+pub(crate) mod specials;
+pub(crate) mod state;
+pub(crate) mod states;
 /// Level statistics tracking (kills, items, secrets, etc).
-pub mod stats;
+pub(crate) mod stats;
 #[cfg(feature = "style_meter")]
-pub mod style;
-pub mod switch;
+pub(crate) mod style;
+pub(crate) mod switch;
 #[cfg(feature = "telemetry")]
-pub mod telemetry;
-pub mod tic;
-pub mod trace;
-pub mod weapon_fire;
-pub mod weapons;
+pub(crate) mod telemetry;
+pub(crate) mod tic;
+pub(crate) mod trace;
+pub(crate) mod weapon_fire;
+pub(crate) mod weapons;
 
 #[cfg(feature = "director")]
-pub mod director;
+pub(crate) mod director;
 #[cfg(feature = "director")]
 pub use director::*;
 
@@ -62,7 +62,7 @@ pub use actions::{Action, dispatch_action, p_move, p_new_chase_dir};
 pub use automap::{
     AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
     draw_grid, draw_line, draw_thing_marker, init_seen_lines, line_color, mark_lines_seen,
-    mark_subsector_lines_seen, thing_marker_color, world_to_screen,
+    mark_subsector_lines_seen, thing_marker_color, world_to_screen, COLOR_UNSEEN, COLOR_PLAYER_MARKER, COLOR_GRID,
 };
 pub use cheats::{CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
@@ -75,8 +75,8 @@ pub use linedef_dispatch::{
     LinedefEffect, TriggerType, check_cross_lines, classify_trigger, dispatch_linedef,
     linedef_effect,
 };
-pub use menu::{GameMenu, MenuAction, MenuItem, MenuPage, MenuResult, TitlePhase, TitleScreen};
-pub use mobj::{Mobj, MobjHandle, MobjSlab, StateNum, flags};
+pub use menu::{GameMenu, MenuAction, MenuItem, MenuPage, MenuResult, TitlePhase, TitleScreen, GameVersion};
+pub use mobj::{Mobj, MobjHandle, MobjSlab, StateNum, MobjStateEntry, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_slide_move, p_try_move};
 pub use movers::{
@@ -88,7 +88,7 @@ pub use phase::{GamePhase, GamePhaseController, MapId};
 pub use pickups::{
     doomed_type_to_kind, kind_to_doomed_type, p_check_pickups, p_touch_special_thing,
 };
-pub use player::PlayerState;
+pub use player::{PlayerState, KEY_BLUE_CARD, KEY_YELLOW_CARD, KEY_RED_CARD, KEY_BLUE_SKULL, KEY_YELLOW_SKULL, KEY_RED_SKULL, powers, psprite_slots};
 pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
 };
@@ -122,7 +122,7 @@ pub use specials::{
 };
 pub use state::{ExitRequest, GameState, LockedDoorColor};
 pub use states::STATES;
-pub use states::sprite_names;
+pub use states::{sprite_names, ids};
 pub use stats::LevelStats;
 #[cfg(feature = "style_meter")]
 pub use style::{StyleMeter, StyleRank};

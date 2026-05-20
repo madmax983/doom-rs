@@ -22,7 +22,7 @@
 
 use doom_game::{
     GameState,
-    savegame::{
+    {
         SaveFormat, SaveGame, detect_save_format, load_game as engine_load,
         save_game_with_format as engine_save_with_format,
     },
@@ -65,14 +65,14 @@ pub(crate) enum SaveError {
     UnsupportedVanillaDsg,
 }
 
-impl From<doom_game::savegame::SaveError> for SaveError {
-    fn from(err: doom_game::savegame::SaveError) -> Self {
+impl From<doom_game::SaveError> for SaveError {
+    fn from(err: doom_game::SaveError) -> Self {
         match err {
-            doom_game::savegame::SaveError::TooShort => SaveError::Truncated,
-            doom_game::savegame::SaveError::BadMagic => SaveError::BadMagic,
-            doom_game::savegame::SaveError::BadVersion => SaveError::BadVersion,
-            doom_game::savegame::SaveError::Truncated => SaveError::Truncated,
-            doom_game::savegame::SaveError::UnsupportedVanillaDsg => {
+            doom_game::SaveError::TooShort => SaveError::Truncated,
+            doom_game::SaveError::BadMagic => SaveError::BadMagic,
+            doom_game::SaveError::BadVersion => SaveError::BadVersion,
+            doom_game::SaveError::Truncated => SaveError::Truncated,
+            doom_game::SaveError::UnsupportedVanillaDsg => {
                 SaveError::UnsupportedVanillaDsg
             }
         }
@@ -191,7 +191,7 @@ pub(crate) fn save_game_with_format(
 pub(crate) fn load_game(
     path: &Path,
     compat: CompatibilityProfile,
-) -> Result<(doom_game::savegame::SaveHeader, SaveGame), SaveError> {
+) -> Result<(doom_game::SaveHeader, SaveGame), SaveError> {
     load_game_with_format(path, save_format_for_compat(compat))
 }
 
@@ -199,7 +199,7 @@ pub(crate) fn load_game(
 pub(crate) fn load_game_with_format(
     path: &Path,
     expected_format: SaveFormat,
-) -> Result<(doom_game::savegame::SaveHeader, SaveGame), SaveError> {
+) -> Result<(doom_game::SaveHeader, SaveGame), SaveError> {
     let data = std::fs::read(path)?;
     let actual_format = detect_save_format(&data)?;
     if actual_format != expected_format {
@@ -227,7 +227,7 @@ pub(crate) fn load_game_with_format(
 /// # The Hero's Journey
 ///
 /// ```rust,no_run
-/// # use doom_app::savegame::{load_game, apply_save};
+/// # use doom_app::{load_game, apply_save};
 /// # use doom_game::GameState;
 /// # use doom_types::CompatibilityProfile;
 /// # use std::path::Path;
@@ -257,7 +257,7 @@ pub(crate) fn apply_save(gs: &mut GameState, payload: &SaveGame) -> Result<(), S
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_game::savegame::{SAVE_MAGIC, SaveFormat};
+    use doom_game::{SAVE_MAGIC, SaveFormat};
     use doom_game::{Mobj, PlayerState};
     use doom_types::CompatibilityProfile;
     use doom_types::mobj_kind::MobjKind;
@@ -385,7 +385,7 @@ mod tests {
 
         assert_eq!(
             header.magic,
-            doom_game::savegame::SAVE_MAGIC,
+            doom_game::SAVE_MAGIC,
             "magic must be b\"DRS1\""
         );
         // Description starts with 'Slot 3'.

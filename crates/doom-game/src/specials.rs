@@ -544,6 +544,7 @@ pub fn tick_lights(gs: &mut GameState, level: &mut Level) {
 /// Scan all sectors and spawn light specials based on `sector.special`.
 ///
 /// Call this once after loading a level, before the first tic.
+#[allow(dead_code)]
 pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
     for (i, sector) in level.sectors.iter().enumerate() {
         let Some(effect_type) = LightEffectType::from_repr(sector.special) else {
@@ -719,6 +720,7 @@ pub fn highest_adjacent_ceiling(level: &Level, sector_index: usize) -> i16 {
 ///
 /// This variant accepts an explicit `current_height` parameter, unlike the
 /// zero-arg `next_highest_floor` which uses the sector's own floor height.
+#[allow(dead_code)]
 pub fn next_highest_floor_above(level: &Level, sector_index: usize, current_height: i16) -> i16 {
     adjacent_sectors(level, sector_index)
         .map(|(_, s)| s.floor_height)
@@ -826,6 +828,7 @@ pub fn ev_floor_lower_to_highest(gs: &mut GameState, level: &Level, tag: u16, sp
 /// the sector's current floor. If none, no mover is created.
 /// ⚡ Bolt Optimization:
 /// Avoids intermediate `.collect::<Vec<_>>()` by processing sectors inline.
+#[allow(dead_code)]
 pub fn ev_floor_lower_to_nearest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
     for (idx, s) in level
         .sectors
@@ -969,6 +972,7 @@ pub fn ev_floor_raise_32(gs: &mut GameState, level: &Level, tag: u16, speed: i16
 }
 
 /// Raise floor to the sector's own ceiling on all sectors matching `tag`.
+#[allow(dead_code)]
 pub fn ev_floor_raise_to_ceiling(
     gs: &mut GameState,
     level: &Level,

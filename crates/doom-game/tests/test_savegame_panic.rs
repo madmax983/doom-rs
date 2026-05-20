@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use doom_game::{GameState, savegame::*};
+use doom_game::{GameState, save_game, load_game, SaveError};
 
 #[test]
 fn load_game_panic() {

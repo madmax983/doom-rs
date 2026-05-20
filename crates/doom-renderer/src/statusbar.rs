@@ -18,8 +18,8 @@
 
 use crate::framebuffer::Framebuffer;
 use crate::patch_cache::PatchCache;
-use doom_game::face::{FaceState, face_patch_name};
-use doom_game::player::{
+use doom_game::{FaceState, face_patch_name};
+use doom_game::{
     KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD, KEY_YELLOW_SKULL,
     PlayerState,
 };
@@ -1237,7 +1237,7 @@ pub fn draw_status_bar_wad(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_game::player::PlayerState;
+    use doom_game::PlayerState;
 
     // Helper: a default (pistol-start) player.
     fn default_player() -> PlayerState {

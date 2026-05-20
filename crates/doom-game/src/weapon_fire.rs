@@ -74,6 +74,7 @@ fn weapon_makes_noise(weapon: WeaponType) -> bool {
 }
 
 /// Return the minimum number of tics before `weapon` may fire again.
+#[allow(dead_code)]
 pub fn weapon_refire_tics(weapon: WeaponType) -> u8 {
     match weapon {
         WeaponType::Fist => 12,

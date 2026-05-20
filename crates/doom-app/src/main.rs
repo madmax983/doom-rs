@@ -38,8 +38,8 @@ use clap::Parser;
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::FaceState;
 use doom_game::LockedDoorColor;
-use doom_game::cheats as game_cheats;
-use doom_game::dehacked::DehPatch;
+use doom_game as game_cheats;
+use doom_game::DehPatch;
 use doom_game::{
     AutomapState, GamePhase, GamePhaseController, GameState, Skill, TitleScreen, init_conveyors,
     init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
@@ -290,7 +290,7 @@ pub(crate) struct DoomGame {
     /// First-person view height above the floor, lowered while the player is dead.
     player_view_height: i32,
     /// In-game menu (Esc toggles it).
-    menu: doom_game::menu::GameMenu,
+    menu: doom_game::GameMenu,
     /// Bitmap font for menu/console text rendering.
     bitmap_font: BitmapFont,
     /// WAD patch cache for menu/HUD graphics.
@@ -408,7 +408,7 @@ impl DoomGame {
         // Capture initial player health for pain-flash delta detection.
         let initial_health = gs.player.health();
 
-        let mut menu = doom_game::menu::GameMenu::new(doom_game::menu::GameVersion::Doom1); // false = Doom 1 mode
+        let mut menu = doom_game::GameMenu::new(doom_game::GameVersion::Doom1); // false = Doom 1 mode
         let title_screen = if show_title {
             menu.open();
             Some(TitleScreen::new())
@@ -474,7 +474,7 @@ impl DoomGame {
 
     fn current_fixed_colormap(&self) -> Option<&[u8; 256]> {
         let is_invulnerable =
-            self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+            self.gs.player.powers[doom_game::powers::PW_INVULNERABILITY] > 0;
         let cache = self.colormap_cache.as_ref()?;
         is_invulnerable.then_some(cache.invulnerability_row(self.compat))
     }
@@ -536,14 +536,14 @@ impl DoomGame {
 
     fn enter_title_screen(&mut self) {
         self.title_screen = Some(TitleScreen::new());
-        self.menu = doom_game::menu::GameMenu::new(doom_game::menu::GameVersion::Doom1);
+        self.menu = doom_game::GameMenu::new(doom_game::GameVersion::Doom1);
         self.menu.open();
         self.intermission_renderer = None;
     }
 
-    fn handle_menu_result(&mut self, result: doom_game::menu::MenuResult) {
+    fn handle_menu_result(&mut self, result: doom_game::MenuResult) {
         match result {
-            doom_game::menu::MenuResult::StartGame { episode: _, skill } => {
+            doom_game::MenuResult::StartGame { episode: _, skill } => {
                 // Map skill index to Skill enum (0=Baby..4=Nightmare).
                 let sk = Skill::from_num(skill).unwrap_or(Skill::Medium);
                 // Re-spawn the level with the chosen skill.
@@ -567,12 +567,12 @@ impl DoomGame {
                 self.title_screen = None;
                 self.start_level_music();
             }
-            doom_game::menu::MenuResult::Quit => {
+            doom_game::MenuResult::Quit => {
                 // Can't stop the event loop from here; just close the menu.
                 self.menu.close();
                 self.title_screen = None;
             }
-            doom_game::menu::MenuResult::LoadGame(slot) => {
+            doom_game::MenuResult::LoadGame(slot) => {
                 let path = format!("doom_save_{slot}.bin");
                 match savegame::load_game(std::path::Path::new(&path), self.compat) {
                     Ok((_header, payload)) => {
@@ -597,7 +597,7 @@ impl DoomGame {
                     }
                 }
             }
-            doom_game::menu::MenuResult::SaveGame(slot) => {
+            doom_game::MenuResult::SaveGame(slot) => {
                 let path = format!("doom_save_{slot}.bin");
                 if let Err(e) =
                     savegame::save_game(std::path::Path::new(&path), &self.gs, slot, self.compat)
@@ -677,7 +677,7 @@ impl DoomGame {
             player.kill_count = 0;
             player.item_count = 0;
             player.secret_count = 0;
-            doom_game::weapons::setup_psprites(&mut player);
+            doom_game::setup_psprites(&mut player);
             gs.player = player;
             gs.sync_player_mobj_health();
         }
@@ -712,17 +712,17 @@ impl DoomGame {
     }
 
     fn ensure_player_psprites_initialized(&mut self) {
-        use doom_game::player::psprite_slots;
+        use doom_game::psprite_slots;
 
         let weapon = self.gs.player.psprites[psprite_slots::WEAPON].state;
         let flash = self.gs.player.psprites[psprite_slots::FLASH].state;
         if weapon == doom_game::StateNum::NULL && flash == doom_game::StateNum::NULL {
-            doom_game::weapons::setup_psprites(&mut self.gs.player);
+            doom_game::setup_psprites(&mut self.gs.player);
         }
     }
 
     fn sync_weapon_anim_from_player_psprites(&mut self, motion: WeaponMotion) {
-        use doom_game::player::psprite_slots;
+        use doom_game::psprite_slots;
 
         let weapon_psprite = self.gs.player.psprites[psprite_slots::WEAPON];
         let flash_psprite = self.gs.player.psprites[psprite_slots::FLASH];
@@ -906,7 +906,7 @@ impl DoomGame {
                 let Some(mo) = self.gs.mobjslab.get(h) else {
                     continue;
                 };
-                if mo.flags & doom_game::mobj::flags::MF_COUNTKILL == 0 {
+                if mo.flags & doom_game::flags::MF_COUNTKILL == 0 {
                     continue;
                 }
                 let ex = mo.x.to_int();
@@ -957,9 +957,9 @@ impl DoomGame {
                 let Some(mo) = self.gs.mobjslab.get_mut(h) else {
                     continue;
                 };
-                if mo.flags & doom_game::mobj::flags::MF_SCREAMED != 0 {
+                if mo.flags & doom_game::flags::MF_SCREAMED != 0 {
                     // Clear the flag so we only log once.
-                    mo.flags &= !doom_game::mobj::flags::MF_SCREAMED;
+                    mo.flags &= !doom_game::flags::MF_SCREAMED;
                     let kind = mo.kind;
                     let x = mo.x.to_int();
                     let y = mo.y.to_int();
@@ -1253,7 +1253,7 @@ impl DoomApp for DoomGame {
             {
                 let is_firing = self.gs.player.attack_down;
                 let is_invulnerable =
-                    self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+                    self.gs.player.powers[doom_game::powers::PW_INVULNERABILITY] > 0;
                 self.face_state
                     .tick(cur_health, is_firing, is_invulnerable, None);
             }
@@ -1414,17 +1414,17 @@ impl DoomApp for DoomGame {
                         let state_entry = doom_game::STATES.get(mo.state.0 as usize);
                         let (sprite, frame) = state_entry
                             .map(|s| (s.sprite, s.frame))
-                            .unwrap_or((doom_game::states::sprite_names::SPR_NONE, 0));
+                            .unwrap_or((doom_game::sprite_names::SPR_NONE, 0));
                         // For items whose spawn_state is S_NULL (sprite = SPR_NONE),
                         // fall back to the DoomEd-type-derived prefix so they still render.
-                        let fallback_prefix = if sprite == doom_game::states::sprite_names::SPR_NONE
+                        let fallback_prefix = if sprite == doom_game::sprite_names::SPR_NONE
                         {
                             kind_to_doomed_type(mo.kind).and_then(thing_sprite_prefix)
                         } else {
                             None
                         };
                         // Skip completely if no sprite and no fallback.
-                        if sprite == doom_game::states::sprite_names::SPR_NONE
+                        if sprite == doom_game::sprite_names::SPR_NONE
                             && fallback_prefix.is_none()
                         {
                             return None;
@@ -1543,7 +1543,7 @@ impl DoomApp for DoomGame {
         if self.title_screen.is_some() {
             return None;
         }
-        use doom_game::player::{
+        use doom_game::{
             KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD,
             KEY_YELLOW_SKULL,
         };
@@ -1864,7 +1864,7 @@ fn psprite_patch_name(state: doom_game::StateNum) -> Option<[u8; 8]> {
 }
 
 fn psprite_transition(weapon: WeaponType, state: doom_game::StateNum) -> WeaponTransition {
-    use doom_game::states::ids;
+    use doom_game::ids;
 
     let (up, down) = match weapon {
         WeaponType::Fist => (ids::S_PUNCH_UP, ids::S_PUNCH_DOWN),
@@ -3200,7 +3200,7 @@ fn parse_warp_episode_map(warp: &str) -> (u8, u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_game::cheats as game_cheats;
+    use doom_game as game_cheats;
     use doom_game::{GameState, Mobj, PlayerState, flags};
     use doom_map::{Blockmap, Level, Reject, Sector};
     use doom_types::mobj_kind::MobjKind;
@@ -3397,7 +3397,7 @@ mod tests {
             std::collections::HashMap::new(),
             CompatibilityProfile::VanillaStrict,
         );
-        game.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] = 1;
+        game.gs.player.powers[doom_game::powers::PW_INVULNERABILITY] = 1;
 
         let row = game
             .current_fixed_colormap()
@@ -3422,7 +3422,7 @@ mod tests {
             std::collections::HashMap::new(),
             CompatibilityProfile::Extended,
         );
-        game.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] = 1;
+        game.gs.player.powers[doom_game::powers::PW_INVULNERABILITY] = 1;
 
         let row = game
             .current_fixed_colormap()
@@ -4913,7 +4913,7 @@ mod tests {
 
     #[test]
     fn dehacked_parse_valid_patch() {
-        use doom_game::dehacked::DehPatch;
+        use doom_game::DehPatch;
 
         let patch_text = "Thing 1\nHit points = 200\n";
         let patch = DehPatch::parse(patch_text);

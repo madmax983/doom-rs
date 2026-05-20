@@ -36,6 +36,7 @@ pub const CHEAT_NOCLIP: &[u8] = b"idclip";
 /// Noclip (Doom 1): IDSPISPOPD
 pub const CHEAT_NOCLIP_DOOM1: &[u8] = b"idspispopd";
 /// IDBEHOLD prefix (followed by V, S, I, R, A, or L)
+#[allow(dead_code)]
 pub const CHEAT_BEHOLD_PREFIX: &[u8] = b"idbehold";
 /// Level warp prefix: IDCLEV (followed by 2 digits)
 pub const CHEAT_LEVELWARP: &[u8] = b"idclev";

@@ -465,8 +465,8 @@ impl CogmindState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_game::mobj::flags;
-    use doom_game::player::PlayerState;
+    use doom_game::flags;
+    use doom_game::PlayerState;
     use doom_game::{GameState, Mobj};
     use doom_map::{Blockmap, Reject, Sector, Seg, Sidedef, Ssector};
     use doom_types::mobj_kind::MobjKind;
