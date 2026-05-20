@@ -1,62 +1,42 @@
-import sys
+import re
 
-with open('crates/doom-map/src/analyzer.rs', 'r') as f:
-    code = f.read()
+with open('crates/doom-app/src/main.rs', 'r') as f:
+    content = f.read()
 
-# fix the borrow checker error
-search_str2 = """                        // After visiting all neighbors of u, if u is not root, update parent's low_time
-                        if let Some(&p) = parent.get(&u) {
-                            let low_u = *low_time.get(&u).unwrap();
-                            let low_p = *low_time.get(&p).unwrap();
-                            low_time.insert(p, low_p.min(low_u));
-
-                            let disc_p = *discovery_time.get(&p).unwrap();
-                            if low_u >= disc_p && parent.contains_key(&p) {
-                                articulation_points.insert(p);
-                            }
-                        } else if *children_map.get(&u).unwrap_or(&0) > 1 {
-                            articulation_points.insert(u);
-                        }"""
-
-replace_str2 = """                        // After visiting all neighbors of u, if u is not root, update parent's low_time
-                        if let Some(&p) = parent.get(&u) {
-                            let (low_u, low_p, disc_p) = (
-                                low_time.get(&u).copied(),
-                                low_time.get(&p).copied(),
-                                discovery_time.get(&p).copied(),
+search = """                        if is_tty {
+                            println!(
+                                "{} {} {}",
+                                "🗺️ ".green(),
+                                "Path found:".green().bold(),
+                                path_str.cyan()
                             );
-                            if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p) {
-                                let new_low = low_p.min(low_u);
-                                low_time.insert(p, new_low);
-
-                                if low_u >= disc_p && parent.contains_key(&p) {
-                                    articulation_points.insert(p);
-                                }
-                            }
-                        } else if *children_map.get(&u).unwrap_or(&0) > 1 {
-                            articulation_points.insert(u);
+                        } else {
+                            println!("Path found: {}", path_str);
                         }"""
 
-code = code.replace(search_str2, replace_str2)
-
-search_str3 = """                        } else if parent.get(&u) != Some(&v) {
-                            let low_u = *low_time.get(&u).unwrap();
-                            let disc_v = *discovery_time.get(&v).unwrap();
-                            low_time.insert(u, low_u.min(disc_v));
+replace = """                        if is_tty {
+                            let mut table = comfy_table::Table::new();
+                            table
+                                .load_preset(comfy_table::presets::UTF8_FULL)
+                                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+                            table.set_header(vec![
+                                comfy_table::Cell::new("Feature")
+                                    .fg(comfy_table::Color::Cyan)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                                comfy_table::Cell::new("Data")
+                                    .fg(comfy_table::Color::Cyan)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("🗺️  Path found:"),
+                                comfy_table::Cell::new(&path_str).fg(comfy_table::Color::Green),
+                            ]);
+                            println!("{table}");
+                        } else {
+                            println!("Path found: {}", path_str);
                         }"""
 
-replace_str3 = """                        } else if parent.get(&u) != Some(&v) {
-                            let (low_u, disc_v) = (
-                                low_time.get(&u).copied(),
-                                discovery_time.get(&v).copied(),
-                            );
-                            if let (Some(low_u), Some(disc_v)) = (low_u, disc_v) {
-                                let new_low = low_u.min(disc_v);
-                                low_time.insert(u, new_low);
-                            }
-                        }"""
-
-code = code.replace(search_str3, replace_str3)
-
-with open('crates/doom-map/src/analyzer.rs', 'w') as f:
-    f.write(code)
+new_content = content.replace(search, replace)
+with open('crates/doom-app/src/main.rs', 'w') as f:
+    f.write(new_content)
