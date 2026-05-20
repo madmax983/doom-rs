@@ -1,0 +1,4 @@
+💡 What: Replaced `Vec::new()` with `Vec::with_capacity(count + 2)` in `render_lines` of `crates/doom-app/src/console.rs`.
+🎯 Why: The console is rendered frequently in TUI mode. Calling `Vec::new()` creates a vector with `0` capacity, leading to dynamic memory re-allocations on the heap every time `lines.push()` is called in the loop.
+📊 Impact: Eliminates multiple heap re-allocations per console render cycle by allocating exactly the required memory up front based on the capped length of the messages deque.
+🔬 Measurement: Run `cargo test -p doom-app` and verify tests pass. Also run `cargo clippy` to verify no warnings.

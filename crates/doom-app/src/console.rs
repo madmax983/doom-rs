@@ -84,9 +84,14 @@ impl Console {
     ///
     /// Returns up to 10 lines suitable for display by a TUI renderer.
     /// Newest messages appear near the top; the current input line is last.
+    /// Renders console messages into a `Vec<String>`.
+    ///
+    /// Pre-allocating `lines` via `with_capacity()` avoids dynamic heap re-allocations
+    /// while repeatedly pushing format strings into the vector.
     #[allow(dead_code)]
     pub(crate) fn render_lines(&self) -> Vec<String> {
-        let mut lines = Vec::new();
+        let count = self.messages.len().min(8);
+        let mut lines = Vec::with_capacity(count + 2);
         lines.push("--- CONSOLE ---".to_string());
         for msg in self.messages.iter().rev().take(8) {
             lines.push(format!("  {msg}"));

@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Optimize render_lines allocation with with_capacity**
+**Learning:** `Vec::new()` creates a vector with 0 capacity and requires dynamic memory reallocations when elements are continually pushed into it during frequent UI loops.
+**Action:** Always pre-calculate the required capacity or sensible maximum limit based on slice properties using `.len()` and use `Vec::with_capacity(limit)` to instantiate the collection.
