@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🎯 Target: Added test `save_error_from_doom_game` in `crates/doom-app/src/savegame.rs`.
+💣 Risk: The app mapped `doom_game::savegame::SaveError` to `doom_app`'s internal `SaveError` implicitly without dedicated verification logic, meaning regressions in error interpretation (like truncations or bad magic mapping) would pass silently.
+🧪 Strategy: Added a strict match check in `save_error_from_doom_game` unit test covering all the relevant `SaveError` types (`TooShort`, `BadMagic`, `BadVersion`, `Truncated`, `UnsupportedVanillaDsg`) against their mapped targets.
+🔬 Verification: Run `cargo test --package doom-app --lib savegame::tests::save_error_from_doom_game`.

@@ -445,4 +445,28 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
     }
+
+    #[test]
+    fn save_error_from_doom_game() {
+        assert!(matches!(
+            SaveError::from(doom_game::savegame::SaveError::TooShort),
+            SaveError::Truncated
+        ));
+        assert!(matches!(
+            SaveError::from(doom_game::savegame::SaveError::BadMagic),
+            SaveError::BadMagic
+        ));
+        assert!(matches!(
+            SaveError::from(doom_game::savegame::SaveError::BadVersion),
+            SaveError::BadVersion
+        ));
+        assert!(matches!(
+            SaveError::from(doom_game::savegame::SaveError::Truncated),
+            SaveError::Truncated
+        ));
+        assert!(matches!(
+            SaveError::from(doom_game::savegame::SaveError::UnsupportedVanillaDsg),
+            SaveError::UnsupportedVanillaDsg
+        ));
+    }
 }
