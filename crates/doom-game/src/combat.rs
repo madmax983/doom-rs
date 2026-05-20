@@ -312,7 +312,7 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         };
         if pain_sn != StateNum::NULL && pain_chance > 0 {
             // Doom's original check: `if (P_Random() < info->painchance)`
-            let roll = gs.p_random();
+            let roll = gs.rng.p_random();
             if roll < pain_chance {
                 if let Some(entry) = crate::states::STATES.get(pain_sn.0 as usize) {
                     let new_tics = entry.tics;
