@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-20 - Fix flaky tests in event_loop.rs
+**Learning:** `MODIFIER_COUNT_LOCK` is a shared global lock meant to synchronize test threads touching static modifiers but some tests skipped taking it, causing concurrent unsynchronized execution resulting in `PoisonError` during testing.
+**Action:** Always verify test mutexes are correctly locked in all unit tests that rely on shared global state variables, or otherwise rewrite them to isolate state instead.

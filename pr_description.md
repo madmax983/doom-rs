@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🎯 Target: Fixed flaky tests in `crates/doom-tui/src/event_loop.rs` by correctly adding Mutex locking and added test coverage for gaps in `crates/doom-types` modules (`angle.rs`, `fixed.rs`, `bbox.rs`).
+💣 Risk: Flaky tests on event loop could sporadically cause CI failures. Missing test coverage for core primitives (`Default` traits and conversion traits) hides untested behavior.
+🧪 Strategy: Acquired `MODIFIER_COUNT_LOCK` across previously concurrent unlocked tests in `event_loop.rs` preventing random poison errors. Added tests validating edge cases for `Default` and `From` trait implementations across `Fixed16_16`, `Bam`, and `BBox` types.
+🔬 Verification: `cargo test -p doom-types` and `cargo test -p doom-tui` pass correctly.

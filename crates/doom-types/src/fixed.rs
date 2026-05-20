@@ -313,6 +313,23 @@ mod tests {
     }
 
     #[test]
+    fn traits_from_i32() {
+        let f: Fixed16_16 = 42.into();
+        assert_eq!(f, Fixed16_16::from_int(42));
+
+        let f2 = Fixed16_16::from_int(42);
+        let i: i32 = f2.into();
+        assert_eq!(i, 42);
+    }
+
+    #[test]
+    fn fixed_div_does_not_panic_on_negative_one2() {
+        let dividend = Fixed16_16(i32::MIN);
+        let divisor = Fixed16_16(-1);
+        let _ = dividend.fixed_div(divisor); // Shouldn't panic!
+    }
+
+    #[test]
     fn fixed_div_overflow_clamping() {
         let a = Fixed16_16::from_int(32767);
         let b = Fixed16_16::from_raw(1); // very small positive

@@ -238,6 +238,19 @@ mod tests {
     }
 
     #[test]
+    fn default_trait() {
+        assert_eq!(
+            BBox::default(),
+            BBox::new(
+                Fixed16_16::ZERO,
+                Fixed16_16::ZERO,
+                Fixed16_16::ZERO,
+                Fixed16_16::ZERO
+            )
+        );
+    }
+
+    #[test]
     fn does_not_contain_outside() {
         let bb = BBox::new(int(10), int(0), int(0), int(10));
         assert!(!bb.contains(Vec2Fixed::from_ints(11, 5)));

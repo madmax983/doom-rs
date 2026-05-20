@@ -296,6 +296,11 @@ mod tests {
     }
 
     #[test]
+    fn default_trait() {
+        assert_eq!(Bam::default(), Bam::ZERO);
+    }
+
+    #[test]
     fn neg_trait() {
         let a = Bam(0x4000_0000);
         assert_eq!(-a, a.negate());

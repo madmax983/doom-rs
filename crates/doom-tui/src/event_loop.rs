@@ -1032,6 +1032,10 @@ mod tests {
 
     #[test]
     fn tic_accumulator_arithmetic_drains_correctly() {
+        let _guard = MODIFIER_COUNT_LOCK
+            .lock()
+            .expect("value must exist in test");
+        reset_modifier_sample_count();
         let mut acc = Duration::ZERO;
         let elapsed = TIC_DURATION * 3 + Duration::from_millis(5);
         acc += elapsed;
@@ -1064,6 +1068,10 @@ mod tests {
 
     #[test]
     fn dummy_app_tick_count() {
+        let _guard = MODIFIER_COUNT_LOCK
+            .lock()
+            .expect("value must exist in test");
+        reset_modifier_sample_count();
         let mut app = CountingApp { ticks: 0 };
         let mut acc = Duration::ZERO;
 
@@ -1114,12 +1122,20 @@ mod tests {
 
     #[test]
     fn default_active_palette_is_zero() {
+        let _guard = MODIFIER_COUNT_LOCK
+            .lock()
+            .expect("value must exist in test");
+        reset_modifier_sample_count();
         let app = CountingApp { ticks: 0 };
         assert_eq!(app.active_palette(), 0);
     }
 
     #[test]
     fn turn_based_wait_generates_recovery_tics() {
+        let _guard = MODIFIER_COUNT_LOCK
+            .lock()
+            .expect("value must exist in test");
+        reset_modifier_sample_count();
         let mut loop_ = make_test_event_loop();
         loop_.set_turn_based_mode(true);
         loop_.input.push_wait();
@@ -1136,6 +1152,10 @@ mod tests {
 
     #[test]
     fn turn_based_held_action_waits_for_release() {
+        let _guard = MODIFIER_COUNT_LOCK
+            .lock()
+            .expect("value must exist in test");
+        reset_modifier_sample_count();
         let mut loop_ = make_test_event_loop();
         loop_.set_turn_based_mode(true);
         loop_.input.key_down(KeyCode::Char('w'));
