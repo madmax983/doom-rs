@@ -1,3 +1,4 @@
+//! AI director and level pacing logic.
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

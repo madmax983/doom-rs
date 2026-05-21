@@ -1,3 +1,4 @@
+//! Sound propagation logic for waking up monsters across sectors.
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

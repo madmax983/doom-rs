@@ -1,3 +1,4 @@
+//! End-of-level statistics tracking for kills, items, and secrets.
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {
