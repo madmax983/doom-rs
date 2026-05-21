@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-21 - Replace unwrap() with expect() in doom-map
+**Learning:** Found instances of `.unwrap()` in map parsing logic, which obscures test failure context or leads to uninformative panics, in violation of Sentry principles.
+**Action:** Replaced `.unwrap()` with `.expect("value must exist")` in `crates/doom-map/src/lumps.rs` and `crates/doom-map/src/analyzer.rs` to explicitly provide failure messages.

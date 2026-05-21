@@ -222,9 +222,9 @@ impl Sidedef {
         Self {
             x_offset: i16::from_le_bytes([b[0], b[1]]),
             y_offset: i16::from_le_bytes([b[2], b[3]]),
-            upper_texture: b[4..12].try_into().unwrap(),
-            lower_texture: b[12..20].try_into().unwrap(),
-            middle_texture: b[20..28].try_into().unwrap(),
+            upper_texture: b[4..12].try_into().expect("value must exist"),
+            lower_texture: b[12..20].try_into().expect("value must exist"),
+            middle_texture: b[20..28].try_into().expect("value must exist"),
             sector: u16::from_le_bytes([b[28], b[29]]),
         }
     }
@@ -518,8 +518,8 @@ impl Sector {
         Self {
             floor_height: i16::from_le_bytes([b[0], b[1]]),
             ceil_height: i16::from_le_bytes([b[2], b[3]]),
-            floor_flat: b[4..12].try_into().unwrap(),
-            ceil_flat: b[12..20].try_into().unwrap(),
+            floor_flat: b[4..12].try_into().expect("value must exist"),
+            ceil_flat: b[12..20].try_into().expect("value must exist"),
             light_level: i16::from_le_bytes([b[20], b[21]]),
             special: u16::from_le_bytes([b[22], b[23]]),
             tag: u16::from_le_bytes([b[24], b[25]]),
@@ -548,7 +548,7 @@ impl Sector {
 /// use doom_map::lumps::Reject;
 ///
 /// let data = vec![0b00000000];
-/// let reject = Reject::parse_lump(&data, 2).unwrap();
+/// let reject = Reject::parse_lump(&data, 2).expect("value must exist");
 /// assert!(reject.visible(0, 1));
 /// ```
 #[derive(Clone, Debug)]
@@ -624,7 +624,7 @@ impl Reject {
 /// data[10..12].copy_from_slice(&0u16.to_le_bytes()); // list start
 /// data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes()); // list end
 ///
-/// let blockmap = Blockmap::parse_lump(&data).unwrap();
+/// let blockmap = Blockmap::parse_lump(&data).expect("value must exist");
 /// let mut it = blockmap.block_linedefs(0, 0);
 /// assert_eq!(it.next(), None);
 /// ```
