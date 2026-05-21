@@ -39,11 +39,11 @@ use crate::wad::{WadError, WadFile, WadKind};
 /// // 2. Push the base game (IWAD) first.
 /// // (Using a minimal 12-byte empty WAD for the example)
 /// let iwad_bytes = b"IWAD\0\0\0\0\x0C\0\0\0".to_vec();
-/// stack.push_iwad(iwad_bytes).unwrap();
+/// stack.push_iwad(iwad_bytes).expect("wad push must succeed");
 ///
 /// // 3. Push any patches (PWADs).
 /// let pwad_bytes = b"PWAD\0\0\0\0\x0C\0\0\0".to_vec();
-/// stack.push_pwad(pwad_bytes).unwrap();
+/// stack.push_pwad(pwad_bytes).expect("wad push must succeed");
 ///
 /// assert_eq!(stack.wad_count(), 2);
 /// ```
@@ -98,7 +98,7 @@ impl WadStack {
     /// ```
     /// use doom_wad::WadStack;
     /// let mut stack = WadStack::new();
-    /// stack.push_iwad(b"IWAD\0\0\0\0\x0C\0\0\0".to_vec()).unwrap();
+    /// stack.push_iwad(b"IWAD\0\0\0\0\x0C\0\0\0".to_vec()).expect("wad push must succeed");
     ///
     /// let minimal_pwad = b"PWAD\0\0\0\0\x0C\0\0\0".to_vec();
     /// assert!(stack.push_pwad(minimal_pwad).is_ok());

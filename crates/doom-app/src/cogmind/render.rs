@@ -79,8 +79,8 @@ impl CogmindState {
     /// # bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
     /// # bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
     /// # bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-    /// # let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
-    /// # let reject = Reject::parse_lump(&[0u8], 0).unwrap();
+    /// # let blockmap = Blockmap::parse_lump(&bm_data).expect("file read or parse must succeed");
+    /// # let reject = Reject::parse_lump(&[0u8], 0).expect("file read or parse must succeed");
     /// # let level = Level {
     /// #     name: "E1M1".to_string(),
     /// #     things: vec![], linedefs: vec![], sidedefs: vec![], vertexes: vec![],
@@ -126,8 +126,8 @@ impl CogmindState {
     /// # bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
     /// # bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
     /// # bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-    /// # let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
-    /// # let reject = Reject::parse_lump(&[0u8], 0).unwrap();
+    /// # let blockmap = Blockmap::parse_lump(&bm_data).expect("file read or parse must succeed");
+    /// # let reject = Reject::parse_lump(&[0u8], 0).expect("file read or parse must succeed");
     /// # let level = Level {
     /// #     name: "E1M1".to_string(),
     /// #     things: vec![], linedefs: vec![], sidedefs: vec![], vertexes: vec![],
@@ -175,8 +175,8 @@ impl CogmindState {
     /// # bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
     /// # bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
     /// # bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
-    /// # let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
-    /// # let reject = Reject::parse_lump(&[0u8], 0).unwrap();
+    /// # let blockmap = Blockmap::parse_lump(&bm_data).expect("file read or parse must succeed");
+    /// # let reject = Reject::parse_lump(&[0u8], 0).expect("file read or parse must succeed");
     /// # let level = Level {
     /// #     name: "E1M1".to_string(),
     /// #     things: vec![], linedefs: vec![], sidedefs: vec![], vertexes: vec![],
