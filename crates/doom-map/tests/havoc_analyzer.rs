@@ -11,9 +11,7 @@ fn havoc_test_analyzer_does_not_panic_on_unconnected_neighbors() {
     adj.insert(0, HashSet::from([1, 2]));
     // 3 connects to 0
     adj.insert(3, HashSet::from([0]));
-    let graph = SectorGraph {
-        adjacency_list: adj,
-    };
+    let graph = SectorGraph::from_adjacency_list_for_testing(adj);
     let analyzer = MapAnalyzer::new(&graph);
     // This should not panic
     let _ = analyzer.chokepoints();
@@ -35,9 +33,7 @@ fn havoc_test_analyzer_does_not_panic_on_asymmetric_edges() {
     adj.insert(4, HashSet::from([2]));
     // Let's assume 2 connects to 4 but 4 doesn't exist? (already tested)
 
-    let graph = SectorGraph {
-        adjacency_list: adj,
-    };
+    let graph = SectorGraph::from_adjacency_list_for_testing(adj);
     let analyzer = MapAnalyzer::new(&graph);
     let _ = analyzer.chokepoints();
 }
@@ -49,9 +45,7 @@ fn havoc_test_analyzer_missing_back_edges() {
     adj.insert(1, HashSet::from([0, 2]));
     // Node 2 missing from adj!
 
-    let graph = SectorGraph {
-        adjacency_list: adj,
-    };
+    let graph = SectorGraph::from_adjacency_list_for_testing(adj);
     let analyzer = MapAnalyzer::new(&graph);
     let _ = analyzer.chokepoints();
 }

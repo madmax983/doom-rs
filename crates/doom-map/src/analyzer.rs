@@ -16,7 +16,7 @@
 //! adj.insert(1, HashSet::from([0, 2]));
 //! adj.insert(2, HashSet::from([0, 1, 3]));
 //! adj.insert(3, HashSet::from([2]));
-//! let graph = SectorGraph { adjacency_list: adj };
+//! let graph = SectorGraph::from_adjacency_list_for_testing(adj);
 //!
 //! let analyzer = MapAnalyzer::new(&graph);
 //!
@@ -51,7 +51,7 @@ impl<'a> MapAnalyzer<'a> {
     /// adj.insert(0, HashSet::from([1]));
     /// adj.insert(1, HashSet::from([0, 2]));
     /// adj.insert(2, HashSet::from([1]));
-    /// let graph = SectorGraph { adjacency_list: adj };
+    /// let graph = SectorGraph::from_adjacency_list_for_testing(adj);
     ///
     /// let analyzer = MapAnalyzer::new(&graph);
     /// assert_eq!(analyzer.chokepoints(), vec![1]); // Sector 1 is a chokepoint!
@@ -155,7 +155,7 @@ impl<'a> MapAnalyzer<'a> {
     /// adj.insert(1, HashSet::from([0]));
     /// adj.insert(2, HashSet::from([3]));
     /// adj.insert(3, HashSet::from([2]));
-    /// let graph = SectorGraph { adjacency_list: adj };
+    /// let graph = SectorGraph::from_adjacency_list_for_testing(adj);
     ///
     /// let analyzer = MapAnalyzer::new(&graph);
     /// let areas = analyzer.isolated_areas();

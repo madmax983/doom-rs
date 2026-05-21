@@ -12,7 +12,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 /// Sectors are nodes, and two-sided linedefs acting as portals are edges.
 pub struct SectorGraph {
     /// Adjacency list: sector_index -> list of connected sector_indices
-    pub adjacency_list: HashMap<usize, HashSet<usize>>,
+    pub(crate) adjacency_list: HashMap<usize, HashSet<usize>>,
 }
 
 impl SectorGraph {
@@ -116,6 +116,12 @@ impl SectorGraph {
 
         dot.push_str("}\n");
         dot
+    }
+
+    /// Helper to construct a graph from an adjacency list directly. Used in integration and documentation tests.
+    #[doc(hidden)]
+    pub fn from_adjacency_list_for_testing(adjacency_list: HashMap<usize, HashSet<usize>>) -> Self {
+        Self { adjacency_list }
     }
 }
 
