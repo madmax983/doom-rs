@@ -1,4 +1,19 @@
+//! Level statistics tracking for end-of-level intermission screens.
+//!
+//! This module contains [`LevelStats`], which tallies kills, items, secrets,
+//! and completion times as the player progresses through a map.
+
 /// End-of-level statistics and map tracking.
+///
+/// # Examples
+///
+/// ```
+/// use doom_game::stats::LevelStats;
+///
+/// let mut stats = LevelStats::default();
+/// stats.kill_count += 1;
+/// assert_eq!(stats.kill_count, 1);
+/// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {
     /// Number of monsters killed by the player so far.

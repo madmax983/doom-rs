@@ -1,3 +1,8 @@
+//! Sector movers and environmental specials (doors, lifts, crushers, lighting).
+//!
+//! This module defines structures that manipulate sector geometry and lighting
+//! over time, such as [`DoorMover`], [`LiftMover`], and [`PerpetualPlatform`].
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

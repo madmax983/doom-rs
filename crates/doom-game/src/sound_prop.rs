@@ -1,3 +1,9 @@
+//! Sound propagation and audio event queuing.
+//!
+//! The simulation emits audio events rather than directly interacting with an
+//! audio API. The [`SoundPropagation`] struct tracks sector audio interactions,
+//! while [`SoundRequest`] represents the actual events.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

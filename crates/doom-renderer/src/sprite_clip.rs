@@ -1,7 +1,24 @@
+//! Hardware-free sprite clipping implementation for software rendering.
+//!
+//! This module provides a stack-based history array, [`SpriteClipHistory`],
+//! which tracks clipping depths without allocating on the heap during rendering.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
 /// In Doom, a single column rarely clips through more than 4-8 portals.
+///
+/// # Examples
+///
+/// ```
+/// use doom_renderer::sprite_clip::SpriteClipHistory;
+/// use doom_renderer::render::SpriteClipStep;
+///
+/// let mut history = SpriteClipHistory::new();
+/// let step = SpriteClipStep { depth: 10.0, row: 5, silhouette_height: 20.0 };
+/// history.push(step);
+/// assert_eq!(history.last(), Some(&step));
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpriteClipHistory {
     steps: [SpriteClipStep; 8],
