@@ -243,10 +243,10 @@ pub(crate) fn load_game_with_format(
 /// # Errors
 /// Currently always returns `Ok(())`, but exists as a `Result` for future-proofing
 /// validation logic.
-pub(crate) fn apply_save(gs: &mut GameState, payload: &SaveGame) -> Result<(), SaveError> {
+pub(crate) fn apply_save(gs: &mut GameState, payload: SaveGame) -> Result<(), SaveError> {
     // Completely overwrite the current game state with the deserialized one.
-    // This is valid because `GameState` implements `Clone` and owns all its data.
-    *gs = payload.state.clone();
+    // This moves the state directly, avoiding a deep clone of the entire game state.
+    *gs = payload.state;
     Ok(())
 }
 
