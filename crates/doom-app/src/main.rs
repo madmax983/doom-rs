@@ -2498,15 +2498,10 @@ fn run_doom(args: Args) -> Result<()> {
                         comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
                     ]);
                 }
+                println!("{table}");
             } else {
-                table.set_header(vec![
-                    comfy_table::Cell::new("Feature"),
-                    comfy_table::Cell::new("Data"),
-                ]);
-                table.add_row(vec![
-                    comfy_table::Cell::new("🗺️  Chokepoints"),
-                    comfy_table::Cell::new(&chokepoints_str),
-                ]);
+                println!("Feature: Data");
+                println!("Chokepoints: {}", chokepoints_str);
                 for (i, area) in areas.iter().enumerate() {
                     let mut area_str = String::new();
                     for (j, s) in area.iter().enumerate() {
@@ -2515,13 +2510,9 @@ fn run_doom(args: Args) -> Result<()> {
                         }
                         area_str.push_str(&s.to_string());
                     }
-                    table.add_row(vec![
-                        comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
-                        comfy_table::Cell::new(area_str),
-                    ]);
+                    println!("Isolated Area {}: {}", i + 1, area_str);
                 }
             }
-            println!("{table}");
         }
         return Ok(());
     }
@@ -2547,9 +2538,10 @@ fn run_doom(args: Args) -> Result<()> {
                         println!("{json_data}");
                     } else {
                         let mut path_str = String::new();
+                        let separator = if is_tty { " ➔ " } else { " -> " };
                         for (j, s) in path.iter().enumerate() {
                             if j > 0 {
-                                path_str.push_str(" ➔ ");
+                                path_str.push_str(separator);
                             }
                             path_str.push_str(&s.to_string());
                         }
@@ -2692,34 +2684,15 @@ fn run_doom(args: Args) -> Result<()> {
                         comfy_table::Cell::new("⏱️  Par Time"),
                         comfy_table::Cell::new(par_time_formatted).fg(comfy_table::Color::Cyan),
                     ]);
+                println!("{table}");
             } else {
-                table
-                    .set_header(vec![
-                        comfy_table::Cell::new("Statistic"),
-                        comfy_table::Cell::new("Value"),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Map"),
-                        comfy_table::Cell::new(warp_str.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Total Kills"),
-                        comfy_table::Cell::new(stats.total_kills.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Total Items"),
-                        comfy_table::Cell::new(stats.total_items.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Total Secrets"),
-                        comfy_table::Cell::new(stats.total_secrets.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Par Time"),
-                        comfy_table::Cell::new(par_time_formatted),
-                    ]);
+                println!("Statistic: Value");
+                println!("Map: {}", warp_str);
+                println!("Total Kills: {}", stats.total_kills);
+                println!("Total Items: {}", stats.total_items);
+                println!("Total Secrets: {}", stats.total_secrets);
+                println!("Par Time: {}", par_time_formatted);
             }
-            println!("{table}");
         }
         return Ok(());
     }
@@ -3064,16 +3037,18 @@ fn main() {
 
     if let Err(err) = run_doom(args) {
         if is_json {
-            // Memory: manually serialize without serde using format!("{:?}", ...) for escaping
-            let mut error_msg = format!("{}", err);
+            // Memory: gracefully avoid raw newlines in json strings
+            // by collecting the error chain into a flat string structure.
+            let mut parts = vec![format!("{}", err)];
             let mut causes = err.chain().skip(1).peekable();
             if causes.peek().is_some() {
-                error_msg.push_str(" \nReason:\n");
+                parts.push("Reason:".to_string());
                 for cause in causes {
-                    error_msg.push_str(&format!("    {}\n", cause));
+                    parts.push(format!("  {}", cause));
                 }
             }
-            let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());
+            let error_msg = parts.join(" | ");
+            let json_data = format!(r#"{{"error": {:?}}}"#, error_msg);
             println!("{json_data}");
         } else {
             use crossterm::style::Stylize;
