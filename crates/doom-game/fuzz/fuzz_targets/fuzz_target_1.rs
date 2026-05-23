@@ -1,3 +1,8 @@
+//! Fuzz target for `DehPatch` parsing.
+//!
+//! This fuzz target ensures that parsing arbitrary Dehacked patch data does not
+//! result in panics or crashes, providing robustness against malformed input.
+
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;

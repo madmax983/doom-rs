@@ -1,3 +1,10 @@
+//! Sound propagation simulation and audio event queues.
+//!
+//! This module tracks audio requests originating from the game simulation
+//! (e.g., monster attacks, player gunfire) and propagates them through sectors
+//! so that other actors can "hear" them. The actual audio playback is deferred
+//! to the presentation layer via `SoundRequest`.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

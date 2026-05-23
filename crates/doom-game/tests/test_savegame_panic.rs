@@ -1,3 +1,8 @@
+//! Tests for savegame load robustness.
+//!
+//! This suite ensures that loading truncated or malformed savegame files
+//! gracefully returns a `SaveError` rather than causing a panic.
+
 #![allow(missing_docs)]
 
 use doom_game::{GameState, savegame::*};

@@ -1,3 +1,6 @@
+//! Havoc tests for `MapAnalyzer` to ensure resilience and avoid panics when processing
+//! malformed, unconnected, or asymmetric sector graphs.
+
 #![allow(missing_docs)]
 
 use doom_map::analyzer::MapAnalyzer;

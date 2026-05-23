@@ -1,3 +1,6 @@
+//! Havoc tests for `Reject` lump parsing to ensure robustness against integer overflows
+//! when processing large or malformed sectors.
+
 #![allow(missing_docs)]
 
 use doom_map::lumps::Reject;

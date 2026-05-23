@@ -1,3 +1,9 @@
+//! Active sector movers, environmental specials, and mechanical map elements.
+//!
+//! This module defines the state and behavior for dynamic geometry in Doom, including
+//! lifts, doors, perpetual platforms, crushers, and scrolling walls. It manages the active
+//! life-cycles of these elements as they wait, move, and reverse direction.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

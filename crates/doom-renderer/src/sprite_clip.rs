@@ -1,3 +1,8 @@
+//! Sprite clipping and portal depth history tracking for the software renderer.
+//!
+//! This module provides a fast, allocation-free history buffer used to determine
+//! if and how sprites are occluded by level geometry.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.

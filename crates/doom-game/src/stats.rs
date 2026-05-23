@@ -1,3 +1,8 @@
+//! End-of-level statistics and map tracking functionality.
+//!
+//! This module contains data structures to track the player's progress through
+//! a level, such as kill counts, item collection, secret discovery, and elapsed time.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {

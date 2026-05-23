@@ -1,3 +1,8 @@
+//! AI Director for dynamic pacing and difficulty adjustments.
+//!
+//! This module analyzes the player's current status (e.g., health levels) to determine
+//! the appropriate level of challenge, deciding whether to spawn ambushes or provide relief.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
