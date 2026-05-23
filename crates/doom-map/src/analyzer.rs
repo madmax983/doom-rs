@@ -162,22 +162,21 @@ impl<'a> MapAnalyzer<'a> {
     /// assert_eq!(areas.len(), 2);
     /// ```
     pub fn isolated_areas(&self) -> Vec<HashSet<usize>> {
-        let mut visited = HashSet::new();
+        let capacity = self.graph.adjacency_list.len();
+        let mut visited = HashSet::with_capacity(capacity);
         let mut components = Vec::new();
 
         for &node in self.graph.adjacency_list.keys() {
-            if !visited.contains(&node) {
+            if visited.insert(node) {
                 let mut component = HashSet::new();
                 let mut queue = vec![node];
-                visited.insert(node);
 
                 while let Some(curr) = queue.pop() {
                     component.insert(curr);
                     if let Some(neighbors) = self.graph.adjacency_list.get(&curr) {
                         for &n in neighbors {
                             // Only traverse edges to nodes that actually exist in the graph.
-                            if self.graph.adjacency_list.contains_key(&n) && !visited.contains(&n) {
-                                visited.insert(n);
+                            if self.graph.adjacency_list.contains_key(&n) && visited.insert(n) {
                                 queue.push(n);
                             }
                         }
@@ -279,6 +278,25 @@ mod tests {
         assert_eq!(areas.len(), 1);
         assert!(areas[0].contains(&0));
         assert!(areas[0].contains(&1));
+    }
+
+    #[test]
+    fn test_isolated_areas_large_linear() {
+        let mut adj = HashMap::new();
+        for i in 0..10000 {
+            adj.insert(i, HashSet::from([i + 1]));
+        }
+        adj.insert(10000, HashSet::from([9999]));
+        for i in 1..10000 {
+            adj.get_mut(&i).unwrap().insert(i - 1);
+        }
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let areas = analyzer.isolated_areas();
+        assert_eq!(areas.len(), 1);
     }
 
     #[test]
