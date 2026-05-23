@@ -63,16 +63,54 @@ impl SessionTelemetry {
 
     /// Exports the telemetry data as a GeoJSON FeatureCollection string.
     /// Player path is exported as a LineString, and significant events as Points.
+    ///
+    /// ⚡ Bolt Optimization:
+    /// Pre-allocates a single string buffer and formats directly into it,
+    /// eliminating intermediate `Vec<String>` allocations and `.join()` overhead.
     #[must_use]
     pub fn export_to_geojson(&self) -> String {
-        let mut features = Vec::new();
-        let mut path_coords = Vec::new();
-        let mut event_features = Vec::new();
+        use std::fmt::Write;
 
+        // Estimate capacity to avoid reallocations:
+        // ~25 bytes per path coordinate, ~200 bytes per event point
+        let mut capacity = 256;
+        let mut path_count = 0;
         for ev in &self.events {
             if ev.kind == TelemetryKind::Position {
-                path_coords.push(format!("[{}, {}]", ev.x, ev.y));
+                capacity += 25;
+                path_count += 1;
             } else {
+                capacity += 200;
+            }
+        }
+
+        let mut out = String::with_capacity(capacity);
+        out.push_str("{\n  \"type\": \"FeatureCollection\",\n  \"features\": [\n");
+
+        let mut first_feature = true;
+
+        if path_count > 0 {
+            out.push_str("    {\n      \"type\": \"Feature\",\n      \"geometry\": {\n        \"type\": \"LineString\",\n        \"coordinates\": [");
+            let mut first_coord = true;
+            for ev in &self.events {
+                if ev.kind == TelemetryKind::Position {
+                    if !first_coord {
+                        out.push_str(", ");
+                    }
+                    let _ = write!(&mut out, "[{}, {}]", ev.x, ev.y);
+                    first_coord = false;
+                }
+            }
+            out.push_str("]\n      },\n      \"properties\": {\n        \"name\": \"Player Path\"\n      }\n    }");
+            first_feature = false;
+        }
+
+        for ev in &self.events {
+            if ev.kind != TelemetryKind::Position {
+                if !first_feature {
+                    out.push_str(",\n");
+                }
+
                 let kind_str = match &ev.kind {
                     TelemetryKind::ItemPickup(_) => "ItemPickup",
                     TelemetryKind::MonsterKill(_) => "MonsterKill",
@@ -80,56 +118,17 @@ impl SessionTelemetry {
                     TelemetryKind::Position => unreachable!(),
                 };
 
-                let desc = format!("{}", ev.kind);
-
-                let feat = format!(
-                    r#"    {{
-      "type": "Feature",
-      "geometry": {{
-        "type": "Point",
-        "coordinates": [{}, {}]
-      }},
-      "properties": {{
-        "tic": {},
-        "kind": "{}",
-        "description": "{}"
-      }}
-    }}"#,
-                    ev.x, ev.y, ev.tic, kind_str, desc
+                let _ = write!(
+                    &mut out,
+                    "    {{\n      \"type\": \"Feature\",\n      \"geometry\": {{\n        \"type\": \"Point\",\n        \"coordinates\": [{}, {}]\n      }},\n      \"properties\": {{\n        \"tic\": {},\n        \"kind\": \"{}\",\n        \"description\": \"{}\"\n      }}\n    }}",
+                    ev.x, ev.y, ev.tic, kind_str, ev.kind
                 );
-                event_features.push(feat);
+                first_feature = false;
             }
         }
 
-        if !path_coords.is_empty() {
-            let path_feat = format!(
-                r#"    {{
-      "type": "Feature",
-      "geometry": {{
-        "type": "LineString",
-        "coordinates": [{}]
-      }},
-      "properties": {{
-        "name": "Player Path"
-      }}
-    }}"#,
-                path_coords.join(", ")
-            );
-            features.push(path_feat);
-        }
-
-        features.extend(event_features);
-        let features_str = features.join(",\n");
-
-        format!(
-            r#"{{
-  "type": "FeatureCollection",
-  "features": [
-{}
-  ]
-}}"#,
-            features_str
-        )
+        out.push_str("\n  ]\n}");
+        out
     }
 }
 

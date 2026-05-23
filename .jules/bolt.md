@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**[GeoJSON Export Zero-Allocation Buffer]**
+**Learning:** `export_to_geojson` in `telemetry.rs` previously allocated intermediate `Vec<String>` and used `format!` inside a loop, resulting in heavy memory churn during serialization of game sessions with many events.
+**Action:** To eliminate intermediate heap allocations and string formatting overhead when building large strings (like JSON/GeoJSON arrays), replace `Vec<String>` and `.join()` with a single pre-allocated `String::with_capacity()` buffer, writing directly to it using `std::fmt::Write` instead of macro-allocating intermediate strings.
