@@ -2457,11 +2457,16 @@ fn run_doom(args: Args) -> Result<()> {
             if chokepoints.is_empty() {
                 chokepoints_str.push_str("None");
             } else {
-                for (i, s) in chokepoints.iter().enumerate() {
+                let limit = 10;
+                for (i, s) in chokepoints.iter().take(limit).enumerate() {
                     if i > 0 {
                         chokepoints_str.push_str(", ");
                     }
                     chokepoints_str.push_str(&s.to_string());
+                }
+                if chokepoints.len() > limit {
+                    chokepoints_str
+                        .push_str(&format!(", ... (and {} more)", chokepoints.len() - limit));
                 }
             }
 
@@ -2487,11 +2492,15 @@ fn run_doom(args: Args) -> Result<()> {
                 ]);
                 for (i, area) in areas.iter().enumerate() {
                     let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
+                    let limit = 10;
+                    for (j, s) in area.iter().take(limit).enumerate() {
                         if j > 0 {
                             area_str.push_str(", ");
                         }
                         area_str.push_str(&s.to_string());
+                    }
+                    if area.len() > limit {
+                        area_str.push_str(&format!(", ... (and {} more)", area.len() - limit));
                     }
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
@@ -2509,11 +2518,15 @@ fn run_doom(args: Args) -> Result<()> {
                 ]);
                 for (i, area) in areas.iter().enumerate() {
                     let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
+                    let limit = 10;
+                    for (j, s) in area.iter().take(limit).enumerate() {
                         if j > 0 {
                             area_str.push_str(", ");
                         }
                         area_str.push_str(&s.to_string());
+                    }
+                    if area.len() > limit {
+                        area_str.push_str(&format!(", ... (and {} more)", area.len() - limit));
                     }
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
@@ -2547,11 +2560,29 @@ fn run_doom(args: Args) -> Result<()> {
                         println!("{json_data}");
                     } else {
                         let mut path_str = String::new();
-                        for (j, s) in path.iter().enumerate() {
-                            if j > 0 {
-                                path_str.push_str(" ➔ ");
+                        let len = path.len();
+                        if len <= 20 {
+                            for (j, s) in path.iter().enumerate() {
+                                if j > 0 {
+                                    path_str.push_str(" ➔ ");
+                                }
+                                path_str.push_str(&s.to_string());
                             }
-                            path_str.push_str(&s.to_string());
+                        } else {
+                            for (j, s) in path.iter().take(10).enumerate() {
+                                if j > 0 {
+                                    path_str.push_str(" ➔ ");
+                                }
+                                path_str.push_str(&s.to_string());
+                            }
+                            path_str
+                                .push_str(&format!(" ➔ ... ({} more sectors) ... ➔ ", len - 20));
+                            for (j, s) in path.iter().skip(len - 10).enumerate() {
+                                if j > 0 {
+                                    path_str.push_str(" ➔ ");
+                                }
+                                path_str.push_str(&s.to_string());
+                            }
                         }
                         if is_tty {
                             println!(
