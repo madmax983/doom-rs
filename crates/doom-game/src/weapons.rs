@@ -380,7 +380,7 @@ fn start_weapon_flash(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
         }
         WeaponType::RocketLauncher => StateNum(ids::S_MISSILE_FLASH1),
         WeaponType::PlasmaRifle => {
-            if gs.p_random() & 1 == 0 {
+            if gs.rng.p_random() & 1 == 0 {
                 StateNum(ids::S_PLASMA_FLASH1)
             } else {
                 StateNum(ids::S_PLASMA_FLASH2)

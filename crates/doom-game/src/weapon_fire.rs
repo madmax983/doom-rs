@@ -115,7 +115,7 @@ fn hitscan_shot_angle(gs: &mut GameState, base_angle: Bam, accurate_first_shot: 
         return base_angle;
     }
 
-    let spread = gs.p_subrandom() << 18;
+    let spread = gs.rng.p_subrandom() << 18;
     Bam(base_angle.0.wrapping_add(spread as u32))
 }
 
@@ -244,7 +244,7 @@ pub fn p_fire_shotgun(gs: &mut GameState, level: Option<&Level>) {
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
 
     for _ in 0..7 {
-        let spread = gs.p_subrandom() << 18;
+        let spread = gs.rng.p_subrandom() << 18;
         let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
         let damage = p_damage_with_variance(gs, 5);
         p_line_attack(
@@ -278,7 +278,7 @@ pub fn p_fire_super_shotgun(gs: &mut GameState, level: Option<&Level>) {
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
 
     for _ in 0..20 {
-        let spread = gs.p_subrandom() << 19;
+        let spread = gs.rng.p_subrandom() << 19;
         let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
         let damage = p_damage_with_variance(gs, 5);
         p_line_attack(
@@ -346,7 +346,7 @@ pub fn p_fire_fist(gs: &mut GameState, level: Option<&Level>) {
         damage *= 10;
     }
 
-    let spread = gs.p_subrandom() << 18;
+    let spread = gs.rng.p_subrandom() << 18;
     let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
 
     let mut intercepts = smallvec::SmallVec::new();
@@ -377,7 +377,7 @@ pub fn p_fire_chainsaw(gs: &mut GameState, level: Option<&Level>) {
 
     let damage = p_damage_with_variance(gs, 2);
 
-    let spread = gs.p_subrandom() << 18;
+    let spread = gs.rng.p_subrandom() << 18;
     let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
 
     // MELEERANGE + 1 map unit for chainsaw (slightly longer reach).
