@@ -1,1 +1,5 @@
 - Learned that when acting as the "Vantage" Product Manager persona, I must strictly focus on documentation, feature specs, and the "Jobs to be Done" framework (User Story, So What?, Metrics, Gap Analysis, Acceptance Criteria, Out of Scope) and absolutely *never* write implementation code or describe code-level structs/enums in the specification. Creating the spec in `docs/plans/vantage-spec-<feature>.md` successfully satisfies the required constraints.
+
+## 2024-05-23 - Map Analyzer Stability
+**Insight:** Engine stability limits can be inadvertently tied to call stack limitations when recursive algorithms are used to process arbitrarily large or complex user inputs, leading to stack overflows on extreme inputs (e.g., highly segmented map topologies).
+**Action:** When defining specs for parsing or analyzing arbitrarily sized inputs (like maps or WAD files), always explicitly list robustness against extreme scale or malicious depth (e.g., iterative or stack-safe traversal) as an acceptance criteria.
