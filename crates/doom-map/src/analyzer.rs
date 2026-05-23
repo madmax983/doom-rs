@@ -62,22 +62,26 @@ impl<'a> MapAnalyzer<'a> {
 
     /// Finds articulation points (sectors that, if removed, disconnect parts of the map).
     pub fn chokepoints(&self) -> Vec<usize> {
-        let mut visited = HashSet::new();
-        let mut discovery_time = HashMap::new();
-        let mut low_time = HashMap::new();
-        let mut parent = HashMap::new();
-        let mut articulation_points = HashSet::new();
-        let mut time = 0;
+        #[derive(Default)]
+        struct DfsState {
+            visited: HashSet<usize>,
+            discovery_time: HashMap<usize, usize>,
+            low_time: HashMap<usize, usize>,
+            parent: HashMap<usize, usize>,
+            articulation_points: HashSet<usize>,
+            time: usize,
+        }
+        let mut state = DfsState::default();
 
         for &node in self.graph.adjacency_list.keys() {
-            if !visited.contains(&node) {
+            if !state.visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
                 let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
 
-                visited.insert(node);
-                time += 1;
-                discovery_time.insert(node, time);
-                low_time.insert(node, time);
+                state.visited.insert(node);
+                state.time += 1;
+                state.discovery_time.insert(node, state.time);
+                state.low_time.insert(node, state.time);
                 let mut children_map: HashMap<usize, usize> = HashMap::new();
 
                 while let Some((u, mut neighbors_iter)) = stack.pop() {
@@ -87,55 +91,55 @@ impl<'a> MapAnalyzer<'a> {
                         if !self.graph.adjacency_list.contains_key(&v) {
                             continue;
                         }
-                        if !visited.contains(&v) {
+                        if !state.visited.contains(&v) {
                             *children_map.entry(u).or_default() += 1;
-                            parent.insert(v, u);
+                            state.parent.insert(v, u);
 
-                            visited.insert(v);
-                            time += 1;
-                            discovery_time.insert(v, time);
-                            low_time.insert(v, time);
+                            state.visited.insert(v);
+                            state.time += 1;
+                            state.discovery_time.insert(v, state.time);
+                            state.low_time.insert(v, state.time);
 
                             stack.push((u, neighbors_iter));
                             stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
                             pushed_child = true;
                             break;
-                        } else if parent.get(&u) != Some(&v) {
+                        } else if state.parent.get(&u) != Some(&v) {
                             let (low_u, disc_v) =
-                                (low_time.get(&u).copied(), discovery_time.get(&v).copied());
+                                (state.low_time.get(&u).copied(), state.discovery_time.get(&v).copied());
                             if let (Some(low_u), Some(disc_v)) = (low_u, disc_v) {
                                 let new_low = low_u.min(disc_v);
-                                low_time.insert(u, new_low);
+                                state.low_time.insert(u, new_low);
                             }
                         }
                     }
 
                     if !pushed_child {
                         // After visiting all neighbors of u, if u is not root, update parent's low_time
-                        if let Some(&p) = parent.get(&u) {
+                        if let Some(&p) = state.parent.get(&u) {
                             let (low_u, low_p, disc_p) = (
-                                low_time.get(&u).copied(),
-                                low_time.get(&p).copied(),
-                                discovery_time.get(&p).copied(),
+                                state.low_time.get(&u).copied(),
+                                state.low_time.get(&p).copied(),
+                                state.discovery_time.get(&p).copied(),
                             );
                             if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p)
                             {
                                 let new_low = low_p.min(low_u);
-                                low_time.insert(p, new_low);
+                                state.low_time.insert(p, new_low);
 
-                                if low_u >= disc_p && parent.contains_key(&p) {
-                                    articulation_points.insert(p);
+                                if low_u >= disc_p && state.parent.contains_key(&p) {
+                                    state.articulation_points.insert(p);
                                 }
                             }
                         } else if *children_map.get(&u).unwrap_or(&0) > 1 {
-                            articulation_points.insert(u);
+                            state.articulation_points.insert(u);
                         }
                     }
                 }
             }
         }
 
-        let mut ap_vec: Vec<usize> = articulation_points.into_iter().collect();
+        let mut ap_vec: Vec<usize> = state.articulation_points.into_iter().collect();
         ap_vec.sort_unstable();
         ap_vec
     }
