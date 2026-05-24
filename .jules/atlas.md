@@ -52,3 +52,6 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+**[Extract DoomRng methods to random.rs]**
+**Tangle:** The `DoomRng` random helper methods `p_random`, `p_random_range`, and `p_subrandom` were implemented on the `GameState` struct in `doom-game/src/state.rs`, coupling general engine logic to specific randomness generation methods and causing unnecessary pollution of the `GameState` API.
+**Blueprint:** Moved `p_random`, `p_random_range`, and `p_subrandom` to be implemented directly on the `DoomRng` struct inside `random.rs`. Updated callers across the crate to use `gs.rng.p_random()` instead of `gs.p_random()`. This enforces higher cohesion within the random module and simplifies `GameState`.
