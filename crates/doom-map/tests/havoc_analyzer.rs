@@ -1,3 +1,4 @@
+//! Havoc chaos testing: Property and edge-case testing for the map analyzer algorithms (chokepoints and isolated areas).
 #![allow(missing_docs)]
 
 use doom_map::analyzer::MapAnalyzer;

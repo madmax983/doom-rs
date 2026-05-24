@@ -1,3 +1,4 @@
+//! LibFuzzer target for Dehacked patch parsing to guarantee safety against malformed input streams.
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;

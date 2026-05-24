@@ -1,3 +1,4 @@
+//! Havoc chaos testing: Stress tests for `analyzer.chokepoints()` to ensure stack overflows are prevented on deeply nested WAD topologies.
 #![allow(missing_docs)]
 
 use doom_map::lumps::Reject;

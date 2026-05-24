@@ -1,3 +1,4 @@
+//! Integration testing for savegame rollback robustness, ensuring corrupted metadata cannot trigger engine panics.
 #![allow(missing_docs)]
 
 use doom_game::{GameState, savegame::*};
