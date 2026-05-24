@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-24 - Document invariants for unwraps
+**Learning:** Found `.unwrap()` calls in `crates/doom-map/src/analyzer.rs` that obscured test failure context and violated Sentrys principles.
+**Action:** Replaced `.unwrap()` with `.expect("...")` explaining the invariant (e.g., node existence guaranteed from `keys()`) to explicitly document the logic and assist debugging.

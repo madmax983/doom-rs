@@ -72,7 +72,7 @@ impl<'a> MapAnalyzer<'a> {
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).expect("node guaranteed to exist as it comes from keys()").iter())];
 
                 visited.insert(node);
                 time += 1;
@@ -97,7 +97,7 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((v, self.graph.adjacency_list.get(&v).expect("v guaranteed to exist due to contains_key check").iter()));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -290,7 +290,7 @@ mod tests {
         }
         adj.insert(10000, HashSet::from([9999]));
         for i in 1..10000 {
-            adj.get_mut(&i).unwrap().insert(i - 1);
+            adj.get_mut(&i).expect("test node guaranteed to exist").insert(i - 1);
         }
 
         let graph = SectorGraph {
