@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Extract State struct for MapAnalyzer to reduce nesting]**
+**Tangle:** The `crates/doom-map/src/analyzer.rs` file contained a huge function `chokepoints()` which performed an iterative DFS algorithm but maintained many independent functional state variables (`visited`, `discovery_time`, `low_time`, `parent`, `articulation_points`, `time`) inline, creating a 'Pyramid of Doom' and low cohesion.
+**Blueprint:** Extracted the variables into a private `ChokepointState` struct and implemented helper methods (`process_node`, `update_low_time`, `finish_child`) to manage the state transitions cleanly. This flattens the nested loop structure and greatly improves code readability without altering behavior.
