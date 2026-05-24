@@ -292,19 +292,35 @@ impl<'a> BspTree<'a> {
             return 0;
         }
         let root = (self.nodes.len() - 1) as u16;
-        self.subtree_depth(BspChild::Node(root))
-    }
 
-    fn subtree_depth(&self, child: BspChild) -> u32 {
-        match child {
-            BspChild::Subsector(_) => 0,
-            BspChild::Node(idx) => {
-                let node = &self.nodes[idx as usize];
-                let left_depth = self.subtree_depth(BspChild::decode(node.left_child));
-                let right_depth = self.subtree_depth(BspChild::decode(node.right_child));
-                1 + left_depth.max(right_depth)
+        let mut max_depth = 0;
+        let mut stack = vec![(BspChild::Node(root), 1)];
+        let mut visited = std::collections::HashSet::new();
+
+        while let Some((child, depth)) = stack.pop() {
+            match child {
+                BspChild::Subsector(_) => {
+                    max_depth = max_depth.max(depth - 1);
+                }
+                BspChild::Node(idx) => {
+                    let idx_usize = idx as usize;
+                    if idx_usize >= self.nodes.len() {
+                        continue;
+                    }
+                    if !visited.insert(idx_usize) {
+                        continue;
+                    }
+
+                    max_depth = max_depth.max(depth);
+                    let node = &self.nodes[idx_usize];
+
+                    stack.push((BspChild::decode(node.right_child), depth + 1));
+                    stack.push((BspChild::decode(node.left_child), depth + 1));
+                }
             }
         }
+
+        max_depth
     }
 
     /// Access the raw node slice.
