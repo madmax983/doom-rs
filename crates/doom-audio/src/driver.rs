@@ -287,4 +287,27 @@ mod loom_tests {
             t2.join().expect("value must exist in test");
         });
     }
+
+    #[test]
+    fn havoc_loom_deadlock_test_2() {
+        loom::model(|| {
+            let driver = AudioDriver::null();
+            let midi1 = driver.midi.clone();
+            let midi2 = driver.midi.clone();
+
+            let t1 = thread::spawn(move || {
+                let mut m = midi1.lock().expect("value must exist in test");
+                m.stop();
+            });
+
+            let t2 = thread::spawn(move || {
+                let mut m = midi2.lock().expect("value must exist in test");
+                let mut buf = [0.0; 2];
+                m.advance_samples(1, 44100, &mut buf);
+            });
+
+            t1.join().expect("value must exist in test");
+            t2.join().expect("value must exist in test");
+        });
+    }
 }

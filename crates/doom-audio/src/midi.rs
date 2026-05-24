@@ -539,7 +539,7 @@ impl MidiPlayer {
             let consumed_idx = (start_pos + step * n_samples as f64).floor() as usize;
             let max_needed = max_interp_idx.max(consumed_idx);
 
-            let mut src = vec![0.0f32; max_needed + 1];
+            let mut src = vec![0.0f32; max_needed + 2];
             src[0] = if self.resample_initialized {
                 self.resample_prev
             } else {
