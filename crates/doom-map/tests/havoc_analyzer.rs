@@ -1,3 +1,5 @@
+//! Tests for chaos/fuzzing edge cases in the map geometry analyzer.
+
 #![allow(missing_docs)]
 
 use doom_map::analyzer::MapAnalyzer;

@@ -1,3 +1,8 @@
+//! Sound propagation and sound event simulation.
+//!
+//! This module defines how sounds propagate through the map structure (sectors),
+//! waking up monsters or triggering events, without handling actual audio output.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

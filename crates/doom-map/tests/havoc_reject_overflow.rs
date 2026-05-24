@@ -1,3 +1,5 @@
+//! Tests for chaos/fuzzing edge cases regarding the Reject table size bounds.
+
 #![allow(missing_docs)]
 
 use doom_map::lumps::Reject;

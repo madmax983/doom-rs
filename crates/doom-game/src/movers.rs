@@ -1,3 +1,8 @@
+//! Moving sector geometry state and types.
+//!
+//! Represents the state of doors, lifts, platforms, and scrolling textures
+//! during active gameplay.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

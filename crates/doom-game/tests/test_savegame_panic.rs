@@ -1,3 +1,5 @@
+//! Tests to ensure savegame serialization and deserialization handle corrupted data gracefully without panicking.
+
 #![allow(missing_docs)]
 
 use doom_game::{GameState, savegame::*};
