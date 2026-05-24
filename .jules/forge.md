@@ -63,3 +63,12 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactoring redundant array indexing in conditionals**
+**Learning:** When multiple  arms conditionally read the same property from an array like , extracting it into a single variable declaration before the  block reduces cognitive load and repetition without altering execution behavior.
+**Action:** Extract redundant property access like  from nested match arms into a single variable bound before the  statement when refactoring large match expressions in structural game logic handlers.
+
+
+**Extracting repeated code from match branches**
+**Learning:** When multiple match branches in large game logic handlers repeatedly extract the same property (like a tag from a linedef array), pulling that declaration above the match block removes redundant boilerplate and flattens structure.
+**Action:** Extract common variable assignments from switch/match branches into a single pre-match binding.

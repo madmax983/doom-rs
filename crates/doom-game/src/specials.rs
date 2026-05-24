@@ -2433,6 +2433,7 @@ fn activate_doors(
     left_sidedef: i16,
     linedef_idx: usize,
 ) {
+    let tag = level.linedefs[linedef_idx].tag;
     match special {
         // --- Type 1: toggle door (immediate, for backward compatibility with existing tests) ---
         1 => {
@@ -2562,7 +2563,6 @@ fn activate_doors(
 
         // --- Type 63: remote tag-based door (open stay) ---
         63 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in level
                 .sectors
                 .iter()
@@ -2585,7 +2585,6 @@ fn activate_doors(
 
         // Type 105: WR Blazing door open-close.
         105 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in level
                 .sectors
                 .iter()
@@ -2604,7 +2603,6 @@ fn activate_doors(
 
         // Type 106: WR Blazing door open-stay.
         106 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in level
                 .sectors
                 .iter()
@@ -2623,7 +2621,6 @@ fn activate_doors(
 
         // Type 107: WR Blazing door close.
         107 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in level
                 .sectors
                 .iter()
@@ -2854,6 +2851,7 @@ fn activate_ceilings(
     left_sidedef: i16,
     linedef_idx: usize,
 ) {
+    let tag = level.linedefs[linedef_idx].tag;
     match special {
         // -----------------------------------------------------------------
         // Crushers
@@ -2861,25 +2859,21 @@ fn activate_ceilings(
 
         // Type 6: W1 Fast crusher ceiling (perpetual, speed=2).
         6 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_ceiling_crush_raise_fast(gs, level, tag, 2);
         }
 
         // Type 25: W1 Slow crusher ceiling (perpetual, speed=1).
         25 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_ceiling_crush_and_raise(gs, level, tag, 1);
         }
 
         // Type 44: W1 Ceiling lower to 8 above floor (one-shot, no crush damage).
         44 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_ceiling_lower_and_crush(gs, level, tag, 2);
         }
 
         // Type 49: S1 Ceiling lower to 8 above floor + crush damage.
         49 => {
-            let tag = level.linedefs[linedef_idx].tag;
             activate_crusher(
                 gs,
                 level,
@@ -2896,31 +2890,26 @@ fn activate_ceilings(
 
         // Type 57: W1 Stop ceiling crusher (remove all crushers matching tag).
         57 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_ceiling_crush_stop(gs, tag);
         }
 
         // Type 72: WR Ceiling lower to 8 above floor.
         72 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_ceiling_lower_and_crush(gs, level, tag, 2);
         }
 
         // Type 73: WR Ceiling crush and raise (slow, perpetual).
         73 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_ceiling_crush_and_raise(gs, level, tag, 1);
         }
 
         // Type 74: WR Stop ceiling crusher.
         74 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_ceiling_crush_stop(gs, tag);
         }
 
         // Type 141: W1 Ceiling crush and raise (silent, perpetual).
         141 => {
-            let tag = level.linedefs[linedef_idx].tag;
             activate_crusher(
                 gs,
                 level,
@@ -2946,6 +2935,7 @@ fn activate_lifts(
     left_sidedef: i16,
     linedef_idx: usize,
 ) {
+    let tag = level.linedefs[linedef_idx].tag;
     match special {
         // -----------------------------------------------------------------
         // Lifts (lower-wait-raise)
@@ -2953,37 +2943,31 @@ fn activate_lifts(
 
         // Type 62: Plat lower-wait-raise (speed 4).
         62 => {
-            let tag = level.linedefs[linedef_idx].tag;
             activate_lift(gs, level, tag, 4);
         }
 
         // Type 66: SR Raise floor 24 + change.
         66 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_24(gs, level, tag, 1);
         }
 
         // Type 10: Plat down-wait-up-stay (door-like lift).
         10 => {
-            let tag = level.linedefs[linedef_idx].tag;
             activate_lift(gs, level, tag, 4);
         }
 
         // Type 21: Plat down-wait-up-stay (switch).
         21 => {
-            let tag = level.linedefs[linedef_idx].tag;
             activate_lift(gs, level, tag, 4);
         }
 
         // Type 88: Plat down-wait-up-stay-monster (walk trigger).
         88 => {
-            let tag = level.linedefs[linedef_idx].tag;
             activate_lift(gs, level, tag, 4);
         }
 
         // Type 121: Plat lower-wait-raise (turbo speed 8).
         121 => {
-            let tag = level.linedefs[linedef_idx].tag;
             activate_lift(gs, level, tag, 8);
         }
 
@@ -2993,19 +2977,16 @@ fn activate_lifts(
 
         // Type 120: WR Lift blazing (speed 8, wait 105).
         120 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
         }
 
         // Type 122: S1 Lift blazing (speed 8, wait 105).
         122 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
         }
 
         // Type 123: SR Lift blazing (speed 8, wait 105).
         123 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_do_lift(gs, level, tag, 8, LIFT_WAIT);
         }
         _ => {}
@@ -3020,6 +3001,7 @@ fn activate_floors(
     left_sidedef: i16,
     linedef_idx: usize,
 ) {
+    let tag = level.linedefs[linedef_idx].tag;
     match special {
         // -----------------------------------------------------------------
         // Floor raisers
@@ -3027,43 +3009,36 @@ fn activate_floors(
 
         // Type 5: W1 Floor raise to lowest adjacent ceiling (crush).
         5 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, crate::state::CrushBehavior::Crush);
         }
 
         // Type 14: S1 Raise floor 32 + change texture/type.
         14 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_32(gs, level, tag, 1);
         }
 
         // Type 15: S1 Raise floor 24 + change texture/type.
         15 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_24(gs, level, tag, 1);
         }
 
         // Type 18: S1 Floor raise to next highest adjacent floor.
         18 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_to_nearest(gs, level, tag, 1);
         }
 
         // Type 20: S1 Raise floor to next highest + change texture.
         20 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_to_nearest(gs, level, tag, 1);
         }
 
         // Type 22: W1 Floor raise to next highest adjacent floor + change texture.
         22 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_to_nearest(gs, level, tag, 1);
         }
 
         // Type 24: G1 Raise floor to lowest adjacent ceiling.
         24 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_to_lowest_ceiling(
                 gs,
                 level,
@@ -3075,13 +3050,11 @@ fn activate_floors(
 
         // Type 30: W1 Raise floor by shortest lower texture.
         30 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_by_texture(gs, level, tag, 1);
         }
 
         // Type 56: W1 Floor raise to 8 below lowest adjacent ceiling (crush).
         56 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in 0..level.sectors.len() {
                 if level.sectors[idx].tag == tag {
                     let target = lowest_adjacent_ceiling(level, idx) - 8;
@@ -3101,19 +3074,16 @@ fn activate_floors(
 
         // Type 58: W1 Raise floor 24.
         58 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_24(gs, level, tag, 1);
         }
 
         // Type 59: W1 Raise floor 24 + change texture/type.
         59 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_24(gs, level, tag, 1);
         }
 
         // Type 64: SR Raise floor to lowest adjacent ceiling.
         64 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_to_lowest_ceiling(
                 gs,
                 level,
@@ -3125,7 +3095,6 @@ fn activate_floors(
 
         // Type 65: SR Raise floor to 8 below lowest ceiling + crush.
         65 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in 0..level.sectors.len() {
                 if level.sectors[idx].tag == tag {
                     let target = lowest_adjacent_ceiling(level, idx) - 8;
@@ -3145,19 +3114,16 @@ fn activate_floors(
 
         // Type 67: SR Raise floor 32 + change.
         67 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_32(gs, level, tag, 1);
         }
 
         // Type 68: SR Raise floor to next highest + change texture.
         68 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_to_nearest(gs, level, tag, 1);
         }
 
         // Type 91: WR Raise floor to lowest adjacent ceiling.
         91 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_to_lowest_ceiling(
                 gs,
                 level,
@@ -3169,19 +3135,16 @@ fn activate_floors(
 
         // Type 92: WR Raise floor 24.
         92 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_24(gs, level, tag, 1);
         }
 
         // Type 93: WR Raise floor 24 + change.
         93 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_24(gs, level, tag, 1);
         }
 
         // Type 94: WR Raise floor to 8 below lowest ceiling + crush.
         94 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in 0..level.sectors.len() {
                 if level.sectors[idx].tag == tag {
                     let target = lowest_adjacent_ceiling(level, idx) - 8;
@@ -3201,13 +3164,11 @@ fn activate_floors(
 
         // Type 95: WR Raise floor to next highest + change texture.
         95 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_to_nearest(gs, level, tag, 1);
         }
 
         // Type 96: WR Raise floor by shortest lower texture.
         96 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_raise_by_texture(gs, level, tag, 1);
         }
 
@@ -3217,19 +3178,16 @@ fn activate_floors(
 
         // Type 19: W1 Lower floor to highest adjacent floor.
         19 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_highest(gs, level, tag, 1);
         }
 
         // Type 23: S1 Lower floor to lowest adjacent floor.
         23 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_lowest(gs, level, tag, 1);
         }
 
         // Type 36: W1 Lower floor to highest adjacent - 8 (turbo).
         36 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in 0..level.sectors.len() {
                 if level.sectors[idx].tag == tag {
                     let target = highest_adjacent_floor(level, idx) + 8;
@@ -3248,31 +3206,26 @@ fn activate_floors(
 
         // Type 37: W1 Lower floor to lowest adjacent + change texture/type.
         37 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_lowest(gs, level, tag, 1);
         }
 
         // Type 38: W1 Lower floor to lowest adjacent floor.
         38 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_lowest(gs, level, tag, 1);
         }
 
         // Type 45: SR Lower floor to highest adjacent floor.
         45 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_highest(gs, level, tag, 1);
         }
 
         // Type 60: SR Lower floor to lowest adjacent floor.
         60 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_lowest(gs, level, tag, 1);
         }
 
         // Type 69: SR Lower floor to highest adjacent - 8.
         69 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in 0..level.sectors.len() {
                 if level.sectors[idx].tag == tag {
                     let target = highest_adjacent_floor(level, idx) + 8;
@@ -3291,7 +3244,6 @@ fn activate_floors(
 
         // Type 70: SR Lower floor to highest adjacent - 8 (turbo).
         70 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in 0..level.sectors.len() {
                 if level.sectors[idx].tag == tag {
                     let target = highest_adjacent_floor(level, idx) + 8;
@@ -3310,7 +3262,6 @@ fn activate_floors(
 
         // Type 71: S1 Lower floor to highest adjacent - 8 (turbo).
         71 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in 0..level.sectors.len() {
                 if level.sectors[idx].tag == tag {
                     let target = highest_adjacent_floor(level, idx) + 8;
@@ -3329,25 +3280,21 @@ fn activate_floors(
 
         // Type 82: WR Lower floor to lowest adjacent floor.
         82 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_lowest(gs, level, tag, 1);
         }
 
         // Type 83: WR Lower floor to highest adjacent floor.
         83 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_highest(gs, level, tag, 1);
         }
 
         // Type 84: WR Lower floor to lowest adjacent + change.
         84 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_lowest(gs, level, tag, 1);
         }
 
         // Type 98: WR Lower floor to highest adjacent - 8 (turbo).
         98 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in 0..level.sectors.len() {
                 if level.sectors[idx].tag == tag {
                     let target = highest_adjacent_floor(level, idx) + 8;
@@ -3366,7 +3313,6 @@ fn activate_floors(
 
         // Type 102: S1 Lower floor to highest adjacent floor.
         102 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_floor_lower_to_highest(gs, level, tag, 1);
         }
         _ => {}
@@ -3381,6 +3327,7 @@ fn activate_stairs(
     left_sidedef: i16,
     linedef_idx: usize,
 ) {
+    let tag = level.linedefs[linedef_idx].tag;
     match special {
         // -----------------------------------------------------------------
         // Teleporters
@@ -3392,7 +3339,6 @@ fn activate_stairs(
 
         // Type 7: S1 Build stairs 8 units.
         7 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in level
                 .sectors
                 .iter()
@@ -3412,7 +3358,6 @@ fn activate_stairs(
 
         // Type 8: W1 Build stairs turbo 16 units.
         8 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in level
                 .sectors
                 .iter()
@@ -3432,7 +3377,6 @@ fn activate_stairs(
 
         // Type 100: W1 Build stairs turbo 16 + crush.
         100 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in level
                 .sectors
                 .iter()
@@ -3452,7 +3396,6 @@ fn activate_stairs(
 
         // Type 127: S1 Build stairs turbo 16 units.
         127 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in level
                 .sectors
                 .iter()
@@ -3481,6 +3424,7 @@ fn activate_platforms(
     left_sidedef: i16,
     linedef_idx: usize,
 ) {
+    let tag = level.linedefs[linedef_idx].tag;
     match special {
         // -----------------------------------------------------------------
         // Perpetual platforms
@@ -3488,25 +3432,21 @@ fn activate_platforms(
 
         // Type 53: S1 Perpetual platform (speed 1).
         53 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_perpetual_platform(gs, level, tag, 1);
         }
 
         // Type 54: W1 Stop platform (by tag).
         54 => {
-            let tag = level.linedefs[linedef_idx].tag;
             gs.movers.active_platforms.retain(|p| p.tag != tag);
         }
 
         // Type 87: WR Perpetual platform (speed 1).
         87 => {
-            let tag = level.linedefs[linedef_idx].tag;
             ev_perpetual_platform(gs, level, tag, 1);
         }
 
         // Type 89: WR Stop platform (by tag).
         89 => {
-            let tag = level.linedefs[linedef_idx].tag;
             gs.movers.active_platforms.retain(|p| p.tag != tag);
         }
         _ => {}
@@ -3521,6 +3461,7 @@ fn activate_teleports(
     left_sidedef: i16,
     linedef_idx: usize,
 ) {
+    let tag = level.linedefs[linedef_idx].tag;
     match special {
         // -----------------------------------------------------------------
         // Teleporters
@@ -3528,14 +3469,12 @@ fn activate_teleports(
 
         // Type 39: W1 Teleport (walk trigger, one-shot).
         39 => {
-            let tag = level.linedefs[linedef_idx].tag;
             let handle = gs.player.handle;
             ev_teleport(gs, level, tag, handle);
         }
 
         // Type 97: WR Teleport (walk trigger, repeatable).
         97 => {
-            let tag = level.linedefs[linedef_idx].tag;
             let handle = gs.player.handle;
             ev_teleport(gs, level, tag, handle);
         }
@@ -3562,6 +3501,7 @@ fn activate_misc(
     left_sidedef: i16,
     linedef_idx: usize,
 ) {
+    let tag = level.linedefs[linedef_idx].tag;
     match special {
         // -----------------------------------------------------------------
         // Donut specials
@@ -3569,7 +3509,6 @@ fn activate_misc(
 
         // Type 9: S1 Donut.
         9 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in level
                 .sectors
                 .iter()
@@ -3583,7 +3522,6 @@ fn activate_misc(
 
         // Type 146: W1 Donut.
         146 => {
-            let tag = level.linedefs[linedef_idx].tag;
             for idx in level
                 .sectors
                 .iter()
