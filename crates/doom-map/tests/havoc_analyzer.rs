@@ -1,3 +1,4 @@
+//! Havoc tests for graph analyzer.
 #![allow(missing_docs)]
 
 use doom_map::analyzer::MapAnalyzer;

@@ -1,3 +1,4 @@
+//! Simple AI director for pacing.
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

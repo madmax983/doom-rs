@@ -1,3 +1,4 @@
+//! Sprite clipping structures.
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
@@ -15,6 +16,7 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new, empty `SpriteClipHistory`.
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {
@@ -26,6 +28,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Pushes a new clipping step onto the history. Drops the step if the history is full.
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +38,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns the most recently pushed clipping step, or `None` if the history is empty.
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +47,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns an iterator over the clipping steps in the history.
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }

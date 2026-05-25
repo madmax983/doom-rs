@@ -1,3 +1,4 @@
+//! Test for savegame panics.
 #![allow(missing_docs)]
 
 use doom_game::{GameState, savegame::*};

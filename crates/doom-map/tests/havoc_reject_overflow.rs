@@ -1,3 +1,4 @@
+//! Havoc test for REJECT overflow panic.
 #![allow(missing_docs)]
 
 use doom_map::lumps::Reject;

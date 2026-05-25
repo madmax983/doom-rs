@@ -1,3 +1,4 @@
+//! Sector movers (doors, lifts, crushers) and specials.
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.
