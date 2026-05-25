@@ -72,7 +72,14 @@ impl<'a> MapAnalyzer<'a> {
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let mut stack = vec![(
+                    node,
+                    self.graph
+                        .adjacency_list
+                        .get(&node)
+                        .expect("node guaranteed to exist as it comes from keys()")
+                        .iter(),
+                )];
 
                 visited.insert(node);
                 time += 1;
@@ -97,7 +104,7 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((v, self.graph.adjacency_list.get(&v).expect("node guaranteed to exist because contains_key was checked immediately prior").iter()));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -299,5 +306,57 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let chokes = analyzer.chokepoints();
         assert_eq!(chokes.len(), 9999);
+    }
+
+    #[test]
+    fn havoc_test_analyzer_does_not_panic_on_unconnected_neighbors() {
+        let mut adj = HashMap::new();
+        // 0 connects to 1 and 2, but 1 and 2 don't exist in the map
+        adj.insert(0, HashSet::from([1, 2]));
+        // 3 connects to 0
+        adj.insert(3, HashSet::from([0]));
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        // This should not panic
+        let _ = analyzer.chokepoints();
+        let _ = analyzer.isolated_areas();
+    }
+
+    #[test]
+    fn havoc_test_analyzer_does_not_panic_on_asymmetric_edges() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1, 2]));
+        adj.insert(1, HashSet::from([0, 2]));
+        adj.insert(2, HashSet::from([0, 1])); // Connected triangle
+
+        // Asymmetric edge pointing to 0 from an unconnected node 3
+        adj.insert(3, HashSet::from([0]));
+        // Node 0 does not have an edge to 3
+
+        // Add a malformed asymmetric connection
+        adj.insert(4, HashSet::from([2]));
+        // Let's assume 2 connects to 4 but 4 doesn't exist? (already tested)
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let _ = analyzer.chokepoints();
+    }
+
+    #[test]
+    fn havoc_test_analyzer_missing_back_edges() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1, 2]));
+        adj.insert(1, HashSet::from([0, 2]));
+        // Node 2 missing from adj!
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let _ = analyzer.chokepoints();
     }
 }
