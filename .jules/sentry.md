@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-25 - Testing uncovered edge cases in WadFile mapping and lump retrieving
+**Learning:** `WadFile::lumps_between` lacked tests verifying its behavior when start or end markers were missing (in which case it correctly returns from the beginning or until the end respectively). Further, `WadFile::map_lump_group` had uncovered edge cases handling the lack of an `ENDMAP` marker in UDMF wads, or a missing set of classic lumps following the marker.
+**Action:** Always test boundary failures where items are missing (e.g. `is_none` results) or truncated, specifically verifying `unwrap_or` fallbacks as in index retrieval logic.

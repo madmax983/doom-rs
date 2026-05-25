@@ -1083,4 +1083,57 @@ mod tests {
             assert!(udmf.find_lump("NONEXISTENT").is_none());
         }
     }
+
+    #[test]
+    fn map_lump_group_missing_endmap_returns_none() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("TEXTMAP", br#"namespace = "doom";"#),
+            ("ZNODES", b"not_relevant_here"),
+            // Missing ENDMAP
+        ]);
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
+        assert!(wad.map_lump_group("MAP01").is_none());
+    }
+
+    #[test]
+    fn map_lump_group_not_enough_lumps_returns_none() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("THINGS", b""),
+            // Missing all other classic lumps
+        ]);
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
+        assert!(wad.map_lump_group("MAP01").is_none());
+    }
+
+    #[test]
+    fn lumps_between_missing_start_returns_from_beginning() {
+        let wad_bytes = make_iwad(&[
+            ("FLAT1", b"flat1_data"),
+            ("FLAT2", b"flat2_data"),
+            ("F_END", b""),
+        ]);
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
+        let flats: Vec<_> = wad
+            .lumps_between("F_START", "F_END")
+            .map(|l| l.name.as_str().to_string())
+            .collect();
+        assert_eq!(flats, vec!["FLAT1", "FLAT2"]);
+    }
+
+    #[test]
+    fn lumps_between_missing_end_returns_to_end() {
+        let wad_bytes = make_iwad(&[
+            ("F_START", b""),
+            ("FLAT1", b"flat1_data"),
+            ("FLAT2", b"flat2_data"),
+        ]);
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
+        let flats: Vec<_> = wad
+            .lumps_between("F_START", "F_END")
+            .map(|l| l.name.as_str().to_string())
+            .collect();
+        assert_eq!(flats, vec!["FLAT1", "FLAT2"]);
+    }
 }
