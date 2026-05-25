@@ -198,11 +198,11 @@ impl DemoPlayer {
     ///
     /// Returns one [`DemoTicCmd`] per present player. Returns `None` once all
     /// recorded tics have been consumed.
-    pub fn next_tic_cmds(&mut self) -> Option<Vec<DemoTicCmd>> {
+    pub fn next_tic_cmds(&mut self) -> Option<&[DemoTicCmd]> {
         if self.current_tic >= self.tics.len() {
             return None;
         }
-        let cmds = self.tics[self.current_tic].clone();
+        let cmds = self.tics.get(self.current_tic).map(Vec::as_slice)?;
         self.current_tic += 1;
         Some(cmds)
     }
