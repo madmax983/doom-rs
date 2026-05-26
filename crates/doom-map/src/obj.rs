@@ -76,9 +76,12 @@ use crate::lumps::SIDEDEF_NONE;
 /// assert!(obj.contains("f 1 2 3 4"));
 /// ```
 pub fn export_map_to_obj(level: &Level) -> String {
-    let mut obj = String::new();
-    obj.push_str("# Doom Level exported by doom-rs\n");
-    obj.push_str(&format!("o {}\n", level.name));
+    use std::fmt::Write;
+
+    let capacity = 100 + level.linedefs.len() * 150;
+    let mut obj = String::with_capacity(capacity);
+    let _ = writeln!(obj, "# Doom Level exported by doom-rs");
+    let _ = writeln!(obj, "o {}", level.name);
 
     let mut vertex_count = 1;
 
@@ -93,47 +96,56 @@ pub fn export_map_to_obj(level: &Level) -> String {
         let right_side = &level.sidedefs[ld.right_sidedef as usize];
         let front_sector = &level.sectors[right_side.sector as usize];
 
-        let mut quads = Vec::new();
+        // Instead of allocating a Vec<()>, we use a fixed size array
+        // A linedef can generate at most 3 vertical quads (lower, middle, upper)
+        let mut quads = [(0i16, 0i16); 3];
+        let mut quads_len = 0;
 
         if ld.left_sidedef == SIDEDEF_NONE {
-            quads.push((front_sector.floor_height, front_sector.ceil_height));
+            quads[quads_len] = (front_sector.floor_height, front_sector.ceil_height);
+            quads_len += 1;
         } else {
             let left_side = &level.sidedefs[ld.left_sidedef as usize];
             let back_sector = &level.sectors[left_side.sector as usize];
 
             if front_sector.floor_height < back_sector.floor_height {
-                quads.push((front_sector.floor_height, back_sector.floor_height));
+                quads[quads_len] = (front_sector.floor_height, back_sector.floor_height);
+                quads_len += 1;
             } else if back_sector.floor_height < front_sector.floor_height {
-                quads.push((back_sector.floor_height, front_sector.floor_height));
+                quads[quads_len] = (back_sector.floor_height, front_sector.floor_height);
+                quads_len += 1;
             }
 
             if front_sector.ceil_height > back_sector.ceil_height {
-                quads.push((back_sector.ceil_height, front_sector.ceil_height));
+                quads[quads_len] = (back_sector.ceil_height, front_sector.ceil_height);
+                quads_len += 1;
             } else if back_sector.ceil_height > front_sector.ceil_height {
-                quads.push((front_sector.ceil_height, back_sector.ceil_height));
+                quads[quads_len] = (front_sector.ceil_height, back_sector.ceil_height);
+                quads_len += 1;
             }
         }
 
-        for (z_bottom, z_top) in quads {
+        for &(z_bottom, z_top) in quads.iter().take(quads_len) {
             if z_bottom >= z_top {
                 continue;
             }
 
             // Doom coords: X is East/West, Y is North/South.
             // 3D coords: X = X, Y = Up (Doom Z), Z = -Doom Y
-            obj.push_str(&format!("v {} {} {}\n", v1.x, z_bottom, -v1.y));
-            obj.push_str(&format!("v {} {} {}\n", v2.x, z_bottom, -v2.y));
-            obj.push_str(&format!("v {} {} {}\n", v2.x, z_top, -v2.y));
-            obj.push_str(&format!("v {} {} {}\n", v1.x, z_top, -v1.y));
+            let _ = writeln!(obj, "v {} {} {}", v1.x, z_bottom, -v1.y);
+            let _ = writeln!(obj, "v {} {} {}", v2.x, z_bottom, -v2.y);
+            let _ = writeln!(obj, "v {} {} {}", v2.x, z_top, -v2.y);
+            let _ = writeln!(obj, "v {} {} {}", v1.x, z_top, -v1.y);
 
             let v_start = vertex_count;
-            obj.push_str(&format!(
-                "f {} {} {} {}\n",
+            let _ = writeln!(
+                obj,
+                "f {} {} {} {}",
                 v_start,
                 v_start + 1,
                 v_start + 2,
                 v_start + 3
-            ));
+            );
             vertex_count += 4;
         }
     }

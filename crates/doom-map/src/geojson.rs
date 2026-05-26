@@ -84,15 +84,26 @@ use crate::Level;
 /// assert!(geojson.contains(r#"[32, 32]"#));
 /// ```
 pub fn export_map_to_geojson(level: &Level) -> String {
-    let mut features = Vec::new();
+    use std::fmt::Write;
+
+    // Estimate capacity: 250 bytes per feature
+    let capacity = 100 + (level.linedefs.len() + level.things.len()) * 250;
+    let mut features_str = String::with_capacity(capacity);
+    let mut first = true;
 
     // Map linedefs to LineString features
     for ld in &level.linedefs {
         let v1 = &level.vertexes[ld.from_vertex as usize];
         let v2 = &level.vertexes[ld.to_vertex as usize];
 
+        if !first {
+            features_str.push_str(",\n");
+        }
+        first = false;
+
         // We include some basic properties like flags and special
-        let feature = format!(
+        let _ = write!(
+            features_str,
             r#"    {{
       "type": "Feature",
       "geometry": {{
@@ -107,12 +118,17 @@ pub fn export_map_to_geojson(level: &Level) -> String {
     }}"#,
             v1.x, v1.y, v2.x, v2.y, ld.flags, ld.special, ld.tag
         );
-        features.push(feature);
     }
 
     // Map things to Point features
     for thing in &level.things {
-        let feature = format!(
+        if !first {
+            features_str.push_str(",\n");
+        }
+        first = false;
+
+        let _ = write!(
+            features_str,
             r#"    {{
       "type": "Feature",
       "geometry": {{
@@ -127,12 +143,11 @@ pub fn export_map_to_geojson(level: &Level) -> String {
     }}"#,
             thing.x, thing.y, thing.angle, thing.kind, thing.flags
         );
-        features.push(feature);
     }
 
-    let features_str = features.join(",\n");
-
-    format!(
+    let mut result = String::with_capacity(features_str.len() + 100);
+    let _ = write!(
+        result,
         r#"{{
   "type": "FeatureCollection",
   "features": [
@@ -140,7 +155,8 @@ pub fn export_map_to_geojson(level: &Level) -> String {
   ]
 }}"#,
         features_str
-    )
+    );
+    result
 }
 
 #[cfg(test)]

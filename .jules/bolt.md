@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Eliminate format! allocations in string builders**
+**Learning:** Using `format!()` inside loops or `format!()` strings appended with `.push_str()` creates unnecessary, short-lived intermediate string allocations. By using a single `String::with_capacity()` and the `write!` or `writeln!` macros from `std::fmt::Write`, you can construct complex strings directly in place, preventing macro-allocated heap churn.
+**Action:** Replace string concatenation via `format!` with pre-allocation (`String::with_capacity`) and `write!` / `writeln!`. Similarly, avoid `.join()` on `Vec<String>` and just push strings natively with conditional delimiters.

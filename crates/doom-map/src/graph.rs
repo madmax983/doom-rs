@@ -97,18 +97,21 @@ impl SectorGraph {
     /// Exports the sector graph to the Graphviz DOT format for visualization.
     #[must_use]
     pub fn to_dot(&self) -> String {
-        let mut dot = String::from("digraph SectorGraph {\n");
+        use std::fmt::Write;
+        let capacity = 200 + self.adjacency_list.len() * 30;
+        let mut dot = String::with_capacity(capacity);
+        dot.push_str("digraph SectorGraph {\n");
         dot.push_str("    node [shape=circle, style=filled, fillcolor=lightblue];\n");
 
         for (&node, neighbors) in &self.adjacency_list {
             if neighbors.is_empty() {
-                dot.push_str(&format!("    {};\n", node));
+                let _ = writeln!(dot, "    {};", node);
             } else {
                 for &neighbor in neighbors {
                     // To avoid duplicating undirected edges in DOT, we only add the edge
                     // if the source node index is less than the target node index.
                     if node < neighbor {
-                        dot.push_str(&format!("    {} -> {};\n", node, neighbor));
+                        let _ = writeln!(dot, "    {} -> {};", node, neighbor);
                     }
                 }
             }

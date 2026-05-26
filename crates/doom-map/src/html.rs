@@ -48,7 +48,12 @@ pub fn export_map_to_html(level: &Level) -> String {
         format!("{width} x {height}")
     };
 
-    format!(
+    let capacity = svg.len() + 2000;
+    let mut html = String::with_capacity(capacity);
+    use std::fmt::Write;
+
+    let _ = write!(
+        html,
         r#"<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -114,7 +119,9 @@ pub fn export_map_to_html(level: &Level) -> String {
         t = num_things,
         min_l = min_light,
         max_l = max_light
-    )
+    );
+
+    html
 }
 
 #[cfg(test)]
