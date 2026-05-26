@@ -1,3 +1,9 @@
+//!
+//! Environment movers: Doors, Lifts, Crushers, and Lighting effects.
+//!
+//! These structs represent active environmental specials that mutate the sector state
+//! over time. The engine ticks them each frame to update the map layout.
+//!
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

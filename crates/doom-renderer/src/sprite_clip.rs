@@ -1,3 +1,21 @@
+//! Sprite clipping history for rendering optimization.
+//!
+//! Because sprites are drawn back-to-front, they must be clipped against
+//! walls that are drawn front-to-back. This history structure records
+//! the silhouette of walls as they are drawn, avoiding allocations per column.
+//!
+//! # Examples
+//!
+//! ```
+//! use doom_renderer::sprite_clip::SpriteClipHistory;
+//! use doom_renderer::render::SpriteClipStep;
+//!
+//! let mut history = SpriteClipHistory::new();
+//! history.push(SpriteClipStep { depth: 10.0, row: 50, silhouette_height: 100.0 });
+//!
+//! assert_eq!(history.last().unwrap().row, 50);
+//! ```
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
