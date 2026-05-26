@@ -9,17 +9,17 @@
 //! - All sidedef sector refs in bounds
 //! - Reject size == `ceil(N_SECTORS² / 8)`
 
-pub mod ascii;
-pub mod bsp;
-pub mod geojson;
-pub mod graph;
-pub mod html;
-pub mod json;
-pub mod level;
-pub mod lumps;
-pub mod obj;
-pub mod svg;
-pub mod udmf;
+pub(crate) mod ascii;
+pub(crate) mod bsp;
+pub(crate) mod geojson;
+pub(crate) mod graph;
+pub(crate) mod html;
+pub(crate) mod json;
+pub(crate) mod level;
+pub(crate) mod lumps;
+pub(crate) mod obj;
+pub(crate) mod svg;
+pub(crate) mod udmf;
 
 pub use ascii::export_map_to_ascii;
 pub use bsp::{BspChild, BspError, BspTree};
@@ -29,11 +29,13 @@ pub use html::export_map_to_html;
 pub use json::export_map_to_json;
 pub use level::{Level, LevelError};
 pub use lumps::{
-    Blockmap, FLAG_TWO_SIDED, Linedef, LumpParseError, Node, NodeBBox, Reject, SIDEDEF_NONE,
-    Sector, Seg, Sidedef, Ssector, Thing, Vertex,
+    Blockmap, FLAG_BLOCKING, FLAG_BLOCKMONSTERS, FLAG_DONTPEGBOTTOM, FLAG_DONTPEGTOP,
+    FLAG_TWO_SIDED, Linedef, LumpParseError, NODE_SUBSECTOR_BIT, Node, NodeBBox, Reject,
+    SIDEDEF_NONE, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
 };
 pub use obj::export_map_to_obj;
 pub use svg::export_map_to_svg;
+pub use udmf::{UdmfBlock, UdmfError, UdmfField, UdmfLevelData, UdmfMap, UdmfValue};
 
-pub mod analyzer;
+pub(crate) mod analyzer;
 pub use analyzer::MapAnalyzer;

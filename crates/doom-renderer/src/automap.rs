@@ -681,7 +681,7 @@ mod tests {
     use super::*;
     use doom_game::AutomapState;
     use doom_map::Level;
-    use doom_map::lumps::{
+    use doom_map::{
         Blockmap, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector, Thing as ThingRaw,
         Vertex as VxRaw,
     };
@@ -1325,7 +1325,7 @@ mod tests {
         use super::*;
         use doom_game::AutomapState;
         use doom_map::Level;
-        use doom_map::lumps::{
+        use doom_map::{
             Blockmap, FLAG_TWO_SIDED, Linedef as LdRaw, Reject, Sector, Sidedef as SdRaw, Ssector,
             Thing as ThingRaw, Vertex as VxRaw,
         };

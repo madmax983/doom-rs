@@ -7,8 +7,8 @@
 //! # Examples
 //! ```
 //! use doom_map::Level;
-//! use doom_map::json::export_map_to_json;
-//! use doom_map::lumps::{Blockmap, Reject};
+//! use doom_map::export_map_to_json;
+//! use doom_map::{Blockmap, Reject};
 //!
 //! // Create a minimal empty level
 //! let level = Level {

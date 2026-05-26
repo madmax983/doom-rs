@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
-use doom_map::analyzer::MapAnalyzer;
-use doom_map::graph::SectorGraph;
+use doom_map::MapAnalyzer;
+use doom_map::SectorGraph;
 use std::collections::{HashMap, HashSet};
 
 #[test]

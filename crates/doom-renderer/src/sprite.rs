@@ -3830,9 +3830,7 @@ mod tests {
     // Helper: build a minimal one-sided level for render_level z-buffer tests
     // ------------------------------------------------------------------
     fn make_render_level_one_sided() -> doom_map::Level {
-        use doom_map::lumps::{
-            Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
-        };
+        use doom_map::{Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex};
 
         let vertexes = vec![Vertex { x: 0, y: 128 }, Vertex { x: 128, y: 128 }];
         let sectors = vec![Sector {
@@ -3910,9 +3908,7 @@ mod tests {
     // Helper: build a minimal two-sided level for render_level z-buffer tests
     // ------------------------------------------------------------------
     fn make_render_level_two_sided() -> doom_map::Level {
-        use doom_map::lumps::{
-            Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex,
-        };
+        use doom_map::{Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Thing, Vertex};
 
         let vertexes = vec![Vertex { x: -64, y: 128 }, Vertex { x: 64, y: 128 }];
         let sectors = vec![
@@ -4165,7 +4161,7 @@ mod tests {
     #[test]
     fn sector_for_point_empty_ssectors() {
         // Build a minimal level with no segs/ssectors.
-        use doom_map::lumps::{Blockmap, Reject};
+        use doom_map::{Blockmap, Reject};
         let reject = Reject::parse_lump(&[0u8; 1], 1).expect("reject");
         let mut bm_data = vec![0u8; 14];
         bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());

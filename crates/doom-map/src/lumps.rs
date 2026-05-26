@@ -24,7 +24,7 @@ use thiserror::Error;
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::LumpParseError;
+/// use doom_map::LumpParseError;
 ///
 /// let err = LumpParseError::BadLength { lump: "VERTEXES", entry_size: 10, actual: 5 };
 /// ```
@@ -79,7 +79,7 @@ pub const SIDEDEF_NONE: u16 = 0xFFFF;
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::Thing;
+/// use doom_map::Thing;
 ///
 /// let thing = Thing {
 ///     x: 1056, y: -3616, angle: 90, kind: 3004, flags: 0,
@@ -127,7 +127,7 @@ impl Thing {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::Linedef;
+/// use doom_map::Linedef;
 ///
 /// let linedef = Linedef {
 ///     from_vertex: 0, to_vertex: 1, flags: 1, special: 0, tag: 0,
@@ -188,7 +188,7 @@ impl Linedef {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::Sidedef;
+/// use doom_map::Sidedef;
 ///
 /// let sidedef = Sidedef {
 ///     x_offset: 0, y_offset: 0,
@@ -243,7 +243,7 @@ impl Sidedef {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::Vertex;
+/// use doom_map::Vertex;
 ///
 /// let v = Vertex { x: 1088, y: -3680 };
 /// assert_eq!(v.x, 1088);
@@ -280,7 +280,7 @@ impl Vertex {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::Seg;
+/// use doom_map::Seg;
 ///
 /// let seg = Seg {
 ///     from_vertex: 0, to_vertex: 1, angle: 16384, linedef: 0, direction: 0, offset: 0,
@@ -331,7 +331,7 @@ impl Seg {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::Ssector;
+/// use doom_map::Ssector;
 ///
 /// let ssector = Ssector {
 ///     seg_count: 5, first_seg: 0,
@@ -382,7 +382,7 @@ pub const NODE_INDEX_MASK: u16 = 0x7FFF;
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::NodeBBox;
+/// use doom_map::NodeBBox;
 ///
 /// let bbox = NodeBBox {
 ///     ymax: 100, ymin: 0, xmin: 0, xmax: 100,
@@ -422,7 +422,7 @@ impl NodeBBox {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::{Node, NodeBBox};
+/// use doom_map::{Node, NodeBBox};
 ///
 /// let node = Node {
 ///     x: 0, y: 0, dx: 64, dy: 64,
@@ -483,7 +483,7 @@ impl Node {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::Sector;
+/// use doom_map::Sector;
 ///
 /// let sector = Sector {
 ///     floor_height: 0, ceil_height: 128,
@@ -545,7 +545,7 @@ impl Sector {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::Reject;
+/// use doom_map::Reject;
 ///
 /// let data = vec![0b00000000];
 /// let reject = Reject::parse_lump(&data, 2).unwrap();
@@ -614,7 +614,7 @@ impl Reject {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::lumps::Blockmap;
+/// use doom_map::Blockmap;
 ///
 /// let mut data = vec![0u8; 14];
 /// // Setup minimal blockmap: origin (0, 0), columns=1, rows=1

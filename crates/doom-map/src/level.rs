@@ -32,7 +32,7 @@ use thiserror::Error;
 ///
 /// ## Examples
 /// ```
-/// use doom_map::level::LevelError;
+/// use doom_map::LevelError;
 ///
 /// let err = LevelError::NotFound("E1M1".to_string());
 /// ```
@@ -132,7 +132,7 @@ pub enum LevelError {
 /// `SSECTORS`, `NODES`, `REJECT`, and `BLOCKMAP`.
 /// ## Examples
 /// ```no_run
-/// use doom_map::level::Level;
+/// use doom_map::Level;
 /// use doom_wad::WadFile;
 ///
 /// let wad = WadFile::parse(std::fs::read("doom.wad").unwrap()).unwrap();
@@ -200,7 +200,7 @@ impl Level {
     ///
     /// ## Examples
     /// ```no_run
-    /// use doom_map::level::Level;
+    /// use doom_map::Level;
     /// use doom_wad::WadFile;
     ///
     /// let bytes = std::fs::read("doom1.wad").unwrap();
@@ -224,7 +224,7 @@ impl Level {
     ///
     /// ## Examples
     /// ```no_run
-    /// use doom_map::level::Level;
+    /// use doom_map::Level;
     /// use doom_wad::{WadFile, WadStack};
     ///
     /// let iwad_bytes = std::fs::read("doom1.wad").unwrap();
@@ -521,7 +521,7 @@ impl Level {
     ///
     /// ## Examples
     /// ```no_run
-    /// use doom_map::level::Level;
+    /// use doom_map::Level;
     /// use doom_wad::WadFile;
     ///
     /// let wad = WadFile::parse(std::fs::read("doom1.wad").unwrap()).unwrap();

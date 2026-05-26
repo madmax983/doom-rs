@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use doom_map::lumps::Reject;
+use doom_map::Reject;
 
 #[test]
 fn havoc_trigger_reject_overflow() {

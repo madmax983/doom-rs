@@ -47,7 +47,7 @@ const SIDEDEF_NONE: u16 = 0xFFFF;
 ///
 /// ## Examples
 /// ```
-/// use doom_map::udmf::UdmfValue;
+/// use doom_map::UdmfValue;
 ///
 /// let val = UdmfValue::Int(42);
 /// let str_val = UdmfValue::Str("doom".to_string());
@@ -71,7 +71,7 @@ pub enum UdmfValue {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::udmf::{UdmfField, UdmfValue};
+/// use doom_map::{UdmfField, UdmfValue};
 ///
 /// let field = UdmfField {
 ///     key: "x".to_string(),
@@ -97,7 +97,7 @@ pub struct UdmfField {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::udmf::{UdmfBlock, UdmfField, UdmfValue};
+/// use doom_map::{UdmfBlock, UdmfField, UdmfValue};
 ///
 /// let block = UdmfBlock {
 ///     kind: "vertex".to_string(),
@@ -122,7 +122,7 @@ pub struct UdmfBlock {
 /// To convert this AST into usable map geometry, you must "compile" it by calling [`UdmfMap::into_level_data`].
 /// ## Examples
 /// ```
-/// use doom_map::udmf::{UdmfMap, UdmfBlock};
+/// use doom_map::{UdmfMap, UdmfBlock};
 ///
 /// let map = UdmfMap {
 ///     namespace: "doom".to_string(),
@@ -147,7 +147,7 @@ pub struct UdmfMap {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::udmf::UdmfMap;
+/// use doom_map::UdmfMap;
 ///
 /// let map = UdmfMap::parse(br#"
 /// namespace = "doom";
@@ -179,7 +179,7 @@ pub struct UdmfLevelData {
 ///
 /// ## Examples
 /// ```
-/// use doom_map::udmf::{UdmfMap, UdmfError};
+/// use doom_map::{UdmfMap, UdmfError};
 ///
 /// let err = UdmfMap::parse(b"namespace").unwrap_err();
 /// assert!(matches!(err, UdmfError::ParseFailed { .. }));
@@ -299,7 +299,7 @@ impl UdmfMap {
     ///
     /// ## Examples
     /// ```
-    /// use doom_map::udmf::UdmfMap;
+    /// use doom_map::UdmfMap;
     ///
     /// let textmap_data = br#"
     /// namespace = "doom";
@@ -373,7 +373,7 @@ impl UdmfMap {
     ///
     /// ## Examples
     /// ```
-    /// use doom_map::udmf::UdmfMap;
+    /// use doom_map::UdmfMap;
     ///
     /// let map = UdmfMap::parse(br#"
     /// namespace = "doom";

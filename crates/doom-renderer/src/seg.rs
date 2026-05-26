@@ -3,7 +3,7 @@
 //! The renderer consumes segs in front-to-back order (relative to the player)
 //! so solid-wall clipping can reject farther geometry early.
 
-use doom_map::bsp::{BspChild, BspTree};
+use doom_map::{BspChild, BspTree};
 use doom_map::{Level, SIDEDEF_NONE};
 
 fn seg_sort_key(level: &Level, seg_idx: usize, player_x: i32, player_y: i32) -> i64 {
@@ -190,7 +190,7 @@ fn subsector_needs_hardening_sort(level: &Level, first_seg: usize, seg_count: us
 #[cfg(test)]
 mod tests {
     use super::*;
-    use doom_map::lumps::{
+    use doom_map::{
         Blockmap, FLAG_TWO_SIDED, Linedef, Node, NodeBBox, Reject, Sector, Seg, Sidedef, Ssector,
         Vertex,
     };

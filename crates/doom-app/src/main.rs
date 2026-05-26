@@ -2297,7 +2297,7 @@ fn run_doom(args: Args) -> Result<()> {
 
     if handle_export(
         args.export_obj.as_deref(),
-        || doom_map::obj::export_map_to_obj(&level),
+        || doom_map::export_map_to_obj(&level),
         "🌟",
         "Exported",
         "3D model",
