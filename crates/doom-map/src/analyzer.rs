@@ -61,11 +61,16 @@ impl<'a> MapAnalyzer<'a> {
     }
 
     /// Finds articulation points (sectors that, if removed, disconnect parts of the map).
+    /// # Performance
+    ///
+    /// Pre-allocates tracking structures to eliminate dynamic heap re-allocations
+    /// during deep map traversals.
     pub fn chokepoints(&self) -> Vec<usize> {
-        let mut visited = HashSet::new();
-        let mut discovery_time = HashMap::new();
-        let mut low_time = HashMap::new();
-        let mut parent = HashMap::new();
+        let capacity = self.graph.adjacency_list.len();
+        let mut visited = HashSet::with_capacity(capacity);
+        let mut discovery_time = HashMap::with_capacity(capacity);
+        let mut low_time = HashMap::with_capacity(capacity);
+        let mut parent = HashMap::with_capacity(capacity);
         let mut articulation_points = HashSet::new();
         let mut time = 0;
 
@@ -161,8 +166,13 @@ impl<'a> MapAnalyzer<'a> {
     /// let areas = analyzer.isolated_areas();
     /// assert_eq!(areas.len(), 2);
     /// ```
+    /// # Performance
+    ///
+    /// Pre-allocates tracking structures to eliminate dynamic heap re-allocations
+    /// during deep map traversals.
     pub fn isolated_areas(&self) -> Vec<HashSet<usize>> {
-        let mut visited = HashSet::new();
+        let capacity = self.graph.adjacency_list.len();
+        let mut visited = HashSet::with_capacity(capacity);
         let mut components = Vec::new();
 
         for &node in self.graph.adjacency_list.keys() {
