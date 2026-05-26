@@ -2457,11 +2457,15 @@ fn run_doom(args: Args) -> Result<()> {
             if chokepoints.is_empty() {
                 chokepoints_str.push_str("None");
             } else {
-                for (i, s) in chokepoints.iter().enumerate() {
+                for (i, s) in chokepoints.iter().take(10).enumerate() {
                     if i > 0 {
                         chokepoints_str.push_str(", ");
                     }
                     chokepoints_str.push_str(&s.to_string());
+                }
+                if chokepoints.len() > 10 {
+                    chokepoints_str
+                        .push_str(&format!(" ... (and {} more)", chokepoints.len() - 10));
                 }
             }
 
@@ -2485,17 +2489,30 @@ fn run_doom(args: Args) -> Result<()> {
                     comfy_table::Cell::new("🗺️  Chokepoints"),
                     comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
                 ]);
-                for (i, area) in areas.iter().enumerate() {
+                for (i, area) in areas.iter().take(10).enumerate() {
                     let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
+                    for (j, s) in area.iter().take(10).enumerate() {
                         if j > 0 {
                             area_str.push_str(", ");
                         }
                         area_str.push_str(&s.to_string());
                     }
+                    if area.len() > 10 {
+                        area_str.push_str(&format!(" ... (and {} more)", area.len() - 10));
+                    }
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
                         comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
+                    ]);
+                }
+                if areas.len() > 10 {
+                    table.add_row(vec![
+                        comfy_table::Cell::new("🏝️  ...".to_string()),
+                        comfy_table::Cell::new(format!(
+                            "... (and {} more areas)",
+                            areas.len() - 10
+                        ))
+                        .fg(comfy_table::Color::Magenta),
                     ]);
                 }
             } else {
@@ -2507,17 +2524,29 @@ fn run_doom(args: Args) -> Result<()> {
                     comfy_table::Cell::new("🗺️  Chokepoints"),
                     comfy_table::Cell::new(&chokepoints_str),
                 ]);
-                for (i, area) in areas.iter().enumerate() {
+                for (i, area) in areas.iter().take(10).enumerate() {
                     let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
+                    for (j, s) in area.iter().take(10).enumerate() {
                         if j > 0 {
                             area_str.push_str(", ");
                         }
                         area_str.push_str(&s.to_string());
                     }
+                    if area.len() > 10 {
+                        area_str.push_str(&format!(" ... (and {} more)", area.len() - 10));
+                    }
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
                         comfy_table::Cell::new(area_str),
+                    ]);
+                }
+                if areas.len() > 10 {
+                    table.add_row(vec![
+                        comfy_table::Cell::new("...".to_string()),
+                        comfy_table::Cell::new(format!(
+                            "... (and {} more areas)",
+                            areas.len() - 10
+                        )),
                     ]);
                 }
             }
@@ -2547,11 +2576,14 @@ fn run_doom(args: Args) -> Result<()> {
                         println!("{json_data}");
                     } else {
                         let mut path_str = String::new();
-                        for (j, s) in path.iter().enumerate() {
+                        for (j, s) in path.iter().take(10).enumerate() {
                             if j > 0 {
                                 path_str.push_str(" ➔ ");
                             }
                             path_str.push_str(&s.to_string());
+                        }
+                        if path.len() > 10 {
+                            path_str.push_str(&format!(" ➔ ... (and {} more)", path.len() - 10));
                         }
                         if is_tty {
                             println!(
