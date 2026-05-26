@@ -170,3 +170,65 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mobj::MobjHandle;
+    use doom_types::Fixed16_16;
+    use doom_types::mobj_kind::MobjKind;
+    use doom_types::weapons::WeaponType;
+
+    #[test]
+    fn emitter_and_origin_coverage() {
+        let px = Fixed16_16::from_int(10);
+        let py = Fixed16_16::from_int(20);
+        let mx = Fixed16_16::from_int(30);
+        let my = Fixed16_16::from_int(40);
+        let handle = MobjHandle {
+            index: 1,
+            generation: 1,
+        };
+        let phandle = MobjHandle {
+            index: 2,
+            generation: 1,
+        };
+
+        let requests = vec![
+            SoundRequest::MonsterWake(MobjKind::Imp, handle, mx, my),
+            SoundRequest::MonsterAttack(MobjKind::Imp, handle, mx, my),
+            SoundRequest::MonsterDie(MobjKind::Imp, handle, mx, my),
+            SoundRequest::PlayerWeaponFire(WeaponType::Pistol),
+            SoundRequest::PlayerSuperShotgunOpen,
+            SoundRequest::PlayerSuperShotgunLoad,
+            SoundRequest::PlayerSuperShotgunClose,
+            SoundRequest::PlayerDie,
+            SoundRequest::PlayerUseFail,
+            SoundRequest::PlayerUseLockedDoor(crate::state::LockedDoorColor::Red),
+        ];
+
+        for req in requests {
+            match req {
+                SoundRequest::MonsterWake(..)
+                | SoundRequest::MonsterAttack(..)
+                | SoundRequest::MonsterDie(..) => {
+                    assert_eq!(req.emitter(px, py), Some((mx, my)));
+                    assert_eq!(req.origin_handle(Some(phandle)), Some(handle));
+                }
+                SoundRequest::PlayerWeaponFire(..)
+                | SoundRequest::PlayerSuperShotgunOpen
+                | SoundRequest::PlayerSuperShotgunLoad
+                | SoundRequest::PlayerSuperShotgunClose => {
+                    assert_eq!(req.emitter(px, py), Some((px, py)));
+                    assert_eq!(req.origin_handle(Some(phandle)), Some(phandle));
+                }
+                SoundRequest::PlayerDie
+                | SoundRequest::PlayerUseFail
+                | SoundRequest::PlayerUseLockedDoor(..) => {
+                    assert_eq!(req.emitter(px, py), None);
+                    assert_eq!(req.origin_handle(Some(phandle)), None);
+                }
+            }
+        }
+    }
+}

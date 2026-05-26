@@ -47,3 +47,30 @@ impl SpriteClipHistory {
         self.steps[..self.len].iter()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sprite_clip_history_tests() {
+        let mut history = SpriteClipHistory::default();
+        assert_eq!(history.last(), None);
+        let step = SpriteClipStep {
+            depth: 1.0,
+            row: 10,
+            silhouette_height: 20.0,
+        };
+        history.push(step);
+        assert_eq!(history.last(), Some(&step));
+        for i in 0..10 {
+            history.push(SpriteClipStep {
+                depth: i as f32,
+                row: i,
+                silhouette_height: 0.0,
+            });
+        }
+        let iter = history.iter();
+        assert_eq!(iter.len(), 8);
+    }
+}

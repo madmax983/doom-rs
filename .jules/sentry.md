@@ -56,3 +56,8 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-26 - Increased test coverage for sound requests, level phases, and sprite clipping
+
+**Learning:** `SoundRequest::emitter` and `origin_handle` had poor coverage despite being critical for telemetry/audio processing. Additionally, `GamePhaseController::next_map_doom1` and `SpriteClipHistory` were uncovered.
+
+**Action:** Added targeted tests to `sound_prop.rs`, `phase.rs`, and `sprite_clip.rs` to reach coverage and ensure stable output.
