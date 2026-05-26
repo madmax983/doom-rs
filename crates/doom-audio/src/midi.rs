@@ -531,7 +531,7 @@ impl MidiPlayer {
         if sample_rate == OPL_RATE {
             self.opl.synthesize(buf, sample_rate);
         } else if n_samples > 0 {
-            let step = OPL_RATE as f64 / sample_rate as f64;
+            let step = OPL_RATE as f64 / sample_rate.max(1) as f64;
             let start_pos = self.resample_frac;
             let last_pos = start_pos + step * (n_samples.saturating_sub(1) as f64);
 
