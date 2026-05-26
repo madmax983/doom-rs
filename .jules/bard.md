@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2024-05-26 - Missing Examples in graph, html, analyzer modules
+**Confusion:** The SectorGraph functions (`build`, `shortest_path`, `to_dot`), `html::export_map_to_html`, and `analyzer::MapAnalyzer::chokepoints` were lacking doc tests / examples, leading to ambiguity in how they are constructed and invoked.
+**Clarification:** Added explicit `## Examples` block with executable rust doc-tests to these functions to serve as a guide for API usage.

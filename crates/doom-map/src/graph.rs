@@ -19,6 +19,27 @@ impl SectorGraph {
     /// Builds a topological graph of sectors from the given Level.
     /// Connections are established by finding two-sided linedefs that connect
     /// one sector to another via their front and back sidedefs.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_map::Level;
+    /// use doom_map::graph::SectorGraph;
+    /// use doom_map::lumps::{Blockmap, Reject};
+    ///
+    /// // Given a level with no sectors, the graph is empty
+    /// let level = Level {
+    ///     name: "TEST".to_owned(),
+    ///     things: vec![], linedefs: vec![], sidedefs: vec![],
+    ///     vertexes: vec![], segs: vec![], ssectors: vec![],
+    ///     nodes: vec![], sectors: vec![],
+    ///     reject: Reject::parse_lump(&[], 0).unwrap(),
+    ///     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+    /// };
+    ///
+    /// let graph = SectorGraph::build(&level);
+    /// assert!(graph.adjacency_list.is_empty());
+    /// ```
     #[must_use]
     pub fn build(level: &Level) -> Self {
         let mut adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::new();
@@ -54,6 +75,30 @@ impl SectorGraph {
 
     /// Finds the shortest topological path (minimum number of sector transitions)
     /// between two sectors using Breadth-First Search (BFS).
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_map::graph::SectorGraph;
+    /// use std::collections::{HashMap, HashSet};
+    ///
+    /// let mut adj = HashMap::new();
+    /// adj.insert(0, HashSet::from([1]));
+    /// adj.insert(1, HashSet::from([0, 2]));
+    /// adj.insert(2, HashSet::from([1]));
+    ///
+    /// let graph = SectorGraph { adjacency_list: adj };
+    ///
+    /// // Path from 0 to 2 passes through 1
+    /// let path = graph.shortest_path(0, 2);
+    /// assert_eq!(path, Some(vec![0, 1, 2]));
+    ///
+    /// // Same sector returns a path of length 1
+    /// assert_eq!(graph.shortest_path(1, 1), Some(vec![1]));
+    ///
+    /// // Path to a non-existent or unreachable sector returns None
+    /// assert_eq!(graph.shortest_path(0, 99), None);
+    /// ```
     #[must_use]
     pub fn shortest_path(&self, start_sector: usize, end_sector: usize) -> Option<Vec<usize>> {
         if start_sector == end_sector {
@@ -95,6 +140,23 @@ impl SectorGraph {
     }
 
     /// Exports the sector graph to the Graphviz DOT format for visualization.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_map::graph::SectorGraph;
+    /// use std::collections::{HashMap, HashSet};
+    ///
+    /// let mut adj = HashMap::new();
+    /// adj.insert(0, HashSet::from([1]));
+    /// adj.insert(1, HashSet::from([0]));
+    ///
+    /// let graph = SectorGraph { adjacency_list: adj };
+    /// let dot = graph.to_dot();
+    ///
+    /// assert!(dot.contains("digraph SectorGraph"));
+    /// assert!(dot.contains("0 -> 1"));
+    /// ```
     #[must_use]
     pub fn to_dot(&self) -> String {
         let mut dot = String::from("digraph SectorGraph {\n");

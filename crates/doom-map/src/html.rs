@@ -11,6 +11,31 @@ use crate::{Level, export_map_to_svg};
 /// This generates a single HTML file containing an interactive visual
 /// representation of the map (using embedded SVG) alongside a dashboard
 /// of statistics about the map's geometry, entities, and environment.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_map::Level;
+/// use doom_map::lumps::{Blockmap, Reject, Sector, Vertex};
+///
+/// let mut level = Level {
+///     name: "TEST".to_owned(),
+///     things: vec![], linedefs: vec![], sidedefs: vec![],
+///     vertexes: vec![Vertex { x: 0, y: 0 }, Vertex { x: 64, y: 0 }],
+///     segs: vec![], ssectors: vec![], nodes: vec![],
+///     sectors: vec![Sector {
+///         floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0",
+///         ceil_flat: *b"FLAT2\0\0\0", light_level: 192, special: 0, tag: 0
+///     }],
+///     reject: Reject::parse_lump(&[], 0).unwrap(),
+///     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+/// };
+///
+/// let html = doom_map::export_map_to_html(&level);
+/// assert!(html.contains("<!DOCTYPE html>"));
+/// assert!(html.contains("Map Report: TEST"));
+/// assert!(html.contains("64 x 0"));
+/// ```
 pub fn export_map_to_html(level: &Level) -> String {
     let svg = export_map_to_svg(level);
 
