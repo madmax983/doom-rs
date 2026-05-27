@@ -55,3 +55,23 @@ fn havoc_test_analyzer_missing_back_edges() {
     let analyzer = MapAnalyzer::new(&graph);
     let _ = analyzer.chokepoints();
 }
+
+#[test]
+fn havoc_trigger_analyzer_stack_overflow() {
+    let mut adj = HashMap::new();
+    let limit = 100_000;
+    for i in 0..limit {
+        adj.insert(i, HashSet::from([i + 1]));
+    }
+    adj.insert(limit, HashSet::from([limit - 1]));
+    for i in 1..limit {
+        adj.get_mut(&i).unwrap().insert(i - 1);
+    }
+
+    let graph = SectorGraph {
+        adjacency_list: adj,
+    };
+    let analyzer = MapAnalyzer::new(&graph);
+    let chokes = analyzer.chokepoints();
+    assert_eq!(chokes.len(), limit - 1);
+}

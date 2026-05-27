@@ -72,7 +72,17 @@ impl<'a> MapAnalyzer<'a> {
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                // We collect iterators into pre-allocated vectors and track indices
+                // to prevent iterator state drops causing deep stack overflows.
+                let neighbors_vec: Vec<usize> = self
+                    .graph
+                    .adjacency_list
+                    .get(&node)
+                    .expect("node guaranteed to exist as it comes from keys()")
+                    .iter()
+                    .copied()
+                    .collect();
+                let mut stack = vec![(node, neighbors_vec, 0)];
 
                 visited.insert(node);
                 time += 1;
@@ -80,10 +90,13 @@ impl<'a> MapAnalyzer<'a> {
                 low_time.insert(node, time);
                 let mut children_map: HashMap<usize, usize> = HashMap::new();
 
-                while let Some((u, mut neighbors_iter)) = stack.pop() {
+                while let Some((u, neighbors, mut idx)) = stack.pop() {
                     let mut pushed_child = false;
 
-                    while let Some(&v) = neighbors_iter.next() {
+                    while idx < neighbors.len() {
+                        let v = neighbors[idx];
+                        idx += 1;
+
                         if !self.graph.adjacency_list.contains_key(&v) {
                             continue;
                         }
@@ -96,8 +109,16 @@ impl<'a> MapAnalyzer<'a> {
                             discovery_time.insert(v, time);
                             low_time.insert(v, time);
 
-                            stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((u, neighbors, idx));
+                            let v_neighbors: Vec<usize> = self
+                                .graph
+                                .adjacency_list
+                                .get(&v)
+                                .expect("v existence checked")
+                                .iter()
+                                .copied()
+                                .collect();
+                            stack.push((v, v_neighbors, 0));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {

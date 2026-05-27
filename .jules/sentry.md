@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-27 - Prevent stack overflow in iterative graph traversal
+**Learning:** During DFS traversal of deeply nested map topologies, using a manual stack containing `HashSet::Iter` elements (e.g. `vec![(node, iter)]`) can still cause stack overflow panics when the `Vec` containing deeply chained unconsumed iterators gets dropped at runtime, due to recursive trait/memory limits in deep stacks.
+**Action:** Always pre-allocate iterators into `Vec<usize>` values and track index bounds (`(node, neighbors_vec, index)`) rather than pushing mutable `std::slice::Iter` types into manual traversal loop stacks to fully decouple state from recursive limits.
