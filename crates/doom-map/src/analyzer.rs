@@ -21,7 +21,9 @@
 //! let analyzer = MapAnalyzer::new(&graph);
 //!
 //! // Sector 2 is a chokepoint because its removal disconnects {0, 1} from {3}
-//! assert_eq!(analyzer.chokepoints(), vec![2]);
+//! let mut chokes = analyzer.chokepoints();
+//! chokes.sort_unstable();
+//! assert_eq!(chokes, vec![2]);
 //! ```
 
 use crate::graph::SectorGraph;
@@ -54,13 +56,45 @@ impl<'a> MapAnalyzer<'a> {
     /// let graph = SectorGraph { adjacency_list: adj };
     ///
     /// let analyzer = MapAnalyzer::new(&graph);
-    /// assert_eq!(analyzer.chokepoints(), vec![1]); // Sector 1 is a chokepoint!
+    /// let mut chokes = analyzer.chokepoints();
+    /// chokes.sort_unstable();
+    /// assert_eq!(chokes, vec![1]); // Sector 1 is a chokepoint!
     /// ```
     pub fn new(graph: &'a SectorGraph) -> Self {
         Self { graph }
     }
 
     /// Finds articulation points (sectors that, if removed, disconnect parts of the map).
+    ///
+    /// The algorithm uses a stack-safe iterative DFS to prevent stack overflows on highly segmented WADs,
+    /// a classic stability trap in map analysis.
+    ///
+    /// # Panics
+    ///
+    /// This function does not panic. It defensively validates the existence of adjacent nodes
+    /// before traversing edges.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_map::SectorGraph;
+    /// use doom_map::analyzer::MapAnalyzer;
+    /// use std::collections::{HashMap, HashSet};
+    ///
+    /// // Map with a chokepoint at sector 2 connecting two distinct areas
+    /// let mut adj = HashMap::new();
+    /// adj.insert(0, HashSet::from([1, 2]));
+    /// adj.insert(1, HashSet::from([0, 2]));
+    /// adj.insert(2, HashSet::from([0, 1, 3])); // 2 connects {0,1} and {3}
+    /// adj.insert(3, HashSet::from([2, 4])); // 3 connects {2} and {4}
+    /// adj.insert(4, HashSet::from([3]));
+    /// let graph = SectorGraph { adjacency_list: adj };
+    ///
+    /// let analyzer = MapAnalyzer::new(&graph);
+    /// let mut chokes = analyzer.chokepoints();
+    /// chokes.sort_unstable();
+    /// assert_eq!(chokes, vec![2, 3]);
+    /// ```
     pub fn chokepoints(&self) -> Vec<usize> {
         let mut visited = HashSet::new();
         let mut discovery_time = HashMap::new();

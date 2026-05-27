@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-05-27 - [Clarified MapAnalyzer logic and DFS traversal]
+**Confusion:** The documentation for `MapAnalyzer` lacked a story-driven module-level explanation of its core purpose and did not explicitly explain why iterative DFS traversal was required for `chokepoints`. The doc-tests also failed due to non-deterministic ordering of `HashMap`/`HashSet` iterators.
+**Clarification:** Added module-level `//!` documentation to `doom-map::analyzer` explaining its purpose in map topology analysis, and added a specific `## Examples` block detailing the algorithm. Updated the doc-tests to sort the chokepoints vector to guarantee test stability.
