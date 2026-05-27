@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-18 - Graceful degradation for malformed UDMF/Lumps input
+**Learning:** Found multiple `unwrap()` calls when reading binary Lumps or parsing UDMF textmaps, which would result in immediate crashes when parsing malformed level data instead of propagating an Err.
+**Action:** Replaced `.unwrap()` in `doom-map` with `.expect()` containing descriptions of the safety guarantee, or removed `unwrap()` entirely to propagate robust parsing errors using `Result`.

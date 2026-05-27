@@ -222,9 +222,9 @@ impl Sidedef {
         Self {
             x_offset: i16::from_le_bytes([b[0], b[1]]),
             y_offset: i16::from_le_bytes([b[2], b[3]]),
-            upper_texture: b[4..12].try_into().unwrap(),
-            lower_texture: b[12..20].try_into().unwrap(),
-            middle_texture: b[20..28].try_into().unwrap(),
+            upper_texture: b[4..12].try_into().expect("slice is exactly 8 bytes"),
+            lower_texture: b[12..20].try_into().expect("slice is exactly 8 bytes"),
+            middle_texture: b[20..28].try_into().expect("slice is exactly 8 bytes"),
             sector: u16::from_le_bytes([b[28], b[29]]),
         }
     }
@@ -518,8 +518,8 @@ impl Sector {
         Self {
             floor_height: i16::from_le_bytes([b[0], b[1]]),
             ceil_height: i16::from_le_bytes([b[2], b[3]]),
-            floor_flat: b[4..12].try_into().unwrap(),
-            ceil_flat: b[12..20].try_into().unwrap(),
+            floor_flat: b[4..12].try_into().expect("slice is exactly 8 bytes"),
+            ceil_flat: b[12..20].try_into().expect("slice is exactly 8 bytes"),
             light_level: i16::from_le_bytes([b[20], b[21]]),
             special: u16::from_le_bytes([b[22], b[23]]),
             tag: u16::from_le_bytes([b[24], b[25]]),

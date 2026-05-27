@@ -152,9 +152,9 @@ pub struct UdmfMap {
 /// let map = UdmfMap::parse(br#"
 /// namespace = "doom";
 /// vertex { x = 0; y = 0; }
-/// "#).unwrap();
+/// "#).expect("parse succeeds");
 ///
-/// let data = map.into_level_data().unwrap();
+/// let data = map.into_level_data().expect("into_level_data succeeds");
 /// assert_eq!(data.vertexes.len(), 1);
 /// ```
 #[derive(Debug)]
@@ -305,7 +305,7 @@ impl UdmfMap {
     /// namespace = "doom";
     /// vertex { x = 10; y = 20; }
     /// "#;
-    /// let map = UdmfMap::parse(textmap_data).unwrap();
+    /// let map = UdmfMap::parse(textmap_data).expect("parse succeeds");
     /// assert_eq!(map.namespace, "doom");
     /// assert_eq!(map.blocks.len(), 1);
     /// assert_eq!(map.blocks[0].kind, "vertex");
@@ -378,10 +378,10 @@ impl UdmfMap {
     /// let map = UdmfMap::parse(br#"
     /// namespace = "doom";
     /// vertex { x = 0; y = 0; }
-    /// "#).unwrap();
+    /// "#).expect("parse succeeds");
     ///
     /// // The engine turns the flexible AST into fixed-size geometry arrays
-    /// let level_data = map.into_level_data().unwrap();
+    /// let level_data = map.into_level_data().expect("into_level_data succeeds");
     /// assert_eq!(level_data.vertexes.len(), 1);
     /// assert_eq!(level_data.vertexes[0].x, 0);
     /// ```
