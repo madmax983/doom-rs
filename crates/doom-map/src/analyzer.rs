@@ -61,6 +61,24 @@ impl<'a> MapAnalyzer<'a> {
     }
 
     /// Finds articulation points (sectors that, if removed, disconnect parts of the map).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::{HashMap, HashSet};
+    /// use doom_map::graph::SectorGraph;
+    /// use doom_map::analyzer::MapAnalyzer;
+    ///
+    /// let mut adj = HashMap::new();
+    /// adj.insert(0, HashSet::from([1, 2]));
+    /// adj.insert(1, HashSet::from([0, 2]));
+    /// adj.insert(2, HashSet::from([0, 1, 3])); // Connects {0,1} to {3}
+    /// adj.insert(3, HashSet::from([2]));
+    /// let graph = SectorGraph { adjacency_list: adj };
+    ///
+    /// let analyzer = MapAnalyzer::new(&graph);
+    /// assert_eq!(analyzer.chokepoints(), vec![2]);
+    /// ```
     pub fn chokepoints(&self) -> Vec<usize> {
         let mut visited = HashSet::new();
         let mut discovery_time = HashMap::new();

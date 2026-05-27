@@ -19,6 +19,35 @@ impl SectorGraph {
     /// Builds a topological graph of sectors from the given Level.
     /// Connections are established by finding two-sided linedefs that connect
     /// one sector to another via their front and back sidedefs.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_map::Level;
+    /// use doom_map::graph::SectorGraph;
+    ///
+    /// // Given a previously loaded or mocked `Level`
+    /// # use doom_map::lumps::{Blockmap, Linedef, Reject, Sector, Sidedef, Vertex};
+    /// # let level = Level {
+    /// #     name: "TEST".to_owned(),
+    /// #     things: vec![],
+    /// #     linedefs: vec![Linedef { from_vertex: 0, to_vertex: 1, flags: 0x0004, special: 0, tag: 0, right_sidedef: 0, left_sidedef: 1 }],
+    /// #     sidedefs: vec![
+    /// #         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"WALL1\0\0\0", lower_texture: *b"WALL2\0\0\0", middle_texture: *b"WALL3\0\0\0", sector: 0 },
+    /// #         Sidedef { x_offset: 0, y_offset: 0, upper_texture: *b"WALL1\0\0\0", lower_texture: *b"WALL2\0\0\0", middle_texture: *b"WALL3\0\0\0", sector: 1 },
+    /// #     ],
+    /// #     vertexes: vec![Vertex { x: 0, y: 0 }, Vertex { x: 64, y: 0 }],
+    /// #     segs: vec![], ssectors: vec![], nodes: vec![],
+    /// #     sectors: vec![
+    /// #         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT2\0\0\0", light_level: 192, special: 0, tag: 0 },
+    /// #         Sector { floor_height: 0, ceil_height: 128, floor_flat: *b"FLAT1\0\0\0", ceil_flat: *b"FLAT2\0\0\0", light_level: 192, special: 0, tag: 0 },
+    /// #     ],
+    /// #     reject: Reject::parse_lump(&[0u8], 1).unwrap(),
+    /// #     blockmap: Blockmap::parse_lump(&[0,0,0,0, 1,0, 1,0, 5,0, 0,0, 255,255]).unwrap(),
+    /// # };
+    /// let graph = SectorGraph::build(&level);
+    /// assert_eq!(graph.adjacency_list.len(), 2);
+    /// ```
     #[must_use]
     pub fn build(level: &Level) -> Self {
         let mut adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::new();
@@ -54,6 +83,22 @@ impl SectorGraph {
 
     /// Finds the shortest topological path (minimum number of sector transitions)
     /// between two sectors using Breadth-First Search (BFS).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::{HashMap, HashSet};
+    /// use doom_map::graph::SectorGraph;
+    ///
+    /// let mut adj = HashMap::new();
+    /// adj.insert(0, HashSet::from([1]));
+    /// adj.insert(1, HashSet::from([0, 2]));
+    /// adj.insert(2, HashSet::from([1]));
+    /// let graph = SectorGraph { adjacency_list: adj };
+    ///
+    /// let path = graph.shortest_path(0, 2);
+    /// assert_eq!(path, Some(vec![0, 1, 2]));
+    /// ```
     #[must_use]
     pub fn shortest_path(&self, start_sector: usize, end_sector: usize) -> Option<Vec<usize>> {
         if start_sector == end_sector {
@@ -95,6 +140,21 @@ impl SectorGraph {
     }
 
     /// Exports the sector graph to the Graphviz DOT format for visualization.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::{HashMap, HashSet};
+    /// use doom_map::graph::SectorGraph;
+    ///
+    /// let mut adj = HashMap::new();
+    /// adj.insert(0, HashSet::from([1]));
+    /// adj.insert(1, HashSet::from([0]));
+    /// let graph = SectorGraph { adjacency_list: adj };
+    ///
+    /// let dot = graph.to_dot();
+    /// assert!(dot.contains("0 -> 1"));
+    /// ```
     #[must_use]
     pub fn to_dot(&self) -> String {
         let mut dot = String::from("digraph SectorGraph {\n");

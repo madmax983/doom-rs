@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2024-05-27 - [Executable doc-tests for analyzer and graph]
+**Confusion:** The `MapAnalyzer` and `SectorGraph` structs had some basic documentation but lacked comprehensive, executable `## Examples` doc-tests for their core public methods (`chokepoints`, `build`, `shortest_path`, `to_dot`), making it difficult for users to understand how to construct the inputs or interpret the outputs without reading the tests.
+**Clarification:** Added explicit, executable `## Examples` doctests to all public methods in `crates/doom-map/src/analyzer.rs` and `crates/doom-map/src/graph.rs`. For complex setups like `SectorGraph::build` which requires a full `Level` struct, used the `#` rustdoc syntax to hide the extensive boilerplate from the rendered documentation while still ensuring it compiles and runs during `cargo test --doc`.
