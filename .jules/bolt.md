@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+## YYYY-MM-DD - [Optimize UDMF Parsing Allocations]
+**Learning:** Pre-counting block types inside arbitrarily large collections (like UDMF AST blocks) and using `Vec::with_capacity()` takes less time than the overhead of re-allocating dynamically sizing `Vec`s multiple times on large datasets.
+**Action:** Always do a fast pass over lists with multiple heterogeneous types you are splitting, count them, and use `.with_capacity()` before iterating.

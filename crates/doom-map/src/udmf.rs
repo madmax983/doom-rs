@@ -390,11 +390,31 @@ impl UdmfMap {
             return Err(UdmfError::UnsupportedNamespace(self.namespace));
         }
 
-        let mut things = Vec::new();
-        let mut linedefs = Vec::new();
-        let mut sidedefs = Vec::new();
-        let mut vertexes = Vec::new();
-        let mut sectors = Vec::new();
+        // Pre-count block types to allocate vectors with exact capacity.
+        // This eliminates multiple heap reallocations when parsing large UDMF maps,
+        // significantly reducing memory fragmentation and overhead.
+        let mut thing_count = 0;
+        let mut linedef_count = 0;
+        let mut sidedef_count = 0;
+        let mut vertex_count = 0;
+        let mut sector_count = 0;
+
+        for block in &self.blocks {
+            match block.kind.as_str() {
+                "thing" => thing_count += 1,
+                "linedef" => linedef_count += 1,
+                "sidedef" => sidedef_count += 1,
+                "vertex" => vertex_count += 1,
+                "sector" => sector_count += 1,
+                _ => {}
+            }
+        }
+
+        let mut things = Vec::with_capacity(thing_count);
+        let mut linedefs = Vec::with_capacity(linedef_count);
+        let mut sidedefs = Vec::with_capacity(sidedef_count);
+        let mut vertexes = Vec::with_capacity(vertex_count);
+        let mut sectors = Vec::with_capacity(sector_count);
 
         for (index, block) in self.blocks.iter().enumerate() {
             match block.kind.as_str() {
