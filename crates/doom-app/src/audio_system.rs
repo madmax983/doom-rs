@@ -551,12 +551,13 @@ mod tests {
 
     #[allow(dead_code)]
     fn make_iwad(lumps: &[(&str, &[u8])]) -> Vec<u8> {
-        let mut data: Vec<u8> = Vec::new();
+        let expected_size = 12 + lumps.iter().map(|(_, p)| p.len() + 16).sum::<usize>();
+        let mut data: Vec<u8> = Vec::with_capacity(expected_size);
         data.extend_from_slice(b"IWAD");
         data.extend_from_slice(&(lumps.len() as i32).to_le_bytes());
         data.extend_from_slice(&0i32.to_le_bytes()); // dir offset placeholder
 
-        let mut offsets: Vec<(usize, usize)> = Vec::new();
+        let mut offsets: Vec<(usize, usize)> = Vec::with_capacity(lumps.len());
         for (_, lump_bytes) in lumps {
             let pos = data.len();
             data.extend_from_slice(lump_bytes);

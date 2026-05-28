@@ -65,14 +65,43 @@ impl SessionTelemetry {
     /// Player path is exported as a LineString, and significant events as Points.
     #[must_use]
     pub fn export_to_geojson(&self) -> String {
-        let mut features = Vec::new();
-        let mut path_coords = Vec::new();
-        let mut event_features = Vec::new();
+        use std::fmt::Write;
+
+        let path_points = self
+            .events
+            .iter()
+            .filter(|e| e.kind == TelemetryKind::Position)
+            .count();
+        let other_points = self.events.len() - path_points;
+        let capacity = 100 + path_points * 20 + other_points * 300;
+        let mut out = String::with_capacity(capacity);
+
+        out.push_str("{\n  \"type\": \"FeatureCollection\",\n  \"features\": [\n");
+
+        let mut first_feature = true;
+
+        if path_points > 0 {
+            out.push_str("    {\n      \"type\": \"Feature\",\n      \"geometry\": {\n        \"type\": \"LineString\",\n        \"coordinates\": [");
+            let mut first_coord = true;
+            for ev in &self.events {
+                if ev.kind == TelemetryKind::Position {
+                    if !first_coord {
+                        out.push_str(", ");
+                    }
+                    let _ = write!(&mut out, "[{}, {}]", ev.x, ev.y);
+                    first_coord = false;
+                }
+            }
+            out.push_str("]\n      },\n      \"properties\": {\n        \"name\": \"Player Path\"\n      }\n    }");
+            first_feature = false;
+        }
 
         for ev in &self.events {
-            if ev.kind == TelemetryKind::Position {
-                path_coords.push(format!("[{}, {}]", ev.x, ev.y));
-            } else {
+            if ev.kind != TelemetryKind::Position {
+                if !first_feature {
+                    out.push_str(",\n");
+                }
+
                 let kind_str = match &ev.kind {
                     TelemetryKind::ItemPickup(_) => "ItemPickup",
                     TelemetryKind::MonsterKill(_) => "MonsterKill",
@@ -80,9 +109,8 @@ impl SessionTelemetry {
                     TelemetryKind::Position => unreachable!(),
                 };
 
-                let desc = format!("{}", ev.kind);
-
-                let feat = format!(
+                let _ = write!(
+                    &mut out,
                     r#"    {{
       "type": "Feature",
       "geometry": {{
@@ -95,41 +123,14 @@ impl SessionTelemetry {
         "description": "{}"
       }}
     }}"#,
-                    ev.x, ev.y, ev.tic, kind_str, desc
+                    ev.x, ev.y, ev.tic, kind_str, ev.kind
                 );
-                event_features.push(feat);
+                first_feature = false;
             }
         }
 
-        if !path_coords.is_empty() {
-            let path_feat = format!(
-                r#"    {{
-      "type": "Feature",
-      "geometry": {{
-        "type": "LineString",
-        "coordinates": [{}]
-      }},
-      "properties": {{
-        "name": "Player Path"
-      }}
-    }}"#,
-                path_coords.join(", ")
-            );
-            features.push(path_feat);
-        }
-
-        features.extend(event_features);
-        let features_str = features.join(",\n");
-
-        format!(
-            r#"{{
-  "type": "FeatureCollection",
-  "features": [
-{}
-  ]
-}}"#,
-            features_str
-        )
+        out.push_str("\n  ]\n}");
+        out
     }
 }
 

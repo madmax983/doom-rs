@@ -3520,12 +3520,17 @@ mod tests {
         kind: &[u8; 4],
         lump_payloads: Vec<([u8; 8], Vec<u8>)>,
     ) -> Vec<u8> {
-        let mut data = Vec::new();
+        let expected_size = 12
+            + lump_payloads
+                .iter()
+                .map(|(_, p)| p.len() + 16)
+                .sum::<usize>();
+        let mut data = Vec::with_capacity(expected_size);
         data.extend_from_slice(kind);
         data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
         data.extend_from_slice(&0i32.to_le_bytes());
 
-        let mut offsets = Vec::new();
+        let mut offsets = Vec::with_capacity(lump_payloads.len());
         for (_, payload) in &lump_payloads {
             let pos = data.len();
             data.extend_from_slice(payload);
