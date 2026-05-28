@@ -26,6 +26,10 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Manual ArrayVec-like structure for tracking sprite clipping depth histories.
+///
+/// This module avoids runtime heap allocations by bounding the clipping history
+/// to a fixed capacity, which is sufficient for typical Doom level geometries.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
