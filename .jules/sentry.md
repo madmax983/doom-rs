@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-28 - Test coverage improvement for doom-net
+**Learning:** Found that edge cases and untested paths often hide in untested `match` arms and missing unit tests.
+**Action:** Use Table-Driven tests for edge cases and make sure every branch is evaluated.
