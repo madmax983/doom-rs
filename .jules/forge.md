@@ -63,3 +63,6 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+**Refactored Boolean Blindness in monster_activate_door_linedef**
+**Learning:** `monster_activate_door_linedef` used an intermediate boolean `auto_close` extracted via `match` to conditionally pass `DoorBehavior::OpenWaitClose` or `DoorBehavior::OpenStay` into another function call `open_door`, which made logic indirect and harder to trace.
+**Action:** Replace the intermediate boolean variable with a direct mapping into the exact semantic `DoorBehavior` enum inside the `match` block. By directly resolving to the correct enum variant, it eliminates boolean blindness and flattens the conditional flow.

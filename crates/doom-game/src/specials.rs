@@ -2086,9 +2086,9 @@ pub fn monster_activate_door_linedef(
         return false;
     };
 
-    let auto_close = match ld.special {
-        1 | 117 => true,
-        31 | 118 => false,
+    let behavior = match ld.special {
+        1 | 117 => crate::linedef_dispatch::DoorBehavior::OpenWaitClose,
+        31 | 118 => crate::linedef_dispatch::DoorBehavior::OpenStay,
         _ => return false,
     };
 
@@ -2104,16 +2104,7 @@ pub fn monster_activate_door_linedef(
         return false;
     }
 
-    open_door(
-        gs,
-        level,
-        sector_idx,
-        if auto_close {
-            crate::linedef_dispatch::DoorBehavior::OpenWaitClose
-        } else {
-            crate::linedef_dispatch::DoorBehavior::OpenStay
-        },
-    );
+    open_door(gs, level, sector_idx, behavior);
     true
 }
 
