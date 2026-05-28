@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-28 - Flaky tests due to missing locks
+**Learning:** Tests `turn_based_wait_generates_recovery_tics` and `turn_based_held_action_waits_for_release` modified shared global state `MODIFIER_SAMPLE_COUNT` concurrently without using `MODIFIER_COUNT_LOCK`, causing PoisonErrors in parallel test runners.
+**Action:** Always ensure that when writing or running tests that interact with global/shared mock state, the corresponding synchronization mechanism (like Mutex guards) is used in every test.

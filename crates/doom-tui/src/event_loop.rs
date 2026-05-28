@@ -1120,6 +1120,7 @@ mod tests {
 
     #[test]
     fn turn_based_wait_generates_recovery_tics() {
+        let _guard = MODIFIER_COUNT_LOCK.lock().expect("test mutex");
         let mut loop_ = make_test_event_loop();
         loop_.set_turn_based_mode(true);
         loop_.input.push_wait();
@@ -1136,6 +1137,7 @@ mod tests {
 
     #[test]
     fn turn_based_held_action_waits_for_release() {
+        let _guard = MODIFIER_COUNT_LOCK.lock().expect("test mutex");
         let mut loop_ = make_test_event_loop();
         loop_.set_turn_based_mode(true);
         loop_.input.key_down(KeyCode::Char('w'));
@@ -1151,5 +1153,71 @@ mod tests {
         loop_.tick_turn_based(&mut app);
         assert_eq!(app.ticks, 1);
         assert!(!loop_.turn_waiting_for_release);
+    }
+
+
+    #[test]
+    fn poll_events_q_quits() {
+        let mut loop_ = make_test_event_loop();
+        let _guard = MODIFIER_COUNT_LOCK.lock().expect("test mutex");
+        loop_.is_running = true;
+        loop_.input.clear();
+    }
+
+    #[test]
+    fn cycle_renderer_mode_cycles_through_modes() {
+        let mut loop_ = make_test_event_loop();
+        let initial = loop_.renderer_mode;
+
+        let mut current = loop_.cycle_renderer_mode();
+        let mut count = 1;
+        while current != initial && count < 20 {
+            current = loop_.cycle_renderer_mode();
+            count += 1;
+        }
+
+        assert_eq!(current, initial);
+        assert!(count > 1);
+    }
+
+    #[test]
+    fn set_graphics_protocol_enables_and_disables() {
+        let mut loop_ = make_test_event_loop();
+        loop_.set_graphics_protocol(false);
+        assert_eq!(loop_.renderer_mode, RendererMode::Halfblocks);
+
+        loop_.set_graphics_protocol(true);
+        let _toggled = loop_.toggle_graphics_protocol();
+    }
+
+    #[test]
+    fn turn_action_cost_logic() {
+        let input1 = TicInput { wait_pressed: true, ..TicInput::default() };
+        assert_eq!(DoomEventLoop::turn_action_cost(&input1), 6);
+
+        let input2 = TicInput { buttons: crate::input::buttons::BT_ATTACK, ..TicInput::default() };
+        assert_eq!(DoomEventLoop::turn_action_cost(&input2), 8);
+
+        let input3 = TicInput { buttons: crate::input::buttons::BT_USE, ..TicInput::default() };
+        assert_eq!(DoomEventLoop::turn_action_cost(&input3), 7);
+
+        let input4 = TicInput { buttons: crate::input::buttons::BT_CHANGE, ..TicInput::default() };
+        assert_eq!(DoomEventLoop::turn_action_cost(&input4), 4);
+
+        let input5 = TicInput::default();
+        assert_eq!(DoomEventLoop::turn_action_cost(&input5), 6);
+    }
+
+    #[test]
+    fn tick_turn_based_waits_for_release() {
+        let mut loop_ = make_test_event_loop();
+        let _guard = MODIFIER_COUNT_LOCK.lock().expect("test mutex");
+        let mut app = CountingApp { ticks: 0 };
+
+        loop_.turn_waiting_for_release = true;
+        loop_.input.key_down(KeyCode::Char('w'));
+
+        loop_.tick_turn_based(&mut app);
+        assert_eq!(app.ticks, 0);
     }
 }
