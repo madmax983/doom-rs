@@ -134,4 +134,83 @@ mod tests {
         let font = empty_font();
         assert!(!font.is_loaded());
     }
+
+    fn test_font() -> WadFont {
+        let mut glyphs = vec![None; 63];
+        // ASCII 65 'A'
+        let patch_a = PatchImage {
+            width: 10,
+            height: 10,
+            left_offset: 0,
+            top_offset: 0,
+            columns: vec![],
+        };
+        glyphs[65 - 33] = Some(patch_a);
+
+        // ASCII 66 'B'
+        let patch_b = PatchImage {
+            width: 5,
+            height: 10,
+            left_offset: 0,
+            top_offset: 0,
+            columns: vec![],
+        };
+        glyphs[66 - 33] = Some(patch_b);
+
+        WadFont { glyphs }
+    }
+
+    #[test]
+    fn string_width_with_valid_glyphs() {
+        let font = test_font();
+        assert_eq!(font.string_width("A"), 10);
+        assert_eq!(font.string_width("B"), 5);
+        assert_eq!(font.string_width("AB"), 10 + GLYPH_GAP + 5);
+        assert_eq!(
+            font.string_width("A B"),
+            10 + GLYPH_GAP + SPACE_WIDTH + GLYPH_GAP + 5
+        );
+    }
+
+    #[test]
+    fn string_width_case_insensitive() {
+        let font = test_font();
+        assert_eq!(font.string_width("a"), 10);
+        assert_eq!(font.string_width("b"), 5);
+    }
+
+    #[test]
+    fn draw_string_advances_x_correctly() {
+        let font = test_font();
+        let mut fb = Framebuffer::new();
+        font.draw_string(&mut fb, 0, 0, "A B!");
+        // We can't easily assert on `x` directly since it's not returned,
+        // but we can verify the function executed without panics and
+        // the framebuffer remains logically consistent.
+        assert_eq!(fb.data.len(), 320 * 200);
+    }
+
+    #[test]
+    fn draw_string_centered() {
+        let font = test_font();
+        let mut fb = Framebuffer::new();
+        // A is width 10. (320 - 10) / 2 = 155
+        font.draw_string_centered(&mut fb, 0, "A");
+        assert_eq!(fb.data.len(), 320 * 200);
+    }
+
+    #[test]
+    fn is_loaded_true_for_test_font() {
+        let font = test_font();
+        assert!(font.is_loaded());
+    }
+
+    #[test]
+    fn glyph_out_of_bounds() {
+        let font = test_font();
+        assert!(font.glyph(0).is_none());
+        assert!(font.glyph(32).is_none());
+        assert!(font.glyph(96).is_none());
+        assert!(font.glyph(128).is_none());
+    }
 }

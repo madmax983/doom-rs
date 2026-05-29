@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-29 - ArrayVec-like optimization tests and boundary checks
+**Learning:** Manual ArrayVec-like structures (such as `SpriteClipHistory`) that use a fixed-size array and track their own length are frequently introduced to eliminate heap allocations. They often lack explicit test coverage for buffer overflow conditions, assuming domain knowledge prevents reaching limits. In `wad_font.rs`, testing glyph lookups that miss the WAD dictionary ensures text rendering silently falls back to space advances without panicking.
+**Action:** When inspecting manual data structures (e.g., custom history buffers, stack-allocated vecs), always enforce tests verifying behaviour when pushed beyond capacity boundaries (e.g., ensuring `push()` silently drops when full rather than panicking). Apply similar rigor to array bounds for static dictionaries (like WAD font glyphs).
