@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Module managing sprite clipping against walls and portals.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;

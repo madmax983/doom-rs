@@ -25,12 +25,19 @@
 //!
 //! Usage: doom-app --iwad doom1.wad [--pwad mod.wad] [--warp E1M1]
 
+/// Audio subsystem management.
 mod audio_system;
+/// Cheat code processing and effects.
 mod cheats;
+/// Easter egg / Cogmind UI mode.
 mod cogmind;
+/// Developer console and log output.
 mod console;
+/// LMP demo recording and playback wrappers.
 mod demo_mode;
+/// Multiplayer tic synchronization and UDP relaying.
 mod net_mode;
+/// Save game serialization and deserialization.
 mod savegame;
 
 use anyhow::{Context, Result};
