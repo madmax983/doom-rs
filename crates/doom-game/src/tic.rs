@@ -293,6 +293,9 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
 
     // 11. Increment level time.
     gs.stats.level_time = gs.stats.level_time.wrapping_add(1);
+
+    #[cfg(feature = "tension")]
+    gs.tension.tick(gs.tic_num);
 }
 
 // ---------------------------------------------------------------------------

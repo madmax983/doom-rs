@@ -223,6 +223,13 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
                 );
             }
         }
+        #[cfg(feature = "tension")]
+        {
+            // Increase tension heavily when damaged
+            if dmg > 0 {
+                gs.tension.add_threat(dmg as u32 * 2, gs.tic_num);
+            }
+        }
         dmg
     } else {
         damage

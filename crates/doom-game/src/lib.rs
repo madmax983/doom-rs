@@ -48,6 +48,8 @@ pub mod style;
 pub mod switch;
 #[cfg(feature = "telemetry")]
 pub mod telemetry;
+#[cfg(feature = "tension")]
+pub mod tension;
 pub mod tic;
 pub mod trace;
 pub mod weapon_fire;
