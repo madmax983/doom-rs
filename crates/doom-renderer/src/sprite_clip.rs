@@ -15,6 +15,16 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new, empty `SpriteClipHistory`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    ///
+    /// let history = SpriteClipHistory::new();
+    /// assert!(history.last().is_none());
+    /// ```
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {
@@ -26,6 +36,20 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Pushes a new clip step onto the history.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    ///
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 50, silhouette_height: 10.0 });
+    /// assert_eq!(history.last().unwrap().row, 50);
+    /// ```
+    ///
+    /// If the history is full (more than 8 steps), the step is ignored to avoid heap allocations.
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +59,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns a reference to the last clip step pushed, or `None` if the history is empty.
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +68,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns an iterator over all clip steps in the history.
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }

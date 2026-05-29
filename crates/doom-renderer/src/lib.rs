@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// History of portal clips for a given screen column to correctly mask sprites.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
