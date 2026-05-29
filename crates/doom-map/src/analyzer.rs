@@ -62,11 +62,15 @@ impl<'a> MapAnalyzer<'a> {
 
     /// Finds articulation points (sectors that, if removed, disconnect parts of the map).
     pub fn chokepoints(&self) -> Vec<usize> {
-        let mut visited = HashSet::new();
-        let mut discovery_time = HashMap::new();
-        let mut low_time = HashMap::new();
-        let mut parent = HashMap::new();
-        let mut articulation_points = HashSet::new();
+        // ⚡ Bolt Optimization:
+        // The number of nodes in the graph is known upfront. By pre-allocating the HashSets
+        // and HashMaps, we eliminate multiple costly dynamic reallocations during graph traversal.
+        let node_count = self.graph.adjacency_list.len();
+        let mut visited = HashSet::with_capacity(node_count);
+        let mut discovery_time = HashMap::with_capacity(node_count);
+        let mut low_time = HashMap::with_capacity(node_count);
+        let mut parent = HashMap::with_capacity(node_count);
+        let mut articulation_points = HashSet::with_capacity(node_count);
         let mut time = 0;
 
         for &node in self.graph.adjacency_list.keys() {
@@ -162,7 +166,11 @@ impl<'a> MapAnalyzer<'a> {
     /// assert_eq!(areas.len(), 2);
     /// ```
     pub fn isolated_areas(&self) -> Vec<HashSet<usize>> {
-        let mut visited = HashSet::new();
+        // ⚡ Bolt Optimization:
+        // The number of nodes in the graph is known upfront. Pre-allocating `visited` avoids
+        // multiple dynamic reallocations during the connected components search.
+        let node_count = self.graph.adjacency_list.len();
+        let mut visited = HashSet::with_capacity(node_count);
         let mut components = Vec::new();
 
         for &node in self.graph.adjacency_list.keys() {

@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**[HashMap/HashSet Pre-allocation in Graph Traversals]**
+**Learning:** During tactical analysis topology traversals (DFS/BFS), initializing `HashMap` and `HashSet` without a known capacity results in costly dynamic reallocations, especially for maps with a high sector count.
+**Action:** When performing graph traversals where the total node count is known (e.g. `graph.adjacency_list.len()`), always pre-allocate collections using `HashMap::with_capacity()` and `HashSet::with_capacity()` to eliminate runtime reallocations.
