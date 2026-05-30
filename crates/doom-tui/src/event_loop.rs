@@ -1082,9 +1082,7 @@ mod tests {
     #[test]
     fn poll_events_does_not_sample_modifiers() {
         let mut loop_ = make_test_event_loop();
-        let _guard = MODIFIER_COUNT_LOCK
-            .lock()
-            .expect("value must exist in test");
+        let _guard = MODIFIER_COUNT_LOCK.lock().unwrap();
         reset_modifier_sample_count();
 
         loop_.poll_events();
@@ -1097,9 +1095,7 @@ mod tests {
     #[test]
     fn drain_ready_tics_samples_modifiers_once_per_tic() {
         let mut loop_ = make_test_event_loop();
-        let _guard = MODIFIER_COUNT_LOCK
-            .lock()
-            .expect("value must exist in test");
+        let _guard = MODIFIER_COUNT_LOCK.lock().unwrap();
         reset_modifier_sample_count();
 
         let mut app = CountingApp { ticks: 0 };
@@ -1116,6 +1112,182 @@ mod tests {
     fn default_active_palette_is_zero() {
         let app = CountingApp { ticks: 0 };
         assert_eq!(app.active_palette(), 0);
+    }
+
+    #[test]
+    fn drain_ready_tics_drains_everything_available() {
+        let mut loop_ = make_test_event_loop();
+        let mut app = CountingApp { ticks: 0 };
+        loop_.tic_accumulator = TIC_DURATION * 3 + TIC_DURATION / 2;
+        loop_.drain_ready_tics(&mut app);
+        assert_eq!(app.ticks, 3);
+        assert_eq!(loop_.tic_accumulator, TIC_DURATION / 2);
+    }
+
+    #[test]
+    fn effective_renderer_mode_fallback() {
+        let mut loop_ = make_test_event_loop();
+
+        // We can't easily mock the terminal support here, but we can verify
+        // the logic mapping halfblocks explicitly:
+
+        loop_.set_renderer_mode(RendererMode::Halfblocks);
+        assert_eq!(loop_.effective_renderer_mode(), RendererMode::Halfblocks);
+
+        loop_.set_renderer_mode(RendererMode::CharMap(crate::charset::CharSet::Ascii));
+        assert_eq!(
+            loop_.effective_renderer_mode(),
+            RendererMode::CharMap(crate::charset::CharSet::Ascii)
+        );
+
+        loop_.set_renderer_mode(RendererMode::Cogmind);
+        assert_eq!(loop_.effective_renderer_mode(), RendererMode::Cogmind);
+    }
+
+    #[test]
+    fn turn_based_disable_clears_recovery() {
+        let mut loop_ = make_test_event_loop();
+        loop_.set_turn_based_mode(true);
+        loop_.turn_recovery_tics = 10;
+        loop_.turn_waiting_for_release = true;
+
+        loop_.set_turn_based_mode(false);
+        assert_eq!(loop_.turn_recovery_tics, 0);
+        assert!(!loop_.turn_waiting_for_release);
+    }
+
+    #[test]
+    fn turn_based_enable_disables_correctly() {
+        let mut loop_ = make_test_event_loop();
+
+        loop_.set_turn_based_mode(true);
+        assert!(loop_.turn_based_mode);
+
+        loop_.set_turn_based_mode(false);
+        assert!(!loop_.turn_based_mode);
+    }
+
+    #[test]
+    fn renderer_mode_getters_setters() {
+        let mut loop_ = make_test_event_loop();
+
+        loop_.set_renderer_mode(RendererMode::Sixel);
+        assert_eq!(loop_.renderer_mode(), RendererMode::Sixel);
+        assert_eq!(loop_.char_set, None);
+
+        loop_.set_renderer_mode(RendererMode::CharMap(crate::charset::CharSet::Ascii));
+        assert_eq!(
+            loop_.renderer_mode(),
+            RendererMode::CharMap(crate::charset::CharSet::Ascii)
+        );
+        assert_eq!(loop_.char_set, Some(crate::charset::CharSet::Ascii));
+
+        // Cycle mode tests
+        let current = loop_.renderer_mode();
+        let next = loop_.cycle_renderer_mode();
+        assert_eq!(next, current.next());
+        assert_eq!(loop_.renderer_mode(), next);
+    }
+
+    #[test]
+    fn run_exits_when_not_running() {
+        let mut loop_ = make_test_event_loop();
+        loop_.is_running = false;
+
+        let (tx, _) = std::sync::mpsc::sync_channel(1);
+        loop_.blit_tx = Some(tx);
+
+        let mut app = CountingApp { ticks: 0 };
+        let lut = PaletteLut::default();
+        let result = loop_.run(&mut app, &lut);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn turn_based_tick_processes_movement_recovery() {
+        let mut loop_ = make_test_event_loop();
+        loop_.set_turn_based_mode(true);
+        let mut app = CountingApp { ticks: 0 };
+
+        // push_menu_up does not generate a forward movement because
+        // forward movement requires the UP arrow key, whereas push_menu_up
+        // just pushes into the menu system. Let's explicitly push an arrow key
+        // or set forward movement directly.
+        loop_.input.key_down(KeyCode::Up);
+
+        loop_.tick_turn_based(&mut app);
+        assert_eq!(app.ticks, 1);
+        assert_eq!(loop_.turn_recovery_tics, 5);
+    }
+
+    #[test]
+    fn drain_ready_tics_with_insufficient_time() {
+        let mut loop_ = make_test_event_loop();
+        let mut app = CountingApp { ticks: 0 };
+        loop_.tic_accumulator = TIC_DURATION - Duration::from_nanos(1);
+        loop_.drain_ready_tics(&mut app);
+        assert_eq!(app.ticks, 0);
+        assert_eq!(
+            loop_.tic_accumulator,
+            TIC_DURATION - Duration::from_nanos(1)
+        );
+    }
+
+    #[test]
+    fn drain_ready_tics_clears_accumulator_if_large() {
+        let mut loop_ = make_test_event_loop();
+        let mut app = CountingApp { ticks: 0 };
+        // Test drain threshold
+        loop_.tic_accumulator = TIC_DURATION * 5;
+        loop_.drain_ready_tics(&mut app);
+        assert_eq!(app.ticks, 5);
+        assert_eq!(loop_.tic_accumulator, Duration::ZERO);
+    }
+
+    #[test]
+    fn turn_action_cost_correct() {
+        // Attack
+        let mut input = TicInput::default();
+        input.buttons |= crate::input::buttons::BT_ATTACK;
+        assert_eq!(DoomEventLoop::turn_action_cost(&input), 8);
+
+        // Use
+        let mut input = TicInput::default();
+        input.buttons |= crate::input::buttons::BT_USE;
+        assert_eq!(DoomEventLoop::turn_action_cost(&input), 7);
+
+        // Change
+        let mut input = TicInput::default();
+        input.buttons |= crate::input::buttons::BT_CHANGE;
+        assert_eq!(DoomEventLoop::turn_action_cost(&input), 4);
+
+        // Wait
+        let input = TicInput {
+            wait_pressed: true,
+            ..Default::default()
+        };
+        assert_eq!(DoomEventLoop::turn_action_cost(&input), 6);
+
+        // Default (Movement)
+        let input = TicInput::default();
+        assert_eq!(DoomEventLoop::turn_action_cost(&input), 6);
+    }
+
+    #[test]
+    fn turn_based_held_action_waits_for_release_does_not_execute() {
+        let mut loop_ = make_test_event_loop();
+        loop_.set_turn_based_mode(true);
+        loop_.turn_waiting_for_release = true;
+        let mut app = CountingApp { ticks: 0 };
+
+        // Even with a new wait input, we are still waiting for the previous action to release
+        loop_.input.push_f9(); // a non-held action
+        loop_.input.key_down(KeyCode::Char(' ')); // a held action (space = USE)
+
+        loop_.tick_turn_based(&mut app);
+
+        assert_eq!(app.ticks, 0); // Still 0
+        assert!(loop_.turn_waiting_for_release);
     }
 
     #[test]

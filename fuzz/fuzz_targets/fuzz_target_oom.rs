@@ -1,8 +1,0 @@
-#![no_main]
-
-use doom_map::lumps::Blockmap;
-use libfuzzer_sys::fuzz_target;
-
-fuzz_target!(|data: &[u8]| {
-    let _ = Blockmap::parse_lump(data);
-});

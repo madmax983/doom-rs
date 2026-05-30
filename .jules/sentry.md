@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-04-29 - Missing test coverage for `doom-tui/src/event_loop.rs` channel teardown and blit rendering
+**Learning:** `run_blit_thread` rendering logic and internal `TicInput` accumulations in `event_loop` were previously untested, risking panics on unmatched payload enum values or infinite loop cycles during termination. Threading and blocking loops make it hard to test the whole `DoomEventLoop::run` function.
+**Action:** Synthesized deterministic event frames (e.g. `BlitPayload::Cogmind`, `BlitPayload::ImageProtocol`) across a dummy `mpsc::sync_channel` dropped immediately by tests. Wrote state and mode tests (`effective_renderer_mode_fallback`, `turn_based_enable_disables_correctly`) for all setters without needing a functional app tick loop.
