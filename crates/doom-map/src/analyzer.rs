@@ -72,7 +72,16 @@ impl<'a> MapAnalyzer<'a> {
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let mut stack: Vec<(usize, Vec<usize>, usize)> = vec![];
+                let neighbors: Vec<usize> = self
+                    .graph
+                    .adjacency_list
+                    .get(&node)
+                    .unwrap()
+                    .iter()
+                    .copied()
+                    .collect();
+                stack.push((node, neighbors, 0));
 
                 visited.insert(node);
                 time += 1;
@@ -80,10 +89,14 @@ impl<'a> MapAnalyzer<'a> {
                 low_time.insert(node, time);
                 let mut children_map: HashMap<usize, usize> = HashMap::new();
 
-                while let Some((u, mut neighbors_iter)) = stack.pop() {
+                while let Some((u, neighbors, index)) = stack.pop() {
                     let mut pushed_child = false;
+                    let mut i = index;
 
-                    while let Some(&v) = neighbors_iter.next() {
+                    while i < neighbors.len() {
+                        let v = neighbors[i];
+                        i += 1;
+
                         if !self.graph.adjacency_list.contains_key(&v) {
                             continue;
                         }
@@ -96,8 +109,16 @@ impl<'a> MapAnalyzer<'a> {
                             discovery_time.insert(v, time);
                             low_time.insert(v, time);
 
-                            stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((u, neighbors, i));
+                            let v_neighbors: Vec<usize> = self
+                                .graph
+                                .adjacency_list
+                                .get(&v)
+                                .unwrap()
+                                .iter()
+                                .copied()
+                                .collect();
+                            stack.push((v, v_neighbors, 0));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {

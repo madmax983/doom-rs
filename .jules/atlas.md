@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Analyzer Stack Overflow]**
+**Tangle:** `MapAnalyzer::chokepoints()` uses an iterative DFS with a manual stack to traverse `SectorGraph`. However, the stack stored `std::collections::hash_set::Iter` containing elements of `self.graph.adjacency_list.get(&node).unwrap()`. In extremely deep topological graphs (e.g., linear chain of 10,000+ nodes), dropping this deeply chained state structure exceeded the recursive memory limits, triggering a stack overflow despite being iterative logic.
+**Blueprint:** Refactored the iterative DFS to pre-allocate vectors (`Vec<usize>`) containing neighbors and track index bounds (`index`) inside the manual stack instead of storing iterators. This prevents deeply nested Iterator structures that cause drop cascades upon completion, ensuring stack stability at scale.

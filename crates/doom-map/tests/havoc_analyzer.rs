@@ -55,3 +55,23 @@ fn havoc_test_analyzer_missing_back_edges() {
     let analyzer = MapAnalyzer::new(&graph);
     let _ = analyzer.chokepoints();
 }
+
+#[test]
+fn havoc_test_chokepoints_deep_recursive_overflow() {
+    let mut adj = std::collections::HashMap::new();
+    let depth = 300000;
+    for i in 0..depth {
+        adj.insert(i, std::collections::HashSet::from([i + 1]));
+    }
+    adj.insert(depth, std::collections::HashSet::from([depth - 1]));
+    for i in 1..depth {
+        adj.get_mut(&i).unwrap().insert(i - 1);
+    }
+
+    let graph = doom_map::graph::SectorGraph {
+        adjacency_list: adj,
+    };
+    let analyzer = doom_map::analyzer::MapAnalyzer::new(&graph);
+    let chokes = analyzer.chokepoints();
+    assert_eq!(chokes.len(), depth - 1);
+}
