@@ -63,3 +63,10 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+**[Boolean Blindness in GameMenu]**
+**Learning:** The  struct used  to track the game version, creating Boolean Blindness and losing type safety when an explicit  enum already existed.
+**Action:** Replaced  with  to enforce type clarity and self-document the menu state without altering runtime behavior.
+
+**[Boolean Blindness in GameMenu]**
+**Learning:** The `GameMenu` struct used `is_doom2: bool` to track the game version, creating Boolean Blindness and losing type safety when an explicit `GameVersion` enum already existed.
+**Action:** Replaced `is_doom2: bool` with `version: GameVersion` to enforce type clarity and self-document the menu state without altering runtime behavior.

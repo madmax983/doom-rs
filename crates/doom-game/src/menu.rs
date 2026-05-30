@@ -317,7 +317,7 @@ pub struct GameMenu {
     /// Selected episode (for Skill page to reference).  1-3 for Doom 1, 1 for Doom 2.
     selected_episode: u8,
     /// Whether this is a Doom 2 game (skips episode selection).
-    is_doom2: bool,
+    version: GameVersion,
     /// Skull cursor animation tic (toggles between two frames).
     skull_tic: u32,
 }
@@ -330,7 +330,7 @@ impl GameMenu {
             page: MenuPage::Main,
             cursor: 0,
             selected_episode: 1,
-            is_doom2: game_version == GameVersion::Doom2,
+            version: game_version,
             skull_tic: 0,
         }
     }
@@ -377,7 +377,7 @@ impl GameMenu {
     pub fn items(&self) -> &[MenuItem] {
         match self.page {
             MenuPage::Main => {
-                if self.is_doom2 {
+                if self.version == GameVersion::Doom2 {
                     MAIN_ITEMS_DOOM2
                 } else {
                     MAIN_ITEMS_DOOM1
@@ -462,7 +462,7 @@ impl GameMenu {
                 self.cursor = 0;
             }
             MenuPage::Skill => {
-                if self.is_doom2 {
+                if self.version == GameVersion::Doom2 {
                     // Doom 2 skips episode; back from Skill goes to Main.
                     self.page = MenuPage::Main;
                 } else {
@@ -1109,7 +1109,7 @@ mod tests {
         menu.open();
         menu.close();
         menu.open();
-        assert!(menu.is_doom2);
+        assert_eq!(menu.version, GameVersion::Doom2);
         // Verify Doom 2 behavior still works
         let result = menu.select(); // -> Skill
         assert_eq!(result, Some(MenuResult::PageChange));
