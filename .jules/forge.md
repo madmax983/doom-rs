@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactor sidedef sector extraction guard clauses**
+**Learning:** `activate_doors` repeatedly used five lines to extract a `sector_idx` from `left_sidedef`: `let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else { return; };`. This pattern was repeated 16 times inside a `match` statement, creating verbose boilerplate.
+**Action:** Extract the variable out of the match statement completely by resolving `let left_sector_idx = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize);` ahead of time. Inside the guard clauses, you only need to run `let Some(sector_idx) = left_sector_idx else { return; };` which compresses the boilerplate into a single line.
