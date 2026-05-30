@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-29 - Missing test coverage for `sound_prop.rs` `SoundRequest` and `checksum.rs` boundaries
+**Learning:** Found untested matching behavior for `SoundRequest::emitter` and `SoundRequest::origin_handle` and untested boundary edges for deterministic CRC checksum implementations (zeroed/maxed). Also found untested behavior with `rollback_ignores_future_misprediction_when_already_flagged`.
+**Action:** Added exhaustive match logic tests for all variants of `SoundRequest` and boundary edge cases for CRC checksums (`checksum_all_zeros` and `checksum_all_ones`).

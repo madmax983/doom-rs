@@ -170,3 +170,131 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mobj::{Mobj, MobjSlab};
+    use doom_types::Bam;
+    use doom_types::Fixed16_16;
+    use doom_types::mobj_kind::MobjKind;
+
+    // Helper to setup mock items
+    fn setup_env() -> (MobjSlab, MobjHandle, Fixed16_16, Fixed16_16) {
+        let mut slab = MobjSlab::new();
+        let mobj = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::from_raw(100),
+            Fixed16_16::from_raw(200),
+            Bam::ZERO,
+        );
+        let handle = slab.alloc(mobj);
+        (
+            slab,
+            handle,
+            Fixed16_16::from_raw(500),
+            Fixed16_16::from_raw(600),
+        )
+    }
+
+    #[test]
+    fn test_emitter_monster_events() {
+        let (_slab, handle, px, py) = setup_env();
+        let mx = Fixed16_16::from_raw(10);
+        let my = Fixed16_16::from_raw(20);
+
+        let wake = SoundRequest::MonsterWake(MobjKind::Player, handle, mx, my);
+        assert_eq!(wake.emitter(px, py), Some((mx, my)));
+
+        let attack = SoundRequest::MonsterAttack(MobjKind::Player, handle, mx, my);
+        assert_eq!(attack.emitter(px, py), Some((mx, my)));
+
+        let die = SoundRequest::MonsterDie(MobjKind::Player, handle, mx, my);
+        assert_eq!(die.emitter(px, py), Some((mx, my)));
+    }
+
+    #[test]
+    fn test_emitter_player_events() {
+        let (_slab, _handle, px, py) = setup_env();
+
+        let fire = SoundRequest::PlayerWeaponFire(doom_types::weapons::WeaponType::Pistol);
+        assert_eq!(fire.emitter(px, py), Some((px, py)));
+
+        let ssg_open = SoundRequest::PlayerSuperShotgunOpen;
+        assert_eq!(ssg_open.emitter(px, py), Some((px, py)));
+
+        let ssg_load = SoundRequest::PlayerSuperShotgunLoad;
+        assert_eq!(ssg_load.emitter(px, py), Some((px, py)));
+
+        let ssg_close = SoundRequest::PlayerSuperShotgunClose;
+        assert_eq!(ssg_close.emitter(px, py), Some((px, py)));
+    }
+
+    #[test]
+    fn test_emitter_no_location_events() {
+        let (_slab, _handle, px, py) = setup_env();
+
+        let die = SoundRequest::PlayerDie;
+        assert_eq!(die.emitter(px, py), None);
+
+        let use_fail = SoundRequest::PlayerUseFail;
+        assert_eq!(use_fail.emitter(px, py), None);
+
+        let locked = SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red);
+        assert_eq!(locked.emitter(px, py), None);
+    }
+
+    #[test]
+    fn test_origin_handle_monster_events() {
+        let (_slab, handle, _px, _py) = setup_env();
+        let p_handle = Some(handle); // doesn't matter for monster events
+
+        let wake =
+            SoundRequest::MonsterWake(MobjKind::Player, handle, Fixed16_16::ZERO, Fixed16_16::ZERO);
+        assert_eq!(wake.origin_handle(p_handle), Some(handle));
+
+        let attack = SoundRequest::MonsterAttack(
+            MobjKind::Player,
+            handle,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+        );
+        assert_eq!(attack.origin_handle(p_handle), Some(handle));
+
+        let die =
+            SoundRequest::MonsterDie(MobjKind::Player, handle, Fixed16_16::ZERO, Fixed16_16::ZERO);
+        assert_eq!(die.origin_handle(p_handle), Some(handle));
+    }
+
+    #[test]
+    fn test_origin_handle_player_events() {
+        let (_slab, handle, _px, _py) = setup_env();
+        let p_handle = Some(handle);
+
+        let fire = SoundRequest::PlayerWeaponFire(doom_types::weapons::WeaponType::Pistol);
+        assert_eq!(fire.origin_handle(p_handle), p_handle);
+
+        let ssg_open = SoundRequest::PlayerSuperShotgunOpen;
+        assert_eq!(ssg_open.origin_handle(p_handle), p_handle);
+
+        let ssg_load = SoundRequest::PlayerSuperShotgunLoad;
+        assert_eq!(ssg_load.origin_handle(p_handle), p_handle);
+
+        let ssg_close = SoundRequest::PlayerSuperShotgunClose;
+        assert_eq!(ssg_close.origin_handle(p_handle), p_handle);
+    }
+
+    #[test]
+    fn test_origin_handle_no_location_events() {
+        let (_slab, handle, _px, _py) = setup_env();
+        let p_handle = Some(handle);
+
+        let die = SoundRequest::PlayerDie;
+        assert_eq!(die.origin_handle(p_handle), None);
+
+        let use_fail = SoundRequest::PlayerUseFail;
+        assert_eq!(use_fail.origin_handle(p_handle), None);
+
+        let locked = SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red);
+        assert_eq!(locked.origin_handle(p_handle), None);
+    }
+}

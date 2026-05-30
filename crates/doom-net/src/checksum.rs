@@ -113,4 +113,18 @@ mod tests {
         let b = compute_checksum(data);
         assert_eq!(a, b, "CRC32 must be deterministic");
     }
+
+    #[test]
+    fn checksum_all_zeros() {
+        let data = [0u8; 1024];
+        let crc = compute_checksum(&data);
+        assert_ne!(crc, 0);
+    }
+
+    #[test]
+    fn checksum_all_ones() {
+        let data = [0xFF; 1024];
+        let crc = compute_checksum(&data);
+        assert_ne!(crc, 0);
+    }
 }
