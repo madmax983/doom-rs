@@ -845,10 +845,10 @@ impl DoomGame {
     /// Write a plain-text event line to the debug log (if active).
     ///
     /// Format: `tic=<N> <msg>\n`  — no ANSI codes, no box drawing.
-    fn dlog(&mut self, msg: &str) {
+    fn dlog(&mut self, args: std::fmt::Arguments<'_>) {
         if let Some(ref mut f) = self.debug_log {
             use std::io::Write;
-            let _ = writeln!(f, "tic={} {}", self.gs.tic_num, msg);
+            let _ = writeln!(f, "tic={} {}", self.gs.tic_num, args);
         }
     }
 
@@ -879,11 +879,10 @@ impl DoomGame {
         } else {
             cur_ammo.to_string()
         };
-        let msg = format!(
+        self.dlog(format_args!(
             "player pos=({},{}) angle={:#010x} health={} armor={} kills={} weapon={:?} ammo={}",
             px, py, pa, hp, arm, kills, weapon, ammo_str
-        );
-        self.dlog(&msg);
+        ));
     }
 
     /// Log the state of all live enemies.
@@ -899,7 +898,24 @@ impl DoomGame {
         // the immutable borrow of `self.gs` before calling `self.dlog`.
         let slot_count = self.gs.mobjslab.slot_count();
         for i in 0..slot_count {
-            let msg = {
+            let Some((
+                h_index,
+                h_gen,
+                kind,
+                ex,
+                ey,
+                health,
+                state_idx,
+                tics,
+                is_dead,
+                flags,
+                target_index,
+                target_gen,
+                threshold,
+                reactiontime,
+                movecount,
+                subsector,
+            )) = ({
                 let Some(h) = self.gs.mobjslab.handle_at(i) else {
                     continue;
                 };
@@ -909,33 +925,32 @@ impl DoomGame {
                 if mo.flags & doom_game::mobj::flags::MF_COUNTKILL == 0 {
                     continue;
                 }
-                let ex = mo.x.to_int();
-                let ey = mo.y.to_int();
-                let state_idx = mo.state.0;
-                let flags = mo.flags;
-                let is_dead = mo.health <= 0;
-                let target = mo.target;
-                format!(
-                    "enemy idx={} gen={} {:?} pos=({},{}) health={} state={} tics={} dead={} flags={:#010x} target=({}, {}) threshold={} reaction={} movecount={} subsector={}",
+                Some((
                     h.index,
                     h.generation,
                     mo.kind,
-                    ex,
-                    ey,
+                    mo.x.to_int(),
+                    mo.y.to_int(),
                     mo.health,
-                    state_idx,
+                    mo.state.0,
                     mo.tics,
-                    is_dead,
-                    flags,
-                    target.index,
-                    target.generation,
+                    mo.health <= 0,
+                    mo.flags,
+                    mo.target.index,
+                    mo.target.generation,
                     mo.threshold,
                     mo.reactiontime,
                     mo.movecount,
                     mo.subsector,
-                )
+                ))
+            })
+            else {
+                continue;
             };
-            self.dlog(&msg);
+            self.dlog(format_args!(
+                "enemy idx={} gen={} {:?} pos=({},{}) health={} state={} tics={} dead={} flags={:#010x} target=({}, {}) threshold={} reaction={} movecount={} subsector={}",
+                h_index, h_gen, kind, ex, ey, health, state_idx, tics, is_dead, flags, target_index, target_gen, threshold, reactiontime, movecount, subsector
+            ));
         }
     }
 
@@ -950,7 +965,7 @@ impl DoomGame {
         // the borrow of `self.gs` before calling `self.dlog`.
         let slot_count = self.gs.mobjslab.slot_count();
         for i in 0..slot_count {
-            let msg = {
+            let msg_args = {
                 let Some(h) = self.gs.mobjslab.handle_at(i) else {
                     continue;
                 };
@@ -960,20 +975,16 @@ impl DoomGame {
                 if mo.flags & doom_game::mobj::flags::MF_SCREAMED != 0 {
                     // Clear the flag so we only log once.
                     mo.flags &= !doom_game::mobj::flags::MF_SCREAMED;
-                    let kind = mo.kind;
-                    let x = mo.x.to_int();
-                    let y = mo.y.to_int();
-                    let state_idx = mo.state.0;
-                    Some(format!(
-                        "enemy_died {:?} pos=({},{}) death_state={}",
-                        kind, x, y, state_idx
-                    ))
+                    Some((mo.kind, mo.x.to_int(), mo.y.to_int(), mo.state.0))
                 } else {
                     None
                 }
             };
-            if let Some(m) = msg {
-                self.dlog(&m);
+            if let Some((kind, x, y, state_idx)) = msg_args {
+                self.dlog(format_args!(
+                    "enemy_died {:?} pos=({},{}) death_state={}",
+                    kind, x, y, state_idx
+                ));
             }
         }
     }
@@ -1208,12 +1219,12 @@ impl DoomApp for DoomGame {
         // Log kill and item events.
         if self.debug_log.is_some() {
             if self.gs.player.kill_count > pre_kills {
-                let msg = format!("kill count={}", self.gs.player.kill_count);
-                self.dlog(&msg);
+                let count = self.gs.player.kill_count;
+                self.dlog(format_args!("kill count={}", count));
             }
             if self.gs.player.item_count > pre_items {
-                let msg = format!("pickup items={}", self.gs.player.item_count);
-                self.dlog(&msg);
+                let items = self.gs.player.item_count;
+                self.dlog(format_args!("pickup items={}", items));
             }
         }
 
@@ -1245,8 +1256,7 @@ impl DoomApp for DoomGame {
                     );
                 }
                 if self.debug_log.is_some() {
-                    let msg = format!("damage -{} health={}", damage, cur_health);
-                    self.dlog(&msg);
+                    self.dlog(format_args!("damage -{} health={}", damage, cur_health));
                 }
             }
             // Tick face FSM every tic.

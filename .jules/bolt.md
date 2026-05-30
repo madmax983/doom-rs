@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Eliminate `format!` String Allocations in Logging Paths**
+**Learning:** Hot paths like `dlog` (debug logging) often construct messages using `format!(...)` inside loops, generating a heap allocation for the resulting `String` on every iteration, even if the result is only used for `writeln!`. In this case, `dlog` captured locals like `x`, `y`, and `kind` in an inner block and passed `String` values to `dlog(&msg)`.
+**Action:** Replace `format!(...)` with `format_args!(...)` by changing the receiver signature to accept `std::fmt::Arguments`. When looping over arrays or slabs to build a logging struct, return a tuple of primitive values from the borrow block rather than a `String`, and pass the unwrapped tuple into the `format_args!` macro directly inside the loop to avoid borrow checker errors.
