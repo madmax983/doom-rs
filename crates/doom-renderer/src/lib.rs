@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Sub-module managing the history of clipping bounds for sprites rendered behind portals or geometry.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
