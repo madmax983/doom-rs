@@ -140,20 +140,19 @@ fn bullet_autoaim_angle(
 
 fn snap_player_to_target(gs: &mut GameState, target_handle: crate::mobj::MobjHandle) {
     let handle = gs.player.handle;
-    if let (Some(src), Some(tgt)) = (
-        gs.mobjslab.get(handle).map(|m| (m.x, m.y)),
-        gs.mobjslab.get(target_handle).map(|m| (m.x, m.y)),
-    ) {
-        let dx = tgt.0 - src.0;
-        let dy = tgt.1 - src.1;
-        let dx_f = dx.to_int() as f32;
-        let dy_f = dy.to_int() as f32;
-        let angle_rad = dy_f.atan2(dx_f);
-        let new_angle =
-            Bam((angle_rad / std::f32::consts::TAU * (u32::MAX as f64 + 1.0) as f32) as u32);
+    if let Some(src) = gs.mobjslab.get(handle).map(|m| (m.x, m.y)) {
+        if let Some(tgt) = gs.mobjslab.get(target_handle).map(|m| (m.x, m.y)) {
+            let dx = tgt.0 - src.0;
+            let dy = tgt.1 - src.1;
+            let dx_f = dx.to_int() as f32;
+            let dy_f = dy.to_int() as f32;
+            let angle_rad = dy_f.atan2(dx_f);
+            let new_angle =
+                Bam((angle_rad / std::f32::consts::TAU * (u32::MAX as f64 + 1.0) as f32) as u32);
 
-        if let Some(mo) = gs.mobjslab.get_mut(handle) {
-            mo.angle = new_angle;
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.angle = new_angle;
+            }
         }
     }
 }

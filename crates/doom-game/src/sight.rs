@@ -245,14 +245,16 @@ pub fn p_check_sight(
     let tgt_sector = sector_from_position_or_subsector(level, tgt_x, tgt_y, tgt_subsector);
 
     // Step 1: Reject table quick-reject.
-    if let (Some(ss), Some(ts)) = (src_sector, tgt_sector) {
-        if !level.reject.visible(ss, ts) {
-            return false;
-        }
+    if let Some(ss) = src_sector {
+        if let Some(ts) = tgt_sector {
+            if !level.reject.visible(ss, ts) {
+                return false;
+            }
 
-        // Step 2: Trivial acceptance -- same sector, skip line traversal.
-        if ss == ts {
-            return true;
+            // Step 2: Trivial acceptance -- same sector, skip line traversal.
+            if ss == ts {
+                return true;
+            }
         }
     }
 

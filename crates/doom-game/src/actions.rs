@@ -383,10 +383,12 @@ fn p_check_sight_local(
             crate::sight::sector_from_position_or_subsector(lv, src_x, src_y, src_subsector);
         let tgt_sector =
             crate::sight::sector_from_position_or_subsector(lv, tgt_x, tgt_y, tgt_subsector);
-        if let (Some(ss), Some(ts)) = (src_sector, tgt_sector) {
-            // If REJECT says definitely not visible, bail out immediately.
-            if !lv.reject.visible(ss, ts) {
-                return false;
+        if let Some(ss) = src_sector {
+            if let Some(ts) = tgt_sector {
+                // If REJECT says definitely not visible, bail out immediately.
+                if !lv.reject.visible(ss, ts) {
+                    return false;
+                }
             }
         }
     }
