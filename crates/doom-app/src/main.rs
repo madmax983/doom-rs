@@ -796,7 +796,11 @@ impl DoomGame {
             .mobjslab
             .get(self.gs.player.handle)
             .map(|mo| (mo.x, mo.y, mo.angle))
-            .unwrap_or_default();
+            .unwrap_or((
+                doom_types::Fixed16_16::ZERO,
+                doom_types::Fixed16_16::ZERO,
+                doom_types::Bam::ZERO,
+            ));
         let player_origin = Some(self.gs.player.handle);
 
         for ev in events {

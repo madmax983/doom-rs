@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**[Refactored unwrap_or_default and unwrap_or(false)]**
+**Learning:** Using `unwrap_or_default` on Option types obscures the actual default value being used (especially when multiple defaults are bundled into a tuple), requiring the reader to hunt down the default implementations. Additionally, `map(...).unwrap_or(false)` is an older pattern that can be replaced by the more concise and idiomatic `is_some_and(...)`.
+**Action:** Replace `unwrap_or_default()` with explicit fallback values using `unwrap_or(...)` when the defaults are non-obvious (like coordinate tuples or specific sentinels like `StateNum::NULL`). Use `is_some_and(...)` instead of `map(...).unwrap_or(false)`.

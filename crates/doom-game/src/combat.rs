@@ -214,7 +214,7 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
                     .mobjslab
                     .get(gs.player.handle)
                     .map(|mo| (mo.x, mo.y))
-                    .unwrap_or_default();
+                    .unwrap_or((doom_types::Fixed16_16::ZERO, doom_types::Fixed16_16::ZERO));
                 gs.telemetry.record(
                     gs.tic_num,
                     px.to_int(),
@@ -280,7 +280,7 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             .mobjslab
             .get(target)
             .map(|mo| (mo.x, mo.y))
-            .unwrap_or_default();
+            .unwrap_or((doom_types::Fixed16_16::ZERO, doom_types::Fixed16_16::ZERO));
         #[cfg(feature = "style_meter")]
         if inflictor == gs.player.handle {
             gs.style.register_kill(gs.tic_num);

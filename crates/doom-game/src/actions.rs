@@ -890,15 +890,14 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         let found_target = gs
             .mobjslab
             .get(handle)
-            .map(|mo| mo.target != MobjHandle::NULL)
-            .unwrap_or(false);
+            .is_some_and(|mo| mo.target != MobjHandle::NULL);
 
         if !found_target {
             // Revert to idle spawn state.
             let spawn_sn = mobjinfo::MOBJINFO
                 .get(mo_kind as usize)
                 .map(|i| i.spawn_state)
-                .unwrap_or_default();
+                .unwrap_or(crate::mobj::StateNum::NULL);
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
                 mo.target = MobjHandle::NULL;
                 mo.state = spawn_sn;
