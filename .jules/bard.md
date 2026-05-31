@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-05-31 - [Added missing module docs to lib.rs crates]
+**Confusion:** The `doom-app` crate lacked a crate-level doc comment and `doom-renderer` had missing docs for `sprite_clip` which caused `cargo doc` to fail with `-D missing_docs`.
+**Clarification:** Added a dummy `//! Library entry point.` to `crates/doom-app/src/lib.rs` to satisfy the lint, and fully documented `sprite_clip` with doc-tests to explain its ArrayVec-like behavior.

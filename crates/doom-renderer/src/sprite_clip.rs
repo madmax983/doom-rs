@@ -15,6 +15,16 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Initializes a fresh clipping history buffer.
+    ///
+    /// This avoids allocating a `Vec` on the heap when rendering deep stacks of transparent
+    /// geometry. Doom's sprites typically don't span more than a handful of portals.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// let history = SpriteClipHistory::new();
+    /// ```
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {
@@ -26,6 +36,20 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Records a portal intersection for this sprite column.
+    ///
+    /// As the ray travels deeper into the map, each portal intersection is logged here.
+    /// The renderer uses this chronological history to properly layer the sprite slices.
+    ///
+    /// If the history is full (capacity is 8), subsequent pushes are silently dropped.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 10, silhouette_height: 50.0 });
+    /// ```
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +59,20 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Peeks at the deepest portal boundary this column has pierced.
+    ///
+    /// If a sprite column gets split across multiple sectors, the renderer needs to know the
+    /// properties of the last portal it crossed to determine where to slice the next chunk.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    /// let mut history = SpriteClipHistory::new();
+    /// assert_eq!(history.last(), None);
+    /// history.push(SpriteClipStep { depth: 100.0, row: 10, silhouette_height: 50.0 });
+    /// assert!(history.last().is_some());
+    /// ```
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +81,19 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Iterates over all portal intersections in chronological (depth) order.
+    ///
+    /// This allows the sprite compositor to walk from back-to-front, drawing the slices
+    /// of the sprite column correctly sandwiched between the solid map geometry.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// let history = SpriteClipHistory::new();
+    /// for step in history.iter() {
+    ///     // Process step
+    /// }
+    /// ```
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }

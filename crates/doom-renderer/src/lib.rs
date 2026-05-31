@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Manual array-backed list for recording how many boundaries a sprite column intersects.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
