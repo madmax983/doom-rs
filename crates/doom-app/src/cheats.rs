@@ -340,4 +340,106 @@ mod tests {
         let msg = apply_cheat(&mut gs, "NOT_A_REAL_CHEAT");
         assert_eq!(msg, "");
     }
+
+    #[test]
+    fn apply_cheat_idfa_gives_ammo_and_armor_no_keys() {
+        let mut gs = make_test_gs();
+        gs.player.keys = 0; // Ensure no keys
+        let msg = apply_cheat(&mut gs, "IDFA");
+        assert_eq!(msg, "Ammo (no keys) Added");
+        assert!(
+            gs.player.weapons.iter().all(|&w| w),
+            "IDFA must set all weapon slots"
+        );
+        assert_eq!(gs.player.keys, 0, "IDFA should not give keys");
+    }
+
+    #[test]
+    fn apply_cheat_idclip_toggles_noclip() {
+        let mut gs = make_test_gs();
+        // First toggle: ON
+        let msg_on = apply_cheat(&mut gs, "IDCLIP");
+        assert_eq!(msg_on, "No Clipping Mode ON");
+        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        assert_ne!(mo.flags & flags::MF_NOCLIP, 0);
+
+        // Second toggle: OFF
+        let msg_off = apply_cheat(&mut gs, "IDSPISPOPD");
+        assert_eq!(msg_off, "No Clipping Mode OFF");
+        let mo = gs.mobjslab.get(gs.player.handle).unwrap();
+        assert_eq!(mo.flags & flags::MF_NOCLIP, 0);
+    }
+
+    #[test]
+    fn apply_cheat_idclip_no_mobj() {
+        let mut gs = make_test_gs();
+        // Remove the mobj to test the else branch
+        use doom_game::mobj::MobjHandle;
+        gs.player.handle = MobjHandle::NULL;
+        let msg = apply_cheat(&mut gs, "IDCLIP");
+        assert_eq!(msg, "No Clipping Mode");
+    }
+
+    #[test]
+    fn apply_cheat_idbehold_powers() {
+        use doom_game::player::powers;
+
+        let cases = vec![
+            ("IDBEHOLDS", powers::PW_STRENGTH, 1, "Berserk!"),
+            (
+                "IDBEHOLDI",
+                powers::PW_INVISIBILITY,
+                60 * 35,
+                "Partial Invisibility",
+            ),
+            (
+                "IDBEHOLDR",
+                powers::PW_IRONFEET,
+                60 * 35,
+                "Radiation Shielding Suit",
+            ),
+            ("IDBEHOLDA", powers::PW_ALLMAP, 1, "Computer Area Map"),
+            (
+                "IDBEHOLDV",
+                powers::PW_INVULNERABILITY,
+                30 * 35,
+                "Invulnerability",
+            ),
+            (
+                "IDBEHOLDL",
+                powers::PW_INFRARED,
+                120 * 35,
+                "Light Amplification Visor",
+            ),
+        ];
+
+        for (cheat, power_idx, expected_val, expected_msg) in cases {
+            let mut gs = make_test_gs();
+            let msg = apply_cheat(&mut gs, cheat);
+            assert_eq!(msg, expected_msg);
+            assert_eq!(
+                gs.player.powers[power_idx], expected_val,
+                "Power {} not set correctly for {}",
+                power_idx, cheat
+            );
+        }
+    }
+
+    #[test]
+    fn cheat_detector_drain() {
+        let mut det = CheatDetector::new();
+        for _ in 0..20 {
+            det.feed('x');
+        }
+        // the max_len is at least 10 (IDSPISPOPD). By feeding 20 chars, it will drain
+        assert!(det.buffer.len() <= det.max_len);
+    }
+
+    #[test]
+    fn cheat_detector_clear() {
+        let mut det = CheatDetector::default();
+        det.feed('i');
+        det.clear();
+        assert_eq!(det.buffer.len(), 0);
+    }
 }

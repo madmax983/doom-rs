@@ -56,3 +56,9 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-31 - Sixel and Cheat Coverage Improvement
+**Learning:** Using `cargo llvm-cov --show-instantiations` or `cargo llvm-cov report --html` allows to precisely identify uncovered execution paths like specific matched arms (e.g. , ) and zero bounds checks in render logic.
+**Action:** Always verify script-based patch generation against the actual source file using a diff tool or manual review, since match statement trailing commas or omitted return values can silently trigger mismatched types during Rust compilation.
+## 2024-05-31 - Sixel and Cheat Coverage Improvement
+**Learning:** Using `cargo llvm-cov report --html` allows to precisely identify uncovered execution paths like specific matched arms (e.g. IDDQD, IDFA) and zero bounds checks in render logic.
+**Action:** Always verify script-based patch generation against the actual source file using a diff tool or manual review, since match statement trailing commas or omitted return values can silently trigger mismatched types during Rust compilation.

@@ -406,4 +406,26 @@ mod tests_havoc {
             area.width,
         );
     }
+
+    #[test]
+    fn widget_render_zero_area() {
+        let mut buf = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 10, 10));
+        let fb = Framebuffer::new();
+        let lut = PaletteLut::grayscale();
+        let widget = DoomSixelWidget::new(&fb, &lut, 0, (8, 16));
+
+        widget.render(Rect::new(0, 0, 0, 0), &mut buf); // Should return early
+    }
+
+    #[test]
+    fn widget_render_normal() {
+        let mut buf = ratatui::buffer::Buffer::empty(Rect::new(0, 0, 10, 10));
+        let fb = Framebuffer::new();
+        let lut = PaletteLut::grayscale();
+        let widget = DoomSixelWidget::new(&fb, &lut, 0, (8, 16));
+
+        widget.render(Rect::new(0, 0, 2, 2), &mut buf);
+
+        assert!(buf.cell((1, 0)).unwrap().skip);
+    }
 }
