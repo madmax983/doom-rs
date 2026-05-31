@@ -459,7 +459,7 @@ impl WadFile {
 
         Some(MapLumpGroup::Classic(ClassicMapLumpGroup {
             marker,
-            lumps: lumps.map(Option::unwrap),
+            lumps: lumps.map(|l| l.expect("Unexpected missing lump")),
         }))
     }
 }
@@ -737,6 +737,21 @@ mod tests {
         }
 
         data
+    }
+
+    #[test]
+    fn parse_directory_out_of_bounds_overflow() {
+        let mut data = vec![0u8; 12];
+        data[0..4].copy_from_slice(b"IWAD");
+        let numlumps: i32 = i32::MAX; // On 32-bit platforms, this overflows when multiplied by 16. On 64-bit platforms, it just exceeds bounds.
+        data[4..8].copy_from_slice(&numlumps.to_le_bytes());
+        data[8..12].copy_from_slice(&12i32.to_le_bytes());
+        let res = WadFile::parse(data);
+        assert!(
+            matches!(res, Err(WadError::DirectoryOutOfBounds { .. })),
+            "Expected DirectoryOutOfBounds, got {:?}",
+            res
+        );
     }
 
     #[test]
