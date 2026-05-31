@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+💡 **The Spark:** "I noticed we can record and playback demos, but we don't have any way to extract meaningful statistics from them to compare player performance or speedrun efficiencies without watching the whole demo."
+🚀 **The Feature:** "Implemented `analyzer.rs` in `doom-demo` which parses a `DemoPlayer` to extract high-level metrics like `total_tics`, `idle_tics`, `attack_tics`, `use_tics`, and total movement distance."
+🔮 **The Potential:** "Could be used by the CLI to print a summary of a demo file without playing it, or to aggregate statistics across multiple demos for telemetry."
+⚠️ **Risk:** "Low. Isolated additive module in `doom-demo/src/analyzer.rs`. No changes to core playback logic."

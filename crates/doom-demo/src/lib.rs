@@ -11,6 +11,7 @@
 //! - [`recorder`] — [`DemoRecorder`]: accumulates tics and writes an LMP file
 //! - [`player`] — [`DemoPlayer`]: parses an LMP file and replays tics
 
+pub mod analyzer;
 pub mod csv;
 pub mod header;
 pub mod player;
@@ -18,6 +19,7 @@ pub mod recorder;
 pub mod ticcmd;
 
 // Re-export primary types at crate root for convenience.
+pub use analyzer::{DemoStats, analyze_demo};
 pub use csv::export_demo_to_csv;
 pub use header::{LMP_HEADER_SIZE, LMP_TERMINATOR, LMP_VERSION_1_9, LmpHeader};
 pub use player::{DemoError, DemoPlayer};
