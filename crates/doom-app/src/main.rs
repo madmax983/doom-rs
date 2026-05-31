@@ -244,7 +244,35 @@ struct Args {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn format_sector_list(sectors: &[usize]) -> String {
+    if sectors.is_empty() {
+        return "None".to_string();
+    }
+    let mut ranges = Vec::new();
+    let mut i = 0;
+    while i < sectors.len() {
+        let start = sectors[i];
+        let mut end = start;
+        while i + 1 < sectors.len() && sectors[i + 1] == end + 1 {
+            end = sectors[i + 1];
+            i += 1;
+        }
+        if start == end {
+            ranges.push(start.to_string());
+        } else {
+            ranges.push(format!("{}-{}", start, end));
+        }
+        i += 1;
+    }
+    ranges.join(", ")
+}
+
+// ---------------------------------------------------------------------------
 // DoomGame — implements DoomApp
+
 // ---------------------------------------------------------------------------
 
 pub(crate) struct DoomGame {
@@ -2453,17 +2481,7 @@ fn run_doom(args: Args) -> Result<()> {
                 println!("Completed tactical analysis for {}", warp_str);
             }
 
-            let mut chokepoints_str = String::new();
-            if chokepoints.is_empty() {
-                chokepoints_str.push_str("None");
-            } else {
-                for (i, s) in chokepoints.iter().enumerate() {
-                    if i > 0 {
-                        chokepoints_str.push_str(", ");
-                    }
-                    chokepoints_str.push_str(&s.to_string());
-                }
-            }
+            let chokepoints_str = format_sector_list(&chokepoints);
 
             let mut table = comfy_table::Table::new();
             table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
@@ -2486,13 +2504,7 @@ fn run_doom(args: Args) -> Result<()> {
                     comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
                 ]);
                 for (i, area) in areas.iter().enumerate() {
-                    let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
-                        if j > 0 {
-                            area_str.push_str(", ");
-                        }
-                        area_str.push_str(&s.to_string());
-                    }
+                    let area_str = format_sector_list(area);
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
                         comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
@@ -2508,13 +2520,7 @@ fn run_doom(args: Args) -> Result<()> {
                     comfy_table::Cell::new(&chokepoints_str),
                 ]);
                 for (i, area) in areas.iter().enumerate() {
-                    let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
-                        if j > 0 {
-                            area_str.push_str(", ");
-                        }
-                        area_str.push_str(&s.to_string());
-                    }
+                    let area_str = format_sector_list(area);
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
                         comfy_table::Cell::new(area_str),

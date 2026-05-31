@@ -160,8 +160,10 @@ impl<'a> MapAnalyzer<'a> {
     /// let analyzer = MapAnalyzer::new(&graph);
     /// let areas = analyzer.isolated_areas();
     /// assert_eq!(areas.len(), 2);
+    /// assert_eq!(areas[0], vec![0, 1]);
+    /// assert_eq!(areas[1], vec![2, 3]);
     /// ```
-    pub fn isolated_areas(&self) -> Vec<HashSet<usize>> {
+    pub fn isolated_areas(&self) -> Vec<Vec<usize>> {
         let mut visited = HashSet::new();
         let mut components = Vec::new();
 
@@ -183,9 +185,14 @@ impl<'a> MapAnalyzer<'a> {
                         }
                     }
                 }
-                components.push(component);
+
+                let mut component_vec: Vec<usize> = component.into_iter().collect();
+                component_vec.sort_unstable();
+                components.push(component_vec);
             }
         }
+
+        components.sort_unstable_by(|a, b| a.first().cmp(&b.first()));
         components
     }
 }
@@ -228,6 +235,8 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let areas = analyzer.isolated_areas();
         assert_eq!(areas.len(), 2);
+        assert_eq!(areas[0], vec![0, 1]);
+        assert_eq!(areas[1], vec![2, 3]);
     }
 
     #[test]
@@ -277,8 +286,7 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let areas = analyzer.isolated_areas();
         assert_eq!(areas.len(), 1);
-        assert!(areas[0].contains(&0));
-        assert!(areas[0].contains(&1));
+        assert_eq!(areas[0], vec![0, 1]);
     }
 
     #[test]
