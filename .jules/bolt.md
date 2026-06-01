@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Remove per-frame Vec allocation in DemoPlayer::next_tic_cmds**
+**Learning:** Returning `Vec<T>` on hot paths (like per-frame game loops) via `.clone()` causes significant allocation overhead. Returning `&[T]` eliminates the heap allocation but requires careful handling of lifetimes tying the returned slice to `&mut self`.
+**Action:** When a method returns data owned by `self` in a hot loop, prefer returning slices or references over cloning, and ensure the caller's lifetime constraints permit holding a borrow on the struct.
