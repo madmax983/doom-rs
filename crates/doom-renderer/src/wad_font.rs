@@ -134,4 +134,64 @@ mod tests {
         let font = empty_font();
         assert!(!font.is_loaded());
     }
+
+    #[test]
+    fn string_width_with_valid_glyphs() {
+        let mut glyphs = vec![None; 63];
+        // 'A' is ascii 65. 65 - 33 = 32
+        glyphs[32] = Some(PatchImage {
+            width: 10,
+            height: 10,
+            left_offset: 0,
+            top_offset: 0,
+            columns: vec![],
+        });
+        // 'B' is ascii 66. 66 - 33 = 33
+        glyphs[33] = Some(PatchImage {
+            width: 15,
+            height: 10,
+            left_offset: 0,
+            top_offset: 0,
+            columns: vec![],
+        });
+
+        let font = WadFont { glyphs };
+
+        // "A B" = width(A) + GLYPH_GAP + width(space) + GLYPH_GAP + width(B)
+        // 10 + 1 + 4 + 1 + 15 = 31
+        assert_eq!(font.string_width("A B"), 31);
+    }
+
+    #[test]
+    fn draw_string_centered() {
+        let mut glyphs = vec![None; 63];
+        // 'A' is ascii 65. 65 - 33 = 32
+        glyphs[32] = Some(PatchImage {
+            width: 10,
+            height: 10,
+            left_offset: 0,
+            top_offset: 0,
+            columns: vec![],
+        });
+
+        let font = WadFont { glyphs };
+
+        let mut fb = Framebuffer::new();
+        // Draw "A". width = 10. Center x = (320 - 10) / 2 = 155
+        font.draw_string_centered(&mut fb, 10, "A");
+    }
+
+    #[test]
+    fn is_loaded_true_when_has_glyphs() {
+        let mut glyphs = vec![None; 63];
+        glyphs[32] = Some(PatchImage {
+            width: 10,
+            height: 10,
+            left_offset: 0,
+            top_offset: 0,
+            columns: vec![],
+        });
+        let font = WadFont { glyphs };
+        assert!(font.is_loaded());
+    }
 }

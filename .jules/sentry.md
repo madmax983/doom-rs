@@ -56,3 +56,7 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-06-01 - When appending programmatic tests in a script, watch for missing or duplicate braces
+
+**Learning:** When using Python to append tests to a file by stripping the trailing `}` and adding a new test block, doing it repeatedly or using a poorly structured regex can cause syntax errors (like duplicate or unexpected braces). Also, trying to parse Rust syntax with naive Python strings is brittle.
+**Action:** Always test Python string-replacement scripts on a clean git working tree, and if the script fails, immediately use `git restore` and rewrite the script with the entire fixed string, or use `sed` to avoid building complicated parsing logic.
