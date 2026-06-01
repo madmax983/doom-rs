@@ -288,3 +288,28 @@ mod loom_tests {
         });
     }
 }
+
+#[cfg(test)]
+mod test_fixes {
+    use super::*;
+
+    #[test]
+    fn test_driver_null_does_not_panic() {
+        let _ = AudioDriver::null();
+    }
+
+    #[test]
+    fn test_driver_open_handles_error() {
+        let driver = AudioDriver::open(44100);
+        let _ = driver.is_ok();
+    }
+
+    #[test]
+    fn test_audio_error_display() {
+        let err1 = AudioError::NoDevice;
+        let err2 = AudioError::Stream("test".to_string());
+
+        assert_eq!(err1.to_string(), "no audio output device available");
+        assert_eq!(err2.to_string(), "cpal stream error: test");
+    }
+}
