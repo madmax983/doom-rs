@@ -27,6 +27,116 @@
 use crate::graph::SectorGraph;
 use std::collections::{HashMap, HashSet};
 
+#[derive(Default)]
+struct ChokepointContext {
+    visited: HashSet<usize>,
+    discovery_time: HashMap<usize, usize>,
+    low_time: HashMap<usize, usize>,
+    parent: HashMap<usize, usize>,
+    articulation_points: HashSet<usize>,
+    time: usize,
+}
+
+impl ChokepointContext {
+    fn process_graph(&mut self, graph: &SectorGraph) {
+        for &node in graph.adjacency_list.keys() {
+            if self.visited.contains(&node) {
+                continue;
+            }
+            self.dfs_iterative(node, graph);
+        }
+    }
+
+    fn dfs_iterative(&mut self, start_node: usize, graph: &SectorGraph) {
+        let Some(neighbors) = graph.adjacency_list.get(&start_node) else {
+            return;
+        };
+        let mut stack = vec![(start_node, neighbors.iter())];
+
+        self.visited.insert(start_node);
+        self.time += 1;
+        self.discovery_time.insert(start_node, self.time);
+        self.low_time.insert(start_node, self.time);
+        let mut children_map: HashMap<usize, usize> = HashMap::new();
+
+        while let Some((u, mut neighbors_iter)) = stack.pop() {
+            let mut pushed_child = false;
+
+            while let Some(&v) = neighbors_iter.next() {
+                if !graph.adjacency_list.contains_key(&v) {
+                    continue;
+                }
+
+                if !self.visited.contains(&v) {
+                    *children_map.entry(u).or_default() += 1;
+                    self.parent.insert(v, u);
+
+                    self.visited.insert(v);
+                    self.time += 1;
+                    self.discovery_time.insert(v, self.time);
+                    self.low_time.insert(v, self.time);
+
+                    stack.push((u, neighbors_iter));
+                    if let Some(v_neighbors) = graph.adjacency_list.get(&v) {
+                        stack.push((v, v_neighbors.iter()));
+                    }
+                    pushed_child = true;
+                    break;
+                }
+
+                if self.parent.get(&u) == Some(&v) {
+                    continue;
+                }
+
+                let Some(&low_u) = self.low_time.get(&u) else {
+                    continue;
+                };
+                let Some(&disc_v) = self.discovery_time.get(&v) else {
+                    continue;
+                };
+                self.low_time.insert(u, low_u.min(disc_v));
+            }
+
+            if pushed_child {
+                continue;
+            }
+
+            self.update_parent_and_check_ap(u, &children_map);
+        }
+    }
+
+    fn update_parent_and_check_ap(&mut self, u: usize, children_map: &HashMap<usize, usize>) {
+        let Some(&p) = self.parent.get(&u) else {
+            if *children_map.get(&u).unwrap_or(&0) > 1 {
+                self.articulation_points.insert(u);
+            }
+            return;
+        };
+
+        let Some(&low_u) = self.low_time.get(&u) else {
+            return;
+        };
+        let Some(&low_p) = self.low_time.get(&p) else {
+            return;
+        };
+        let Some(&disc_p) = self.discovery_time.get(&p) else {
+            return;
+        };
+
+        self.low_time.insert(p, low_p.min(low_u));
+
+        if low_u >= disc_p && self.parent.contains_key(&p) {
+            self.articulation_points.insert(p);
+        }
+    }
+
+    fn extract(self) -> Vec<usize> {
+        let mut ap_vec: Vec<usize> = self.articulation_points.into_iter().collect();
+        ap_vec.sort_unstable();
+        ap_vec
+    }
+}
+
 /// Analyzes map topology for tactical features.
 pub struct MapAnalyzer<'a> {
     graph: &'a SectorGraph,
@@ -62,82 +172,9 @@ impl<'a> MapAnalyzer<'a> {
 
     /// Finds articulation points (sectors that, if removed, disconnect parts of the map).
     pub fn chokepoints(&self) -> Vec<usize> {
-        let mut visited = HashSet::new();
-        let mut discovery_time = HashMap::new();
-        let mut low_time = HashMap::new();
-        let mut parent = HashMap::new();
-        let mut articulation_points = HashSet::new();
-        let mut time = 0;
-
-        for &node in self.graph.adjacency_list.keys() {
-            if !visited.contains(&node) {
-                // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
-
-                visited.insert(node);
-                time += 1;
-                discovery_time.insert(node, time);
-                low_time.insert(node, time);
-                let mut children_map: HashMap<usize, usize> = HashMap::new();
-
-                while let Some((u, mut neighbors_iter)) = stack.pop() {
-                    let mut pushed_child = false;
-
-                    while let Some(&v) = neighbors_iter.next() {
-                        if !self.graph.adjacency_list.contains_key(&v) {
-                            continue;
-                        }
-                        if !visited.contains(&v) {
-                            *children_map.entry(u).or_default() += 1;
-                            parent.insert(v, u);
-
-                            visited.insert(v);
-                            time += 1;
-                            discovery_time.insert(v, time);
-                            low_time.insert(v, time);
-
-                            stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
-                            pushed_child = true;
-                            break;
-                        } else if parent.get(&u) != Some(&v) {
-                            let (low_u, disc_v) =
-                                (low_time.get(&u).copied(), discovery_time.get(&v).copied());
-                            if let (Some(low_u), Some(disc_v)) = (low_u, disc_v) {
-                                let new_low = low_u.min(disc_v);
-                                low_time.insert(u, new_low);
-                            }
-                        }
-                    }
-
-                    if !pushed_child {
-                        // After visiting all neighbors of u, if u is not root, update parent's low_time
-                        if let Some(&p) = parent.get(&u) {
-                            let (low_u, low_p, disc_p) = (
-                                low_time.get(&u).copied(),
-                                low_time.get(&p).copied(),
-                                discovery_time.get(&p).copied(),
-                            );
-                            if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p)
-                            {
-                                let new_low = low_p.min(low_u);
-                                low_time.insert(p, new_low);
-
-                                if low_u >= disc_p && parent.contains_key(&p) {
-                                    articulation_points.insert(p);
-                                }
-                            }
-                        } else if *children_map.get(&u).unwrap_or(&0) > 1 {
-                            articulation_points.insert(u);
-                        }
-                    }
-                }
-            }
-        }
-
-        let mut ap_vec: Vec<usize> = articulation_points.into_iter().collect();
-        ap_vec.sort_unstable();
-        ap_vec
+        let mut ctx = ChokepointContext::default();
+        ctx.process_graph(self.graph);
+        ctx.extract()
     }
 
     /// Finds distinct disconnected areas of the map.
@@ -166,27 +203,38 @@ impl<'a> MapAnalyzer<'a> {
         let mut components = Vec::new();
 
         for &node in self.graph.adjacency_list.keys() {
-            if !visited.contains(&node) {
-                let mut component = HashSet::new();
-                let mut queue = vec![node];
-                visited.insert(node);
-
-                while let Some(curr) = queue.pop() {
-                    component.insert(curr);
-                    if let Some(neighbors) = self.graph.adjacency_list.get(&curr) {
-                        for &n in neighbors {
-                            // Only traverse edges to nodes that actually exist in the graph.
-                            if self.graph.adjacency_list.contains_key(&n) && !visited.contains(&n) {
-                                visited.insert(n);
-                                queue.push(n);
-                            }
-                        }
-                    }
-                }
-                components.push(component);
+            if visited.contains(&node) {
+                continue;
             }
+            components.push(self.explore_isolated_area(node, &mut visited));
         }
         components
+    }
+
+    fn explore_isolated_area(
+        &self,
+        start_node: usize,
+        visited: &mut HashSet<usize>,
+    ) -> HashSet<usize> {
+        let mut component = HashSet::new();
+        let mut stack = vec![start_node];
+        visited.insert(start_node);
+
+        while let Some(curr) = stack.pop() {
+            component.insert(curr);
+            let Some(neighbors) = self.graph.adjacency_list.get(&curr) else {
+                continue;
+            };
+
+            for &n in neighbors {
+                if !self.graph.adjacency_list.contains_key(&n) || visited.contains(&n) {
+                    continue;
+                }
+                visited.insert(n);
+                stack.push(n);
+            }
+        }
+        component
     }
 }
 

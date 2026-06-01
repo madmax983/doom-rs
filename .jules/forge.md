@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**God Function / Pyramid of Doom Context Extraction**
+**Learning:** Extracting deeply nested `while`/`if`/`match` blocks (Pyramid of Doom) from large god functions (like graph analysis) into a dedicated internal `Context` struct effectively flattens the logic while encapsulating messy transient state.
+**Action:** When a method has too many local variables and nested blocks, pull those variables into a temporary struct, add stateful helper methods utilizing early-return Guard Clauses, and then collapse the main function into simply initializing, processing, and extracting results from the Context.
