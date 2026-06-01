@@ -1205,35 +1205,13 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
         // The ring sector provides the target height.
         // Find it by looking at linedefs fronting the hole sector — the ring
         // is the other sector that isn't the trigger sector.
-        let hole_ld_indices = sector_linedefs(level, hole_sector);
-        let mut ring_floor: Option<i16> = None;
-
-        for hole_ld in hole_ld_indices {
-            let hld = &level.linedefs[hole_ld];
-            if hld.left_sidedef == SIDEDEF_NONE {
-                continue;
-            }
-            let Some(sd) = level.sidedefs.get(hld.left_sidedef as usize) else {
-                continue;
-            };
-            let ring_sector = sd.sector as usize;
-            if ring_sector != hole_sector && ring_sector != trigger_sector {
-                if let Some(s) = level.sectors.get(ring_sector) {
-                    ring_floor = Some(s.floor_height);
-                    break;
-                }
-            }
-        }
-
-        let target = match ring_floor {
-            Some(h) => h,
-            None => {
-                // Fall back: use trigger sector floor as ring floor.
-                match level.sectors.get(trigger_sector) {
-                    Some(s) => s.floor_height,
-                    None => continue,
-                }
-            }
+        let Some(target) = adjacent_sectors(level, hole_sector)
+            .filter(|&(idx, _)| idx != trigger_sector)
+            .map(|(_, s)| s.floor_height)
+            .next()
+            .or_else(|| level.sectors.get(trigger_sector).map(|s| s.floor_height))
+        else {
+            continue;
         };
 
         // Skip if already has a mover.
