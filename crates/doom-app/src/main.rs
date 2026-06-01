@@ -204,6 +204,10 @@ struct Args {
     #[arg(long, num_args = 2, value_names = ["INPUT_LMP", "OUTPUT_CSV"])]
     export_demo_csv: Option<Vec<std::path::PathBuf>>,
 
+    /// Convert a .lmp demo file to a JSON and exit.
+    #[arg(long, num_args = 2, value_names = ["INPUT_LMP", "OUTPUT_JSON"])]
+    export_demo_json: Option<Vec<std::path::PathBuf>>,
+
     /// Export the sector topological graph to a Graphviz DOT file and exit.
     #[arg(long)]
     export_dot: Option<std::path::PathBuf>,
@@ -2335,6 +2339,38 @@ fn run_doom(args: Args) -> Result<()> {
                 );
             } else {
                 println!("Exported demo CSV to {}", output_path.display());
+            }
+        }
+        return Ok(());
+    }
+
+    if let Some(ref paths) = args.export_demo_json {
+        let input_path = &paths[0];
+        let output_path = &paths[1];
+        let mut player = load_demo_player(input_path)?;
+        let json_output = doom_demo::export_demo_to_json(&mut player);
+        std::fs::write(output_path, json_output).with_context(|| {
+            format!(
+                "Could not save demo JSON to '{}'. Please check your permissions.",
+                output_path.display()
+            )
+        })?;
+        if args.json {
+            let json_data = format!(
+                r#"{{"status":"success","action":"export","type":"demo JSON","file":{:?}}}"#,
+                output_path.display().to_string()
+            );
+            println!("{json_data}");
+        } else {
+            use crossterm::style::Stylize;
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                println!(
+                    "{} {}",
+                    "🌟 Exported demo JSON to".green().bold(),
+                    output_path.display().to_string().cyan()
+                );
+            } else {
+                println!("Exported demo JSON to {}", output_path.display());
             }
         }
         return Ok(());
@@ -5211,5 +5247,26 @@ mod tests {
         assert!(args.is_ok(), "args with --analyze must parse successfully");
         let args = args.expect("args parse must succeed");
         assert!(args.analyze);
+    }
+
+    #[test]
+    fn cli_args_parse_export_demo_json() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--export-demo-json",
+            "test.lmp",
+            "test.json",
+        ]);
+        assert!(
+            args.is_ok(),
+            "args with --export-demo-json must parse successfully"
+        );
+        let args = args.expect("args parse must succeed");
+        let paths = args.export_demo_json.expect("export_demo_json must exist");
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0], std::path::PathBuf::from("test.lmp"));
+        assert_eq!(paths[1], std::path::PathBuf::from("test.json"));
     }
 }

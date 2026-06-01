@@ -13,6 +13,7 @@
 
 pub mod csv;
 pub mod header;
+pub mod json;
 pub mod player;
 pub mod recorder;
 pub mod ticcmd;
@@ -20,6 +21,7 @@ pub mod ticcmd;
 // Re-export primary types at crate root for convenience.
 pub use csv::export_demo_to_csv;
 pub use header::{LMP_HEADER_SIZE, LMP_TERMINATOR, LMP_VERSION_1_9, LmpHeader};
+pub use json::export_demo_to_json;
 pub use player::{DemoError, DemoPlayer};
 pub use recorder::DemoRecorder;
 pub use ticcmd::{DEMO_TIC_SIZE, DemoTicCmd};
