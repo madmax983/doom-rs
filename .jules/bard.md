@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-11-20 - [Clarified SpriteClipHistory allocation limits]
+**Confusion:** The `SpriteClipHistory` struct used a magic constant (8) for its internal array of `SpriteClipStep`s, and its methods didn't explain why it drops clips silently when exceeding this limit instead of allocating.
+**Clarification:** Added module-level and method-level documentation explaining that columns rarely clip through more than 4-8 portals before hitting a solid wall, so the fixed size avoids expensive heap allocations on the hot path at the minor risk of visual artifacts in extremely complex portal traversals.
