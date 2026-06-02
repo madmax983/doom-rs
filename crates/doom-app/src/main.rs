@@ -3082,9 +3082,9 @@ fn main() {
 
                 let mut causes = err.chain().skip(1).peekable();
                 if causes.peek().is_some() {
-                    eprintln!("\n↳ {}:", "Reason".red().bold());
+                    eprintln!("\n↳ {}:", "Reason".dark_grey());
                     for cause in causes {
-                        eprintln!("    {}", cause);
+                        eprintln!("    {}", cause.to_string().dark_grey());
                     }
                 }
                 eprintln!();
