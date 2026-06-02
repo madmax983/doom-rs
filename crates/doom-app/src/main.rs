@@ -775,6 +775,246 @@ impl DoomGame {
         self.transition_buttons_down = button_mask;
         input.menu_select || input.escape_pressed || button_pressed
     }
+    fn handle_title_screen(&mut self, input: &TicInput) -> bool {
+        if let Some(ref mut ts) = self.title_screen {
+            ts.tick();
+            self.menu.tick();
+
+            // Edge-triggered navigation: Up/Down arrows, Escape = back.
+            if input.menu_up {
+                self.menu.move_up();
+            } else if input.menu_down {
+                self.menu.move_down();
+            }
+            if input.escape_pressed {
+                self.menu.back();
+            }
+
+            // Enter = select; Backspace = back.
+            if input.menu_select {
+                if let Some(result) = self.menu.select() {
+                    self.handle_menu_result(result);
+                }
+            } else if let Some('\x08') = input.console_char {
+                // Backspace = back in menu (alternative to Escape).
+                self.menu.back();
+            }
+            return true;
+        }
+        false
+    }
+
+    fn handle_intermission_and_finale(&mut self, transition_pressed: bool) -> bool {
+        match self.phase_controller.phase() {
+            GamePhase::Intermission { .. } => {
+                if let Some(renderer) = self.intermission_renderer.as_mut() {
+                    if transition_pressed {
+                        if renderer.is_done() {
+                            self.phase_controller.request_skip();
+                        } else {
+                            renderer.skip();
+                        }
+                    } else {
+                        renderer.tick();
+                    }
+                }
+
+                self.phase_controller.tick(&mut self.gs);
+                if let Some(map_id) = self.phase_controller.should_load_map() {
+                    self.load_map_after_intermission(map_id, PlayerStateCarry::Carry);
+                }
+                self.update_intermission_renderer();
+                true
+            }
+            GamePhase::Finale { .. } => {
+                if transition_pressed {
+                    self.phase_controller.request_skip();
+                }
+                self.phase_controller.tick(&mut self.gs);
+                if matches!(self.phase_controller.phase(), GamePhase::TitleScreen) {
+                    self.enter_title_screen();
+                }
+                true
+            }
+            GamePhase::TitleScreen | GamePhase::Playing => false,
+        }
+    }
+
+    fn handle_console_and_cheats(&mut self, input: &TicInput) {
+        // Escape: toggle the in-game menu (when console is not open).
+        if input.escape_pressed && !self.console.visible {
+            if self.menu.is_active() {
+                self.menu.close();
+            } else {
+                self.menu.open();
+            }
+        }
+
+        // Also handle in-game menu navigation via edge-triggered keys.
+        if self.menu.is_active() {
+            if input.menu_up {
+                self.menu.move_up();
+            } else if input.menu_down {
+                self.menu.move_down();
+            }
+            if input.menu_select {
+                if let Some(result) = self.menu.select() {
+                    self.handle_menu_result(result);
+                }
+            }
+        }
+
+        if let Some(ch) = input.console_char {
+            if ch == '`' || ch == '~' {
+                // Toggle the console overlay on backtick/tilde.
+                self.console.toggle();
+            } else if self.console.visible {
+                // Console is open: feed characters to the input line.
+                if ch == '\n' {
+                    // Enter: submit the line, try to apply as a cheat.
+                    let line = self.console.submit();
+                    if !line.is_empty() {
+                        let upper = line.to_uppercase();
+                        let msg = cheats::apply_cheat(&mut self.gs, &upper);
+                        let display = if msg.is_empty() {
+                            format!("(ERR) UNKNOWN COMMAND {}", line)
+                        } else {
+                            format!("(OK) {}", msg)
+                        };
+                        self.console.print(display);
+                    }
+                } else {
+                    self.console.type_char(ch);
+                }
+            } else {
+                // Console is closed: feed character to the cheat detector.
+                if let Some(cheat_name) = self.cheat_detector.feed(ch) {
+                    let msg = cheats::apply_cheat(&mut self.gs, cheat_name);
+                    // IDDT toggles full automap reveal.
+                    if cheat_name == "IDDT" {
+                        self.automap_full_reveal = !self.automap_full_reveal;
+                    }
+                    if !msg.is_empty() {
+                        self.hud_messages.push(msg.to_string(), 105); // 3 sec @ 35 tics/sec
+                        self.console.print(msg.to_string());
+                    }
+                }
+            }
+        }
+
+        // Toggle automap on Tab (stateful — each press flips visibility).
+        if input.tab_pressed {
+            self.automap.toggle();
+        }
+
+        // Feed typed characters from chatchar to the ring-buffer cheat detector.
+        // This is the classic Doom cheat entry path: typed characters during
+        // gameplay are matched against known sequences (iddqd, idkfa, etc.).
+        if input.chatchar != 0 {
+            self.cheat_buffer.push(input.chatchar);
+            if let Some(code) = game_cheats::check_cheats(&self.cheat_buffer) {
+                game_cheats::apply_cheat(&mut self.gs, code);
+                let msg = game_cheats::cheat_message(code).to_string();
+                self.hud_messages.push(msg, 105); // 3 seconds at 35 tics/sec
+                self.cheat_buffer.clear();
+            }
+        }
+    }
+
+    fn handle_quick_save_load(&mut self, input: &TicInput) {
+        // Quick save (F5).
+        if input.f5_save {
+            if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0, self.compat) {
+                self.console.print(format!("Save failed: {e}"));
+                self.hud_messages.push(format!("Save failed: {e}"), 105);
+            } else {
+                self.console.print("Game saved.".to_string());
+                self.hud_messages.push("Game saved.".to_string(), 105);
+            }
+        }
+
+        // Quick load (F9).
+        if input.f9_load {
+            match savegame::load_game(&self.save_path, self.compat) {
+                Ok((_header, payload)) => {
+                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
+                        self.console.print(format!("Load failed: {e}"));
+                        self.hud_messages.push(format!("Load failed: {e}"), 105);
+                    } else {
+                        self.reset_weapon_anim();
+                        self.console.print("Game loaded.".to_string());
+                        self.hud_messages.push("Game loaded.".to_string(), 105);
+                        self.start_level_music();
+                    }
+                }
+                Err(e) => {
+                    self.console.print(format!("Load failed: {e}"));
+                    self.hud_messages.push(format!("Load failed: {e}"), 105);
+                }
+            }
+        }
+    }
+
+    fn drain_sound_events(&mut self) {
+        // Drain the game's sound event queue.  Each event maps to a DS* lump
+        // name and a priority.  The SfxMixer's 8-channel priority system handles
+        // contention — weapon-priority sounds always win; monster sounds compete
+        // with each other, matching Doom's original S_StartSound behaviour.
+        let events = std::mem::take(&mut self.gs.sound.sound_queue);
+
+        #[cfg(feature = "sound_ripples")]
+        if self.title_screen.is_none() {
+            self.cogmind_state
+                .effects
+                .spawn_sound_ripples(&events, &self.gs);
+        }
+        self.handle_sound_events(events);
+    }
+
+    fn detect_player_damage(&mut self) {
+        let cur_health = self.gs.player.health();
+        if cur_health < self.prev_health {
+            let damage = self.prev_health - cur_health;
+            // Pain palette indices 1-8 (increasing red tint).
+            // Simple formula: one palette step per 8 HP lost, clamped.
+            let palette = ((damage / 8) as usize).clamp(1, 8);
+            self.palette_flash.trigger(palette, 12);
+            // Signal face FSM about damage.
+            self.face_state.on_damage(damage, Bam::ZERO);
+            // Play DSPLPAIN on any damage taken.
+            if let (Some(audio), Some(sfx_id)) = (&self.audio, self.pain_sfx_id) {
+                audio.play_sfx(
+                    sfx_id,
+                    SfxPriority::High,
+                    1.0,
+                    0.0,
+                    Some(self.gs.player.handle),
+                );
+            }
+            if self.debug_log.is_some() {
+                let msg = format!("damage -{} health={}", damage, cur_health);
+                self.dlog(&msg);
+            }
+        }
+        // Tick face FSM every tic.
+        {
+            let is_firing = self.gs.player.attack_down;
+            let is_invulnerable =
+                self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+            self.face_state
+                .tick(cur_health, is_firing, is_invulnerable, None);
+        }
+        if self.debug_log.is_some() {
+            // Log player snapshot every 35 tics (once per second of gametime).
+            if self.gs.tic_num.is_multiple_of(35) {
+                self.dlog_player_snapshot();
+                self.dlog_live_enemies();
+            }
+            // Log any deaths that fired A_Scream this tic.
+            self.dlog_death_events();
+        }
+        self.prev_health = cur_health;
+    }
 }
 
 impl DoomGame {
@@ -986,184 +1226,23 @@ impl DoomApp for DoomGame {
         // --- Title screen mode ---
         // While the title screen is showing, route input to the menu and skip
         // all game simulation.  StartGame dismisses the title screen.
-        if let Some(ref mut ts) = self.title_screen {
-            ts.tick();
-            self.menu.tick();
-
-            // Edge-triggered navigation: Up/Down arrows, Escape = back.
-            if input.menu_up {
-                self.menu.move_up();
-            } else if input.menu_down {
-                self.menu.move_down();
-            }
-            if input.escape_pressed {
-                self.menu.back();
-            }
-
-            // Enter = select; Backspace = back.
-            if input.menu_select {
-                if let Some(result) = self.menu.select() {
-                    self.handle_menu_result(result);
-                }
-            } else if let Some('\x08') = input.console_char {
-                // Backspace = back in menu (alternative to Escape).
-                self.menu.back();
-            }
+        if self.handle_title_screen(&input) {
             return;
         }
 
-        match self.phase_controller.phase() {
-            GamePhase::Intermission { .. } => {
-                if let Some(renderer) = self.intermission_renderer.as_mut() {
-                    if transition_pressed {
-                        if renderer.is_done() {
-                            self.phase_controller.request_skip();
-                        } else {
-                            renderer.skip();
-                        }
-                    } else {
-                        renderer.tick();
-                    }
-                }
-
-                self.phase_controller.tick(&mut self.gs);
-                if let Some(map_id) = self.phase_controller.should_load_map() {
-                    self.load_map_after_intermission(map_id, PlayerStateCarry::Carry);
-                }
-                self.update_intermission_renderer();
-                return;
-            }
-            GamePhase::Finale { .. } => {
-                if transition_pressed {
-                    self.phase_controller.request_skip();
-                }
-                self.phase_controller.tick(&mut self.gs);
-                if matches!(self.phase_controller.phase(), GamePhase::TitleScreen) {
-                    self.enter_title_screen();
-                }
-                return;
-            }
-            GamePhase::TitleScreen | GamePhase::Playing => {}
+        if self.handle_intermission_and_finale(transition_pressed) {
+            return;
         }
 
         // Tick menu skull animation each tic regardless of menu state.
         self.menu.tick();
 
-        // Handle console / cheat input before forwarding movement to the
-        // game simulation.
-        // Escape: toggle the in-game menu (when console is not open).
-        if input.escape_pressed && !self.console.visible {
-            if self.menu.is_active() {
-                self.menu.close();
-            } else {
-                self.menu.open();
-            }
-        }
-
-        // Also handle in-game menu navigation via edge-triggered keys.
-        if self.menu.is_active() {
-            if input.menu_up {
-                self.menu.move_up();
-            } else if input.menu_down {
-                self.menu.move_down();
-            }
-            if input.menu_select {
-                if let Some(result) = self.menu.select() {
-                    self.handle_menu_result(result);
-                }
-            }
-        }
-
-        if let Some(ch) = input.console_char {
-            if ch == '`' || ch == '~' {
-                // Toggle the console overlay on backtick/tilde.
-                self.console.toggle();
-            } else if self.console.visible {
-                // Console is open: feed characters to the input line.
-                if ch == '\n' {
-                    // Enter: submit the line, try to apply as a cheat.
-                    let line = self.console.submit();
-                    if !line.is_empty() {
-                        let upper = line.to_uppercase();
-                        let msg = cheats::apply_cheat(&mut self.gs, &upper);
-                        let display = if msg.is_empty() {
-                            format!("(ERR) UNKNOWN COMMAND {}", line)
-                        } else {
-                            format!("(OK) {}", msg)
-                        };
-                        self.console.print(display);
-                    }
-                } else {
-                    self.console.type_char(ch);
-                }
-            } else {
-                // Console is closed: feed character to the cheat detector.
-                if let Some(cheat_name) = self.cheat_detector.feed(ch) {
-                    let msg = cheats::apply_cheat(&mut self.gs, cheat_name);
-                    // IDDT toggles full automap reveal.
-                    if cheat_name == "IDDT" {
-                        self.automap_full_reveal = !self.automap_full_reveal;
-                    }
-                    if !msg.is_empty() {
-                        self.hud_messages.push(msg.to_string(), 105); // 3 sec @ 35 tics/sec
-                        self.console.print(msg.to_string());
-                    }
-                }
-            }
-        }
-
-        // Toggle automap on Tab (stateful — each press flips visibility).
-        if input.tab_pressed {
-            self.automap.toggle();
-        }
-
-        // Feed typed characters from chatchar to the ring-buffer cheat detector.
-        // This is the classic Doom cheat entry path: typed characters during
-        // gameplay are matched against known sequences (iddqd, idkfa, etc.).
-        if input.chatchar != 0 {
-            self.cheat_buffer.push(input.chatchar);
-            if let Some(code) = game_cheats::check_cheats(&self.cheat_buffer) {
-                game_cheats::apply_cheat(&mut self.gs, code);
-                let msg = game_cheats::cheat_message(code).to_string();
-                self.hud_messages.push(msg, 105); // 3 seconds at 35 tics/sec
-                self.cheat_buffer.clear();
-            }
-        }
+        self.handle_console_and_cheats(&input);
 
         // Tick down cheat message timer.
         self.hud_messages.tick();
 
-        // Quick save (F5).
-        if input.f5_save {
-            if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0, self.compat) {
-                self.console.print(format!("Save failed: {e}"));
-                self.hud_messages.push(format!("Save failed: {e}"), 105);
-            } else {
-                self.console.print("Game saved.".to_string());
-                self.hud_messages.push("Game saved.".to_string(), 105);
-            }
-        }
-
-        // Quick load (F9).
-        if input.f9_load {
-            match savegame::load_game(&self.save_path, self.compat) {
-                Ok((_header, payload)) => {
-                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
-                        self.console.print(format!("Load failed: {e}"));
-                        self.hud_messages.push(format!("Load failed: {e}"), 105);
-                    } else {
-                        self.reset_weapon_anim();
-                        self.console.print("Game loaded.".to_string());
-                        self.hud_messages.push("Game loaded.".to_string(), 105);
-                        self.start_level_music();
-                    }
-                }
-                Err(e) => {
-                    self.console.print(format!("Load failed: {e}"));
-                    self.hud_messages.push(format!("Load failed: {e}"), 105);
-                }
-            }
-        }
+        self.handle_quick_save_load(&input);
 
         let cmd = crate::net_mode::ticinput_to_ticcmd(input);
 
@@ -1189,21 +1268,7 @@ impl DoomApp for DoomGame {
             self.load_map_after_intermission(map_id, PlayerStateCarry::Carry);
         }
 
-        // Drain the game's sound event queue.  Each event maps to a DS* lump
-        // name and a priority.  The SfxMixer's 8-channel priority system handles
-        // contention — weapon-priority sounds always win; monster sounds compete
-        // with each other, matching Doom's original S_StartSound behaviour.
-        {
-            let events = std::mem::take(&mut self.gs.sound.sound_queue);
-
-            #[cfg(feature = "sound_ripples")]
-            if self.title_screen.is_none() {
-                self.cogmind_state
-                    .effects
-                    .spawn_sound_ripples(&events, &self.gs);
-            }
-            self.handle_sound_events(events);
-        }
+        self.drain_sound_events();
 
         // Log kill and item events.
         if self.debug_log.is_some() {
@@ -1223,51 +1288,7 @@ impl DoomApp for DoomGame {
         // Advance palette flash timer (pain/pickup/rad-suit tints).
         self.palette_flash.tick();
 
-        // Detect player damage and trigger a pain flash + hurt sound.
-        {
-            let cur_health = self.gs.player.health();
-            if cur_health < self.prev_health {
-                let damage = self.prev_health - cur_health;
-                // Pain palette indices 1-8 (increasing red tint).
-                // Simple formula: one palette step per 8 HP lost, clamped.
-                let palette = ((damage / 8) as usize).clamp(1, 8);
-                self.palette_flash.trigger(palette, 12);
-                // Signal face FSM about damage.
-                self.face_state.on_damage(damage, Bam::ZERO);
-                // Play DSPLPAIN on any damage taken.
-                if let (Some(audio), Some(sfx_id)) = (&self.audio, self.pain_sfx_id) {
-                    audio.play_sfx(
-                        sfx_id,
-                        SfxPriority::High,
-                        1.0,
-                        0.0,
-                        Some(self.gs.player.handle),
-                    );
-                }
-                if self.debug_log.is_some() {
-                    let msg = format!("damage -{} health={}", damage, cur_health);
-                    self.dlog(&msg);
-                }
-            }
-            // Tick face FSM every tic.
-            {
-                let is_firing = self.gs.player.attack_down;
-                let is_invulnerable =
-                    self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
-                self.face_state
-                    .tick(cur_health, is_firing, is_invulnerable, None);
-            }
-            if self.debug_log.is_some() {
-                // Log player snapshot every 35 tics (once per second of gametime).
-                if self.gs.tic_num.is_multiple_of(35) {
-                    self.dlog_player_snapshot();
-                    self.dlog_live_enemies();
-                }
-                // Log any deaths that fired A_Scream this tic.
-                self.dlog_death_events();
-            }
-            self.prev_health = cur_health;
-        }
+        self.detect_player_damage();
 
         // Update automap center to follow the player position.
         if self.automap.active {
