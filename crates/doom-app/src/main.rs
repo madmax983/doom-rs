@@ -32,6 +32,8 @@ mod console;
 mod demo_mode;
 mod net_mode;
 mod savegame;
+#[cfg(feature = "wad_explorer")]
+pub mod wad_explorer;
 
 use anyhow::{Context, Result};
 use clap::Parser;
@@ -100,6 +102,10 @@ struct Args {
     /// Optional PWAD overlay(s). Repeat to stack multiple patch WADs.
     #[arg(long)]
     pwad: Vec<std::path::PathBuf>,
+    #[arg(long)]
+    #[cfg(feature = "wad_explorer")]
+    #[arg(long)]
+    pub explore_wad: bool,
 
     /// Map to load (e.g. E1M1, MAP01). Omit to start at the title screen.
     #[arg(long)]
@@ -2215,6 +2221,11 @@ fn run_doom(args: Args) -> Result<()> {
                 pwad_path.display()
             )
         })?;
+    }
+    #[cfg(feature = "wad_explorer")]
+    if args.explore_wad {
+        wad_explorer::run_explorer(&wad_stack)?;
+        return Ok(());
     }
 
     // Build the PLAYPAL blit palette (for terminal RGB conversion).
