@@ -15,12 +15,12 @@ Currently, the Options menu contains placeholder items (`Sound Volume`, `Music V
 
 ## 🔍 Gap Analysis
 - **Current State:** The game hardcodes default behaviors (e.g., audio volumes are fixed or not adjustable via UI). The settings menu is visually present but functionally a stub (`MenuAction::Noop`).
-- **Standard Libs / Market:** Most terminal-based Rust games or applications use lightweight serialization crates like `serde` with `toml` or `json` to manage configurations locally in a standard user directory (e.g., via the `directories` crate). Implementing this is a standard and expected pattern for any modern source port or engine clone.
+- **Standard Libs / Market:** Most terminal-based Rust games or applications use lightweight serialization crates like `serde` with `toml` or `json` to manage configurations locally in a standard user directory. Implementing this is a standard and expected pattern for any modern source port or engine clone.
 
 ## ✅ Acceptance Criteria
 - Must introduce a Configuration state module that serializes/deserializes to disk.
-- Must implement functional `MenuAction`s for the existing Options items (`Sound Volume`, `Music Volume`, `Controls`).
-- Must wire the UI changes to the corresponding backend systems (e.g., `doom-audio` mixer volumes).
+- Must implement functional menu actions for the existing Options items (Sound Volume, Music Volume, Controls).
+- Must wire the UI changes to the corresponding backend systems (e.g., audio mixer volumes).
 - Must gracefully handle file I/O errors and corrupted config files without panicking.
 
 ## 🚫 Out of Scope
