@@ -52,3 +52,6 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+**[Split specials.rs Blob]**
+**Tangle:** `specials.rs` was a 10,000-line "Blob" anti-pattern containing all logic for doors, floors, ceilings, lifts, teleporters, and linedef activation.
+**Blueprint:** Split `specials.rs` into cohesive submodules (`doors`, `floors`, `ceilings`, `lifts`, `teleport`, `activate`, etc.) within a `specials` directory, exporting the exact same public API via `specials/mod.rs`.
