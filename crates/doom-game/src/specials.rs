@@ -1431,85 +1431,90 @@ pub fn tick_platforms(gs: &mut GameState, level: &mut Level) {
 /// use doom_game::specials::tick_ceilings;
 /// // tick_ceilings(&mut gs, &mut level);
 /// ```
+fn tick_single_ceiling(
+    gs: &mut GameState,
+    level: &mut Level,
+    ceiling: &mut crate::state::CeilingMover,
+) -> bool {
+    let sector_idx = ceiling.sector_index;
+    let speed = ceiling.speed;
+    let direction = ceiling.direction;
+    let top = ceiling.top_height;
+    let bottom = ceiling.bottom_height;
+    let crush_dmg = ceiling.crush_damage;
+    let remove_when_done = ceiling.remove_when_done;
+    let normal_speed = ceiling.normal_speed;
+    let ceiling_type = ceiling.ceiling_type;
+
+    if sector_idx >= level.sectors.len() {
+        return false;
+    }
+
+    match direction {
+        MoveDirection::Down => {
+            level.sectors[sector_idx].ceil_height -= speed;
+            let ceil = level.sectors[sector_idx].ceil_height;
+            let floor = level.sectors[sector_idx].floor_height;
+
+            // Crush damage: when ceiling is close to floor (within 8 units).
+            if ceil <= floor + 8 && crush_dmg > 0 {
+                // Simplified: damage player if they are in this sector.
+                // A proper implementation would iterate all mobjs in the sector.
+                let player_handle = gs.player.handle;
+                if let Some(pmo) = gs.mobjslab.get(player_handle) {
+                    if pmo.z.to_int() == floor as i32 {
+                        // Very simplified sector check: just damage if z matches.
+                        gs.damage_player(crush_dmg);
+                    }
+                }
+
+                // Slow down to speed 1 when crushing (CrushAndRaise / SilentCrush).
+                match ceiling_type {
+                    CeilingType::CrushAndRaise | CeilingType::SilentCrush => {
+                        ceiling.speed = 1;
+                    }
+                    _ => {}
+                }
+            }
+
+            if ceil <= bottom {
+                level.sectors[sector_idx].ceil_height = bottom;
+                match ceiling_type {
+                    CeilingType::LowerToFloor | CeilingType::LowerAndCrush => {
+                        // One-shot types: remove when done.
+                        return false;
+                    }
+                    _ => {
+                        // Perpetual types: reverse to Up.
+                        ceiling.direction = MoveDirection::Up;
+                    }
+                }
+            }
+        }
+        MoveDirection::Up => {
+            // Unconditionally restore normal speed as the original code did.
+            ceiling.speed = normal_speed;
+            level.sectors[sector_idx].ceil_height += normal_speed;
+            let ceil = level.sectors[sector_idx].ceil_height;
+
+            if ceil >= top {
+                level.sectors[sector_idx].ceil_height = top;
+                if remove_when_done {
+                    return false;
+                }
+                // Perpetual: reverse back to Down.
+                ceiling.direction = MoveDirection::Down;
+            }
+        }
+    }
+
+    true
+}
+
 pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
     let mut active_ceilings = std::mem::take(&mut gs.movers.active_ceilings);
 
-    active_ceilings.retain_mut(|ceiling| {
-        let sector_idx = ceiling.sector_index;
-        let speed = ceiling.speed;
-        let direction = ceiling.direction;
-        let top = ceiling.top_height;
-        let bottom = ceiling.bottom_height;
-        let crush_dmg = ceiling.crush_damage;
-        let remove_when_done = ceiling.remove_when_done;
-        let normal_speed = ceiling.normal_speed;
-        let ceiling_type = ceiling.ceiling_type;
-
-        if sector_idx >= level.sectors.len() {
-            return false;
-        }
-
-        match direction {
-            MoveDirection::Down => {
-                level.sectors[sector_idx].ceil_height -= speed;
-                let ceil = level.sectors[sector_idx].ceil_height;
-                let floor = level.sectors[sector_idx].floor_height;
-
-                // Crush damage: when ceiling is close to floor (within 8 units).
-                if ceil <= floor + 8 && crush_dmg > 0 {
-                    // Simplified: damage player if they are in this sector.
-                    // A proper implementation would iterate all mobjs in the sector.
-                    let player_handle = gs.player.handle;
-                    if let Some(pmo) = gs.mobjslab.get(player_handle) {
-                        if pmo.z.to_int() == floor as i32 {
-                            // Very simplified sector check: just damage if z matches.
-                            gs.damage_player(crush_dmg);
-                        }
-                    }
-
-                    // Slow down to speed 1 when crushing (CrushAndRaise / SilentCrush).
-                    match ceiling_type {
-                        CeilingType::CrushAndRaise | CeilingType::SilentCrush => {
-                            ceiling.speed = 1;
-                        }
-                        _ => {}
-                    }
-                }
-
-                if ceil <= bottom {
-                    level.sectors[sector_idx].ceil_height = bottom;
-                    match ceiling_type {
-                        CeilingType::LowerToFloor | CeilingType::LowerAndCrush => {
-                            // One-shot types: remove when done.
-                            return false;
-                        }
-                        _ => {
-                            // Perpetual types: reverse to Up.
-                            ceiling.direction = MoveDirection::Up;
-                        }
-                    }
-                }
-            }
-            MoveDirection::Up => {
-                // Resume normal speed when going up.
-                ceiling.speed = normal_speed;
-
-                level.sectors[sector_idx].ceil_height += normal_speed;
-                let ceil = level.sectors[sector_idx].ceil_height;
-
-                if ceil >= top {
-                    level.sectors[sector_idx].ceil_height = top;
-                    if remove_when_done {
-                        return false;
-                    }
-                    // Perpetual: reverse back to Down.
-                    ceiling.direction = MoveDirection::Down;
-                }
-            }
-        }
-
-        true
-    });
+    active_ceilings.retain_mut(|ceiling| tick_single_ceiling(gs, level, ceiling));
 
     gs.movers.active_ceilings = active_ceilings;
 }
@@ -1531,86 +1536,92 @@ pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
 /// Floor raiser/lowerer behavior (wait_tics == -1):
 /// 1. Floor moves to target_height.
 /// 2. Removed when target reached.
-pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
-    let mut active_floors = std::mem::take(&mut gs.movers.active_floors);
+fn tick_single_floor(
+    gs: &mut GameState,
+    level: &mut Level,
+    floor_mover: &mut crate::state::FloorMover,
+) -> bool {
+    let sector_idx = floor_mover.sector_index;
+    if sector_idx >= level.sectors.len() {
+        return false;
+    }
 
-    active_floors.retain_mut(|floor_mover| {
-        let sector_idx = floor_mover.sector_index;
-        if sector_idx >= level.sectors.len() {
-            return false;
+    // Waiting phase.
+    if floor_mover.waiting {
+        floor_mover.wait_remaining -= 1;
+        if floor_mover.wait_remaining <= 0 {
+            // Wait over — reverse direction to return.
+            floor_mover.waiting = false;
+            floor_mover.direction = MoveDirection::Up;
+            floor_mover.target_height = floor_mover.return_height;
         }
+        return true;
+    }
 
-        // Waiting phase.
-        if floor_mover.waiting {
-            floor_mover.wait_remaining -= 1;
-            if floor_mover.wait_remaining <= 0 {
-                // Wait over — reverse direction to return.
-                floor_mover.waiting = false;
-                floor_mover.direction = MoveDirection::Up;
-                floor_mover.target_height = floor_mover.return_height;
-            }
-            return true;
-        }
+    let speed = floor_mover.speed;
+    let direction = floor_mover.direction;
+    let target = floor_mover.target_height;
+    let wait_tics = floor_mover.wait_tics;
+    let crush = floor_mover.crush;
+    let crush_dmg: i32 = if crush == crate::state::CrushBehavior::Crush {
+        10
+    } else {
+        0
+    };
 
-        let speed = floor_mover.speed;
-        let direction = floor_mover.direction;
-        let target = floor_mover.target_height;
-        let wait_tics = floor_mover.wait_tics;
-        let crush = floor_mover.crush;
-        let crush_dmg: i32 = if crush == crate::state::CrushBehavior::Crush {
-            10
-        } else {
-            0
-        };
+    match direction {
+        MoveDirection::Down => {
+            level.sectors[sector_idx].floor_height -= speed;
+            let floor = level.sectors[sector_idx].floor_height;
 
-        match direction {
-            MoveDirection::Down => {
-                level.sectors[sector_idx].floor_height -= speed;
-                let floor = level.sectors[sector_idx].floor_height;
-
-                if floor <= target {
-                    level.sectors[sector_idx].floor_height = target;
-                    if wait_tics > 0 {
-                        // Enter wait phase (e.g., lift at bottom).
-                        floor_mover.waiting = true;
-                        floor_mover.wait_remaining = wait_tics;
-                    } else {
-                        // One-shot: remove.
-                        return false;
-                    }
-                }
-            }
-            MoveDirection::Up => {
-                level.sectors[sector_idx].floor_height += speed;
-                let floor = level.sectors[sector_idx].floor_height;
-
-                // Crush damage when raising into something.
-                if crush == crate::state::CrushBehavior::Crush && crush_dmg > 0 {
-                    let ceil = level.sectors[sector_idx].ceil_height;
-                    if floor >= ceil - 8 {
-                        let player_handle = gs.player.handle;
-                        if let Some(pmo) = gs.mobjslab.get_mut(player_handle) {
-                            if pmo.z.to_int() >= (floor - 8) as i32 {
-                                gs.damage_player(crush_dmg);
-                            }
-                        }
-                    }
-                }
-
-                if floor >= target {
-                    level.sectors[sector_idx].floor_height = target;
-                    if wait_tics > 0 && floor_mover.return_height != target {
-                        // Returning phase complete — remove.
-                        return false;
-                    }
-                    // One-shot raiser: remove.
+            if floor <= target {
+                level.sectors[sector_idx].floor_height = target;
+                if wait_tics > 0 {
+                    // Enter wait phase (e.g., lift at bottom).
+                    floor_mover.waiting = true;
+                    floor_mover.wait_remaining = wait_tics;
+                } else {
+                    // One-shot: remove.
                     return false;
                 }
             }
         }
+        MoveDirection::Up => {
+            level.sectors[sector_idx].floor_height += speed;
+            let floor = level.sectors[sector_idx].floor_height;
 
-        true
-    });
+            // Crush damage when raising into something.
+            if crush == crate::state::CrushBehavior::Crush && crush_dmg > 0 {
+                let ceil = level.sectors[sector_idx].ceil_height;
+                if floor >= ceil - 8 {
+                    let player_handle = gs.player.handle;
+                    if let Some(pmo) = gs.mobjslab.get_mut(player_handle) {
+                        if pmo.z.to_int() >= (floor - 8) as i32 {
+                            gs.damage_player(crush_dmg);
+                        }
+                    }
+                }
+            }
+
+            if floor >= target {
+                level.sectors[sector_idx].floor_height = target;
+                if wait_tics > 0 && floor_mover.return_height != target {
+                    // Returning phase complete — remove.
+                    return false;
+                }
+                // One-shot raiser: remove.
+                return false;
+            }
+        }
+    }
+
+    true
+}
+
+pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
+    let mut active_floors = std::mem::take(&mut gs.movers.active_floors);
+
+    active_floors.retain_mut(|floor_mover| tick_single_floor(gs, level, floor_mover));
 
     gs.movers.active_floors = active_floors;
 }
