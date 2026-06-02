@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-24 - Test arrayvec-like behavior
+**Learning:** Found a custom arrayvec-like struct `SpriteClipHistory` in `doom-renderer/src/sprite_clip.rs` with zero test coverage.
+**Action:** Added tests for initialization, push semantics, bounds clipping, and iterator correctness.
