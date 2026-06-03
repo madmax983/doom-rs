@@ -321,6 +321,9 @@ impl SfxMixer {
 
         // Clamp output to [-1.0, 1.0] to prevent clipping.
         for sample in output.iter_mut() {
+            if sample.is_nan() {
+                *sample = 0.0;
+            }
             *sample = sample.clamp(-1.0, 1.0);
         }
     }
@@ -721,5 +724,27 @@ mod tests {
             SfxPriority::Medium,
         );
         assert_eq!(mixer.active_count(), 0);
+    }
+}
+
+#[cfg(test)]
+mod havoc_tests {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn havoc_audio_nan_poisoning(volume in proptest::num::f32::ANY, pan in proptest::num::f32::ANY) {
+            let mut mixer = SfxMixer::new();
+            let data: std::sync::Arc<[u8]> = vec![200u8; 100].into();
+            mixer.play(1, data, volume, pan, SfxPriority::Medium);
+
+            let mut output = vec![0.0f32; 200];
+            mixer.mix(&mut output, 11025);
+
+            for sample in output {
+                prop_assert!(!sample.is_nan(), "💥 DETONATE: NaN escaped into the audio buffer!");
+            }
+        }
     }
 }

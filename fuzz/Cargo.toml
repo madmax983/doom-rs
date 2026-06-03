@@ -119,3 +119,10 @@ bench = false
 
 [dependencies.doom-app]
 path = "../crates/doom-app"
+
+[[bin]]
+name = "fuzz_udmf"
+path = "fuzz_targets/fuzz_udmf.rs"
+test = false
+doc = false
+bench = false
