@@ -51,7 +51,8 @@ pub fn render_mus_to_wav_mono(
     // Render with one-sample granularity to avoid buffer-boundary timing drift.
     while completed_loops < target_loops {
         player.advance_samples(1, sample_rate, &mut mono_sample);
-        let s = (mono_sample[0] * i16::MAX as f32)
+        let val = mono_sample[0] * i16::MAX as f32;
+        let s = if val.is_nan() { 0.0 } else { val }
             .clamp(i16::MIN as f32, i16::MAX as f32)
             .round() as i16;
         pcm_i16.push(s);

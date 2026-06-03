@@ -8,3 +8,6 @@
 **Havoc: Bounds-checking allocations**
 **Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
 **Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+**[NaN Poisoning in audio parameters]
+**Learning:** In Rust, f32::clamp preserves NaN. Passing NaN for volume or pan poisons the entire audio buffer.
+**Action:** Explicitly substitute 0.0 for NaN before clamping any floating-point audio parameters.

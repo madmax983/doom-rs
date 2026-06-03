@@ -121,7 +121,12 @@ pub fn compute_spatial(
     // In Doom's coordinate system (BAM 0 = East, increasing = counter-clockwise),
     // a negative sine means the emitter is to the right of the listener's facing
     // direction. We negate so that "right of facing" = positive pan.
-    let pan = -(relative.sin().clamp(-1.0, 1.0));
+    let sin_val = relative.sin();
+    let pan = if sin_val.is_nan() {
+        0.0
+    } else {
+        -(sin_val.clamp(-1.0, 1.0))
+    };
 
     SpatialParams { volume, pan }
 }
