@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+## 2024-05-18 - SmallVec vs Iterator Borrows
+**Learning:** Returning an `impl Iterator` instead of collecting into a `Vec` is a common zero-cost abstraction, but in a game engine where the caller uses the iterator to mutate state (e.g., dispatching triggers on sectors), returning an iterator extends the immutable borrow of the game state, causing borrow checker violations.
+**Action:** When you need to avoid heap allocations but the caller requires mutable access during iteration, use `smallvec::SmallVec` to eagerly collect the items onto the stack. This satisfies the borrow checker while maintaining the zero-cost performance goal.
