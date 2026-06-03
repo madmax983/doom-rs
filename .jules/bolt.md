@@ -23,3 +23,10 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+## 2025-02-12 - Console Optimization
+**Learning:** `std::mem::replace(&mut string, String::with_capacity(string.capacity()))` allows swapping out strings without heap re-allocations while returning the contents of the previous value.
+**Action:** Use `std::mem::replace` when transferring ownership from structs out to the caller to preserve capacity for future values, avoiding re-allocation churn.
+
+**Avoid Unnecessary Hot Path Allocations**
+**Learning:** The `render_level` method was unconditionally performing `Vec::new()` to hold `masked_columns` every frame, which results in repeated dynamic heap allocations. `SmallVec` prevents allocation drag completely.
+**Action:** Pre-allocate lists using `SmallVec` in situations where the dynamic allocation is likely small, to avoid heap fragmentation and performance drops in render loops.

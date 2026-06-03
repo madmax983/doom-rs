@@ -64,9 +64,11 @@ impl Console {
     /// Clears the input buffer and returns the submitted string so the caller
     /// can process it as a command or cheat code.
     pub(crate) fn submit(&mut self) -> String {
-        let line = self.input.clone();
-        self.input.clear();
-        line
+        // ⚡ Bolt Optimization:
+        // Eliminates a string clone during submit by returning the current string
+        // while preserving its allocated capacity for future input via `replace`.
+        let cap = self.input.capacity();
+        std::mem::replace(&mut self.input, String::with_capacity(cap))
     }
 
     /// Add an output message to the console.

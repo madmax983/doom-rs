@@ -346,7 +346,7 @@ pub struct RenderOut<'a> {
     /// Monotone bottom-clip state changes for each screen column.
     pub clip_bot_history: [crate::sprite_clip::SpriteClipHistory; SCREEN_W],
     /// Deferred masked midtexture columns to interleave with sprite rendering.
-    pub masked_columns: Vec<MaskedColumnDraw<'a>>,
+    pub masked_columns: smallvec::SmallVec<[MaskedColumnDraw<'a>; 128]>,
 }
 
 /// Render a Doom level into `fb` and return occlusion data for sprite clipping.
@@ -493,7 +493,11 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
         [const { crate::sprite_clip::SpriteClipHistory::new() }; SCREEN_W];
     let mut wall_clip_bot_history: [crate::sprite_clip::SpriteClipHistory; SCREEN_W] =
         [const { crate::sprite_clip::SpriteClipHistory::new() }; SCREEN_W];
-    let mut masked_columns = Vec::new();
+    // ⚡ Bolt Optimization:
+    // `masked_columns` is populated every frame for translucent elements and 2-sided lines.
+    // Using `SmallVec` prevents dynamic heap allocations for the vast majority of frames
+    // where the number of masked columns is small, keeping the data entirely on the stack.
+    let mut masked_columns = smallvec::SmallVec::<[MaskedColumnDraw<'_>; 128]>::new();
 
     // Doom-style open column tracking for inline visplane emission.
     // open_top[x]  = first unclaimed row for ceiling spans (initially 0).
