@@ -609,6 +609,23 @@ fn p_thrust(mo: &mut crate::mobj::Mobj, angle: Bam, move_units: i8) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn advance_mobj_state_with_invalid_state_transitions_to_null() {
+        let mut gs = make_game_state();
+        let invalid_state = StateNum(crate::states::STATES.len() as u16 + 100);
+        let trooper = make_trooper(invalid_state, 1);
+        let handle = gs.mobjslab.alloc(trooper);
+
+        gs.advance_mobj_state(handle, None);
+
+        let mo = gs.mobjslab.get(handle).expect("item must exist in tests");
+        assert_eq!(
+            mo.tics, -1,
+            "advance_mobj_state should hold forever (-1 tics) for an invalid state"
+        );
+    }
+
     use super::*;
     use crate::mobj::{Mobj, flags};
     use crate::player::PlayerState;

@@ -795,6 +795,23 @@ pub fn player_can_fire(gs: &GameState) -> bool {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn tick_psprites_with_invalid_state_transitions_to_null() {
+        let mut gs = make_game_state();
+        let invalid_state = crate::mobj::StateNum(crate::states::STATES.len() as u16 + 100);
+        gs.player.psprites[0].state = invalid_state;
+        gs.player.psprites[0].tics = 0;
+
+        tick_psprites(&mut gs, doom_types::TicCmd::default(), None);
+
+        assert_eq!(
+            gs.player.psprites[0].state,
+            crate::mobj::StateNum::NULL,
+            "tick_psprites should transition to NULL for an invalid state"
+        );
+    }
+
     use super::*;
     use crate::mobj::{Mobj, flags};
     use crate::player::{PlayerState, psprite_slots};
