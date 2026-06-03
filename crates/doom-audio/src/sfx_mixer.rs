@@ -321,7 +321,8 @@ impl SfxMixer {
 
         // Clamp output to [-1.0, 1.0] to prevent clipping.
         for sample in output.iter_mut() {
-            *sample = sample.clamp(-1.0, 1.0);
+            let s = if sample.is_nan() { 0.0 } else { *sample };
+            *sample = s.clamp(-1.0, 1.0);
         }
     }
 

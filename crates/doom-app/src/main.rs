@@ -1985,7 +1985,8 @@ fn wav_from_f32_mono(samples: &[f32], sample_rate: u32) -> Vec<u8> {
     out.extend_from_slice(&data_bytes_len.to_le_bytes());
 
     for s in samples {
-        let clamped = s.clamp(-1.0, 1.0);
+        let s_tmp = if s.is_nan() { 0.0 } else { *s };
+        let clamped = s_tmp.clamp(-1.0, 1.0);
         let pcm = (clamped * i16::MAX as f32).round() as i16;
         out.extend_from_slice(&pcm.to_le_bytes());
     }
@@ -2009,7 +2010,8 @@ fn export_sfx_wav_for_name(
     for &byte in sfx_sample.data.iter() {
         // Convert 8-bit unsigned DOOM PCM (128 = silence) to normalized 32-bit float, then 16-bit signed
         let s = (byte as i32 - 128) as f32 / 127.0;
-        let s_clamped = s.clamp(-1.0, 1.0);
+        let s_tmp = if s.is_nan() { 0.0 } else { s };
+        let s_clamped = s_tmp.clamp(-1.0, 1.0);
         let pcm = (s_clamped * i16::MAX as f32).round() as i16;
         samples_i16.push(pcm);
     }

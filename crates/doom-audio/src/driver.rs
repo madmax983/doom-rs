@@ -145,6 +145,9 @@ impl AudioDriver {
                         let sfx_l = sfx_buf.get(i * 2).copied().unwrap_or(0.0);
                         let sfx_r = sfx_buf.get(i * 2 + 1).copied().unwrap_or(0.0);
                         let opl = opl_buf.get(i).copied().unwrap_or(0.0) * 0.5;
+                        let sfx_l = if sfx_l.is_nan() { 0.0 } else { sfx_l };
+                        let sfx_r = if sfx_r.is_nan() { 0.0 } else { sfx_r };
+                        let opl = if opl.is_nan() { 0.0 } else { opl };
                         if let Some(out_l) = data.get_mut(i * 2) {
                             *out_l = (sfx_l + opl).clamp(-1.0, 1.0);
                         }
