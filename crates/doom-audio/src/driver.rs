@@ -116,6 +116,12 @@ impl AudioDriver {
         let mixer_cb = Arc::clone(&mixer);
         let midi_cb = Arc::clone(&midi);
 
+        // Pre-allocate intermediate mix buffers.
+        // Capturing and reusing these buffers inside the `cpal` closure avoids allocating
+        // on the real-time audio thread, preventing latency spikes and dropouts.
+        let mut sfx_buf = Vec::new();
+        let mut opl_buf = Vec::new();
+
         let stream = device
             .build_output_stream(
                 &config.into(),
@@ -130,8 +136,16 @@ impl AudioDriver {
                     let n_mono = (data.len() / 2).max(1);
 
                     // SfxMixer outputs f32 stereo directly — no i16 conversion needed.
-                    let mut sfx_buf = vec![0.0f32; data.len()];
-                    let mut opl_buf = vec![0.0f32; n_mono];
+                    // ⚡ Bolt: Resize pre-allocated buffers instead of allocating `vec![...]`.
+                    // After the first frame, `resize` is zero-cost since capacity is stable.
+                    sfx_buf.resize(data.len(), 0.0f32);
+                    opl_buf.resize(n_mono, 0.0f32);
+
+                    // We must clear the buffers explicitly because `resize` only fills *new* elements.
+                    // (Even though the mixers internally clear the slices, ensuring they are zeroed
+                    // here matches the exact semantics of the original `vec![0.0; len]` allocation).
+                    sfx_buf.fill(0.0f32);
+                    opl_buf.fill(0.0f32);
 
                     if let Ok(mut m) = mixer_cb.lock() {
                         m.mix(&mut sfx_buf, actual_rate);
