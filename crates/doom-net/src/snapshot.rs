@@ -98,6 +98,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn with_default_capacity_works() {
+        let snap: SnapshotRing<u32> = SnapshotRing::with_default_capacity();
+        assert_eq!(snap.capacity, crate::packet::MAX_ROLLBACK_TICS);
+    }
+
+    #[test]
     fn new_creates_empty_ring() {
         let ring: SnapshotRing<u64> = SnapshotRing::new(8);
         assert!(ring.get(0).is_none(), "fresh ring must return None");

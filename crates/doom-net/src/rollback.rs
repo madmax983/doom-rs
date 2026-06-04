@@ -431,6 +431,19 @@ mod tests {
     }
 
     #[test]
+    fn get_inputs_predicts_stops_at_tic_0_bound() {
+        let rm = RollbackManager::<u32>::new(0);
+        // Do not record anything. Let it search back and hit tic 0,
+        // then try to subtract delta but it stops properly and returns default.
+        let inputs = rm.get_inputs(5);
+        assert_eq!(inputs, [TicCmd::default(); MAX_PLAYERS]);
+
+        // Also ensure it tests the case where `checked_sub` might be None when delta > tic.
+        let inputs = rm.get_inputs(2);
+        assert_eq!(inputs, [TicCmd::default(); MAX_PLAYERS]);
+    }
+
+    #[test]
     fn get_inputs_predicts_stops_at_tic_0() {
         let mut rm: RollbackManager<u32> = RollbackManager::new(0);
 

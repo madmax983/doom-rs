@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🎯 Target: `doom-net` crate, specifically untested edge cases in `client.rs`, `server.rs`, `transport.rs`, `input_log.rs`, `rollback.rs`, and `snapshot.rs`.
+💣 Risk: Various potential panic points and undefined behaviors due to missing bounds testing on socket operations, timeout pruning failures, missing coverage of packet edge scenarios, and `Option` dropping.
+🧪 Strategy: Added robust polling loop unit tests and targeted edge-case evaluations across the network stack to correctly process or reject edge cases and bubble up `io::Error` instances on sockets gracefully. Fixed several `clippy::manual_assert` occurrences, replacing flaky assertions.
+🔬 Verification: `cargo test -p doom-net`

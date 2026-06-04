@@ -205,6 +205,12 @@ mod tests {
     }
 
     #[test]
+    fn with_default_capacity_works() {
+        let log = InputLog::with_default_capacity();
+        assert_eq!(log.capacity, crate::packet::MAX_ROLLBACK_TICS);
+    }
+
+    #[test]
     fn new_creates_empty_log() {
         let log = InputLog::new(8);
         assert!(log.get(0).is_none(), "fresh log must return None");

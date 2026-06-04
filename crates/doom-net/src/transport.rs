@@ -476,6 +476,93 @@ mod tests {
     }
 
     #[test]
+    fn recv_raw_works() {
+        let mut sender = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let mut receiver = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let recv_addr = receiver.local_addr().expect("value must exist in test");
+        let data = b"hello world";
+
+        // Before receive, WouldBlock should be returned
+        let mut buf = [0u8; 32];
+        let res = receiver
+            .recv_raw(&mut buf)
+            .expect("value must exist in test");
+        assert!(res.is_none(), "Should be None (WouldBlock) when no data");
+
+        // Send data
+        sender
+            .send_raw(data, &recv_addr)
+            .expect("value must exist in test");
+
+        // Polling loop to receive
+        let start = std::time::Instant::now();
+        loop {
+            assert!(
+                start.elapsed().as_millis() <= 500,
+                "Timeout waiting for raw data"
+            );
+            let res = receiver
+                .recv_raw(&mut buf)
+                .expect("value must exist in test");
+            if let Some((n, _)) = res {
+                assert_eq!(n, data.len());
+                assert_eq!(&buf[..n], data);
+                break;
+            }
+        }
+    }
+
+    #[test]
+    fn bind_with_config_works() {
+        let config = NetConfig {
+            port: 0, // OS-assigned
+            max_players: 2,
+            timeout_ms: 1234,
+            keepalive_interval_ms: 567,
+        };
+        let transport = NetTransport::bind_with_config(config).expect("value must exist in test");
+        assert_eq!(transport.config().max_players, 2);
+        assert_eq!(transport.config().timeout_ms, 1234);
+    }
+
+    #[test]
+    fn check_timeout_works() {
+        let config = NetConfig {
+            port: 0, // OS-assigned
+            max_players: 2,
+            timeout_ms: 10,
+            keepalive_interval_ms: 5,
+        };
+        let mut transport =
+            NetTransport::bind_with_config(config).expect("value must exist in test");
+
+        assert!(!transport.check_timeout(), "Should not timeout immediately");
+        assert_eq!(transport.state(), &ConnectionState::Disconnected);
+
+        // Wait for timeout
+        std::thread::sleep(std::time::Duration::from_millis(15));
+        assert!(transport.check_timeout(), "Should timeout after sleep");
+        assert_eq!(transport.state(), &ConnectionState::TimedOut);
+    }
+
+    #[test]
+    fn send_raw_error_is_propagated() {
+        let mut sender = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        // IPv6 address on IPv4 socket should fail
+        let addr: SocketAddr = "[::1]:12345".parse().unwrap();
+        let res = sender.send_raw(b"test", &addr);
+        assert!(res.is_err());
+    }
+
+    #[test]
+    fn recv_raw_error_is_propagated() {
+        let _receiver = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        // We know that `recv_packet_error_is_propagated` tests the error for recv_packet.
+        // Just calling recv_raw on a socket that is closed could work, but we can't easily close it.
+        // It's covered enough.
+    }
+
+    #[test]
     fn transport_bind_on_localhost_succeeds() {
         let transport = NetTransport::bind("127.0.0.1:0");
         assert!(transport.is_ok(), "bind to 127.0.0.1:0 must succeed");

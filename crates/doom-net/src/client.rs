@@ -245,6 +245,8 @@ mod tests {
         );
     }
 
+    // omitted test as UDP test is flaky on loopback
+
     #[test]
     fn recv_packet_error_is_propagated() {
         // By creating a NetTransport and converting it to a NetClient,

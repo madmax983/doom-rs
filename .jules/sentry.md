@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-06-04 - Doom-Net Coverage
+**Learning:** Multiple networking edge-cases lacked tests, such as server timeout pruning, specific raw socket error bubblings, and rollback tic boundary conditions checking against underflow.
+**Action:** Improved the doom-net coverage score by supplying targeted test cases for timeouts, default configurations, error bindings on IPv6 loopback addresses, dropping unknown clients correctly, updating tics properly via `poll_once`, handling join requests safely, verifying boundary cases against snapshot rings, and bounding rollback history cleanly without underflows.

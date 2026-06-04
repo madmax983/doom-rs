@@ -321,6 +321,177 @@ mod tests {
     }
 
     #[test]
+    fn server_transport_and_state_getters() {
+        let mut server =
+            RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+
+        let t = server.transport();
+        assert_eq!(t.state(), &ConnectionState::Disconnected);
+
+        server.set_transport_state(ConnectionState::TimedOut);
+        assert_eq!(server.transport().state(), &ConnectionState::TimedOut);
+    }
+
+    #[test]
+    fn server_new_works() {
+        let config = NetConfig {
+            port: 0,
+            ..test_config()
+        };
+        let server = RelayServer::new(config).expect("value must exist in test");
+        assert_eq!(server.connected_count(), 0);
+    }
+
+    #[test]
+    fn poll_once_updates_last_tic() {
+        let mut server =
+            RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let mut client = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let server_addr = server.local_addr().expect("value must exist in test");
+        let client_addr = client.local_addr().expect("value must exist in test");
+
+        let slot = server
+            .accept_connection(client_addr)
+            .expect("value must exist in test");
+
+        let pkt = TicPacket {
+            tic: 5,
+            sender: slot,
+            ack_tic: 0,
+            state_checksum: 0,
+            cmds: [doom_types::TicCmd::default(); MAX_PLAYERS],
+        };
+
+        client
+            .send_raw(&pkt.to_bytes(), &server_addr)
+            .expect("value must exist in test");
+
+        let start = std::time::Instant::now();
+        loop {
+            assert!(start.elapsed().as_millis() <= 500, "Timeout waiting for packet");
+            if let Ok(Some(_)) = server.poll_once() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        // Assert the tic was updated
+        assert_eq!(
+            server.slots[slot as usize]
+                .as_ref()
+                .expect("value must exist in test")
+                .last_tic,
+            5
+        );
+    }
+    #[test]
+    fn poll_once_ignores_old_tic() {
+        let mut server =
+            RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let mut client = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let server_addr = server.local_addr().expect("value must exist in test");
+        let client_addr = client.local_addr().expect("value must exist in test");
+
+        let slot = server
+            .accept_connection(client_addr)
+            .expect("value must exist in test");
+        server.slots[slot as usize]
+            .as_mut()
+            .expect("value must exist in test")
+            .last_tic = 10;
+
+        let pkt = TicPacket {
+            tic: 5,
+            sender: slot,
+            ack_tic: 0,
+            state_checksum: 0,
+            cmds: [doom_types::TicCmd::default(); MAX_PLAYERS],
+        };
+
+        client
+            .send_raw(&pkt.to_bytes(), &server_addr)
+            .expect("value must exist in test");
+
+        let start = std::time::Instant::now();
+        loop {
+            assert!(start.elapsed().as_millis() <= 500, "Timeout waiting for packet");
+            if let Ok(Some(_)) = server.poll_once() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+
+        // Assert the tic was not updated because it's older
+        assert_eq!(
+            server.slots[slot as usize]
+                .as_ref()
+                .expect("value must exist in test")
+                .last_tic,
+            10
+        );
+    }
+    #[test]
+    fn poll_once_drops_unknown_sender() {
+        let mut server =
+            RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let mut client = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let server_addr = server.local_addr().expect("value must exist in test");
+
+        let pkt = TicPacket {
+            tic: 1,
+            sender: 99, // Some unknown sender
+            ack_tic: 0,
+            state_checksum: 0,
+            cmds: [doom_types::TicCmd::default(); MAX_PLAYERS],
+        };
+        client
+            .send_raw(&pkt.to_bytes(), &server_addr)
+            .expect("value must exist in test");
+
+        let start = std::time::Instant::now();
+        let mut received = false;
+        while start.elapsed().as_millis() < 500 {
+            if let Ok(res) = server.poll_once() {
+                if res.is_none() {
+                    // It dropped it or hasn't received it yet. We just need to give it enough time to receive it.
+                } else {
+                    received = true;
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        // If we didn't receive it as a valid packet after 500ms, it was dropped.
+        assert!(!received, "Should drop unknown sender");
+    }
+    #[test]
+    fn poll_once_handles_join_request() {
+        let mut server =
+            RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let mut client = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
+        let server_addr = server.local_addr().expect("value must exist in test");
+
+        // Send a join request
+        let join = crate::transport::make_join_packet();
+        client
+            .send_raw(&join.to_bytes(), &server_addr)
+            .expect("value must exist in test");
+
+        // Wait for server to process join and respond
+        let start = std::time::Instant::now();
+        loop {
+            assert!(start.elapsed().as_millis() <= 500, "Timeout waiting for join response");
+            let _ = server.poll_once();
+            if let Ok(Some((response, _))) = client.recv_packet() {
+                if crate::transport::is_join_response(&response) {
+                    break;
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        assert_eq!(server.connected_count(), 1, "Client should be connected");
+    }
+    #[test]
     fn relay_server_new_binds_successfully() {
         let server = RelayServer::bind("127.0.0.1:0", test_config());
         assert!(
@@ -344,6 +515,20 @@ mod tests {
         assert_eq!(server.accept_connection(addr2), Some(1));
         assert_eq!(server.accept_connection(addr3), Some(2));
         assert_eq!(server.connected_count(), 3);
+    }
+
+    #[test]
+    fn server_accept_connection_returns_existing() {
+        let mut server =
+            RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+        let client_addr: SocketAddr = "127.0.0.1:12345".parse().expect("value must exist in test");
+
+        let slot1 = server.accept_connection(client_addr);
+        assert!(slot1.is_some());
+
+        // Accepting same address again should return the same slot
+        let slot2 = server.accept_connection(client_addr);
+        assert_eq!(slot1, slot2);
     }
 
     #[test]
