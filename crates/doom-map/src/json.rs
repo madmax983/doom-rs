@@ -37,6 +37,7 @@ use crate::Level;
 /// This does not include the full vertex/linedef geometry, but instead
 /// serves as a high-level summary of the level's stats and composition.
 #[must_use]
+/// Exports a parsed `Level` into a JSON string representation.
 pub fn export_map_to_json(level: &Level) -> String {
     format!(
         r#"{{

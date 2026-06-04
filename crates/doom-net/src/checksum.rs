@@ -35,6 +35,7 @@ pub const CRC32_TABLE: [u32; 256] = {
 /// Returns `0` for an empty slice (the complement of `0xFFFF_FFFF` XOR
 /// `0xFFFF_FFFF`).  This is only used for desync detection, not security.
 #[must_use]
+/// Computes a deterministic checksum over the given data slice.
 pub fn compute_checksum(data: &[u8]) -> u32 {
     let mut crc: u32 = 0xFFFF_FFFF;
     for &byte in data {

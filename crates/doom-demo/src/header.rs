@@ -76,6 +76,7 @@ impl LmpHeader {
 
     /// Serialize the header to its 13-byte wire representation.
     #[must_use]
+    /// Serializes the header to raw bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
         vec![
             self.version,
@@ -98,6 +99,7 @@ impl LmpHeader {
     ///
     /// Returns `None` if the data is shorter than 13 bytes.
     #[must_use]
+    /// Parses a header from a raw byte slice.
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
         if data.len() < LMP_HEADER_SIZE {
             return None;
@@ -118,12 +120,14 @@ impl LmpHeader {
 
     /// Count the number of present players.
     #[must_use]
+    /// Gets the expected number of players based on the header format.
     pub fn num_players(&self) -> usize {
         self.players_present.iter().filter(|&&p| p).count()
     }
 
     /// Bytes per tic in the LMP stream: 4 bytes per present player.
     #[must_use]
+    /// Gets the size in bytes of a single tic frame for all players.
     pub fn tic_size(&self) -> usize {
         4 * self.num_players()
     }

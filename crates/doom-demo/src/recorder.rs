@@ -82,6 +82,7 @@ impl DemoRecorder {
 
     /// Serialize the complete LMP file: header + tic data + terminator.
     #[must_use]
+    /// Serializes the current recording state to raw LMP bytes.
     pub fn to_lmp(&self) -> Vec<u8> {
         let mut buf = self.header.to_bytes();
 
@@ -97,6 +98,7 @@ impl DemoRecorder {
 
     /// Consume the recorder and produce the final LMP bytes.
     #[must_use]
+    /// Consumes the recorder and returns the final serialized bytes.
     pub fn finish(self) -> Vec<u8> {
         self.to_lmp()
     }

@@ -188,6 +188,9 @@ impl Level {
     /// Returns `None` if the `subsector_idx` is out of bounds or if the
     /// internal references (seg -> linedef -> sidedef) are missing.
     #[must_use]
+    /// Retrieves the sector index for a given subsector index.
+    ///
+    /// Returns `None` if the subsector or its associated segs are invalid.
     pub fn subsector_sector_index(&self, subsector_idx: usize) -> Option<usize> {
         let ss = self.ssectors.get(subsector_idx)?;
         self.seg_front_sector_index(ss.first_seg as usize)
@@ -492,6 +495,7 @@ impl Level {
     /// Returns `None` if the level has no BSP nodes, or if any index is
     /// out of bounds.
     #[must_use]
+    /// Looks up the sector index located at the given map coordinates `(x, y)`.
     pub fn sector_index_at(&self, x: i32, y: i32) -> Option<usize> {
         let subsector_idx = self.subsector_index_at(x, y)?;
         self.subsector_sector_index(subsector_idx)
@@ -502,6 +506,7 @@ impl Level {
     /// Uses BSP traversal to find the subsector.  Returns `None` if the
     /// level geometry is incomplete.
     #[must_use]
+    /// Looks up the floor height at the given map coordinates `(x, y)`.
     pub fn floor_at(&self, x: i32, y: i32) -> Option<i16> {
         let si = self.sector_index_at(x, y)?;
         self.sectors.get(si).map(|s| s.floor_height)
@@ -509,6 +514,7 @@ impl Level {
 
     /// Return the subsector index containing world point `(x, y)`.
     #[must_use]
+    /// Traverses the BSP tree to find the subsector index containing the point `(x, y)`.
     pub fn subsector_index_at(&self, x: i32, y: i32) -> Option<usize> {
         let bsp = BspTree::validate(&self.nodes, &self.ssectors, self.segs.len()).ok()?;
         let ssector = bsp.point_in_subsector(x, y)?;

@@ -48,6 +48,7 @@ impl DemoTicCmd {
     ///
     /// Returns `None` if `data.len() < 4`.
     #[must_use]
+    /// Parses a single `DemoTicCmd` from a raw byte slice.
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
         if data.len() < DEMO_TIC_SIZE {
             return None;
@@ -114,6 +115,7 @@ impl DemoTicCmd {
     /// assert_eq!(tic.angle_turn, 0x1200); // Shifted to high byte
     /// ```
     #[must_use]
+    /// Converts the demo tic format to the standard engine format.
     pub fn to_ticcmd(&self) -> TicCmd {
         TicCmd {
             forward_move: self.forward_move,

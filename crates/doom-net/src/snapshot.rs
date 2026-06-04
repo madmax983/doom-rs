@@ -30,6 +30,7 @@ impl<S: Clone> SnapshotRing<S> {
     /// # Panics
     /// Panics if `capacity` is 0.
     #[must_use]
+    /// Creates a new `SnapshotRing` with the specified capacity.
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "SnapshotRing capacity must be > 0");
         let cap = capacity.min(1024);
@@ -43,6 +44,7 @@ impl<S: Clone> SnapshotRing<S> {
 
     /// Create a ring with the default capacity ([`MAX_ROLLBACK_TICS`]).
     #[must_use]
+    /// Creates a new `SnapshotRing` with the default `MAX_ROLLBACK_TICS` capacity.
     pub fn with_default_capacity() -> Self {
         Self::new(MAX_ROLLBACK_TICS)
     }
@@ -58,6 +60,7 @@ impl<S: Clone> SnapshotRing<S> {
     /// Returns `None` if the slot has been overwritten by a later tic or
     /// was never written.
     #[must_use]
+    /// Retrieves the snapshot for the given tic.
     pub fn get(&self, tic: u32) -> Option<&S> {
         let slot = (tic as usize) % self.capacity;
         match &self.ring[slot] {
@@ -68,6 +71,7 @@ impl<S: Clone> SnapshotRing<S> {
 
     /// The most recent tic number stored in the ring, or `None` if empty.
     #[must_use]
+    /// Gets the tic number of the most recent snapshot.
     pub fn latest_tic(&self) -> Option<u32> {
         self.ring
             .iter()

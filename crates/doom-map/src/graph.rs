@@ -20,6 +20,9 @@ impl SectorGraph {
     /// Connections are established by finding two-sided linedefs that connect
     /// one sector to another via their front and back sidedefs.
     #[must_use]
+    /// Builds a topological graph of sectors from the given `Level`.
+    /// Connections are established by finding two-sided linedefs that connect
+    /// one sector to another via their front and back sidedefs.
     pub fn build(level: &Level) -> Self {
         let mut adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::new();
 
@@ -55,6 +58,8 @@ impl SectorGraph {
     /// Finds the shortest topological path (minimum number of sector transitions)
     /// between two sectors using Breadth-First Search (BFS).
     #[must_use]
+    /// Finds the shortest path between `start_sector` and `end_sector` using BFS.
+    /// Returns a list of sector indices representing the path, or `None` if no path exists.
     pub fn shortest_path(&self, start_sector: usize, end_sector: usize) -> Option<Vec<usize>> {
         if start_sector == end_sector {
             return Some(vec![start_sector]);
@@ -96,6 +101,7 @@ impl SectorGraph {
 
     /// Exports the sector graph to the Graphviz DOT format for visualization.
     #[must_use]
+    /// Serializes the graph to Graphviz DOT format.
     pub fn to_dot(&self) -> String {
         let mut dot = String::from("digraph SectorGraph {\n");
         dot.push_str("    node [shape=circle, style=filled, fillcolor=lightblue];\n");

@@ -175,6 +175,7 @@ impl Linedef {
 
     /// Returns `true` if the two-sided flag is set.
     #[inline]
+    /// Returns `true` if this linedef is two-sided (has a back sidedef).
     pub fn is_two_sided(&self) -> bool {
         self.flags & FLAG_TWO_SIDED != 0
     }
@@ -363,6 +364,7 @@ impl Ssector {
 
     /// Exclusive end index into SEGS: `first_seg + seg_count`.
     #[inline]
+    /// The starting seg index for this subsector plus its seg count (the exclusive end index).
     pub fn seg_end(self) -> usize {
         self.first_seg as usize + self.seg_count as usize
     }
@@ -404,6 +406,7 @@ pub struct NodeBBox {
 impl NodeBBox {
     /// Returns `true` if the invariant holds: ymax ≥ ymin ∧ xmax ≥ xmin.
     #[inline]
+    /// Checks if this node index points to a valid BSP node or subsector.
     pub fn is_valid(self) -> bool {
         self.ymax >= self.ymin && self.xmax >= self.xmin
     }

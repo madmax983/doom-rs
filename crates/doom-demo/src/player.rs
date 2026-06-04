@@ -79,6 +79,7 @@ impl DemoPlayer {
     /// matches vanilla Doom's parsing behavior and avoids false positives
     /// from `i8::MIN` (-128 = 0x80) appearing inside tic data fields.
     #[must_use]
+    /// Parses a raw LMP byte slice into a `DemoPlayer`.
     pub fn from_lmp(data: &[u8]) -> Option<Self> {
         let header = LmpHeader::from_bytes(data)?;
 
@@ -209,6 +210,7 @@ impl DemoPlayer {
 
     /// Look at the current tic's commands without advancing the cursor.
     #[must_use]
+    /// Looks at the next tic without advancing the playback index.
     pub fn peek_tic(&self) -> Option<&[DemoTicCmd]> {
         self.tics.get(self.current_tic).map(Vec::as_slice)
     }

@@ -199,6 +199,7 @@ impl NetTransport {
     ///
     /// Returns an [`io::Error`] if there is an issue reading from the socket.
     #[allow(clippy::option_if_let_else)]
+    /// Receives the next available packet from the socket.
     pub fn recv_packet(&mut self) -> io::Result<Option<(TicPacket, SocketAddr)>> {
         let mut buf = [0u8; TIC_PACKET_SIZE + 64]; // extra headroom
         match self.socket.recv_from(&mut buf) {
@@ -331,6 +332,7 @@ pub const HANDSHAKE_JOIN_SENDER: u8 = 0xFF;
 
 /// Create a "join" handshake packet sent by a client to request a slot.
 #[must_use]
+/// Creates a join request packet.
 pub fn make_join_packet() -> TicPacket {
     TicPacket {
         tic: HANDSHAKE_TIC,
@@ -344,6 +346,7 @@ pub fn make_join_packet() -> TicPacket {
 /// Create a handshake response from the server, assigning `slot` to the
 /// joining client.
 #[must_use]
+/// Creates a join response packet with the assigned slot.
 pub fn make_join_response(slot: u8) -> TicPacket {
     TicPacket {
         tic: HANDSHAKE_TIC,

@@ -75,6 +75,24 @@ impl TicPacket {
     /// assert_eq!(bytes.len(), doom_net::packet::TIC_PACKET_SIZE);
     /// ```
     #[must_use]
+    /// Serializes this `TicPacket` into a raw byte vector.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use doom_net::{TicPacket, packet::MAX_PLAYERS};
+    /// use doom_types::TicCmd;
+    ///
+    /// let packet = TicPacket {
+    ///     tic: 100,
+    ///     sender: 0,
+    ///     ack_tic: 99,
+    ///     state_checksum: 12345,
+    ///     cmds: [TicCmd::default(); MAX_PLAYERS],
+    /// };
+    /// let bytes = packet.to_bytes();
+    /// assert_eq!(bytes.len(), doom_net::packet::TIC_PACKET_SIZE);
+    /// ```
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(TIC_PACKET_SIZE);
 
@@ -119,6 +137,21 @@ impl TicPacket {
     /// assert_eq!(parsed.sender, 1);
     /// ```
     #[must_use]
+    /// Deserializes a `TicPacket` from a raw byte slice.
+    ///
+    /// Returns `None` if the slice is not exactly `TIC_PACKET_SIZE` bytes long.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use doom_net::{TicPacket, packet::{MAX_PLAYERS, TIC_PACKET_SIZE}};
+    /// use doom_types::TicCmd;
+    ///
+    /// let mut bytes = vec![0u8; TIC_PACKET_SIZE];
+    /// bytes[0..4].copy_from_slice(&100u32.to_le_bytes()); // tic
+    /// let packet = TicPacket::from_bytes(&bytes).unwrap();
+    /// assert_eq!(packet.tic, 100);
+    /// ```
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
         if data.len() < TIC_PACKET_SIZE {
             return None;

@@ -94,6 +94,7 @@ pub enum BspChild {
 impl BspChild {
     /// Decode a raw 16-bit child pointer.
     #[inline]
+    /// Decodes a raw 16-bit child ID from the BSP tree into a `NodeChild`.
     pub fn decode(raw: u16) -> Self {
         if raw & NODE_SUBSECTOR_BIT != 0 {
             Self::Subsector(raw & NODE_INDEX_MASK)

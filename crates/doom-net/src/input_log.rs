@@ -55,6 +55,14 @@ impl InputLog {
     /// assert_eq!(log.get(0), None);
     /// ```
     #[must_use]
+    /// Creates a new `InputLog` with the specified ring buffer capacity.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use doom_net::InputLog;
+    /// let log = InputLog::new(64);
+    /// ```
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "InputLog capacity must be > 0");
         let cap = capacity.min(1024);
@@ -77,6 +85,7 @@ impl InputLog {
     /// let log = InputLog::with_default_capacity();
     /// ```
     #[must_use]
+    /// Creates a new `InputLog` with the default `MAX_ROLLBACK_TICS` capacity.
     pub fn with_default_capacity() -> Self {
         Self::new(MAX_ROLLBACK_TICS)
     }
@@ -125,6 +134,20 @@ impl InputLog {
     /// assert!(log.get(6).is_none());
     /// ```
     #[must_use]
+    /// Retrieves the inputs for the given `tic`, if they are present in the log.
+    ///
+    /// ## Examples
+    ///
+    /// ```rust
+    /// use doom_net::InputLog;
+    /// use doom_types::TicCmd;
+    ///
+    /// let mut log = InputLog::new(64);
+    /// let cmds = [TicCmd::default(); 4];
+    /// log.record(10, cmds);
+    /// assert!(log.get(10).is_some());
+    /// assert!(log.get(11).is_none());
+    /// ```
     pub fn get(&self, tic: u32) -> Option<&[TicCmd; MAX_PLAYERS]> {
         let slot = (tic as usize) % self.capacity;
         match &self.log[slot] {
@@ -150,6 +173,7 @@ impl InputLog {
     /// assert_eq!(log.has_authoritative(1), true);
     /// ```
     #[must_use]
+    /// Checks if the log has an authoritative entry for the given `tic`.
     pub fn has_authoritative(&self, tic: u32) -> bool {
         let slot = (tic as usize) % self.capacity;
         matches!(&self.log[slot], Some(entry) if entry.tic == tic && entry.authoritative)

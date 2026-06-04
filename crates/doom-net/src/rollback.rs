@@ -80,6 +80,7 @@ pub struct RollbackManager<S: Clone> {
 impl<S: Clone> RollbackManager<S> {
     /// Create a new manager for `local_player`, starting at tic 0.
     #[must_use]
+    /// Creates a new `RollbackManager` configured for the given `local_player` index.
     pub fn new(local_player: u8) -> Self {
         Self {
             snapshots: SnapshotRing::new(MAX_ROLLBACK_TICS),
@@ -98,6 +99,7 @@ impl<S: Clone> RollbackManager<S> {
 
     /// Retrieve the snapshot for `tic`, if still in the ring.
     #[must_use]
+    /// Retrieves the game state snapshot taken at the given `tic`, if available.
     pub fn get_snapshot(&self, tic: u32) -> Option<&S> {
         self.snapshots.get(tic)
     }
@@ -159,6 +161,7 @@ impl<S: Clone> RollbackManager<S> {
     /// Returns authoritative inputs if available, otherwise predicts by
     /// repeating the last known input for each player.
     #[must_use]
+    /// Gets the combined inputs for all players at the given tic.
     pub fn get_inputs(&self, tic: u32) -> [TicCmd; MAX_PLAYERS] {
         // If we have authoritative (or any recorded) inputs for this tic, use them.
         if let Some(cmds) = self.input_log.get(tic) {

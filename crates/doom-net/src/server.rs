@@ -193,6 +193,7 @@ impl RelayServer {
 
     /// Count of currently connected players.
     #[must_use]
+    /// Gets the current number of connected clients.
     pub fn connected_count(&self) -> usize {
         self.slots
             .iter()
