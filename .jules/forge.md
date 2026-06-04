@@ -63,3 +63,8 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+
+## 2024-06-04 - Refactored Option destructuring boolean blindness in actions.rs
+**Learning:** Using `.map(|mo| condition).unwrap_or(false)` to access fields from a collection like `gs.mobjslab.get(handle)` creates verbose and disconnected functional chains that decrease readability.
+**Action:** Use idiomatic `.map_or(default, |mo| ...)` or `.is_some_and(|mo| ...)` to safely evaluate inner conditions while preserving read flow and minimizing boilerplate.

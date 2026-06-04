@@ -199,7 +199,7 @@ fn get_alive_target_with_pos(
     let target = mo.target;
     let mo_x = mo.x;
     let mo_y = mo.y;
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    if gs.mobjslab.get(target).is_none_or(|t| t.is_dead()) {
         return None;
     }
     Some((target, mo_x, mo_y))
@@ -498,8 +498,7 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
     };
     let spd = mobjinfo::MOBJINFO
         .get(mo.kind as usize)
-        .map(|i| i.speed)
-        .unwrap_or(Fixed16_16::ZERO);
+        .map_or(Fixed16_16::ZERO, |i| i.speed);
     let (mo_x, mo_y, dir, speed) = (mo.x, mo.y, mo.movedir, spd);
 
     if dir == DI_NODIR || dir > 8 {
@@ -588,11 +587,7 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         if let Some(actor_sector) = actor_sector {
             if let Some(sound_target) = crate::sound::get_sound_target(gs, actor_sector) {
                 // Verify the sound target is alive.
-                let target_alive = gs
-                    .mobjslab
-                    .get(sound_target)
-                    .map(|t| !t.is_dead())
-                    .unwrap_or(false);
+                let target_alive = gs.mobjslab.get(sound_target).is_some_and(|t| !t.is_dead());
 
                 if target_alive
                     && (!is_ambush || crate::sight::p_check_sight(gs, lv, handle, sound_target))
@@ -606,11 +601,7 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     // --- Step 2: Look for players by line-of-sight ---
     // Check the player exists and is alive.
-    let player_alive = gs
-        .mobjslab
-        .get(player_handle)
-        .map(|p| !p.is_dead())
-        .unwrap_or(false);
+    let player_alive = gs.mobjslab.get(player_handle).is_some_and(|p| !p.is_dead());
 
     if !player_alive {
         return;
@@ -739,8 +730,7 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
     };
     let spd = mobjinfo::MOBJINFO
         .get(mo.kind as usize)
-        .map(|i| i.speed)
-        .unwrap_or(Fixed16_16::ZERO);
+        .map_or(Fixed16_16::ZERO, |i| i.speed);
     let (target_handle, mo_x, mo_y, speed) = (mo.target, mo.x, mo.y, spd);
 
     // If no target, set NODIR and return.
@@ -890,15 +880,13 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         let found_target = gs
             .mobjslab
             .get(handle)
-            .map(|mo| mo.target != MobjHandle::NULL)
-            .unwrap_or(false);
+            .is_some_and(|mo| mo.target != MobjHandle::NULL);
 
         if !found_target {
             // Revert to idle spawn state.
             let spawn_sn = mobjinfo::MOBJINFO
                 .get(mo_kind as usize)
-                .map(|i| i.spawn_state)
-                .unwrap_or_default();
+                .map_or(crate::mobj::StateNum::NULL, |i| i.spawn_state);
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
                 mo.target = MobjHandle::NULL;
                 mo.state = spawn_sn;
@@ -953,11 +941,7 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     let melee_sn = info.melee_state;
     let missile_sn = info.missile_state;
-    let reactiontime = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| mo.reactiontime)
-        .unwrap_or(0);
+    let reactiontime = gs.mobjslab.get(handle).map_or(0, |mo| mo.reactiontime);
 
     // --- Step 4: Melee check ---
     if melee_sn != crate::mobj::StateNum::NULL && dist <= MELEE_THRESHOLD {
@@ -970,7 +954,7 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     // --- Step 5: Missile check ---
     if missile_sn != crate::mobj::StateNum::NULL && reactiontime == 0 {
         // Re-read movecount (might have changed).
-        let cur_movecount = gs.mobjslab.get(handle).map(|mo| mo.movecount).unwrap_or(0);
+        let cur_movecount = gs.mobjslab.get(handle).map_or(0, |mo| mo.movecount);
 
         // Don't fire if still moving from last direction change (gives monsters
         // a movement phase between attacks), unless movecount has expired.
@@ -1327,8 +1311,7 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
     let bruis_kind = gs
         .mobjslab
         .get(handle)
-        .map(|mo| mo.kind)
-        .unwrap_or(MobjKind::BaronOfHell);
+        .map_or(MobjKind::BaronOfHell, |mo| mo.kind);
     crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::BaronBall);
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
@@ -1364,8 +1347,7 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let cpos_kind = gs
         .mobjslab
         .get(handle)
-        .map(|mo| mo.kind)
-        .unwrap_or(MobjKind::Trooper);
+        .map_or(MobjKind::Trooper, |mo| mo.kind);
     let mut intercepts = smallvec::SmallVec::new();
     crate::combat::p_line_attack(
         gs,
@@ -1463,7 +1445,7 @@ fn fat_shoot(gs: &mut GameState, handle: MobjHandle, angle_offset: u32) {
     if let Some(proj_h) = crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::FatShot)
     {
         // Read the source angle (already set by face_target).
-        let mo_angle = gs.mobjslab.get(handle).map(|mo| mo.angle.0).unwrap_or(0);
+        let mo_angle = gs.mobjslab.get(handle).map_or(0, |mo| mo.angle.0);
         let new_angle = Bam(mo_angle.wrapping_add(angle_offset));
 
         // Adjust the projectile's angle and recompute momentum from the new angle.
@@ -1657,8 +1639,7 @@ fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
         .filter(|h| {
             gs.mobjslab
                 .get(*h)
-                .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
-                .unwrap_or(false)
+                .is_some_and(|m| m.kind == MobjKind::LostSoul && m.health > 0)
         })
         .count();
 
@@ -1757,7 +1738,7 @@ fn a_vile_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     if let Some(ch) = corpse_handle {
         // Resurrect the corpse: restore health, clear corpse flag, set raise_state.
-        let kind_idx = gs.mobjslab.get(ch).map(|m| m.kind as usize).unwrap_or(0);
+        let kind_idx = gs.mobjslab.get(ch).map_or(0, |m| m.kind as usize);
         let info = &mobjinfo::MOBJINFO[kind_idx];
         let raise_sn = info.raise_state;
         let full_hp = info.spawn_health;
@@ -3843,8 +3824,7 @@ mod tests {
         let rocket = gs.mobjslab.iter_handles().find(|h| {
             gs.mobjslab
                 .get(*h)
-                .map(|m| m.kind == MobjKind::Rocket)
-                .unwrap_or(false)
+                .is_some_and(|m| m.kind == MobjKind::Rocket)
         });
         assert!(rocket.is_some(), "must spawn a Rocket MobjKind");
     }
@@ -3861,8 +3841,7 @@ mod tests {
         let tracer = gs.mobjslab.iter_handles().find(|h| {
             gs.mobjslab
                 .get(*h)
-                .map(|m| m.kind == MobjKind::Tracer)
-                .unwrap_or(false)
+                .is_some_and(|m| m.kind == MobjKind::Tracer)
         });
         assert!(tracer.is_some(), "must spawn a Tracer MobjKind");
     }
@@ -3879,8 +3858,7 @@ mod tests {
         let plaz = gs.mobjslab.iter_handles().find(|h| {
             gs.mobjslab
                 .get(*h)
-                .map(|m| m.kind == MobjKind::ArachPlaz)
-                .unwrap_or(false)
+                .is_some_and(|m| m.kind == MobjKind::ArachPlaz)
         });
         assert!(plaz.is_some(), "must spawn an ArachPlaz MobjKind");
     }
@@ -4058,8 +4036,7 @@ mod tests {
             .filter(|h| {
                 gs.mobjslab
                     .get(*h)
-                    .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
-                    .unwrap_or(false)
+                    .is_some_and(|m| m.kind == MobjKind::LostSoul && m.health > 0)
             })
             .count();
 
@@ -4071,8 +4048,7 @@ mod tests {
             .filter(|h| {
                 gs.mobjslab
                     .get(*h)
-                    .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
-                    .unwrap_or(false)
+                    .is_some_and(|m| m.kind == MobjKind::LostSoul && m.health > 0)
             })
             .count();
 
@@ -4109,8 +4085,7 @@ mod tests {
             .filter(|h| {
                 gs.mobjslab
                     .get(*h)
-                    .map(|m| m.kind == MobjKind::LostSoul && m.health > 0)
-                    .unwrap_or(false)
+                    .is_some_and(|m| m.kind == MobjKind::LostSoul && m.health > 0)
             })
             .count();
 
