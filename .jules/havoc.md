@@ -1,10 +1,3 @@
-## 2024-05-18 - [Havoc: OOM on TEXTURE1 parser]
-**Learning:** Doom's TEXTURE1 parsing uses a direct 4-byte `num_textures` read to allocate `Vec::with_capacity(num_textures)`. Fuzzing this length with large values triggers an immediate OOM.
-**Action:** Use `.min(data.len() / 4)` to clamp lengths derived from WAD/lump headers, preventing massive allocations while still ensuring we parse valid entries up to the slice boundary.
-
-**Havoc: Bounds-checking allocations**
-**Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust,  attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
-**Action:** Use  when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
-**Havoc: Bounds-checking allocations**
-**Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
-**Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+**Audio Float NaN Poisoning**
+**Learning:** `f32::clamp` throws a panic (`NaN` is passed to it). In Rust, floating point values fetched directly from binary data (which we do if they're random or untrusted inputs) can be `NaN`. When handling arbitrary floating-point inputs, explicit checks for `.is_nan()` are necessary before passing to operations that require total order, like `clamp`.
+**Action:** Always check `.is_nan()` when converting bytes to floats or when doing math that can result in `NaN`s, before calling `.clamp()`.
