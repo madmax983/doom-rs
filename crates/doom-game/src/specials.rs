@@ -72,6 +72,16 @@ const PERIODIC_DAMAGE_SUPER_HELLSLIME: i32 = 20;
 ///
 /// Damage sectors update both the player state and player mobj health so
 /// monster AI sees the same liveness the HUD does.
+/// Helper function to iterate over all sectors that match a given tag.
+pub(crate) fn iter_sectors_by_tag(level: &Level, tag: u16) -> impl Iterator<Item = usize> + '_ {
+    level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(move |(_, s)| s.tag == tag)
+        .map(|(i, _)| i)
+}
+
 pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandle) {
     // Read actor position.
     let Some(mo) = gs.mobjslab.get(handle) else {
@@ -1308,13 +1318,7 @@ const PLATFORM_WAIT: i32 = 105;
 /// ```
 pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed: i16) -> usize {
     let mut count = 0;
-    for idx in level
-        .sectors
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| s.tag == tag)
-        .map(|(i, _)| i)
-    {
+    for idx in iter_sectors_by_tag(level, tag) {
         // Avoid duplicate platforms on the same sector.
         if gs
             .movers
@@ -1774,13 +1778,7 @@ pub struct CrusherParams {
 }
 
 fn activate_crusher(gs: &mut GameState, level: &Level, tag: u16, params: CrusherParams) {
-    for idx in level
-        .sectors
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| s.tag == tag)
-        .map(|(i, _)| i)
-    {
+    for idx in iter_sectors_by_tag(level, tag) {
         // Avoid duplicate crushers on the same sector.
         if gs
             .movers
@@ -1818,13 +1816,7 @@ fn stop_crushers(gs: &mut GameState, tag: u16) {
 
 /// Activate a lift (lower-wait-raise) on all sectors matching `tag`.
 fn activate_lift(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    for idx in level
-        .sectors
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| s.tag == tag)
-        .map(|(i, _)| i)
-    {
+    for idx in iter_sectors_by_tag(level, tag) {
         // Avoid duplicate floor movers on the same sector.
         if gs
             .movers
@@ -1872,13 +1864,7 @@ pub fn ev_do_lift(
     wait_tics: i32,
 ) -> usize {
     let mut count = 0;
-    for idx in level
-        .sectors
-        .iter()
-        .enumerate()
-        .filter(|(_, s)| s.tag == tag)
-        .map(|(i, _)| i)
-    {
+    for idx in iter_sectors_by_tag(level, tag) {
         // Avoid duplicate lifts on the same sector.
         if gs.movers.lifts.iter().any(|l| l.sector_index == idx) {
             continue;
@@ -2563,13 +2549,7 @@ fn activate_doors(
         // --- Type 63: remote tag-based door (open stay) ---
         63 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in iter_sectors_by_tag(level, tag) {
                 open_door(
                     gs,
                     level,
@@ -2586,13 +2566,7 @@ fn activate_doors(
         // Type 105: WR Blazing door open-close.
         105 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in iter_sectors_by_tag(level, tag) {
                 open_blazing_door(
                     gs,
                     level,
@@ -2605,13 +2579,7 @@ fn activate_doors(
         // Type 106: WR Blazing door open-stay.
         106 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in iter_sectors_by_tag(level, tag) {
                 open_blazing_door(
                     gs,
                     level,
@@ -2624,13 +2592,7 @@ fn activate_doors(
         // Type 107: WR Blazing door close.
         107 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in iter_sectors_by_tag(level, tag) {
                 close_blazing_door(gs, level, idx);
             }
         }
@@ -3082,20 +3044,18 @@ fn activate_floors(
         // Type 56: W1 Floor raise to 8 below lowest adjacent ceiling (crush).
         56 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = lowest_adjacent_ceiling(level, idx) - 8;
-                    activate_floor_raise_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        crate::state::CrushBehavior::Crush,
-                        FloorType::RaiseCrush,
-                    );
-                }
+            for idx in iter_sectors_by_tag(level, tag) {
+                let target = lowest_adjacent_ceiling(level, idx) - 8;
+                activate_floor_raise_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    crate::state::CrushBehavior::Crush,
+                    FloorType::RaiseCrush,
+                );
             }
         }
 
@@ -3126,20 +3086,18 @@ fn activate_floors(
         // Type 65: SR Raise floor to 8 below lowest ceiling + crush.
         65 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = lowest_adjacent_ceiling(level, idx) - 8;
-                    activate_floor_raise_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        crate::state::CrushBehavior::Crush,
-                        FloorType::RaiseCrush,
-                    );
-                }
+            for idx in iter_sectors_by_tag(level, tag) {
+                let target = lowest_adjacent_ceiling(level, idx) - 8;
+                activate_floor_raise_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    crate::state::CrushBehavior::Crush,
+                    FloorType::RaiseCrush,
+                );
             }
         }
 
@@ -3182,20 +3140,18 @@ fn activate_floors(
         // Type 94: WR Raise floor to 8 below lowest ceiling + crush.
         94 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = lowest_adjacent_ceiling(level, idx) - 8;
-                    activate_floor_raise_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        crate::state::CrushBehavior::Crush,
-                        FloorType::RaiseCrush,
-                    );
-                }
+            for idx in iter_sectors_by_tag(level, tag) {
+                let target = lowest_adjacent_ceiling(level, idx) - 8;
+                activate_floor_raise_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    crate::state::CrushBehavior::Crush,
+                    FloorType::RaiseCrush,
+                );
             }
         }
 
@@ -3230,19 +3186,17 @@ fn activate_floors(
         // Type 36: W1 Lower floor to highest adjacent - 8 (turbo).
         36 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
+            for idx in iter_sectors_by_tag(level, tag) {
+                let target = highest_adjacent_floor(level, idx) + 8;
+                activate_floor_lower_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
+                    FloorType::LowerToHighest,
+                );
             }
         }
 
@@ -3273,57 +3227,51 @@ fn activate_floors(
         // Type 69: SR Lower floor to highest adjacent - 8.
         69 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        FloorType::LowerToHighest,
-                    );
-                }
+            for idx in iter_sectors_by_tag(level, tag) {
+                let target = highest_adjacent_floor(level, idx) + 8;
+                activate_floor_lower_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    FloorType::LowerToHighest,
+                );
             }
         }
 
         // Type 70: SR Lower floor to highest adjacent - 8 (turbo).
         70 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
+            for idx in iter_sectors_by_tag(level, tag) {
+                let target = highest_adjacent_floor(level, idx) + 8;
+                activate_floor_lower_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
+                    FloorType::LowerToHighest,
+                );
             }
         }
 
         // Type 71: S1 Lower floor to highest adjacent - 8 (turbo).
         71 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
+            for idx in iter_sectors_by_tag(level, tag) {
+                let target = highest_adjacent_floor(level, idx) + 8;
+                activate_floor_lower_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
+                    FloorType::LowerToHighest,
+                );
             }
         }
 
@@ -3348,19 +3296,17 @@ fn activate_floors(
         // Type 98: WR Lower floor to highest adjacent - 8 (turbo).
         98 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
+            for idx in iter_sectors_by_tag(level, tag) {
+                let target = highest_adjacent_floor(level, idx) + 8;
+                activate_floor_lower_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
+                    FloorType::LowerToHighest,
+                );
             }
         }
 
@@ -3393,13 +3339,7 @@ fn activate_stairs(
         // Type 7: S1 Build stairs 8 units.
         7 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in iter_sectors_by_tag(level, tag) {
                 ev_build_stairs(
                     gs,
                     level,
@@ -3413,13 +3353,7 @@ fn activate_stairs(
         // Type 8: W1 Build stairs turbo 16 units.
         8 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in iter_sectors_by_tag(level, tag) {
                 ev_build_stairs(
                     gs,
                     level,
@@ -3433,13 +3367,7 @@ fn activate_stairs(
         // Type 100: W1 Build stairs turbo 16 + crush.
         100 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in iter_sectors_by_tag(level, tag) {
                 ev_build_stairs(
                     gs,
                     level,
@@ -3453,13 +3381,7 @@ fn activate_stairs(
         // Type 127: S1 Build stairs turbo 16 units.
         127 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in iter_sectors_by_tag(level, tag) {
                 ev_build_stairs(
                     gs,
                     level,
@@ -3570,13 +3492,7 @@ fn activate_misc(
         // Type 9: S1 Donut.
         9 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in iter_sectors_by_tag(level, tag) {
                 ev_do_donut(gs, level, idx);
             }
         }
@@ -3584,13 +3500,7 @@ fn activate_misc(
         // Type 146: W1 Donut.
         146 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in iter_sectors_by_tag(level, tag) {
                 ev_do_donut(gs, level, idx);
             }
         }
