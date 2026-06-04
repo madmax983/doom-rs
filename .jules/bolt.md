@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Pre-allocating Audio Buffers**
+**Learning:** Re-creating `Vec` instances (e.g. `vec![0.0f32; data.len()]`) inside hot audio callbacks (like `cpal`'s stream closure) causes unnecessary heap allocations per frame, which is bad for real-time audio performance.
+**Action:** Move `Vec` allocations out of the closure and reuse them via `.clear()` and `.resize()` to maintain zero-cost buffer filling while preserving the correct length.

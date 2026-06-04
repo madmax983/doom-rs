@@ -116,6 +116,9 @@ impl AudioDriver {
         let mixer_cb = Arc::clone(&mixer);
         let midi_cb = Arc::clone(&midi);
 
+        let mut sfx_buf = Vec::new();
+        let mut opl_buf = Vec::new();
+
         let stream = device
             .build_output_stream(
                 &config.into(),
@@ -129,9 +132,12 @@ impl AudioDriver {
                     // data is interleaved stereo f32: [L0, R0, L1, R1, ...].
                     let n_mono = (data.len() / 2).max(1);
 
+                    // Re-use vectors to avoid allocation on the hot audio path.
                     // SfxMixer outputs f32 stereo directly — no i16 conversion needed.
-                    let mut sfx_buf = vec![0.0f32; data.len()];
-                    let mut opl_buf = vec![0.0f32; n_mono];
+                    sfx_buf.clear();
+                    sfx_buf.resize(data.len(), 0.0);
+                    opl_buf.clear();
+                    opl_buf.resize(n_mono, 0.0);
 
                     if let Ok(mut m) = mixer_cb.lock() {
                         m.mix(&mut sfx_buf, actual_rate);
