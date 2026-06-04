@@ -1,11 +1,11 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+💡 What:
+Replaced the `Vec<usize>` return type of `sectors_by_tag` with `impl Iterator<Item = usize> + '_` by removing the `.collect()` call at the end of the chain.
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+🎯 Why:
+To avoid intermediate heap allocations (`Vec::new()`) when mapping sector indices based on game tags, which is queried frequently during line trigger resolution.
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+📊 Impact:
+Eliminates intermediate vector allocations on the hot path when triggering actions that affect grouped sectors. This fits within zero-cost abstractions by leveraging Rust’s lazy evaluation.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🔭 Measurement:
+Run `cargo bench` and verify through `cargo clippy --all-targets --all-features -- -D warnings` and `cargo test` that the logic functions identically.
