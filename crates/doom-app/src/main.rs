@@ -3078,13 +3078,18 @@ fn main() {
         } else {
             use crossterm::style::Stylize;
             if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-                eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
+                eprintln!(
+                    "\n{} {}",
+                    "❌".red().bold(),
+                    "Engine Failure".red().bold().underlined()
+                );
+                eprintln!("\n  {}", err.to_string().white().bold());
 
                 let mut causes = err.chain().skip(1).peekable();
                 if causes.peek().is_some() {
-                    eprintln!("\n↳ {}:", "Reason".red().bold());
+                    eprintln!("\n  {}", "Diagnostic Trace:".dark_grey());
                     for cause in causes {
-                        eprintln!("    {}", cause);
+                        eprintln!("    {} {}", "↳".dark_grey(), cause.to_string().dark_grey());
                     }
                 }
                 eprintln!();
