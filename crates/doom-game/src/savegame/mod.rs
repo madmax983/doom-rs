@@ -13,7 +13,7 @@ use doom_types::{Bam, Fixed16_16};
 
 use crate::mobj::{Mobj, MobjHandle, MobjSlab, StateNum};
 use crate::player::{PlayerState, PspriteState};
-use crate::savegame_vanilla;
+pub(crate) mod vanilla;
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
     GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
@@ -832,10 +832,10 @@ pub fn detect_save_format(data: &[u8]) -> Result<SaveFormat, SaveError> {
     if data.len() >= SAVE_MAGIC.len() && data[..SAVE_MAGIC.len()] == SAVE_MAGIC {
         return Ok(SaveFormat::DoomRs);
     }
-    if savegame_vanilla::looks_like_vanilla_dsg(data) {
+    if vanilla::looks_like_vanilla_dsg(data) {
         return Ok(SaveFormat::VanillaDsg);
     }
-    if data.len() < savegame_vanilla::VANILLA_HEADER_LEN {
+    if data.len() < vanilla::VANILLA_HEADER_LEN {
         return Err(SaveError::TooShort);
     }
     Err(SaveError::BadMagic)
@@ -859,7 +859,7 @@ pub fn save_game_with_format(
 ) -> Result<Vec<u8>, SaveError> {
     match format {
         SaveFormat::DoomRs => Ok(save_game_doomrs(gs, level_name, skill, description)),
-        SaveFormat::VanillaDsg => savegame_vanilla::save_game(gs, level_name, skill, description),
+        SaveFormat::VanillaDsg => vanilla::save_game(gs, level_name, skill, description),
     }
 }
 
@@ -983,7 +983,7 @@ fn save_game_doomrs(gs: &GameState, level_name: &[u8; 8], skill: u8, description
 pub fn load_game(data: &[u8]) -> Result<SaveGame, SaveError> {
     match detect_save_format(data)? {
         SaveFormat::DoomRs => load_game_doomrs(data),
-        SaveFormat::VanillaDsg => savegame_vanilla::load_game(data),
+        SaveFormat::VanillaDsg => vanilla::load_game(data),
     }
 }
 

@@ -31,7 +31,6 @@ pub mod player;
 pub mod projectile;
 pub mod random;
 pub mod savegame;
-mod savegame_vanilla;
 pub mod sight;
 pub mod snapshot;
 pub mod sound;
@@ -94,11 +93,11 @@ pub use projectile::{
 };
 pub use random::{DoomRng, RNG_TABLE};
 pub use random::{p_damage_with_variance, p_missile_angle_spread, p_random_chance, randomize_tics};
+pub use savegame::vanilla::VanillaSaveHeader;
 pub use savegame::{
     MAX_SAVE_SLOTS, SAVE_MAGIC, SaveError, SaveFormat, SaveGame, SaveHeader, detect_save_format,
     load_game, save_game, save_game_with_format, save_slot_filename,
 };
-pub use savegame_vanilla::VanillaSaveHeader;
 pub use sight::{
     p_aim_line_slope, p_check_sight, p_look_for_players, point_on_side, ray_crosses_linedef,
     sector_from_subsector,

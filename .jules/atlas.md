@@ -52,3 +52,6 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+**[Fix savegame vanilla circular dependency]**
+**Tangle:** The `doom-game` crate contained a circular dependency between the `savegame` module and `savegame_vanilla`. `savegame` imported `savegame_vanilla` for Vanilla Doom save format detection, and `savegame_vanilla` imported `SaveError` and `SaveGame` from `savegame`. This created a "Knot" anti-pattern in the codebase.
+**Blueprint:** Refactored the 2000-line `savegame.rs` into a `savegame` directory module. Moved `savegame_vanilla.rs` to `savegame/vanilla.rs` as a proper submodule, breaking the circular dependency by placing the items in a natural module hierarchy, fixing the knot, and helping to alleviate the blob anti-pattern.
