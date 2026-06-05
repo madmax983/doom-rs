@@ -10,3 +10,6 @@ thiserror  = { workspace = true }
 
 [lints]
 workspace = true
+
+[features]
+json_export = []

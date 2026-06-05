@@ -204,6 +204,11 @@ struct Args {
     #[arg(long, num_args = 2, value_names = ["INPUT_LMP", "OUTPUT_CSV"])]
     export_demo_csv: Option<Vec<std::path::PathBuf>>,
 
+    /// Convert a .lmp demo file to a JSON and exit.
+    #[cfg(feature = "json_export")]
+    #[arg(long, num_args = 2, value_names = ["INPUT_LMP", "OUTPUT_JSON"])]
+    export_demo_json: Option<Vec<std::path::PathBuf>>,
+
     /// Export the sector topological graph to a Graphviz DOT file and exit.
     #[arg(long)]
     export_dot: Option<std::path::PathBuf>,
@@ -2304,6 +2309,19 @@ fn run_doom(args: Args) -> Result<()> {
         "3D model",
         args.json,
     )? {
+        return Ok(());
+    }
+
+    #[cfg(feature = "json_export")]
+    if let Some(ref paths) = args.export_demo_json {
+        let input_path = &paths[0];
+        let output_path = &paths[1];
+        let mut player = load_demo_player(input_path)?;
+        let json_data = doom_demo::json::export_demo_to_json(&mut player);
+        std::fs::write(output_path, json_data).with_context(|| {
+            format!("Failed to write JSON demo to {}", output_path.display())
+        })?;
+        println!("Exported demo JSON to {}", output_path.display());
         return Ok(());
     }
 

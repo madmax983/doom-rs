@@ -238,3 +238,6 @@ mod tests {
         assert_eq!(lmp[17], LMP_TERMINATOR);
     }
 }
+
+#[cfg(feature = "json_export")]
+pub mod json;
