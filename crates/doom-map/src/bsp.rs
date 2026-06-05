@@ -20,6 +20,12 @@ use thiserror::Error;
 
 /// Errors from BSP structural validation.
 #[derive(Debug, Error)]
+/// ## Examples
+/// ```
+/// use doom_map::bsp::BspError;
+///
+/// let err = BspError::LeafCountMismatch { nodes: 10, ssectors: 5 };
+/// ```
 pub enum BspError {
     /// The leaf-count invariant is violated.
     #[error("BSP invariant violated: N_SSECTORS ({ssectors}) != N_NODES ({nodes}) + 1")]
@@ -104,6 +110,16 @@ impl BspChild {
 }
 
 /// A validated BSP tree — holds references to the node and subsector arrays.
+/// ## Examples
+/// ```
+/// use doom_map::bsp::BspTree;
+/// use doom_map::lumps::{Node, Ssector, NodeBBox};
+///
+/// let nodes: Vec<Node> = vec![];
+/// let ssectors: Vec<Ssector> = vec![Ssector { seg_count: 1, first_seg: 0 }];
+/// // Empty tree validates successfully when segecount > 0 and n_segs > 0
+/// let tree = BspTree::validate(&nodes, &ssectors, 1).unwrap();
+/// ```
 pub struct BspTree<'a> {
     nodes: &'a [Node],
     ssectors: &'a [Ssector],
@@ -114,6 +130,16 @@ impl<'a> BspTree<'a> {
     ///
     /// # Errors
     /// Returns the first invariant violation encountered.
+    /// ## Examples
+    /// ```
+    /// use doom_map::bsp::BspTree;
+    /// use doom_map::lumps::{Node, Ssector};
+    ///
+    /// let nodes: Vec<Node> = vec![];
+    /// let ssectors: Vec<Ssector> = vec![Ssector { seg_count: 1, first_seg: 0 }];
+    /// let result = BspTree::validate(&nodes, &ssectors, 1);
+    /// assert!(result.is_ok());
+    /// ```
     pub fn validate(
         nodes: &'a [Node],
         ssectors: &'a [Ssector],
@@ -257,6 +283,18 @@ impl<'a> BspTree<'a> {
     /// the point falls on.
     ///
     /// Returns `None` only if the tree has no nodes and no subsectors (empty level).
+    /// ## Examples
+    /// ```
+    /// use doom_map::bsp::BspTree;
+    /// use doom_map::lumps::{Node, Ssector};
+    ///
+    /// let nodes: Vec<Node> = vec![];
+    /// let ssectors: Vec<Ssector> = vec![Ssector { seg_count: 10, first_seg: 0 }];
+    /// let tree = BspTree::validate(&nodes, &ssectors, 10).unwrap();
+    ///
+    /// let ssector = tree.point_in_subsector(100, 200).unwrap();
+    /// assert_eq!(ssector.seg_count, 10);
+    /// ```
     pub fn point_in_subsector(&self, px: i32, py: i32) -> Option<&Ssector> {
         if self.nodes.is_empty() {
             return self.ssectors.first();
@@ -287,6 +325,17 @@ impl<'a> BspTree<'a> {
     /// Compute the maximum depth of the BSP tree (counting from root).
     ///
     /// Used by the Phase 3 gate to print geometry stats.
+    /// ## Examples
+    /// ```
+    /// use doom_map::bsp::BspTree;
+    /// use doom_map::lumps::{Node, Ssector};
+    ///
+    /// let nodes: Vec<Node> = vec![];
+    /// let ssectors: Vec<Ssector> = vec![Ssector { seg_count: 1, first_seg: 0 }];
+    /// let tree = BspTree::validate(&nodes, &ssectors, 1).unwrap();
+    ///
+    /// assert_eq!(tree.max_depth(), 0);
+    /// ```
     pub fn max_depth(&self) -> u32 {
         if self.nodes.is_empty() {
             return 0;
@@ -308,11 +357,33 @@ impl<'a> BspTree<'a> {
     }
 
     /// Access the raw node slice.
+    /// ## Examples
+    /// ```
+    /// use doom_map::bsp::BspTree;
+    /// use doom_map::lumps::{Node, Ssector};
+    ///
+    /// let nodes: Vec<Node> = vec![];
+    /// let ssectors: Vec<Ssector> = vec![Ssector { seg_count: 1, first_seg: 0 }];
+    /// let tree = BspTree::validate(&nodes, &ssectors, 1).unwrap();
+    ///
+    /// assert_eq!(tree.nodes().len(), 0);
+    /// ```
     pub fn nodes(&self) -> &[Node] {
         self.nodes
     }
 
     /// Access the raw subsector slice.
+    /// ## Examples
+    /// ```
+    /// use doom_map::bsp::BspTree;
+    /// use doom_map::lumps::{Node, Ssector};
+    ///
+    /// let nodes: Vec<Node> = vec![];
+    /// let ssectors: Vec<Ssector> = vec![Ssector { seg_count: 1, first_seg: 0 }];
+    /// let tree = BspTree::validate(&nodes, &ssectors, 1).unwrap();
+    ///
+    /// assert_eq!(tree.ssectors().len(), 1);
+    /// ```
     pub fn ssectors(&self) -> &[Ssector] {
         self.ssectors
     }

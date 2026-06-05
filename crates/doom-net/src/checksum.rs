@@ -35,6 +35,13 @@ pub const CRC32_TABLE: [u32; 256] = {
 /// Returns `0` for an empty slice (the complement of `0xFFFF_FFFF` XOR
 /// `0xFFFF_FFFF`).  This is only used for desync detection, not security.
 #[must_use]
+/// ## Examples
+/// ```
+/// use doom_net::checksum::compute_checksum;
+///
+/// let checksum = compute_checksum(b"doom");
+/// assert_eq!(checksum, 132995544);
+/// ```
 pub fn compute_checksum(data: &[u8]) -> u32 {
     let mut crc: u32 = 0xFFFF_FFFF;
     for &byte in data {
@@ -48,6 +55,13 @@ pub fn compute_checksum(data: &[u8]) -> u32 {
 ///
 /// Trivial wrapper -- exists so call sites read as intent rather than `==`.
 #[must_use]
+/// ## Examples
+/// ```
+/// use doom_net::checksum::checksums_match;
+///
+/// assert!(checksums_match(132995544, 132995544));
+/// assert!(!checksums_match(132995544, 0x00000000));
+/// ```
 pub const fn checksums_match(local: u32, remote: u32) -> bool {
     local == remote
 }

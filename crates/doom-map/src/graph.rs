@@ -10,6 +10,15 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A topological graph representing the connectivity of sectors in a map.
 /// Sectors are nodes, and two-sided linedefs acting as portals are edges.
+/// ## Examples
+/// ```
+/// use doom_map::graph::SectorGraph;
+/// use std::collections::{HashMap, HashSet};
+///
+/// let mut adj = HashMap::new();
+/// adj.insert(0, HashSet::from([1, 2]));
+/// let graph = SectorGraph { adjacency_list: adj };
+/// ```
 pub struct SectorGraph {
     /// Adjacency list: sector_index -> list of connected sector_indices
     pub adjacency_list: HashMap<usize, HashSet<usize>>,
@@ -20,6 +29,30 @@ impl SectorGraph {
     /// Connections are established by finding two-sided linedefs that connect
     /// one sector to another via their front and back sidedefs.
     #[must_use]
+    /// ## Examples
+    /// ```
+    /// use doom_map::Level;
+    /// use doom_map::graph::SectorGraph;
+    /// use doom_map::lumps::{Blockmap, Reject};
+    ///
+    /// let reject = Reject::parse_lump(&[0u8], 1).unwrap();
+    /// let mut bm_data = vec![0u8; 14];
+    /// bm_data[4..6].copy_from_slice(&1u16.to_le_bytes());
+    /// bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+    /// bm_data[8..10].copy_from_slice(&5u16.to_le_bytes());
+    /// bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes());
+    /// bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes());
+    /// let blockmap = Blockmap::parse_lump(&bm_data).unwrap();
+    ///
+    /// let level = Level {
+    ///     name: "TEST".to_string(),
+    ///     things: vec![], linedefs: vec![], sidedefs: vec![], vertexes: vec![],
+    ///     sectors: vec![], segs: vec![], ssectors: vec![], nodes: vec![],
+    ///     reject, blockmap
+    /// };
+    /// let graph = SectorGraph::build(&level);
+    /// assert!(graph.adjacency_list.is_empty());
+    /// ```
     pub fn build(level: &Level) -> Self {
         let mut adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::new();
 

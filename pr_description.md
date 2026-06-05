@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+📖 Chapter: The `bsp`, `checksum`, and `graph` modules.
+🔦 Insight: Added missing doc-tests and executable examples for core map geometry structures and networking tools, helping developers understand how they work without reading the source.
+🧪 Example: Added 9 executable doctests.
+🖼️ Preview: (Run `cargo doc --open` to view the beautiful results)
