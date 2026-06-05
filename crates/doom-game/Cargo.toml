@@ -5,6 +5,7 @@ edition.workspace = true
 
 [features]
 default = []
+run_report = []
 style_meter = []
 telemetry = []
 director = []

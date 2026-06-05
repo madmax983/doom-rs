@@ -30,6 +30,8 @@ pub mod pickups;
 pub mod player;
 pub mod projectile;
 pub mod random;
+#[cfg(feature = "run_report")]
+pub mod run_report;
 pub mod savegame;
 mod savegame_vanilla;
 pub mod sight;
@@ -94,6 +96,8 @@ pub use projectile::{
 };
 pub use random::{DoomRng, RNG_TABLE};
 pub use random::{p_damage_with_variance, p_missile_angle_spread, p_random_chance, randomize_tics};
+#[cfg(feature = "run_report")]
+pub use run_report::*;
 pub use savegame::{
     MAX_SAVE_SLOTS, SAVE_MAGIC, SaveError, SaveFormat, SaveGame, SaveHeader, detect_save_format,
     load_game, save_game, save_game_with_format, save_slot_filename,
