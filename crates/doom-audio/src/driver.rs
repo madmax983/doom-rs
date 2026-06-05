@@ -251,7 +251,7 @@ mod tests {
 
         // Lock, load, verify — must not panic.
         let mut mp = driver.midi.lock().expect("midi mutex must not be poisoned");
-        mp.load_score(score);
+        mp.load_score(std::sync::Arc::new(score));
         assert!(
             mp.current_score.is_some(),
             "score must be loaded after load_score"

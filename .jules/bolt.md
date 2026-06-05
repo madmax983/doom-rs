@@ -23,3 +23,11 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**[Zero-cost MusEvent Copy]
+**Learning:** `MusEvent` was implemented as a `Clone` enum but only contained primitive types. In `midi.rs`, the tight audio loop was calling `.clone()` on each event, creating unnecessary overhead. By deriving `Copy`, the clone can be eliminated. Also, `MidiPlayer` held `Option<MusScore>`, which meant loading a score cloned the entire event sequence `Vec<(u32, MusEvent)>`. Wrapping it in `Arc<MusScore>` prevented deep cloning on load.
+**Action:** Always derive `Copy` for enums and structs that only contain primitive types. Wrap large read-only configurations or assets in `std::sync::Arc` to prevent deep cloning when passing them into players or states.
+
+**[Zero-cost MusEvent Copy]
+**Learning:** `MusEvent` was implemented as a `Clone` enum but only contained primitive types. In `midi.rs`, the tight audio loop was calling `.clone()` on each event, creating unnecessary overhead. By deriving `Copy`, the clone can be eliminated.
+**Action:** Always derive `Copy` for enums and structs that only contain primitive types.

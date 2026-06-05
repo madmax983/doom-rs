@@ -2053,7 +2053,7 @@ fn export_music_wav_for_map(
         / u64::from(player.ticks_per_sec)) as usize;
 
     let mut rendered = vec![0.0f32; total_samples];
-    player.load_score(score);
+    player.load_score(std::sync::Arc::new(score));
     player.advance_samples(total_samples, sample_rate, &mut rendered);
 
     let wav_bytes = wav_from_f32_mono(&rendered, sample_rate);

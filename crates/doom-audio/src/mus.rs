@@ -46,7 +46,7 @@ pub struct MusHeader {
 ///     volume: Some(127),
 /// };
 /// ```
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum MusEvent {
     /// Note-off for `note` on `channel`.
     ReleaseNote {

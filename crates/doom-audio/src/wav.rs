@@ -41,7 +41,7 @@ pub fn render_mus_to_wav_mono(
     if let Some(bank) = genmidi {
         player.load_genmidi(bank);
     }
-    player.load_score(score);
+    player.load_score(std::sync::Arc::new(score));
 
     let mut pcm_i16 = Vec::<i16>::new();
     let mut mono_sample = [0.0f32; 1];

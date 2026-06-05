@@ -313,7 +313,7 @@ pub struct MidiPlayer {
     // Timed-playback state
     // -----------------------------------------------------------------------
     /// The currently loaded score, if any.
-    pub current_score: Option<MusScore>,
+    pub current_score: Option<std::sync::Arc<MusScore>>,
     /// Index into `current_score.events` for the next unplayed event.
     pub event_cursor: usize,
     /// Absolute tick number at which `events[event_cursor]` becomes due.
@@ -385,7 +385,7 @@ impl MidiPlayer {
     /// Silences the OPL chip and resets all channel allocations before
     /// beginning playback of the new score.  Per-channel GM program numbers
     /// are also reset to 0 (Acoustic Grand Piano).
-    pub fn load_score(&mut self, score: MusScore) {
+    pub fn load_score(&mut self, score: std::sync::Arc<MusScore>) {
         // Silence the chip and reset channel allocations.
         self.opl = OplChip::new();
         self.channel_map = [0xFF; 16];
@@ -474,7 +474,7 @@ impl MidiPlayer {
                     if event_sample >= sample_count_end {
                         LoopAction::Break
                     } else {
-                        let event_clone = score.events[self.event_cursor].1.clone();
+                        let event_clone = score.events[self.event_cursor].1;
                         let delta_next = score
                             .events
                             .get(self.event_cursor + 1)
@@ -828,7 +828,7 @@ mod tests {
         player.sample_count = 99_999;
 
         let score = make_score(vec![MusEvent::ScoreEnd]);
-        player.load_score(score);
+        player.load_score(std::sync::Arc::new(score));
 
         assert_eq!(
             player.event_cursor, 0,
@@ -863,7 +863,7 @@ mod tests {
             ),
             (100, MusEvent::ScoreEnd),
         ]);
-        player.load_score(score);
+        player.load_score(std::sync::Arc::new(score));
 
         let mut buf = vec![0.0f32; 44_100];
         player.advance_samples(44_100, 44_100, &mut buf);
@@ -891,7 +891,7 @@ mod tests {
             ),
             (1, MusEvent::ScoreEnd),
         ]);
-        player.load_score(score);
+        player.load_score(std::sync::Arc::new(score));
 
         let mut buf = vec![0.0f32; 64];
         player.advance_samples(64, 44_100, &mut buf);
@@ -913,7 +913,7 @@ mod tests {
             },
             MusEvent::ScoreEnd,
         ]);
-        player.load_score(score);
+        player.load_score(std::sync::Arc::new(score));
 
         // Advance enough to fire all events.
         let mut buf = vec![0.0f32; 64];
@@ -969,12 +969,12 @@ mod tests {
         ]);
 
         let mut oneshot = MidiPlayer::new();
-        oneshot.load_score(score.clone());
+        oneshot.load_score(std::sync::Arc::new(score.clone()));
         let mut one = vec![0.0f32; 2048];
         oneshot.advance_samples(one.len(), 44_100, &mut one);
 
         let mut chunked = MidiPlayer::new();
-        chunked.load_score(score);
+        chunked.load_score(std::sync::Arc::new(score));
         let mut two = vec![0.0f32; 2048];
         chunked.advance_samples(1024, 44_100, &mut two[..1024]);
         chunked.advance_samples(1024, 44_100, &mut two[1024..]);

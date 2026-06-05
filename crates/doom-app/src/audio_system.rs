@@ -340,7 +340,7 @@ fn audio_cmd_thread(
                     continue;
                 };
                 log::debug!("[music] genmidi={}", mp.genmidi.is_some());
-                mp.load_score(score);
+                mp.load_score(std::sync::Arc::new(score));
                 log::debug!("[music] score loaded — playback started");
             }
 
