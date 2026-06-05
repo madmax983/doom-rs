@@ -1194,7 +1194,7 @@ fn min_neighbor_light(level: &Level, tag: u16) -> i16 {
 // ---------------------------------------------------------------------------
 
 /// Collect all sector indices matching `tag`.
-fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
+pub(crate) fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
     level
         .sectors
         .iter()

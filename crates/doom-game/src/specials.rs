@@ -3082,20 +3082,18 @@ fn activate_floors(
         // Type 56: W1 Floor raise to 8 below lowest adjacent ceiling (crush).
         56 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = lowest_adjacent_ceiling(level, idx) - 8;
-                    activate_floor_raise_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        crate::state::CrushBehavior::Crush,
-                        FloorType::RaiseCrush,
-                    );
-                }
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
+                let target = lowest_adjacent_ceiling(level, idx) - 8;
+                activate_floor_raise_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    crate::state::CrushBehavior::Crush,
+                    FloorType::RaiseCrush,
+                );
             }
         }
 
@@ -3126,20 +3124,18 @@ fn activate_floors(
         // Type 65: SR Raise floor to 8 below lowest ceiling + crush.
         65 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = lowest_adjacent_ceiling(level, idx) - 8;
-                    activate_floor_raise_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        crate::state::CrushBehavior::Crush,
-                        FloorType::RaiseCrush,
-                    );
-                }
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
+                let target = lowest_adjacent_ceiling(level, idx) - 8;
+                activate_floor_raise_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    crate::state::CrushBehavior::Crush,
+                    FloorType::RaiseCrush,
+                );
             }
         }
 
@@ -3182,20 +3178,18 @@ fn activate_floors(
         // Type 94: WR Raise floor to 8 below lowest ceiling + crush.
         94 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = lowest_adjacent_ceiling(level, idx) - 8;
-                    activate_floor_raise_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        crate::state::CrushBehavior::Crush,
-                        FloorType::RaiseCrush,
-                    );
-                }
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
+                let target = lowest_adjacent_ceiling(level, idx) - 8;
+                activate_floor_raise_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    crate::state::CrushBehavior::Crush,
+                    FloorType::RaiseCrush,
+                );
             }
         }
 
@@ -3230,19 +3224,17 @@ fn activate_floors(
         // Type 36: W1 Lower floor to highest adjacent - 8 (turbo).
         36 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
+                let target = highest_adjacent_floor(level, idx) + 8;
+                activate_floor_lower_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
+                    FloorType::LowerToHighest,
+                );
             }
         }
 
@@ -3273,57 +3265,51 @@ fn activate_floors(
         // Type 69: SR Lower floor to highest adjacent - 8.
         69 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        FloorType::LowerToHighest,
-                    );
-                }
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
+                let target = highest_adjacent_floor(level, idx) + 8;
+                activate_floor_lower_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    1,
+                    FloorType::LowerToHighest,
+                );
             }
         }
 
         // Type 70: SR Lower floor to highest adjacent - 8 (turbo).
         70 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
+                let target = highest_adjacent_floor(level, idx) + 8;
+                activate_floor_lower_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
+                    FloorType::LowerToHighest,
+                );
             }
         }
 
         // Type 71: S1 Lower floor to highest adjacent - 8 (turbo).
         71 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
+                let target = highest_adjacent_floor(level, idx) + 8;
+                activate_floor_lower_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
+                    FloorType::LowerToHighest,
+                );
             }
         }
 
@@ -3348,19 +3334,17 @@ fn activate_floors(
         // Type 98: WR Lower floor to highest adjacent - 8 (turbo).
         98 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
+                let target = highest_adjacent_floor(level, idx) + 8;
+                activate_floor_lower_single_typed(
+                    gs,
+                    level,
+                    idx,
+                    tag,
+                    target,
+                    4,
+                    FloorType::LowerToHighest,
+                );
             }
         }
 
@@ -3393,13 +3377,7 @@ fn activate_stairs(
         // Type 7: S1 Build stairs 8 units.
         7 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
                 ev_build_stairs(
                     gs,
                     level,
@@ -3413,13 +3391,7 @@ fn activate_stairs(
         // Type 8: W1 Build stairs turbo 16 units.
         8 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
                 ev_build_stairs(
                     gs,
                     level,
@@ -3433,13 +3405,7 @@ fn activate_stairs(
         // Type 100: W1 Build stairs turbo 16 + crush.
         100 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
                 ev_build_stairs(
                     gs,
                     level,
@@ -3453,13 +3419,7 @@ fn activate_stairs(
         // Type 127: S1 Build stairs turbo 16 units.
         127 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
                 ev_build_stairs(
                     gs,
                     level,
@@ -3570,13 +3530,7 @@ fn activate_misc(
         // Type 9: S1 Donut.
         9 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
                 ev_do_donut(gs, level, idx);
             }
         }
@@ -3584,13 +3538,7 @@ fn activate_misc(
         // Type 146: W1 Donut.
         146 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in level
-                .sectors
-                .iter()
-                .enumerate()
-                .filter(|(_, s)| s.tag == tag)
-                .map(|(i, _)| i)
-            {
+            for idx in crate::linedef_dispatch::sectors_by_tag(level, tag) {
                 ev_do_donut(gs, level, idx);
             }
         }

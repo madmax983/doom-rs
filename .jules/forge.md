@@ -63,3 +63,19 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactored redundant inline iterator pipelines for extracting adjacent sectors by tag**
+**Learning:** `activate_stairs` repeatedly used a 5-line inline iterator chain `.iter().enumerate().filter(|(_, s)| s.tag == tag).map(|(i, _)| i)` to find sector indices matching a tag. This verbose pattern was duplicated for every stair building special type.
+**Action:** Replace the duplicated iterator chains with a call to the existing `crate::linedef_dispatch::sectors_by_tag(level, tag)` helper function to reduce boilerplate and improve readability without changing runtime behavior.
+
+**Refactored redundant inline iterator pipelines for extracting matching sectors in floor raisers**
+**Learning:** Sector floor raise specials repeatedly iterated over all sectors manually `for idx in 0..level.sectors.len() { if level.sectors[idx].tag == tag { ... } }` to find sectors matching a tag.
+**Action:** Replace the duplicated manual loop with a call to the existing `crate::linedef_dispatch::sectors_by_tag(level, tag)` helper function to reduce boilerplate, enforce DRY principles, and improve readability without changing runtime behavior.
+
+**Refactored redundant inline loop pipelines for extracting matching sectors in floor lowers**
+**Learning:** Sector floor lower specials repeatedly iterated over all sectors manually `for idx in 0..level.sectors.len() { if level.sectors[idx].tag == tag { ... } }` to find sectors matching a tag.
+**Action:** Replace the duplicated manual loop with a call to the existing `crate::linedef_dispatch::sectors_by_tag(level, tag)` helper function to reduce boilerplate, enforce DRY principles, and improve readability without changing runtime behavior.
+
+**Refactored redundant inline loop pipelines for extracting matching sectors in donuts**
+**Learning:** Sector donut specials repeatedly iterated over all sectors manually `for idx in level.sectors.iter().enumerate().filter(|(_, s)| s.tag == tag).map(|(i, _)| i) { ... }` to find sectors matching a tag.
+**Action:** Replace the duplicated manual loop with a call to the existing `crate::linedef_dispatch::sectors_by_tag(level, tag)` helper function to reduce boilerplate, enforce DRY principles, and improve readability without changing runtime behavior.
