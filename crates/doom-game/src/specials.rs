@@ -73,34 +73,28 @@ const PERIODIC_DAMAGE_SUPER_HELLSLIME: i32 = 20;
 /// Damage sectors update both the player state and player mobj health so
 /// monster AI sees the same liveness the HUD does.
 pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandle) {
-    // Read actor position.
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let (az, _ax, _ay) = (mo.z.to_int(), mo.x.to_int(), mo.y.to_int());
+    let az = mo.z.to_int();
 
-    for sector in &level.sectors {
-        if sector.special == 0 {
-            continue;
+    let Some(dmg) = level.sectors.iter().find_map(|s| {
+        if s.special == 0 || az != s.floor_height as i32 {
+            return None;
         }
-
-        // Only apply damage if actor is standing on this floor.
-        if az != sector.floor_height as i32 {
-            continue;
+        match crate::state::SectorDamageType::from_repr(s.special) {
+            Some(crate::state::SectorDamageType::Hellslime) => Some(LEGACY_DAMAGE_HELLSLIME),
+            Some(crate::state::SectorDamageType::Nukage) => Some(LEGACY_DAMAGE_NUKAGE),
+            Some(crate::state::SectorDamageType::SuperHellslime) => {
+                Some(LEGACY_DAMAGE_SUPER_HELLSLIME)
+            }
+            _ => None,
         }
-
-        let dmg: i32 = match crate::state::SectorDamageType::from_repr(sector.special) {
-            Some(crate::state::SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
-            Some(crate::state::SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
-            Some(crate::state::SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
-            _ => continue,
-        };
-
-        apply_sector_damage(gs, handle, dmg);
-
-        // Only apply one sector's damage per tic (first match wins).
+    }) else {
         return;
-    }
+    };
+
+    apply_sector_damage(gs, handle, dmg);
 }
 
 // ---------------------------------------------------------------------------
@@ -130,7 +124,6 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
 
     let handle = gs.player.handle;
 
-    // Read actor position.
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
@@ -139,20 +132,11 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
     // Check if player has RadSuit active.
     let has_radsuit = gs.player.powers[crate::player::powers::PW_IRONFEET] > 0;
 
-    for sector in &level.sectors {
-        if sector.special == 0 {
-            continue;
+    let Some((damage, ignores_radsuit, damage_type)) = level.sectors.iter().find_map(|s| {
+        if s.special == 0 || az != s.floor_height as i32 {
+            return None;
         }
-
-        // Only apply damage if actor is standing on this floor.
-        if az != sector.floor_height as i32 {
-            continue;
-        }
-
-        let Some(damage_type) = crate::state::SectorDamageType::from_repr(sector.special) else {
-            continue;
-        };
-
+        let damage_type = crate::state::SectorDamageType::from_repr(s.special)?;
         let (damage, ignores_radsuit) = match damage_type {
             crate::state::SectorDamageType::NukageBlink => (PERIODIC_DAMAGE_NUKAGE_BLINK, false),
             crate::state::SectorDamageType::Hellslime => (PERIODIC_DAMAGE_HELLSLIME, false),
@@ -162,22 +146,22 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
                 (PERIODIC_DAMAGE_SUPER_HELLSLIME, false)
             }
         };
+        Some((damage, ignores_radsuit, damage_type))
+    }) else {
+        return;
+    };
 
-        if ignores_radsuit || !has_radsuit {
-            apply_sector_damage(gs, handle, damage);
-        }
+    if ignores_radsuit || !has_radsuit {
+        apply_sector_damage(gs, handle, damage);
+    }
 
-        // God exit specific behavior
-        if damage_type == crate::state::SectorDamageType::GodExit {
-            if let Some(mo) = gs.mobjslab.get(handle) {
-                if mo.health <= 10 {
-                    gs.exit_request = Some(ExitRequest::Normal);
-                }
+    // God exit specific behavior
+    if damage_type == crate::state::SectorDamageType::GodExit {
+        if let Some(mo) = gs.mobjslab.get(handle) {
+            if mo.health <= 10 {
+                gs.exit_request = Some(ExitRequest::Normal);
             }
         }
-
-        // Only apply one sector's damage per period (first match wins).
-        return;
     }
 }
 
@@ -208,13 +192,10 @@ fn apply_sector_damage(gs: &mut GameState, handle: MobjHandle, damage: i32) {
 pub fn player_sector_index(gs: &GameState, level: &Level) -> Option<usize> {
     let handle = gs.player.handle;
     let az = gs.mobjslab.get(handle)?.z.to_int();
-
-    for (i, sector) in level.sectors.iter().enumerate() {
-        if az == sector.floor_height as i32 {
-            return Some(i);
-        }
-    }
-    None
+    level
+        .sectors
+        .iter()
+        .position(|sector| az == sector.floor_height as i32)
 }
 
 // ---------------------------------------------------------------------------
