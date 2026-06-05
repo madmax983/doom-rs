@@ -61,7 +61,7 @@ impl Bam {
 
     /// Create from a raw `u32`.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::Bam;
     /// let a = Bam::from_raw(0x4000_0000); // 90 degrees
@@ -74,7 +74,7 @@ impl Bam {
 
     /// Raw `u32` bit pattern.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::Bam;
     /// let a = Bam::from_raw(0x8000_0000);
@@ -90,7 +90,7 @@ impl Bam {
     /// Because angles are mapped to the full `u32` range, overflowing past 360 degrees
     /// naturally wraps back around to 0 degrees via integer overflow.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::{Bam, ANG90, ANG180};
     /// assert_eq!(ANG90.wrapping_add(ANG90), ANG180);
@@ -104,7 +104,7 @@ impl Bam {
     ///
     /// Underflowing past 0 degrees wraps around to 360 degrees.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::{Bam, ANG90, ANG270};
     /// assert_eq!(Bam::ZERO.wrapping_sub(ANG90), ANG270);
@@ -118,7 +118,7 @@ impl Bam {
     ///
     /// Flipping an angle is equivalent to adding 180 degrees.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::{Bam, ANG90, ANG270};
     /// assert_eq!(ANG90.negate(), ANG270);
@@ -132,7 +132,7 @@ impl Bam {
     ///
     /// Doom uses an 8192-entry table for full-circle trigonometry.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::ANG90;
     /// // 90 degrees is exactly 1/4th of the way through the 8192 entry table.
@@ -150,7 +150,7 @@ impl Bam {
     /// # Safety
     /// Safe only after `init_trig_tables()`. Returns 0 before initialization.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::{Bam, ANG90, FIXED_ONE};
     /// unsafe { Bam::init_trig_tables(); }
@@ -166,7 +166,7 @@ impl Bam {
 
     /// Cos lookup (sin shifted by 90°).
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::{Bam, ANG180, FIXED_ONE};
     /// unsafe { Bam::init_trig_tables(); }
@@ -185,7 +185,7 @@ impl Bam {
     /// # Safety
     /// Must not be called concurrently or more than once.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::{Bam, ANG90, FIXED_ONE};
     /// unsafe { Bam::init_trig_tables(); }

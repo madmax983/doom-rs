@@ -37,7 +37,7 @@ impl Fixed16_16 {
 
     /// Create from a raw `i32` (no scaling — you supply the already-shifted bits).
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::{Fixed16_16, FIXED_ONE};
     /// let f = Fixed16_16::from_raw(1 << 16);
@@ -50,7 +50,7 @@ impl Fixed16_16 {
 
     /// Convert an integer to fixed-point by shifting left 16 bits.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::Fixed16_16;
     /// let f = Fixed16_16::from_int(5);
@@ -63,7 +63,7 @@ impl Fixed16_16 {
 
     /// Extract the integer part (truncates toward negative infinity).
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::Fixed16_16;
     /// let f = Fixed16_16::from_int(42);
@@ -76,7 +76,7 @@ impl Fixed16_16 {
 
     /// Return the raw `i32` bit pattern.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::Fixed16_16;
     /// let f = Fixed16_16::from_int(1);
@@ -91,7 +91,7 @@ impl Fixed16_16 {
     ///
     /// Equivalent to the C macro `FixedMul(a, b)`.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::Fixed16_16;
     /// let a = Fixed16_16::from_int(3);
@@ -115,7 +115,7 @@ impl Fixed16_16 {
     /// # Panics
     /// Panics (debug) if `rhs == 0`.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::Fixed16_16;
     /// let a = Fixed16_16::from_int(10);
@@ -149,7 +149,7 @@ impl Fixed16_16 {
 
     /// Absolute value.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::Fixed16_16;
     /// let a = Fixed16_16::from_int(-5);
@@ -162,7 +162,7 @@ impl Fixed16_16 {
 
     /// Linear interpolation: `self + t * (other - self)` where `t ∈ [0, FIXED_ONE]`.
     ///
-    /// # Examples
+    /// ## Examples
     /// ```
     /// use doom_types::{Fixed16_16, FIXED_ONE};
     /// let a = Fixed16_16::from_int(0);
