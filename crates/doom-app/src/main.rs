@@ -3076,18 +3076,41 @@ fn main() {
             let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
             if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-                eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
+                let mut table = comfy_table::Table::new();
+                table
+                    .load_preset(comfy_table::presets::UTF8_FULL)
+                    .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                    .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+                table.set_header(vec![
+                    comfy_table::Cell::new("❌ Engine Failure")
+                        .fg(comfy_table::Color::Red)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                ]);
+                table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+                // force columns to not wrap character-by-character
+                table.set_width(100);
+                table.add_row(vec![comfy_table::Cell::new(err.to_string())]);
 
                 let mut causes = err.chain().skip(1).peekable();
                 if causes.peek().is_some() {
-                    eprintln!("\n↳ {}:", "Reason".red().bold());
+                    let mut reasons = String::new();
                     for cause in causes {
-                        eprintln!("    {}", cause);
+                        reasons.push_str(&format!(
+                            "↳ {}
+",
+                            cause
+                        ));
                     }
+                    table.add_row(vec![
+                        comfy_table::Cell::new(reasons.trim_end()).fg(comfy_table::Color::DarkGrey),
+                    ]);
                 }
-                eprintln!();
+                eprintln!(
+                    "
+{table}
+"
+                );
             } else {
                 eprintln!("❌ Engine Failure: {}", err);
 
