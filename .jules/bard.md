@@ -39,3 +39,11 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2024-06-06 - [Fixed deprecated set_skip warning in ratatui]
+**Confusion:** The `ratatui` crate deprecated the `set_skip` method on `Cell`, resulting in a flurry of compiler warnings that obscured actual issues in `doom-tui`.
+**Clarification:** Replaced `cell.set_skip(true)` with `cell.set_diff_option(ratatui::buffer::CellDiffOption::Skip)` to ensure clean compilation and modernize the terminal drawing API usage.
+
+## 2024-06-06 - [Added doc tests for SnapshotRing in doom-net]
+**Confusion:** The `SnapshotRing` in the `doom-net` crate lacked executable examples, leaving users to infer how to use `with_default_capacity` and `save`.
+**Clarification:** Added explicit `## Examples` doc-tests for `SnapshotRing::with_default_capacity` and `SnapshotRing::save`, guaranteeing they are tested and compiled.

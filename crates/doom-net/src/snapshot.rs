@@ -42,12 +42,29 @@ impl<S: Clone> SnapshotRing<S> {
     }
 
     /// Create a ring with the default capacity ([`MAX_ROLLBACK_TICS`]).
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::SnapshotRing;
+    /// let ring: SnapshotRing<String> = SnapshotRing::with_default_capacity();
+    /// assert!(ring.capacity() > 0);
+    /// ```
     #[must_use]
     pub fn with_default_capacity() -> Self {
         Self::new(MAX_ROLLBACK_TICS)
     }
 
     /// Save `state` at `tic`, evicting any older occupant of the same slot.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::SnapshotRing;
+    /// let mut ring = SnapshotRing::new(8);
+    /// ring.save(5, "tic_5_state".to_string());
+    /// assert_eq!(ring.get(5), Some(&"tic_5_state".to_string()));
+    /// ```
     pub fn save(&mut self, tic: u32, state: S) {
         let slot = (tic as usize) % self.capacity;
         self.ring[slot] = Some((tic, state));
