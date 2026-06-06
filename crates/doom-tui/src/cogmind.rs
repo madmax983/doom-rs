@@ -319,6 +319,35 @@ impl Widget for CogmindHudWidget<'_> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn hud_widget_default_colors() {
+        let mut hud = CogmindHud {
+            health: 100,
+            max_health: 100,
+            armor: 100,
+            ammo: Some(50),
+            max_ammo: Some(50),
+            weapon_name: "SG",
+            keys: [true, false, true, false, true, false],
+            kill_count: 10,
+            total_monsters: 20,
+            level_name: "E1M1".to_string(),
+            #[cfg(feature = "style_meter")]
+            style_rank: None,
+        };
+        let widget = CogmindHudWidget::new(&hud);
+        let area = ratatui::layout::Rect::new(0, 0, 80, 24);
+        let mut buf = ratatui::buffer::Buffer::empty(area);
+        widget.render(area, &mut buf);
+
+        hud.health = 20;
+        hud.armor = 0;
+        hud.ammo = Some(0);
+        let widget = CogmindHudWidget::new(&hud);
+        widget.render(area, &mut buf);
+    }
+
     use super::*;
 
     #[test]

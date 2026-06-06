@@ -114,7 +114,8 @@ impl Widget for DoomSixelWidget<'_> {
                     skip_first = true;
                     continue;
                 }
-                buf.cell_mut((x, y)).map(|cell| cell.set_skip(true));
+                buf.cell_mut((x, y))
+                    .map(|cell| cell.set_diff_option(ratatui::buffer::CellDiffOption::Skip));
             }
         }
     }
@@ -320,6 +321,47 @@ fn emit_rle(out: &mut String, ch: u8, count: usize) {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn sixel_unused_colors() {
+        let lut = PaletteLut::grayscale();
+        // Set all to unused, only color 1 is used
+        let mut data = vec![0u8; 320 * 200];
+        data[0] = 1;
+        let out = encode_doom_sixel(&data, &lut, 0, 320, 200, 320, 200, 40);
+        assert!(out.contains("#1;2;"));
+        assert!(!out.contains("#2;2;"));
+    }
+
+    #[test]
+    fn sixel_widget_render() {
+        let fb = doom_renderer::Framebuffer::new();
+        let lut = PaletteLut::grayscale();
+        let active_palette = 0;
+        let font_size = (8, 16);
+        let widget = DoomSixelWidget::new(&fb, &lut, active_palette, font_size);
+        let mut buf = ratatui::buffer::Buffer::empty(ratatui::layout::Rect::new(0, 0, 10, 10));
+        let area = ratatui::layout::Rect::new(0, 0, 10, 10);
+        widget.render(area, &mut buf);
+        // also test area width/height == 0
+        let widget = DoomSixelWidget::new(&fb, &lut, active_palette, font_size);
+        widget.render(ratatui::layout::Rect::new(0, 0, 0, 0), &mut buf);
+    }
+
+    #[test]
+    fn sixel_widget_wrong_data_length() {
+        let fb = doom_renderer::Framebuffer::new();
+        let mut buf = ratatui::buffer::Buffer::empty(ratatui::layout::Rect::new(0, 0, 10, 10));
+        let lut = PaletteLut::grayscale();
+        let widget = DoomSixelWidget {
+            data: &fb.as_slice()[0..1], // Invalid length
+            lut: &lut,
+            active_palette: 0,
+            font_size: (8, 16),
+        };
+        widget.render(ratatui::layout::Rect::new(0, 0, 10, 10), &mut buf);
+    }
+
     use super::*;
 
     #[test]

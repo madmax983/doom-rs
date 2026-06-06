@@ -1,3 +1,8 @@
+## 2026-06-06 - Avoid using stdout in TUI unit tests
+
+**Learning:** When writing tests for a TUI application using `ratatui` or `crossterm`, using `CrosstermBackend::new(std::io::stdout())` will spew raw ANSI escape codes directly to the console during `cargo test`, bypassing test output capture. Also, testing `run_blit_thread` directly is difficult without test pollution if it hardcodes `CrosstermBackend`.
+**Action:** Always use `ratatui::backend::TestBackend::new(width, height)` when writing rendering or layout unit tests instead of using real stdout handles. Avoid adding multithreaded GUI loop tests if they force stdout writes.
+
 ## 2024-03-18 - Unreachable state in GamePhaseController
 
 **Learning:** `GamePhaseController::tick_intermission` assumes it's only called when `self.phase` is `GamePhase::Intermission`. While this is guaranteed by the current call site (`tick()`), if someone were to call `tick_intermission` directly (or change `tick()`) while in another state, it would hit an `unreachable!()` panic.

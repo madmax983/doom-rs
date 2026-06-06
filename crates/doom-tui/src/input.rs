@@ -337,6 +337,135 @@ impl InputState {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn weapon_change_keys() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('1'));
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_CHANGE, 0);
+        assert_eq!((s.to_tic_input().buttons & buttons::BT_WEAPONMASK) >> 3, 0);
+
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('2'));
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_CHANGE, 0);
+        assert_eq!((s.to_tic_input().buttons & buttons::BT_WEAPONMASK) >> 3, 1);
+
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('3'));
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_CHANGE, 0);
+        assert_eq!((s.to_tic_input().buttons & buttons::BT_WEAPONMASK) >> 3, 2);
+
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('4'));
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_CHANGE, 0);
+        assert_eq!((s.to_tic_input().buttons & buttons::BT_WEAPONMASK) >> 3, 3);
+
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('5'));
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_CHANGE, 0);
+        assert_eq!((s.to_tic_input().buttons & buttons::BT_WEAPONMASK) >> 3, 4);
+
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('6'));
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_CHANGE, 0);
+        assert_eq!((s.to_tic_input().buttons & buttons::BT_WEAPONMASK) >> 3, 5);
+
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('7'));
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_CHANGE, 0);
+        assert_eq!((s.to_tic_input().buttons & buttons::BT_WEAPONMASK) >> 3, 6);
+    }
+
+    #[test]
+    fn push_events_are_consumed() {
+        let mut s = InputState::new();
+        s.push_f5();
+        s.push_f9();
+        s.push_escape();
+        s.push_menu_up();
+        s.push_menu_down();
+        s.push_menu_select();
+        s.push_wait();
+
+        let t = s.to_tic_input();
+        assert!(t.f5_save);
+        assert!(t.f9_load);
+        assert!(t.escape_pressed);
+        assert!(t.menu_up);
+        assert!(t.menu_down);
+        assert!(t.menu_select);
+        assert!(t.wait_pressed);
+
+        let t2 = s.to_tic_input();
+        assert!(!t2.f5_save);
+        assert!(!t2.f9_load);
+        assert!(!t2.escape_pressed);
+        assert!(!t2.menu_up);
+        assert!(!t2.menu_down);
+        assert!(!t2.menu_select);
+        assert!(!t2.wait_pressed);
+    }
+
+    #[test]
+    fn clear_resets_state() {
+        let mut s = InputState::new();
+        s.set_shift(true);
+        s.set_control(true);
+        s.key_down(KeyCode::Char('w'));
+        s.push_console_char('a');
+        s.push_f5();
+        s.push_f9();
+        s.push_tab();
+        s.push_escape();
+        s.push_menu_up();
+        s.push_menu_down();
+        s.push_menu_select();
+        s.push_wait();
+
+        s.clear();
+
+        assert!(!s.shift_held);
+        assert!(!s.control_held);
+        assert!(!s.is_held(KeyCode::Char('w')));
+
+        let t = s.to_tic_input();
+        assert_eq!(t.console_char, None);
+        assert!(!t.f5_save);
+        assert!(!t.f9_load);
+        assert!(!t.tab_pressed);
+        assert!(!t.escape_pressed);
+        assert!(!t.menu_up);
+        assert!(!t.menu_down);
+        assert!(!t.menu_select);
+        assert!(!t.wait_pressed);
+    }
+
+    #[test]
+    fn shift_key_down_up() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Modifier(ModifierKeyCode::LeftShift));
+        assert!(s.shift_held);
+        s.key_up(KeyCode::Modifier(ModifierKeyCode::LeftShift));
+        assert!(!s.shift_held);
+    }
+
+    #[test]
+    fn control_key_down_up() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Modifier(ModifierKeyCode::LeftControl));
+        assert!(s.control_held);
+        s.key_up(KeyCode::Modifier(ModifierKeyCode::LeftControl));
+        assert!(!s.control_held);
+    }
+
+    #[test]
+    fn other_modifier_down_up() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Modifier(ModifierKeyCode::LeftAlt));
+        s.key_up(KeyCode::Modifier(ModifierKeyCode::LeftAlt));
+        assert!(!s.is_held(KeyCode::Modifier(ModifierKeyCode::LeftAlt)));
+    }
+
     use super::*;
 
     #[test]
