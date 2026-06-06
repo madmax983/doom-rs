@@ -164,7 +164,9 @@ fn run_blit_thread(
                                     past_first = true;
                                     continue;
                                 }
-                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                                f.buffer_mut().cell_mut((x, y)).map(|c| {
+                                    c.set_diff_option(ratatui::buffer::CellDiffOption::Skip)
+                                });
                             }
                         }
                     }
@@ -1110,6 +1112,50 @@ mod tests {
         assert_eq!(app.ticks, 2);
         assert_eq!(modifier_sample_count(), 2);
         assert_eq!(loop_.tic_accumulator, TIC_DURATION / 2);
+    }
+
+    #[test]
+    fn test_tic_has_turn_action() {
+        let mut input = TicInput::default();
+        assert!(!DoomEventLoop::tic_has_turn_action(&input));
+
+        input.wait_pressed = true;
+        assert!(DoomEventLoop::tic_has_turn_action(&input));
+
+        input.wait_pressed = false;
+        input.forward_move = 1;
+        assert!(DoomEventLoop::tic_has_turn_action(&input));
+
+        input.forward_move = 0;
+        input.side_move = 1;
+        assert!(DoomEventLoop::tic_has_turn_action(&input));
+
+        input.side_move = 0;
+        input.angle_turn = 1;
+        assert!(DoomEventLoop::tic_has_turn_action(&input));
+
+        input.angle_turn = 0;
+        input.buttons = 1;
+        assert!(DoomEventLoop::tic_has_turn_action(&input));
+    }
+
+    #[test]
+    fn test_turn_action_cost() {
+        let mut input = TicInput::default();
+        assert_eq!(DoomEventLoop::turn_action_cost(&input), 6);
+
+        input.wait_pressed = true;
+        assert_eq!(DoomEventLoop::turn_action_cost(&input), 6);
+
+        input.wait_pressed = false;
+        input.buttons = crate::input::buttons::BT_ATTACK;
+        assert_eq!(DoomEventLoop::turn_action_cost(&input), 8);
+
+        input.buttons = crate::input::buttons::BT_USE;
+        assert_eq!(DoomEventLoop::turn_action_cost(&input), 7);
+
+        input.buttons = crate::input::buttons::BT_CHANGE;
+        assert_eq!(DoomEventLoop::turn_action_cost(&input), 4);
     }
 
     #[test]
