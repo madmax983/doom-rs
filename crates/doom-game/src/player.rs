@@ -7,8 +7,10 @@
 //! - `health ≤ MAX_HEALTH (100)` at all times
 //! - `ammo[i] ≤ MAX_AMMO[i]` for all i
 
-use doom_types::limits::{MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_WEAPONS};
-pub use doom_types::limits::{NUM_POWERS, NUM_PSPRITES};
+use doom_types::limits::{
+    MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_POWERS, NUM_PSPRITES, NUM_WEAPONS,
+};
+
 use doom_types::weapons::{AmmoType, WEAPON_AMMO, WeaponType};
 
 use crate::mobj::{MobjHandle, StateNum};
