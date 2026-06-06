@@ -613,6 +613,7 @@ mod tests {
     use crate::mobj::{Mobj, flags};
     use crate::player::PlayerState;
     use crate::states::ids;
+    use doom_types::ExitRequest;
     use doom_types::mobj_kind::MobjKind;
     use doom_types::weapons::AmmoType;
     use doom_types::weapons::WeaponType;
@@ -982,13 +983,15 @@ mod tests {
     #[test]
     fn tick_world_processes_scrolling_walls() {
         let mut gs = make_game_state();
-        gs.movers.scrolling_walls.push(crate::state::ScrollingWall {
-            linedef_index: 0,
-            speed_x: 1,
-            speed_y: 0,
-            accumulated_x: 0,
-            accumulated_y: 0,
-        });
+        gs.movers
+            .scrolling_walls
+            .push(crate::movers::ScrollingWall {
+                linedef_index: 0,
+                speed_x: 1,
+                speed_y: 0,
+                accumulated_x: 0,
+                accumulated_y: 0,
+            });
 
         tick_world(&mut gs, None);
 
@@ -1744,7 +1747,7 @@ mod tests {
     #[test]
     fn exit_request_cleared_at_tick_start() {
         let mut gs = make_game_state();
-        gs.exit_request = Some(crate::state::ExitRequest::Normal);
+        gs.exit_request = Some(ExitRequest::Normal);
         gs.tick(TicCmd::default(), None);
         assert_eq!(
             gs.exit_request, None,
@@ -2163,7 +2166,7 @@ mod tests {
 
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(ExitRequest::Normal),
             "walk-trigger exits should be processed during the game tick, not only in the app wrapper"
         );
     }
@@ -2174,7 +2177,7 @@ mod tests {
 
     #[test]
     fn exit_request_clone_copy_partial_eq() {
-        use crate::state::ExitRequest;
+        use doom_types::ExitRequest;
         let a = ExitRequest::Normal;
         let b = a; // Copy
         let c = a; // Clone
@@ -2231,13 +2234,15 @@ mod tests {
         let missile_handle = gs.mobjslab.alloc(missile);
 
         // Add a scrolling wall.
-        gs.movers.scrolling_walls.push(crate::state::ScrollingWall {
-            linedef_index: 0,
-            speed_x: 2,
-            speed_y: 0,
-            accumulated_x: 0,
-            accumulated_y: 0,
-        });
+        gs.movers
+            .scrolling_walls
+            .push(crate::movers::ScrollingWall {
+                linedef_index: 0,
+                speed_x: 2,
+                speed_y: 0,
+                accumulated_x: 0,
+                accumulated_y: 0,
+            });
 
         tick_world(&mut gs, None);
 

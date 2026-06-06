@@ -154,6 +154,7 @@ use crate::mobj::MobjHandle;
 use crate::mobj::flags;
 use crate::state::GameState;
 use crate::{mobjinfo, states};
+use doom_types::ExitRequest;
 use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
@@ -660,7 +661,7 @@ fn transition_to_see_state(
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterWake(
+            .push(crate::sound_prop::SoundRequest::MonsterWake(
                 kind, handle, mo.x, mo.y,
             ));
     }
@@ -1154,7 +1155,7 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Trooper,
                 handle,
                 mo.x,
@@ -1202,7 +1203,7 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Sergeant,
                 handle,
                 mo.x,
@@ -1242,7 +1243,7 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Imp,
                 handle,
                 mo.x,
@@ -1275,7 +1276,7 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
         if let Some(mo) = gs.mobjslab.get(handle) {
             gs.sound
                 .sound_queue
-                .push(crate::state::SoundRequest::MonsterAttack(
+                .push(crate::sound_prop::SoundRequest::MonsterAttack(
                     MobjKind::Demon,
                     handle,
                     mo.x,
@@ -1302,7 +1303,7 @@ fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Cacodemon,
                 handle,
                 mo.x,
@@ -1333,7 +1334,7 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 bruis_kind, handle, mo.x, mo.y,
             ));
     }
@@ -1379,7 +1380,7 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 cpos_kind, handle, mo.x, mo.y,
             ));
     }
@@ -1402,7 +1403,7 @@ fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Cyberdemon,
                 handle,
                 mo.x,
@@ -1428,7 +1429,7 @@ fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Revenant,
                 handle,
                 mo.x,
@@ -1496,7 +1497,7 @@ fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Mancubus,
                 handle,
                 mo.x,
@@ -2021,7 +2022,7 @@ fn a_spawn_fly(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Triggers a normal level exit.
 fn a_brain_die(gs: &mut GameState) {
-    gs.exit_request = Some(crate::state::ExitRequest::Normal);
+    gs.exit_request = Some(ExitRequest::Normal);
 }
 
 /// Port of `A_BrainScream` from Doom's `p_enemy.c`.
@@ -2093,6 +2094,7 @@ mod tests {
     use crate::mobj::{Mobj, StateNum, flags};
     use crate::player::PlayerState;
     use crate::state::GameState;
+    use doom_types::ExitRequest;
     use doom_types::TicCmd;
     use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
@@ -4684,7 +4686,7 @@ mod tests {
         a_brain_die(&mut gs);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(ExitRequest::Normal),
             "brain_die must trigger a normal exit"
         );
     }

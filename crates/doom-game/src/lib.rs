@@ -55,9 +55,6 @@ pub mod weapons;
 
 #[cfg(feature = "director")]
 pub mod director;
-#[cfg(feature = "director")]
-pub use director::*;
-
 pub use actions::{Action, dispatch_action, p_move, p_new_chase_dir};
 pub use automap::{
     AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
@@ -69,6 +66,7 @@ pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_
 pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
+pub use doom_types::{ExitRequest, LockedDoorColor};
 pub use face::{FaceDir, FaceKind, FaceState, face_patch_name, health_tier};
 pub use intermission::{IntermissionStats, par_time};
 pub use linedef_dispatch::{
@@ -120,7 +118,7 @@ pub use specials::{
     tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
     tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
-pub use state::{ExitRequest, GameState, LockedDoorColor};
+pub use state::GameState;
 pub use states::STATES;
 pub use states::sprite_names;
 pub use stats::LevelStats;

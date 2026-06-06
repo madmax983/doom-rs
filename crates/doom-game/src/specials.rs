@@ -19,11 +19,9 @@ use doom_map::{Level, SIDEDEF_NONE};
 use doom_types::{FIXED_ONE, Fixed16_16};
 
 use crate::mobj::MobjHandle;
-use crate::state::{
-    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
-    GameState, LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection,
-    PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
-};
+use crate::movers::*;
+use crate::state::GameState;
+use doom_types::ExitRequest;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -89,10 +87,10 @@ pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandl
             continue;
         }
 
-        let dmg: i32 = match crate::state::SectorDamageType::from_repr(sector.special) {
-            Some(crate::state::SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
-            Some(crate::state::SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
-            Some(crate::state::SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
+        let dmg: i32 = match crate::movers::SectorDamageType::from_repr(sector.special) {
+            Some(crate::movers::SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
+            Some(crate::movers::SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
+            Some(crate::movers::SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
             _ => continue,
         };
 
@@ -149,16 +147,16 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
             continue;
         }
 
-        let Some(damage_type) = crate::state::SectorDamageType::from_repr(sector.special) else {
+        let Some(damage_type) = crate::movers::SectorDamageType::from_repr(sector.special) else {
             continue;
         };
 
         let (damage, ignores_radsuit) = match damage_type {
-            crate::state::SectorDamageType::NukageBlink => (PERIODIC_DAMAGE_NUKAGE_BLINK, false),
-            crate::state::SectorDamageType::Hellslime => (PERIODIC_DAMAGE_HELLSLIME, false),
-            crate::state::SectorDamageType::Nukage => (PERIODIC_DAMAGE_NUKAGE, false),
-            crate::state::SectorDamageType::GodExit => (PERIODIC_DAMAGE_GOD_EXIT, true),
-            crate::state::SectorDamageType::SuperHellslime => {
+            crate::movers::SectorDamageType::NukageBlink => (PERIODIC_DAMAGE_NUKAGE_BLINK, false),
+            crate::movers::SectorDamageType::Hellslime => (PERIODIC_DAMAGE_HELLSLIME, false),
+            crate::movers::SectorDamageType::Nukage => (PERIODIC_DAMAGE_NUKAGE, false),
+            crate::movers::SectorDamageType::GodExit => (PERIODIC_DAMAGE_GOD_EXIT, true),
+            crate::movers::SectorDamageType::SuperHellslime => {
                 (PERIODIC_DAMAGE_SUPER_HELLSLIME, false)
             }
         };
@@ -168,7 +166,7 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
         }
 
         // God exit specific behavior
-        if damage_type == crate::state::SectorDamageType::GodExit {
+        if damage_type == crate::movers::SectorDamageType::GodExit {
             if let Some(mo) = gs.mobjslab.get(handle) {
                 if mo.health <= 10 {
                     gs.exit_request = Some(ExitRequest::Normal);
@@ -858,7 +856,7 @@ pub fn ev_floor_raise_to_lowest_ceiling(
     level: &Level,
     tag: u16,
     speed: i16,
-    crush: crate::state::CrushBehavior,
+    crush: crate::movers::CrushBehavior,
 ) {
     for (idx, target) in level
         .sectors
@@ -896,7 +894,7 @@ pub fn ev_floor_raise_to_nearest(gs: &mut GameState, level: &Level, tag: u16, sp
             tag,
             target,
             speed,
-            crate::state::CrushBehavior::NoCrush,
+            crate::movers::CrushBehavior::NoCrush,
             FloorType::RaiseToNearest,
         );
     }
@@ -918,7 +916,7 @@ pub fn ev_floor_raise_by_texture(gs: &mut GameState, level: &Level, tag: u16, sp
             tag,
             target,
             speed,
-            crate::state::CrushBehavior::NoCrush,
+            crate::movers::CrushBehavior::NoCrush,
             FloorType::RaiseByTexture,
         );
     }
@@ -940,7 +938,7 @@ pub fn ev_floor_raise_24(gs: &mut GameState, level: &Level, tag: u16, speed: i16
             tag,
             target,
             speed,
-            crate::state::CrushBehavior::NoCrush,
+            crate::movers::CrushBehavior::NoCrush,
             FloorType::Raise24,
         );
     }
@@ -962,7 +960,7 @@ pub fn ev_floor_raise_32(gs: &mut GameState, level: &Level, tag: u16, speed: i16
             tag,
             target,
             speed,
-            crate::state::CrushBehavior::NoCrush,
+            crate::movers::CrushBehavior::NoCrush,
             FloorType::Raise32,
         );
     }
@@ -974,7 +972,7 @@ pub fn ev_floor_raise_to_ceiling(
     level: &Level,
     tag: u16,
     speed: i16,
-    crush: crate::state::CrushBehavior,
+    crush: crate::movers::CrushBehavior,
 ) {
     for (idx, target) in level
         .sectors
@@ -1051,7 +1049,7 @@ pub fn ev_build_stairs(
     level: &Level,
     start_sector: usize,
     stair_type: StairType,
-    crush: crate::state::CrushBehavior,
+    crush: crate::movers::CrushBehavior,
 ) -> usize {
     let (step_size, speed): (i16, i16) = match stair_type {
         StairType::Build8 => (8, 2),
@@ -1266,7 +1264,7 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
             return_height: hole_sec.floor_height,
             waiting: false,
             wait_remaining: 0,
-            crush: crate::state::CrushBehavior::NoCrush,
+            crush: crate::movers::CrushBehavior::NoCrush,
             tag: 0,
             floor_type: FloorType::LowerToLowest,
         });
@@ -1557,7 +1555,7 @@ pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
         let target = floor_mover.target_height;
         let wait_tics = floor_mover.wait_tics;
         let crush = floor_mover.crush;
-        let crush_dmg: i32 = if crush == crate::state::CrushBehavior::Crush {
+        let crush_dmg: i32 = if crush == crate::movers::CrushBehavior::Crush {
             10
         } else {
             0
@@ -1585,7 +1583,7 @@ pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
                 let floor = level.sectors[sector_idx].floor_height;
 
                 // Crush damage when raising into something.
-                if crush == crate::state::CrushBehavior::Crush && crush_dmg > 0 {
+                if crush == crate::movers::CrushBehavior::Crush && crush_dmg > 0 {
                     let ceil = level.sectors[sector_idx].ceil_height;
                     if floor >= ceil - 8 {
                         let player_handle = gs.player.handle;
@@ -1751,7 +1749,7 @@ pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) 
 /// ## Examples
 /// ```
 /// # use doom_game::specials::CrusherParams;
-/// # use doom_game::state::CeilingType;
+/// # use doom_game::movers::CeilingType;
 /// let params = CrusherParams {
 ///     speed: 2,
 ///     crush_damage: 10,
@@ -1845,7 +1843,7 @@ fn activate_lift(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
             return_height: sector.floor_height,
             waiting: false,
             wait_remaining: 0,
-            crush: crate::state::CrushBehavior::NoCrush,
+            crush: crate::movers::CrushBehavior::NoCrush,
             tag,
             floor_type: FloorType::LowerToLowest,
         });
@@ -1965,7 +1963,7 @@ fn activate_floor_raise_single_typed(
     tag: u16,
     target_height: i16,
     speed: i16,
-    crush: crate::state::CrushBehavior,
+    crush: crate::movers::CrushBehavior,
     floor_type: FloorType,
 ) {
     if gs
@@ -2025,7 +2023,7 @@ fn activate_floor_lower_single_typed(
         return_height: sector.floor_height,
         waiting: false,
         wait_remaining: 0,
-        crush: crate::state::CrushBehavior::NoCrush,
+        crush: crate::movers::CrushBehavior::NoCrush,
         tag,
         floor_type,
     });
@@ -2346,7 +2344,7 @@ pub fn p_use_lines(gs: &mut GameState, level: &mut Level, handle: MobjHandle) {
         if special == 0 && blocks_use {
             gs.sound
                 .sound_queue
-                .push(crate::state::SoundRequest::PlayerUseFail);
+                .push(crate::sound_prop::SoundRequest::PlayerUseFail);
             return;
         }
 
@@ -3028,7 +3026,13 @@ fn activate_floors(
         // Type 5: W1 Floor raise to lowest adjacent ceiling (crush).
         5 => {
             let tag = level.linedefs[linedef_idx].tag;
-            ev_floor_raise_to_lowest_ceiling(gs, level, tag, 1, crate::state::CrushBehavior::Crush);
+            ev_floor_raise_to_lowest_ceiling(
+                gs,
+                level,
+                tag,
+                1,
+                crate::movers::CrushBehavior::Crush,
+            );
         }
 
         // Type 14: S1 Raise floor 32 + change texture/type.
@@ -3069,7 +3073,7 @@ fn activate_floors(
                 level,
                 tag,
                 1,
-                crate::state::CrushBehavior::NoCrush,
+                crate::movers::CrushBehavior::NoCrush,
             );
         }
 
@@ -3092,7 +3096,7 @@ fn activate_floors(
                         tag,
                         target,
                         1,
-                        crate::state::CrushBehavior::Crush,
+                        crate::movers::CrushBehavior::Crush,
                         FloorType::RaiseCrush,
                     );
                 }
@@ -3119,7 +3123,7 @@ fn activate_floors(
                 level,
                 tag,
                 1,
-                crate::state::CrushBehavior::NoCrush,
+                crate::movers::CrushBehavior::NoCrush,
             );
         }
 
@@ -3136,7 +3140,7 @@ fn activate_floors(
                         tag,
                         target,
                         1,
-                        crate::state::CrushBehavior::Crush,
+                        crate::movers::CrushBehavior::Crush,
                         FloorType::RaiseCrush,
                     );
                 }
@@ -3163,7 +3167,7 @@ fn activate_floors(
                 level,
                 tag,
                 1,
-                crate::state::CrushBehavior::NoCrush,
+                crate::movers::CrushBehavior::NoCrush,
             );
         }
 
@@ -3192,7 +3196,7 @@ fn activate_floors(
                         tag,
                         target,
                         1,
-                        crate::state::CrushBehavior::Crush,
+                        crate::movers::CrushBehavior::Crush,
                         FloorType::RaiseCrush,
                     );
                 }
@@ -3405,7 +3409,7 @@ fn activate_stairs(
                     level,
                     idx,
                     StairType::Build8,
-                    crate::state::CrushBehavior::NoCrush,
+                    crate::movers::CrushBehavior::NoCrush,
                 );
             }
         }
@@ -3425,7 +3429,7 @@ fn activate_stairs(
                     level,
                     idx,
                     StairType::Turbo16,
-                    crate::state::CrushBehavior::NoCrush,
+                    crate::movers::CrushBehavior::NoCrush,
                 );
             }
         }
@@ -3445,7 +3449,7 @@ fn activate_stairs(
                     level,
                     idx,
                     StairType::Turbo16,
-                    crate::state::CrushBehavior::Crush,
+                    crate::movers::CrushBehavior::Crush,
                 );
             }
         }
@@ -3465,7 +3469,7 @@ fn activate_stairs(
                     level,
                     idx,
                     StairType::Turbo16,
-                    crate::state::CrushBehavior::NoCrush,
+                    crate::movers::CrushBehavior::NoCrush,
                 );
             }
         }
@@ -5186,7 +5190,7 @@ mod tests {
             "target = lowest adjacent ceiling = 96"
         );
         assert!(
-            gs.movers.active_floors[0].crush == crate::state::CrushBehavior::Crush,
+            gs.movers.active_floors[0].crush == crate::movers::CrushBehavior::Crush,
             "type 5 must have crush=true"
         );
     }
@@ -5247,7 +5251,7 @@ mod tests {
             "target = lowest_adj_ceil(100) - 8 = 92"
         );
         assert!(
-            gs.movers.active_floors[0].crush == crate::state::CrushBehavior::Crush,
+            gs.movers.active_floors[0].crush == crate::movers::CrushBehavior::Crush,
             "type 56 must have crush=true"
         );
     }
@@ -5318,7 +5322,7 @@ mod tests {
             return_height: 64,
             waiting: false,
             wait_remaining: 0,
-            crush: crate::state::CrushBehavior::NoCrush,
+            crush: crate::movers::CrushBehavior::NoCrush,
             tag: 1,
             floor_type: FloorType::LowerToLowest,
         });
@@ -5351,7 +5355,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(ExitRequest::Normal),
             "type 11 must set ExitRequest::Normal"
         );
     }
@@ -5364,7 +5368,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Secret),
+            Some(ExitRequest::Secret),
             "type 51 must set ExitRequest::Secret"
         );
     }
@@ -5377,7 +5381,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(ExitRequest::Normal),
             "type 52 (walk trigger) must set ExitRequest::Normal"
         );
     }
@@ -5390,7 +5394,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Secret),
+            Some(ExitRequest::Secret),
             "type 124 (walk trigger) must set ExitRequest::Secret"
         );
     }
@@ -5720,7 +5724,7 @@ mod tests {
         assert_eq!(mo.health, 5, "God exit must deal 20 damage");
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(ExitRequest::Normal),
             "God exit must set ExitRequest::Normal when health <= 10"
         );
     }
@@ -5860,15 +5864,15 @@ mod tests {
         );
         assert_eq!(
             gs.movers.sector_lights[0].effect_type,
-            crate::state::LightEffectType::BlinkRandom
+            crate::movers::LightEffectType::BlinkRandom
         );
         assert_eq!(
             gs.movers.sector_lights[1].effect_type,
-            crate::state::LightEffectType::Blink05s
+            crate::movers::LightEffectType::Blink05s
         );
         assert_eq!(
             gs.movers.sector_lights[2].effect_type,
-            crate::state::LightEffectType::Blink1s
+            crate::movers::LightEffectType::Blink1s
         );
     }
 
@@ -5916,14 +5920,14 @@ mod tests {
 
     #[test]
     fn light_effect_type_derives_partial_eq() {
-        use crate::state::LightEffectType;
+        use crate::movers::LightEffectType;
         assert_eq!(LightEffectType::BlinkRandom, LightEffectType::BlinkRandom);
         assert_ne!(LightEffectType::Blink05s, LightEffectType::Blink1s);
     }
 
     #[test]
     fn sector_light_effect_clone_works() {
-        use crate::state::{LightEffectType, SectorLightEffect};
+        use crate::movers::*;
         let effect = SectorLightEffect {
             sector_index: 0,
             effect_type: LightEffectType::Oscillate,
@@ -6030,7 +6034,8 @@ mod tests {
 
     #[test]
     fn game_state_clone_includes_sector_lights() {
-        use crate::state::{LightEffectType, SectorLightEffect};
+        use crate::movers::*;
+        use crate::state::GameState;
         let mut gs = GameState::new("TEST");
         gs.movers.sector_lights.push(SectorLightEffect {
             sector_index: 0,
@@ -6095,11 +6100,11 @@ mod tests {
         assert_eq!(gs.movers.sector_lights.len(), 2);
         assert_eq!(
             gs.movers.sector_lights[0].effect_type,
-            crate::state::LightEffectType::Oscillate
+            crate::movers::LightEffectType::Oscillate
         );
         assert_eq!(
             gs.movers.sector_lights[1].effect_type,
-            crate::state::LightEffectType::FireFlicker
+            crate::movers::LightEffectType::FireFlicker
         );
     }
 
@@ -6477,7 +6482,7 @@ mod tests {
             &level,
             0,
             StairType::Build8,
-            crate::state::CrushBehavior::NoCrush,
+            crate::movers::CrushBehavior::NoCrush,
         );
 
         // Should create 4 floor movers (sectors 0, 1, 2, 3).
@@ -6505,7 +6510,7 @@ mod tests {
             &level,
             0,
             StairType::Turbo16,
-            crate::state::CrushBehavior::NoCrush,
+            crate::movers::CrushBehavior::NoCrush,
         );
 
         assert_eq!(count, 3, "3 sectors should get stair movers");
@@ -6527,15 +6532,15 @@ mod tests {
             &level,
             0,
             StairType::Turbo16,
-            crate::state::CrushBehavior::Crush,
+            crate::movers::CrushBehavior::Crush,
         );
 
         assert!(
-            gs.movers.active_floors[0].crush == crate::state::CrushBehavior::Crush,
+            gs.movers.active_floors[0].crush == crate::movers::CrushBehavior::Crush,
             "crush flag must be set on stair movers"
         );
         assert!(
-            gs.movers.active_floors[1].crush == crate::state::CrushBehavior::Crush,
+            gs.movers.active_floors[1].crush == crate::movers::CrushBehavior::Crush,
             "crush flag must be set on all stair movers"
         );
     }
@@ -6552,7 +6557,7 @@ mod tests {
             &level,
             0,
             StairType::Build8,
-            crate::state::CrushBehavior::NoCrush,
+            crate::movers::CrushBehavior::NoCrush,
         );
 
         // Should create only 2 movers (sectors 0 and 1). Sector 2 has different
@@ -6579,7 +6584,7 @@ mod tests {
             return_height: 0,
             waiting: false,
             wait_remaining: 0,
-            crush: crate::state::CrushBehavior::NoCrush,
+            crush: crate::movers::CrushBehavior::NoCrush,
             tag: 0,
             floor_type: FloorType::RaiseToNearest,
         });
@@ -6614,7 +6619,7 @@ mod tests {
             return_height: 32,
             waiting: false,
             wait_remaining: 0,
-            crush: crate::state::CrushBehavior::NoCrush,
+            crush: crate::movers::CrushBehavior::NoCrush,
             tag: 0,
             floor_type: FloorType::LowerToLowest,
         });
@@ -6647,19 +6652,19 @@ mod tests {
             return_height: 0,
             waiting: false,
             wait_remaining: 0,
-            crush: crate::state::CrushBehavior::Crush,
+            crush: crate::movers::CrushBehavior::Crush,
             tag: 0,
             floor_type: FloorType::RaiseCrush,
         });
 
         assert!(
-            gs.movers.active_floors[0].crush == crate::state::CrushBehavior::Crush,
+            gs.movers.active_floors[0].crush == crate::movers::CrushBehavior::Crush,
             "crush flag must be set"
         );
 
         // Verify it's a FloorMover that can deal crush damage.
         let _crush_dmg: i32 =
-            if gs.movers.active_floors[0].crush == crate::state::CrushBehavior::Crush {
+            if gs.movers.active_floors[0].crush == crate::movers::CrushBehavior::Crush {
                 10
             } else {
                 0
@@ -6731,7 +6736,7 @@ mod tests {
         );
         assert_eq!(
             gs.movers.active_platforms[0].status,
-            crate::state::PlatformStatus::Waiting,
+            crate::movers::PlatformStatus::Waiting,
             "platform must be waiting at bottom"
         );
     }
@@ -6749,7 +6754,7 @@ mod tests {
         }
         assert_eq!(
             gs.movers.active_platforms[0].status,
-            crate::state::PlatformStatus::Waiting
+            crate::movers::PlatformStatus::Waiting
         );
 
         // Tick once — wait_remaining should decrease.
@@ -6953,14 +6958,14 @@ mod tests {
         // Create a platform first.
         gs.movers
             .active_platforms
-            .push(crate::state::PerpetualPlatform {
+            .push(crate::movers::PerpetualPlatform {
                 sector_index: 1,
                 low_height: 0,
                 high_height: 64,
                 speed: 1,
                 wait_tics: 105,
                 wait_remaining: 0,
-                status: crate::state::PlatformStatus::Down,
+                status: crate::movers::PlatformStatus::Down,
                 tag: 10,
             });
 
@@ -6993,14 +6998,14 @@ mod tests {
 
         gs.movers
             .active_platforms
-            .push(crate::state::PerpetualPlatform {
+            .push(crate::movers::PerpetualPlatform {
                 sector_index: 1,
                 low_height: 0,
                 high_height: 64,
                 speed: 1,
                 wait_tics: 105,
                 wait_remaining: 0,
-                status: crate::state::PlatformStatus::Down,
+                status: crate::movers::PlatformStatus::Down,
                 tag: 10,
             });
 
@@ -7024,7 +7029,7 @@ mod tests {
             "line type 100 must create stair movers"
         );
         assert!(
-            gs.movers.active_floors[0].crush == crate::state::CrushBehavior::Crush,
+            gs.movers.active_floors[0].crush == crate::movers::CrushBehavior::Crush,
             "line type 100 stair movers must have crush=true"
         );
     }
@@ -7079,7 +7084,7 @@ mod tests {
             &level,
             0,
             StairType::Build8,
-            crate::state::CrushBehavior::NoCrush,
+            crate::movers::CrushBehavior::NoCrush,
         );
 
         assert_eq!(
@@ -7114,21 +7119,21 @@ mod tests {
             return_height: 0,
             waiting: false,
             wait_remaining: 0,
-            crush: crate::state::CrushBehavior::NoCrush,
+            crush: crate::movers::CrushBehavior::NoCrush,
             tag: 0,
             floor_type: FloorType::RaiseToNearest,
         });
 
         gs.movers
             .active_platforms
-            .push(crate::state::PerpetualPlatform {
+            .push(crate::movers::PerpetualPlatform {
                 sector_index: 3,
                 low_height: -16,
                 high_height: 48,
                 speed: 1,
                 wait_tics: 105,
                 wait_remaining: 0,
-                status: crate::state::PlatformStatus::Down,
+                status: crate::movers::PlatformStatus::Down,
                 tag: 7,
             });
 
@@ -8096,7 +8101,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn lift_mover_creation_correct_fields() {
-        use crate::state::{LiftMover, LiftStatus};
+        use crate::movers::*;
         let lm = LiftMover {
             sector_index: 1,
             low_height: 0,
@@ -8134,7 +8139,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn tick_lifts_lowers_floor() {
-        use crate::state::LiftStatus;
+        use crate::movers::LiftStatus;
         let mut gs = GameState::new("TEST");
         let mut level = make_lift_test_level(16, 0, 5);
 
@@ -8153,7 +8158,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn lift_transition_lowering_to_waiting() {
-        use crate::state::LiftStatus;
+        use crate::movers::LiftStatus;
         let mut gs = GameState::new("TEST");
         let mut level = make_lift_test_level(16, 0, 5);
         // Sector 1 floor=64, low=0 (from sec 0), speed=4.
@@ -8176,7 +8181,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn lift_transition_waiting_to_raising() {
-        use crate::state::LiftStatus;
+        use crate::movers::LiftStatus;
         let mut gs = GameState::new("TEST");
         let mut level = make_lift_test_level(16, 0, 5);
         ev_do_lift(&mut gs, &level, 5, 4, 105);
@@ -8199,7 +8204,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn lift_transition_raising_to_done() {
-        use crate::state::LiftStatus;
+        use crate::movers::LiftStatus;
         let mut gs = GameState::new("TEST");
         let mut level = make_lift_test_level(16, 0, 5);
         ev_do_lift(&mut gs, &level, 5, 4, 105);
@@ -8256,7 +8261,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn blazing_lift_speed_8() {
-        use crate::state::LiftStatus;
+        use crate::movers::LiftStatus;
         let mut gs = GameState::new("TEST");
         let mut level = make_lift_test_level(16, 0, 5);
         ev_do_lift(&mut gs, &level, 5, 8, 105);
@@ -8506,7 +8511,8 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn game_state_clone_includes_lifts() {
-        use crate::state::{LiftMover, LiftStatus};
+        use crate::movers::*;
+        use crate::state::GameState;
         let mut gs = GameState::new("TEST");
         gs.movers.lifts.push(LiftMover {
             sector_index: 1,
@@ -8533,7 +8539,9 @@ mod tests {
         use crate::mobj::{Mobj, flags};
         use crate::player::PlayerState;
         use crate::savegame::{load_game, save_game};
-        use crate::state::{LiftMover, LiftStatus};
+
+        use crate::movers::*;
+        use crate::state::GameState;
         use doom_types::mobj_kind::MobjKind;
 
         let mut gs = GameState::new("E1M1");
@@ -8770,7 +8778,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn lift_status_derives() {
-        use crate::state::LiftStatus;
+        use crate::movers::LiftStatus;
         let a = LiftStatus::Lowering;
         let b = a; // Copy
         let c = a; // Clone
@@ -8916,7 +8924,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn scrolling_wall_creation_correct_fields() {
-        use crate::state::ScrollingWall;
+        use crate::movers::ScrollingWall;
         let sw = ScrollingWall {
             linedef_index: 7,
             speed_x: 1,
@@ -8936,7 +8944,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn tick_scrollers_advances_accumulated_x() {
-        use crate::state::ScrollingWall;
+        use crate::movers::ScrollingWall;
         let mut gs = GameState::new("TEST");
         gs.movers.scrolling_walls.push(ScrollingWall {
             linedef_index: 0,
@@ -8959,7 +8967,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn tick_scrollers_advances_accumulated_y() {
-        use crate::state::ScrollingWall;
+        use crate::movers::ScrollingWall;
         let mut gs = GameState::new("TEST");
         gs.movers.scrolling_walls.push(ScrollingWall {
             linedef_index: 0,
@@ -9016,7 +9024,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn get_scroll_offset_correct_after_ticking() {
-        use crate::state::ScrollingWall;
+        use crate::movers::ScrollingWall;
         let mut gs = GameState::new("TEST");
         gs.movers.scrolling_walls.push(ScrollingWall {
             linedef_index: 5,
@@ -9051,7 +9059,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn multiple_scrolling_walls_tick_independently() {
-        use crate::state::ScrollingWall;
+        use crate::movers::ScrollingWall;
         let mut gs = GameState::new("TEST");
         gs.movers.scrolling_walls.push(ScrollingWall {
             linedef_index: 0,
@@ -9091,7 +9099,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn accumulated_offset_grows_linearly() {
-        use crate::state::ScrollingWall;
+        use crate::movers::ScrollingWall;
         let mut gs = GameState::new("TEST");
         gs.movers.scrolling_walls.push(ScrollingWall {
             linedef_index: 0,
@@ -9117,7 +9125,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn conveyor_belt_creation_correct_fields() {
-        use crate::state::ConveyorBelt;
+        use crate::movers::ConveyorBelt;
         let cb = ConveyorBelt {
             sector_index: 3,
             push_x: 100,
@@ -9191,7 +9199,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn tick_conveyors_applies_push_force() {
-        use crate::state::ConveyorBelt;
+        use crate::movers::ConveyorBelt;
         let mut gs = GameState::new("TEST");
         let level = make_conveyor_level(253, 0, 0);
 
@@ -9234,7 +9242,8 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn game_state_clone_includes_scrolling_walls_and_conveyors() {
-        use crate::state::{ConveyorBelt, ScrollingWall};
+        use crate::movers::*;
+        use crate::state::GameState;
         let mut gs = GameState::new("TEST");
         gs.movers.scrolling_walls.push(ScrollingWall {
             linedef_index: 0,
@@ -9271,7 +9280,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn save_load_roundtrip_scrolling_wall() {
-        use crate::state::ScrollingWall;
+        use crate::movers::ScrollingWall;
         let mut gs = GameState::new("E1M1");
         let mo = Mobj::new(
             MobjKind::Player,
@@ -9309,7 +9318,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn save_load_roundtrip_conveyor_belt() {
-        use crate::state::ConveyorBelt;
+        use crate::movers::ConveyorBelt;
         let mut gs = GameState::new("E1M1");
         let mo = Mobj::new(
             MobjKind::Player,
@@ -9347,7 +9356,7 @@ mod tests {
     // -----------------------------------------------------------------------
     #[test]
     fn scroll_offset_large_values_no_overflow() {
-        use crate::state::ScrollingWall;
+        use crate::movers::ScrollingWall;
         let mut gs = GameState::new("TEST");
         gs.movers.scrolling_walls.push(ScrollingWall {
             linedef_index: 0,
@@ -9628,7 +9637,7 @@ mod tests {
             &level,
             1,
             1,
-            crate::state::CrushBehavior::NoCrush,
+            crate::movers::CrushBehavior::NoCrush,
         );
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
@@ -9637,7 +9646,7 @@ mod tests {
         );
         assert_eq!(gs.movers.active_floors[0].direction, MoveDirection::Up);
         assert!(
-            gs.movers.active_floors[0].crush == crate::state::CrushBehavior::NoCrush,
+            gs.movers.active_floors[0].crush == crate::movers::CrushBehavior::NoCrush,
             "crush should be false"
         );
     }
@@ -9767,7 +9776,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 1: floor=0, ceil=200, tag=1.
         let level = make_multi_sector_level([0, 0, 0], [128, 200, 128], [0, 1, 0], 0, 0);
-        ev_floor_raise_to_ceiling(&mut gs, &level, 1, 1, crate::state::CrushBehavior::NoCrush);
+        ev_floor_raise_to_ceiling(&mut gs, &level, 1, 1, crate::movers::CrushBehavior::NoCrush);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
             gs.movers.active_floors[0].target_height, 200,
@@ -9837,7 +9846,7 @@ mod tests {
             "type 56: target = lowest_adj_ceil(100) - 8 = 92"
         );
         assert!(
-            gs.movers.active_floors[0].crush == crate::state::CrushBehavior::Crush,
+            gs.movers.active_floors[0].crush == crate::movers::CrushBehavior::Crush,
             "type 56 must have crush=true"
         );
     }
@@ -9903,7 +9912,7 @@ mod tests {
             return_height: 0,
             waiting: false,
             wait_remaining: 0,
-            crush: crate::state::CrushBehavior::NoCrush,
+            crush: crate::movers::CrushBehavior::NoCrush,
             tag: 1,
             floor_type: FloorType::Raise24,
         });

@@ -784,7 +784,7 @@ mod tests {
     fn sound_request_sfx_maps_locked_door_feedback_to_oof() {
         assert_eq!(
             sound_request_sfx(doom_game::SoundRequest::PlayerUseLockedDoor(
-                doom_game::LockedDoorColor::Blue,
+                doom_types::LockedDoorColor::Blue,
             )),
             Some(("DSOOF", doom_audio::SfxPriority::High))
         );
