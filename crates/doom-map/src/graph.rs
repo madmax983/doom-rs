@@ -10,6 +10,17 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A topological graph representing the connectivity of sectors in a map.
 /// Sectors are nodes, and two-sided linedefs acting as portals are edges.
+///
+/// ## Examples
+/// ```
+/// use std::collections::{HashMap, HashSet};
+/// use doom_map::SectorGraph;
+///
+/// let mut adj = HashMap::new();
+/// adj.insert(0, HashSet::from([1]));
+/// adj.insert(1, HashSet::from([0]));
+/// let graph = SectorGraph { adjacency_list: adj };
+/// ```
 pub struct SectorGraph {
     /// Adjacency list: sector_index -> list of connected sector_indices
     pub adjacency_list: HashMap<usize, HashSet<usize>>,
@@ -19,6 +30,7 @@ impl SectorGraph {
     /// Builds a topological graph of sectors from the given Level.
     /// Connections are established by finding two-sided linedefs that connect
     /// one sector to another via their front and back sidedefs.
+    ///
     #[must_use]
     pub fn build(level: &Level) -> Self {
         let mut adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::new();
@@ -54,6 +66,7 @@ impl SectorGraph {
 
     /// Finds the shortest topological path (minimum number of sector transitions)
     /// between two sectors using Breadth-First Search (BFS).
+    ///
     #[must_use]
     pub fn shortest_path(&self, start_sector: usize, end_sector: usize) -> Option<Vec<usize>> {
         if start_sector == end_sector {
@@ -95,6 +108,7 @@ impl SectorGraph {
     }
 
     /// Exports the sector graph to the Graphviz DOT format for visualization.
+    ///
     #[must_use]
     pub fn to_dot(&self) -> String {
         let mut dot = String::from("digraph SectorGraph {\n");

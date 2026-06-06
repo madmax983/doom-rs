@@ -19,6 +19,14 @@ use crate::lumps::{NODE_INDEX_MASK, NODE_SUBSECTOR_BIT, Node, Ssector};
 use thiserror::Error;
 
 /// Errors from BSP structural validation.
+///
+/// ## Examples
+/// ```
+/// use doom_map::bsp::BspError;
+///
+/// let err = BspError::LeafCountMismatch { nodes: 10, ssectors: 5 };
+/// assert!(err.to_string().contains("BSP invariant violated"));
+/// ```
 #[derive(Debug, Error)]
 pub enum BspError {
     /// The leaf-count invariant is violated.
@@ -83,6 +91,14 @@ pub enum BspError {
 }
 
 /// Decoded child pointer from a BSP node.
+///
+/// ## Examples
+/// ```
+/// use doom_map::bsp::BspChild;
+///
+/// let child = BspChild::decode(10);
+/// assert_eq!(child, BspChild::Node(10));
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BspChild {
     /// Another BSP node at the given index into `nodes`.
@@ -93,6 +109,13 @@ pub enum BspChild {
 
 impl BspChild {
     /// Decode a raw 16-bit child pointer.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_map::bsp::BspChild;
+    /// let child = BspChild::decode(10);
+    /// assert_eq!(child, BspChild::Node(10));
+    /// ```
     #[inline]
     pub fn decode(raw: u16) -> Self {
         if raw & NODE_SUBSECTOR_BIT != 0 {
@@ -104,6 +127,27 @@ impl BspChild {
 }
 
 /// A validated BSP tree — holds references to the node and subsector arrays.
+///
+/// ## Examples
+/// ```
+/// use doom_map::bsp::BspTree;
+/// use doom_map::lumps::{Node, Ssector, NodeBBox};
+///
+/// let nodes = vec![Node {
+///     x: 0, y: 0, dx: 1, dy: 0,
+///     right_bbox: NodeBBox { ymax: 10, ymin: 0, xmin: 0, xmax: 10 },
+///     left_bbox: NodeBBox { ymax: 10, ymin: 0, xmin: 0, xmax: 10 },
+///     right_child: 0x8000 | 0, // leaf 0
+///     left_child: 0x8000 | 1,  // leaf 1
+/// }];
+/// let ssectors = vec![
+///     Ssector { first_seg: 0, seg_count: 1 },
+///     Ssector { first_seg: 1, seg_count: 1 },
+/// ];
+///
+/// let tree = BspTree::validate(&nodes, &ssectors, 2).unwrap();
+/// assert_eq!(tree.max_depth(), 1);
+/// ```
 pub struct BspTree<'a> {
     nodes: &'a [Node],
     ssectors: &'a [Ssector],
@@ -114,6 +158,7 @@ impl<'a> BspTree<'a> {
     ///
     /// # Errors
     /// Returns the first invariant violation encountered.
+    ///
     pub fn validate(
         nodes: &'a [Node],
         ssectors: &'a [Ssector],
@@ -139,6 +184,7 @@ impl<'a> BspTree<'a> {
     // -- individual checks ---------------------------------------------------
 
     /// Verifies `N_SSECTORS == N_NODES + 1`.
+    ///
     pub fn validate_leaf_count(&self) -> Result<(), BspError> {
         let n = self.nodes.len();
         let s = self.ssectors.len();
@@ -257,6 +303,7 @@ impl<'a> BspTree<'a> {
     /// the point falls on.
     ///
     /// Returns `None` only if the tree has no nodes and no subsectors (empty level).
+    ///
     pub fn point_in_subsector(&self, px: i32, py: i32) -> Option<&Ssector> {
         if self.nodes.is_empty() {
             return self.ssectors.first();
@@ -287,6 +334,7 @@ impl<'a> BspTree<'a> {
     /// Compute the maximum depth of the BSP tree (counting from root).
     ///
     /// Used by the Phase 3 gate to print geometry stats.
+    ///
     pub fn max_depth(&self) -> u32 {
         if self.nodes.is_empty() {
             return 0;
@@ -308,11 +356,13 @@ impl<'a> BspTree<'a> {
     }
 
     /// Access the raw node slice.
+    ///
     pub fn nodes(&self) -> &[Node] {
         self.nodes
     }
 
     /// Access the raw subsector slice.
+    ///
     pub fn ssectors(&self) -> &[Ssector] {
         self.ssectors
     }

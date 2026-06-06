@@ -174,6 +174,13 @@ impl Linedef {
     }
 
     /// Returns `true` if the two-sided flag is set.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_map::lumps::Linedef;
+    /// let ld = Linedef { flags: 0x0004, from_vertex: 0, to_vertex: 1, special: 0, tag: 0, right_sidedef: 0, left_sidedef: 1 };
+    /// assert!(ld.is_two_sided());
+    /// ```
     #[inline]
     pub fn is_two_sided(&self) -> bool {
         self.flags & FLAG_TWO_SIDED != 0
@@ -587,6 +594,13 @@ impl Reject {
 
     /// Returns `true` if sectors `a` and `b` might be mutually visible
     /// (i.e., the reject bit is NOT set).
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_map::lumps::Reject;
+    /// let r = Reject::parse_lump(&[0], 1).unwrap();
+    /// assert!(r.visible(0, 0));
+    /// ```
     pub fn visible(&self, a: usize, b: usize) -> bool {
         if a >= self.n_sectors || b >= self.n_sectors {
             return false;
@@ -598,6 +612,13 @@ impl Reject {
     }
 
     /// Number of sectors this reject was built for.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_map::lumps::Reject;
+    /// let r = Reject::parse_lump(&[0], 1).unwrap();
+    /// assert_eq!(r.n_sectors(), 1);
+    /// ```
     pub fn n_sectors(&self) -> usize {
         self.n_sectors
     }
@@ -686,6 +707,7 @@ impl Blockmap {
     ///
     /// Returns an empty iterator if the block index is out of range or the
     /// offset points past the lump.
+    ///
     pub fn block_linedefs(&self, col: usize, row: usize) -> impl Iterator<Item = u16> + '_ {
         let idx = row * self.x_count as usize + col;
         let offset = self.offsets.get(idx).copied().unwrap_or(0) as usize;
