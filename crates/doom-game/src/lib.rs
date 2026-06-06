@@ -50,6 +50,8 @@ pub mod switch;
 pub mod telemetry;
 pub mod tic;
 pub mod trace;
+#[cfg(feature = "vampirism")]
+pub mod vampirism;
 pub mod weapon_fire;
 pub mod weapons;
 

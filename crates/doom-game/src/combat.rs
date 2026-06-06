@@ -259,6 +259,9 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         mo.health
     };
 
+    #[cfg(feature = "vampirism")]
+    crate::vampirism::process_vampirism(gs, inflictor, effective_damage);
+
     if new_health <= 0 {
         // -------------------------------------------------------------------
         // Death transition — use p_set_mobj_state so the entry action

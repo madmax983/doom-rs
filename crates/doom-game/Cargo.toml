@@ -9,6 +9,7 @@ style_meter = []
 telemetry = []
 director = []
 
+vampirism = []
 [dependencies]
 doom-types = { workspace = true }
 doom-map   = { workspace = true }
