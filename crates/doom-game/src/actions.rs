@@ -1061,9 +1061,10 @@ fn a_face_target(gs: &mut GameState, handle: MobjHandle) {
     // Compute BAM angle from (dx, dy) using integer atan2 approximation.
     let angle = bam_from_xy(dx, dy);
 
-    if let Some(mo) = gs.mobjslab.get_mut(handle) {
-        mo.angle = angle;
-    }
+    let Some(mo) = gs.mobjslab.get_mut(handle) else {
+        return;
+    };
+    mo.angle = angle;
 }
 
 /// Compute a BAM angle from a displacement vector `(dx, dy)`.
@@ -1099,9 +1100,10 @@ fn bam_from_xy(dx: i32, dy: i32) -> Bam {
 /// `MF_COUNTKILL` so corpses no longer block movement and are no longer
 /// tallied in the kill count again.
 fn a_fall(gs: &mut GameState, handle: MobjHandle) {
-    if let Some(mo) = gs.mobjslab.get_mut(handle) {
-        mo.flags &= !(crate::mobj::flags::MF_SOLID | crate::mobj::flags::MF_COUNTKILL);
-    }
+    let Some(mo) = gs.mobjslab.get_mut(handle) else {
+        return;
+    };
+    mo.flags &= !(crate::mobj::flags::MF_SOLID | crate::mobj::flags::MF_COUNTKILL);
 }
 
 // ---------------------------------------------------------------------------
@@ -1115,9 +1117,10 @@ fn a_fall(gs: &mut GameState, handle: MobjHandle) {
 /// layer can trigger audio, matching the vanilla pattern without
 /// hard-coding a sound ID in the game crate.
 fn a_scream(gs: &mut GameState, handle: MobjHandle) {
-    if let Some(mo) = gs.mobjslab.get_mut(handle) {
-        mo.flags |= crate::mobj::flags::MF_SCREAMED;
-    }
+    let Some(mo) = gs.mobjslab.get_mut(handle) else {
+        return;
+    };
+    mo.flags |= crate::mobj::flags::MF_SCREAMED;
 }
 
 // ---------------------------------------------------------------------------
@@ -1549,14 +1552,10 @@ fn a_skull_attack(gs: &mut GameState, handle: MobjHandle) {
     };
 
     // Set the skull-fly flag so the Lost Soul damages on contact.
-    if let Some(mo) = gs.mobjslab.get_mut(handle) {
-        mo.flags |= flags::MF_SKULLFLY;
-    }
-
-    // Read positions for velocity computation.
-    let Some(mo) = gs.mobjslab.get(handle) else {
+    let Some(mo) = gs.mobjslab.get_mut(handle) else {
         return;
     };
+    mo.flags |= flags::MF_SKULLFLY;
     let (sx, sy) = (mo.x, mo.y);
 
     let Some(t) = gs.mobjslab.get(target) else {
@@ -1573,10 +1572,11 @@ fn a_skull_attack(gs: &mut GameState, handle: MobjHandle) {
     let dist = (dx_f * dx_f + dy_f * dy_f).sqrt().max(1.0);
     let speed = SKULLSPEED as f32;
 
-    if let Some(mo) = gs.mobjslab.get_mut(handle) {
-        mo.momx = Fixed16_16::from_int((dx_f / dist * speed) as i32);
-        mo.momy = Fixed16_16::from_int((dy_f / dist * speed) as i32);
-    }
+    let Some(mo) = gs.mobjslab.get_mut(handle) else {
+        return;
+    };
+    mo.momx = Fixed16_16::from_int((dx_f / dist * speed) as i32);
+    mo.momy = Fixed16_16::from_int((dy_f / dist * speed) as i32);
 }
 
 // ---------------------------------------------------------------------------
