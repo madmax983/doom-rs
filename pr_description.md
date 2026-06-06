@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+💡 What: Replaced a redundant string `.clone()` with an immutable reference in `GameState::new` inside the episode reset path. Also fixed two unrelated deprecated warnings (`Cell::set_skip`) in the terminal UI render logic.
+🎯 Why: Passing `&self.gs.level_name.clone()` creates an unnecessary heap allocation of a throwaway string. Rust's NLL handles this perfectly using the `&self.gs.level_name` reference.
+📊 Impact: Eliminates 1 heap allocation per level restart/re-spawn sequence.
+🔬 Measurement: Run `cargo clippy --all-targets --all-features -- -D warnings` and `cargo test` to verify no regressions.

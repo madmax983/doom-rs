@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**[Eliminate redundant cloning before construction]**
+**Learning:** Calling `.clone()` on a `String` (e.g., `&self.gs.level_name.clone()`) to pass a string slice reference (`&str`) to a constructor function creates a redundant heap allocation. Rust's NLL (Non-Lexical Lifetimes) correctly understand that an immutable borrow taken during the right-hand-side of an assignment expression (`GameState::new(&self.gs.level_name)`) expires before the mutable assignment to the struct (`self.gs = ...`) takes place.
+**Action:** When reconstructing or resetting a state structure using an existing field, pass the field as an immutable reference instead of cloning it, relying on NLL to prove safety without allocating a throwaway string.
