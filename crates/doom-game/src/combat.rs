@@ -108,6 +108,12 @@ fn collect_actor_hitscan_intercepts(
 ) {
     intercepts.clear();
 
+    // ⚡ Bolt: Calculate the ray's bounding box to skip expensive intersection checks for distant actors.
+    let ray_min_x = sx.min(sx + rdx);
+    let ray_max_x = sx.max(sx + rdx);
+    let ray_min_y = sy.min(sy + rdy);
+    let ray_max_y = sy.max(sy + rdy);
+
     for handle in gs.mobjslab.iter_handles() {
         if handle == source {
             continue;
@@ -120,15 +126,20 @@ fn collect_actor_hitscan_intercepts(
             continue;
         }
 
-        if let Some(frac) = ray_actor_intersection(
-            sx,
-            sy,
-            rdx,
-            rdy,
-            fixed_to_f32(mo.x),
-            fixed_to_f32(mo.y),
-            fixed_to_f32(mo.radius),
-        ) {
+        let ax = fixed_to_f32(mo.x);
+        let ay = fixed_to_f32(mo.y);
+        let radius = fixed_to_f32(mo.radius);
+
+        // ⚡ Bolt: Fast AABB overlap check before doing precise intersection math.
+        if ax + radius < ray_min_x
+            || ax - radius > ray_max_x
+            || ay + radius < ray_min_y
+            || ay - radius > ray_max_y
+        {
+            continue;
+        }
+
+        if let Some(frac) = ray_actor_intersection(sx, sy, rdx, rdy, ax, ay, radius) {
             if (0.0..=1.0).contains(&frac) {
                 intercepts.push(HitscanIntercept {
                     frac,
@@ -359,29 +370,63 @@ pub(crate) fn p_line_attack_target(
     collect_actor_hitscan_intercepts(gs, source, sx, sy, rdx, rdy, intercepts);
 
     if let Some(lv) = level {
-        for (linedef_idx, linedef) in lv.linedefs.iter().enumerate() {
-            let Some(v1) = lv.vertexes.get(linedef.from_vertex as usize) else {
-                continue;
-            };
-            let Some(v2) = lv.vertexes.get(linedef.to_vertex as usize) else {
-                continue;
-            };
+        // ⚡ Bolt: Calculate ray AABB and iterate over overlapping blockmap cells instead of all linedefs.
+        let ray_min_x = sx.min(sx + rdx);
+        let ray_max_x = sx.max(sx + rdx);
+        let ray_min_y = sy.min(sy + rdy);
+        let ray_max_y = sy.max(sy + rdy);
 
-            if let Some(frac) = trace::ray_linedef_intersection(
-                sx,
-                sy,
-                rdx,
-                rdy,
-                v1.x as f32,
-                v1.y as f32,
-                v2.x as f32,
-                v2.y as f32,
-            ) {
-                if (0.0..=1.0).contains(&frac) {
-                    intercepts.push(HitscanIntercept {
-                        frac,
-                        kind: HitscanInterceptKind::Line(linedef_idx),
-                    });
+        let bm_origin_x = lv.blockmap.x_origin as f32;
+        let bm_origin_y = lv.blockmap.y_origin as f32;
+
+        let min_cell_x = (((ray_min_x - bm_origin_x) / 128.0).floor() as i32)
+            .clamp(0, lv.blockmap.x_count as i32 - 1);
+        let max_cell_x = (((ray_max_x - bm_origin_x) / 128.0).floor() as i32)
+            .clamp(0, lv.blockmap.x_count as i32 - 1);
+        let min_cell_y = (((ray_min_y - bm_origin_y) / 128.0).floor() as i32)
+            .clamp(0, lv.blockmap.y_count as i32 - 1);
+        let max_cell_y = (((ray_max_y - bm_origin_y) / 128.0).floor() as i32)
+            .clamp(0, lv.blockmap.y_count as i32 - 1);
+
+        let mut tested_lines = smallvec::SmallVec::<[usize; 32]>::new();
+
+        for cell_y in min_cell_y..=max_cell_y {
+            for cell_x in min_cell_x..=max_cell_x {
+                for ld_idx_u16 in lv.blockmap.block_linedefs(cell_x as usize, cell_y as usize) {
+                    let linedef_idx = ld_idx_u16 as usize;
+
+                    if tested_lines.contains(&linedef_idx) {
+                        continue;
+                    }
+                    tested_lines.push(linedef_idx);
+
+                    let Some(linedef) = lv.linedefs.get(linedef_idx) else {
+                        continue;
+                    };
+                    let Some(v1) = lv.vertexes.get(linedef.from_vertex as usize) else {
+                        continue;
+                    };
+                    let Some(v2) = lv.vertexes.get(linedef.to_vertex as usize) else {
+                        continue;
+                    };
+
+                    if let Some(frac) = trace::ray_linedef_intersection(
+                        sx,
+                        sy,
+                        rdx,
+                        rdy,
+                        v1.x as f32,
+                        v1.y as f32,
+                        v2.x as f32,
+                        v2.y as f32,
+                    ) {
+                        if (0.0..=1.0).contains(&frac) {
+                            intercepts.push(HitscanIntercept {
+                                frac,
+                                kind: HitscanInterceptKind::Line(linedef_idx),
+                            });
+                        }
+                    }
                 }
             }
         }
