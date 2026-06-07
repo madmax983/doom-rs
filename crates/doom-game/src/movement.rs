@@ -136,7 +136,7 @@ pub fn p_slide_move(
     consider(new_x, old_y);
     consider(old_x, new_y);
 
-    best.map(|(x, y, _)| (x, y)).unwrap_or((old_x, old_y))
+    best.map_or((old_x, old_y), |(x, y, _)| (x, y))
 }
 
 /// Compute the Doom-shaped support floor under an actor at `(x, y)`.

@@ -199,7 +199,7 @@ fn get_alive_target_with_pos(
     let target = mo.target;
     let mo_x = mo.x;
     let mo_y = mo.y;
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    if gs.mobjslab.get(target).is_none_or(|t| t.is_dead()) {
         return None;
     }
     Some((target, mo_x, mo_y))
@@ -970,7 +970,7 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     // --- Step 5: Missile check ---
     if missile_sn != crate::mobj::StateNum::NULL && reactiontime == 0 {
         // Re-read movecount (might have changed).
-        let cur_movecount = gs.mobjslab.get(handle).map(|mo| mo.movecount).unwrap_or(0);
+        let cur_movecount = gs.mobjslab.get(handle).map_or(0, |mo| mo.movecount);
 
         // Don't fire if still moving from last direction change (gives monsters
         // a movement phase between attacks), unless movecount has expired.
@@ -1463,7 +1463,7 @@ fn fat_shoot(gs: &mut GameState, handle: MobjHandle, angle_offset: u32) {
     if let Some(proj_h) = crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::FatShot)
     {
         // Read the source angle (already set by face_target).
-        let mo_angle = gs.mobjslab.get(handle).map(|mo| mo.angle.0).unwrap_or(0);
+        let mo_angle = gs.mobjslab.get(handle).map_or(0, |mo| mo.angle.0);
         let new_angle = Bam(mo_angle.wrapping_add(angle_offset));
 
         // Adjust the projectile's angle and recompute momentum from the new angle.
@@ -1757,7 +1757,7 @@ fn a_vile_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     if let Some(ch) = corpse_handle {
         // Resurrect the corpse: restore health, clear corpse flag, set raise_state.
-        let kind_idx = gs.mobjslab.get(ch).map(|m| m.kind as usize).unwrap_or(0);
+        let kind_idx = gs.mobjslab.get(ch).map_or(0, |m| m.kind as usize);
         let info = &mobjinfo::MOBJINFO[kind_idx];
         let raise_sn = info.raise_state;
         let full_hp = info.spawn_health;
