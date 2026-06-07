@@ -198,7 +198,7 @@ pub struct CogmindHud {
     pub level_name: String,
     /// The current style rank.
     #[cfg(feature = "style_meter")]
-    pub style_rank: Option<doom_game::style::StyleRank>,
+    pub style_rank: Option<doom_types::style::StyleRank>,
 }
 
 impl CogmindHud {

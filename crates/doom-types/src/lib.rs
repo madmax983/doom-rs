@@ -28,3 +28,5 @@ pub mod mobj_kind;
 #[cfg(verus_keep_ghost)]
 mod proofs;
 pub mod weapons;
+
+pub mod style;
