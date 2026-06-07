@@ -75,6 +75,18 @@ struct ChannelState {
 // ---------------------------------------------------------------------------
 
 /// State of one OPL2 operator (either modulator or carrier).
+///
+/// ## Examples
+///
+/// ```
+/// use doom_audio::opl::OplOperator;
+///
+/// let mut op = OplOperator::default();
+/// op.attack_rate = 15;
+/// op.decay_rate = 0;
+/// op.sustain_level = 0;
+/// op.release_rate = 15;
+/// ```
 #[derive(Debug, Default, Clone, Copy)]
 pub struct OplOperator {
     /// Attack rate (bits 7-4 of 0x60+offset register).
@@ -94,6 +106,17 @@ pub struct OplOperator {
 }
 
 /// State of one of the 9 OPL2 voice channels.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_audio::opl::{OplChannel, OplOperator};
+///
+/// let mut ch = OplChannel::default();
+/// ch.freq_low = 0x42;
+/// ch.freq_high = 0x01;
+/// ch.key_on = true;
+/// ```
 #[derive(Debug, Default, Clone, Copy)]
 pub struct OplChannel {
     /// Low 8 bits of the F-number (register 0xA0+ch).
@@ -109,8 +132,22 @@ pub struct OplChannel {
 /// Complete OPL2 chip register state with FM synthesis.
 ///
 /// Call [`OplChip::write`] to update registers and have the decoded channel
-/// state kept in sync automatically.  Call [`OplChip::synthesize`] to generate
+/// state kept in sync automatically. Call [`OplChip::synthesize`] to generate
 /// audio samples.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_audio::opl::OplChip;
+///
+/// let mut chip = OplChip::new();
+/// // Turn on channel 0 with a basic beep
+/// chip.write(0xA0, 172);
+/// chip.write(0xB0, (4 << 2) | 0x20); // block 4, key on
+///
+/// let mut buf = [0.0f32; 128];
+/// chip.synthesize(&mut buf, 44100);
+/// ```
 pub struct OplChip {
     /// Raw shadow of every register byte (256 entries).
     regs: [u8; 256],

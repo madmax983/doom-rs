@@ -15,6 +15,16 @@ use crate::AudioError;
 // ---------------------------------------------------------------------------
 
 /// A decoded PCM sound effect sample.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_audio::mixer::PcmSample;
+///
+/// // Create 1 second of silence at 11025 Hz
+/// let silence = PcmSample::silence(11025, 11025);
+/// assert_eq!(silence.sample_rate, 11025);
+/// ```
 pub struct PcmSample {
     /// Sample rate in Hz as recorded in the SFX lump header.
     pub sample_rate: u32,
@@ -78,7 +88,22 @@ impl PcmSample {
 // MixChannel
 // ---------------------------------------------------------------------------
 
-/// One slot in the [`Mixer`] voice table.
+/// An active channel in the mixer playing a PCM sample.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_audio::mixer::{MixChannel, PcmSample};
+/// use std::sync::Arc;
+///
+/// let sample = Arc::new(PcmSample::silence(11025, 100));
+/// let channel = MixChannel {
+///     sample: Some(sample),
+///     pos: 0,
+///     active: true,
+///     volume: 128,
+/// };
+/// ```
 pub struct MixChannel {
     /// The sample currently assigned to this channel, if any.
     pub sample: Option<Arc<PcmSample>>,
@@ -105,7 +130,23 @@ impl Default for MixChannel {
 // Mixer
 // ---------------------------------------------------------------------------
 
-/// Eight-voice PCM mixer that outputs interleaved stereo `i16` frames.
+/// Mixes multiple PCM samples into a single output buffer.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_audio::mixer::{Mixer, PcmSample};
+/// use std::sync::Arc;
+///
+/// let mut mixer = Mixer::new(44100);
+/// let sample = Arc::new(PcmSample::silence(11025, 100));
+///
+/// // Play sample on channel 0 at full volume
+/// mixer.play(0, sample, 255);
+///
+/// let mut out = [0i16; 128];
+/// mixer.mix_frame(&mut out);
+/// ```
 pub struct Mixer {
     /// The 8 voice channels.
     pub channels: [MixChannel; 8],
