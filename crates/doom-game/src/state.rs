@@ -115,6 +115,9 @@ pub struct GameState {
     #[cfg(feature = "telemetry")]
     /// Tracks spatial player path data over the session.
     pub telemetry: crate::telemetry::SessionTelemetry,
+    #[cfg(feature = "director")]
+    /// The AI Director which controls spawning of ambushes or relief drops.
+    pub director: crate::director::AiDirector,
 }
 
 impl GameState {
@@ -144,6 +147,8 @@ impl GameState {
             style: crate::style::StyleMeter::new(),
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
+            #[cfg(feature = "director")]
+            director: crate::director::AiDirector::new(),
         }
     }
 

@@ -404,6 +404,45 @@ impl GameState {
         tick_world(self, level);
         #[cfg(feature = "style_meter")]
         self.style.tick(self.tic_num);
+
+        #[cfg(feature = "director")]
+        if self.tic_num.is_multiple_of(150) && !self.player.is_dead() {
+            let action = self.director.tick(&self.player);
+            let p_x = self
+                .mobjslab
+                .get(self.player.handle)
+                .map(|p| p.x)
+                .unwrap_or(doom_types::Fixed16_16::ZERO);
+            let p_y = self
+                .mobjslab
+                .get(self.player.handle)
+                .map(|p| p.y)
+                .unwrap_or(doom_types::Fixed16_16::ZERO);
+
+            match action {
+                crate::director::DirectorAction::SpawnAmbush => {
+                    let mut mo = crate::mobj::Mobj::new(
+                        doom_types::mobj_kind::MobjKind::Imp,
+                        p_x + doom_types::Fixed16_16::from_int(128),
+                        p_y + doom_types::Fixed16_16::from_int(128),
+                        doom_types::Bam::ZERO,
+                    );
+                    crate::spawn::apply_mobjinfo_defaults(&mut mo);
+                    self.mobjslab.alloc(mo);
+                }
+                crate::director::DirectorAction::SpawnRelief => {
+                    let mut mo = crate::mobj::Mobj::new(
+                        doom_types::mobj_kind::MobjKind::Medikit,
+                        p_x + doom_types::Fixed16_16::from_int(64),
+                        p_y + doom_types::Fixed16_16::from_int(64),
+                        doom_types::Bam::ZERO,
+                    );
+                    crate::spawn::apply_mobjinfo_defaults(&mut mo);
+                    self.mobjslab.alloc(mo);
+                }
+                crate::director::DirectorAction::Maintain => {}
+            }
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -2370,5 +2409,45 @@ mod tests {
             mo.tics, -1,
             "advance_mobj_state falling back to StateNum::NULL should hold the state forever (-1 tics)"
         );
+    }
+
+    #[cfg(feature = "director")]
+    #[test]
+    fn test_director_spawns_ambush_on_high_health() {
+        let mut gs = make_game_state();
+        gs.player.set_health_capped(100, 100);
+        gs.sync_player_mobj_health();
+
+        // Fast forward near the director's 150-tic trigger
+        gs.tic_num = 149;
+        let initial_count = gs.mobjslab.len();
+
+        gs.tick(TicCmd::default(), None);
+
+        // Director should have triggered SpawnAmbush, adding 1 Imp
+        assert_eq!(gs.mobjslab.len(), initial_count + 1);
+        let spawned = gs.mobjslab.iter_handles().last().unwrap();
+        let mo = gs.mobjslab.get(spawned).unwrap();
+        assert_eq!(mo.kind, doom_types::mobj_kind::MobjKind::Imp);
+    }
+
+    #[cfg(feature = "director")]
+    #[test]
+    fn test_director_spawns_relief_on_low_health() {
+        let mut gs = make_game_state();
+        gs.player.set_health_capped(10, 100);
+        gs.sync_player_mobj_health();
+
+        // Fast forward near the director's 150-tic trigger
+        gs.tic_num = 149;
+        let initial_count = gs.mobjslab.len();
+
+        gs.tick(TicCmd::default(), None);
+
+        // Director should have triggered SpawnRelief, adding 1 Medikit
+        assert_eq!(gs.mobjslab.len(), initial_count + 1);
+        let spawned = gs.mobjslab.iter_handles().last().unwrap();
+        let mo = gs.mobjslab.get(spawned).unwrap();
+        assert_eq!(mo.kind, doom_types::mobj_kind::MobjKind::Medikit);
     }
 }
