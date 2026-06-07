@@ -547,7 +547,8 @@ impl DoomGame {
                 // Map skill index to Skill enum (0=Baby..4=Nightmare).
                 let sk = Skill::from_num(skill).unwrap_or(Skill::Medium);
                 // Re-spawn the level with the chosen skill.
-                self.gs = GameState::new(&self.gs.level_name.clone());
+                let level_name = self.gs.level_name.clone();
+                self.gs = GameState::new(&level_name);
                 spawn_level_things(
                     &mut self.gs,
                     &self.level,
@@ -576,7 +577,7 @@ impl DoomGame {
                 let path = format!("doom_save_{slot}.bin");
                 match savegame::load_game(std::path::Path::new(&path), self.compat) {
                     Ok((_header, payload)) => {
-                        if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
+                        if let Err(e) = savegame::apply_save(&mut self.gs, payload) {
                             self.console.print(format!("Load failed: {e}"));
                             self.hud_messages.push(format!("Load failed: {e}"), 105);
                         } else {
@@ -1148,7 +1149,7 @@ impl DoomApp for DoomGame {
         if input.f9_load {
             match savegame::load_game(&self.save_path, self.compat) {
                 Ok((_header, payload)) => {
-                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
+                    if let Err(e) = savegame::apply_save(&mut self.gs, payload) {
                         self.console.print(format!("Load failed: {e}"));
                         self.hud_messages.push(format!("Load failed: {e}"), 105);
                     } else {

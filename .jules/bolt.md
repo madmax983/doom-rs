@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Remove GameState clone on save load**
+**Learning:** `GameState` was being fully cloned in `apply_save` when loading a save just because `SaveGame` was passed by reference (`&SaveGame`). By passing `SaveGame` by value, we can directly assign `*gs = payload.state`, avoiding a huge deep copy of the game state structs, arena of slots, thinker lists, etc.
+**Action:** When transferring complete ownership of a large loaded structure into an existing state pointer (like restoring a save), consume the loaded wrapper by value instead of borrowing it, which prevents having to `.clone()` out of the reference.
