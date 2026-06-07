@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-06-07 - Flaky Tests Due to Global State
+**Learning:** The test `drain_ready_tics_samples_modifiers_once_per_tic` in `crates/doom-tui/src/event_loop.rs` was found to be flaky because it relied on `MODIFIER_SAMPLE_COUNT`, a global variable, which was being modified concurrently by other test threads.
+**Action:** Always wrap uses of global static variables for tests in a `Mutex` lock, such as `MODIFIER_COUNT_LOCK`, to enforce serialized access when running cargo tests in parallel.

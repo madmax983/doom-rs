@@ -340,6 +340,152 @@ mod tests {
     use super::*;
 
     #[test]
+    fn push_f5_f9_in_tic_input() {
+        let mut s = InputState::new();
+        s.push_f5();
+        s.push_f9();
+        let t = s.to_tic_input();
+        assert!(t.f5_save);
+        assert!(t.f9_load);
+
+        let t2 = s.to_tic_input();
+        assert!(!t2.f5_save);
+        assert!(!t2.f9_load);
+    }
+
+    #[test]
+    fn escape_pressed_in_tic_input() {
+        let mut s = InputState::new();
+        s.push_escape();
+        let t = s.to_tic_input();
+        assert!(t.escape_pressed);
+
+        let t2 = s.to_tic_input();
+        assert!(!t2.escape_pressed);
+    }
+
+    #[test]
+    fn menu_navigation_in_tic_input() {
+        let mut s = InputState::new();
+        s.push_menu_up();
+        s.push_menu_down();
+        s.push_menu_select();
+        let t = s.to_tic_input();
+        assert!(t.menu_up);
+        assert!(t.menu_down);
+        assert!(t.menu_select);
+
+        let t2 = s.to_tic_input();
+        assert!(!t2.menu_up);
+        assert!(!t2.menu_down);
+        assert!(!t2.menu_select);
+    }
+
+    #[test]
+    fn clear_resets_all_state() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('w'));
+        s.set_shift(true);
+        s.set_control(true);
+        s.push_console_char('x');
+        s.push_f5();
+        s.push_f9();
+        s.push_tab();
+        s.push_escape();
+        s.push_menu_up();
+        s.push_menu_down();
+        s.push_menu_select();
+        s.push_wait();
+
+        s.clear();
+
+        let t = s.to_tic_input();
+        assert_eq!(t, TicInput::default());
+        assert!(!s.shift_held);
+        assert!(!s.control_held);
+    }
+
+    #[test]
+    fn right_arrow_turns_right() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Right);
+        let t = s.to_tic_input();
+        assert!(t.angle_turn < 0);
+        assert_eq!(t.side_move, 0);
+    }
+
+    #[test]
+    fn down_arrow_moves_backward() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Down);
+        let t = s.to_tic_input();
+        assert_eq!(t.forward_move, -MOVE_SPEED);
+    }
+
+    #[test]
+    fn use_button_on_e() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('e'));
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_USE, 0);
+    }
+
+    #[test]
+    fn turn_right_without_shift() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('d'));
+        let t = s.to_tic_input();
+        assert!(t.angle_turn < 0);
+        assert_eq!(t.side_move, 0);
+    }
+
+    #[test]
+    fn strafe_right_with_shift() {
+        let mut s = InputState::new();
+        s.set_shift(true);
+        s.key_down(KeyCode::Char('d'));
+        let t = s.to_tic_input();
+        assert_eq!(t.angle_turn, 0);
+        assert!(t.side_move > 0);
+    }
+
+    #[test]
+    fn console_char_only_keeps_first() {
+        let mut s = InputState::new();
+        s.push_console_char('a');
+        s.push_console_char('b'); // Should be ignored
+        let t = s.to_tic_input();
+        assert_eq!(t.console_char, Some('a'));
+    }
+
+    #[test]
+    fn console_char_ignores_non_ascii() {
+        let mut s = InputState::new();
+        s.push_console_char('🦀');
+        let t = s.to_tic_input();
+        assert_eq!(t.console_char, Some('🦀'));
+        assert_eq!(t.chatchar, 0); // Not ASCII, so chatchar is 0
+    }
+
+    #[test]
+    fn weapon_change_keys_set_weapon_bits() {
+        for (key, weapon) in [
+            (KeyCode::Char('1'), 0u8),
+            (KeyCode::Char('2'), 1),
+            (KeyCode::Char('3'), 2),
+            (KeyCode::Char('4'), 3),
+            (KeyCode::Char('5'), 4),
+            (KeyCode::Char('6'), 5),
+            (KeyCode::Char('7'), 6),
+        ] {
+            let mut s = InputState::new();
+            s.key_down(key);
+            let t = s.to_tic_input();
+            assert_ne!(t.buttons & buttons::BT_CHANGE, 0);
+            assert_eq!((t.buttons & buttons::BT_WEAPONMASK) >> 3, weapon);
+        }
+    }
+
+    #[test]
     fn forward_key_sets_forward_move() {
         let mut s = InputState::new();
         s.key_down(KeyCode::Char('w'));

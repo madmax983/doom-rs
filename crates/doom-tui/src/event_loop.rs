@@ -164,7 +164,9 @@ fn run_blit_thread(
                                     past_first = true;
                                     continue;
                                 }
-                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                                f.buffer_mut().cell_mut((x, y)).map(|c| {
+                                    c.set_diff_option(ratatui::buffer::CellDiffOption::Skip)
+                                });
                             }
                         }
                     }
@@ -1084,7 +1086,7 @@ mod tests {
         let mut loop_ = make_test_event_loop();
         let _guard = MODIFIER_COUNT_LOCK
             .lock()
-            .expect("value must exist in test");
+            .unwrap_or_else(|e| e.into_inner());
         reset_modifier_sample_count();
 
         loop_.poll_events();
@@ -1099,7 +1101,7 @@ mod tests {
         let mut loop_ = make_test_event_loop();
         let _guard = MODIFIER_COUNT_LOCK
             .lock()
-            .expect("value must exist in test");
+            .unwrap_or_else(|e| e.into_inner());
         reset_modifier_sample_count();
 
         let mut app = CountingApp { ticks: 0 };
@@ -1120,6 +1122,12 @@ mod tests {
 
     #[test]
     fn turn_based_wait_generates_recovery_tics() {
+        let _guard = MODIFIER_COUNT_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = MODIFIER_COUNT_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let mut loop_ = make_test_event_loop();
         loop_.set_turn_based_mode(true);
         loop_.input.push_wait();
@@ -1136,6 +1144,12 @@ mod tests {
 
     #[test]
     fn turn_based_held_action_waits_for_release() {
+        let _guard = MODIFIER_COUNT_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let _guard = MODIFIER_COUNT_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let mut loop_ = make_test_event_loop();
         loop_.set_turn_based_mode(true);
         loop_.input.key_down(KeyCode::Char('w'));
