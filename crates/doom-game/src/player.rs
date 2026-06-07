@@ -574,6 +574,48 @@ mod tests {
     }
 
     #[test]
+    fn deduct_armor_clears_type_on_zero() {
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        p.armor = 50;
+        p.armor_type = 1;
+        p.deduct_armor(50);
+        assert_eq!(p.armor, 0);
+        assert_eq!(p.armor_type, 0);
+    }
+
+    #[test]
+    fn deduct_armor_preserves_type_if_positive() {
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        p.armor = 50;
+        p.armor_type = 1;
+        p.deduct_armor(25);
+        assert_eq!(p.armor, 25);
+        assert_eq!(p.armor_type, 1);
+    }
+
+    #[test]
+    fn use_ammo_success() {
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        p.give_ammo(AmmoType::Bullets as usize, 50);
+        assert!(p.use_ammo(AmmoType::Bullets as usize, 20));
+        assert_eq!(p.ammo(AmmoType::Bullets as usize), 80);
+    }
+
+    #[test]
+    fn use_ammo_insufficient() {
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        let current_ammo = p.ammo(AmmoType::Bullets as usize);
+        assert!(!p.use_ammo(AmmoType::Bullets as usize, current_ammo + 10));
+        assert_eq!(p.ammo(AmmoType::Bullets as usize), current_ammo);
+    }
+
+    #[test]
+    fn use_ammo_invalid_type() {
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        assert!(!p.use_ammo(999, 10));
+    }
+
+    #[test]
     fn damage_drives_health_below_zero() {
         let mut p = PlayerState::pistol_start(MobjHandle::NULL);
         p.apply_damage(200);
