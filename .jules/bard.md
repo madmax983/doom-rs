@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-06-08 - [Avoiding Getter Noise in Documentation]
+**Confusion:** Writing simple docs like "Creates a new object" or "Pushes an item" violates the Bard persona's rule against useless noise and repetition of function names.
+**Clarification:** Replaced mechanical "getter" docs with story-driven explanations of *why* the function exists in the engine's architecture (e.g., explaining that pushing a SpriteClipStep helps the renderer determine occlusion bounds during BSP traversal).

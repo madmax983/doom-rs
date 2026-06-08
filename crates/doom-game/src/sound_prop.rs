@@ -1,3 +1,7 @@
+//! Sound propagation and audio request structs.
+//!
+//! Handles queued audio events and sector-based sound propagation.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;
