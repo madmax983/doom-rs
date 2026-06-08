@@ -293,6 +293,41 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
 
     // 11. Increment level time.
     gs.stats.level_time = gs.stats.level_time.wrapping_add(1);
+
+    // 12. Director spawning (every 10 seconds).
+    #[cfg(feature = "director")]
+    #[allow(clippy::manual_is_multiple_of)]
+    if gs.tic_num > 0 && gs.tic_num % (35 * 10) == 0 {
+        let action = gs.director.tick(&gs.player);
+        if let Some(player_mo) = gs.mobjslab.get(gs.player.handle) {
+            let px = player_mo.x;
+            let py = player_mo.y;
+
+            match action {
+                crate::director::DirectorAction::SpawnAmbush => {
+                    let mut mo = crate::mobj::Mobj::new(
+                        doom_types::mobj_kind::MobjKind::Imp,
+                        px + doom_types::Fixed16_16::from_int(128),
+                        py + doom_types::Fixed16_16::from_int(128),
+                        doom_types::Bam::ZERO,
+                    );
+                    crate::spawn::apply_mobjinfo_defaults(&mut mo);
+                    gs.mobjslab.alloc(mo);
+                }
+                crate::director::DirectorAction::SpawnRelief => {
+                    let mut mo = crate::mobj::Mobj::new(
+                        doom_types::mobj_kind::MobjKind::Medikit,
+                        px + doom_types::Fixed16_16::from_int(64),
+                        py + doom_types::Fixed16_16::from_int(64),
+                        doom_types::Bam::ZERO,
+                    );
+                    crate::spawn::apply_mobjinfo_defaults(&mut mo);
+                    gs.mobjslab.alloc(mo);
+                }
+                crate::director::DirectorAction::Maintain => {}
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -2369,6 +2404,47 @@ mod tests {
         assert_eq!(
             mo.tics, -1,
             "advance_mobj_state falling back to StateNum::NULL should hold the state forever (-1 tics)"
+        );
+    }
+
+    #[cfg(feature = "director")]
+    #[test]
+    fn test_director_integration() {
+        let mut gs = GameState::new("E1M1");
+        // Spawning player Mobj.
+        let mo = crate::mobj::Mobj::new(
+            doom_types::mobj_kind::MobjKind::Player,
+            doom_types::Fixed16_16::from_int(100),
+            doom_types::Fixed16_16::from_int(100),
+            doom_types::Bam::ZERO,
+        );
+        let handle = gs.mobjslab.alloc(mo);
+        gs.player.handle = handle;
+
+        let initial_count = gs.mobjslab.len();
+
+        // Force tick_num to exactly trigger the director's 10-second check
+        gs.tic_num = 35 * 10;
+
+        // High health -> Ambush -> Should spawn Imp
+        gs.player.heal(100);
+        super::tick_world(&mut gs, None);
+        assert_eq!(
+            gs.mobjslab.len(),
+            initial_count + 1,
+            "Should spawn one Imp for high health"
+        );
+
+        // Force tick_num to exactly trigger the director's 10-second check again
+        gs.tic_num = 35 * 20;
+
+        // Low health -> Relief -> Should spawn Medikit
+        gs.player.apply_damage(90); // Bring health down to ~10
+        super::tick_world(&mut gs, None);
+        assert_eq!(
+            gs.mobjslab.len(),
+            initial_count + 2,
+            "Should spawn one Medikit for low health"
         );
     }
 }
