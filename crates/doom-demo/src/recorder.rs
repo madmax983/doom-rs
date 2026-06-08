@@ -50,6 +50,13 @@ pub struct DemoRecorder {
 
 impl DemoRecorder {
     /// Create a new recorder with the given [`LmpHeader`].
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoRecorder, LmpHeader};
+/// let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// let recorder = DemoRecorder::new(header);
+/// ```
     #[must_use]
     pub const fn new(header: LmpHeader) -> Self {
         Self {
@@ -62,6 +69,14 @@ impl DemoRecorder {
     ///
     /// This is the primary recording entry point for doom-app, which records
     /// one `TicCmd` per tic for the console player.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoRecorder, LmpHeader};
+/// use doom_types::TicCmd;
+/// let mut recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// recorder.record_tic(&TicCmd::default());
+/// ```
     pub fn record_tic(&mut self, cmd: &TicCmd) {
         self.tics.push(vec![DemoTicCmd::from_ticcmd(cmd)]);
     }
@@ -70,17 +85,43 @@ impl DemoRecorder {
     ///
     /// For multi-player demos, pass one [`DemoTicCmd`] per present player
     /// slot.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoRecorder, LmpHeader};
+/// use doom_demo::ticcmd::DemoTicCmd;
+/// let mut recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// recorder.record_tic_cmds(&[DemoTicCmd::default()]);
+/// ```
     pub fn record_tic_cmds(&mut self, cmds: &[DemoTicCmd]) {
         self.tics.push(cmds.to_vec());
     }
 
     /// Return the number of tics recorded so far.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoRecorder, LmpHeader};
+/// use doom_types::TicCmd;
+/// let mut recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// assert_eq!(recorder.tic_count(), 0);
+/// recorder.record_tic(&TicCmd::default());
+/// assert_eq!(recorder.tic_count(), 1);
+/// ```
     #[must_use]
     pub const fn tic_count(&self) -> usize {
         self.tics.len()
     }
 
     /// Serialize the complete LMP file: header + tic data + terminator.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// let bytes = recorder.to_lmp();
+/// assert!(!bytes.is_empty());
+/// ```
     #[must_use]
     pub fn to_lmp(&self) -> Vec<u8> {
         let mut buf = self.header.to_bytes();
@@ -96,12 +137,27 @@ impl DemoRecorder {
     }
 
     /// Consume the recorder and produce the final LMP bytes.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// let bytes = recorder.finish();
+/// assert!(!bytes.is_empty());
+/// ```
     #[must_use]
     pub fn finish(self) -> Vec<u8> {
         self.to_lmp()
     }
 
     /// Access the header.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// assert_eq!(recorder.header().skill, 3);
+/// ```
     #[must_use]
     pub const fn header(&self) -> &LmpHeader {
         &self.header
@@ -114,6 +170,13 @@ impl DemoRecorder {
     ///
     /// This never fails; the `Result` wrapper exists only for backward
     /// compatibility.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// let bytes = recorder.to_bytes().unwrap();
+/// ```
     pub fn to_bytes(&self) -> Result<Vec<u8>, std::io::Error> {
         Ok(self.to_lmp())
     }

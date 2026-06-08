@@ -20,6 +20,12 @@ pub const DEMO_TIC_SIZE: usize = 4;
 /// byte 2: angle_turn (one byte, high 8 bits of the engine angle)
 /// byte 3: buttons
 /// ```
+///
+/// ## Examples
+/// ```
+/// use doom_demo::ticcmd::DemoTicCmd;
+/// let cmd = DemoTicCmd::default();
+/// ```
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct DemoTicCmd {
     /// Forward/backward movement (-128..127, positive = forward).
@@ -34,6 +40,14 @@ pub struct DemoTicCmd {
 
 impl DemoTicCmd {
     /// Serialize this command to its 4-byte wire representation.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::ticcmd::DemoTicCmd;
+/// let cmd = DemoTicCmd::default();
+/// let bytes = cmd.to_bytes();
+/// assert_eq!(bytes.len(), 4);
+/// ```
     #[must_use]
     pub const fn to_bytes(&self) -> [u8; DEMO_TIC_SIZE] {
         [
@@ -47,6 +61,13 @@ impl DemoTicCmd {
     /// Parse a 4-byte slice into a [`DemoTicCmd`].
     ///
     /// Returns `None` if `data.len() < 4`.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::ticcmd::DemoTicCmd;
+/// let bytes = [0, 0, 0, 0];
+/// let cmd = DemoTicCmd::from_bytes(&bytes).unwrap();
+/// ```
     #[must_use]
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
         if data.len() < DEMO_TIC_SIZE {

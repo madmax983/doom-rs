@@ -13,6 +13,12 @@ use crate::ticcmd::DemoTicCmd;
 // ---------------------------------------------------------------------------
 
 /// Errors that can occur while parsing an LMP demo file.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::player::DemoError;
+/// let error = DemoError::TooShort;
+/// ```
 #[derive(Debug, thiserror::Error)]
 pub enum DemoError {
     /// The byte slice was shorter than expected.
@@ -78,6 +84,14 @@ impl DemoPlayer {
     /// position where the first player's `forward_move` would be). This
     /// matches vanilla Doom's parsing behavior and avoids false positives
     /// from `i8::MIN` (-128 = 0x80) appearing inside tic data fields.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// let bytes = recorder.to_lmp();
+/// let player = DemoPlayer::from_lmp(&bytes).unwrap();
+/// ```
     #[must_use]
     pub fn from_lmp(data: &[u8]) -> Option<Self> {
         let header = LmpHeader::from_bytes(data)?;
@@ -142,6 +156,14 @@ impl DemoPlayer {
     ///
     /// Returns [`DemoError::TooShort`] if the data is shorter than the
     /// 13-byte header, or [`DemoError::UnexpectedEof`] if parsing fails.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// let bytes = recorder.to_lmp();
+/// let player = DemoPlayer::parse(&bytes).unwrap();
+/// ```
     pub fn parse(data: &[u8]) -> Result<Self, DemoError> {
         if data.len() < LMP_HEADER_SIZE {
             return Err(DemoError::TooShort);
@@ -150,30 +172,75 @@ impl DemoPlayer {
     }
 
     /// Access the parsed header.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// let bytes = recorder.to_lmp();
+/// let player = DemoPlayer::from_lmp(&bytes).unwrap();
+/// assert_eq!(player.header().skill, 3);
+/// ```
     #[must_use]
     pub const fn header(&self) -> &LmpHeader {
         &self.header
     }
 
     /// Index of the tic that will be returned by the next call to [`next_tic`](Self::next_tic).
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// let bytes = recorder.to_lmp();
+/// let player = DemoPlayer::from_lmp(&bytes).unwrap();
+/// assert_eq!(player.current_tic(), 0);
+/// ```
     #[must_use]
     pub const fn current_tic(&self) -> usize {
         self.current_tic
     }
 
     /// Total number of tics in the demo.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// let bytes = recorder.to_lmp();
+/// let player = DemoPlayer::from_lmp(&bytes).unwrap();
+/// assert_eq!(player.total_tics(), 0);
+/// ```
     #[must_use]
     pub const fn total_tics(&self) -> usize {
         self.tics.len()
     }
 
     /// Backward-compatible alias for [`total_tics`](Self::total_tics).
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// let bytes = recorder.to_lmp();
+/// let player = DemoPlayer::from_lmp(&bytes).unwrap();
+/// assert_eq!(player.tic_count(), 0);
+/// ```
     #[must_use]
     pub const fn tic_count(&self) -> usize {
         self.tics.len()
     }
 
     /// Return `true` when the demo has been fully consumed.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// let recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// let bytes = recorder.to_lmp();
+/// let player = DemoPlayer::from_lmp(&bytes).unwrap();
+/// assert!(player.is_finished());
+/// ```
     #[must_use]
     pub const fn is_finished(&self) -> bool {
         self.current_tic >= self.tics.len()
@@ -186,6 +253,17 @@ impl DemoPlayer {
     /// demos). For multi-player demos, use [`next_tic_cmds`](Self::next_tic_cmds).
     ///
     /// Returns `None` once all recorded tics have been consumed.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// use doom_types::TicCmd;
+/// let mut recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// recorder.record_tic(&TicCmd::default());
+/// let bytes = recorder.to_lmp();
+/// let mut player = DemoPlayer::from_lmp(&bytes).unwrap();
+/// assert!(player.next_tic().is_some());
+/// ```
     pub fn next_tic(&mut self) -> Option<TicCmd> {
         let cmds = self.next_tic_cmds()?;
         Some(
@@ -198,6 +276,17 @@ impl DemoPlayer {
     ///
     /// Returns one [`DemoTicCmd`] per present player. Returns `None` once all
     /// recorded tics have been consumed.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// use doom_types::TicCmd;
+/// let mut recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// recorder.record_tic(&TicCmd::default());
+/// let bytes = recorder.to_lmp();
+/// let mut player = DemoPlayer::from_lmp(&bytes).unwrap();
+/// assert!(player.next_tic_cmds().is_some());
+/// ```
     pub fn next_tic_cmds(&mut self) -> Option<Vec<DemoTicCmd>> {
         if self.current_tic >= self.tics.len() {
             return None;
@@ -208,12 +297,36 @@ impl DemoPlayer {
     }
 
     /// Look at the current tic's commands without advancing the cursor.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// use doom_types::TicCmd;
+/// let mut recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// recorder.record_tic(&TicCmd::default());
+/// let bytes = recorder.to_lmp();
+/// let player = DemoPlayer::from_lmp(&bytes).unwrap();
+/// assert!(player.peek_tic().is_some());
+/// ```
     #[must_use]
     pub fn peek_tic(&self) -> Option<&[DemoTicCmd]> {
         self.tics.get(self.current_tic).map(Vec::as_slice)
     }
 
     /// Rewind playback to the beginning.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
+/// use doom_types::TicCmd;
+/// let mut recorder = DemoRecorder::new(LmpHeader::new_singleplayer(3, 1, 1));
+/// recorder.record_tic(&TicCmd::default());
+/// let bytes = recorder.to_lmp();
+/// let mut player = DemoPlayer::from_lmp(&bytes).unwrap();
+/// player.next_tic();
+/// player.reset();
+/// assert_eq!(player.current_tic(), 0);
+/// ```
     pub const fn reset(&mut self) {
         self.current_tic = 0;
     }

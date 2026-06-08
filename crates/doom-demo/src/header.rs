@@ -30,6 +30,12 @@ pub const LMP_HEADER_SIZE: usize = 13;
 /// Byte 11: player3present (0 or 1)
 /// Byte 12: player4present (0 or 1)
 /// ```
+///
+/// ## Examples
+/// ```
+/// use doom_demo::LmpHeader;
+/// let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LmpHeader {
     /// Demo format version (`LMP_VERSION_1_9` = 109 for v1.9).
@@ -58,6 +64,13 @@ impl LmpHeader {
     /// Create a header for a standard single-player recording.
     ///
     /// Player 0 is present; all flags default to off.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::LmpHeader;
+/// let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// assert_eq!(header.skill, 3);
+/// ```
     #[must_use]
     pub const fn new_singleplayer(skill: u8, episode: u8, map: u8) -> Self {
         Self {
@@ -75,6 +88,14 @@ impl LmpHeader {
     }
 
     /// Serialize the header to its 13-byte wire representation.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::LmpHeader;
+/// let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// let bytes = header.to_bytes();
+/// assert_eq!(bytes.len(), 13);
+/// ```
     #[must_use]
     pub fn to_bytes(&self) -> Vec<u8> {
         vec![
@@ -97,6 +118,14 @@ impl LmpHeader {
     /// Parse a 13-byte header from the beginning of `data`.
     ///
     /// Returns `None` if the data is shorter than 13 bytes.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::LmpHeader;
+/// let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// let bytes = header.to_bytes();
+/// let parsed = LmpHeader::from_bytes(&bytes).unwrap();
+/// ```
     #[must_use]
     pub fn from_bytes(data: &[u8]) -> Option<Self> {
         if data.len() < LMP_HEADER_SIZE {
@@ -117,12 +146,26 @@ impl LmpHeader {
     }
 
     /// Count the number of present players.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::LmpHeader;
+/// let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// assert_eq!(header.num_players(), 1);
+/// ```
     #[must_use]
     pub fn num_players(&self) -> usize {
         self.players_present.iter().filter(|&&p| p).count()
     }
 
     /// Bytes per tic in the LMP stream: 4 bytes per present player.
+///
+/// ## Examples
+/// ```
+/// use doom_demo::LmpHeader;
+/// let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// assert_eq!(header.tic_size(), 4);
+/// ```
     #[must_use]
     pub fn tic_size(&self) -> usize {
         4 * self.num_players()
