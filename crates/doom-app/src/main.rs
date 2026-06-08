@@ -3076,30 +3076,56 @@ fn main() {
             let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
-            if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-                eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
+            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stderr());
 
-                let mut causes = err.chain().skip(1).peekable();
-                if causes.peek().is_some() {
-                    eprintln!("\n↳ {}:", "Reason".red().bold());
-                    for cause in causes {
-                        eprintln!("    {}", cause);
-                    }
-                }
-                eprintln!();
+            let mut table = comfy_table::Table::new();
+            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS);
+
+            if is_tty {
+                table.set_header(vec![
+                    comfy_table::Cell::new("❌ Engine Failure")
+                        .fg(comfy_table::Color::Red)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new(err.to_string())
+                        .fg(comfy_table::Color::Red),
+                ]);
             } else {
-                eprintln!("❌ Engine Failure: {}", err);
-
-                let mut causes = err.chain().skip(1).peekable();
-                if causes.peek().is_some() {
-                    eprintln!("↳ Reason:");
-                    for cause in causes {
-                        eprintln!("    {}", cause);
-                    }
-                }
-                eprintln!();
+                table.set_header(vec![
+                    comfy_table::Cell::new("Engine Failure"),
+                    comfy_table::Cell::new(err.to_string()),
+                ]);
             }
+
+            let mut causes = err.chain().skip(1).peekable();
+            if causes.peek().is_some() {
+                let mut reasons = String::new();
+                for (i, cause) in causes.enumerate() {
+                    if i > 0 {
+                        reasons.push('\n');
+                    }
+                    use std::fmt::Write;
+                    let _ = write!(&mut reasons, "• {}", cause);
+                }
+
+                if is_tty {
+                    table.add_row(vec![
+                        comfy_table::Cell::new("↳ Reason")
+                            .fg(comfy_table::Color::Yellow)
+                            .add_attribute(comfy_table::Attribute::Bold),
+                        comfy_table::Cell::new(reasons).fg(comfy_table::Color::Yellow),
+                    ]);
+                } else {
+                    table.add_row(vec![
+                        comfy_table::Cell::new("Reason"),
+                        comfy_table::Cell::new(reasons),
+                    ]);
+                }
+            }
+
+            eprintln!("\n{table}\n");
         }
         std::process::exit(1);
     }
