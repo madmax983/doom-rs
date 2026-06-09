@@ -11,7 +11,7 @@
 //! assert_eq!(patch.things[0].hit_points, Some(200));
 //! ```
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use crate::mobj::{MobjStateEntry, StateNum};
 use crate::mobjinfo::MobjInfo;
@@ -158,10 +158,10 @@ pub struct DehPatch {
     /// Text substitutions as structured `TextReplacement` entries.
     pub texts: Vec<TextReplacement>,
     /// String table overrides (`KEY -> value`).
-    pub strings: HashMap<String, String>,
+    pub strings: BTreeMap<String, String>,
     /// Code pointer overrides from `[CODEPTR]` section.
     /// Maps frame number -> action name string.
-    pub code_pointers: HashMap<usize, String>,
+    pub code_pointers: BTreeMap<usize, String>,
     /// Doom version from the header (if present).
     pub doom_version: Option<i32>,
     /// Patch format from the header (if present).
