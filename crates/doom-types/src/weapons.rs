@@ -1,7 +1,29 @@
-//! Weapon and ammo primitives.
+//! The Arsenal of the Marine: Weapon and Ammo primitives.
+//!
+//! This module defines the core abstractions for the player's arsenal. In the Doom engine,
+//! physical weapons (`WeaponType`) are completely decoupled from the logical ammunition
+//! pools (`AmmoType`) that fuel them. This allows multiple weapons (like the Pistol and
+//! Chaingun) to draw from the same shared pool of bullets, ensuring that resource management
+//! is centralized.
+//!
+//! It also defines the lookup table `WEAPON_AMMO` to map each weapon to its corresponding
+//! ammunition type, enabling generic weapon logic during gameplay.
+
 use crate::limits::NUM_WEAPONS;
 
-/// Weapon slots (index = selection key − 1 for keys 1-7; chainsaw = key 1 alt).
+/// Represents the specific physical weapon currently equipped or available.
+///
+/// The indices directly correlate with the keyboard selection keys (1-7), with the
+/// exception of the chainsaw, which shares the '1' key with the fist but sits at the
+/// end of the enumeration.
+///
+/// ## Examples
+/// ```
+/// use doom_types::weapons::WeaponType;
+///
+/// let w = WeaponType::Shotgun;
+/// assert_eq!(w as u8, 2);
+/// ```
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 #[repr(u8)]
 pub enum WeaponType {
@@ -26,7 +48,19 @@ pub enum WeaponType {
     SuperShotgun = 8,
 }
 
-/// Ammo pool indices.
+/// Represents the shared logical ammunition pools.
+///
+/// Instead of weapons tracking their own ammo, the player's inventory tracks these
+/// specific pools. Melee weapons explicitly use `AmmoType::None` to bypass ammo consumption
+/// checks entirely.
+///
+/// ## Examples
+/// ```
+/// use doom_types::weapons::AmmoType;
+///
+/// let a = AmmoType::Shells;
+/// assert_eq!(a as u8, 1);
+/// ```
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum AmmoType {
@@ -56,9 +90,22 @@ pub const WEAPON_AMMO: [AmmoType; NUM_WEAPONS] = [
 ];
 
 impl WeaponType {
-    /// Convert a weapon number (0–8) from `BT_WEAPONMASK` to a `WeaponType`.
+    /// Parses an integer weapon number (typically masked from the network `TicCmd`)
+    /// into a valid `WeaponType`.
     ///
-    /// Returns `None` for any out-of-range value.
+    /// This is crucial for safely converting unvalidated network input into safe enums.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_types::weapons::WeaponType;
+    ///
+    /// // Network sends us a '3'
+    /// let weapon = WeaponType::from_num(3);
+    /// assert_eq!(weapon, Some(WeaponType::Chaingun));
+    ///
+    /// // Invalid input gracefully fails
+    /// assert_eq!(WeaponType::from_num(99), None);
+    /// ```
     pub fn from_num(n: usize) -> Option<Self> {
         u8::try_from(n).ok().and_then(Self::from_repr)
     }
