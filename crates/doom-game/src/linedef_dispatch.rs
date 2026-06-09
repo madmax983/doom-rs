@@ -114,10 +114,13 @@ pub enum LinedefEffect {
     DoorLockedYellow,
     /// Blue-key locked door (open stay).
     DoorLockedBlueOpen,
+    DoorLockedBlueBlaze,
     /// Red-key locked door (open stay).
     DoorLockedRedOpen,
+    DoorLockedRedBlaze,
     /// Yellow-key locked door (open stay).
     DoorLockedYellowOpen,
+    DoorLockedYellowBlaze,
 
     // Floors
     /// Lower floor to lowest adjacent floor.
@@ -172,6 +175,7 @@ pub enum LinedefEffect {
     StairsBuild8,
     /// Build stairs with 16-unit turbo steps.
     StairsTurbo16,
+    StairsTurbo16Crush,
 
     // Lights
     /// Turn sector light to 255.
@@ -204,18 +208,21 @@ pub fn linedef_effect(special: u16) -> Option<LinedefEffect> {
     match special {
         // Doors
         1 | 4 | 29 | 63 | 90 => Some(DoorOpenWaitClose),
-        2 | 31 | 46 | 61 | 86 | 103 | 109 => Some(DoorOpen),
-        3 | 42 | 75 | 110 => Some(DoorClose),
+        2 | 31 | 46 | 61 | 86 | 103 => Some(DoorOpen),
+        3 | 42 | 75 => Some(DoorClose),
         16 | 76 => Some(DoorCloseWaitOpen),
         105 | 108 => Some(DoorBlazeOpenWaitClose),
-        106 => Some(DoorBlazeOpen),
-        107 => Some(DoorBlazeClose),
+        106 | 109 => Some(DoorBlazeOpen),
+        107 | 110 => Some(DoorBlazeClose),
         26 => Some(DoorLockedBlue),
         27 => Some(DoorLockedYellow),
         28 => Some(DoorLockedRed),
-        32 | 99 | 133 => Some(DoorLockedBlueOpen),
-        33 | 134 | 135 => Some(DoorLockedRedOpen),
-        34 | 136 | 137 => Some(DoorLockedYellowOpen),
+        32 | 99 => Some(DoorLockedBlueOpen),
+        133 => Some(DoorLockedBlueBlaze),
+        33 | 134 => Some(DoorLockedRedOpen),
+        135 => Some(DoorLockedRedBlaze),
+        34 | 136 => Some(DoorLockedYellowOpen),
+        137 => Some(DoorLockedYellowBlaze),
 
         // Floors
         5 | 24 | 64 | 91 | 101 => Some(FloorRaiseToLowestCeiling),
@@ -249,7 +256,8 @@ pub fn linedef_effect(special: u16) -> Option<LinedefEffect> {
         // Stairs
         7 => Some(StairsBuild8),
         8 => Some(StairsTurbo16),
-        100 | 127 => Some(StairsTurbo16),
+        127 => Some(StairsTurbo16),
+        100 => Some(StairsTurbo16Crush),
 
         // Lights
         12 | 81 => Some(LightTurnOn255),
@@ -349,7 +357,8 @@ fn dispatch_effect(
 
         // --- Locked doors ---
         DoorLockedBlue | DoorLockedRed | DoorLockedYellow | DoorLockedBlueOpen
-        | DoorLockedRedOpen | DoorLockedYellowOpen => {
+        | DoorLockedRedOpen | DoorLockedYellowOpen
+        | DoorLockedBlueBlaze | DoorLockedRedBlaze | DoorLockedYellowBlaze => {
             dispatch_locked_doors(gs, level, linedef_index, tag, effect, activator)
         }
 
@@ -380,7 +389,8 @@ fn dispatch_effect(
         }
 
         // --- Stairs ---
-        StairsBuild8 | StairsTurbo16 => dispatch_stairs(gs, level, tag, effect),
+        StairsBuild8 | StairsTurbo16
+        | StairsTurbo16Crush => dispatch_stairs(gs, level, tag, effect),
 
         // --- Lights ---
         LightTurnOn255 | LightTurnOnMaxNeighbor | LightTurnOff | LightStartBlinking => {
@@ -619,6 +629,49 @@ fn dispatch_locked_doors(
             );
             true
         }
+
+        DoorLockedBlueBlaze => {
+            if !check_locked_door_keys(gs, activator, LockedDoorColor::Blue) {
+                return false;
+            }
+            door_by_tag_or_back(
+                gs,
+                level,
+                linedef_index,
+                tag,
+                DoorBehavior::OpenStay,
+                DoorSpeed::Blazing,
+            );
+            true
+        }
+        DoorLockedRedBlaze => {
+            if !check_locked_door_keys(gs, activator, LockedDoorColor::Red) {
+                return false;
+            }
+            door_by_tag_or_back(
+                gs,
+                level,
+                linedef_index,
+                tag,
+                DoorBehavior::OpenStay,
+                DoorSpeed::Blazing,
+            );
+            true
+        }
+        DoorLockedYellowBlaze => {
+            if !check_locked_door_keys(gs, activator, LockedDoorColor::Yellow) {
+                return false;
+            }
+            door_by_tag_or_back(
+                gs,
+                level,
+                linedef_index,
+                tag,
+                DoorBehavior::OpenStay,
+                DoorSpeed::Blazing,
+            );
+            true
+        }
         _ => false,
     }
 }
@@ -765,6 +818,20 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                     idx,
                     crate::specials::StairType::Turbo16,
                     crate::state::CrushBehavior::NoCrush,
+                );
+            }
+            true
+        }
+
+        StairsTurbo16Crush => {
+            let indices = sectors_by_tag(level, tag);
+            for idx in indices {
+                crate::specials::ev_build_stairs(
+                    gs,
+                    level,
+                    idx,
+                    crate::specials::StairType::Turbo16,
+                    crate::state::CrushBehavior::Crush,
                 );
             }
             true
@@ -1615,14 +1682,14 @@ mod tests {
     }
 
     #[test]
-    fn effect_type_100_is_stairs_turbo16() {
-        assert_eq!(linedef_effect(100), Some(LinedefEffect::StairsTurbo16));
+    fn effect_type_100_is_stairs_turbo16crush() {
+        assert_eq!(linedef_effect(100), Some(LinedefEffect::StairsTurbo16Crush));
     }
 
     #[test]
     fn effect_multiple_types_map_to_door_open() {
         // Types 2, 31, 46, 61, 86, 103, 109 all map to DoorOpen.
-        for &special in &[2, 31, 46, 61, 86, 103, 109] {
+        for &special in &[2, 31, 46, 61, 86, 103] {
             assert_eq!(
                 linedef_effect(special),
                 Some(LinedefEffect::DoorOpen),

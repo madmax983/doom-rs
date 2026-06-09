@@ -111,7 +111,7 @@ pub use sound::{
 pub use sound_prop::{SoundPropagation, SoundRequest};
 pub use spawn::{GameMode, Skill, spawn_level_things};
 pub use specials::{
-    StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_ceiling_crush_and_raise,
+    StairType, USE_RANGE, ev_build_stairs, ev_ceiling_crush_and_raise,
     ev_ceiling_crush_raise_fast, ev_ceiling_crush_stop, ev_ceiling_lower_and_crush,
     ev_ceiling_lower_to_floor, ev_ceiling_raise_to_highest, ev_do_donut, ev_do_lift,
     ev_perpetual_platform, ev_teleport, highest_adjacent_ceiling, highest_adjacent_floor,

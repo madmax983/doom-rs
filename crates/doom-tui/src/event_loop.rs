@@ -66,9 +66,6 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 use thiserror::Error;
 
-#[cfg(test)]
-use std::sync::atomic::AtomicUsize;
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,7 +161,7 @@ fn run_blit_thread(
                                     past_first = true;
                                     continue;
                                 }
-                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_diff_option(ratatui::buffer::CellDiffOption::Skip));
                             }
                         }
                     }
@@ -217,7 +214,9 @@ struct ModifierSnapshot {
 }
 
 #[cfg(test)]
-static MODIFIER_SAMPLE_COUNT: AtomicUsize = AtomicUsize::new(0);
+thread_local! {
+    static MODIFIER_SAMPLE_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Error type
@@ -396,7 +395,7 @@ fn query_refresh_rate() -> u32 {
 
 fn sampled_modifier_snapshot() -> ModifierSnapshot {
     #[cfg(test)]
-    MODIFIER_SAMPLE_COUNT.fetch_add(1, Ordering::Relaxed);
+    MODIFIER_SAMPLE_COUNT.with(|c| c.set(c.get() + 1));
 
     #[cfg(target_os = "windows")]
     {
@@ -980,14 +979,14 @@ impl Drop for DoomEventLoop {
 mod tests {
     use super::*;
 
-    static MODIFIER_COUNT_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 
     fn reset_modifier_sample_count() {
-        MODIFIER_SAMPLE_COUNT.store(0, Ordering::Relaxed);
+        MODIFIER_SAMPLE_COUNT.with(|c| c.set(0));
     }
 
     fn modifier_sample_count() -> usize {
-        MODIFIER_SAMPLE_COUNT.load(Ordering::Relaxed)
+        MODIFIER_SAMPLE_COUNT.with(|c| c.get())
     }
 
     fn make_test_event_loop() -> DoomEventLoop {
@@ -1082,9 +1081,6 @@ mod tests {
     #[test]
     fn poll_events_does_not_sample_modifiers() {
         let mut loop_ = make_test_event_loop();
-        let _guard = MODIFIER_COUNT_LOCK
-            .lock()
-            .expect("value must exist in test");
         reset_modifier_sample_count();
 
         loop_.poll_events();
@@ -1097,9 +1093,6 @@ mod tests {
     #[test]
     fn drain_ready_tics_samples_modifiers_once_per_tic() {
         let mut loop_ = make_test_event_loop();
-        let _guard = MODIFIER_COUNT_LOCK
-            .lock()
-            .expect("value must exist in test");
         reset_modifier_sample_count();
 
         let mut app = CountingApp { ticks: 0 };
