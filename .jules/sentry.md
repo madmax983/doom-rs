@@ -56,3 +56,7 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+
+## 2024-05-20 - ArrayVec capacity edge cases
+**Learning:** Fixed-size array buffers using a length counter (like `SpriteClipHistory`) need explicit tests for when items are pushed beyond their capacity limit to ensure they correctly drop elements rather than panicking or corrupting memory.
+**Action:** Always write a specific test case that deliberately exceeds the maximum capacity of manual `[T; N]` buffers to ensure boundary conditions are safe.
