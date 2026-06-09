@@ -164,7 +164,9 @@ fn run_blit_thread(
                                     past_first = true;
                                     continue;
                                 }
-                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                                f.buffer_mut().cell_mut((x, y)).map(|c| {
+                                    c.set_diff_option(ratatui::buffer::CellDiffOption::Skip)
+                                });
                             }
                         }
                     }
@@ -1151,5 +1153,56 @@ mod tests {
         loop_.tick_turn_based(&mut app);
         assert_eq!(app.ticks, 1);
         assert!(!loop_.turn_waiting_for_release);
+    }
+
+    #[test]
+    fn effective_renderer_mode_falls_back_when_unsupported() {
+        let mut loop_ = make_test_event_loop();
+
+        // Picker is initialized with Halfblocks by default in the test setup.
+        loop_.set_renderer_mode(RendererMode::Sixel);
+        assert_eq!(loop_.effective_renderer_mode(), RendererMode::Halfblocks);
+
+        loop_.set_renderer_mode(RendererMode::Kitty);
+        assert_eq!(loop_.effective_renderer_mode(), RendererMode::Halfblocks);
+
+        loop_.set_renderer_mode(RendererMode::Iterm2);
+        assert_eq!(loop_.effective_renderer_mode(), RendererMode::Halfblocks);
+
+        // If we set a char map, it should stay that way
+        loop_.set_renderer_mode(RendererMode::CharMap(CharSet::Ascii));
+        assert_eq!(
+            loop_.effective_renderer_mode(),
+            RendererMode::CharMap(CharSet::Ascii)
+        );
+    }
+
+    #[test]
+    fn set_graphics_protocol_logic() {
+        let mut loop_ = make_test_event_loop();
+        // Halfblocks is default picker. So enabling should set Halfblocks.
+        loop_.set_graphics_protocol(true);
+        assert_eq!(loop_.renderer_mode, RendererMode::Halfblocks);
+
+        // Disabling sets to Halfblocks.
+        loop_.set_graphics_protocol(false);
+        assert_eq!(loop_.renderer_mode, RendererMode::Halfblocks);
+    }
+
+    #[test]
+    fn toggle_graphics_protocol_logic() {
+        let mut loop_ = make_test_event_loop();
+
+        // Since picker defaults to Halfblocks, toggling from halfblocks shouldn't change mode and return false
+        assert_eq!(loop_.renderer_mode, RendererMode::Halfblocks);
+        assert!(!loop_.toggle_graphics_protocol());
+        assert_eq!(loop_.renderer_mode, RendererMode::Halfblocks);
+
+        // Manually setting to a gfx mode
+        loop_.set_renderer_mode(RendererMode::Sixel);
+
+        // Toggling from a gfx mode should revert to Halfblocks and return false
+        assert!(!loop_.toggle_graphics_protocol());
+        assert_eq!(loop_.renderer_mode, RendererMode::Halfblocks);
     }
 }
