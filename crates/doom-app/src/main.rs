@@ -2176,6 +2176,333 @@ fn handle_export(
     Ok(true)
 }
 
+fn handle_tactical_analysis(args: &Args, level: &Level, warp_str: &str) -> Result<()> {
+    let graph = doom_map::SectorGraph::build(level);
+    let analyzer = doom_map::MapAnalyzer::new(&graph);
+    let chokepoints = analyzer.chokepoints();
+    let areas = analyzer.isolated_areas();
+
+    if args.json {
+        // ⚡ Bolt Optimization:
+        // Pre-formats the JSON array inline directly into a single `String` buffer.
+        // This completely eliminates intermediate `.collect::<Vec<_>>()` chains
+        // and intermediate inner string allocations that previously happened per-area,
+        // saving ~3 heap allocations per JSON generation loop.
+        let mut chokepoints_json = String::new();
+        chokepoints_json.push('[');
+        for (i, s) in chokepoints.iter().enumerate() {
+            if i > 0 {
+                chokepoints_json.push_str(", ");
+            }
+            chokepoints_json.push_str(&s.to_string());
+        }
+        chokepoints_json.push(']');
+        let mut areas_json = String::new();
+        areas_json.push('[');
+        for (i, a) in areas.iter().enumerate() {
+            if i > 0 {
+                areas_json.push_str(", ");
+            }
+            areas_json.push('[');
+            for (j, s) in a.iter().enumerate() {
+                if j > 0 {
+                    areas_json.push_str(", ");
+                }
+                areas_json.push_str(&s.to_string());
+            }
+            areas_json.push(']');
+        }
+        areas_json.push(']');
+
+        let json_data = format!(
+            r#"{{
+  "map": "{}",
+  "chokepoints": {},
+  "isolated_areas": {}
+}}"#,
+            warp_str, chokepoints_json, areas_json
+        );
+        println!("{json_data}");
+    } else {
+        use crossterm::style::Stylize;
+        let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+        if is_tty {
+            println!(
+                "{} {} tactical analysis for {}",
+                "🌟".green(),
+                "Completed".green().bold(),
+                warp_str.cyan()
+            );
+        } else {
+            println!("Completed tactical analysis for {}", warp_str);
+        }
+
+        let mut chokepoints_str = String::new();
+        if chokepoints.is_empty() {
+            chokepoints_str.push_str("None");
+        } else {
+            for (i, s) in chokepoints.iter().enumerate() {
+                if i > 0 {
+                    chokepoints_str.push_str(", ");
+                }
+                chokepoints_str.push_str(&s.to_string());
+            }
+        }
+
+        let mut table = comfy_table::Table::new();
+        table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+        table
+            .load_preset(comfy_table::presets::UTF8_FULL)
+            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+        if is_tty {
+            table.set_header(vec![
+                comfy_table::Cell::new("Feature")
+                    .fg(comfy_table::Color::Cyan)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new("Data")
+                    .fg(comfy_table::Color::Cyan)
+                    .add_attribute(comfy_table::Attribute::Bold),
+            ]);
+            table.add_row(vec![
+                comfy_table::Cell::new("🗺️  Chokepoints"),
+                comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
+            ]);
+            for (i, area) in areas.iter().enumerate() {
+                let mut area_str = String::new();
+                for (j, s) in area.iter().enumerate() {
+                    if j > 0 {
+                        area_str.push_str(", ");
+                    }
+                    area_str.push_str(&s.to_string());
+                }
+                table.add_row(vec![
+                    comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
+                    comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
+                ]);
+            }
+        } else {
+            table.set_header(vec![
+                comfy_table::Cell::new("Feature"),
+                comfy_table::Cell::new("Data"),
+            ]);
+            table.add_row(vec![
+                comfy_table::Cell::new("🗺️  Chokepoints"),
+                comfy_table::Cell::new(&chokepoints_str),
+            ]);
+            for (i, area) in areas.iter().enumerate() {
+                let mut area_str = String::new();
+                for (j, s) in area.iter().enumerate() {
+                    if j > 0 {
+                        area_str.push_str(", ");
+                    }
+                    area_str.push_str(&s.to_string());
+                }
+                table.add_row(vec![
+                    comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
+                    comfy_table::Cell::new(area_str),
+                ]);
+            }
+        }
+        println!("{table}");
+    }
+    Ok(())
+}
+
+fn handle_pathfinding(args: &Args, level: &Level, path_str: &str) -> Result<()> {
+    use crossterm::style::Stylize;
+    let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+    // Avoids an unnecessary heap allocation from .collect::<Vec<_>>()
+    if let Some((start_str, end_str)) = path_str.split_once(',') {
+        if let (Ok(start), Ok(end)) = (start_str.parse::<usize>(), end_str.parse::<usize>()) {
+            let graph = doom_map::SectorGraph::build(level);
+            if let Some(path) = graph.shortest_path(start, end) {
+                if args.json {
+                    let mut path_inner = String::new();
+                    for (j, s) in path.iter().enumerate() {
+                        if j > 0 {
+                            path_inner.push_str(", ");
+                        }
+                        path_inner.push_str(&s.to_string());
+                    }
+                    let path_json = format!("[{}]", path_inner);
+                    let json_data = format!(r#"{{ "path": {} }}"#, path_json);
+                    println!("{json_data}");
+                } else {
+                    let mut path_str = String::new();
+                    for (j, s) in path.iter().enumerate() {
+                        if j > 0 {
+                            path_str.push_str(" ➔ ");
+                        }
+                        path_str.push_str(&s.to_string());
+                    }
+                    if is_tty {
+                        println!(
+                            "{} {} {}",
+                            "🗺️ ".green(),
+                            "Path found:".green().bold(),
+                            path_str.cyan()
+                        );
+                    } else {
+                        println!("Path found: {}", path_str);
+                    }
+                }
+            } else {
+                if args.json {
+                    let msg = format!("No path found between sector {} and sector {}", start, end);
+                    let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                    println!("{json_data}");
+                } else {
+                    if is_tty {
+                        println!(
+                            "{} {}",
+                            "❌".yellow(),
+                            format!("No path found between sector {} and sector {}", start, end)
+                                .yellow()
+                                .bold()
+                        );
+                    } else {
+                        println!("No path found between sector {} and sector {}", start, end);
+                    }
+                }
+            }
+        } else {
+            let msg = "Invalid sector indices. Please provide two integers separated by a comma.";
+            if args.json {
+                let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                println!("{json_data}");
+            } else {
+                if is_tty {
+                    println!("{} {}", "❌".yellow(), msg.yellow().bold());
+                } else {
+                    println!("{}", msg);
+                }
+            }
+        }
+    } else {
+        let msg = "Invalid format. Please use START,END (e.g. 0,5).";
+        if args.json {
+            let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+            println!("{json_data}");
+        } else {
+            if is_tty {
+                println!("{} {}", "❌".yellow(), msg.yellow().bold());
+            } else {
+                println!("{}", msg);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn handle_map_stats(args: &Args, level: &Level, warp_str: &str) -> Result<()> {
+    let mut gs = GameState::new(warp_str);
+    doom_game::spawn_level_things(
+        &mut gs,
+        level,
+        Skill::Medium,
+        doom_game::GameMode::SinglePlayer,
+    );
+    let stats = gs.compute_intermission_stats();
+
+    if args.json {
+        let json_data = format!(
+            r#"{{
+  "map": "{}",
+  "total_kills": {},
+  "total_items": {},
+  "total_secrets": {},
+  "par_time_tics": {}
+}}"#,
+            warp_str,
+            stats.total_kills,
+            stats.total_items,
+            stats.total_secrets,
+            stats.par_time_tics
+        );
+        println!("{json_data}");
+    } else {
+        let par_time_mins = stats.par_time_tics / 35 / 60;
+        let par_time_secs = (stats.par_time_tics / 35) % 60;
+        let par_time_formatted = format!(
+            "{:02}:{:02} ({} tics)",
+            par_time_mins, par_time_secs, stats.par_time_tics
+        );
+
+        let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+        let mut table = comfy_table::Table::new();
+        table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+        table
+            .load_preset(comfy_table::presets::UTF8_FULL)
+            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+        if is_tty {
+            table
+                .set_header(vec![
+                    comfy_table::Cell::new("Statistic")
+                        .fg(comfy_table::Color::Cyan)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new("Value")
+                        .fg(comfy_table::Color::Cyan)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("🗺️  Map"),
+                    comfy_table::Cell::new(warp_str.to_string()).fg(comfy_table::Color::Yellow),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("💀 Total Kills"),
+                    comfy_table::Cell::new(stats.total_kills.to_string())
+                        .fg(comfy_table::Color::Yellow),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("📦 Total Items"),
+                    comfy_table::Cell::new(stats.total_items.to_string())
+                        .fg(comfy_table::Color::Green),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("🕵️  Total Secrets"),
+                    comfy_table::Cell::new(stats.total_secrets.to_string())
+                        .fg(comfy_table::Color::Magenta),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("⏱️  Par Time"),
+                    comfy_table::Cell::new(par_time_formatted).fg(comfy_table::Color::Cyan),
+                ]);
+        } else {
+            table
+                .set_header(vec![
+                    comfy_table::Cell::new("Statistic"),
+                    comfy_table::Cell::new("Value"),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("Map"),
+                    comfy_table::Cell::new(warp_str.to_string()),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("Total Kills"),
+                    comfy_table::Cell::new(stats.total_kills.to_string()),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("Total Items"),
+                    comfy_table::Cell::new(stats.total_items.to_string()),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("Total Secrets"),
+                    comfy_table::Cell::new(stats.total_secrets.to_string()),
+                ])
+                .add_row(vec![
+                    comfy_table::Cell::new("Par Time"),
+                    comfy_table::Cell::new(par_time_formatted),
+                ]);
+        }
+        println!("{table}");
+    }
+    Ok(())
+}
+
 fn run_doom(args: Args) -> Result<()> {
     // Initialize trig tables (required for sin/cos in the game simulation).
     // SAFETY: called exactly once at startup, single-threaded, before any
@@ -2393,335 +2720,15 @@ fn run_doom(args: Args) -> Result<()> {
     }
 
     if args.analyze {
-        let graph = doom_map::SectorGraph::build(&level);
-        let analyzer = doom_map::MapAnalyzer::new(&graph);
-        let chokepoints = analyzer.chokepoints();
-        let areas = analyzer.isolated_areas();
-
-        if args.json {
-            // ⚡ Bolt Optimization:
-            // Formats the JSON array inline directly into a single `String` buffer.
-            // This completely eliminates intermediate `.collect::<Vec<_>>()` chains
-            // and intermediate inner string allocations that previously happened per-area,
-            // saving ~3 heap allocations per JSON generation loop.
-            let mut chokepoints_json = String::new();
-            chokepoints_json.push('[');
-            for (i, s) in chokepoints.iter().enumerate() {
-                if i > 0 {
-                    chokepoints_json.push_str(", ");
-                }
-                chokepoints_json.push_str(&s.to_string());
-            }
-            chokepoints_json.push(']');
-            let mut areas_json = String::new();
-            areas_json.push('[');
-            for (i, a) in areas.iter().enumerate() {
-                if i > 0 {
-                    areas_json.push_str(", ");
-                }
-                areas_json.push('[');
-                for (j, s) in a.iter().enumerate() {
-                    if j > 0 {
-                        areas_json.push_str(", ");
-                    }
-                    areas_json.push_str(&s.to_string());
-                }
-                areas_json.push(']');
-            }
-            areas_json.push(']');
-
-            let json_data = format!(
-                r#"{{
-  "map": "{}",
-  "chokepoints": {},
-  "isolated_areas": {}
-}}"#,
-                warp_str, chokepoints_json, areas_json
-            );
-            println!("{json_data}");
-        } else {
-            use crossterm::style::Stylize;
-            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-            if is_tty {
-                println!(
-                    "{} {} tactical analysis for {}",
-                    "🌟".green(),
-                    "Completed".green().bold(),
-                    warp_str.cyan()
-                );
-            } else {
-                println!("Completed tactical analysis for {}", warp_str);
-            }
-
-            let mut chokepoints_str = String::new();
-            if chokepoints.is_empty() {
-                chokepoints_str.push_str("None");
-            } else {
-                for (i, s) in chokepoints.iter().enumerate() {
-                    if i > 0 {
-                        chokepoints_str.push_str(", ");
-                    }
-                    chokepoints_str.push_str(&s.to_string());
-                }
-            }
-
-            let mut table = comfy_table::Table::new();
-            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-            table
-                .load_preset(comfy_table::presets::UTF8_FULL)
-                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
-                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-
-            if is_tty {
-                table.set_header(vec![
-                    comfy_table::Cell::new("Feature")
-                        .fg(comfy_table::Color::Cyan)
-                        .add_attribute(comfy_table::Attribute::Bold),
-                    comfy_table::Cell::new("Data")
-                        .fg(comfy_table::Color::Cyan)
-                        .add_attribute(comfy_table::Attribute::Bold),
-                ]);
-                table.add_row(vec![
-                    comfy_table::Cell::new("🗺️  Chokepoints"),
-                    comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
-                ]);
-                for (i, area) in areas.iter().enumerate() {
-                    let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
-                        if j > 0 {
-                            area_str.push_str(", ");
-                        }
-                        area_str.push_str(&s.to_string());
-                    }
-                    table.add_row(vec![
-                        comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
-                        comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
-                    ]);
-                }
-            } else {
-                table.set_header(vec![
-                    comfy_table::Cell::new("Feature"),
-                    comfy_table::Cell::new("Data"),
-                ]);
-                table.add_row(vec![
-                    comfy_table::Cell::new("🗺️  Chokepoints"),
-                    comfy_table::Cell::new(&chokepoints_str),
-                ]);
-                for (i, area) in areas.iter().enumerate() {
-                    let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
-                        if j > 0 {
-                            area_str.push_str(", ");
-                        }
-                        area_str.push_str(&s.to_string());
-                    }
-                    table.add_row(vec![
-                        comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
-                        comfy_table::Cell::new(area_str),
-                    ]);
-                }
-            }
-            println!("{table}");
-        }
-        return Ok(());
+        return handle_tactical_analysis(&args, &level, warp_str);
     }
 
     if let Some(path_str) = &args.pathfind {
-        use crossterm::style::Stylize;
-        let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-        // Avoids an unnecessary heap allocation from .collect::<Vec<_>>()
-        if let Some((start_str, end_str)) = path_str.split_once(',') {
-            if let (Ok(start), Ok(end)) = (start_str.parse::<usize>(), end_str.parse::<usize>()) {
-                let graph = doom_map::SectorGraph::build(&level);
-                if let Some(path) = graph.shortest_path(start, end) {
-                    if args.json {
-                        let mut path_inner = String::new();
-                        for (j, s) in path.iter().enumerate() {
-                            if j > 0 {
-                                path_inner.push_str(", ");
-                            }
-                            path_inner.push_str(&s.to_string());
-                        }
-                        let path_json = format!("[{}]", path_inner);
-                        let json_data = format!(r#"{{ "path": {} }}"#, path_json);
-                        println!("{json_data}");
-                    } else {
-                        let mut path_str = String::new();
-                        for (j, s) in path.iter().enumerate() {
-                            if j > 0 {
-                                path_str.push_str(" ➔ ");
-                            }
-                            path_str.push_str(&s.to_string());
-                        }
-                        if is_tty {
-                            println!(
-                                "{} {} {}",
-                                "🗺️ ".green(),
-                                "Path found:".green().bold(),
-                                path_str.cyan()
-                            );
-                        } else {
-                            println!("Path found: {}", path_str);
-                        }
-                    }
-                } else {
-                    if args.json {
-                        let msg =
-                            format!("No path found between sector {} and sector {}", start, end);
-                        let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
-                        println!("{json_data}");
-                    } else {
-                        if is_tty {
-                            println!(
-                                "{} {}",
-                                "❌".yellow(),
-                                format!(
-                                    "No path found between sector {} and sector {}",
-                                    start, end
-                                )
-                                .yellow()
-                                .bold()
-                            );
-                        } else {
-                            println!("No path found between sector {} and sector {}", start, end);
-                        }
-                    }
-                }
-            } else {
-                let msg =
-                    "Invalid sector indices. Please provide two integers separated by a comma.";
-                if args.json {
-                    let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
-                    println!("{json_data}");
-                } else {
-                    if is_tty {
-                        println!("{} {}", "❌".yellow(), msg.yellow().bold());
-                    } else {
-                        println!("{}", msg);
-                    }
-                }
-            }
-        } else {
-            let msg = "Invalid format. Please use START,END (e.g. 0,5).";
-            if args.json {
-                let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
-                println!("{json_data}");
-            } else {
-                if is_tty {
-                    println!("{} {}", "❌".yellow(), msg.yellow().bold());
-                } else {
-                    println!("{}", msg);
-                }
-            }
-        }
-        return Ok(());
+        return handle_pathfinding(&args, &level, path_str);
     }
 
     if args.map_stats {
-        let mut gs = GameState::new(warp_str);
-        doom_game::spawn_level_things(
-            &mut gs,
-            &level,
-            Skill::Medium,
-            doom_game::GameMode::SinglePlayer,
-        );
-        let stats = gs.compute_intermission_stats();
-
-        if args.json {
-            let json_data = format!(
-                r#"{{
-  "map": "{}",
-  "total_kills": {},
-  "total_items": {},
-  "total_secrets": {},
-  "par_time_tics": {}
-}}"#,
-                warp_str,
-                stats.total_kills,
-                stats.total_items,
-                stats.total_secrets,
-                stats.par_time_tics
-            );
-            println!("{json_data}");
-        } else {
-            let par_time_mins = stats.par_time_tics / 35 / 60;
-            let par_time_secs = (stats.par_time_tics / 35) % 60;
-            let par_time_formatted = format!(
-                "{:02}:{:02} ({} tics)",
-                par_time_mins, par_time_secs, stats.par_time_tics
-            );
-
-            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-            let mut table = comfy_table::Table::new();
-            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-            table
-                .load_preset(comfy_table::presets::UTF8_FULL)
-                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
-                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-
-            if is_tty {
-                table
-                    .set_header(vec![
-                        comfy_table::Cell::new("Statistic")
-                            .fg(comfy_table::Color::Cyan)
-                            .add_attribute(comfy_table::Attribute::Bold),
-                        comfy_table::Cell::new("Value")
-                            .fg(comfy_table::Color::Cyan)
-                            .add_attribute(comfy_table::Attribute::Bold),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("🗺️  Map"),
-                        comfy_table::Cell::new(warp_str.to_string()).fg(comfy_table::Color::Yellow),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("💀 Total Kills"),
-                        comfy_table::Cell::new(stats.total_kills.to_string())
-                            .fg(comfy_table::Color::Yellow),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("📦 Total Items"),
-                        comfy_table::Cell::new(stats.total_items.to_string())
-                            .fg(comfy_table::Color::Green),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("🕵️  Total Secrets"),
-                        comfy_table::Cell::new(stats.total_secrets.to_string())
-                            .fg(comfy_table::Color::Magenta),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("⏱️  Par Time"),
-                        comfy_table::Cell::new(par_time_formatted).fg(comfy_table::Color::Cyan),
-                    ]);
-            } else {
-                table
-                    .set_header(vec![
-                        comfy_table::Cell::new("Statistic"),
-                        comfy_table::Cell::new("Value"),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Map"),
-                        comfy_table::Cell::new(warp_str.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Total Kills"),
-                        comfy_table::Cell::new(stats.total_kills.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Total Items"),
-                        comfy_table::Cell::new(stats.total_items.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Total Secrets"),
-                        comfy_table::Cell::new(stats.total_secrets.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Par Time"),
-                        comfy_table::Cell::new(par_time_formatted),
-                    ]);
-            }
-            println!("{table}");
-        }
-        return Ok(());
+        return handle_map_stats(&args, &level, warp_str);
     }
 
     // Create game state and spawn ALL level things (player, monsters, items, keys).
