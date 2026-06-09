@@ -451,4 +451,30 @@ mod tests {
             "prediction should fail to find history beyond max depth"
         );
     }
+
+    #[test]
+    fn receive_packet_preserves_earlier_rollback_tic() {
+        let mut rm: RollbackManager<u32> = RollbackManager::new(0);
+
+        // This simulates a state where we already have a pending rollback for an earlier tic,
+        // and we receive another mispredicted packet for a later tic.
+        // It ensures the match block logic in `receive_packet` correctly keeps the earlier tic:
+        // match self.rollback_tic {
+        //     Some(existing) if existing <= tic => {}
+        //     _ => self.rollback_tic = Some(tic),
+        // }
+
+        rm.record_local_input(10, cmd(50));
+        let mut auth_cmds = [TicCmd::default(); MAX_PLAYERS];
+        auth_cmds[0] = cmd(99);
+        let pkt = make_auth_packet(10, auth_cmds);
+
+        // Let's set a pending rollback
+        rm.rollback_tic = Some(5);
+
+        rm.receive_packet(&pkt);
+
+        // Since the existing rollback (5) is <= the new mispredicted tic (10), it should keep 5.
+        assert_eq!(rm.needs_rollback(), Some(5));
+    }
 }

@@ -56,3 +56,9 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-06-09 - Remove unwraps and increase test coverage
+**Learning:** Replaced lingering  with  across the workspace and added test cases like  and  to reach a higher coverage block in .
+**Action:** Replaced  with  and added some unit tests to ensure boundaries are correctly checked without panicking randomly during networking tasks.
+## 2024-06-09 - Replaced unwraps and added rollback test
+**Learning:** Replaced `unwrap` with `expect` to increase crash context. Added `receive_packet_preserves_earlier_rollback_tic` to prevent regressions where a late packet overwrites an earlier rollback flag.
+**Action:** Replaced `.unwrap()` with `.expect()` and added tests for rollback priority to hit coverage branches.

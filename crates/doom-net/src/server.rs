@@ -81,7 +81,7 @@ impl RelayServer {
     /// use doom_net::{RelayServer, NetConfig};
     ///
     /// // Bind the server to an OS-assigned port on localhost.
-    /// let server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).unwrap();
+    /// let server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).expect("Network operation should succeed");
     /// assert_eq!(server.connected_count(), 0);
     /// ```
     pub fn bind(addr: &str, config: NetConfig) -> io::Result<Self> {
@@ -104,8 +104,8 @@ impl RelayServer {
     /// use doom_net::{RelayServer, NetConfig};
     /// use std::net::SocketAddr;
     ///
-    /// let mut server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).unwrap();
-    /// let client_addr: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+    /// let mut server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).expect("Network operation should succeed");
+    /// let client_addr: SocketAddr = "127.0.0.1:12345".parse().expect("Network operation should succeed");
     ///
     /// // The server manually accepts the connection and returns the slot
     /// let slot = server.accept_connection(client_addr);
@@ -158,7 +158,7 @@ impl RelayServer {
     /// use doom_net::{RelayServer, NetConfig, TicPacket};
     /// use doom_types::TicCmd;
     ///
-    /// let mut server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).unwrap();
+    /// let mut server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).expect("Network operation should succeed");
     ///
     /// let packet = TicPacket {
     ///     tic: 10,
@@ -169,7 +169,7 @@ impl RelayServer {
     /// };
     ///
     /// // Broadcast to everyone except the sender (slot 0)
-    /// server.broadcast_packet(&packet, Some(0)).unwrap();
+    /// server.broadcast_packet(&packet, Some(0)).expect("Network operation should succeed");
     /// ```
     pub fn broadcast_packet(
         &mut self,
@@ -219,10 +219,10 @@ impl RelayServer {
     /// ```
     /// use doom_net::{RelayServer, NetConfig};
     ///
-    /// let mut server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).unwrap();
+    /// let mut server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).expect("Network operation should succeed");
     ///
     /// // Receive incoming packets. Will return None if no traffic exists.
-    /// let result = server.poll_once().unwrap();
+    /// let result = server.poll_once().expect("Network operation should succeed");
     /// assert!(result.is_none());
     /// ```
     pub fn poll_once(&mut self) -> io::Result<Option<(TicPacket, u8)>> {
@@ -370,6 +370,24 @@ mod tests {
             server.accept_connection(overflow),
             None,
             "5th connection must be rejected when max_players=4"
+        );
+    }
+
+    #[test]
+    fn accept_connection_returns_existing_slot() {
+        let mut server =
+            RelayServer::bind("127.0.0.1:0", test_config()).expect("value must exist in test");
+
+        let addr: SocketAddr = "127.0.0.1:10001".parse().expect("value must exist in test");
+
+        let slot1 = server.accept_connection(addr);
+        assert_eq!(slot1, Some(0));
+
+        let slot2 = server.accept_connection(addr);
+        assert_eq!(
+            slot2,
+            Some(0),
+            "re-connecting from the same address should return the existing slot"
         );
     }
 
