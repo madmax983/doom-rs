@@ -69,6 +69,7 @@ pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_
 pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
+pub use doom_types::Skill;
 pub use face::{FaceDir, FaceKind, FaceState, face_patch_name, health_tier};
 pub use intermission::{IntermissionStats, par_time};
 pub use linedef_dispatch::{
@@ -109,7 +110,7 @@ pub use sound::{
     monster_should_wake, p_noise_alert,
 };
 pub use sound_prop::{SoundPropagation, SoundRequest};
-pub use spawn::{GameMode, Skill, spawn_level_things};
+pub use spawn::{GameMode, spawn_level_things};
 pub use specials::{
     StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_ceiling_crush_and_raise,
     ev_ceiling_crush_raise_fast, ev_ceiling_crush_stop, ev_ceiling_lower_and_crush,

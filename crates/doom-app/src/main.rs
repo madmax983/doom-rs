@@ -41,7 +41,7 @@ use doom_game::LockedDoorColor;
 use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
 use doom_game::{
-    AutomapState, GamePhase, GamePhaseController, GameState, Skill, TitleScreen, init_conveyors,
+    AutomapState, GamePhase, GamePhaseController, GameState, TitleScreen, init_conveyors,
     init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
@@ -57,6 +57,7 @@ use doom_renderer::{
     render_level_with_view_height_and_extra_light_and_fixed_colormap, thing_sprite_prefix,
 };
 use doom_tui::{DoomApp, DoomEventLoop, RendererMode, TicInput};
+use doom_types::Skill;
 use doom_types::weapons::WeaponType;
 use doom_types::{Bam, CompatibilityProfile, Fixed16_16};
 use doom_wad::WadStack;
