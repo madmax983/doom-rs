@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**[Refactored repeated sector extraction boilerplate]
+**Learning:** The expression `let Some(sector_idx) = level.sidedefs.get(left_sidedef as usize).map(|sd| sd.sector as usize) else { return; };` was repeated 16 times in a single match block in `activate_linedef` sub-functions.
+**Action:** Extract repeated structural queries into small, named helper functions (like `get_back_sector(level, left_sidedef)`) to dramatically reduce visual noise and improve readability.
