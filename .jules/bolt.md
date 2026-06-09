@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**[Arc<str> for HUD level_name]
+**Learning:** Attempted to use `Arc<str>` instead of `String` for `level_name` in `CogmindHud` to avoid per-frame cloning, but it fought the borrow checker and caused mismatched type errors (`String` vs `Arc<str>`) that cascaded through the app.
+**Action:** Reverted the change. Next time, carefully consider the blast radius of changing core struct field types before committing to `Arc`, as it may require extensive refactoring across the codebase.
