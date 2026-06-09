@@ -7,6 +7,7 @@
 //! their parsed map matches their intentions.
 
 use crate::Level;
+use std::fmt::Write;
 
 /// Exports a `Level` to an SVG XML string.
 ///
@@ -110,28 +111,25 @@ pub fn export_map_to_svg(level: &Level) -> String {
     let v_min_y = min_y as i32 - pad;
 
     let mut svg = String::new();
-    svg.push_str(&format!(
-        r#"<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" style="background-color: #333;">
-"#
-    ));
+    let _ = writeln!(
+        svg, r#"<svg viewBox="0 0 {width} {height}" xmlns="http://www.w3.org/2000/svg" style="background-color: #333;">"#);
     // Doom's Y axis points UP, SVG's Y axis points DOWN.
     // We scale by (1, -1) and translate to keep things in the view box.
-    svg.push_str(&format!(
-        r#"<g transform="translate(0, {height}) scale(1, -1) translate({trans_x}, {trans_y})">
-"#,
+    let _ = writeln!(
+        svg, r#"<g transform="translate(0, {height}) scale(1, -1) translate({trans_x}, {trans_y})">"#,
         trans_x = -v_min_x,
         trans_y = -v_min_y
-    ));
+    );
 
     // Draw two-sided linedefs first (so they are under one-sided)
     for ld in &level.linedefs {
         if ld.is_two_sided() {
             let v1 = &level.vertexes[ld.from_vertex as usize];
             let v2 = &level.vertexes[ld.to_vertex as usize];
-            svg.push_str(&format!(
-                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#888\" stroke-width=\"2\" />\n",
+            let _ = writeln!(
+                svg, "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#888\" stroke-width=\"2\" />",
                 v1.x, v1.y, v2.x, v2.y
-            ));
+            );
         }
     }
 
@@ -140,19 +138,19 @@ pub fn export_map_to_svg(level: &Level) -> String {
         if !ld.is_two_sided() {
             let v1 = &level.vertexes[ld.from_vertex as usize];
             let v2 = &level.vertexes[ld.to_vertex as usize];
-            svg.push_str(&format!(
-                "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#fff\" stroke-width=\"4\" />\n",
+            let _ = writeln!(
+                svg, "<line x1=\"{}\" y1=\"{}\" x2=\"{}\" y2=\"{}\" stroke=\"#fff\" stroke-width=\"4\" />",
                 v1.x, v1.y, v2.x, v2.y
-            ));
+            );
         }
     }
 
     // Draw things
     for thing in &level.things {
-        svg.push_str(&format!(
-            "<circle cx=\"{}\" cy=\"{}\" r=\"16\" fill=\"#f55\" />\n",
+        let _ = writeln!(
+            svg, "<circle cx=\"{}\" cy=\"{}\" r=\"16\" fill=\"#f55\" />",
             thing.x, thing.y
-        ));
+        );
     }
 
     svg.push_str("</g>\n</svg>\n");

@@ -7,6 +7,7 @@
 
 use crate::Level;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt::Write;
 
 /// A topological graph representing the connectivity of sectors in a map.
 /// Sectors are nodes, and two-sided linedefs acting as portals are edges.
@@ -102,13 +103,13 @@ impl SectorGraph {
 
         for (&node, neighbors) in &self.adjacency_list {
             if neighbors.is_empty() {
-                dot.push_str(&format!("    {};\n", node));
+                let _ = writeln!(dot, "    {};", node);
             } else {
                 for &neighbor in neighbors {
                     // To avoid duplicating undirected edges in DOT, we only add the edge
                     // if the source node index is less than the target node index.
                     if node < neighbor {
-                        dot.push_str(&format!("    {} -> {};\n", node, neighbor));
+                        let _ = writeln!(dot, "    {} -> {};", node, neighbor);
                     }
                 }
             }

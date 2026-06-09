@@ -25,6 +25,7 @@
 //!
 //! Usage: doom-app --iwad doom1.wad [--pwad mod.wad] [--warp E1M1]
 
+use std::fmt::Write;
 mod audio_system;
 mod cheats;
 mod cogmind;
@@ -3070,7 +3071,7 @@ fn main() {
             if causes.peek().is_some() {
                 error_msg.push_str(" \nReason:\n");
                 for cause in causes {
-                    error_msg.push_str(&format!("    {}\n", cause));
+                    let _ = writeln!(error_msg, "    {}", cause);
                 }
             }
             let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());

@@ -5,6 +5,7 @@
 
 use crate::Level;
 use crate::lumps::SIDEDEF_NONE;
+use std::fmt::Write;
 
 /// Exports a `Level` to a Wavefront OBJ string containing vertical walls.
 ///
@@ -78,7 +79,7 @@ use crate::lumps::SIDEDEF_NONE;
 pub fn export_map_to_obj(level: &Level) -> String {
     let mut obj = String::new();
     obj.push_str("# Doom Level exported by doom-rs\n");
-    obj.push_str(&format!("o {}\n", level.name));
+    let _ = writeln!(obj, "o {}", level.name);
 
     let mut vertex_count = 1;
 
@@ -121,19 +122,19 @@ pub fn export_map_to_obj(level: &Level) -> String {
 
             // Doom coords: X is East/West, Y is North/South.
             // 3D coords: X = X, Y = Up (Doom Z), Z = -Doom Y
-            obj.push_str(&format!("v {} {} {}\n", v1.x, z_bottom, -v1.y));
-            obj.push_str(&format!("v {} {} {}\n", v2.x, z_bottom, -v2.y));
-            obj.push_str(&format!("v {} {} {}\n", v2.x, z_top, -v2.y));
-            obj.push_str(&format!("v {} {} {}\n", v1.x, z_top, -v1.y));
+            let _ = writeln!(obj, "v {} {} {}", v1.x, z_bottom, -v1.y);
+            let _ = writeln!(obj, "v {} {} {}", v2.x, z_bottom, -v2.y);
+            let _ = writeln!(obj, "v {} {} {}", v2.x, z_top, -v2.y);
+            let _ = writeln!(obj, "v {} {} {}", v1.x, z_top, -v1.y);
 
             let v_start = vertex_count;
-            obj.push_str(&format!(
-                "f {} {} {} {}\n",
+            let _ = writeln!(
+                obj, "f {} {} {} {}",
                 v_start,
                 v_start + 1,
                 v_start + 2,
                 v_start + 3
-            ));
+            );
             vertex_count += 4;
         }
     }
