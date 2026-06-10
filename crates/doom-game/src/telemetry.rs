@@ -131,6 +131,61 @@ impl SessionTelemetry {
             features_str
         )
     }
+
+    /// Exports the telemetry data as an HTML dashboard overlaying the SVG map.
+    #[must_use]
+    pub fn export_telemetry_html(&self, level: &doom_map::Level) -> String {
+        let mut base_svg = doom_map::svg::export_map_to_svg(level);
+
+        let mut path_coords = String::new();
+        let mut event_circles = String::new();
+
+        for ev in &self.events {
+            if ev.kind == TelemetryKind::Position {
+                if !path_coords.is_empty() {
+                    path_coords.push(' ');
+                }
+                path_coords.push_str(&format!("{},{}", ev.x, ev.y));
+            } else {
+                let color = match &ev.kind {
+                    TelemetryKind::ItemPickup(_) => "#0f0",
+                    TelemetryKind::MonsterKill(_) => "#f00",
+                    TelemetryKind::DamageTaken(_) => "#fa0",
+                    TelemetryKind::Position => unreachable!(),
+                };
+                event_circles.push_str(&format!(
+                    r#"<circle cx="{}" cy="{}" r="8" fill="{}" />"#,
+                    ev.x, ev.y, color
+                ));
+            }
+        }
+
+        let overlay = format!(
+            "<polyline points=\"{}\" fill=\"none\" stroke=\"#00ffff\" stroke-width=\"2\" stroke-opacity=\"0.8\" />{}",
+            path_coords, event_circles
+        );
+
+        base_svg = base_svg.replace("</g>\n</svg>\n", &format!("{}\n</g>\n</svg>\n", overlay));
+
+        format!(
+            r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Telemetry Map Overlay: {}</title>
+    <style>
+        body {{ background: #111; color: #fff; font-family: sans-serif; }}
+        svg {{ max-width: 100%; height: auto; }}
+    </style>
+</head>
+<body>
+    <h1>Telemetry Overlay: {}</h1>
+    <div>{}</div>
+</body>
+</html>"#,
+            level.name, level.name, base_svg
+        )
+    }
 }
 
 #[cfg(test)]
@@ -160,5 +215,32 @@ mod tests {
         assert!(json.contains(r#""type": "Point""#));
         assert!(json.contains("[0, 0], [10, 10]"));
         assert!(json.contains("DamageTaken: 15"));
+    }
+
+    #[test]
+    fn test_export_telemetry_html() {
+        let mut t = SessionTelemetry::new();
+        t.record(0, 0, 0, TelemetryKind::Position);
+        t.record(1, 10, 10, TelemetryKind::DamageTaken(15));
+
+        let level = doom_map::Level {
+            name: "TEST".to_owned(),
+            things: vec![],
+            linedefs: vec![],
+            sidedefs: vec![],
+            vertexes: vec![],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![],
+            reject: doom_map::lumps::Reject::parse_lump(&[0u8], 1).unwrap(),
+            blockmap: doom_map::lumps::Blockmap::parse_lump(&[0u8; 14]).unwrap(),
+        };
+
+        let html = t.export_telemetry_html(&level);
+        assert!(html.contains("<!DOCTYPE html>"));
+        assert!(html.contains("<svg"));
+        assert!(html.contains("<polyline points=\"0,0\""));
+        assert!(html.contains("<circle cx=\"10\" cy=\"10\""));
     }
 }
