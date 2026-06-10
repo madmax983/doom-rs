@@ -170,3 +170,116 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::LockedDoorColor;
+    use doom_types::Fixed16_16;
+    use doom_types::mobj_kind::MobjKind;
+    use doom_types::weapons::WeaponType;
+
+    #[test]
+    fn should_return_monster_coordinates_when_emitter_is_monster() {
+        let handle = MobjHandle::NULL;
+        let x = Fixed16_16::ZERO;
+        let y = Fixed16_16::ZERO;
+        let px = Fixed16_16::from_raw(100);
+        let py = Fixed16_16::from_raw(200);
+
+        let req = SoundRequest::MonsterWake(MobjKind::Player, handle, x, y);
+        assert_eq!(req.emitter(px, py), Some((x, y)));
+
+        let req2 = SoundRequest::MonsterAttack(MobjKind::Player, handle, x, y);
+        assert_eq!(req2.emitter(px, py), Some((x, y)));
+
+        let req3 = SoundRequest::MonsterDie(MobjKind::Player, handle, x, y);
+        assert_eq!(req3.emitter(px, py), Some((x, y)));
+    }
+
+    #[test]
+    fn should_return_player_coordinates_when_emitter_is_player_weapon() {
+        let px = Fixed16_16::from_raw(100);
+        let py = Fixed16_16::from_raw(200);
+
+        let req = SoundRequest::PlayerWeaponFire(WeaponType::Pistol);
+        assert_eq!(req.emitter(px, py), Some((px, py)));
+
+        let req2 = SoundRequest::PlayerSuperShotgunOpen;
+        assert_eq!(req2.emitter(px, py), Some((px, py)));
+
+        let req3 = SoundRequest::PlayerSuperShotgunLoad;
+        assert_eq!(req3.emitter(px, py), Some((px, py)));
+
+        let req4 = SoundRequest::PlayerSuperShotgunClose;
+        assert_eq!(req4.emitter(px, py), Some((px, py)));
+    }
+
+    #[test]
+    fn should_return_none_when_emitter_is_unlocalized_player_event() {
+        let px = Fixed16_16::from_raw(100);
+        let py = Fixed16_16::from_raw(200);
+
+        let req = SoundRequest::PlayerDie;
+        assert_eq!(req.emitter(px, py), None);
+
+        let req2 = SoundRequest::PlayerUseFail;
+        assert_eq!(req2.emitter(px, py), None);
+
+        let req3 = SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Blue);
+        assert_eq!(req3.emitter(px, py), None);
+    }
+
+    #[test]
+    fn should_return_monster_handle_when_origin_is_monster() {
+        let handle = MobjHandle::NULL;
+        let p_handle = MobjHandle::NULL;
+
+        let req =
+            SoundRequest::MonsterWake(MobjKind::Player, handle, Fixed16_16::ZERO, Fixed16_16::ZERO);
+        assert_eq!(req.origin_handle(Some(p_handle)), Some(handle));
+
+        let req2 = SoundRequest::MonsterAttack(
+            MobjKind::Player,
+            handle,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+        );
+        assert_eq!(req2.origin_handle(Some(p_handle)), Some(handle));
+
+        let req3 =
+            SoundRequest::MonsterDie(MobjKind::Player, handle, Fixed16_16::ZERO, Fixed16_16::ZERO);
+        assert_eq!(req3.origin_handle(Some(p_handle)), Some(handle));
+    }
+
+    #[test]
+    fn should_return_player_handle_when_origin_is_player_weapon() {
+        let p_handle = MobjHandle::NULL;
+
+        let req = SoundRequest::PlayerWeaponFire(WeaponType::Pistol);
+        assert_eq!(req.origin_handle(Some(p_handle)), Some(p_handle));
+
+        let req2 = SoundRequest::PlayerSuperShotgunOpen;
+        assert_eq!(req2.origin_handle(Some(p_handle)), Some(p_handle));
+
+        let req3 = SoundRequest::PlayerSuperShotgunLoad;
+        assert_eq!(req3.origin_handle(Some(p_handle)), Some(p_handle));
+
+        let req4 = SoundRequest::PlayerSuperShotgunClose;
+        assert_eq!(req4.origin_handle(Some(p_handle)), Some(p_handle));
+    }
+
+    #[test]
+    fn should_return_none_handle_when_origin_is_unlocalized_player_event() {
+        let p_handle = MobjHandle::NULL;
+
+        let req = SoundRequest::PlayerDie;
+        assert_eq!(req.origin_handle(Some(p_handle)), None);
+
+        let req2 = SoundRequest::PlayerUseFail;
+        assert_eq!(req2.origin_handle(Some(p_handle)), None);
+
+        let req3 = SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Blue);
+        assert_eq!(req3.origin_handle(Some(p_handle)), None);
+    }
+}
