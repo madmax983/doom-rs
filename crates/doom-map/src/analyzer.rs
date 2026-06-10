@@ -1,8 +1,12 @@
 //! Map topology analyzer for finding chokepoints and isolated areas.
 //!
 //! The `MapAnalyzer` uses standard graph algorithms to detect critical map features.
-//! **Chokepoints**: (Articulation Points) Ssectors that, if removed, would split the map into two disconnected halves.
+//!
+//! **Chokepoints**: (Articulation Points) Sectors that, if removed, would split the map into two disconnected halves.
+//! This is calculated using an iterative Depth-First Search (DFS) based on Tarjan's bridge-finding algorithm.
+//!
 //! **Isolated Areas**: Finds distinct disconnected clusters of sectors within the map.
+//! This is calculated using Breadth-First Search (BFS) to find connected components in the graph.
 //!
 //! # Examples
 //! ```

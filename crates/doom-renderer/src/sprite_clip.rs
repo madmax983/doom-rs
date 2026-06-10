@@ -26,6 +26,8 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Push a new clip step onto the history.
+    /// If the history is full, extra clips are dropped to avoid heap allocations.
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +37,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Retrieve the most recently added clip step, if any.
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +46,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Iterate over the recorded clip steps.
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }
