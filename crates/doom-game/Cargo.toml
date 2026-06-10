@@ -7,7 +7,6 @@ edition.workspace = true
 default = []
 style_meter = []
 telemetry = []
-director = []
 
 [dependencies]
 doom-types = { workspace = true }

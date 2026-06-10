@@ -52,3 +52,6 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+**[Remove unused director feature]**
+**Tangle:** The `doom-game` crate contained a `director` feature flag and an `AiDirector` struct in `director.rs`. However, it was completely disconnected from the game loop and `GameState`, serving as an unused, over-engineered module that complicated the build setup without providing value.
+**Blueprint:** Removed the `director` feature from `Cargo.toml`, deleted `director.rs`, and removed its re-exports from `lib.rs` to adhere to YAGNI and reduce build complexity.
