@@ -1254,8 +1254,12 @@ impl DoomApp for DoomGame {
                 let is_firing = self.gs.player.attack_down;
                 let is_invulnerable =
                     self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
-                self.face_state
-                    .tick(cur_health, is_firing, is_invulnerable, None);
+                self.face_state.tick(doom_game::FaceTickParams {
+                    health: cur_health,
+                    is_firing,
+                    is_invulnerable,
+                    attacker_angle: None,
+                });
             }
             if self.debug_log.is_some() {
                 // Log player snapshot every 35 tics (once per second of gametime).

@@ -69,7 +69,7 @@ pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_
 pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
-pub use face::{FaceDir, FaceKind, FaceState, face_patch_name, health_tier};
+pub use face::{FaceDir, FaceKind, FaceState, FaceTickParams, face_patch_name, health_tier};
 pub use intermission::{IntermissionStats, par_time};
 pub use linedef_dispatch::{
     LinedefEffect, TriggerType, check_cross_lines, classify_trigger, dispatch_linedef,
