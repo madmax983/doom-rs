@@ -96,26 +96,26 @@ impl MapId {
     /// - MAP31 normal -> MAP16
     /// - MAP32 normal -> MAP16
     /// - MAP30 -> None (game end)
-    pub fn next_map(&self, secret_exit: bool) -> Option<MapId> {
+    pub fn next_map(&self, exit_type: crate::state::ExitRequest) -> Option<MapId> {
         if self.is_doom2() {
-            return self.next_map_doom2(secret_exit);
+            return self.next_map_doom2(exit_type);
         }
 
         // Doom 1: episode 1-3, maps 1-9
         if self.episode >= 1 && self.episode <= 3 {
-            return self.next_map_doom1(secret_exit);
+            return self.next_map_doom1(exit_type);
         }
 
         None
     }
 
     /// Next map for Doom 1 (ExMy format).
-    fn next_map_doom1(&self, secret_exit: bool) -> Option<MapId> {
+    fn next_map_doom1(&self, exit_type: crate::state::ExitRequest) -> Option<MapId> {
         let ep = self.episode;
         let map = self.map;
 
         // Secret exits: ExM3 -> ExM9
-        if secret_exit && map == 3 {
+        if exit_type == crate::state::ExitRequest::Secret && map == 3 {
             return Some(MapId::new(ep, 9));
         }
 
@@ -138,7 +138,7 @@ impl MapId {
     }
 
     /// Next map for Doom 2 (MAPxx format).
-    fn next_map_doom2(&self, secret_exit: bool) -> Option<MapId> {
+    fn next_map_doom2(&self, exit_type: crate::state::ExitRequest) -> Option<MapId> {
         let map = self.map;
 
         // MAP30 is the final map
@@ -147,12 +147,12 @@ impl MapId {
         }
 
         // MAP15 + secret -> MAP31
-        if map == 15 && secret_exit {
+        if map == 15 && exit_type == crate::state::ExitRequest::Secret {
             return Some(MapId::doom2(31));
         }
 
         // MAP31 + secret -> MAP32
-        if map == 31 && secret_exit {
+        if map == 31 && exit_type == crate::state::ExitRequest::Secret {
             return Some(MapId::doom2(32));
         }
 
@@ -333,10 +333,9 @@ impl GamePhaseController {
     /// Handle the `Playing` phase: check for exit requests.
     fn tick_playing(&mut self, game_state: &mut GameState) {
         if let Some(exit_req) = game_state.exit_request.take() {
-            let secret_exit = exit_req == ExitRequest::Secret;
             let stats = game_state.compute_intermission_stats();
 
-            if self.current_map.is_final_map() && !secret_exit {
+            if self.current_map.is_final_map() && exit_req != ExitRequest::Secret {
                 // Final map -> Finale
                 self.phase = GamePhase::Finale {
                     text_index: 0,
@@ -344,7 +343,7 @@ impl GamePhaseController {
                 };
                 self.phase_tic = 0;
                 self.skip_requested = false;
-            } else if let Some(next) = self.current_map.next_map(secret_exit) {
+            } else if let Some(next) = self.current_map.next_map(exit_req) {
                 // Normal/secret exit -> Intermission
                 self.phase = GamePhase::Intermission {
                     stats,
@@ -475,61 +474,88 @@ mod tests {
     #[test]
     fn next_map_e1m1_normal() {
         let id = MapId::new(1, 1);
-        assert_eq!(id.next_map(false), Some(MapId::new(1, 2)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(1, 2))
+        );
     }
 
     #[test]
     fn next_map_e1m2_normal() {
         let id = MapId::new(1, 2);
-        assert_eq!(id.next_map(false), Some(MapId::new(1, 3)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(1, 3))
+        );
     }
 
     #[test]
     fn next_map_e1m3_normal() {
         let id = MapId::new(1, 3);
-        assert_eq!(id.next_map(false), Some(MapId::new(1, 4)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(1, 4))
+        );
     }
 
     #[test]
     fn next_map_e1m3_secret() {
         let id = MapId::new(1, 3);
-        assert_eq!(id.next_map(true), Some(MapId::new(1, 9)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Secret),
+            Some(MapId::new(1, 9))
+        );
     }
 
     #[test]
     fn next_map_e1m4_normal() {
         let id = MapId::new(1, 4);
-        assert_eq!(id.next_map(false), Some(MapId::new(1, 5)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(1, 5))
+        );
     }
 
     #[test]
     fn next_map_e1m5_normal() {
         let id = MapId::new(1, 5);
-        assert_eq!(id.next_map(false), Some(MapId::new(1, 6)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(1, 6))
+        );
     }
 
     #[test]
     fn next_map_e1m6_normal() {
         let id = MapId::new(1, 6);
-        assert_eq!(id.next_map(false), Some(MapId::new(1, 7)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(1, 7))
+        );
     }
 
     #[test]
     fn next_map_e1m7_normal() {
         let id = MapId::new(1, 7);
-        assert_eq!(id.next_map(false), Some(MapId::new(1, 8)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(1, 8))
+        );
     }
 
     #[test]
     fn next_map_e1m8_ends_episode() {
         let id = MapId::new(1, 8);
-        assert_eq!(id.next_map(false), None);
+        assert_eq!(id.next_map(crate::state::ExitRequest::Normal), None);
     }
 
     #[test]
     fn next_map_e1m9_returns_to_e1m4() {
         let id = MapId::new(1, 9);
-        assert_eq!(id.next_map(false), Some(MapId::new(1, 4)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(1, 4))
+        );
     }
 
     // --- next_map: Doom 1 Episode 2 ---
@@ -537,25 +563,34 @@ mod tests {
     #[test]
     fn next_map_e2m1_normal() {
         let id = MapId::new(2, 1);
-        assert_eq!(id.next_map(false), Some(MapId::new(2, 2)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(2, 2))
+        );
     }
 
     #[test]
     fn next_map_e2m3_secret() {
         let id = MapId::new(2, 3);
-        assert_eq!(id.next_map(true), Some(MapId::new(2, 9)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Secret),
+            Some(MapId::new(2, 9))
+        );
     }
 
     #[test]
     fn next_map_e2m8_ends_episode() {
         let id = MapId::new(2, 8);
-        assert_eq!(id.next_map(false), None);
+        assert_eq!(id.next_map(crate::state::ExitRequest::Normal), None);
     }
 
     #[test]
     fn next_map_e2m9_returns_to_e2m4() {
         let id = MapId::new(2, 9);
-        assert_eq!(id.next_map(false), Some(MapId::new(2, 4)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(2, 4))
+        );
     }
 
     // --- next_map: Doom 1 Episode 3 ---
@@ -563,25 +598,34 @@ mod tests {
     #[test]
     fn next_map_e3m1_normal() {
         let id = MapId::new(3, 1);
-        assert_eq!(id.next_map(false), Some(MapId::new(3, 2)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(3, 2))
+        );
     }
 
     #[test]
     fn next_map_e3m3_secret() {
         let id = MapId::new(3, 3);
-        assert_eq!(id.next_map(true), Some(MapId::new(3, 9)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Secret),
+            Some(MapId::new(3, 9))
+        );
     }
 
     #[test]
     fn next_map_e3m8_ends_episode() {
         let id = MapId::new(3, 8);
-        assert_eq!(id.next_map(false), None);
+        assert_eq!(id.next_map(crate::state::ExitRequest::Normal), None);
     }
 
     #[test]
     fn next_map_e3m9_returns_to_e3m4() {
         let id = MapId::new(3, 9);
-        assert_eq!(id.next_map(false), Some(MapId::new(3, 4)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::new(3, 4))
+        );
     }
 
     // --- next_map: Doom 2 ---
@@ -589,61 +633,88 @@ mod tests {
     #[test]
     fn next_map_map01_normal() {
         let id = MapId::doom2(1);
-        assert_eq!(id.next_map(false), Some(MapId::doom2(2)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::doom2(2))
+        );
     }
 
     #[test]
     fn next_map_map14_normal() {
         let id = MapId::doom2(14);
-        assert_eq!(id.next_map(false), Some(MapId::doom2(15)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::doom2(15))
+        );
     }
 
     #[test]
     fn next_map_map15_normal() {
         let id = MapId::doom2(15);
-        assert_eq!(id.next_map(false), Some(MapId::doom2(16)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::doom2(16))
+        );
     }
 
     #[test]
     fn next_map_map15_secret() {
         let id = MapId::doom2(15);
-        assert_eq!(id.next_map(true), Some(MapId::doom2(31)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Secret),
+            Some(MapId::doom2(31))
+        );
     }
 
     #[test]
     fn next_map_map16_normal() {
         let id = MapId::doom2(16);
-        assert_eq!(id.next_map(false), Some(MapId::doom2(17)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::doom2(17))
+        );
     }
 
     #[test]
     fn next_map_map29_normal() {
         let id = MapId::doom2(29);
-        assert_eq!(id.next_map(false), Some(MapId::doom2(30)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::doom2(30))
+        );
     }
 
     #[test]
     fn next_map_map30_ends_game() {
         let id = MapId::doom2(30);
-        assert_eq!(id.next_map(false), None);
+        assert_eq!(id.next_map(crate::state::ExitRequest::Normal), None);
     }
 
     #[test]
     fn next_map_map31_normal_goes_to_map16() {
         let id = MapId::doom2(31);
-        assert_eq!(id.next_map(false), Some(MapId::doom2(16)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::doom2(16))
+        );
     }
 
     #[test]
     fn next_map_map31_secret_goes_to_map32() {
         let id = MapId::doom2(31);
-        assert_eq!(id.next_map(true), Some(MapId::doom2(32)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Secret),
+            Some(MapId::doom2(32))
+        );
     }
 
     #[test]
     fn next_map_map32_goes_to_map16() {
         let id = MapId::doom2(32);
-        assert_eq!(id.next_map(false), Some(MapId::doom2(16)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::doom2(16))
+        );
     }
 
     // --- is_final_map ---
@@ -1091,7 +1162,10 @@ mod tests {
         // Secret exit on E1M1 (which doesn't have a special secret exit)
         // should just go to E1M2 (same as normal, since only E1M3 has secret routing)
         let id = MapId::new(1, 1);
-        assert_eq!(id.next_map(true), Some(MapId::new(1, 2)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Secret),
+            Some(MapId::new(1, 2))
+        );
     }
 
     #[test]
@@ -1180,14 +1254,20 @@ mod tests {
     #[test]
     fn doom2_linear_progression_map20_to_map21() {
         let id = MapId::doom2(20);
-        assert_eq!(id.next_map(false), Some(MapId::doom2(21)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Normal),
+            Some(MapId::doom2(21))
+        );
     }
 
     #[test]
     fn doom2_map32_secret_exit_still_goes_to_map16() {
         // MAP32 doesn't have a further secret — secret_exit is ignored
         let id = MapId::doom2(32);
-        assert_eq!(id.next_map(true), Some(MapId::doom2(16)));
+        assert_eq!(
+            id.next_map(crate::state::ExitRequest::Secret),
+            Some(MapId::doom2(16))
+        );
     }
 
     #[test]

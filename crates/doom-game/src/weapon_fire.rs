@@ -19,6 +19,12 @@ use doom_types::mobj_kind::MobjKind;
 use doom_types::weapons::AmmoType;
 use doom_types::weapons::WeaponType;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShotAccuracy {
+    FirstShotAccurate,
+    AlwaysSpread,
+}
+
 // ---------------------------------------------------------------------------
 // Ammo cost table
 // ---------------------------------------------------------------------------
@@ -110,8 +116,8 @@ fn player_angle(gs: &GameState) -> Option<Bam> {
 }
 
 #[inline]
-fn hitscan_shot_angle(gs: &mut GameState, base_angle: Bam, accurate_first_shot: bool) -> Bam {
-    if accurate_first_shot && !gs.player.attack_down {
+fn hitscan_shot_angle(gs: &mut GameState, base_angle: Bam, accuracy: ShotAccuracy) -> Bam {
+    if accuracy == ShotAccuracy::FirstShotAccurate && !gs.player.attack_down {
         return base_angle;
     }
 
@@ -212,7 +218,7 @@ pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
 
     let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
-    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
+    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, ShotAccuracy::FirstShotAccurate);
     let damage = p_damage_with_variance(gs, 5);
 
     p_line_attack(
@@ -310,7 +316,7 @@ pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
 
     let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
-    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
+    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, ShotAccuracy::FirstShotAccurate);
     let damage = p_damage_with_variance(gs, 5);
 
     p_line_attack(
