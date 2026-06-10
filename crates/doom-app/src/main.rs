@@ -2453,17 +2453,16 @@ fn run_doom(args: Args) -> Result<()> {
                 println!("Completed tactical analysis for {}", warp_str);
             }
 
-            let mut chokepoints_str = String::new();
-            if chokepoints.is_empty() {
-                chokepoints_str.push_str("None");
+            let chokepoints_str = if chokepoints.is_empty() {
+                "None".to_string()
             } else {
-                for (i, s) in chokepoints.iter().enumerate() {
-                    if i > 0 {
-                        chokepoints_str.push_str(", ");
-                    }
-                    chokepoints_str.push_str(&s.to_string());
+                let count = chokepoints.len();
+                let mut list = chokepoints.iter().take(10).map(|s| s.to_string()).collect::<Vec<_>>().join(", ");
+                if count > 10 {
+                    list.push_str(&format!(" ... and {} more", count - 10));
                 }
-            }
+                format!("{} chokepoints: {}", count, list)
+            };
 
             let mut table = comfy_table::Table::new();
             table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
@@ -2486,16 +2485,15 @@ fn run_doom(args: Args) -> Result<()> {
                     comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
                 ]);
                 for (i, area) in areas.iter().enumerate() {
-                    let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
-                        if j > 0 {
-                            area_str.push_str(", ");
-                        }
-                        area_str.push_str(&s.to_string());
+                    let count = area.len();
+                    let mut area_str = area.iter().take(10).map(|s| s.to_string()).collect::<Vec<_>>().join(", ");
+                    if count > 10 {
+                        area_str.push_str(&format!(" ... and {} more", count - 10));
                     }
+                    let area_formatted = format!("{} sectors: {}", count, area_str);
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
-                        comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
+                        comfy_table::Cell::new(area_formatted).fg(comfy_table::Color::Magenta),
                     ]);
                 }
             } else {
@@ -2508,16 +2506,15 @@ fn run_doom(args: Args) -> Result<()> {
                     comfy_table::Cell::new(&chokepoints_str),
                 ]);
                 for (i, area) in areas.iter().enumerate() {
-                    let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
-                        if j > 0 {
-                            area_str.push_str(", ");
-                        }
-                        area_str.push_str(&s.to_string());
+                    let count = area.len();
+                    let mut area_str = area.iter().take(10).map(|s| s.to_string()).collect::<Vec<_>>().join(", ");
+                    if count > 10 {
+                        area_str.push_str(&format!(" ... and {} more", count - 10));
                     }
+                    let area_formatted = format!("{} sectors: {}", count, area_str);
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
-                        comfy_table::Cell::new(area_str),
+                        comfy_table::Cell::new(area_formatted),
                     ]);
                 }
             }
