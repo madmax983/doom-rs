@@ -904,7 +904,10 @@ impl BitmapFont {
     /// Characters outside the printable ASCII range are rendered as spaces.
     pub fn draw_string(&self, fb: &mut Framebuffer, x: i32, y: i32, text: &str, color: u8) {
         for (i, ch) in text.bytes().enumerate() {
-            let cx = x + (i as i32) * i32::from(self.char_width);
+            let cx = x.saturating_add((i as i32).saturating_mul(i32::from(self.char_width)));
+            if cx >= FB_WIDTH as i32 {
+                break; // Text is now off the right side of the screen, no need to process further
+            }
             self.draw_char(fb, cx, y, ch, color);
         }
     }
@@ -918,7 +921,7 @@ impl BitmapFont {
     /// Draw a string centered horizontally on the 320-pixel-wide framebuffer.
     pub fn draw_string_centered(&self, fb: &mut Framebuffer, y: i32, text: &str, color: u8) {
         let w = self.string_width(text);
-        let x = (FB_WIDTH as i32 - w) / 2;
+        let x = (FB_WIDTH as i32).saturating_sub(w) / 2;
         self.draw_string(fb, x, y, text, color);
     }
 }
@@ -943,6 +946,24 @@ mod havoc_tests {
         // A huge string causes an i32 overflow if simply multiplied
         let s = "A".repeat(300_000_000);
         let _w = font.string_width(&s);
+    }
+
+    #[test]
+    fn havoc_font_draw_string_overflow() {
+        let font = BitmapFont::new();
+        let mut fb = Framebuffer::new();
+        let s = "A".repeat(300_000_000);
+        // Should not panic on multiplication overflow
+        font.draw_string(&mut fb, 0, 0, &s, 1);
+    }
+
+    #[test]
+    fn havoc_font_draw_string_centered_overflow() {
+        let font = BitmapFont::new();
+        let mut fb = Framebuffer::new();
+        let s = "A".repeat(300_000_000);
+        // Should not panic on multiplication overflow
+        font.draw_string_centered(&mut fb, 0, &s, 1);
     }
 }
 
