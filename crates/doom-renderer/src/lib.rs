@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Utilities and structures for handling partial column clipping of sprites against portals.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
