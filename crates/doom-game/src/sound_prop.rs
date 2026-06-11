@@ -170,3 +170,114 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use doom_types::{Fixed16_16, mobj_kind::MobjKind, weapons::WeaponType};
+
+    fn create_dummy_handle() -> MobjHandle {
+        // Create a fake handle by using a slab
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            doom_types::Bam::ZERO,
+        );
+        slab.alloc(mobj)
+    }
+
+    #[test]
+    fn emitter_returns_correct_coordinates() {
+        let handle = create_dummy_handle();
+        let px = Fixed16_16::from_int(10);
+        let py = Fixed16_16::from_int(20);
+        let mx = Fixed16_16::from_int(30);
+        let my = Fixed16_16::from_int(40);
+
+        let tests = vec![
+            // Monster variants (should return mx, my)
+            (
+                SoundRequest::MonsterWake(MobjKind::Player, handle, mx, my),
+                Some((mx, my)),
+            ),
+            (
+                SoundRequest::MonsterAttack(MobjKind::Player, handle, mx, my),
+                Some((mx, my)),
+            ),
+            (
+                SoundRequest::MonsterDie(MobjKind::Player, handle, mx, my),
+                Some((mx, my)),
+            ),
+            // Player weapon variants (should return px, py)
+            (
+                SoundRequest::PlayerWeaponFire(WeaponType::Pistol),
+                Some((px, py)),
+            ),
+            (SoundRequest::PlayerSuperShotgunOpen, Some((px, py))),
+            (SoundRequest::PlayerSuperShotgunLoad, Some((px, py))),
+            (SoundRequest::PlayerSuperShotgunClose, Some((px, py))),
+            // None variants
+            (SoundRequest::PlayerDie, None),
+            (SoundRequest::PlayerUseFail, None),
+            (
+                SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red),
+                None,
+            ),
+        ];
+
+        for (req, expected) in tests {
+            assert_eq!(req.emitter(px, py), expected, "failed on {:?}", req);
+        }
+    }
+
+    #[test]
+    fn origin_handle_returns_correct_handle() {
+        let monster_handle = create_dummy_handle();
+        let player_handle = create_dummy_handle();
+
+        let mx = Fixed16_16::from_int(30);
+        let my = Fixed16_16::from_int(40);
+
+        let tests = vec![
+            // Monster variants (should return monster_handle)
+            (
+                SoundRequest::MonsterWake(MobjKind::Player, monster_handle, mx, my),
+                Some(monster_handle),
+            ),
+            (
+                SoundRequest::MonsterAttack(MobjKind::Player, monster_handle, mx, my),
+                Some(monster_handle),
+            ),
+            (
+                SoundRequest::MonsterDie(MobjKind::Player, monster_handle, mx, my),
+                Some(monster_handle),
+            ),
+            // Player weapon variants (should return player_handle)
+            (
+                SoundRequest::PlayerWeaponFire(WeaponType::Pistol),
+                Some(player_handle),
+            ),
+            (SoundRequest::PlayerSuperShotgunOpen, Some(player_handle)),
+            (SoundRequest::PlayerSuperShotgunLoad, Some(player_handle)),
+            (SoundRequest::PlayerSuperShotgunClose, Some(player_handle)),
+            // None variants
+            (SoundRequest::PlayerDie, None),
+            (SoundRequest::PlayerUseFail, None),
+            (
+                SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red),
+                None,
+            ),
+        ];
+
+        for (req, expected) in tests {
+            assert_eq!(
+                req.origin_handle(Some(player_handle)),
+                expected,
+                "failed on {:?}",
+                req
+            );
+        }
+    }
+}
