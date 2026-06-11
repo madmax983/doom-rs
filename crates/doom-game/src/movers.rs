@@ -1,3 +1,9 @@
+//! Dynamic sector environment structures.
+//!
+//! Contains definitions for stateful level geometry changes, such as doors, crushers, lifts,
+//! and perpetual platforms. These objects mutate sector floor/ceiling heights during the
+//! game loop and enforce complex interactions with map actors.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

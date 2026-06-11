@@ -1,3 +1,8 @@
+//! Zero-allocation structures for clipping sprite rendering.
+//!
+//! When rendering transparent sprites behind multiple portals, the renderer needs to track
+//! the upper and lower bounds for each column. Since these portal depths rarely exceed a few layers,
+//! `SpriteClipHistory` uses stack-allocated arrays to avoid expensive heap allocations on the hot path.
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
@@ -26,6 +31,18 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Pushes a new clip step onto the history.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    ///
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 10.0, row: 5, silhouette_height: 20.0 });
+    /// assert_eq!(history.last().unwrap().depth, 10.0);
+    /// ```
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;

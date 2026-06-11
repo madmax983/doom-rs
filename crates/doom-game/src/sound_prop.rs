@@ -1,3 +1,8 @@
+//! Decoupled sound event propagation.
+//!
+//! The `sound_prop` module allows the core game simulation to queue audio requests
+//! (`SoundRequest`) without depending on an audio backend. The app later drains this queue
+//! and resolves each semantic request (like a monster attack) into a concrete WAD sound lump.
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

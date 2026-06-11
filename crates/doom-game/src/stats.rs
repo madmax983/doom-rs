@@ -1,3 +1,9 @@
+//! Level statistics tracking.
+//!
+//! This module contains `LevelStats`, which tallies kills, items, and secrets over the
+//! course of gameplay. By tracking these totals independently, the engine can accurately
+//! calculate the end-of-level completion percentages.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {
