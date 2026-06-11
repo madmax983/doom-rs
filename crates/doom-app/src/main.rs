@@ -576,7 +576,7 @@ impl DoomGame {
                 let path = format!("doom_save_{slot}.bin");
                 match savegame::load_game(std::path::Path::new(&path), self.compat) {
                     Ok((_header, payload)) => {
-                        if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
+                        if let Err(e) = savegame::apply_save(&mut self.gs, payload) {
                             self.console.print(format!("Load failed: {e}"));
                             self.hud_messages.push(format!("Load failed: {e}"), 105);
                         } else {
@@ -1148,7 +1148,7 @@ impl DoomApp for DoomGame {
         if input.f9_load {
             match savegame::load_game(&self.save_path, self.compat) {
                 Ok((_header, payload)) => {
-                    if let Err(e) = savegame::apply_save(&mut self.gs, &payload) {
+                    if let Err(e) = savegame::apply_save(&mut self.gs, payload) {
                         self.console.print(format!("Load failed: {e}"));
                         self.hud_messages.push(format!("Load failed: {e}"), 105);
                     } else {
