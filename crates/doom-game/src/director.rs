@@ -7,6 +7,7 @@ pub enum DirectorAction {
     Maintain,
 }
 
+#[derive(Clone, Debug)]
 pub struct AiDirector;
 
 impl AiDirector {

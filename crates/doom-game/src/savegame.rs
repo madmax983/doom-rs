@@ -911,6 +911,21 @@ fn save_game_doomrs(gs: &GameState, level_name: &[u8; 8], skill: u8, description
         Some(req) => w.write_u8(req as u8 + 1),
     }
 
+    // --- Boss Brain ---
+    w.write_bool(gs.brain_awake);
+    w.write_u32(gs.brain_targets.len() as u32);
+    for target in &gs.brain_targets {
+        w.write_i32(target.0.raw());
+        w.write_i32(target.1.raw());
+    }
+    w.write_u32(gs.brain_target_index as u32);
+
+    // --- Automap visibility ---
+    w.write_u32(gs.seen_lines.len() as u32);
+    for seen in &gs.seen_lines {
+        w.write_bool(*seen);
+    }
+
     // --- Door movers ---
     w.write_u32(gs.movers.active_doors.len() as u32);
     for door in &gs.movers.active_doors {
@@ -1064,6 +1079,33 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
         0 => None,
         disc => Some(ExitRequest::from_repr(disc - 1).ok_or(SaveError::Truncated)?),
     };
+
+    // --- Boss Brain ---
+    let brain_awake = r.read_bool()?;
+    let brain_targets_count = r.read_u32()? as usize;
+    let max_targets = (r.data.len().saturating_sub(r.pos)) / 8;
+    if brain_targets_count > max_targets {
+        return Err(SaveError::Truncated);
+    }
+    let mut brain_targets = Vec::with_capacity(brain_targets_count);
+    for _ in 0..brain_targets_count {
+        brain_targets.push((
+            Fixed16_16::from_raw(r.read_i32()?),
+            Fixed16_16::from_raw(r.read_i32()?),
+        ));
+    }
+    let brain_target_index = r.read_u32()? as usize;
+
+    // --- Automap visibility ---
+    let seen_lines_count = r.read_u32()? as usize;
+    let max_seen_lines = r.data.len().saturating_sub(r.pos);
+    if seen_lines_count > max_seen_lines {
+        return Err(SaveError::Truncated);
+    }
+    let mut seen_lines = Vec::with_capacity(seen_lines_count);
+    for _ in 0..seen_lines_count {
+        seen_lines.push(r.read_bool()?);
+    }
 
     // --- Door movers ---
     let door_count = r.read_u32()? as usize;
@@ -1229,6 +1271,10 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
     state.movers.conveyors = conveyors;
     state.exit_request = exit_request;
     state.stats.level_time = level_time;
+    state.brain_awake = brain_awake;
+    state.brain_targets = brain_targets;
+    state.brain_target_index = brain_target_index;
+    state.seen_lines = seen_lines;
 
     Ok(SaveGame { header, state })
 }
@@ -1849,6 +1895,33 @@ mod tests {
         let data = save_game(&gs, &test_level_name(), 2, "tic test");
         let loaded = load_game(&data).expect("load must succeed");
         assert_eq!(loaded.state.tic_num, 12345);
+    }
+
+    // --- Test 24.5: Roundtrip Boss Brain and Automap visibility ---
+    #[test]
+    fn roundtrip_boss_brain_and_automap() {
+        let mut gs = test_game_state();
+        gs.brain_awake = true;
+        gs.brain_targets = vec![
+            (Fixed16_16::from_int(10), Fixed16_16::from_int(20)),
+            (Fixed16_16::from_int(30), Fixed16_16::from_int(40)),
+        ];
+        gs.brain_target_index = 1;
+        gs.seen_lines = vec![true, false, true, true];
+
+        let data = save_game(&gs, &test_level_name(), 2, "boss brain test");
+        let loaded = load_game(&data).expect("load must succeed");
+
+        assert!(loaded.state.brain_awake);
+        assert_eq!(
+            loaded.state.brain_targets,
+            vec![
+                (Fixed16_16::from_int(10), Fixed16_16::from_int(20)),
+                (Fixed16_16::from_int(30), Fixed16_16::from_int(40)),
+            ]
+        );
+        assert_eq!(loaded.state.brain_target_index, 1);
+        assert_eq!(loaded.state.seen_lines, vec![true, false, true, true]);
     }
 
     // --- Test 25: Roundtrip preserves player mobj handle validity ---
