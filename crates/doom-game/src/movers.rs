@@ -12,8 +12,8 @@ pub struct DoorMover {
     pub current_height: i16,
     /// Speed in map units per tic (positive = opening/rising, negative = closing/lowering).
     pub speed: i16,
-    /// `true` = this mover operates on ceiling height, `false` = floor height.
-    pub is_ceiling: bool,
+    /// The target height to modify (ceiling or floor).
+    pub target: MoverTarget,
     /// Tics to wait at top/bottom before reversing (0 = no wait, no reverse).
     pub wait_tics: i32,
     /// Countdown until the door starts closing again (−1 = permanent open/close).
@@ -27,6 +27,15 @@ pub struct DoorMover {
 // ---------------------------------------------------------------------------
 // Ceiling / floor mover types
 // ---------------------------------------------------------------------------
+
+/// The part of the sector the mover operates on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MoverTarget {
+    /// Mover operates on the sector's ceiling.
+    Ceiling,
+    /// Mover operates on the sector's floor.
+    Floor,
+}
 
 /// Direction a ceiling or floor is currently moving.
 #[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
@@ -151,16 +160,23 @@ pub struct FloorMover {
     pub wait_tics: i32,
     /// Height to return to after waiting (original floor height for lifts).
     pub return_height: i16,
-    /// Currently in the wait phase.
-    pub waiting: bool,
-    /// Tics remaining in the wait phase.
-    pub wait_remaining: i32,
+    /// The current phase of the floor mover.
+    pub phase: FloorMoverPhase,
     /// Does this floor damage actors when raising into them?
     pub crush: CrushBehavior,
     /// Tag from the activating linedef.
     pub tag: u16,
     /// The type of floor motion (for savegame serialization and behavior differentiation).
     pub floor_type: FloorType,
+}
+
+/// Phase of a moving floor.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FloorMoverPhase {
+    /// Floor is currently moving towards its target.
+    Moving,
+    /// Floor has reached its target and is waiting before reversing (holds remaining wait tics).
+    Waiting(i32),
 }
 
 // ---------------------------------------------------------------------------
@@ -260,8 +276,17 @@ pub struct LightSpecial {
     pub bright: i16,
     /// Light value when in the dark phase.
     pub dark: i16,
-    /// `true` if currently in the bright phase.
-    pub is_bright: bool,
+    /// Currently in the bright or dark phase.
+    pub phase: LightPhase,
+}
+
+/// The phase of a toggling light special.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LightPhase {
+    /// The light is currently in its bright phase.
+    Bright,
+    /// The light is currently in its dark phase.
+    Dark,
 }
 
 // ---------------------------------------------------------------------------

@@ -967,7 +967,7 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavi
         target_height: target,
         current_height: sector.ceil_height,
         speed: DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: if behavior == DoorBehavior::OpenWaitClose {
             DOOR_WAIT
         } else {
@@ -998,7 +998,7 @@ fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
         target_height: target,
         current_height: sector.ceil_height,
         speed: -DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: -1,
         countdown: -1,
         reopen_height: 0,
@@ -1026,7 +1026,7 @@ fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) 
         target_height: sector.floor_height,
         current_height: sector.ceil_height,
         speed: -DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: -1,
         countdown: -1,
         reopen_height: reopen_h,
@@ -1058,7 +1058,7 @@ fn open_blazing_door_helper(
         target_height: target,
         current_height: sector.ceil_height,
         speed: BLAZING_DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: if behavior == DoorBehavior::OpenWaitClose {
             DOOR_WAIT
         } else {
@@ -1089,7 +1089,7 @@ fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usiz
         target_height: target,
         current_height: sector.ceil_height,
         speed: -BLAZING_DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: -1,
         countdown: -1,
         reopen_height: 0,

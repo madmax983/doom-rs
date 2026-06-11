@@ -596,7 +596,7 @@ fn write_door_mover(w: &mut WriteCursor, d: &DoorMover) {
     w.write_i16(d.target_height);
     w.write_i16(d.current_height);
     w.write_i16(d.speed);
-    w.write_bool(d.is_ceiling);
+    w.write_bool(d.target == crate::movers::MoverTarget::Ceiling);
     w.write_i32(d.wait_tics);
     w.write_i32(d.countdown);
     w.write_i16(d.reopen_height);
@@ -609,7 +609,11 @@ fn read_door_mover(r: &mut ReadCursor<'_>) -> Result<DoorMover, SaveError> {
         target_height: r.read_i16()?,
         current_height: r.read_i16()?,
         speed: r.read_i16()?,
-        is_ceiling: r.read_bool()?,
+        target: if r.read_bool()? {
+            crate::movers::MoverTarget::Ceiling
+        } else {
+            crate::movers::MoverTarget::Floor
+        },
         wait_tics: r.read_i32()?,
         countdown: r.read_i32()?,
         reopen_height: r.read_i16()?,
@@ -623,7 +627,7 @@ fn write_light_special(w: &mut WriteCursor, l: &LightSpecial) {
     w.write_i32(l.period);
     w.write_i16(l.bright);
     w.write_i16(l.dark);
-    w.write_bool(l.is_bright);
+    w.write_bool(l.phase == crate::movers::LightPhase::Bright);
 }
 
 fn read_light_special(r: &mut ReadCursor<'_>) -> Result<LightSpecial, SaveError> {
@@ -633,7 +637,11 @@ fn read_light_special(r: &mut ReadCursor<'_>) -> Result<LightSpecial, SaveError>
         period: r.read_i32()?,
         bright: r.read_i16()?,
         dark: r.read_i16()?,
-        is_bright: r.read_bool()?,
+        phase: if r.read_bool()? {
+            crate::movers::LightPhase::Bright
+        } else {
+            crate::movers::LightPhase::Dark
+        },
     })
 }
 
@@ -690,8 +698,16 @@ fn write_floor_mover(w: &mut WriteCursor, fm: &FloorMover) {
     write_move_direction(w, fm.direction);
     w.write_i32(fm.wait_tics);
     w.write_i16(fm.return_height);
-    w.write_bool(fm.waiting);
-    w.write_i32(fm.wait_remaining);
+    match fm.phase {
+        crate::movers::FloorMoverPhase::Waiting(ticks) => {
+            w.write_bool(true);
+            w.write_i32(ticks);
+        }
+        crate::movers::FloorMoverPhase::Moving => {
+            w.write_bool(false);
+            w.write_i32(0);
+        }
+    }
     w.write_bool(fm.crush == crate::state::CrushBehavior::Crush);
     w.write_u16(fm.tag);
     write_floor_type(w, fm.floor_type);
@@ -705,8 +721,15 @@ fn read_floor_mover(r: &mut ReadCursor<'_>) -> Result<FloorMover, SaveError> {
         direction: read_move_direction(r)?,
         wait_tics: r.read_i32()?,
         return_height: r.read_i16()?,
-        waiting: r.read_bool()?,
-        wait_remaining: r.read_i32()?,
+        phase: {
+            let waiting = r.read_bool()?;
+            let wait_remaining = r.read_i32()?;
+            if waiting {
+                crate::movers::FloorMoverPhase::Waiting(wait_remaining)
+            } else {
+                crate::movers::FloorMoverPhase::Moving
+            }
+        },
         crush: if r.read_bool()? {
             crate::state::CrushBehavior::Crush
         } else {
@@ -1593,7 +1616,7 @@ mod tests {
             target_height: 128,
             current_height: 64,
             speed: 2,
-            is_ceiling: true,
+            target: crate::movers::MoverTarget::Ceiling,
             wait_tics: 120,
             countdown: 60,
             reopen_height: 0,
@@ -1604,7 +1627,7 @@ mod tests {
             target_height: 0,
             current_height: 100,
             speed: -2,
-            is_ceiling: true,
+            target: crate::movers::MoverTarget::Ceiling,
             wait_tics: 0,
             countdown: -1,
             reopen_height: 0,
@@ -1630,8 +1653,7 @@ mod tests {
             direction: MoveDirection::Down,
             wait_tics: 105,
             return_height: 0,
-            waiting: false,
-            wait_remaining: 0,
+            phase: crate::movers::FloorMoverPhase::Moving,
             crush: crate::state::CrushBehavior::Crush,
             tag: 7,
             floor_type: FloorType::LowerToLowest,
@@ -1831,14 +1853,17 @@ mod tests {
             period: 30,
             bright: 255,
             dark: 128,
-            is_bright: true,
+            phase: crate::movers::LightPhase::Bright,
         });
         let data = save_game(&gs, &test_level_name(), 2, "light test");
         let loaded = load_game(&data).expect("load must succeed");
         assert_eq!(loaded.state.movers.active_lights.len(), 1);
         assert_eq!(loaded.state.movers.active_lights[0].sector, 2);
         assert_eq!(loaded.state.movers.active_lights[0].bright, 255);
-        assert!(loaded.state.movers.active_lights[0].is_bright);
+        assert_eq!(
+            loaded.state.movers.active_lights[0].phase,
+            crate::movers::LightPhase::Bright
+        );
     }
 
     // --- Test 24: Roundtrip preserves tic_num ---

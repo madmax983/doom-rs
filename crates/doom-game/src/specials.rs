@@ -465,7 +465,7 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
         // ── Move toward target ──
         let speed = door.speed;
         let target = door.target_height;
-        let is_ceiling = door.is_ceiling;
+        let is_ceiling = door.target == crate::movers::MoverTarget::Ceiling;
         let reopen_height = door.reopen_height;
         let wait_tics = door.wait_tics;
 
@@ -524,13 +524,15 @@ pub fn tick_lights(gs: &mut GameState, level: &mut Level) {
     for light in &mut gs.movers.active_lights {
         light.timer -= 1;
         if light.timer <= 0 {
-            light.is_bright = !light.is_bright;
+            light.phase = match light.phase {
+                crate::movers::LightPhase::Bright => crate::movers::LightPhase::Dark,
+                crate::movers::LightPhase::Dark => crate::movers::LightPhase::Bright,
+            };
             light.timer = light.period;
             if light.sector < level.sectors.len() {
-                level.sectors[light.sector].light_level = if light.is_bright {
-                    light.bright
-                } else {
-                    light.dark
+                level.sectors[light.sector].light_level = match light.phase {
+                    crate::movers::LightPhase::Bright => light.bright,
+                    crate::movers::LightPhase::Dark => light.dark,
                 };
             }
         }
@@ -559,7 +561,7 @@ pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
                     period: BLINK_SLOW_PERIOD,
                     bright: sector.light_level,
                     dark: 0,
-                    is_bright: true,
+                    phase: crate::movers::LightPhase::Bright,
                 });
             }
             LightEffectType::Blink05s => {
@@ -570,7 +572,7 @@ pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
                     period: BLINK_FAST_PERIOD,
                     bright: sector.light_level,
                     dark: 0,
-                    is_bright: true,
+                    phase: crate::movers::LightPhase::Bright,
                 });
             }
             LightEffectType::Blink1s => {
@@ -581,7 +583,7 @@ pub fn spawn_level_specials(gs: &mut GameState, level: &Level) {
                     period: BLINK_SLOW_PERIOD,
                     bright: sector.light_level,
                     dark: 35,
-                    is_bright: true,
+                    phase: crate::movers::LightPhase::Bright,
                 });
             }
             _ => {} // Other specials handled by tick_sector_specials.
@@ -1079,8 +1081,7 @@ pub fn ev_build_stairs(
             direction: MoveDirection::Up,
             wait_tics: -1,
             return_height: level.sectors[start_sector].floor_height,
-            waiting: false,
-            wait_remaining: 0,
+            phase: crate::movers::FloorMoverPhase::Moving,
             crush,
             tag: 0,
             floor_type: FloorType::RaiseToNearest,
@@ -1137,8 +1138,7 @@ pub fn ev_build_stairs(
                 direction: MoveDirection::Up,
                 wait_tics: -1,
                 return_height: other_sec.floor_height,
-                waiting: false,
-                wait_remaining: 0,
+                phase: crate::movers::FloorMoverPhase::Moving,
                 crush,
                 tag: 0,
                 floor_type: FloorType::RaiseToNearest,
@@ -1264,8 +1264,7 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
             direction,
             wait_tics: -1,
             return_height: hole_sec.floor_height,
-            waiting: false,
-            wait_remaining: 0,
+            phase: crate::movers::FloorMoverPhase::Moving,
             crush: crate::state::CrushBehavior::NoCrush,
             tag: 0,
             floor_type: FloorType::LowerToLowest,
@@ -1329,12 +1328,12 @@ pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed:
         let high = sector.floor_height;
 
         gs.movers.active_platforms.push(PerpetualPlatform {
+            wait_remaining: 0,
             sector_index: idx,
             low_height: low,
             high_height: high,
             speed,
             wait_tics: PLATFORM_WAIT,
-            wait_remaining: 0,
             status: PlatformStatus::Down,
             tag,
         });
@@ -1541,11 +1540,11 @@ pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
         }
 
         // Waiting phase.
-        if floor_mover.waiting {
-            floor_mover.wait_remaining -= 1;
-            if floor_mover.wait_remaining <= 0 {
+        if let crate::movers::FloorMoverPhase::Waiting(ref mut wait_remaining) = floor_mover.phase {
+            *wait_remaining -= 1;
+            if *wait_remaining <= 0 {
                 // Wait over — reverse direction to return.
-                floor_mover.waiting = false;
+                floor_mover.phase = crate::movers::FloorMoverPhase::Moving;
                 floor_mover.direction = MoveDirection::Up;
                 floor_mover.target_height = floor_mover.return_height;
             }
@@ -1572,8 +1571,7 @@ pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
                     level.sectors[sector_idx].floor_height = target;
                     if wait_tics > 0 {
                         // Enter wait phase (e.g., lift at bottom).
-                        floor_mover.waiting = true;
-                        floor_mover.wait_remaining = wait_tics;
+                        floor_mover.phase = crate::movers::FloorMoverPhase::Waiting(wait_tics);
                     } else {
                         // One-shot: remove.
                         return false;
@@ -1843,8 +1841,7 @@ fn activate_lift(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
             direction: MoveDirection::Down,
             wait_tics: LIFT_WAIT,
             return_height: sector.floor_height,
-            waiting: false,
-            wait_remaining: 0,
+            phase: crate::movers::FloorMoverPhase::Moving,
             crush: crate::state::CrushBehavior::NoCrush,
             tag,
             floor_type: FloorType::LowerToLowest,
@@ -1886,12 +1883,12 @@ pub fn ev_do_lift(
         let sector = &level.sectors[idx];
         let low = lowest_adjacent_floor(level, idx);
         gs.movers.lifts.push(LiftMover {
+            wait_remaining: 0,
             sector_index: idx,
             low_height: low,
             high_height: sector.floor_height,
             speed,
             wait_tics,
-            wait_remaining: 0,
             status: LiftStatus::Lowering,
         });
         count += 1;
@@ -1986,8 +1983,7 @@ fn activate_floor_raise_single_typed(
         direction: MoveDirection::Up,
         wait_tics: -1,
         return_height: sector.floor_height,
-        waiting: false,
-        wait_remaining: 0,
+        phase: crate::movers::FloorMoverPhase::Moving,
         crush,
         tag,
         floor_type,
@@ -2023,8 +2019,7 @@ fn activate_floor_lower_single_typed(
         direction: MoveDirection::Down,
         wait_tics: -1,
         return_height: sector.floor_height,
-        waiting: false,
-        wait_remaining: 0,
+        phase: crate::movers::FloorMoverPhase::Moving,
         crush: crate::state::CrushBehavior::NoCrush,
         tag,
         floor_type,
@@ -2064,7 +2059,7 @@ fn open_door(
         target_height: target,
         current_height: sector.ceil_height,
         speed: DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: if behavior == crate::linedef_dispatch::DoorBehavior::OpenWaitClose {
             DOOR_WAIT
         } else {
@@ -2141,7 +2136,7 @@ fn close_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         target_height: target,
         current_height: sector.ceil_height,
         speed: -DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: -1,
         countdown: -1,
         reopen_height: 0,
@@ -2171,7 +2166,7 @@ fn close_wait_open_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         target_height: sector.floor_height,
         current_height: sector.ceil_height,
         speed: -DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: -1,
         countdown: -1,
         reopen_height: reopen_h,
@@ -2209,7 +2204,7 @@ fn open_blazing_door(
         target_height: target,
         current_height: sector.ceil_height,
         speed: BLAZING_DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: if behavior == crate::linedef_dispatch::DoorBehavior::OpenWaitClose {
             DOOR_WAIT
         } else {
@@ -2244,7 +2239,7 @@ fn close_blazing_door(gs: &mut GameState, level: &Level, sector_idx: usize) {
         target_height: target,
         current_height: sector.ceil_height,
         speed: -BLAZING_DOOR_SPEED,
-        is_ceiling: true,
+        target: crate::movers::MoverTarget::Ceiling,
         wait_tics: -1,
         countdown: -1,
         reopen_height: 0,
@@ -5046,11 +5041,19 @@ mod tests {
 
         // Should now be in wait phase.
         assert!(
-            gs.movers.active_floors[0].waiting,
+            matches!(
+                gs.movers.active_floors[0].phase,
+                crate::movers::FloorMoverPhase::Waiting(_)
+            ),
             "lift must enter wait phase"
         );
         assert_eq!(
-            gs.movers.active_floors[0].wait_remaining, LIFT_WAIT,
+            if let crate::movers::FloorMoverPhase::Waiting(r) = gs.movers.active_floors[0].phase {
+                r
+            } else {
+                0
+            },
+            LIFT_WAIT,
             "wait_remaining must be set to LIFT_WAIT"
         );
 
@@ -5058,7 +5061,13 @@ mod tests {
         for _ in 0..LIFT_WAIT {
             tick_floors(&mut gs, &mut level);
         }
-        assert!(!gs.movers.active_floors[0].waiting, "wait phase must end");
+        assert!(
+            !matches!(
+                gs.movers.active_floors[0].phase,
+                crate::movers::FloorMoverPhase::Waiting(_)
+            ),
+            "wait phase must end"
+        );
 
         // Should now be heading back up to return_height (64).
         // 64 units / speed 4 = 16 tics.
@@ -5316,8 +5325,7 @@ mod tests {
             direction: MoveDirection::Down,
             wait_tics: 105,
             return_height: 64,
-            waiting: false,
-            wait_remaining: 0,
+            phase: crate::movers::FloorMoverPhase::Moving,
             crush: crate::state::CrushBehavior::NoCrush,
             tag: 1,
             floor_type: FloorType::LowerToLowest,
@@ -6577,8 +6585,7 @@ mod tests {
             direction: MoveDirection::Up,
             wait_tics: -1,
             return_height: 0,
-            waiting: false,
-            wait_remaining: 0,
+            phase: crate::movers::FloorMoverPhase::Moving,
             crush: crate::state::CrushBehavior::NoCrush,
             tag: 0,
             floor_type: FloorType::RaiseToNearest,
@@ -6612,8 +6619,7 @@ mod tests {
             direction: MoveDirection::Down,
             wait_tics: -1,
             return_height: 32,
-            waiting: false,
-            wait_remaining: 0,
+            phase: crate::movers::FloorMoverPhase::Moving,
             crush: crate::state::CrushBehavior::NoCrush,
             tag: 0,
             floor_type: FloorType::LowerToLowest,
@@ -6645,8 +6651,7 @@ mod tests {
             direction: MoveDirection::Up,
             wait_tics: -1,
             return_height: 0,
-            waiting: false,
-            wait_remaining: 0,
+            phase: crate::movers::FloorMoverPhase::Moving,
             crush: crate::state::CrushBehavior::Crush,
             tag: 0,
             floor_type: FloorType::RaiseCrush,
@@ -6954,12 +6959,12 @@ mod tests {
         gs.movers
             .active_platforms
             .push(crate::state::PerpetualPlatform {
+                wait_remaining: 0,
                 sector_index: 1,
                 low_height: 0,
                 high_height: 64,
                 speed: 1,
                 wait_tics: 105,
-                wait_remaining: 0,
                 status: crate::state::PlatformStatus::Down,
                 tag: 10,
             });
@@ -6994,12 +6999,12 @@ mod tests {
         gs.movers
             .active_platforms
             .push(crate::state::PerpetualPlatform {
+                wait_remaining: 0,
                 sector_index: 1,
                 low_height: 0,
                 high_height: 64,
                 speed: 1,
                 wait_tics: 105,
-                wait_remaining: 0,
                 status: crate::state::PlatformStatus::Down,
                 tag: 10,
             });
@@ -7112,8 +7117,7 @@ mod tests {
             direction: MoveDirection::Up,
             wait_tics: -1,
             return_height: 0,
-            waiting: false,
-            wait_remaining: 0,
+            phase: crate::movers::FloorMoverPhase::Moving,
             crush: crate::state::CrushBehavior::NoCrush,
             tag: 0,
             floor_type: FloorType::RaiseToNearest,
@@ -7122,12 +7126,12 @@ mod tests {
         gs.movers
             .active_platforms
             .push(crate::state::PerpetualPlatform {
+                wait_remaining: 0,
                 sector_index: 3,
                 low_height: -16,
                 high_height: 48,
                 speed: 1,
                 wait_tics: 105,
-                wait_remaining: 0,
                 status: crate::state::PlatformStatus::Down,
                 tag: 7,
             });
@@ -8098,12 +8102,12 @@ mod tests {
     fn lift_mover_creation_correct_fields() {
         use crate::state::{LiftMover, LiftStatus};
         let lm = LiftMover {
+            wait_remaining: 0,
             sector_index: 1,
             low_height: 0,
             high_height: 64,
             speed: 4,
             wait_tics: 105,
-            wait_remaining: 0,
             status: LiftStatus::Lowering,
         };
         assert_eq!(lm.sector_index, 1);
@@ -8729,7 +8733,7 @@ mod tests {
         let door = &gs.movers.active_doors[0];
         assert_eq!(door.speed, -DOOR_SPEED);
         assert_eq!(door.target_height, 0); // floor height
-        assert!(door.is_ceiling);
+        assert_eq!(door.target, crate::movers::MoverTarget::Ceiling);
         // Wait is calculated internally; just verify it's a valid mover.
     }
 
@@ -8746,7 +8750,7 @@ mod tests {
         let door = &gs.movers.active_doors[0];
         assert_eq!(door.speed, -DOOR_SPEED);
         assert_eq!(door.target_height, 0);
-        assert!(door.is_ceiling);
+        assert_eq!(door.target, crate::movers::MoverTarget::Ceiling);
     }
 
     // -----------------------------------------------------------------------
@@ -9901,8 +9905,7 @@ mod tests {
             direction: MoveDirection::Up,
             wait_tics: -1,
             return_height: 0,
-            waiting: false,
-            wait_remaining: 0,
+            phase: crate::movers::FloorMoverPhase::Moving,
             crush: crate::state::CrushBehavior::NoCrush,
             tag: 1,
             floor_type: FloorType::Raise24,
