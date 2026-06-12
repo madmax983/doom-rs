@@ -77,16 +77,14 @@ pub fn p_set_mobj_state(
         return false;
     }
 
-    let action = match crate::states::STATES.get(new_state.0 as usize) {
-        Some(entry) => {
-            if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.state = new_state;
-                mo.tics = entry.tics;
-            }
-            entry.action
-        }
-        None => return false,
+    let Some(entry) = crate::states::STATES.get(new_state.0 as usize) else {
+        return false;
     };
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.state = new_state;
+        mo.tics = entry.tics;
+    }
+    let action = entry.action;
 
     // Fire action on state entry (needs &mut self — all borrows released above).
     if action != crate::actions::Action::NoAction as u8 {
@@ -520,10 +518,9 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
     let old_y = mo.y;
     let new_x = mo.x + mo.momx;
     let new_y = mo.y + mo.momy;
-    let mut moved = match level.as_deref() {
-        Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
-        None => true,
-    };
+    let mut moved = level
+        .as_deref()
+        .is_none_or(|lv| crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv));
     let mut final_x = new_x;
     let mut final_y = new_y;
 
