@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Stop Movers and SoundProp Re-export Leak]**
+**Tangle:** `doom-game/src/state.rs` was unnecessarily re-exporting structures from `crate::movers` and `crate::sound_prop` using `pub use`. This caused other internal modules to depend on the `state` module for mover and sound logic, creating low cohesion and a leaky abstraction.
+**Blueprint:** Replaced `pub use` with `use` in `state.rs` and updated internal files to import `movers` and `sound_prop` types directly from their respective modules, enforcing clear domain boundaries.

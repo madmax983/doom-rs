@@ -298,7 +298,9 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         }
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterDie(kind, target, sx, sy));
+            .push(crate::sound_prop::SoundRequest::MonsterDie(
+                kind, target, sx, sy,
+            ));
     } else {
         // -------------------------------------------------------------------
         // Pain transition — probabilistic via p_random()
