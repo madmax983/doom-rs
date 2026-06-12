@@ -619,4 +619,49 @@ mod tests {
             "response must not be identified as join request"
         );
     }
+
+    // -- Coverage tests --
+
+    #[test]
+    fn bind_with_config_sets_custom_port() {
+        let config = NetConfig {
+            port: 0,
+            ..NetConfig::default()
+        };
+        let transport =
+            NetTransport::bind_with_config(config).expect("bind_with_config must succeed");
+        assert_eq!(transport.config().port, 0);
+        assert!(!transport.is_connected());
+    }
+
+    #[test]
+    fn recv_raw_loopback() {
+        let mut sender = NetTransport::bind("127.0.0.1:0").expect("bind");
+        let mut receiver = NetTransport::bind("127.0.0.1:0").expect("bind");
+        let recv_addr = receiver.local_addr().expect("local_addr");
+
+        let data = b"hello raw";
+        let sent = sender.send_raw(data, &recv_addr).expect("send_raw");
+        assert_eq!(sent, data.len());
+
+        let mut buf = [0u8; 32];
+        let recv = receiver.recv_raw(&mut buf).expect("recv_raw");
+        assert!(recv.is_some());
+        let (n, addr) = recv.expect("value");
+        assert_eq!(n, data.len());
+        assert_eq!(&buf[..n], data);
+        assert_eq!(addr, sender.local_addr().expect("local_addr"));
+    }
+
+    #[test]
+    fn check_timeout_returns_true_when_elapsed() {
+        let mut t = NetTransport::bind("127.0.0.1:0").expect("bind");
+        // Fresh transport shouldn't timeout if timeout_ms is large
+        assert!(!t.check_timeout(), "fresh transport must not timeout");
+
+        // Force a timeout by setting config.timeout_ms to 0
+        t.config.timeout_ms = 0;
+        assert!(t.check_timeout(), "must timeout when elapsed >= timeout_ms");
+        assert_eq!(*t.state(), ConnectionState::TimedOut);
+    }
 }
