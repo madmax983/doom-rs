@@ -603,6 +603,14 @@ impl DehPatch {
     }
 
     fn parse_float_fallback(s: &str) -> Result<f64, ()> {
+        // If a float string has more than 309 characters, we reject it as it
+        // could easily overflow or underflow our subsequent casts.
+        // E.g. maximum f64 is approx 1.79e308. If the digits exceed this
+        // the standard parse::<f64>() can handle it (returns infinity), but
+        // extremely large representations without decimal points can be troublesome.
+        if s.len() > 300 {
+            return Err(());
+        }
         let v = s.parse::<f64>().map_err(|_| ())?;
         if v.is_nan() { Err(()) } else { Ok(v) }
     }

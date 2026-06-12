@@ -69,15 +69,20 @@ impl<'a> MapAnalyzer<'a> {
         let mut articulation_points = HashSet::new();
         let mut time = 0;
 
-        for &node in self.graph.adjacency_list.keys() {
-            if !visited.contains(&node) {
-                // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+        for &root in self.graph.adjacency_list.keys() {
+            if !visited.contains(&root) {
+                // To avoid deep recursion or stack overflow on malicious inputs,
+                // we cap the number of nodes processed in a single DFS tree.
+                // We cap at a level far larger than any real DOOM map sector count
+                // to not break large linear tests.
+                const MAX_DFS_DEPTH: usize = 1_000_000;
 
-                visited.insert(node);
+                let mut stack = vec![(root, self.graph.adjacency_list.get(&root).unwrap().iter())];
+
+                visited.insert(root);
                 time += 1;
-                discovery_time.insert(node, time);
-                low_time.insert(node, time);
+                discovery_time.insert(root, time);
+                low_time.insert(root, time);
                 let mut children_map: HashMap<usize, usize> = HashMap::new();
 
                 while let Some((u, mut neighbors_iter)) = stack.pop() {
@@ -88,6 +93,9 @@ impl<'a> MapAnalyzer<'a> {
                             continue;
                         }
                         if !visited.contains(&v) {
+                            if stack.len() >= MAX_DFS_DEPTH {
+                                continue;
+                            }
                             *children_map.entry(u).or_default() += 1;
                             parent.insert(v, u);
 
@@ -111,20 +119,21 @@ impl<'a> MapAnalyzer<'a> {
                     }
 
                     if !pushed_child {
-                        // After visiting all neighbors of u, if u is not root, update parent's low_time
-                        if let Some(&p) = parent.get(&u) {
-                            let (low_u, low_p, disc_p) = (
-                                low_time.get(&u).copied(),
-                                low_time.get(&p).copied(),
-                                discovery_time.get(&p).copied(),
-                            );
-                            if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p)
-                            {
-                                let new_low = low_p.min(low_u);
-                                low_time.insert(p, new_low);
+                        if u != root {
+                            if let Some(&p) = parent.get(&u) {
+                                let (low_u, low_p, disc_p) = (
+                                    low_time.get(&u).copied(),
+                                    low_time.get(&p).copied(),
+                                    discovery_time.get(&p).copied(),
+                                );
+                                if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p)
+                                {
+                                    let new_low = low_p.min(low_u);
+                                    low_time.insert(p, new_low);
 
-                                if low_u >= disc_p && parent.contains_key(&p) {
-                                    articulation_points.insert(p);
+                                    if low_u >= disc_p && p != root {
+                                        articulation_points.insert(p);
+                                    }
                                 }
                             }
                         } else if *children_map.get(&u).unwrap_or(&0) > 1 {
