@@ -114,6 +114,7 @@ impl Widget for DoomSixelWidget<'_> {
                     skip_first = true;
                     continue;
                 }
+                #[allow(deprecated)]
                 buf.cell_mut((x, y)).map(|cell| cell.set_skip(true));
             }
         }

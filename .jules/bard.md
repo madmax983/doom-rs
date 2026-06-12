@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2024-05-18 - The Empty Lib
+**Confusion:** The `doom-app` crate failed `cargo doc` with `error: missing documentation for the crate`. The binary's main functionality is housed in `src/main.rs` where the `//!` top-level doc lives, but since `src/lib.rs` existed (as an empty file), Rustdoc treats the crate as a library and expects documentation at the top of `lib.rs`.
+**Clarification:** Added a `//!` documentation header to `src/lib.rs` that re-exports or points to `main.rs` to satisfy Rustdoc's requirements for libraries while preserving the module structure.
