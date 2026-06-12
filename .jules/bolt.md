@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**[Iterator for Tagged Sectors]
+**Learning:** `sectors_by_tag` collected sector indices into a `Vec<usize>`, allocating on the heap during line action triggers. Changing this to return `impl Iterator<Item = usize> + '_` enables zero-cost iteration in the caller.
+**Action:** When filtering collections to return a set of indices or references to the caller, use `impl Iterator` to avoid intermediate `.collect()` allocations.
