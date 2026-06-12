@@ -1,11 +1,7 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+💡 **The Spark:** "I noticed we calculate map chokepoints in `doom-map` (using `MapAnalyzer`), but we don't use them to track player progress. Can we use these chokepoints to automatically generate speedrun splits as the player traverses the map?"
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+🚀 **The Feature:** "Implemented `SpeedrunTracker` in `doom-game` that hooks into `MapAnalyzer`. It automatically tracks when a player crosses a map's topological chokepoint and records a timestamped speedrun split."
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+🔮 **The Potential:** "This gives speedrunners zero-setup auto-splitting, and could be extended to show an end-of-level timeline or heatmaps of where players get stuck."
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+⚠️ **Risk:** "Low. The feature is behind the `speedrun_tracker` Cargo feature flag and is completely additive."

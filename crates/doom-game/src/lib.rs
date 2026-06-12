@@ -39,6 +39,8 @@ pub mod sound;
 pub mod sound_prop;
 pub mod spawn;
 pub mod specials;
+#[cfg(feature = "speedrun_tracker")]
+pub mod speedrun;
 pub mod state;
 pub mod states;
 /// Level statistics tracking (kills, items, secrets, etc).

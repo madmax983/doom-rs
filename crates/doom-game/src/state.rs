@@ -115,6 +115,9 @@ pub struct GameState {
     #[cfg(feature = "telemetry")]
     /// Tracks spatial player path data over the session.
     pub telemetry: crate::telemetry::SessionTelemetry,
+    #[cfg(feature = "speedrun_tracker")]
+    /// Auto-generated speedrun split tracking.
+    pub speedrun: crate::speedrun::SpeedrunTracker,
 }
 
 impl GameState {
@@ -144,6 +147,8 @@ impl GameState {
             style: crate::style::StyleMeter::new(),
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
+            #[cfg(feature = "speedrun_tracker")]
+            speedrun: crate::speedrun::SpeedrunTracker::new(),
         }
     }
 

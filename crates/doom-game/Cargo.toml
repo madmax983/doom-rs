@@ -8,6 +8,7 @@ default = []
 style_meter = []
 telemetry = []
 director = []
+speedrun_tracker = []
 
 [dependencies]
 doom-types = { workspace = true }

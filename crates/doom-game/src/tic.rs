@@ -266,6 +266,14 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
 ///
 /// This does NOT process player input — call `tick_player` before this.
 pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
+    #[cfg(feature = "speedrun_tracker")]
+    if let Some(lv) = level.as_deref() {
+        gs.speedrun.init_if_needed(lv);
+        if let Some(sector_idx) = crate::specials::player_sector_index(gs, lv) {
+            gs.speedrun.update(sector_idx, gs.tic_num);
+        }
+    }
+
     // 1. Advance all actor state machines.
     tick_all_mobjs(gs, level.as_deref());
 
