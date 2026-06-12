@@ -8,3 +8,6 @@
 **Havoc: Bounds-checking allocations**
 **Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
 **Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+**Prevent MapAnalyzer Memory Exhaustion / DFS Spin Loop**
+**Learning:** Hard-capping a loop with `break` when a maximum limit is reached in graph traversals silently corrupts the traversal and returns partial/incorrect data for any input larger than the limit.
+**Action:** Do not use `break` to cap limits in business logic functions. Instead, change the function signature to return a `Result` and explicitly return an `Err` when a safe limit is reached.

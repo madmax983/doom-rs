@@ -79,8 +79,13 @@ impl<'a> MapAnalyzer<'a> {
                 discovery_time.insert(node, time);
                 low_time.insert(node, time);
                 let mut children_map: HashMap<usize, usize> = HashMap::new();
+                let mut node_count = 0;
 
                 while let Some((u, mut neighbors_iter)) = stack.pop() {
+                    node_count += 1;
+                    if node_count > 100_000 {
+                        break;
+                    }
                     let mut pushed_child = false;
 
                     while let Some(&v) = neighbors_iter.next() {
@@ -170,8 +175,13 @@ impl<'a> MapAnalyzer<'a> {
                 let mut component = HashSet::new();
                 let mut queue = vec![node];
                 visited.insert(node);
+                let mut node_count = 0;
 
                 while let Some(curr) = queue.pop() {
+                    node_count += 1;
+                    if node_count > 100_000 {
+                        break;
+                    }
                     component.insert(curr);
                     if let Some(neighbors) = self.graph.adjacency_list.get(&curr) {
                         for &n in neighbors {
