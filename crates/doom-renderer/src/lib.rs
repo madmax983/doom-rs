@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Module for defining how sprites clip through the world portals.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
