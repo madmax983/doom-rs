@@ -32,6 +32,17 @@ pub struct MapAnalyzer<'a> {
     graph: &'a SectorGraph,
 }
 
+#[derive(Default)]
+struct AnalyzerContext {
+    visited: HashSet<usize>,
+    discovery_time: HashMap<usize, usize>,
+    low_time: HashMap<usize, usize>,
+    parent: HashMap<usize, usize>,
+    articulation_points: HashSet<usize>,
+    children_map: HashMap<usize, usize>,
+    time: usize,
+}
+
 impl<'a> MapAnalyzer<'a> {
     /// The MapAnalyzer is the cartographer's lens for finding tactical advantages.
     ///
@@ -62,82 +73,91 @@ impl<'a> MapAnalyzer<'a> {
 
     /// Finds articulation points (sectors that, if removed, disconnect parts of the map).
     pub fn chokepoints(&self) -> Vec<usize> {
-        let mut visited = HashSet::new();
-        let mut discovery_time = HashMap::new();
-        let mut low_time = HashMap::new();
-        let mut parent = HashMap::new();
-        let mut articulation_points = HashSet::new();
-        let mut time = 0;
+        let mut ctx = AnalyzerContext::default();
 
         for &node in self.graph.adjacency_list.keys() {
-            if !visited.contains(&node) {
+            if !ctx.visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
                 let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
 
-                visited.insert(node);
-                time += 1;
-                discovery_time.insert(node, time);
-                low_time.insert(node, time);
-                let mut children_map: HashMap<usize, usize> = HashMap::new();
+                ctx.visited.insert(node);
+                ctx.time += 1;
+                ctx.discovery_time.insert(node, ctx.time);
+                ctx.low_time.insert(node, ctx.time);
 
                 while let Some((u, mut neighbors_iter)) = stack.pop() {
                     let mut pushed_child = false;
 
-                    while let Some(&v) = neighbors_iter.next() {
-                        if !self.graph.adjacency_list.contains_key(&v) {
-                            continue;
-                        }
-                        if !visited.contains(&v) {
-                            *children_map.entry(u).or_default() += 1;
-                            parent.insert(v, u);
-
-                            visited.insert(v);
-                            time += 1;
-                            discovery_time.insert(v, time);
-                            low_time.insert(v, time);
-
-                            stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
-                            pushed_child = true;
-                            break;
-                        } else if parent.get(&u) != Some(&v) {
-                            let (low_u, disc_v) =
-                                (low_time.get(&u).copied(), discovery_time.get(&v).copied());
-                            if let (Some(low_u), Some(disc_v)) = (low_u, disc_v) {
-                                let new_low = low_u.min(disc_v);
-                                low_time.insert(u, new_low);
-                            }
-                        }
+                    if let Some(v) = self.process_neighbors(u, &mut neighbors_iter, &mut ctx) {
+                        stack.push((u, neighbors_iter));
+                        stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                        pushed_child = true;
                     }
 
                     if !pushed_child {
-                        // After visiting all neighbors of u, if u is not root, update parent's low_time
-                        if let Some(&p) = parent.get(&u) {
-                            let (low_u, low_p, disc_p) = (
-                                low_time.get(&u).copied(),
-                                low_time.get(&p).copied(),
-                                discovery_time.get(&p).copied(),
-                            );
-                            if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p)
-                            {
-                                let new_low = low_p.min(low_u);
-                                low_time.insert(p, new_low);
-
-                                if low_u >= disc_p && parent.contains_key(&p) {
-                                    articulation_points.insert(p);
-                                }
-                            }
-                        } else if *children_map.get(&u).unwrap_or(&0) > 1 {
-                            articulation_points.insert(u);
-                        }
+                        self.update_parent_low_time(u, &mut ctx);
                     }
                 }
             }
         }
 
-        let mut ap_vec: Vec<usize> = articulation_points.into_iter().collect();
+        let mut ap_vec: Vec<usize> = ctx.articulation_points.into_iter().collect();
         ap_vec.sort_unstable();
         ap_vec
+    }
+
+    fn process_neighbors<'b>(
+        &self,
+        u: usize,
+        neighbors_iter: &mut std::collections::hash_set::Iter<'b, usize>,
+        ctx: &mut AnalyzerContext,
+    ) -> Option<usize> {
+        for &v in neighbors_iter {
+            if !self.graph.adjacency_list.contains_key(&v) {
+                continue;
+            }
+            if !ctx.visited.contains(&v) {
+                *ctx.children_map.entry(u).or_default() += 1;
+                ctx.parent.insert(v, u);
+
+                ctx.visited.insert(v);
+                ctx.time += 1;
+                ctx.discovery_time.insert(v, ctx.time);
+                ctx.low_time.insert(v, ctx.time);
+
+                return Some(v);
+            } else if ctx.parent.get(&u) != Some(&v) {
+                let (low_u, disc_v) = (
+                    ctx.low_time.get(&u).copied(),
+                    ctx.discovery_time.get(&v).copied(),
+                );
+                if let (Some(low_u), Some(disc_v)) = (low_u, disc_v) {
+                    let new_low = low_u.min(disc_v);
+                    ctx.low_time.insert(u, new_low);
+                }
+            }
+        }
+        None
+    }
+
+    fn update_parent_low_time(&self, u: usize, ctx: &mut AnalyzerContext) {
+        if let Some(&p) = ctx.parent.get(&u) {
+            let (low_u, low_p, disc_p) = (
+                ctx.low_time.get(&u).copied(),
+                ctx.low_time.get(&p).copied(),
+                ctx.discovery_time.get(&p).copied(),
+            );
+            if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p) {
+                let new_low = low_p.min(low_u);
+                ctx.low_time.insert(p, new_low);
+
+                if low_u >= disc_p && ctx.parent.contains_key(&p) {
+                    ctx.articulation_points.insert(p);
+                }
+            }
+        } else if *ctx.children_map.get(&u).unwrap_or(&0) > 1 {
+            ctx.articulation_points.insert(u);
+        }
     }
 
     /// Finds distinct disconnected areas of the map.
