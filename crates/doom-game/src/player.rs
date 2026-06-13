@@ -8,27 +8,13 @@
 //! - `ammo[i] ≤ MAX_AMMO[i]` for all i
 
 use doom_types::limits::{MAX_AMMO, MAX_ARMOR, MAX_HEALTH, NUM_AMMO, NUM_WEAPONS};
-pub use doom_types::limits::{NUM_POWERS, NUM_PSPRITES};
+pub(crate) use doom_types::limits::{NUM_POWERS, NUM_PSPRITES};
 use doom_types::weapons::{AmmoType, WEAPON_AMMO, WeaponType};
 
+pub(crate) use doom_types::keys::*;
+pub(crate) use doom_types::powers;
+
 use crate::mobj::{MobjHandle, StateNum};
-
-// ---------------------------------------------------------------------------
-// Key bit constants
-// ---------------------------------------------------------------------------
-
-/// Blue keycard bit.
-pub const KEY_BLUE_CARD: u8 = 0x01;
-/// Yellow keycard bit.
-pub const KEY_YELLOW_CARD: u8 = 0x02;
-/// Red keycard bit.
-pub const KEY_RED_CARD: u8 = 0x04;
-/// Blue skull key bit.
-pub const KEY_BLUE_SKULL: u8 = 0x08;
-/// Yellow skull key bit.
-pub const KEY_YELLOW_SKULL: u8 = 0x10;
-/// Red skull key bit.
-pub const KEY_RED_SKULL: u8 = 0x20;
 
 // ---------------------------------------------------------------------------
 // Power-up constants
@@ -40,22 +26,6 @@ pub mod psprite_slots {
     pub const WEAPON: usize = 0;
     /// Muzzle-flash overlay sprite.
     pub const FLASH: usize = 1;
-}
-
-/// Power-up slot indices.
-pub mod powers {
-    /// Invulnerability sphere.
-    pub const PW_INVULNERABILITY: usize = 0;
-    /// Berserk (strength — fist does 10× damage, full health restore).
-    pub const PW_STRENGTH: usize = 1;
-    /// Blur sphere / partial invisibility.
-    pub const PW_INVISIBILITY: usize = 2;
-    /// Radiation suit (iron feet).
-    pub const PW_IRONFEET: usize = 3;
-    /// Computer area map (all map visible).
-    pub const PW_ALLMAP: usize = 4;
-    /// Infrared (light amplification visor).
-    pub const PW_INFRARED: usize = 5;
 }
 
 // ---------------------------------------------------------------------------
