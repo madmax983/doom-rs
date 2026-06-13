@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Fix missing docs and clippy warnings]**
+**Tangle:** The `doom-tui` crate used a deprecated ratatui method `ratatui::buffer::Cell::set_skip`, triggering warnings during the build. The `doom-app` crate lacked a module-level doc comment, causing `cargo doc` to fail when running with `-D missing_docs`. The `doom-renderer/src/sprite_clip.rs` file was lacking documentation, causing `cargo doc` to fail.
+**Blueprint:** Wrapped the deprecated `set_skip` call in `doom-tui/src/event_loop.rs` and `doom-tui/src/sixel.rs` with `#[allow(deprecated)]` and refactored the `.map` into an idiomatic `if let Some` block to satisfy clippy. Added module-level doc comment to `doom-app/src/lib.rs` and missing documentation comments to `sprite_clip.rs` in `doom-renderer`.
