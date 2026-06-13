@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**[Avoid Borrow Checker Pitfalls with Slices]**
+**Learning:** Changing a method to return `Option<&[T]>` instead of `Option<Vec<T>>` when `&mut self` is required effectively binds the slice's lifetime to the exclusive mutable borrow of `self`. This creates borrow checker errors upstream because callers cannot perform other operations (like immutable borrows via `p.peek()`) while the returned slice is held.
+**Action:** Do not blindly swap `Vec<T>` for `&[T]` if the returning method takes `&mut self` and the caller needs to use `self` while holding the result. Alternatively, examine if `&self` can be used or if other zero-cost abstractions apply.

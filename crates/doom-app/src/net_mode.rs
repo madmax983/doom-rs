@@ -168,11 +168,10 @@ pub(crate) fn run_server(port: u16) -> Result<()> {
                         .label(format!("{} / {}", count, MAX_PLAYERS));
                     f.render_widget(gauge, chunks[1]);
 
-                    let items: Vec<ListItem> = logs
+                    let items = logs
                         .iter()
                         .rev()
-                        .map(|msg| ListItem::new(Span::raw(msg)))
-                        .collect();
+                        .map(|msg| ListItem::new(Span::raw(msg)));
                     let list = List::new(items).block(
                         Block::default()
                             .title("Recent Events")
