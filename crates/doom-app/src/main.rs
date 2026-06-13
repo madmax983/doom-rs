@@ -2457,11 +2457,14 @@ fn run_doom(args: Args) -> Result<()> {
             if chokepoints.is_empty() {
                 chokepoints_str.push_str("None");
             } else {
-                for (i, s) in chokepoints.iter().enumerate() {
+                for (i, s) in chokepoints.iter().take(20).enumerate() {
                     if i > 0 {
                         chokepoints_str.push_str(", ");
                     }
                     chokepoints_str.push_str(&s.to_string());
+                }
+                if chokepoints.len() > 20 {
+                    chokepoints_str.push_str(&format!("... ({} more)", chokepoints.len() - 20));
                 }
             }
 
@@ -2485,17 +2488,26 @@ fn run_doom(args: Args) -> Result<()> {
                     comfy_table::Cell::new("🗺️  Chokepoints"),
                     comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
                 ]);
-                for (i, area) in areas.iter().enumerate() {
+                for (i, area) in areas.iter().take(10).enumerate() {
                     let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
+                    for (j, s) in area.iter().take(20).enumerate() {
                         if j > 0 {
                             area_str.push_str(", ");
                         }
                         area_str.push_str(&s.to_string());
                     }
+                    if area.len() > 20 {
+                        area_str.push_str(&format!("... ({} more)", area.len() - 20));
+                    }
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
                         comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
+                    ]);
+                }
+                if areas.len() > 10 {
+                    table.add_row(vec![
+                        comfy_table::Cell::new("..."),
+                        comfy_table::Cell::new(format!("... ({} more areas)", areas.len() - 10)).fg(comfy_table::Color::DarkGrey),
                     ]);
                 }
             } else {
@@ -2507,17 +2519,26 @@ fn run_doom(args: Args) -> Result<()> {
                     comfy_table::Cell::new("🗺️  Chokepoints"),
                     comfy_table::Cell::new(&chokepoints_str),
                 ]);
-                for (i, area) in areas.iter().enumerate() {
+                for (i, area) in areas.iter().take(10).enumerate() {
                     let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
+                    for (j, s) in area.iter().take(20).enumerate() {
                         if j > 0 {
                             area_str.push_str(", ");
                         }
                         area_str.push_str(&s.to_string());
                     }
+                    if area.len() > 20 {
+                        area_str.push_str(&format!("... ({} more)", area.len() - 20));
+                    }
                     table.add_row(vec![
                         comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
                         comfy_table::Cell::new(area_str),
+                    ]);
+                }
+                if areas.len() > 10 {
+                    table.add_row(vec![
+                        comfy_table::Cell::new("..."),
+                        comfy_table::Cell::new(format!("... ({} more areas)", areas.len() - 10)),
                     ]);
                 }
             }
