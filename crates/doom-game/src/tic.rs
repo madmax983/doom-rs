@@ -293,6 +293,18 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
 
     // 11. Increment level time.
     gs.stats.level_time = gs.stats.level_time.wrapping_add(1);
+
+    #[cfg(feature = "achievements")]
+    {
+        let par = crate::intermission::par_time(&gs.level_name);
+        let _new_achievements = gs.achievements.tick(
+            gs.player.kill_count,
+            gs.player.secret_count,
+            gs.stats.level_time,
+            gs.exit_request.is_some(),
+            par,
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
