@@ -1,3 +1,4 @@
+//! doom-app
 //! Doom engine entry point and master orchestrator.
 //!
 //! # The Grand Assembly

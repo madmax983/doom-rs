@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Structures for handling sprite clipping against geometry boundaries during rendering.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
