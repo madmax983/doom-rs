@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Eliminate massive heap allocations by consuming arguments by value**
+**Learning:** `apply_save(gs: &mut GameState, payload: &SaveGame)` cloned the entire `GameState` payload internally (`*gs = payload.state.clone()`). By passing `SaveGame` by value instead of reference, ownership is transferred and the deep clone can be avoided, saving large amounts of memory allocations.
+**Action:** When assigning a large structure into a mutable pointer/reference, if the caller does not need the data afterwards, change the function signature to take ownership by value to prevent `clone()`ing.
