@@ -236,17 +236,20 @@ pub(crate) fn load_game_with_format(
 ///
 /// if let Ok((_header, payload)) = load_game(save_path, CompatibilityProfile::Extended) {
 ///     // Overwrite the current timeline with the saved one.
-///     apply_save(&mut current_state, &payload).expect("Failed to apply save!");
+///     apply_save(&mut current_state, payload).expect("Failed to apply save!");
 /// }
 /// ```
 ///
 /// # Errors
 /// Currently always returns `Ok(())`, but exists as a `Result` for future-proofing
 /// validation logic.
-pub(crate) fn apply_save(gs: &mut GameState, payload: &SaveGame) -> Result<(), SaveError> {
+/// Performance optimization (Bolt): Taking ownership of `payload` directly via move
+/// semantics eliminates a massive heap allocation deep-copy `.clone()` of `GameState`
+/// that was previously required when passing by reference.
+pub(crate) fn apply_save(gs: &mut GameState, payload: SaveGame) -> Result<(), SaveError> {
     // Completely overwrite the current game state with the deserialized one.
     // This is valid because `GameState` implements `Clone` and owns all its data.
-    *gs = payload.state.clone();
+    *gs = payload.state;
     Ok(())
 }
 

@@ -1,11 +1,7 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+💡 What: Modified `savegame::apply_save` to take ownership of `SaveGame` payload by value instead of by reference, eliminating a massive deep copy `.clone()` operation on the entire `GameState`.
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+🎯 Why: During game load (or quick load), the deserialized `SaveGame` object is completely consumed and discarded right after restoring the `GameState`. Because the `apply_save` function originally took the `payload` by reference, we were forced to execute `*gs = payload.state.clone()`. For a large, complex `GameState` containing thousands of structs and slabs, this triggers massive intermediate heap allocations and deep copies that were immediately thrown away when the initial load payload dropped.
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+📊 Impact: Removes one complete deep-copy of the `GameState` per save load or quick load.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🔬 Measurement: Run `cargo bench` or profile game loading; or simply observe the removed `.clone()` in `savegame.rs`.
