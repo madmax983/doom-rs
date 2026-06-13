@@ -170,3 +170,147 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+#[cfg(test)]
+mod tests {
+    use crate::mobj::{Mobj, MobjSlab};
+    use crate::sound_prop::SoundRequest;
+    use crate::state::LockedDoorColor;
+    use doom_types::mobj_kind::MobjKind;
+    use doom_types::weapons::WeaponType;
+    use doom_types::{Bam, Fixed16_16};
+
+    #[test]
+    fn test_emitter_player_sounds() {
+        let px = Fixed16_16::from_int(10);
+        let py = Fixed16_16::from_int(20);
+
+        let events = vec![
+            SoundRequest::PlayerWeaponFire(WeaponType::Pistol),
+            SoundRequest::PlayerSuperShotgunOpen,
+            SoundRequest::PlayerSuperShotgunLoad,
+            SoundRequest::PlayerSuperShotgunClose,
+        ];
+
+        for event in events {
+            assert_eq!(event.emitter(px, py), Some((px, py)));
+        }
+    }
+
+    #[test]
+    fn test_emitter_monster_sounds() {
+        let px = Fixed16_16::from_int(10);
+        let py = Fixed16_16::from_int(20);
+
+        let mx = Fixed16_16::from_int(30);
+        let my = Fixed16_16::from_int(40);
+
+        let mut slab = MobjSlab::new();
+        let mobj = Mobj::new(MobjKind::Imp, Fixed16_16::ZERO, Fixed16_16::ZERO, Bam::ZERO);
+        let handle = slab.alloc(mobj);
+
+        let events = vec![
+            SoundRequest::MonsterWake(MobjKind::Imp, handle, mx, my),
+            SoundRequest::MonsterDie(MobjKind::Imp, handle, mx, my),
+            SoundRequest::MonsterAttack(MobjKind::Imp, handle, mx, my),
+        ];
+
+        for event in events {
+            assert_eq!(event.emitter(px, py), Some((mx, my)));
+        }
+    }
+
+    #[test]
+    fn test_emitter_none_sounds() {
+        let px = Fixed16_16::from_int(10);
+        let py = Fixed16_16::from_int(20);
+
+        let events = vec![
+            SoundRequest::PlayerDie,
+            SoundRequest::PlayerUseFail,
+            SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red),
+        ];
+
+        for event in events {
+            assert_eq!(event.emitter(px, py), None);
+        }
+    }
+
+    #[test]
+    fn test_origin_handle_player_sounds() {
+        let mut slab = MobjSlab::new();
+        let mobj = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let player_handle = slab.alloc(mobj);
+
+        let events = vec![
+            SoundRequest::PlayerWeaponFire(WeaponType::Pistol),
+            SoundRequest::PlayerSuperShotgunOpen,
+            SoundRequest::PlayerSuperShotgunLoad,
+            SoundRequest::PlayerSuperShotgunClose,
+        ];
+
+        for event in events {
+            assert_eq!(
+                event.origin_handle(Some(player_handle)),
+                Some(player_handle)
+            );
+            assert_eq!(event.origin_handle(None), None);
+        }
+    }
+
+    #[test]
+    fn test_origin_handle_monster_sounds() {
+        let mut slab = MobjSlab::new();
+        let mobj = Mobj::new(MobjKind::Imp, Fixed16_16::ZERO, Fixed16_16::ZERO, Bam::ZERO);
+        let handle = slab.alloc(mobj);
+
+        let player_mobj = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let player_handle = slab.alloc(player_mobj);
+
+        let mx = Fixed16_16::from_int(30);
+        let my = Fixed16_16::from_int(40);
+
+        let events = vec![
+            SoundRequest::MonsterWake(MobjKind::Imp, handle, mx, my),
+            SoundRequest::MonsterDie(MobjKind::Imp, handle, mx, my),
+            SoundRequest::MonsterAttack(MobjKind::Imp, handle, mx, my),
+        ];
+
+        for event in events {
+            assert_eq!(event.origin_handle(Some(player_handle)), Some(handle));
+            assert_eq!(event.origin_handle(None), Some(handle));
+        }
+    }
+
+    #[test]
+    fn test_origin_handle_none_sounds() {
+        let mut slab = MobjSlab::new();
+        let mobj = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let player_handle = slab.alloc(mobj);
+
+        let events = vec![
+            SoundRequest::PlayerDie,
+            SoundRequest::PlayerUseFail,
+            SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Red),
+        ];
+
+        for event in events {
+            assert_eq!(event.origin_handle(Some(player_handle)), None);
+            assert_eq!(event.origin_handle(None), None);
+        }
+    }
+}

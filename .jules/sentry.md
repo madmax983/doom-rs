@@ -56,3 +56,7 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-06-13 - Added test coverage to sound_prop.rs
+
+**Learning:** Found an uncovered panic point related to enum match branches inside `SoundRequest::emitter` and `SoundRequest::origin_handle` where variants like `PlayerDie` or `MonsterWake` had no coverage verifying their expected coordinates and handles.
+**Action:** Always write tests checking every variant of enums representing game state events to ensure matching paths return correct expected values.
