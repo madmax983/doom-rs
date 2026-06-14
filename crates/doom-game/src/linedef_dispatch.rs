@@ -12,7 +12,8 @@
 use doom_map::Level;
 
 use crate::mobj::MobjHandle;
-use crate::state::{ExitRequest, GameState, LockedDoorColor, SoundRequest};
+use crate::sound_prop::SoundRequest;
+use crate::state::{ExitRequest, GameState, LockedDoorColor};
 use crate::switch::KeyType;
 
 // ---------------------------------------------------------------------------
@@ -632,7 +633,7 @@ fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefE
                 level,
                 tag,
                 1,
-                crate::state::CrushBehavior::NoCrush,
+                crate::movers::CrushBehavior::NoCrush,
             );
             true
         }
@@ -658,7 +659,7 @@ fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefE
                 level,
                 tag,
                 1,
-                crate::state::CrushBehavior::Crush,
+                crate::movers::CrushBehavior::Crush,
             );
             true
         }
@@ -751,7 +752,7 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                     level,
                     idx,
                     crate::specials::StairType::Build8,
-                    crate::state::CrushBehavior::NoCrush,
+                    crate::movers::CrushBehavior::NoCrush,
                 );
             }
             true
@@ -764,7 +765,7 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                     level,
                     idx,
                     crate::specials::StairType::Turbo16,
-                    crate::state::CrushBehavior::NoCrush,
+                    crate::movers::CrushBehavior::NoCrush,
                 );
             }
             true
@@ -962,7 +963,7 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavi
     {
         return;
     }
-    gs.movers.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::movers::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -993,7 +994,7 @@ fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
     {
         return;
     }
-    gs.movers.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::movers::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -1021,7 +1022,7 @@ fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) 
         return;
     }
     let reopen_h = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
-    gs.movers.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::movers::DoorMover {
         sector: sector_idx,
         target_height: sector.floor_height,
         current_height: sector.ceil_height,
@@ -1053,7 +1054,7 @@ fn open_blazing_door_helper(
     {
         return;
     }
-    gs.movers.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::movers::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -1084,7 +1085,7 @@ fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usiz
     {
         return;
     }
-    gs.movers.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::movers::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -1804,7 +1805,7 @@ mod tests {
         assert!(!result, "locked door without key should fail");
         assert_eq!(
             gs.sound.sound_queue,
-            vec![crate::state::SoundRequest::PlayerUseLockedDoor(
+            vec![crate::sound_prop::SoundRequest::PlayerUseLockedDoor(
                 crate::state::LockedDoorColor::Blue,
             )],
             "player should get Doom-style keyed-door feedback"

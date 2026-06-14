@@ -660,7 +660,7 @@ fn transition_to_see_state(
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterWake(
+            .push(crate::sound_prop::SoundRequest::MonsterWake(
                 kind, handle, mo.x, mo.y,
             ));
     }
@@ -1154,7 +1154,7 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Trooper,
                 handle,
                 mo.x,
@@ -1202,7 +1202,7 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Sergeant,
                 handle,
                 mo.x,
@@ -1242,7 +1242,7 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Imp,
                 handle,
                 mo.x,
@@ -1275,7 +1275,7 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
         if let Some(mo) = gs.mobjslab.get(handle) {
             gs.sound
                 .sound_queue
-                .push(crate::state::SoundRequest::MonsterAttack(
+                .push(crate::sound_prop::SoundRequest::MonsterAttack(
                     MobjKind::Demon,
                     handle,
                     mo.x,
@@ -1302,7 +1302,7 @@ fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Cacodemon,
                 handle,
                 mo.x,
@@ -1333,7 +1333,7 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 bruis_kind, handle, mo.x, mo.y,
             ));
     }
@@ -1379,7 +1379,7 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 cpos_kind, handle, mo.x, mo.y,
             ));
     }
@@ -1402,7 +1402,7 @@ fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Cyberdemon,
                 handle,
                 mo.x,
@@ -1428,7 +1428,7 @@ fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Revenant,
                 handle,
                 mo.x,
@@ -1496,7 +1496,7 @@ fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
             .sound_queue
-            .push(crate::state::SoundRequest::MonsterAttack(
+            .push(crate::sound_prop::SoundRequest::MonsterAttack(
                 MobjKind::Mancubus,
                 handle,
                 mo.x,
