@@ -2546,23 +2546,47 @@ fn run_doom(args: Args) -> Result<()> {
                         let json_data = format!(r#"{{ "path": {} }}"#, path_json);
                         println!("{json_data}");
                     } else {
-                        let mut path_str = String::new();
-                        for (j, s) in path.iter().enumerate() {
-                            if j > 0 {
-                                path_str.push_str(" ➔ ");
-                            }
-                            path_str.push_str(&s.to_string());
-                        }
                         if is_tty {
-                            println!(
-                                "{} {} {}",
-                                "🗺️ ".green(),
-                                "Path found:".green().bold(),
-                                path_str.cyan()
-                            );
+                            println!("{} {}", "🗺️ ".green(), "Path found".green().bold(),);
                         } else {
-                            println!("Path found: {}", path_str);
+                            println!("Path found");
                         }
+
+                        let mut table = comfy_table::Table::new();
+                        table
+                            .load_preset(comfy_table::presets::UTF8_FULL)
+                            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+                        if is_tty {
+                            table.set_header(vec![
+                                comfy_table::Cell::new("Step")
+                                    .fg(comfy_table::Color::Cyan)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                                comfy_table::Cell::new("Sector")
+                                    .fg(comfy_table::Color::Cyan)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
+                            for (j, s) in path.iter().enumerate() {
+                                table.add_row(vec![
+                                    comfy_table::Cell::new(j.to_string()),
+                                    comfy_table::Cell::new(s.to_string())
+                                        .fg(comfy_table::Color::Magenta),
+                                ]);
+                            }
+                        } else {
+                            table.set_header(vec![
+                                comfy_table::Cell::new("Step"),
+                                comfy_table::Cell::new("Sector"),
+                            ]);
+                            for (j, s) in path.iter().enumerate() {
+                                table.add_row(vec![
+                                    comfy_table::Cell::new(j.to_string()),
+                                    comfy_table::Cell::new(s.to_string()),
+                                ]);
+                            }
+                        }
+                        println!("{table}");
                     }
                 } else {
                     if args.json {
