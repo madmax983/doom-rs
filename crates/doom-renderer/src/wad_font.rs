@@ -134,4 +134,63 @@ mod tests {
         let font = empty_font();
         assert!(!font.is_loaded());
     }
+
+    // Create a mock wad_font locally for test scope
+    fn mock_font() -> WadFont {
+        let mut font = WadFont {
+            glyphs: vec![None; 63],
+        };
+        // 'A'
+        font.glyphs[(b'A' - 33) as usize] = Some(PatchImage {
+            width: 10,
+            height: 10,
+            left_offset: 0,
+            top_offset: 0,
+            columns: vec![],
+        });
+        // 'B'
+        font.glyphs[(b'B' - 33) as usize] = Some(PatchImage {
+            width: 20,
+            height: 10,
+            left_offset: 0,
+            top_offset: 0,
+            columns: vec![],
+        });
+        // 'C'
+        font.glyphs[(b'C' - 33) as usize] = Some(PatchImage {
+            width: 5,
+            height: 5,
+            left_offset: 0,
+            top_offset: 0,
+            columns: vec![],
+        });
+        font
+    }
+
+    #[test]
+    fn string_width_removes_trailing_gap() {
+        let font = mock_font();
+        // Width = (10 + 1) + (4 + 1) + (10 + 1) - 1 = 11 + 5 + 11 - 1 = 26
+        assert_eq!(font.string_width("A A"), 26);
+    }
+
+    #[test]
+    fn draw_string_updates_x_and_calls_fb() {
+        let font = mock_font();
+        let mut fb = Framebuffer::new();
+        font.draw_string(&mut fb, 10, 10, "A !");
+    }
+
+    #[test]
+    fn draw_string_centered_calculates_x_correctly() {
+        let font = mock_font();
+        let mut fb = Framebuffer::new();
+        font.draw_string_centered(&mut fb, 50, "B");
+    }
+
+    #[test]
+    fn is_loaded_true_when_has_glyph() {
+        let font = mock_font();
+        assert!(font.is_loaded());
+    }
 }

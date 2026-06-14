@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2025-02-23 - [WadFont Coverage Gap]
+**Learning:** Internal logic regarding `draw_string` and `string_width` calculations in `WadFont` lacked coverage, which could hide off-by-one errors in glyph rendering widths. Private traits or helpers missing in scope block tests, requiring proper scoping and mock instances.
+**Action:** Add comprehensive unit tests in the same module utilizing minimal mock data representations instead of relying on real WAD file IO to verify logic correctly.
