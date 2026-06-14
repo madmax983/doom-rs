@@ -1,0 +1,1 @@
+//! Doom application binary crate.
