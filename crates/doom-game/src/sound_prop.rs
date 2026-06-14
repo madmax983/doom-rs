@@ -170,3 +170,95 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::LockedDoorColor;
+    use doom_types::Fixed16_16;
+    use doom_types::mobj_kind::MobjKind;
+    use doom_types::weapons::WeaponType;
+
+    #[test]
+    fn test_sound_request_emitter_and_origin_handle_exhaustively() {
+        let mut slab = crate::mobj::MobjSlab::new();
+        let handle = slab.alloc(crate::mobj::Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            doom_types::Bam::ZERO,
+        ));
+
+        let player_handle = slab.alloc(crate::mobj::Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            doom_types::Bam::ZERO,
+        ));
+
+        let x = Fixed16_16::from_int(100);
+        let y = Fixed16_16::from_int(200);
+        let px = Fixed16_16::from_int(300);
+        let py = Fixed16_16::from_int(400);
+
+        let cases = vec![
+            (
+                SoundRequest::MonsterWake(MobjKind::Imp, handle, x, y),
+                Some((x, y)),
+                Some(handle),
+            ),
+            (
+                SoundRequest::MonsterDie(MobjKind::Imp, handle, x, y),
+                Some((x, y)),
+                Some(handle),
+            ),
+            (
+                SoundRequest::MonsterAttack(MobjKind::Imp, handle, x, y),
+                Some((x, y)),
+                Some(handle),
+            ),
+            (
+                SoundRequest::PlayerWeaponFire(WeaponType::Shotgun),
+                Some((px, py)),
+                Some(player_handle),
+            ),
+            (
+                SoundRequest::PlayerSuperShotgunOpen,
+                Some((px, py)),
+                Some(player_handle),
+            ),
+            (
+                SoundRequest::PlayerSuperShotgunLoad,
+                Some((px, py)),
+                Some(player_handle),
+            ),
+            (
+                SoundRequest::PlayerSuperShotgunClose,
+                Some((px, py)),
+                Some(player_handle),
+            ),
+            (SoundRequest::PlayerDie, None, None),
+            (SoundRequest::PlayerUseFail, None, None),
+            (
+                SoundRequest::PlayerUseLockedDoor(LockedDoorColor::Blue),
+                None,
+                None,
+            ),
+        ];
+
+        for (req, expected_emitter, expected_handle) in cases {
+            assert_eq!(
+                req.emitter(px, py),
+                expected_emitter,
+                "emitter failed for {:?}",
+                req
+            );
+            assert_eq!(
+                req.origin_handle(Some(player_handle)),
+                expected_handle,
+                "origin_handle failed for {:?}",
+                req
+            );
+        }
+    }
+}

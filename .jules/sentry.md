@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2025-06-14 - Exhaustively Test Enum Event Mappers
+**Learning:** Adding tests to functions that map application enums to runtime contexts (like `SoundRequest::emitter` matching internal structs) is highly valuable. Without exhaustive `match` verification via table-driven testing in these seemingly simple event handlers, new enum variants could easily be forgotten or mishandled by returning `None` silently.
+**Action:** Always write an exhaustive table-driven test covering *all* variants when an enum is used in a translation or property-extraction layer, even if it seems trivial.
