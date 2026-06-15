@@ -56,3 +56,8 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-06-15 - MapAnalyzer::isolated_areas iterative rewrite
+
+**Learning:** `analyzer.chokepoints()` recursive DFS was causing a stack overflow on highly nested topologies, and was fixed in a previous PR by converting it to an iterative approach. However, `analyzer.isolated_areas()` may suffer from the same recursive issue if it uses a recursive search, or it might just need a test to ensure it's safe. It turns out `isolated_areas()` is already iterative (using a `queue`), but lacks a test proving it doesn't stack overflow. Adding a large linear graph test ensures this remains true.
+
+**Action:** Added a `havoc_test_analyzer_isolated_areas_does_not_stack_overflow` to `havoc_analyzer.rs` to guarantee `isolated_areas` won't crash on large inputs.
