@@ -39,3 +39,10 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2024-06-25 - [Clarified SpriteClipHistory silent drop]
+**Confusion:** The `push` method on `SpriteClipHistory` silently dropped extra elements when full without any documentation, leading to confusion about potential silent bugs.
+**Clarification:** Added module docs and explicit `///` comments explaining the ArrayVec-like behavior and *why* silent dropping is an acceptable trade-off for performance.
+## 2024-07-15 - [Ratatui Cell::set_skip deprecation warning workaround]
+**Confusion:** The `ratatui` crate deprecated `Cell::set_skip` and suggested using `set_diff_option(CellDiffOption::Skip)`, however this new API does not actually exist in the currently used version, causing compilation failures when blindly following the deprecation hint.
+**Clarification:** You must use `#[allow(deprecated)]` above the method call to suppress the warning and pass `-D warnings` checks without attempting to use the non-existent API.
