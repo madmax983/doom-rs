@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**[Passing owned types directly to avoid cloning]
+**Learning:** `GameState` was cloned using `.clone()` before assignment into `*gs = payload.state.clone();`, which is a large heap-allocated game state. The `payload` containing the state wasn't used after the assignment, so passing `payload.state` directly via ownership avoids the heavy memory allocation entirely.
+**Action:** When overriding an entire complex state, try passing ownership into the function taking the struct instead of a reference if the state isn't needed afterwards.

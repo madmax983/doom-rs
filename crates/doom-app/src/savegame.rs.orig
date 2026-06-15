@@ -243,8 +243,6 @@ pub(crate) fn load_game_with_format(
 /// # Errors
 /// Currently always returns `Ok(())`, but exists as a `Result` for future-proofing
 /// validation logic.
-///
-/// ⚡ **Bolt Optimization:** Takes ownership of `payload` to avoid a massive `.clone()` on the `GameState`.
 pub(crate) fn apply_save(gs: &mut GameState, payload: SaveGame) -> Result<(), SaveError> {
     // Completely overwrite the current game state with the deserialized one.
     // This is valid because `GameState` implements `Clone` and owns all its data.
