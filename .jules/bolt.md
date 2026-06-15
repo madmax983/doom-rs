@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Refactoring savegame apply**
+**Learning:** Re-assigning an existing struct instance using a pointer by performing a deep clone `*gs = payload.state.clone();` when the original owner is discarded generates huge memory allocations.
+**Action:** Remove `.clone()` and consume the parameter directly (by removing the reference flag `&`) so Rust transfers ownership without copying large values, `*gs = payload.state;`.
