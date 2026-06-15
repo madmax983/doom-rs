@@ -603,6 +603,9 @@ impl DehPatch {
     }
 
     fn parse_float_fallback(s: &str) -> Result<f64, ()> {
+        if s.len() > 300 {
+            return Err(());
+        }
         let v = s.parse::<f64>().map_err(|_| ())?;
         if v.is_nan() { Err(()) } else { Ok(v) }
     }
