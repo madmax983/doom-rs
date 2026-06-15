@@ -2457,13 +2457,19 @@ fn run_doom(args: Args) -> Result<()> {
             if chokepoints.is_empty() {
                 chokepoints_str.push_str("None");
             } else {
-                for (i, s) in chokepoints.iter().enumerate() {
+                for (i, s) in chokepoints.iter().take(10).enumerate() {
                     if i > 0 {
                         chokepoints_str.push_str(", ");
                     }
                     chokepoints_str.push_str(&s.to_string());
                 }
+                if chokepoints.len() > 10 {
+                    chokepoints_str.push_str(&format!(" ... (+{} more)", chokepoints.len() - 10));
+                }
             }
+
+            let mut sorted_areas = areas.clone();
+            sorted_areas.sort_by_key(|b| std::cmp::Reverse(b.len()));
 
             let mut table = comfy_table::Table::new();
             table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
@@ -2485,18 +2491,32 @@ fn run_doom(args: Args) -> Result<()> {
                     comfy_table::Cell::new("🗺️  Chokepoints"),
                     comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
                 ]);
-                for (i, area) in areas.iter().enumerate() {
+                for (i, area) in sorted_areas.iter().enumerate() {
                     let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
-                        if j > 0 {
-                            area_str.push_str(", ");
+                    if i == 0 {
+                        area_str = format!("Main Map Area ({} sectors)", area.len());
+                        table.add_row(vec![
+                            comfy_table::Cell::new("🌐  Main Area"),
+                            comfy_table::Cell::new(area_str).fg(comfy_table::Color::Blue),
+                        ]);
+                    } else {
+                        if area.len() > 10 {
+                            area_str = format!("{} sectors", area.len());
+                        } else {
+                            let mut sorted_area: Vec<usize> = area.iter().copied().collect();
+                            sorted_area.sort_unstable();
+                            for (j, s) in sorted_area.iter().enumerate() {
+                                if j > 0 {
+                                    area_str.push_str(", ");
+                                }
+                                area_str.push_str(&s.to_string());
+                            }
                         }
-                        area_str.push_str(&s.to_string());
+                        table.add_row(vec![
+                            comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i)),
+                            comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
+                        ]);
                     }
-                    table.add_row(vec![
-                        comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
-                        comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
-                    ]);
                 }
             } else {
                 table.set_header(vec![
@@ -2507,18 +2527,32 @@ fn run_doom(args: Args) -> Result<()> {
                     comfy_table::Cell::new("🗺️  Chokepoints"),
                     comfy_table::Cell::new(&chokepoints_str),
                 ]);
-                for (i, area) in areas.iter().enumerate() {
+                for (i, area) in sorted_areas.iter().enumerate() {
                     let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
-                        if j > 0 {
-                            area_str.push_str(", ");
+                    if i == 0 {
+                        area_str = format!("Main Map Area ({} sectors)", area.len());
+                        table.add_row(vec![
+                            comfy_table::Cell::new("Main Area"),
+                            comfy_table::Cell::new(area_str),
+                        ]);
+                    } else {
+                        if area.len() > 10 {
+                            area_str = format!("{} sectors", area.len());
+                        } else {
+                            let mut sorted_area: Vec<usize> = area.iter().copied().collect();
+                            sorted_area.sort_unstable();
+                            for (j, s) in sorted_area.iter().enumerate() {
+                                if j > 0 {
+                                    area_str.push_str(", ");
+                                }
+                                area_str.push_str(&s.to_string());
+                            }
                         }
-                        area_str.push_str(&s.to_string());
+                        table.add_row(vec![
+                            comfy_table::Cell::new(format!("Isolated Area {}", i)),
+                            comfy_table::Cell::new(area_str),
+                        ]);
                     }
-                    table.add_row(vec![
-                        comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
-                        comfy_table::Cell::new(area_str),
-                    ]);
                 }
             }
             println!("{table}");
