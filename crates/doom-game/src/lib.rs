@@ -14,6 +14,8 @@
 pub mod actions;
 pub mod automap;
 pub mod cheats;
+#[cfg(feature = "chronos")]
+pub mod chronos;
 pub mod combat;
 pub mod dehacked;
 pub mod face;
@@ -65,6 +67,8 @@ pub use automap::{
     mark_subsector_lines_seen, thing_marker_color, world_to_screen,
 };
 pub use cheats::{CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
+#[cfg(feature = "chronos")]
+pub use chronos::*;
 pub use combat::{MELEERANGE, MISSILERANGE, damage_mobj, p_line_attack, p_radius_attack};
 pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
