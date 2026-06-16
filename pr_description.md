@@ -1,11 +1,7 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🕸️ Tangle: `doom-game/src/state.rs` and `doom-game/src/lib.rs` are re-exporting (`pub use`) `SoundPropagation`, `SoundRequest` and many structs/enums from `movers.rs` into `crate::state`. This is a "Re-export Leak". It causes downstream dependent modules and crates to import internal mover logic and sound types from `crate::state` rather than their actual defining modules (`crate::movers` and `crate::sound_prop`), creating a tangled dependency graph and blurring the boundaries of `state.rs`.
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+📐 Blueprint: Removed the `pub use` re-exports of `sound_prop` and `movers` from `state.rs`. Updated all references across `doom-game` to import these types directly from their true defining modules (`crate::sound_prop` and `crate::movers`). Replaced the wildcard `use crate::movers::*` with an explicit `use crate::movers::SectorMovers` in `state.rs` for clear encapsulation.
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+🧱 Stability: Reduced coupling, clearer module boundaries, and a cleaner dependency graph.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🔬 Verification: Builds successfully (`cargo check`), tests pass (`cargo test`), and strict separation is enforced.

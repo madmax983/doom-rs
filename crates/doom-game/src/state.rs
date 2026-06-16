@@ -10,12 +10,10 @@ use crate::mobj::MobjSlab;
 use crate::player::PlayerState;
 use crate::spawn::Skill;
 
+use crate::movers::SectorMovers;
 use crate::random::DoomRng;
+use crate::sound_prop::SoundPropagation;
 use crate::stats::LevelStats;
-
-pub use crate::sound_prop::{SoundPropagation, SoundRequest};
-
-pub use crate::movers::*;
 
 // ---------------------------------------------------------------------------
 // Sound events
