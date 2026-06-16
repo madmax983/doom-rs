@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**[Iterating over MobjSlab with dropping borrows]
+**Learning:** Functions that mutate self (like `dlog`) cannot be called inside closures passed to `iter_handles` because `iter_handles` holds an immutable borrow of `MobjSlab` (and therefore `self`). We can avoid allocating a vector of items to log by explicitly querying indices up to `slot_count()` inside a for-loop, retrieving the handles using `handle_at()`, and moving the mutable logic into a sub-block to cleanly drop the borrow before the method call.
+**Action:** Replace `iter_handles().filter_map(...).collect::<Vec<_>>()` with a manual `0..slot_count` loop combined with `handle_at` and a localized block expression `let msg = { ... }` when you need to avoid memory allocations and borrow conflicts.
