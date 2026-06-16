@@ -48,6 +48,8 @@ pub mod style;
 pub mod switch;
 #[cfg(feature = "telemetry")]
 pub mod telemetry;
+#[cfg(feature = "telemetry_svg")]
+pub mod telemetry_svg;
 pub mod tic;
 pub mod trace;
 pub mod weapon_fire;
@@ -132,6 +134,8 @@ pub use switch::{
 };
 #[cfg(feature = "telemetry")]
 pub use telemetry::{SessionTelemetry, TelemetryEvent, TelemetryKind};
+#[cfg(feature = "telemetry_svg")]
+pub use telemetry_svg::*;
 pub use tic::{
     FRICTION, MAXMOVE, PLAYER_SPEED_SCALE, p_set_mobj_state, tick_all_mobjs, tick_player,
     tick_world,
