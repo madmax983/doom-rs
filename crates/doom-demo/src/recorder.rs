@@ -169,7 +169,7 @@ mod tests {
         rec.record_tic_cmds(&[DemoTicCmd::default()]);
         let lmp = rec.to_lmp();
         assert_eq!(
-            *lmp.last().expect("value must exist in test"),
+            *lmp.last().expect("LMP file must have at least one byte"),
             LMP_TERMINATOR
         );
     }
@@ -191,7 +191,7 @@ mod tests {
         assert_eq!(lmp.len(), 18);
         assert_eq!(lmp[0], LMP_VERSION_1_9);
         assert_eq!(
-            *lmp.last().expect("value must exist in test"),
+            *lmp.last().expect("LMP file must have at least one byte"),
             LMP_TERMINATOR
         );
     }
@@ -217,7 +217,7 @@ mod tests {
         let rec = singleplayer_recorder();
         let result = rec.to_bytes();
         assert!(result.is_ok());
-        assert_eq!(result.expect("value must exist in test").len(), 14);
+        assert_eq!(result.expect("to_bytes should always succeed").len(), 14);
     }
 
     #[test]

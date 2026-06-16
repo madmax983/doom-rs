@@ -202,7 +202,8 @@ mod tests {
             buttons: 0,
         };
         let bytes = original.to_bytes();
-        let parsed = DemoTicCmd::from_bytes(&bytes).expect("value must exist in test");
+        let parsed = DemoTicCmd::from_bytes(&bytes)
+            .expect("valid negative DemoTicCmd bytes should parse successfully");
         assert_eq!(original, parsed);
     }
 
@@ -221,7 +222,8 @@ mod tests {
             buttons: u8::MAX,
         };
         let bytes = original.to_bytes();
-        let parsed = DemoTicCmd::from_bytes(&bytes).expect("value must exist in test");
+        let parsed = DemoTicCmd::from_bytes(&bytes)
+            .expect("valid extreme values DemoTicCmd bytes should parse successfully");
         assert_eq!(original, parsed);
     }
 

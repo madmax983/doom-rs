@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-20 - Uncovered panic points in doom-demo parsing tests
+**Learning:** Found widespread use of `.unwrap()` and `.expect("value must exist in test")` within `doom-demo` (`recorder.rs`, `player.rs`, `ticcmd.rs`, `header.rs`). This obscures error messages if parsing behaves differently in testing or fails, violating Sentry's principles of clear test invariants.
+**Action:** Replaced these generic panic messages with clear descriptions of the test invariant being asserted (e.g. `"valid LMP parsing should return Some"`).
