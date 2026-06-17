@@ -56,3 +56,7 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-20 - Missing coverage on toggle_graphics_protocol branches
+
+**Learning:** `toggle_graphics_protocol` in `doom-tui` handles multiple conditional states between `Halfblocks` and graphics protocols like `Sixel`, but tests only hit the `Sixel` reset condition natively because the mock UI picker resolves to `Halfblocks`. A mocked test explicitly coercing `ratatui_image::picker::Picker` is needed to fully exercise `toggle_graphics_protocol`.
+**Action:** Always test toggle mechanisms by manually injecting states for `RendererMode` and explicitly checking the returned boolean flag along with the structural changes.

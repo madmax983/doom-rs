@@ -1,11 +1,9 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🎯 **Target:** `toggle_graphics_protocol` in `crates/doom-tui/src/event_loop.rs`
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+💣 **Risk:** The previous lack of coverage on `toggle_graphics_protocol` meant we were not properly validating its branches or return values, which could result in a UI mode failure to update gracefully. We also had deprecated method `set_skip` that needed fixing.
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+🧪 **Strategy:**
+- Added a robust unit test for `toggle_graphics_protocol` that forces a simulated initialization state by leveraging mocked properties of the Picker to hit branching fallback logic properly.
+- Switched deprecated `set_skip(true)` calls to `set_diff_option(ratatui::buffer::CellDiffOption::Skip)` which fixes compilation deprecations warnings and ensures safe terminal transitions.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🔬 **Verification:** `cargo clippy --all-targets --all-features -- -D warnings` and `cargo test --package doom-tui`
