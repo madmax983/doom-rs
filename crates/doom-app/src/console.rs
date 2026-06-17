@@ -64,9 +64,7 @@ impl Console {
     /// Clears the input buffer and returns the submitted string so the caller
     /// can process it as a command or cheat code.
     pub(crate) fn submit(&mut self) -> String {
-        let line = self.input.clone();
-        self.input.clear();
-        line
+        std::mem::take(&mut self.input)
     }
 
     /// Add an output message to the console.

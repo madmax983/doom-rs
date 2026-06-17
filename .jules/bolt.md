@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**[Zero-Cost String Extraction]**
+**Learning:** Using `.clone()` and `.clear()` on a `String` inside a struct buffer (like an input console) creates an unnecessary heap allocation and a secondary clear operation. Additionally, calling `.clone()` immediately before creating a reference (e.g. `&my_string.clone()`) allocates a completely detached duplicate string on the heap only to immediately borrow it.
+**Action:** Use `std::mem::take(&mut my_string)` to move the string out of the struct and replace it with an empty `String::new()` via `Default::default()`, effectively transferring ownership without touching the heap. Remove `.clone()` calls when functions only require a `&str` reference.

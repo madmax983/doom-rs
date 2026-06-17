@@ -547,7 +547,7 @@ impl DoomGame {
                 // Map skill index to Skill enum (0=Baby..4=Nightmare).
                 let sk = Skill::from_num(skill).unwrap_or(Skill::Medium);
                 // Re-spawn the level with the chosen skill.
-                self.gs = GameState::new(&self.gs.level_name.clone());
+                self.gs = GameState::new(&self.gs.level_name);
                 spawn_level_things(
                     &mut self.gs,
                     &self.level,
