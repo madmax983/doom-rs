@@ -107,16 +107,13 @@ impl Widget for DoomSixelWidget<'_> {
         if let Some(cell) = buf.cell_mut((area.x, area.y)) {
             cell.set_symbol(&sixel);
         }
-        let mut skip_first = false;
-        for y in area.top()..area.bottom() {
-            for x in area.left()..area.right() {
-                if !skip_first {
-                    skip_first = true;
-                    continue;
-                }
-                buf.cell_mut((x, y)).map(|cell| cell.set_skip(true));
-            }
-        }
+        (area.top()..area.bottom())
+            .flat_map(|y| (area.left()..area.right()).map(move |x| (x, y)))
+            .skip(1)
+            .for_each(|(x, y)| {
+                buf.cell_mut((x, y))
+                    .map(|cell| cell.set_diff_option(ratatui::buffer::CellDiffOption::Skip));
+            });
     }
 }
 

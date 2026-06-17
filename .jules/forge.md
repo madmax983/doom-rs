@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactored Boolean Blindness in terminal UI rendering**
+**Learning:** Manual nested `for` loops that skip the first element using a mutable boolean flag (`past_first` and `skip_first`) create visual noise, cause "Boolean Blindness", and increase cognitive load compared to functional pipelines.
+**Action:** Flatten these 2D Cartesian coordinate iteration loops into a single `.flat_map().skip(1)` iterator chain, eliminating the boolean state variable entirely.
