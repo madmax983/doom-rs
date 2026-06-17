@@ -35,6 +35,11 @@ pub fn render_mus_to_wav_mono(
     sample_rate: u32,
     loops: u32,
 ) -> Vec<u8> {
+    let total_duration: u32 = score.events.iter().map(|(d, _)| *d).sum();
+    if total_duration == 0 || score.events.is_empty() {
+        return encode_pcm16_wav_mono(sample_rate, &[]);
+    }
+
     let target_loops = loops.max(1);
 
     let mut player = MidiPlayer::new();
