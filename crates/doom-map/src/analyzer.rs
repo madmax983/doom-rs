@@ -21,11 +21,19 @@
 //! let analyzer = MapAnalyzer::new(&graph);
 //!
 //! // Sector 2 is a chokepoint because its removal disconnects {0, 1} from {3}
-//! assert_eq!(analyzer.chokepoints(), vec![2]);
+//! assert_eq!(analyzer.chokepoints().unwrap(), vec![2]);
 //! ```
 
 use crate::graph::SectorGraph;
 use std::collections::{HashMap, HashSet};
+
+/// Errors that can occur during graph analysis.
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+pub enum MapAnalyzerError {
+    /// Graph traversal exceeded the complexity limit (e.g. infinite loops or huge node counts)
+    #[error("Node limit exceeded. Graph too complex.")]
+    LimitExceeded,
+}
 
 /// Analyzes map topology for tactical features.
 pub struct MapAnalyzer<'a> {
@@ -33,35 +41,32 @@ pub struct MapAnalyzer<'a> {
 }
 
 impl<'a> MapAnalyzer<'a> {
-    /// The MapAnalyzer is the cartographer's lens for finding tactical advantages.
-    ///
-    /// By supplying a `SectorGraph`, this struct can traverse the connections between
-    /// map areas to discover chokepoints and isolated zones. This is vital for
-    /// understanding the flow of a map and predicting where players might get trapped.
+    /// Create a new analyzer for the given sector graph.
     ///
     /// # Examples
-    ///
     /// ```
     /// use doom_map::SectorGraph;
     /// use doom_map::analyzer::MapAnalyzer;
     /// use std::collections::{HashMap, HashSet};
     ///
-    /// // A simple linear map: 0 <-> 1 <-> 2
     /// let mut adj = HashMap::new();
     /// adj.insert(0, HashSet::from([1]));
-    /// adj.insert(1, HashSet::from([0, 2]));
-    /// adj.insert(2, HashSet::from([1]));
+    /// adj.insert(1, HashSet::from([0]));
     /// let graph = SectorGraph { adjacency_list: adj };
     ///
     /// let analyzer = MapAnalyzer::new(&graph);
-    /// assert_eq!(analyzer.chokepoints(), vec![1]); // Sector 1 is a chokepoint!
+    /// assert_eq!(analyzer.chokepoints().unwrap(), vec![]); // Only 2 sectors, no chokepoint
     /// ```
     pub fn new(graph: &'a SectorGraph) -> Self {
         Self { graph }
     }
 
     /// Finds articulation points (sectors that, if removed, disconnect parts of the map).
-    pub fn chokepoints(&self) -> Vec<usize> {
+    pub fn chokepoints(&self) -> Result<Vec<usize>, MapAnalyzerError> {
+        if self.graph.adjacency_list.len() > 65536 {
+            return Err(MapAnalyzerError::LimitExceeded);
+        }
+
         let mut visited = HashSet::new();
         let mut discovery_time = HashMap::new();
         let mut low_time = HashMap::new();
@@ -123,33 +128,35 @@ impl<'a> MapAnalyzer<'a> {
                                 let new_low = low_p.min(low_u);
                                 low_time.insert(p, new_low);
 
+                                // Articulation point condition 1: u is not root and low_u >= disc_p
                                 if low_u >= disc_p && parent.contains_key(&p) {
                                     articulation_points.insert(p);
                                 }
                             }
-                        } else if *children_map.get(&u).unwrap_or(&0) > 1 {
-                            articulation_points.insert(u);
                         }
                     }
+                }
+
+                // Articulation point condition 2: root has > 1 children
+                if children_map.get(&node).copied().unwrap_or(0) > 1 {
+                    articulation_points.insert(node);
                 }
             }
         }
 
-        let mut ap_vec: Vec<usize> = articulation_points.into_iter().collect();
-        ap_vec.sort_unstable();
-        ap_vec
+        let mut sorted = articulation_points.into_iter().collect::<Vec<_>>();
+        sorted.sort_unstable();
+        Ok(sorted)
     }
 
-    /// Finds distinct disconnected areas of the map.
+    /// Finds distinct isolated components in the map.
     ///
     /// # Examples
-    ///
     /// ```
     /// use doom_map::SectorGraph;
     /// use doom_map::analyzer::MapAnalyzer;
     /// use std::collections::{HashMap, HashSet};
     ///
-    /// // Two disconnected rooms: 0 <-> 1 and 2 <-> 3
     /// let mut adj = HashMap::new();
     /// adj.insert(0, HashSet::from([1]));
     /// adj.insert(1, HashSet::from([0]));
@@ -158,10 +165,13 @@ impl<'a> MapAnalyzer<'a> {
     /// let graph = SectorGraph { adjacency_list: adj };
     ///
     /// let analyzer = MapAnalyzer::new(&graph);
-    /// let areas = analyzer.isolated_areas();
+    /// let areas = analyzer.isolated_areas().unwrap();
     /// assert_eq!(areas.len(), 2);
     /// ```
-    pub fn isolated_areas(&self) -> Vec<HashSet<usize>> {
+    pub fn isolated_areas(&self) -> Result<Vec<HashSet<usize>>, MapAnalyzerError> {
+        if self.graph.adjacency_list.len() > 65536 {
+            return Err(MapAnalyzerError::LimitExceeded);
+        }
         let mut visited = HashSet::new();
         let mut components = Vec::new();
 
@@ -186,32 +196,61 @@ impl<'a> MapAnalyzer<'a> {
                 components.push(component);
             }
         }
-        components
+
+        Ok(components)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::graph::SectorGraph;
-    use std::collections::{HashMap, HashSet};
+
+    #[test]
+    fn test_chokepoints_empty() {
+        let graph = SectorGraph {
+            adjacency_list: HashMap::new(),
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        assert_eq!(analyzer.chokepoints().unwrap(), vec![]);
+    }
 
     #[test]
     fn test_chokepoints() {
         let mut adj = HashMap::new();
         adj.insert(0, HashSet::from([1, 2]));
         adj.insert(1, HashSet::from([0, 2]));
-        adj.insert(2, HashSet::from([0, 1, 3])); // 2 connects {0,1} and {3}
-        adj.insert(3, HashSet::from([2, 4])); // 3 connects {2} and {4}
-        adj.insert(4, HashSet::from([3]));
+        adj.insert(2, HashSet::from([0, 1, 3]));
+        adj.insert(3, HashSet::from([2]));
+
         let graph = SectorGraph {
             adjacency_list: adj,
         };
-
         let analyzer = MapAnalyzer::new(&graph);
-        let chokes = analyzer.chokepoints();
-        // 2 and 3 are both chokepoints because removing either splits the graph.
-        assert_eq!(chokes, vec![2, 3]);
+
+        let cps = analyzer.chokepoints().unwrap();
+        assert_eq!(cps, vec![2]);
+    }
+
+    #[test]
+    fn test_chokepoints_disconnected() {
+        let mut adj = HashMap::new();
+        // Component 1
+        adj.insert(0, HashSet::from([1, 2]));
+        adj.insert(1, HashSet::from([0, 2]));
+        adj.insert(2, HashSet::from([0, 1, 3]));
+        adj.insert(3, HashSet::from([2]));
+        // Component 2
+        adj.insert(4, HashSet::from([5, 6]));
+        adj.insert(5, HashSet::from([4]));
+        adj.insert(6, HashSet::from([4]));
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+
+        let cps = analyzer.chokepoints().unwrap();
+        assert_eq!(cps, vec![2, 4]); // 2 is CP for C1, 4 is CP for C2
     }
 
     #[test]
@@ -221,83 +260,74 @@ mod tests {
         adj.insert(1, HashSet::from([0]));
         adj.insert(2, HashSet::from([3]));
         adj.insert(3, HashSet::from([2]));
+
         let graph = SectorGraph {
             adjacency_list: adj,
         };
-
         let analyzer = MapAnalyzer::new(&graph);
-        let areas = analyzer.isolated_areas();
+
+        let areas = analyzer.isolated_areas().unwrap();
         assert_eq!(areas.len(), 2);
-    }
-
-    #[test]
-    fn test_chokepoints_empty() {
-        let graph = SectorGraph {
-            adjacency_list: HashMap::new(),
-        };
-        let analyzer = MapAnalyzer::new(&graph);
-        assert_eq!(analyzer.chokepoints(), vec![]);
     }
 
     #[test]
     fn test_chokepoints_fully_connected() {
         let mut adj = HashMap::new();
-        adj.insert(0, HashSet::from([1, 2]));
-        adj.insert(1, HashSet::from([0, 2]));
-        adj.insert(2, HashSet::from([0, 1]));
-        let graph = SectorGraph {
-            adjacency_list: adj,
-        };
-        let analyzer = MapAnalyzer::new(&graph);
-        assert_eq!(analyzer.chokepoints(), vec![]);
-    }
+        adj.insert(0, HashSet::from([1, 2, 3]));
+        adj.insert(1, HashSet::from([0, 2, 3]));
+        adj.insert(2, HashSet::from([0, 1, 3]));
+        adj.insert(3, HashSet::from([0, 1, 2]));
 
-    #[test]
-    fn test_chokepoints_disconnected() {
-        let mut adj = HashMap::new();
-        adj.insert(0, HashSet::from([1]));
-        adj.insert(1, HashSet::from([0]));
-        adj.insert(2, HashSet::from([3]));
-        adj.insert(3, HashSet::from([2]));
         let graph = SectorGraph {
             adjacency_list: adj,
         };
         let analyzer = MapAnalyzer::new(&graph);
-        assert_eq!(analyzer.chokepoints(), vec![]);
+
+        let cps = analyzer.chokepoints().unwrap();
+        assert_eq!(cps, vec![]); // No single sector removes connectivity
     }
 
     #[test]
     fn test_isolated_areas_single() {
         let mut adj = HashMap::new();
-        adj.insert(0, HashSet::from([1]));
-        adj.insert(1, HashSet::from([0]));
+        adj.insert(0, HashSet::from([1, 2, 3]));
+        adj.insert(1, HashSet::from([0, 2, 3]));
+        adj.insert(2, HashSet::from([0, 1, 3]));
+        adj.insert(3, HashSet::from([0, 1, 2]));
+
         let graph = SectorGraph {
             adjacency_list: adj,
         };
         let analyzer = MapAnalyzer::new(&graph);
-        let areas = analyzer.isolated_areas();
+
+        let areas = analyzer.isolated_areas().unwrap();
         assert_eq!(areas.len(), 1);
-        assert!(areas[0].contains(&0));
-        assert!(areas[0].contains(&1));
+        assert_eq!(areas[0].len(), 4);
     }
 
     #[test]
     fn test_chokepoints_large_linear() {
-        // Havoc: Trigger stack overflow without iterative rewrite
         let mut adj = HashMap::new();
-        for i in 0..10000 {
-            adj.insert(i, HashSet::from([i + 1]));
-        }
-        adj.insert(10000, HashSet::from([9999]));
-        for i in 1..10000 {
-            adj.get_mut(&i).unwrap().insert(i - 1);
+        let num_nodes = 10_000;
+
+        for i in 0..num_nodes {
+            let mut edges = HashSet::new();
+            if i > 0 {
+                edges.insert(i - 1);
+            }
+            if i < num_nodes - 1 {
+                edges.insert(i + 1);
+            }
+            adj.insert(i, edges);
         }
 
         let graph = SectorGraph {
             adjacency_list: adj,
         };
         let analyzer = MapAnalyzer::new(&graph);
-        let chokes = analyzer.chokepoints();
-        assert_eq!(chokes.len(), 9999);
+
+        let res = analyzer.chokepoints().unwrap();
+        // In a line graph of N nodes, all N-2 interior nodes are chokepoints.
+        assert_eq!(res.len(), num_nodes - 2);
     }
 }

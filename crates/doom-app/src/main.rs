@@ -2395,8 +2395,8 @@ fn run_doom(args: Args) -> Result<()> {
     if args.analyze {
         let graph = doom_map::SectorGraph::build(&level);
         let analyzer = doom_map::MapAnalyzer::new(&graph);
-        let chokepoints = analyzer.chokepoints();
-        let areas = analyzer.isolated_areas();
+        let chokepoints = analyzer.chokepoints().unwrap_or_default();
+        let areas = analyzer.isolated_areas().unwrap_or_default();
 
         if args.json {
             // ⚡ Bolt Optimization:
