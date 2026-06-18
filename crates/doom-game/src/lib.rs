@@ -57,6 +57,10 @@ pub mod weapons;
 pub mod director;
 #[cfg(feature = "director")]
 pub use director::*;
+#[cfg(feature = "tactical_director")]
+pub mod tactical_director;
+#[cfg(feature = "tactical_director")]
+pub use tactical_director::*;
 
 pub use actions::{Action, dispatch_action, p_move, p_new_chase_dir};
 pub use automap::{

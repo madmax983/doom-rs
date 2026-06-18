@@ -8,6 +8,7 @@ default = []
 style_meter = []
 telemetry = []
 director = []
+tactical_director = []
 
 [dependencies]
 doom-types = { workspace = true }
