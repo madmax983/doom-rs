@@ -119,3 +119,9 @@ bench = false
 
 [dependencies.doom-app]
 path = "../crates/doom-app"
+
+[[bin]]
+name = "fuzz_dehacked"
+path = "fuzz_targets/fuzz_dehacked.rs"
+test = false
+doc = false
