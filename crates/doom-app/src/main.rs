@@ -2159,18 +2159,28 @@ fn handle_export(
         );
         println!("{json_data}");
     } else {
-        use crossterm::style::Stylize;
+        let mut table = comfy_table::Table::new();
+        table
+            .load_preset(comfy_table::presets::UTF8_FULL)
+            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} {} to {}",
-                success_icon.green(),
-                success_verb.green().bold(),
-                success_noun,
-                path.display().to_string().cyan()
-            );
+            table.add_row(vec![
+                comfy_table::Cell::new(success_icon).fg(comfy_table::Color::Green),
+                comfy_table::Cell::new(success_verb)
+                    .fg(comfy_table::Color::Green)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new(success_noun),
+                comfy_table::Cell::new(path.display().to_string()).fg(comfy_table::Color::Cyan),
+            ]);
         } else {
-            println!("{} {} to {}", success_verb, success_noun, path.display());
+            table.add_row(vec![
+                comfy_table::Cell::new(success_verb),
+                comfy_table::Cell::new(success_noun),
+                comfy_table::Cell::new(path.display().to_string()),
+            ]);
         }
+        println!("{table}");
     }
 
     Ok(true)
@@ -2325,17 +2335,29 @@ fn run_doom(args: Args) -> Result<()> {
             );
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
+            let mut table = comfy_table::Table::new();
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
             if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-                println!(
-                    "{} {} demo CSV to {}",
-                    "🌟".green(),
-                    "Exported".green().bold(),
-                    output_path.display().to_string().cyan()
-                );
+                table.add_row(vec![
+                    comfy_table::Cell::new("🌟").fg(comfy_table::Color::Green),
+                    comfy_table::Cell::new("Exported")
+                        .fg(comfy_table::Color::Green)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new("demo CSV to"),
+                    comfy_table::Cell::new(output_path.display().to_string())
+                        .fg(comfy_table::Color::Cyan),
+                ]);
             } else {
-                println!("Exported demo CSV to {}", output_path.display());
+                table.add_row(vec![
+                    comfy_table::Cell::new("Exported"),
+                    comfy_table::Cell::new("demo CSV to"),
+                    comfy_table::Cell::new(output_path.display().to_string()),
+                ]);
             }
+            println!("{table}");
         }
         return Ok(());
     }
@@ -2349,17 +2371,29 @@ fn run_doom(args: Args) -> Result<()> {
             );
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
+            let mut table = comfy_table::Table::new();
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
             if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-                println!(
-                    "{} {} music WAV to {}",
-                    "🎵".green(),
-                    "Exported".green().bold(),
-                    wav_path.display().to_string().cyan()
-                );
+                table.add_row(vec![
+                    comfy_table::Cell::new("🎵").fg(comfy_table::Color::Green),
+                    comfy_table::Cell::new("Exported")
+                        .fg(comfy_table::Color::Green)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new("music WAV to"),
+                    comfy_table::Cell::new(wav_path.display().to_string())
+                        .fg(comfy_table::Color::Cyan),
+                ]);
             } else {
-                println!("Exported music WAV to {}", wav_path.display());
+                table.add_row(vec![
+                    comfy_table::Cell::new("Exported"),
+                    comfy_table::Cell::new("music WAV to"),
+                    comfy_table::Cell::new(wav_path.display().to_string()),
+                ]);
             }
+            println!("{table}");
         }
         return Ok(());
     }
@@ -2377,17 +2411,29 @@ fn run_doom(args: Args) -> Result<()> {
             );
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
+            let mut table = comfy_table::Table::new();
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
             if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-                println!(
-                    "{} {} SFX WAV to {}",
-                    "🔊".green(),
-                    "Exported".green().bold(),
-                    sfx_wav_path.display().to_string().cyan()
-                );
+                table.add_row(vec![
+                    comfy_table::Cell::new("🔊").fg(comfy_table::Color::Green),
+                    comfy_table::Cell::new("Exported")
+                        .fg(comfy_table::Color::Green)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new("SFX WAV to"),
+                    comfy_table::Cell::new(sfx_wav_path.display().to_string())
+                        .fg(comfy_table::Color::Cyan),
+                ]);
             } else {
-                println!("Exported SFX WAV to {}", sfx_wav_path.display());
+                table.add_row(vec![
+                    comfy_table::Cell::new("Exported"),
+                    comfy_table::Cell::new("SFX WAV to"),
+                    comfy_table::Cell::new(sfx_wav_path.display().to_string()),
+                ]);
             }
+            println!("{table}");
         }
         return Ok(());
     }
@@ -2440,18 +2486,7 @@ fn run_doom(args: Args) -> Result<()> {
             );
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
             let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-            if is_tty {
-                println!(
-                    "{} {} tactical analysis for {}",
-                    "🌟".green(),
-                    "Completed".green().bold(),
-                    warp_str.cyan()
-                );
-            } else {
-                println!("Completed tactical analysis for {}", warp_str);
-            }
 
             let mut chokepoints_str = String::new();
             if chokepoints.is_empty() {
@@ -2474,6 +2509,15 @@ fn run_doom(args: Args) -> Result<()> {
 
             if is_tty {
                 table.set_header(vec![
+                    comfy_table::Cell::new(format!(
+                        "🌟 Completed tactical analysis for {}",
+                        warp_str
+                    ))
+                    .fg(comfy_table::Color::Green)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new(""),
+                ]);
+                table.add_row(vec![
                     comfy_table::Cell::new("Feature")
                         .fg(comfy_table::Color::Cyan)
                         .add_attribute(comfy_table::Attribute::Bold),
@@ -2500,6 +2544,10 @@ fn run_doom(args: Args) -> Result<()> {
                 }
             } else {
                 table.set_header(vec![
+                    comfy_table::Cell::new(format!("Completed tactical analysis for {}", warp_str)),
+                    comfy_table::Cell::new(""),
+                ]);
+                table.add_row(vec![
                     comfy_table::Cell::new("Feature"),
                     comfy_table::Cell::new("Data"),
                 ]);
@@ -2527,7 +2575,6 @@ fn run_doom(args: Args) -> Result<()> {
     }
 
     if let Some(path_str) = &args.pathfind {
-        use crossterm::style::Stylize;
         let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
         // Avoids an unnecessary heap allocation from .collect::<Vec<_>>()
         if let Some((start_str, end_str)) = path_str.split_once(',') {
@@ -2553,16 +2600,26 @@ fn run_doom(args: Args) -> Result<()> {
                             }
                             path_str.push_str(&s.to_string());
                         }
+                        let mut table = comfy_table::Table::new();
+                        table
+                            .load_preset(comfy_table::presets::UTF8_FULL)
+                            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
                         if is_tty {
-                            println!(
-                                "{} {} {}",
-                                "🗺️ ".green(),
-                                "Path found:".green().bold(),
-                                path_str.cyan()
-                            );
+                            table.add_row(vec![
+                                comfy_table::Cell::new("🗺️ ").fg(comfy_table::Color::Green),
+                                comfy_table::Cell::new("Path found:")
+                                    .fg(comfy_table::Color::Green)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                                comfy_table::Cell::new(&path_str).fg(comfy_table::Color::Cyan),
+                            ]);
                         } else {
-                            println!("Path found: {}", path_str);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("Path found:"),
+                                comfy_table::Cell::new(&path_str),
+                            ]);
                         }
+                        println!("{table}");
                     }
                 } else {
                     if args.json {
@@ -2571,20 +2628,31 @@ fn run_doom(args: Args) -> Result<()> {
                         let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
                         println!("{json_data}");
                     } else {
+                        let mut table = comfy_table::Table::new();
+                        table
+                            .load_preset(comfy_table::presets::UTF8_FULL)
+                            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
                         if is_tty {
-                            println!(
-                                "{} {}",
-                                "❌".yellow(),
-                                format!(
+                            table.add_row(vec![
+                                comfy_table::Cell::new("❌").fg(comfy_table::Color::Yellow),
+                                comfy_table::Cell::new(format!(
                                     "No path found between sector {} and sector {}",
                                     start, end
-                                )
-                                .yellow()
-                                .bold()
-                            );
+                                ))
+                                .fg(comfy_table::Color::Yellow)
+                                .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
                         } else {
-                            println!("No path found between sector {} and sector {}", start, end);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("❌"),
+                                comfy_table::Cell::new(format!(
+                                    "No path found between sector {} and sector {}",
+                                    start, end
+                                )),
+                            ]);
                         }
+                        println!("{table}");
                     }
                 }
             } else {
@@ -2594,11 +2662,25 @@ fn run_doom(args: Args) -> Result<()> {
                     let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
                     println!("{json_data}");
                 } else {
+                    let mut table = comfy_table::Table::new();
+                    table
+                        .load_preset(comfy_table::presets::UTF8_FULL)
+                        .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                        .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
                     if is_tty {
-                        println!("{} {}", "❌".yellow(), msg.yellow().bold());
+                        table.add_row(vec![
+                            comfy_table::Cell::new("❌").fg(comfy_table::Color::Yellow),
+                            comfy_table::Cell::new(msg)
+                                .fg(comfy_table::Color::Yellow)
+                                .add_attribute(comfy_table::Attribute::Bold),
+                        ]);
                     } else {
-                        println!("{}", msg);
+                        table.add_row(vec![
+                            comfy_table::Cell::new("❌"),
+                            comfy_table::Cell::new(msg),
+                        ]);
                     }
+                    println!("{table}");
                 }
             }
         } else {
@@ -2607,11 +2689,25 @@ fn run_doom(args: Args) -> Result<()> {
                 let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
                 println!("{json_data}");
             } else {
+                let mut table = comfy_table::Table::new();
+                table
+                    .load_preset(comfy_table::presets::UTF8_FULL)
+                    .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                    .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
                 if is_tty {
-                    println!("{} {}", "❌".yellow(), msg.yellow().bold());
+                    table.add_row(vec![
+                        comfy_table::Cell::new("❌").fg(comfy_table::Color::Yellow),
+                        comfy_table::Cell::new(msg)
+                            .fg(comfy_table::Color::Yellow)
+                            .add_attribute(comfy_table::Attribute::Bold),
+                    ]);
                 } else {
-                    println!("{}", msg);
+                    table.add_row(vec![
+                        comfy_table::Cell::new("❌"),
+                        comfy_table::Cell::new(msg),
+                    ]);
                 }
+                println!("{table}");
             }
         }
         return Ok(());
@@ -2744,22 +2840,30 @@ fn run_doom(args: Args) -> Result<()> {
         let count = patch
             .apply(&mut mobjinfo_vec, &mut states_vec)
             .map_err(|e| anyhow::anyhow!("DeHackEd apply error: {e}"))?;
-        use crossterm::style::Stylize;
+
+        let mut table = comfy_table::Table::new();
+        table
+            .load_preset(comfy_table::presets::UTF8_FULL)
+            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} applied {} modification(s) from {}",
-                "⚙️".green(),
-                "DeHackEd:".green().bold(),
-                count.to_string().cyan(),
-                deh_path.as_str().yellow()
-            );
+            table.add_row(vec![
+                comfy_table::Cell::new("⚙️").fg(comfy_table::Color::Green),
+                comfy_table::Cell::new("DeHackEd:")
+                    .fg(comfy_table::Color::Green)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new(format!("applied {} modification(s) from", count))
+                    .fg(comfy_table::Color::Cyan),
+                comfy_table::Cell::new(deh_path.as_str()).fg(comfy_table::Color::Yellow),
+            ]);
         } else {
-            println!(
-                "DeHackEd: applied {} modification(s) from {}",
-                count,
-                deh_path.as_str()
-            );
+            table.add_row(vec![
+                comfy_table::Cell::new("DeHackEd:"),
+                comfy_table::Cell::new(format!("applied {} modification(s) from", count)),
+                comfy_table::Cell::new(deh_path.as_str()),
+            ]);
         }
+        println!("{table}");
     }
 
     // Load flat texture cache (floor/ceiling textures between F_START and F_END).
@@ -2807,17 +2911,34 @@ fn run_doom(args: Args) -> Result<()> {
         .and_then(|p| match std::fs::File::create(p) {
             Ok(f) => Some(f),
             Err(e) => {
-                use crossterm::style::Stylize;
+                let mut table = comfy_table::Table::new();
+                table
+                    .load_preset(comfy_table::presets::UTF8_FULL)
+                    .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                    .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
                 if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-                    eprintln!(
-                        "⚠️ {}: could not open debug log '{}': {}",
-                        "Warning".yellow().bold(),
-                        p.display(),
-                        e
-                    );
+                    table.add_row(vec![
+                        comfy_table::Cell::new("⚠️").fg(comfy_table::Color::Yellow),
+                        comfy_table::Cell::new("Warning")
+                            .fg(comfy_table::Color::Yellow)
+                            .add_attribute(comfy_table::Attribute::Bold),
+                        comfy_table::Cell::new(format!(
+                            "could not open debug log '{}': {}",
+                            p.display(),
+                            e
+                        )),
+                    ]);
                 } else {
-                    eprintln!("Warning: could not open debug log '{}': {}", p.display(), e);
+                    table.add_row(vec![
+                        comfy_table::Cell::new("Warning"),
+                        comfy_table::Cell::new(format!(
+                            "could not open debug log '{}': {}",
+                            p.display(),
+                            e
+                        )),
+                    ]);
                 }
+                eprintln!("{table}");
                 None
             }
         });
@@ -2850,23 +2971,35 @@ fn run_doom(args: Args) -> Result<()> {
 
     // Timedemo mode: play back a demo as fast as possible, then print FPS and exit.
     if let Some(ref timedemo_path) = args.timedemo {
-        use crossterm::style::Stylize;
         use std::time::Instant;
 
         let player = load_demo_player(timedemo_path)?;
         let mut playback_app = demo_mode::DemoPlaybackApp::new_with_compat(app, player, compat);
         let mut framebuffer = Framebuffer::new();
 
+        let mut table = comfy_table::Table::new();
+        table
+            .load_preset(comfy_table::presets::UTF8_FULL)
+            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} timedemo from {}",
-                "🚀".cyan(),
-                "Starting".cyan().bold(),
-                timedemo_path.display().to_string().cyan()
-            );
+            table.add_row(vec![
+                comfy_table::Cell::new("🚀").fg(comfy_table::Color::Cyan),
+                comfy_table::Cell::new("Starting")
+                    .fg(comfy_table::Color::Cyan)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new("timedemo from"),
+                comfy_table::Cell::new(timedemo_path.display().to_string())
+                    .fg(comfy_table::Color::Cyan),
+            ]);
         } else {
-            println!("Starting timedemo from {}", timedemo_path.display());
+            table.add_row(vec![
+                comfy_table::Cell::new("Starting"),
+                comfy_table::Cell::new("timedemo from"),
+                comfy_table::Cell::new(timedemo_path.display().to_string()),
+            ]);
         }
+        println!("{table}");
 
         let start = Instant::now();
         let mut actual_tics = 0;
@@ -2879,24 +3012,36 @@ fn run_doom(args: Args) -> Result<()> {
 
         let duration = start.elapsed();
         let fps = (actual_tics as f64) / duration.as_secs_f64();
-
+        let mut table = comfy_table::Table::new();
+        table
+            .load_preset(comfy_table::presets::UTF8_FULL)
+            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} timedemo: {} tics in {:.2} seconds ({:.2} fps)",
-                "✅".green(),
-                "Finished".green().bold(),
-                actual_tics.to_string().yellow(),
-                duration.as_secs_f64(),
-                fps.to_string().green().bold()
-            );
+            table.add_row(vec![
+                comfy_table::Cell::new("✅").fg(comfy_table::Color::Green),
+                comfy_table::Cell::new("Finished")
+                    .fg(comfy_table::Color::Green)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new(format!(
+                    "timedemo: {} tics in {:.2} seconds ({:.2} fps)",
+                    actual_tics,
+                    duration.as_secs_f64(),
+                    fps
+                )),
+            ]);
         } else {
-            println!(
-                "Finished timedemo: {} tics in {:.2} seconds ({:.2} fps)",
-                actual_tics,
-                duration.as_secs_f64(),
-                fps
-            );
+            table.add_row(vec![
+                comfy_table::Cell::new("Finished"),
+                comfy_table::Cell::new(format!(
+                    "timedemo: {} tics in {:.2} seconds ({:.2} fps)",
+                    actual_tics,
+                    duration.as_secs_f64(),
+                    fps
+                )),
+            ]);
         }
+        println!("{table}");
 
         return Ok(());
     }
@@ -2920,22 +3065,31 @@ fn run_doom(args: Args) -> Result<()> {
             capture.active_palette,
         )
         .with_context(|| format!("Failed to write capture: {}", capture_path.display()))?;
-        use crossterm::style::Stylize;
+
+        let mut table = comfy_table::Table::new();
+        table
+            .load_preset(comfy_table::presets::UTF8_FULL)
+            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
         if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-            println!(
-                "{} {} frame {} to {}",
-                "✅".green(),
-                "Captured".green().bold(),
-                args.capture_frames.to_string().cyan(),
-                capture_path.display().to_string().yellow()
-            );
+            table.add_row(vec![
+                comfy_table::Cell::new("✅").fg(comfy_table::Color::Green),
+                comfy_table::Cell::new("Captured")
+                    .fg(comfy_table::Color::Green)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new(format!("frame {} to", args.capture_frames))
+                    .fg(comfy_table::Color::Cyan),
+                comfy_table::Cell::new(capture_path.display().to_string())
+                    .fg(comfy_table::Color::Yellow),
+            ]);
         } else {
-            println!(
-                "Captured frame {} to {}",
-                args.capture_frames,
-                capture_path.display()
-            );
+            table.add_row(vec![
+                comfy_table::Cell::new("Captured"),
+                comfy_table::Cell::new(format!("frame {} to", args.capture_frames)),
+                comfy_table::Cell::new(capture_path.display().to_string()),
+            ]);
         }
+        println!("{table}");
         return Ok(());
     }
 
@@ -2977,19 +3131,32 @@ fn run_doom(args: Args) -> Result<()> {
     } else if let Some(mode) = RendererMode::from_str_loose(&args.renderer) {
         event_loop.set_renderer_mode(mode);
     } else {
-        use crossterm::style::Stylize;
+        let mut table = comfy_table::Table::new();
+        table
+            .load_preset(comfy_table::presets::UTF8_FULL)
+            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
         if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-            eprintln!(
-                "⚠️ {}: unknown --renderer {:?}, using auto-detect",
-                "Warning".yellow().bold(),
-                args.renderer
-            );
+            table.add_row(vec![
+                comfy_table::Cell::new("⚠️").fg(comfy_table::Color::Yellow),
+                comfy_table::Cell::new("Warning")
+                    .fg(comfy_table::Color::Yellow)
+                    .add_attribute(comfy_table::Attribute::Bold),
+                comfy_table::Cell::new(format!(
+                    "unknown --renderer {:?}, using auto-detect",
+                    args.renderer
+                )),
+            ]);
         } else {
-            eprintln!(
-                "Warning: unknown --renderer {:?}, using auto-detect",
-                args.renderer
-            );
+            table.add_row(vec![
+                comfy_table::Cell::new("Warning"),
+                comfy_table::Cell::new(format!(
+                    "unknown --renderer {:?}, using auto-detect",
+                    args.renderer
+                )),
+            ]);
         }
+        eprintln!("{table}");
         event_loop.set_graphics_protocol(true);
     }
 
@@ -3076,29 +3243,55 @@ fn main() {
             let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
+            let mut table = comfy_table::Table::new();
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
             if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-                eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
-
-                let mut causes = err.chain().skip(1).peekable();
-                if causes.peek().is_some() {
-                    eprintln!("\n↳ {}:", "Reason".red().bold());
-                    for cause in causes {
-                        eprintln!("    {}", cause);
-                    }
-                }
-                eprintln!();
+                table.add_row(vec![
+                    comfy_table::Cell::new("❌").fg(comfy_table::Color::Red),
+                    comfy_table::Cell::new("Engine Failure")
+                        .fg(comfy_table::Color::Red)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new(err.to_string()),
+                ]);
             } else {
-                eprintln!("❌ Engine Failure: {}", err);
+                table.add_row(vec![
+                    comfy_table::Cell::new("❌"),
+                    comfy_table::Cell::new("Engine Failure"),
+                    comfy_table::Cell::new(err.to_string()),
+                ]);
+            }
+            eprintln!("{table}");
 
-                let mut causes = err.chain().skip(1).peekable();
-                if causes.peek().is_some() {
-                    eprintln!("↳ Reason:");
-                    for cause in causes {
-                        eprintln!("    {}", cause);
-                    }
+            let mut causes = err.chain().skip(1).peekable();
+            if causes.peek().is_some() {
+                let mut reason_table = comfy_table::Table::new();
+                reason_table
+                    .load_preset(comfy_table::presets::UTF8_FULL)
+                    .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                    .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+                if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+                    reason_table.add_row(vec![
+                        comfy_table::Cell::new("↳").fg(comfy_table::Color::Red),
+                        comfy_table::Cell::new("Reason:")
+                            .fg(comfy_table::Color::Red)
+                            .add_attribute(comfy_table::Attribute::Bold),
+                    ]);
+                } else {
+                    reason_table.add_row(vec![
+                        comfy_table::Cell::new("↳"),
+                        comfy_table::Cell::new("Reason:"),
+                    ]);
                 }
-                eprintln!();
+                for cause in causes {
+                    reason_table.add_row(vec![
+                        comfy_table::Cell::new(""),
+                        comfy_table::Cell::new(cause.to_string()),
+                    ]);
+                }
+                eprintln!("{reason_table}");
             }
         }
         std::process::exit(1);

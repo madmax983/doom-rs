@@ -1,11 +1,5 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🎨 Mosaic: UI Polish for doom-app
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🖌️ **Before:** The CLI used log-like text output with `crossterm::style::Stylize` colored macros, and `doom-tui` had deprecated `ratatui` APIs and boolean blindness in coordinate loops.
+✨ **After:** Refactored CLI output to use `comfy_table` for a dashboard-like appearance, removed unused `Stylize` imports, updated `ratatui` methods, and applied `.skip(1)` for cleaner loops.
+🖼️ **Visuals:** All CLI feedback loops now display within elegant dynamic tables, maintaining color hierarchy without polluting the console with unstructured text walls.
