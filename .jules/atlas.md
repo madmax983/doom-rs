@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Fix Cell::set_skip deprecation warning]**
+**Tangle:** The `doom-tui` crate used the `Cell::set_skip` method from the `ratatui` crate, which is deprecated, causing `cargo clippy --all-targets --all-features -- -D warnings` to fail.
+**Blueprint:** Replaced `cell.set_skip(true)` with `cell.set_diff_option(ratatui::buffer::CellDiffOption::Skip)` across `crates/doom-tui/src/event_loop.rs` and `crates/doom-tui/src/sixel.rs` to fix the `clippy` warning with the new API method.
