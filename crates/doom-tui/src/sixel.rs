@@ -29,6 +29,8 @@
 //!   `char = '?' (63) + 6-bit mask`  (bit 0 = top row, bit 5 = bottom row)
 //! Runs of identical characters are RLE-compressed as `!count char`.
 
+#![allow(deprecated)]
+
 use std::fmt::Write as FmtWrite;
 
 use doom_renderer::{Framebuffer, PaletteLut};

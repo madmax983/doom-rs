@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Eliminate Blockmap Reallocation Overhead**
+**Learning:** `Vec` appending logic inside hot loops that instantiate empty vectors multiple times per cycle (e.g. `vec![0x0000u16]` and `&vec![]` used as defaults inside blockmap traversal) causes unnecessary, avoidable heap allocations and resize delays in performance-critical code.
+**Action:** Extract repeated empty fallback instances (e.g., `let empty_cell = Vec::new()`) out of the loop and reuse the reference, and dynamically allocate the exact needed size using `Vec::with_capacity` based on expected length to minimize heap re-allocations inside blockmap setup loops.

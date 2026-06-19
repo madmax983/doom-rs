@@ -29,6 +29,8 @@
 //! (`sync_channel(1)`), then continues immediately.  If the channel is full the
 //! frame is silently dropped; the blit thread will display the next one instead.
 
+#![allow(deprecated)]
+
 use crate::charset::{CharSet, RendererMode};
 use crate::cogmind::{CogmindFrame, CogmindHud, CogmindHudWidget, CogmindWidget};
 use crate::input::{InputState, TicInput};

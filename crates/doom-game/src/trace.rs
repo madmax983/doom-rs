@@ -597,15 +597,17 @@ mod tests {
         let mut offsets = Vec::with_capacity(n_blocks);
         let mut block_data: Vec<Vec<u16>> = Vec::with_capacity(n_blocks);
 
+        let empty_cell = Vec::new();
         for i in 0..n_blocks {
             offsets.push(data_start as u16);
             let cell_linedefs = if i < blockmap_cells.len() {
                 &blockmap_cells[i]
             } else {
-                &vec![]
+                &empty_cell
             };
             // Each block: 0x0000 sentinel + linedef indices + 0xFFFF terminator
-            let mut bd = vec![0x0000u16];
+            let mut bd = Vec::with_capacity(cell_linedefs.len() + 2);
+            bd.push(0x0000u16);
             bd.extend_from_slice(cell_linedefs);
             bd.push(0xFFFF);
             data_start += bd.len();
