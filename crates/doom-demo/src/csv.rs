@@ -2,11 +2,63 @@
 //!
 //! This module provides the `export_demo_to_csv` function, which translates
 //! the parsed demo tics and player input commands into a human-readable CSV.
+//!
+//! # Examples
+//!
+//! ```
+//! use doom_demo::header::LmpHeader;
+//! use doom_demo::recorder::DemoRecorder;
+//! use doom_demo::ticcmd::DemoTicCmd;
+//! use doom_demo::DemoPlayer;
+//! use doom_demo::export_demo_to_csv;
+//!
+//! let header = LmpHeader::new_singleplayer(3, 1, 1);
+//! let mut rec = DemoRecorder::new(header);
+//! rec.record_tic_cmds(&[DemoTicCmd {
+//!     forward_move: 50,
+//!     side_move: -10,
+//!     angle_turn: 3,
+//!     buttons: 0x1f,
+//! }]);
+//! let lmp = rec.to_lmp();
+//! let mut player = DemoPlayer::from_lmp(&lmp).expect("should parse");
+//!
+//! let csv = export_demo_to_csv(&mut player);
+//! assert!(csv.contains("tic,player,forward_move,side_move,angle_turn,buttons"));
+//! assert!(csv.contains("0,0,50,-10,3,31"));
+//! ```
 
 use crate::DemoPlayer;
 use std::fmt::Write;
 
 /// Exports a parsed `DemoPlayer` to a CSV string.
+///
+/// Iterates over all tics in the `DemoPlayer` and formats each tic command
+/// as a row in a CSV string. Resets the `DemoPlayer` after it finishes.
+///
+/// # Examples
+///
+/// ```
+/// use doom_demo::header::LmpHeader;
+/// use doom_demo::recorder::DemoRecorder;
+/// use doom_demo::ticcmd::DemoTicCmd;
+/// use doom_demo::DemoPlayer;
+/// use doom_demo::export_demo_to_csv;
+///
+/// let header = LmpHeader::new_singleplayer(3, 1, 1);
+/// let mut rec = DemoRecorder::new(header);
+/// rec.record_tic_cmds(&[DemoTicCmd {
+///     forward_move: 50,
+///     side_move: -10,
+///     angle_turn: 3,
+///     buttons: 0x1f,
+/// }]);
+/// let lmp = rec.to_lmp();
+/// let mut player = DemoPlayer::from_lmp(&lmp).expect("should parse");
+///
+/// let csv = export_demo_to_csv(&mut player);
+/// assert!(csv.contains("0,0,50,-10,3,31"));
+/// ```
 pub fn export_demo_to_csv(player: &mut DemoPlayer) -> String {
     let mut out = String::new();
     out.push_str("tic,player,forward_move,side_move,angle_turn,buttons\n");

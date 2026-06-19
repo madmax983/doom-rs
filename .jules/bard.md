@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2024-05-18 - [Resolved deprecated function warnings in doom-tui docs]
+**Confusion:** Building documentation for `doom-tui` threw warnings due to a deprecated ratatui method `Cell::set_skip`.
+**Clarification:** To resolve ratatui deprecation warnings while building docs, instead of changing code to use `CellDiffOption::Skip` (which can be rejected in PRs if it breaks other things), apply `#![allow(deprecated)]` at the top of the modules `event_loop.rs` and `sixel.rs` to silence `cargo doc` warnings.
