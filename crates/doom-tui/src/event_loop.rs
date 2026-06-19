@@ -157,15 +157,15 @@ fn run_blit_thread(
                         if let Some(cell) = f.buffer_mut().cell_mut((chunks[0].x, chunks[0].y)) {
                             cell.set_symbol(sixel_str);
                         }
-                        let mut past_first = false;
-                        for y in chunks[0].top()..chunks[0].bottom() {
-                            for x in chunks[0].left()..chunks[0].right() {
-                                if !past_first {
-                                    past_first = true;
-                                    continue;
-                                }
-                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
-                            }
+                        for (x, y) in (chunks[0].top()..chunks[0].bottom())
+                            .flat_map(|y| {
+                                (chunks[0].left()..chunks[0].right()).map(move |x| (x, y))
+                            })
+                            .skip(1)
+                        {
+                            f.buffer_mut()
+                                .cell_mut((x, y))
+                                .map(|c| c.set_diff_option(ratatui::buffer::CellDiffOption::Skip));
                         }
                     }
 
