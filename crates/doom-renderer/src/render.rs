@@ -493,7 +493,13 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
         [const { crate::sprite_clip::SpriteClipHistory::new() }; SCREEN_W];
     let mut wall_clip_bot_history: [crate::sprite_clip::SpriteClipHistory; SCREEN_W] =
         [const { crate::sprite_clip::SpriteClipHistory::new() }; SCREEN_W];
-    let mut masked_columns = Vec::new();
+
+    // ⚡ Bolt Optimization:
+    // Pre-allocates `masked_columns` to `SCREEN_W` to prevent repeated heap allocations
+    // during frame rendering. Since `SCREEN_W` is the maximum width of the screen,
+    // this guarantees no reallocations will occur.
+    // This removes up to log2(SCREEN_W) allocations per frame on complex maps.
+    let mut masked_columns = Vec::with_capacity(SCREEN_W);
 
     // Doom-style open column tracking for inline visplane emission.
     // open_top[x]  = first unclaimed row for ceiling spans (initially 0).
