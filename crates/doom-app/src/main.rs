@@ -2553,16 +2553,38 @@ fn run_doom(args: Args) -> Result<()> {
                             }
                             path_str.push_str(&s.to_string());
                         }
+
+                        let mut table = comfy_table::Table::new();
+                        table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+                        table
+                            .load_preset(comfy_table::presets::UTF8_FULL)
+                            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
                         if is_tty {
-                            println!(
-                                "{} {} {}",
-                                "🗺️ ".green(),
-                                "Path found:".green().bold(),
-                                path_str.cyan()
-                            );
+                            table.set_header(vec![
+                                comfy_table::Cell::new("Result")
+                                    .fg(comfy_table::Color::Cyan)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                                comfy_table::Cell::new("Path")
+                                    .fg(comfy_table::Color::Cyan)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("🗺️  Path found"),
+                                comfy_table::Cell::new(path_str).fg(comfy_table::Color::Yellow),
+                            ]);
                         } else {
-                            println!("Path found: {}", path_str);
+                            table.set_header(vec![
+                                comfy_table::Cell::new("Result"),
+                                comfy_table::Cell::new("Path"),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("Path found"),
+                                comfy_table::Cell::new(path_str),
+                            ]);
                         }
+                        println!("{table}");
                     }
                 } else {
                     if args.json {
@@ -2571,20 +2593,38 @@ fn run_doom(args: Args) -> Result<()> {
                         let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
                         println!("{json_data}");
                     } else {
+                        let mut table = comfy_table::Table::new();
+                        table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+                        table
+                            .load_preset(comfy_table::presets::UTF8_FULL)
+                            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
                         if is_tty {
-                            println!(
-                                "{} {}",
-                                "❌".yellow(),
-                                format!(
+                            table.set_header(vec![
+                                comfy_table::Cell::new("Result")
+                                    .fg(comfy_table::Color::Red)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new(format!(
+                                    "❌ No path found between sector {} and sector {}",
+                                    start, end
+                                ))
+                                .fg(comfy_table::Color::Yellow),
+                            ]);
+                        } else {
+                            table.set_header(vec![
+                                comfy_table::Cell::new("Result"),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new(format!(
                                     "No path found between sector {} and sector {}",
                                     start, end
-                                )
-                                .yellow()
-                                .bold()
-                            );
-                        } else {
-                            println!("No path found between sector {} and sector {}", start, end);
+                                )),
+                            ]);
                         }
+                        println!("{table}");
                     }
                 }
             } else {
@@ -3076,29 +3116,51 @@ fn main() {
             let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
-            if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-                eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
+            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stderr());
 
-                let mut causes = err.chain().skip(1).peekable();
-                if causes.peek().is_some() {
-                    eprintln!("\n↳ {}:", "Reason".red().bold());
-                    for cause in causes {
-                        eprintln!("    {}", cause);
-                    }
+            let mut table = comfy_table::Table::new();
+            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+            let mut causes_str = String::new();
+            let mut causes = err.chain().skip(1).peekable();
+            if causes.peek().is_some() {
+                for cause in causes {
+                    causes_str.push_str(&format!("{}\n", cause));
                 }
-                eprintln!();
             } else {
-                eprintln!("❌ Engine Failure: {}", err);
+                causes_str.push_str("None");
+            }
+            let causes_str = causes_str.trim_end();
 
-                let mut causes = err.chain().skip(1).peekable();
-                if causes.peek().is_some() {
-                    eprintln!("↳ Reason:");
-                    for cause in causes {
-                        eprintln!("    {}", cause);
-                    }
-                }
-                eprintln!();
+            if is_tty {
+                table.set_header(vec![
+                    comfy_table::Cell::new("❌ Engine Failure")
+                        .fg(comfy_table::Color::Red)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new(err.to_string())
+                        .fg(comfy_table::Color::Yellow),
+                ]);
+                table.add_row(vec![
+                    comfy_table::Cell::new("↳ Reason")
+                        .fg(comfy_table::Color::Red)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new(causes_str),
+                ]);
+                eprintln!("\n{table}\n");
+            } else {
+                table.set_header(vec![
+                    comfy_table::Cell::new("Engine Failure"),
+                    comfy_table::Cell::new(err.to_string()),
+                ]);
+                table.add_row(vec![
+                    comfy_table::Cell::new("Reason"),
+                    comfy_table::Cell::new(causes_str),
+                ]);
+                eprintln!("\n{table}\n");
             }
         }
         std::process::exit(1);
