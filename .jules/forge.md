@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactoring byte parsing loops with closures**
+**Learning:** Repetitive bounds checking and cursor advancement when parsing binary slices (e.g., `let val = *data.get(cursor).ok_or(...)?; cursor += 1;`) creates boilerplate and increases the risk of off-by-one errors inside large match blocks.
+**Action:** Extract a mutable closure (e.g., `let mut read_u8 = || -> Result<u8, _> { ... }`) to encapsulate the bounds checking, error mapping, and cursor increment logic, keeping the main parsing loop clean and focused on protocol semantics.
