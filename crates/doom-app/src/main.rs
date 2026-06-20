@@ -187,6 +187,10 @@ struct Args {
     #[arg(long)]
     export_svg: Option<std::path::PathBuf>,
 
+    /// Export the level layout to an ASCII text file and exit.
+    #[arg(long)]
+    export_ascii: Option<std::path::PathBuf>,
+
     /// Export the level layout to an OBJ 3D model file and exit.
     #[arg(long)]
     export_obj: Option<std::path::PathBuf>,
@@ -2266,6 +2270,18 @@ fn run_doom(args: Args) -> Result<()> {
         "Exported",
         "layout",
         "SVG layout",
+        args.json,
+    )? {
+        return Ok(());
+    }
+
+    if handle_export(
+        args.export_ascii.as_deref(),
+        || doom_map::export_map_to_ascii(&level, 100, 50),
+        "🌟",
+        "Exported",
+        "ASCII layout",
+        "ASCII layout file",
         args.json,
     )? {
         return Ok(());
@@ -5071,6 +5087,26 @@ mod tests {
         assert_eq!(
             validate_mode_args(&args).unwrap_err(),
             "--capture cannot be combined with --connect"
+        );
+    }
+
+    #[test]
+    fn cli_args_parse_export_ascii() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--export-ascii",
+            "map.txt",
+        ]);
+        assert!(
+            args.is_ok(),
+            "args with --export-ascii must parse successfully"
+        );
+        let args = args.expect("args parse must succeed");
+        assert_eq!(
+            args.export_ascii.as_deref(),
+            Some(std::path::Path::new("map.txt"))
         );
     }
 
