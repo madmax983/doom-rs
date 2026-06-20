@@ -1,3 +1,9 @@
+//! End-of-level statistics and map tracking.
+//!
+//! # Overview
+//! This module tracks player progress such as kill count, item count,
+//! and secret discovery, which are used to display the intermission screen.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {

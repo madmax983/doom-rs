@@ -1,3 +1,10 @@
+//! Sound propagation and event queues.
+//!
+//! # Overview
+//! This module defines the structures and logic for handling sound events
+//! emitted by the game simulation, which are then used by the app to play
+//! audio or alert enemies.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

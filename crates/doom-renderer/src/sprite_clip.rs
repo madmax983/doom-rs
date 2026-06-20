@@ -1,3 +1,10 @@
+//! Sprite clipping and depth tracking.
+//!
+//! # Overview
+//! This module provides structures like `SpriteClipHistory` to manage
+//! the clipping of sprites against walls and portals without requiring
+//! heap allocations.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.

@@ -1,3 +1,9 @@
+//! The AI Director, responsible for spawning ambushes and relief based on player health.
+//!
+//! # Overview
+//! The AI Director monitors the player's status and determines whether to increase
+//! the challenge by spawning ambushes or provide relief when the player is struggling.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
