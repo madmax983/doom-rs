@@ -1,33 +1,27 @@
-//! Core simulation tick — `GameState::tick()`.
-//!
-//! Called exactly once per tic (35x/sec by the event loop).
-//! Applies player input via `P_MovePlayer`, then runs the thinker loop
-//! to advance all actor state machines by one step.
-//!
-//! # Unified thinker/ticker loop
-//!
-//! `tick_world` is the master per-tic function that processes all game objects:
-//! 1. `tick_all_mobjs` — advance every actor's state machine
-//! 2. Sector movers (doors, ceilings, floors, lifts, platforms)
-//! 3. Light effects, scrollers, conveyors
-//! 4. Projectile movement
-//!
-//! `p_set_mobj_state` is the canonical state transition function: it sets the
-//! new state, loads tics from the STATES table, and fires the entry action.
-//!
-//! # Player movement (P_MovePlayer / P_Thrust)
-//!
-//! The original Doom movement math:
-//! ```text
-//! mo->angle += cmd->angleturn << 16;          // 16-bit -> 32-bit BAM
-//! if (cmd->forwardmove)
-//!     P_Thrust(player, mo->angle, cmd->forwardmove * 2048);
-//! if (cmd->sidemove)
-//!     P_Thrust(player, mo->angle - ANG90, cmd->sidemove * 2048);
-//! // P_Thrust:
-//!     mo->momx += FixedMul(move, finecosine[angle >> ANGLETOFINESHIFT]);
-//!     mo->momy += FixedMul(move, finesine[angle >> ANGLETOFINESHIFT]);
-//! ```
+// Core simulation tick — `GameState::tick()`.
+// Called exactly once per tic (35x/sec by the event loop).
+// Applies player input via `P_MovePlayer`, then runs the thinker loop
+// to advance all actor state machines by one step.
+// # Unified thinker/ticker loop
+// `tick_world` is the master per-tic function that processes all game objects:
+// 1. `tick_all_mobjs` — advance every actor's state machine
+// 2. Sector movers (doors, ceilings, floors, lifts, platforms)
+// 3. Light effects, scrollers, conveyors
+// 4. Projectile movement
+// `p_set_mobj_state` is the canonical state transition function: it sets the
+// new state, loads tics from the STATES table, and fires the entry action.
+// # Player movement (P_MovePlayer / P_Thrust)
+// The original Doom movement math:
+// ```text
+// mo->angle += cmd->angleturn << 16;          // 16-bit -> 32-bit BAM
+// if (cmd->forwardmove)
+//     P_Thrust(player, mo->angle, cmd->forwardmove * 2048);
+// if (cmd->sidemove)
+//     P_Thrust(player, mo->angle - ANG90, cmd->sidemove * 2048);
+// // P_Thrust:
+//     mo->momx += FixedMul(move, finecosine[angle >> ANGLETOFINESHIFT]);
+//     mo->momy += FixedMul(move, finesine[angle >> ANGLETOFINESHIFT]);
+// ```
 
 use doom_map::Level;
 use doom_types::{ANG90, Bam, Fixed16_16, TicCmd, bt};
@@ -589,10 +583,10 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
 /// Apply a thrust of `move_units` map-units/tic in direction `angle`.
 ///
 /// Port of Doom's `P_Thrust`:
-/// ```c
+// ```c
 /// mo->momx += FixedMul(move, finecosine[angle >> ANGLETOFINESHIFT]);
 /// mo->momy += FixedMul(move, finesine  [angle >> ANGLETOFINESHIFT]);
-/// ```
+// ```
 ///
 /// Requires `Bam::init_trig_tables()` to have been called.
 /// Returns zero thrust if tables have not been initialized
@@ -1210,7 +1204,7 @@ mod tests {
 
         tick_player(&mut gs, cmd, None);
         assert_eq!(
-            gs.player.psprites[crate::player::psprite_slots::WEAPON].state,
+            gs.player.psprites[doom_types::powers::psprite_slots::WEAPON].state,
             StateNum(ids::S_MISSILE1),
             "the first launcher attack tic should enter the windup state"
         );
@@ -1226,7 +1220,7 @@ mod tests {
         }
 
         assert_eq!(
-            gs.player.psprites[crate::player::psprite_slots::WEAPON].state,
+            gs.player.psprites[doom_types::powers::psprite_slots::WEAPON].state,
             StateNum(ids::S_MISSILE2),
             "after the windup, the launcher should advance into its fire state"
         );
@@ -1263,7 +1257,7 @@ mod tests {
         assert_eq!(gs.player.weapon, WeaponType::Pistol);
         assert_eq!(gs.player.pending_weapon, Some(WeaponType::Shotgun));
         assert_eq!(
-            gs.player.psprites[crate::player::psprite_slots::WEAPON].state,
+            gs.player.psprites[doom_types::powers::psprite_slots::WEAPON].state,
             StateNum(ids::S_PISTOL_DOWN)
         );
     }

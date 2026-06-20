@@ -8,7 +8,7 @@
 //! left in the world -- `p_touch_special_thing` returns `false`.
 
 use crate::mobj::{MobjHandle, flags};
-use crate::player::{self, powers};
+use crate::player;
 use crate::state::GameState;
 use doom_types::mobj_kind::MobjKind;
 use doom_types::weapons::AmmoType;
@@ -433,29 +433,29 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             if gs.player.health() < 100 {
                 gs.set_player_health_capped(100, 200);
             }
-            gs.player.powers[powers::PW_STRENGTH] = STRENGTH_TICS;
+            gs.player.powers[doom_types::powers::PW_STRENGTH] = STRENGTH_TICS;
             gs.player.weapons[WeaponType::Fist as usize] = true;
             gs.player.pending_weapon = Some(WeaponType::Fist);
             true
         }
         MobjKind::InvulnerabilitySphere => {
-            gs.player.powers[powers::PW_INVULNERABILITY] = INVULN_TICS;
+            gs.player.powers[doom_types::powers::PW_INVULNERABILITY] = INVULN_TICS;
             true
         }
         MobjKind::BlurSphere => {
-            gs.player.powers[powers::PW_INVISIBILITY] = INVIS_TICS;
+            gs.player.powers[doom_types::powers::PW_INVISIBILITY] = INVIS_TICS;
             true
         }
         MobjKind::RadSuit => {
-            gs.player.powers[powers::PW_IRONFEET] = IRONFEET_TICS;
+            gs.player.powers[doom_types::powers::PW_IRONFEET] = IRONFEET_TICS;
             true
         }
         MobjKind::Allmap => {
-            gs.player.powers[powers::PW_ALLMAP] = 1; // Allmap is permanent (just nonzero)
+            gs.player.powers[doom_types::powers::PW_ALLMAP] = 1; // Allmap is permanent (just nonzero)
             true
         }
         MobjKind::Infrared => {
-            gs.player.powers[powers::PW_INFRARED] = INFRARED_TICS;
+            gs.player.powers[doom_types::powers::PW_INFRARED] = INFRARED_TICS;
             true
         }
         MobjKind::Backpack => {
@@ -926,7 +926,7 @@ mod tests {
         assert!(gs.player.weapons[WeaponType::Fist as usize]);
         assert_eq!(gs.player.weapon, WeaponType::Pistol);
         assert_eq!(gs.player.pending_weapon, Some(WeaponType::Fist));
-        assert!(gs.player.powers[powers::PW_STRENGTH] > 0);
+        assert!(gs.player.powers[doom_types::powers::PW_STRENGTH] > 0);
     }
 
     #[test]
@@ -934,7 +934,7 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::InvulnerabilitySphere, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert_eq!(gs.player.powers[powers::PW_INVULNERABILITY], INVULN_TICS);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INVULNERABILITY], INVULN_TICS);
     }
 
     #[test]
@@ -942,7 +942,7 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::BlurSphere, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert_eq!(gs.player.powers[powers::PW_INVISIBILITY], INVIS_TICS);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INVISIBILITY], INVIS_TICS);
     }
 
     #[test]
@@ -950,7 +950,7 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::RadSuit, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert_eq!(gs.player.powers[powers::PW_IRONFEET], IRONFEET_TICS);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_IRONFEET], IRONFEET_TICS);
     }
 
     #[test]
@@ -958,7 +958,7 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::Allmap, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert!(gs.player.powers[powers::PW_ALLMAP] > 0);
+        assert!(gs.player.powers[doom_types::powers::PW_ALLMAP] > 0);
     }
 
     #[test]
@@ -966,7 +966,7 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::Infrared, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert_eq!(gs.player.powers[powers::PW_INFRARED], INFRARED_TICS);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INFRARED], INFRARED_TICS);
     }
 
     // =======================================================================

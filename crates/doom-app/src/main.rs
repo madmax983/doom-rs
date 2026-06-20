@@ -474,7 +474,7 @@ impl DoomGame {
 
     fn current_fixed_colormap(&self) -> Option<&[u8; 256]> {
         let is_invulnerable =
-            self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+            self.gs.player.powers[doom_types::powers::PW_INVULNERABILITY] > 0;
         let cache = self.colormap_cache.as_ref()?;
         is_invulnerable.then_some(cache.invulnerability_row(self.compat))
     }
@@ -712,20 +712,18 @@ impl DoomGame {
     }
 
     fn ensure_player_psprites_initialized(&mut self) {
-        use doom_game::player::psprite_slots;
 
-        let weapon = self.gs.player.psprites[psprite_slots::WEAPON].state;
-        let flash = self.gs.player.psprites[psprite_slots::FLASH].state;
+        let weapon = self.gs.player.psprites[doom_types::powers::psprite_slots::WEAPON].state;
+        let flash = self.gs.player.psprites[doom_types::powers::psprite_slots::FLASH].state;
         if weapon == doom_game::StateNum::NULL && flash == doom_game::StateNum::NULL {
             doom_game::weapons::setup_psprites(&mut self.gs.player);
         }
     }
 
     fn sync_weapon_anim_from_player_psprites(&mut self, motion: WeaponMotion) {
-        use doom_game::player::psprite_slots;
 
-        let weapon_psprite = self.gs.player.psprites[psprite_slots::WEAPON];
-        let flash_psprite = self.gs.player.psprites[psprite_slots::FLASH];
+        let weapon_psprite = self.gs.player.psprites[doom_types::powers::psprite_slots::WEAPON];
+        let flash_psprite = self.gs.player.psprites[doom_types::powers::psprite_slots::FLASH];
         let previous_offset =
             (motion == WeaponMotion::Preserve).then_some(self.weapon_anim.raise_offset);
 
@@ -1253,7 +1251,7 @@ impl DoomApp for DoomGame {
             {
                 let is_firing = self.gs.player.attack_down;
                 let is_invulnerable =
-                    self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+                    self.gs.player.powers[doom_types::powers::PW_INVULNERABILITY] > 0;
                 self.face_state
                     .tick(cur_health, is_firing, is_invulnerable, None);
             }
@@ -3397,7 +3395,7 @@ mod tests {
             std::collections::HashMap::new(),
             CompatibilityProfile::VanillaStrict,
         );
-        game.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] = 1;
+        game.gs.player.powers[doom_types::powers::PW_INVULNERABILITY] = 1;
 
         let row = game
             .current_fixed_colormap()
@@ -3422,7 +3420,7 @@ mod tests {
             std::collections::HashMap::new(),
             CompatibilityProfile::Extended,
         );
-        game.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] = 1;
+        game.gs.player.powers[doom_types::powers::PW_INVULNERABILITY] = 1;
 
         let row = game
             .current_fixed_colormap()

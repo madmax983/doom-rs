@@ -18,7 +18,6 @@
 
 use doom_types::limits::MAX_AMMO;
 
-use crate::player::powers;
 use crate::state::GameState;
 
 // ---------------------------------------------------------------------------
@@ -250,7 +249,7 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
 
         CheatCode::Invulnerability => {
             toggle_power(
-                &mut gs.player.powers[powers::PW_INVULNERABILITY],
+                &mut gs.player.powers[doom_types::powers::PW_INVULNERABILITY],
                 POWER_DURATION_60S,
             );
             true
@@ -258,13 +257,13 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
 
         CheatCode::Strength => {
             // Berserk is permanent (tics = 1 means "active indefinitely").
-            toggle_power(&mut gs.player.powers[powers::PW_STRENGTH], 1);
+            toggle_power(&mut gs.player.powers[doom_types::powers::PW_STRENGTH], 1);
             true
         }
 
         CheatCode::Invisibility => {
             toggle_power(
-                &mut gs.player.powers[powers::PW_INVISIBILITY],
+                &mut gs.player.powers[doom_types::powers::PW_INVISIBILITY],
                 POWER_DURATION_60S,
             );
             true
@@ -272,7 +271,7 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
 
         CheatCode::RadSuit => {
             toggle_power(
-                &mut gs.player.powers[powers::PW_IRONFEET],
+                &mut gs.player.powers[doom_types::powers::PW_IRONFEET],
                 POWER_DURATION_60S,
             );
             true
@@ -280,13 +279,13 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
 
         CheatCode::AllMap => {
             // AllMap is permanent (tics = 1 means "active indefinitely").
-            toggle_power(&mut gs.player.powers[powers::PW_ALLMAP], 1);
+            toggle_power(&mut gs.player.powers[doom_types::powers::PW_ALLMAP], 1);
             true
         }
 
         CheatCode::LightAmp => {
             toggle_power(
-                &mut gs.player.powers[powers::PW_INFRARED],
+                &mut gs.player.powers[doom_types::powers::PW_INFRARED],
                 POWER_DURATION_120S,
             );
             true
@@ -609,21 +608,21 @@ mod tests {
     #[test]
     fn apply_invulnerability_toggles_power() {
         let mut gs = GameState::new("E1M1");
-        assert_eq!(gs.player.powers[powers::PW_INVULNERABILITY], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INVULNERABILITY], 0);
         apply_cheat(&mut gs, CheatCode::Invulnerability);
-        assert_eq!(gs.player.powers[powers::PW_INVULNERABILITY], 60 * 35);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INVULNERABILITY], 60 * 35);
         apply_cheat(&mut gs, CheatCode::Invulnerability);
-        assert_eq!(gs.player.powers[powers::PW_INVULNERABILITY], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INVULNERABILITY], 0);
     }
 
     #[test]
     fn apply_allmap_toggles_power() {
         let mut gs = GameState::new("E1M1");
-        assert_eq!(gs.player.powers[powers::PW_ALLMAP], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_ALLMAP], 0);
         apply_cheat(&mut gs, CheatCode::AllMap);
-        assert_eq!(gs.player.powers[powers::PW_ALLMAP], 1);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_ALLMAP], 1);
         apply_cheat(&mut gs, CheatCode::AllMap);
-        assert_eq!(gs.player.powers[powers::PW_ALLMAP], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_ALLMAP], 0);
     }
 
     // -----------------------------------------------------------------------
@@ -680,41 +679,41 @@ mod tests {
     #[test]
     fn apply_strength_toggles_power() {
         let mut gs = GameState::new("E1M1");
-        assert_eq!(gs.player.powers[powers::PW_STRENGTH], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_STRENGTH], 0);
         apply_cheat(&mut gs, CheatCode::Strength);
-        assert_eq!(gs.player.powers[powers::PW_STRENGTH], 1);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_STRENGTH], 1);
         apply_cheat(&mut gs, CheatCode::Strength);
-        assert_eq!(gs.player.powers[powers::PW_STRENGTH], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_STRENGTH], 0);
     }
 
     #[test]
     fn apply_invisibility_toggles_power() {
         let mut gs = GameState::new("E1M1");
-        assert_eq!(gs.player.powers[powers::PW_INVISIBILITY], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INVISIBILITY], 0);
         apply_cheat(&mut gs, CheatCode::Invisibility);
-        assert_eq!(gs.player.powers[powers::PW_INVISIBILITY], 60 * 35);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INVISIBILITY], 60 * 35);
         apply_cheat(&mut gs, CheatCode::Invisibility);
-        assert_eq!(gs.player.powers[powers::PW_INVISIBILITY], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INVISIBILITY], 0);
     }
 
     #[test]
     fn apply_radsuit_toggles_power() {
         let mut gs = GameState::new("E1M1");
-        assert_eq!(gs.player.powers[powers::PW_IRONFEET], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_IRONFEET], 0);
         apply_cheat(&mut gs, CheatCode::RadSuit);
-        assert_eq!(gs.player.powers[powers::PW_IRONFEET], 60 * 35);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_IRONFEET], 60 * 35);
         apply_cheat(&mut gs, CheatCode::RadSuit);
-        assert_eq!(gs.player.powers[powers::PW_IRONFEET], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_IRONFEET], 0);
     }
 
     #[test]
     fn apply_lightamp_toggles_power() {
         let mut gs = GameState::new("E1M1");
-        assert_eq!(gs.player.powers[powers::PW_INFRARED], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INFRARED], 0);
         apply_cheat(&mut gs, CheatCode::LightAmp);
-        assert_eq!(gs.player.powers[powers::PW_INFRARED], 120 * 35);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INFRARED], 120 * 35);
         apply_cheat(&mut gs, CheatCode::LightAmp);
-        assert_eq!(gs.player.powers[powers::PW_INFRARED], 0);
+        assert_eq!(gs.player.powers[doom_types::powers::PW_INFRARED], 0);
     }
 
     #[test]
