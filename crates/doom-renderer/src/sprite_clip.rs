@@ -1,3 +1,9 @@
+//! Sprite occlusion and clipping through portals.
+//!
+//! Tracks a short history of BSP portal "windows" (`SpriteClipStep`) that a
+//! column has passed through. This ensures sprites behind two-sided linedefs
+//! don't bleed through walls.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.

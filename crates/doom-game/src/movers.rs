@@ -1,3 +1,9 @@
+//! The Clockwork of Doom — sector movers and environmental effects.
+//!
+//! This module defines the state structures for doors, lifts, crushers, platforms,
+//! and animated lighting. These "movers" are the dynamic parts of the BSP level
+//! geometry, updating ceiling and floor heights every tic.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

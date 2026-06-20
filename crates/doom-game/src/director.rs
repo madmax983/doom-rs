@@ -1,3 +1,9 @@
+//! The AI Director — dynamic monster spawning and pacing.
+//!
+//! While vanilla Doom uses static monster placements, this module introduces an
+//! AI Director that dynamically spawns monsters or relief items based on the
+//! player's current health, adapting the difficulty on the fly.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
