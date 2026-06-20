@@ -300,4 +300,35 @@ mod tests {
         let chokes = analyzer.chokepoints();
         assert_eq!(chokes.len(), 9999);
     }
+
+    #[test]
+    fn havoc_test_analyzer_missing_back_edges() {
+        let mut adj = HashMap::new();
+        // Node 0 connects to Node 1, but Node 1 does not exist in the adjacency list.
+        adj.insert(0, HashSet::from([1]));
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let chokes = analyzer.chokepoints();
+        assert_eq!(chokes.len(), 0);
+    }
+
+    #[test]
+    fn havoc_test_analyzer_does_not_panic_on_asymmetric_edges() {
+        let mut adj = HashMap::new();
+        // Node 0 connects to Node 1.
+        adj.insert(0, HashSet::from([1]));
+        // Node 1 connects to Node 2, but NOT back to Node 0.
+        adj.insert(1, HashSet::from([2]));
+        // Node 2 connects nowhere.
+        adj.insert(2, HashSet::new());
+
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let chokes = analyzer.chokepoints();
+        assert_eq!(chokes, vec![1]);
+    }
 }
