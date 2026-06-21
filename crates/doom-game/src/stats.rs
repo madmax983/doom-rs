@@ -1,4 +1,14 @@
+//! End-of-level statistics tracking (kills, items, secrets).
+
 /// End-of-level statistics and map tracking.
+///
+/// # Examples
+/// ```
+/// use doom_game::stats::LevelStats;
+///
+/// let stats = LevelStats::default();
+/// assert_eq!(stats.kill_count, 0);
+/// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {
     /// Number of monsters killed by the player so far.

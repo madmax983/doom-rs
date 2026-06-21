@@ -1,7 +1,16 @@
+//! Sprite clip history for portal-based software rendering.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
 /// In Doom, a single column rarely clips through more than 4-8 portals.
+///
+/// # Examples
+/// ```
+/// use doom_renderer::sprite_clip::SpriteClipHistory;
+///
+/// let history = SpriteClipHistory::new();
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpriteClipHistory {
     steps: [SpriteClipStep; 8],

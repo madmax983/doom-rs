@@ -1,3 +1,5 @@
+//! Chaos tests for the map analyzer.
+
 #![allow(missing_docs)]
 
 use doom_map::analyzer::MapAnalyzer;

@@ -1,5 +1,16 @@
+//! AI Director for adjusting game difficulty dynamically based on player health.
+
 use crate::PlayerState;
 
+/// Actions the AI Director can take to alter gameplay pacing.
+///
+/// # Examples
+/// ```
+/// use doom_game::director::DirectorAction;
+///
+/// let action = DirectorAction::SpawnAmbush;
+/// assert_eq!(action, DirectorAction::SpawnAmbush);
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirectorAction {
     SpawnAmbush,
@@ -7,6 +18,14 @@ pub enum DirectorAction {
     Maintain,
 }
 
+/// The `AiDirector` analyzes the player state and decides on a `DirectorAction`.
+///
+/// # Examples
+/// ```
+/// use doom_game::director::AiDirector;
+///
+/// let director = AiDirector::new();
+/// ```
 pub struct AiDirector;
 
 impl AiDirector {

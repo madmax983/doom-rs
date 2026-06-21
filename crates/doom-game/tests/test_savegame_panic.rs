@@ -1,3 +1,5 @@
+//! Tests for savegame panic and truncation conditions.
+
 #![allow(missing_docs)]
 
 use doom_game::{GameState, savegame::*};

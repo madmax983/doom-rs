@@ -1,3 +1,5 @@
+//! Sound propagation and event queues for notifying the engine of game sounds.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

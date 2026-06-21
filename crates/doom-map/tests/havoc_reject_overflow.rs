@@ -1,3 +1,5 @@
+//! Chaos tests for triggering reject overflows.
+
 #![allow(missing_docs)]
 
 use doom_map::lumps::Reject;

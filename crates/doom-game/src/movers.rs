@@ -1,3 +1,5 @@
+//! Active sector movers, environmental specials, and lighting animations.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.
