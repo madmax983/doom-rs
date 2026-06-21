@@ -1,11 +1,3 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🖌️ **Before:** Raw panic/error logs dumped to stderr with simple bolding, lacking structural layout or visual hierarchy, making it hard to parse the chained reasons.
+✨ **After:** Wrapped the Engine Failure handler in `crates/doom-app/src/main.rs` in a `comfy_table` with full rounded UTF-8 borders, maintaining `ratatui` UI layout consistency with `--analyze` and `--map-stats` tools.
+🖼️ **Visuals:** Now outputs a two-column bordered table with a bold red '❌ Engine Failure' header and the primary error. The secondary row contains the '↳ Reason' and any chained error messages. Uses dynamic text wrapping for readability.
