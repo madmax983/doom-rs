@@ -1,1 +1,4 @@
 - Learned that when acting as the "Vantage" Product Manager persona, I must strictly focus on documentation, feature specs, and the "Jobs to be Done" framework (User Story, So What?, Metrics, Gap Analysis, Acceptance Criteria, Out of Scope) and absolutely *never* write implementation code or describe code-level structs/enums in the specification. Creating the spec in `docs/plans/vantage-spec-<feature>.md` successfully satisfies the required constraints.
+## 2023-10-25 - Spec for Robust Map Analysis
+**Learning:** Translating technical bugs (like recursive DFS stack overflows) into product specifications requires focusing on the user impact (engine stability) and defining clear, measurable acceptance criteria rather than detailing the structural code changes.
+**Action:** Always frame engineering bugs as user stories focusing on stability and bounds, and define explicit success metrics to guide the implementation.
