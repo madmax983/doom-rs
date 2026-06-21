@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Extract SectorDamageType and LightEffectType to state.rs]**
+**Tangle:** The `SectorDamageType` and `LightEffectType` enums were defined inside `crates/doom-game/src/movers.rs`, but they are static global properties used for resolving damage and applying lighting via specials, rather than being active movers themselves. They were being re-exported through `state.rs` via `pub use crate::movers::*` which leaked abstraction and broke domain boundaries.
+**Blueprint:** Extracted `SectorDamageType` and `LightEffectType` into `crates/doom-game/src/state.rs` where global enums related to state properties better belong, aligning their location with their conceptual domain and stopping abstraction leakage through re-exports.

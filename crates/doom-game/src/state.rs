@@ -50,6 +50,46 @@ pub enum ExitRequest {
     Secret,
 }
 
+// ---------------------------------------------------------------------------
+// Sector damage and light types
+// ---------------------------------------------------------------------------
+
+/// Type of periodic sector damage applied to a sector.
+#[derive(strum_macros::FromRepr, Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u16)]
+pub enum SectorDamageType {
+    /// Special 4: Nukage, blink 0.5s (-20% health randomly, ~5 damage per period)
+    NukageBlink = 4,
+    /// Special 5: Hellslime (-10% health, ~5 damage per period)
+    Hellslime = 5,
+    /// Special 7: Nukage, no blink (-5% health, ~2 damage per period)
+    Nukage = 7,
+    /// Special 11: God exit (-20% health + end level when health <= 10)
+    GodExit = 11,
+    /// Special 16: Super hellslime (-20% health, ~20 damage per period)
+    SuperHellslime = 16,
+}
+
+/// Type of light effect applied to a sector.
+#[derive(strum_macros::FromRepr, Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u16)]
+pub enum LightEffectType {
+    /// Special 1: Light oscillates between base and dark at random intervals.
+    BlinkRandom = 1,
+    /// Special 2: Light blinks every ~17 tics.
+    Blink05s = 2,
+    /// Special 3: Light blinks every ~35 tics.
+    Blink1s = 3,
+    /// Special 8: Light smoothly oscillates.
+    Oscillate = 8,
+    /// Special 12: Synchronized blink every ~17 tics.
+    BlinkSync05s = 12,
+    /// Special 13: Synchronized blink every ~35 tics.
+    BlinkSync1s = 13,
+    /// Special 17: Random light variation (fire flicker).
+    FireFlicker = 17,
+}
+
 /// Complete, self-contained game simulation state.
 ///
 /// All simulation ticks are pure functions of this struct + the (immutable)

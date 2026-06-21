@@ -81,8 +81,8 @@ pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_slide_move, p_try_move};
 pub use movers::{
     CeilingMover, CeilingType, ConveyorBelt, CrushBehavior, DoorMover, FloorMover, FloorType,
-    LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection, PerpetualPlatform,
-    PlatformStatus, ScrollingWall, SectorLightEffect, SectorMovers,
+    LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus,
+    ScrollingWall, SectorLightEffect, SectorMovers,
 };
 pub use phase::{GamePhase, GamePhaseController, MapId};
 pub use pickups::{
@@ -120,7 +120,7 @@ pub use specials::{
     tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
     tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
-pub use state::{ExitRequest, GameState, LockedDoorColor};
+pub use state::{ExitRequest, GameState, LightEffectType, LockedDoorColor, SectorDamageType};
 pub use states::STATES;
 pub use states::sprite_names;
 pub use stats::LevelStats;
