@@ -8,3 +8,6 @@
 **Havoc: Bounds-checking allocations**
 **Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
 **Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+**Prevent Fixed16_16 division by zero panic**
+**Learning:** Fuzzing with cargo-fuzz caught a panic on `Fixed16_16::fixed_div` caused by a `debug_assert!` which aborted the process when dividing by zero.
+**Action:** Replaced the `debug_assert!` with a graceful clamp to `i32::MAX` / `i32::MIN` to ensure robust recovery and prevent denial-of-service in debug builds.
