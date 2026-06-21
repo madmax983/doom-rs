@@ -54,6 +54,7 @@ pub mod weapon_fire;
 pub mod weapons;
 
 #[cfg(feature = "director")]
+/// AI Director logic for managing tension and spawning encounters based on player health.
 pub mod director;
 #[cfg(feature = "director")]
 pub use director::*;

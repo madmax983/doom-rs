@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-04-18 - [Avoided getter noise and fixed doc-test compilation issues]
+**Confusion:** The code review flagged boilerplate "getter noise" (e.g., `Creates a new AiDirector.`) as a violation of the Bard persona. It also warned that using `assert_eq!(history.last(), None)` inside a doc-test requires the returned item to implement `PartialEq`, which is often not true for internal structs, risking a compilation failure during `cargo test`.
+**Clarification:** Rewrote documentation to focus on the *why* rather than repeating the function name. Updated the doc-test assertion to use `.is_none()` which correctly compiles and asserts the absence of a value without requiring `PartialEq` on the inner struct.
