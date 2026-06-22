@@ -1,11 +1,13 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🔭 Vantage: Spec for Turn-Based Mode
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+👤 **User Story:** "As a Player, I want to play the game at my own pace where time only advances when I take an action, so that I can enjoy a tactical, roguelike experience using the new ASCII rendering mode."
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+✅ **Acceptance Criteria:**
+- Time strictly advances based on player action cost, allowing monsters and projectiles to move proportionally.
+- The game world correctly updates between player turns without skipping critical simulation steps.
+- Players can clearly choose between real-time or turn-based play at startup.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🚫 **Out of Scope:**
+- New AI Behaviors
+- Grid-Snapping Movement
+- Turn-Based Multiplayer
