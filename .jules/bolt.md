@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Refactoring `.collect::<Vec<_>>()` to Iterators for sector triggers**
+**Learning:** Returning an `impl Iterator` instead of `.collect::<Vec<_>>()` inside trigger dispatch functions (like `sectors_by_tag`) seems like a great zero-cost abstraction, but it fights the borrow checker and loses. Because the iterator maintains an immutable borrow on the `Level` state, callers are prevented from modifying the state (which they invariably need to do to apply the trigger effect).
+**Action:** When a function fetches data to be mutated, use `smallvec::SmallVec` to collect the indices on the stack instead of returning an `impl Iterator`. This safely separates the read and write phases while remaining a zero-cost abstraction.
