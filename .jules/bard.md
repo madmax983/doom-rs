@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-06-22 - [Fixed broken doc tests by using exact struct paths in examples]
+**Confusion:** Doctests in `doom-renderer::sprite_clip` failed to compile because the `SpriteClipHistory` structure wasn't imported correctly.
+**Clarification:** Modified doctests to correctly `use doom_renderer::sprite_clip::SpriteClipHistory` and `use doom_renderer::render::SpriteClipStep` when demonstrating initialization and iteration.
