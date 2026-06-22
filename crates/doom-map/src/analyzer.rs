@@ -188,6 +188,89 @@ impl<'a> MapAnalyzer<'a> {
         }
         components
     }
+
+    /// Exports the chokepoints and isolated areas to a GeoJSON FeatureCollection string.
+    /// The `Level` is used to determine the coordinates of each sector.
+    pub fn export_analysis_to_geojson(&self, level: &crate::Level) -> String {
+        let chokepoints = self.chokepoints();
+        let areas = self.isolated_areas();
+
+        // Precompute a center point for each sector
+        let mut sector_centers = HashMap::new();
+        for ld in &level.linedefs {
+            let v1 = &level.vertexes[ld.from_vertex as usize];
+            if ld.right_sidedef != crate::lumps::SIDEDEF_NONE {
+                let sd = &level.sidedefs[ld.right_sidedef as usize];
+                sector_centers
+                    .entry(sd.sector as usize)
+                    .or_insert((v1.x, v1.y));
+            }
+            if ld.left_sidedef != crate::lumps::SIDEDEF_NONE {
+                let sd = &level.sidedefs[ld.left_sidedef as usize];
+                sector_centers
+                    .entry(sd.sector as usize)
+                    .or_insert((v1.x, v1.y));
+            }
+        }
+
+        let mut features = Vec::new();
+
+        for &choke in &chokepoints {
+            if let Some(&(x, y)) = sector_centers.get(&choke) {
+                features.push(format!(
+                    r#"    {{
+      "type": "Feature",
+      "geometry": {{
+        "type": "Point",
+        "coordinates": [{}, {}]
+      }},
+      "properties": {{
+        "type": "chokepoint",
+        "sector": {}
+      }}
+    }}"#,
+                    x, y, choke
+                ));
+            }
+        }
+
+        for (i, area) in areas.iter().enumerate() {
+            let mut coords = Vec::new();
+            for &sector in area {
+                if let Some(&(x, y)) = sector_centers.get(&sector) {
+                    coords.push(format!("[{}, {}]", x, y));
+                }
+            }
+            if !coords.is_empty() {
+                features.push(format!(
+                    r#"    {{
+      "type": "Feature",
+      "geometry": {{
+        "type": "MultiPoint",
+        "coordinates": [{}]
+      }},
+      "properties": {{
+        "type": "isolated_area",
+        "id": {}
+      }}
+    }}"#,
+                    coords.join(", "),
+                    i
+                ));
+            }
+        }
+
+        let features_str = features.join(",\n");
+        format!(
+            r#"{{
+  "type": "FeatureCollection",
+  "features": [
+{}
+  ]
+}}"#,
+            features_str
+        )
+    }
 }
 
 #[cfg(test)]
@@ -299,5 +382,98 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let chokes = analyzer.chokepoints();
         assert_eq!(chokes.len(), 9999);
+    }
+
+    #[test]
+    fn test_export_analysis_to_geojson() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1]));
+        adj.insert(1, HashSet::from([0]));
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+
+        let analyzer = MapAnalyzer::new(&graph);
+
+        let level = crate::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![
+                crate::lumps::Linedef {
+                    from_vertex: 0,
+                    to_vertex: 1,
+                    flags: 0,
+                    special: 0,
+                    tag: 0,
+                    right_sidedef: 0,
+                    left_sidedef: crate::lumps::SIDEDEF_NONE,
+                },
+                crate::lumps::Linedef {
+                    from_vertex: 1,
+                    to_vertex: 0,
+                    flags: 0,
+                    special: 0,
+                    tag: 0,
+                    right_sidedef: 1,
+                    left_sidedef: crate::lumps::SIDEDEF_NONE,
+                },
+            ],
+            sidedefs: vec![
+                crate::lumps::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"WALL1\0\0\0",
+                    lower_texture: *b"WALL2\0\0\0",
+                    middle_texture: *b"WALL3\0\0\0",
+                    sector: 0,
+                },
+                crate::lumps::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: *b"WALL1\0\0\0",
+                    lower_texture: *b"WALL2\0\0\0",
+                    middle_texture: *b"WALL3\0\0\0",
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                crate::lumps::Vertex { x: 0, y: 0 },
+                crate::lumps::Vertex { x: 10, y: 10 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                crate::lumps::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                crate::lumps::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject: crate::lumps::Reject::parse_lump(&[0u8], 1).unwrap(),
+            blockmap: crate::lumps::Blockmap::parse_lump(&[
+                0u8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ])
+            .unwrap(),
+        };
+
+        let geojson = analyzer.export_analysis_to_geojson(&level);
+        assert!(geojson.contains(r#"FeatureCollection"#));
+        assert!(geojson.contains(r#"isolated_area"#));
+        assert!(geojson.contains(r#"[0, 0]"#));
+        assert!(geojson.contains(r#"[10, 10]"#));
     }
 }

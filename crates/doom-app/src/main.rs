@@ -241,6 +241,10 @@ struct Args {
     /// Print the map statistics or tactical analysis as raw JSON. Only valid when combined with --map-stats, --analyze, or --pathfind.
     #[arg(long)]
     json: bool,
+
+    /// Export the map analysis (chokepoints and isolated areas) to a GeoJSON file and exit.
+    #[arg(long)]
+    export_analysis: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -2242,6 +2246,22 @@ fn run_doom(args: Args) -> Result<()> {
         "Exported",
         "HTML report",
         "HTML report",
+        args.json,
+    )? {
+        return Ok(());
+    }
+
+    if handle_export(
+        args.export_analysis.as_deref(),
+        || {
+            let graph = doom_map::SectorGraph::build(&level);
+            let analyzer = doom_map::MapAnalyzer::new(&graph);
+            analyzer.export_analysis_to_geojson(&level)
+        },
+        "🌟",
+        "Exported",
+        "analysis GeoJSON",
+        "analysis GeoJSON file",
         args.json,
     )? {
         return Ok(());

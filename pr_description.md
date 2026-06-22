@@ -1,11 +1,7 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+💡 **The Spark:** We have telemetry tracking player movement, and we have the MapAnalyzer that finds pathfinding data. Can I export the chokepoints and isolated areas to GeoJSON so that mappers can visually analyze tactical regions in standard GIS tools alongside player heatmaps?
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+🚀 **The Feature:** Implemented `export_analysis_to_geojson` in the `MapAnalyzer`.
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+🔭 **The Potential:** This bridges the gap between raw map connectivity data and external visualization, letting level designers easily view chokepoints as map markers alongside the structural layout using any standard GeoJSON viewer (like Mapbox or geojson.io).
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+⚠️ **Risk:** Low. The feature is purely an exporter added to the map analysis module and wired through the CLI behind a new `--export-analysis` flag, completely isolated from runtime execution.
