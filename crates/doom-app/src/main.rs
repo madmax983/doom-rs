@@ -473,8 +473,7 @@ impl DoomGame {
     }
 
     fn current_fixed_colormap(&self) -> Option<&[u8; 256]> {
-        let is_invulnerable =
-            self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+        let is_invulnerable = self.gs.player.powers[doom_types::powers::PW_INVULNERABILITY] > 0;
         let cache = self.colormap_cache.as_ref()?;
         is_invulnerable.then_some(cache.invulnerability_row(self.compat))
     }
@@ -1253,7 +1252,7 @@ impl DoomApp for DoomGame {
             {
                 let is_firing = self.gs.player.attack_down;
                 let is_invulnerable =
-                    self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+                    self.gs.player.powers[doom_types::powers::PW_INVULNERABILITY] > 0;
                 self.face_state
                     .tick(cur_health, is_firing, is_invulnerable, None);
             }
@@ -1543,7 +1542,7 @@ impl DoomApp for DoomGame {
         if self.title_screen.is_some() {
             return None;
         }
-        use doom_game::player::{
+        use doom_types::keys::{
             KEY_BLUE_CARD, KEY_BLUE_SKULL, KEY_RED_CARD, KEY_RED_SKULL, KEY_YELLOW_CARD,
             KEY_YELLOW_SKULL,
         };
@@ -3397,7 +3396,7 @@ mod tests {
             std::collections::HashMap::new(),
             CompatibilityProfile::VanillaStrict,
         );
-        game.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] = 1;
+        game.gs.player.powers[doom_types::powers::PW_INVULNERABILITY] = 1;
 
         let row = game
             .current_fixed_colormap()
@@ -3422,7 +3421,7 @@ mod tests {
             std::collections::HashMap::new(),
             CompatibilityProfile::Extended,
         );
-        game.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] = 1;
+        game.gs.player.powers[doom_types::powers::PW_INVULNERABILITY] = 1;
 
         let row = game
             .current_fixed_colormap()

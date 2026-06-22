@@ -1852,7 +1852,7 @@ mod tests {
         level.linedefs[0].special = 26; // Blue locked door.
 
         // Give player the blue card.
-        gs.player.give_key(crate::player::KEY_BLUE_CARD);
+        gs.player.give_key(doom_types::keys::KEY_BLUE_CARD);
 
         let result = dispatch_linedef(
             &mut gs,
@@ -1874,7 +1874,7 @@ mod tests {
         level.linedefs[0].special = 28; // Red locked door.
 
         // Give player blue (wrong key).
-        gs.player.give_key(crate::player::KEY_BLUE_CARD);
+        gs.player.give_key(doom_types::keys::KEY_BLUE_CARD);
 
         let result = dispatch_linedef(
             &mut gs,
@@ -1888,7 +1888,7 @@ mod tests {
         assert!(!result, "red door should not open with blue key");
 
         // Now give red key.
-        gs.player.give_key(crate::player::KEY_RED_CARD);
+        gs.player.give_key(doom_types::keys::KEY_RED_CARD);
         let result = dispatch_linedef(
             &mut gs,
             &mut level,

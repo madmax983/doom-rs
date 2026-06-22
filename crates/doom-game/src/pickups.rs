@@ -8,7 +8,6 @@
 //! left in the world -- `p_touch_special_thing` returns `false`.
 
 use crate::mobj::{MobjHandle, flags};
-use crate::player::{self, powers};
 use crate::state::GameState;
 use doom_types::mobj_kind::MobjKind;
 use doom_types::weapons::AmmoType;
@@ -403,27 +402,27 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
 
         // ---- Keys ----
         MobjKind::BlueCard => {
-            gs.player.give_key(player::KEY_BLUE_CARD);
+            gs.player.give_key(doom_types::keys::KEY_BLUE_CARD);
             true // Keys are always picked up
         }
         MobjKind::YellowCard => {
-            gs.player.give_key(player::KEY_YELLOW_CARD);
+            gs.player.give_key(doom_types::keys::KEY_YELLOW_CARD);
             true
         }
         MobjKind::RedCard => {
-            gs.player.give_key(player::KEY_RED_CARD);
+            gs.player.give_key(doom_types::keys::KEY_RED_CARD);
             true
         }
         MobjKind::BlueSkull => {
-            gs.player.give_key(player::KEY_BLUE_SKULL);
+            gs.player.give_key(doom_types::keys::KEY_BLUE_SKULL);
             true
         }
         MobjKind::YellowSkull => {
-            gs.player.give_key(player::KEY_YELLOW_SKULL);
+            gs.player.give_key(doom_types::keys::KEY_YELLOW_SKULL);
             true
         }
         MobjKind::RedSkull => {
-            gs.player.give_key(player::KEY_RED_SKULL);
+            gs.player.give_key(doom_types::keys::KEY_RED_SKULL);
             true
         }
 
@@ -433,29 +432,29 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             if gs.player.health() < 100 {
                 gs.set_player_health_capped(100, 200);
             }
-            gs.player.powers[powers::PW_STRENGTH] = STRENGTH_TICS;
+            gs.player.powers[doom_types::powers::PW_STRENGTH] = STRENGTH_TICS;
             gs.player.weapons[WeaponType::Fist as usize] = true;
             gs.player.pending_weapon = Some(WeaponType::Fist);
             true
         }
         MobjKind::InvulnerabilitySphere => {
-            gs.player.powers[powers::PW_INVULNERABILITY] = INVULN_TICS;
+            gs.player.powers[doom_types::powers::PW_INVULNERABILITY] = INVULN_TICS;
             true
         }
         MobjKind::BlurSphere => {
-            gs.player.powers[powers::PW_INVISIBILITY] = INVIS_TICS;
+            gs.player.powers[doom_types::powers::PW_INVISIBILITY] = INVIS_TICS;
             true
         }
         MobjKind::RadSuit => {
-            gs.player.powers[powers::PW_IRONFEET] = IRONFEET_TICS;
+            gs.player.powers[doom_types::powers::PW_IRONFEET] = IRONFEET_TICS;
             true
         }
         MobjKind::Allmap => {
-            gs.player.powers[powers::PW_ALLMAP] = 1; // Allmap is permanent (just nonzero)
+            gs.player.powers[doom_types::powers::PW_ALLMAP] = 1; // Allmap is permanent (just nonzero)
             true
         }
         MobjKind::Infrared => {
-            gs.player.powers[powers::PW_INFRARED] = INFRARED_TICS;
+            gs.player.powers[doom_types::powers::PW_INFRARED] = INFRARED_TICS;
             true
         }
         MobjKind::Backpack => {
@@ -863,22 +862,22 @@ mod tests {
     #[test]
     fn pickup_blue_card_sets_key_bit() {
         let mut gs = make_game_state();
-        assert!(!gs.player.has_key(player::KEY_BLUE_CARD));
+        assert!(!gs.player.has_key(doom_types::keys::KEY_BLUE_CARD));
         let item = spawn_item(&mut gs, MobjKind::BlueCard, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert!(gs.player.has_key(player::KEY_BLUE_CARD));
+        assert!(gs.player.has_key(doom_types::keys::KEY_BLUE_CARD));
     }
 
     #[test]
     fn pickup_all_keys() {
         let mut gs = make_game_state();
         let keys = [
-            (MobjKind::BlueCard, player::KEY_BLUE_CARD),
-            (MobjKind::YellowCard, player::KEY_YELLOW_CARD),
-            (MobjKind::RedCard, player::KEY_RED_CARD),
-            (MobjKind::BlueSkull, player::KEY_BLUE_SKULL),
-            (MobjKind::YellowSkull, player::KEY_YELLOW_SKULL),
-            (MobjKind::RedSkull, player::KEY_RED_SKULL),
+            (MobjKind::BlueCard, doom_types::keys::KEY_BLUE_CARD),
+            (MobjKind::YellowCard, doom_types::keys::KEY_YELLOW_CARD),
+            (MobjKind::RedCard, doom_types::keys::KEY_RED_CARD),
+            (MobjKind::BlueSkull, doom_types::keys::KEY_BLUE_SKULL),
+            (MobjKind::YellowSkull, doom_types::keys::KEY_YELLOW_SKULL),
+            (MobjKind::RedSkull, doom_types::keys::KEY_RED_SKULL),
         ];
         for (kind, key_bit) in keys {
             let item = spawn_item(&mut gs, kind, 0, 0);
@@ -890,11 +889,11 @@ mod tests {
     #[test]
     fn pickup_blue_card_gives_key_via_p_check() {
         let mut gs = make_game_state();
-        assert!(!gs.player.has_key(player::KEY_BLUE_CARD));
+        assert!(!gs.player.has_key(doom_types::keys::KEY_BLUE_CARD));
         spawn_item(&mut gs, MobjKind::BlueCard, 0, 0);
         p_check_pickups(&mut gs);
         assert!(
-            gs.player.has_key(player::KEY_BLUE_CARD),
+            gs.player.has_key(doom_types::keys::KEY_BLUE_CARD),
             "Player should have blue card after pickup"
         );
     }
@@ -902,11 +901,11 @@ mod tests {
     #[test]
     fn pickup_red_skull_gives_key() {
         let mut gs = make_game_state();
-        assert!(!gs.player.has_key(player::KEY_RED_SKULL));
+        assert!(!gs.player.has_key(doom_types::keys::KEY_RED_SKULL));
         spawn_item(&mut gs, MobjKind::RedSkull, 0, 0);
         p_check_pickups(&mut gs);
         assert!(
-            gs.player.has_key(player::KEY_RED_SKULL),
+            gs.player.has_key(doom_types::keys::KEY_RED_SKULL),
             "Player should have red skull after pickup"
         );
     }
@@ -926,7 +925,7 @@ mod tests {
         assert!(gs.player.weapons[WeaponType::Fist as usize]);
         assert_eq!(gs.player.weapon, WeaponType::Pistol);
         assert_eq!(gs.player.pending_weapon, Some(WeaponType::Fist));
-        assert!(gs.player.powers[powers::PW_STRENGTH] > 0);
+        assert!(gs.player.powers[doom_types::powers::PW_STRENGTH] > 0);
     }
 
     #[test]
@@ -934,7 +933,10 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::InvulnerabilitySphere, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert_eq!(gs.player.powers[powers::PW_INVULNERABILITY], INVULN_TICS);
+        assert_eq!(
+            gs.player.powers[doom_types::powers::PW_INVULNERABILITY],
+            INVULN_TICS
+        );
     }
 
     #[test]
@@ -942,7 +944,10 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::BlurSphere, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert_eq!(gs.player.powers[powers::PW_INVISIBILITY], INVIS_TICS);
+        assert_eq!(
+            gs.player.powers[doom_types::powers::PW_INVISIBILITY],
+            INVIS_TICS
+        );
     }
 
     #[test]
@@ -950,7 +955,10 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::RadSuit, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert_eq!(gs.player.powers[powers::PW_IRONFEET], IRONFEET_TICS);
+        assert_eq!(
+            gs.player.powers[doom_types::powers::PW_IRONFEET],
+            IRONFEET_TICS
+        );
     }
 
     #[test]
@@ -958,7 +966,7 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::Allmap, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert!(gs.player.powers[powers::PW_ALLMAP] > 0);
+        assert!(gs.player.powers[doom_types::powers::PW_ALLMAP] > 0);
     }
 
     #[test]
@@ -966,7 +974,10 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::Infrared, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert_eq!(gs.player.powers[powers::PW_INFRARED], INFRARED_TICS);
+        assert_eq!(
+            gs.player.powers[doom_types::powers::PW_INFRARED],
+            INFRARED_TICS
+        );
     }
 
     // =======================================================================
