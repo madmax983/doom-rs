@@ -144,8 +144,8 @@ impl Drop for DemoRecordingWrapper {
 /// # use doom_tui::TicInput;
 /// # use doom_tui::DoomApp;
 /// # let doom_game: DoomGame = unsafe { std::mem::zeroed() };
-/// let demo_bytes = std::fs::read("my_demo.lmp").unwrap();
-/// let player = DemoPlayer::parse(&demo_bytes).unwrap();
+/// let demo_bytes = std::fs::read("my_demo.lmp").expect("must exist");
+/// let player = DemoPlayer::parse(&demo_bytes).expect("must parse");
 /// let mut app = DemoPlaybackApp::new(doom_game, player);
 ///
 /// // The game will ignore `TicInput` and use the recorded demo ticks instead.

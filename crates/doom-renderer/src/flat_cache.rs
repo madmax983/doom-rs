@@ -27,7 +27,7 @@ use doom_wad::lump::LumpName;
 /// use doom_renderer::flat_cache::FlatCache;
 ///
 /// let wad_bytes = b"IWAD\x00\0\0\0\x0C\0\0\0".to_vec();
-/// let wad = WadFile::parse(wad_bytes).unwrap();
+/// let wad = WadFile::parse(wad_bytes).expect("must succeed");
 /// let cache = FlatCache::load(&wad);
 /// let texels: &[u8; 4096] = cache.get(b"FLOOR4_8");
 /// ```

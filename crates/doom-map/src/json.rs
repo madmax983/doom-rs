@@ -21,8 +21,8 @@
 //!     ssectors: vec![],
 //!     nodes: vec![],
 //!     sectors: vec![],
-//!     reject: Reject::parse_lump(&[], 0).unwrap(),
-//!     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).unwrap(),
+//!     reject: Reject::parse_lump(&[], 0).expect("must succeed"),
+//!     blockmap: Blockmap::parse_lump(&[0, 0, 0, 0, 0, 0, 0, 0]).expect("must succeed"),
 //! };
 //!
 //! let json_output = export_map_to_json(&level);

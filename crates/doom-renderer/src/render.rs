@@ -1350,7 +1350,7 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
             masked_columns,
         };
     }
-    let cache = flat_cache.unwrap();
+    let cache = flat_cache.expect("must succeed");
 
     for plane in visplanes.planes() {
         let resolved = anim.map_or(plane.flat_name, |a| a.resolve_flat(&plane.flat_name));

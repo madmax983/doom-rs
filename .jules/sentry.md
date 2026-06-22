@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-06-22 - Naked Unwraps in test documentation
+**Learning:** Uninformative unwraps obscure failure contexts in doc-tests and unit tests.
+**Action:** Replaced with context-aware expects, as well as replacing unwrap_err() with expect_err(). Fixed ratatui cell.set_skip deprecation warning.

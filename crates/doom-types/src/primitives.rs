@@ -28,7 +28,7 @@
 /// ```
 /// use doom_types::primitives::Brightness;
 ///
-/// let dark = Brightness::new(0).unwrap();
+/// let dark = Brightness::new(0).expect("must succeed");
 /// assert_eq!(dark.raw(), 0);
 ///
 /// let bright = Brightness::MAX;
@@ -47,7 +47,7 @@ impl Brightness {
     /// # Examples
     /// ```
     /// use doom_types::primitives::Brightness;
-    /// let b = Brightness::new(128).unwrap();
+    /// let b = Brightness::new(128).expect("must succeed");
     /// assert_eq!(b.raw(), 128);
     /// ```
     #[inline]
@@ -75,7 +75,7 @@ impl Brightness {
 /// assert_eq!(normal.raw(), 0);
 ///
 /// // Constructing a valid special (e.g., 9 = Secret).
-/// let secret = SectorSpecial::new(9).unwrap();
+/// let secret = SectorSpecial::new(9).expect("must succeed");
 /// assert_eq!(secret.raw(), 9);
 ///
 /// // Invalid specials are rejected at construction.
@@ -86,7 +86,7 @@ impl Brightness {
 /// ```
 /// use doom_types::primitives::SectorSpecial;
 ///
-/// let special = SectorSpecial::new(9).unwrap();
+/// let special = SectorSpecial::new(9).expect("must succeed");
 /// assert_eq!(special.raw(), 9);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -147,7 +147,7 @@ impl SkillLevel {
     /// use doom_types::primitives::SkillLevel;
     ///
     /// // Valid skill level.
-    /// let skill = SkillLevel::new(2).unwrap();
+    /// let skill = SkillLevel::new(2).expect("must succeed");
     /// assert_eq!(skill.raw(), 2);
     /// ```
     #[inline]
@@ -187,7 +187,7 @@ impl SkillLevel {
 /// ```
 /// use doom_types::primitives::PlayerNum;
 ///
-/// let p1 = PlayerNum::new(0).unwrap();
+/// let p1 = PlayerNum::new(0).expect("must succeed");
 /// assert_eq!(p1.raw(), 0);
 ///
 /// // Player 5 does not exist.
@@ -198,7 +198,7 @@ impl SkillLevel {
 /// ```
 /// use doom_types::primitives::PlayerNum;
 ///
-/// let player = PlayerNum::new(0).unwrap();
+/// let player = PlayerNum::new(0).expect("must succeed");
 /// assert_eq!(player.raw(), 0);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -216,7 +216,7 @@ impl PlayerNum {
     /// use doom_types::primitives::PlayerNum;
     ///
     /// // Creating the host player (Player 1, index 0).
-    /// let player = PlayerNum::new(0).unwrap();
+    /// let player = PlayerNum::new(0).expect("must succeed");
     /// assert_eq!(player.raw(), 0);
     /// ```
     #[inline]
@@ -227,7 +227,7 @@ impl PlayerNum {
     /// # Examples
     /// ```
     /// use doom_types::primitives::PlayerNum;
-    /// let p = PlayerNum::new(2).unwrap();
+    /// let p = PlayerNum::new(2).expect("must succeed");
     /// assert_eq!(p.raw(), 2);
     /// ```
     #[inline]
@@ -296,20 +296,20 @@ mod tests {
 
     #[test]
     fn raw_methods_return_internal_value() {
-        let b = Brightness::new(128).unwrap();
+        let b = Brightness::new(128).expect("must succeed");
         assert_eq!(b.raw(), 128);
 
         let s = SectorSpecial::NORMAL;
         assert_eq!(s.raw(), 0);
-        let s2 = SectorSpecial::new(5).unwrap();
+        let s2 = SectorSpecial::new(5).expect("must succeed");
         assert_eq!(s2.raw(), 5);
 
         let skill = SkillLevel::UV;
         assert_eq!(skill.raw(), 3);
-        let skill2 = SkillLevel::new(2).unwrap();
+        let skill2 = SkillLevel::new(2).expect("must succeed");
         assert_eq!(skill2.raw(), 2);
 
-        let p = PlayerNum::new(2).unwrap();
+        let p = PlayerNum::new(2).expect("must succeed");
         assert_eq!(p.raw(), 2);
     }
 
@@ -330,7 +330,7 @@ mod tests {
     #[test]
     fn skill_level_rejects_over_4() {
         assert!(SkillLevel::new(5).is_none());
-        assert_eq!(SkillLevel::new(4).unwrap().raw(), 4);
+        assert_eq!(SkillLevel::new(4).expect("must succeed").raw(), 4);
     }
 
     #[test]

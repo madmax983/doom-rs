@@ -23,5 +23,8 @@ fn load_game_panic() {
     data[len - 5] = 0xff;
 
     let res = load_game(&data);
-    assert_eq!(res.unwrap_err(), SaveError::Truncated);
+    assert_eq!(
+        res.expect_err("Expected an error but got Ok"),
+        SaveError::Truncated
+    );
 }

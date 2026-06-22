@@ -114,7 +114,8 @@ impl Widget for DoomSixelWidget<'_> {
                     skip_first = true;
                     continue;
                 }
-                buf.cell_mut((x, y)).map(|cell| cell.set_skip(true));
+                buf.cell_mut((x, y))
+                    .map(|cell| cell.set_diff_option(ratatui::buffer::CellDiffOption::Skip));
             }
         }
     }
@@ -191,7 +192,7 @@ pub fn encode_doom_sixel(
     let mut out = String::with_capacity(8192 + dst_w * 16);
 
     // DCS header: aspect-ratio=7 (1:1), background=0 (no change).
-    write!(out, "\x1bP7;0;{}q", area_w).unwrap();
+    write!(out, "\x1bP7;0;{}q", area_w).expect("must succeed");
 
     // Color register definitions: #n;2;R;G;B (values 0-100).
     for (i, is_used) in used.iter().enumerate() {
@@ -202,7 +203,7 @@ pub fn encode_doom_sixel(
         let r = (rgb.r as u32 * 100 + 127) / 255;
         let g = (rgb.g as u32 * 100 + 127) / 255;
         let b = (rgb.b as u32 * 100 + 127) / 255;
-        write!(out, "#{};2;{};{};{}", i, r, g, b).unwrap();
+        write!(out, "#{};2;{};{};{}", i, r, g, b).expect("must succeed");
     }
 
     // ── Band loop ─────────────────────────────────────────────────────────
@@ -282,7 +283,7 @@ pub fn encode_doom_sixel(
             }
             first_in_band = false;
 
-            write!(out, "#{}", color).unwrap();
+            write!(out, "#{}", color).expect("must succeed");
 
             // RLE-encode sixel characters for this color's columns.
             let mut run_ch = slice[0] + 63;
@@ -310,7 +311,7 @@ pub fn encode_doom_sixel(
 #[inline]
 fn emit_rle(out: &mut String, ch: u8, count: usize) {
     if count >= 4 {
-        write!(out, "!{}{}", count, ch as char).unwrap();
+        write!(out, "!{}{}", count, ch as char).expect("must succeed");
     } else {
         for _ in 0..count {
             out.push(ch as char);

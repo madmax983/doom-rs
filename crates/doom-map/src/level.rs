@@ -135,8 +135,8 @@ pub enum LevelError {
 /// use doom_map::level::Level;
 /// use doom_wad::WadFile;
 ///
-/// let wad = WadFile::parse(std::fs::read("doom.wad").unwrap()).unwrap();
-/// let level = Level::from_wad(&wad, "E1M1").unwrap();
+/// let wad = WadFile::parse(std::fs::read("doom.wad").expect("must succeed")).expect("must succeed");
+/// let level = Level::from_wad(&wad, "E1M1").expect("must succeed");
 /// assert_eq!(level.name, "E1M1");
 /// ```
 pub struct Level {
@@ -203,9 +203,9 @@ impl Level {
     /// use doom_map::level::Level;
     /// use doom_wad::WadFile;
     ///
-    /// let bytes = std::fs::read("doom1.wad").unwrap();
-    /// let wad = WadFile::parse(bytes).unwrap();
-    /// let level = Level::from_wad(&wad, "E1M1").unwrap();
+    /// let bytes = std::fs::read("doom1.wad").expect("must succeed");
+    /// let wad = WadFile::parse(bytes).expect("must succeed");
+    /// let level = Level::from_wad(&wad, "E1M1").expect("must succeed");
     ///
     /// assert_eq!(level.name, "E1M1");
     /// ```
@@ -227,13 +227,13 @@ impl Level {
     /// use doom_map::level::Level;
     /// use doom_wad::{WadFile, WadStack};
     ///
-    /// let iwad_bytes = std::fs::read("doom1.wad").unwrap();
-    /// let pwad_bytes = std::fs::read("mymap.wad").unwrap();
+    /// let iwad_bytes = std::fs::read("doom1.wad").expect("must succeed");
+    /// let pwad_bytes = std::fs::read("mymap.wad").expect("must succeed");
     /// let mut stack = WadStack::new();
-    /// stack.push_iwad(iwad_bytes).unwrap();
-    /// stack.push_pwad(pwad_bytes).unwrap();
+    /// stack.push_iwad(iwad_bytes).expect("must succeed");
+    /// stack.push_pwad(pwad_bytes).expect("must succeed");
     ///
-    /// let level = Level::from_wad_stack(&stack, "E1M1").unwrap();
+    /// let level = Level::from_wad_stack(&stack, "E1M1").expect("must succeed");
     /// ```
     pub fn from_wad_stack(wad_stack: &WadStack, map_name: &str) -> Result<Self, LevelError> {
         let (wad, group) = wad_stack
@@ -524,8 +524,8 @@ impl Level {
     /// use doom_map::level::Level;
     /// use doom_wad::WadFile;
     ///
-    /// let wad = WadFile::parse(std::fs::read("doom1.wad").unwrap()).unwrap();
-    /// let level = Level::from_wad(&wad, "E1M1").unwrap();
+    /// let wad = WadFile::parse(std::fs::read("doom1.wad").expect("must succeed")).expect("must succeed");
+    /// let level = Level::from_wad(&wad, "E1M1").expect("must succeed");
     /// level.print_stats();
     /// ```
     pub fn print_stats(&self) {

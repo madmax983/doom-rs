@@ -49,7 +49,7 @@ use doom_wad::lump::LumpName;
 /// use doom_renderer::texture::TextureCache;
 ///
 /// let wad_bytes = b"IWAD\x00\0\0\0\x0C\0\0\0".to_vec();
-/// let wad = WadFile::parse(wad_bytes).unwrap();
+/// let wad = WadFile::parse(wad_bytes).expect("must succeed");
 /// let textures = TextureCache::load(&wad);
 /// ```
 pub struct TextureCache {
