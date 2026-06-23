@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-07-01 - [Fixed deprecation warnings and missing docs]
+**Confusion:** `ratatui::buffer::Cell::set_skip` is deprecated but still triggered `-D warnings`. Additionally, an empty `lib.rs` file in a binary crate like `doom-app` triggers a `-D missing_docs` warning if it's left undocumented.
+**Clarification:** Replaced `set_skip(true)` with `set_diff_option(ratatui::buffer::CellDiffOption::Skip)`. Removed the empty `crates/doom-app/src/lib.rs` file to explicitly configure the crate as a pure binary crate.
