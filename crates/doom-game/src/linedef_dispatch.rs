@@ -1194,14 +1194,13 @@ fn min_neighbor_light(level: &Level, tag: u16) -> i16 {
 // ---------------------------------------------------------------------------
 
 /// Collect all sector indices matching `tag`.
-fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
+fn sectors_by_tag(level: &Level, tag: u16) -> impl Iterator<Item = usize> + '_ {
     level
         .sectors
         .iter()
         .enumerate()
-        .filter(|(_, s)| s.tag == tag)
+        .filter(move |(_, s)| s.tag == tag)
         .map(|(i, _)| i)
-        .collect()
 }
 
 // ---------------------------------------------------------------------------
