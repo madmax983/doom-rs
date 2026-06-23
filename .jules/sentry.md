@@ -56,3 +56,7 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-18 - Graceful degradation for unconnected/malformed topologies
+
+**Learning:** `MapAnalyzer::chokepoints` previously lacked proper testing to verify resilience against malformed graphs, particularly graphs that included asymmetric connections or nonexistent child nodes in the adjacency list.
+**Action:** Adding tests like `havoc_test_analyzer_does_not_panic_on_asymmetric_edges` and `havoc_test_analyzer_missing_back_edges` proactively protects analysis functions against dirty maps without failing safely.
