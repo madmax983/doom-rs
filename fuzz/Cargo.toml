@@ -119,3 +119,17 @@ bench = false
 
 [dependencies.doom-app]
 path = "../crates/doom-app"
+
+[[bin]]
+name = "test_sixel_crash"
+path = "fuzz_targets/test_sixel_crash.rs"
+test = false
+doc = false
+bench = false
+
+
+[dependencies.doom-tui]
+path = "../crates/doom-tui"
+
+[dependencies.doom-renderer]
+path = "../crates/doom-renderer"
