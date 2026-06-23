@@ -823,7 +823,7 @@ mod tests {
     fn intermission_stats_are_captured() {
         let mut ctrl = GamePhaseController::new(MapId::new(1, 1));
         let mut gs = make_test_game_state("E1M1");
-        gs.player.kill_count = 10;
+        gs.stats.kill_count = 10;
         gs.stats.total_kills = 20;
         gs.stats.level_time = 350;
         gs.exit_request = Some(ExitRequest::Normal);

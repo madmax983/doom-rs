@@ -41,11 +41,11 @@ impl GameState {
     /// the next map.
     pub fn compute_intermission_stats(&self) -> IntermissionStats {
         IntermissionStats {
-            kills: self.player.kill_count,
+            kills: self.stats.kill_count,
             total_kills: self.stats.total_kills,
-            items: self.player.item_count,
+            items: self.stats.item_count,
             total_items: self.stats.total_items,
-            secrets: self.player.secret_count,
+            secrets: self.stats.secret_count,
             total_secrets: self.stats.total_secrets,
             time_tics: self.stats.level_time,
             par_time_tics: par_time(&self.level_name),
@@ -150,9 +150,9 @@ mod tests {
         );
         let handle = gs.mobjslab.alloc(mo);
         gs.player = PlayerState::pistol_start(handle);
-        gs.player.kill_count = kills;
-        gs.player.item_count = items;
-        gs.player.secret_count = secrets;
+        gs.stats.kill_count = kills;
+        gs.stats.item_count = items;
+        gs.stats.secret_count = secrets;
         gs.stats.total_kills = total_kills;
         gs.stats.total_items = total_items;
         gs.stats.total_secrets = total_secrets;

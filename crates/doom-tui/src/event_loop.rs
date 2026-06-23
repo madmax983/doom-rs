@@ -1,33 +1,34 @@
-//! Fixed-step Doom game loop: 35 tic/sec simulation, variable render rate.
-//!
-//! Ported from `abrash/src/platform/tui.rs` with these changes:
-//! - Game simulation ticks at a fixed 35 Hz regardless of render rate.
-//! - Render runs at monitor Hz (queried via Windows API, else 60 Hz fallback).
-//! - Input collected via `InputState` → `TicInput` each tic.
-//! - Framebuffer is palette-indexed `Framebuffer` + `PaletteLut`, not ARGB.
-//!
-//! # Game loop pseudocode
-//! ```text
-//! loop:
-//!   elapsed = time since last frame
-//!   accumulate elapsed into tic_timer
-//!   while tic_timer >= TIC_DURATION:
-//!       input = held_keys → TicInput
-//!       app.tick(input)
-//!       tic_timer -= TIC_DURATION
-//!   app.render(fb)
-//!   try_send(encoded_frame) to blit thread   ← non-blocking; drop if blit still busy
-//!   sleep to fill remaining frame budget (vsync approximation)
-//! ```
-//!
-//! # Double-buffer async blit
-//!
-//! Terminal I/O (sixel in particular) takes ~28 ms per frame — far too long to
-//! block the game loop.  The blit thread owns the `Terminal` handle and calls
-//! `terminal.draw()` at its own rate.  The main loop prepares the next frame
-//! (encode sixel, clone framebuffer) and hands it off via a bounded channel
-//! (`sync_channel(1)`), then continues immediately.  If the channel is full the
-//! frame is silently dropped; the blit thread will display the next one instead.
+use ratatui::buffer::CellDiffOption;
+// Fixed-step Doom game loop: 35 tic/sec simulation, variable render rate.
+//
+// Ported from `abrash/src/platform/tui.rs` with these changes:
+// - Game simulation ticks at a fixed 35 Hz regardless of render rate.
+// - Render runs at monitor Hz (queried via Windows API, else 60 Hz fallback).
+// - Input collected via `InputState` → `TicInput` each tic.
+// - Framebuffer is palette-indexed `Framebuffer` + `PaletteLut`, not ARGB.
+//
+// # Game loop pseudocode
+// ```text
+// loop:
+//   elapsed = time since last frame
+//   accumulate elapsed into tic_timer
+//   while tic_timer >= TIC_DURATION:
+//       input = held_keys → TicInput
+//       app.tick(input)
+//       tic_timer -= TIC_DURATION
+//   app.render(fb)
+//   try_send(encoded_frame) to blit thread   ← non-blocking; drop if blit still busy
+//   sleep to fill remaining frame budget (vsync approximation)
+// ```
+//
+// # Double-buffer async blit
+//
+// Terminal I/O (sixel in particular) takes ~28 ms per frame — far too long to
+// block the game loop.  The blit thread owns the `Terminal` handle and calls
+// `terminal.draw()` at its own rate.  The main loop prepares the next frame
+// (encode sixel, clone framebuffer) and hands it off via a bounded channel
+// (`sync_channel(1)`), then continues immediately.  If the channel is full the
+// frame is silently dropped; the blit thread will display the next one instead.
 
 use crate::charset::{CharSet, RendererMode};
 use crate::cogmind::{CogmindFrame, CogmindHud, CogmindHudWidget, CogmindWidget};
@@ -164,7 +165,9 @@ fn run_blit_thread(
                                     past_first = true;
                                     continue;
                                 }
-                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                                f.buffer_mut()
+                                    .cell_mut((x, y))
+                                    .map(|c| c.set_diff_option(CellDiffOption::Skip));
                             }
                         }
                     }

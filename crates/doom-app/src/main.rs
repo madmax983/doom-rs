@@ -674,9 +674,6 @@ impl DoomGame {
             player.use_down = false;
             player.bonus_count = 0;
             player.damage_count = 0;
-            player.kill_count = 0;
-            player.item_count = 0;
-            player.secret_count = 0;
             doom_game::weapons::setup_psprites(&mut player);
             gs.player = player;
             gs.sync_player_mobj_health();
@@ -865,7 +862,7 @@ impl DoomGame {
             .unwrap_or((0, 0, 0));
         let hp = self.gs.player.health();
         let arm = self.gs.player.armor();
-        let kills = self.gs.player.kill_count;
+        let kills = self.gs.stats.kill_count;
         let weapon = self.gs.player.weapon;
         use doom_types::weapons::{AmmoType, WEAPON_AMMO};
         let cur_ammo_type = WEAPON_AMMO[weapon as usize];
@@ -1174,8 +1171,8 @@ impl DoomApp for DoomGame {
             self.menu.is_active() && matches!(self.phase_controller.phase(), GamePhase::Playing);
 
         // Snapshot kill/item counts before the tick to detect changes.
-        let pre_kills = self.gs.player.kill_count;
-        let pre_items = self.gs.player.item_count;
+        let pre_kills = self.gs.stats.kill_count;
+        let pre_items = self.gs.stats.item_count;
 
         if !paused {
             self.gs.tick(cmd, Some(&mut self.level));
@@ -1207,12 +1204,12 @@ impl DoomApp for DoomGame {
 
         // Log kill and item events.
         if self.debug_log.is_some() {
-            if self.gs.player.kill_count > pre_kills {
-                let msg = format!("kill count={}", self.gs.player.kill_count);
+            if self.gs.stats.kill_count > pre_kills {
+                let msg = format!("kill count={}", self.gs.stats.kill_count);
                 self.dlog(&msg);
             }
-            if self.gs.player.item_count > pre_items {
-                let msg = format!("pickup items={}", self.gs.player.item_count);
+            if self.gs.stats.item_count > pre_items {
+                let msg = format!("pickup items={}", self.gs.stats.item_count);
                 self.dlog(&msg);
             }
         }
@@ -1587,7 +1584,7 @@ impl DoomApp for DoomGame {
                 p.keys & KEY_YELLOW_SKULL != 0,
                 p.keys & KEY_RED_SKULL != 0,
             ],
-            kill_count: p.kill_count,
+            kill_count: self.gs.stats.kill_count,
             total_monsters: self.gs.stats.total_kills,
             level_name: self.gs.level_name.clone(),
             #[cfg(feature = "style_meter")]

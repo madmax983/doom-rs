@@ -478,9 +478,6 @@ fn write_player_state(w: &mut WriteCursor, p: &PlayerState) {
     w.write_u8(p.keys);
     w.write_u32(p.bonus_count);
     w.write_u32(p.damage_count);
-    w.write_u32(p.kill_count);
-    w.write_u32(p.item_count);
-    w.write_u32(p.secret_count);
 }
 
 fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
@@ -530,9 +527,6 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
     let keys = r.read_u8()?;
     let bonus_count = r.read_u32()?;
     let damage_count = r.read_u32()?;
-    let kill_count = r.read_u32()?;
-    let item_count = r.read_u32()?;
-    let secret_count = r.read_u32()?;
 
     // Build PlayerState using pistol_start then overwrite fields.
     // We need to set private fields (health, armor, ammo) through the public API.
@@ -580,9 +574,6 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
     ps.keys = keys;
     ps.bonus_count = bonus_count;
     ps.damage_count = damage_count;
-    ps.kill_count = kill_count;
-    ps.item_count = item_count;
-    ps.secret_count = secret_count;
 
     Ok(ps)
 }

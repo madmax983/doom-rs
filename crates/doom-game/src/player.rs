@@ -157,14 +157,6 @@ pub struct PlayerState {
     pub bonus_count: u32,
     /// Tics to flash the screen red (damage).
     pub damage_count: u32,
-
-    // --- End-of-level statistics ---
-    /// Number of monsters killed by this player.
-    pub kill_count: u32,
-    /// Number of items picked up by this player.
-    pub item_count: u32,
-    /// Number of secret sectors discovered by this player.
-    pub secret_count: u32,
 }
 
 impl PlayerState {
@@ -203,9 +195,6 @@ impl PlayerState {
             keys: 0,
             bonus_count: 0,
             damage_count: 0,
-            kill_count: 0,
-            item_count: 0,
-            secret_count: 0,
         }
     }
 

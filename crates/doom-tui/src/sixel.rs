@@ -1,33 +1,34 @@
-//! Fast palette-aware Sixel widget for Doom's indexed framebuffer.
-//!
-//! ## Performance design
-//!
-//! The generic ratatui-image path quantizes 192 KB of RGB data per frame (~20-50 ms).
-//! Doom already has a 256-color indexed buffer, so we skip quantization entirely and
-//! encode directly from palette indices.
-//!
-//! Three bottlenecks addressed vs. a naive implementation:
-//!
-//! 1. **`col_bits` zeroing** — use a dirty-color list; only zero the ~30-50 colors that
-//!    actually appeared last band, not all 256 × dst_w bytes.
-//! 2. **Accumulation** — iterate in *source* pixel coordinates (src_w = 320) and fill
-//!    contiguous runs of dst columns, instead of iterating every dst pixel (dst_w = 1760+)
-//!    with a scatter-write per pixel.  Division is replaced by a precomputed table.
-//! 3. **Active-color scan** — skip the O(256 × dst_w) `any()` check; dirty tracking
-//!    tells us exactly which colors need emission.
-//!
-//! ## Sixel format summary
-//! ```text
-//! ESC P <params> q          DCS introducer
-//! #n;2;R;G;B                color register n = RGB (0-100 scale)
-//! #n <chars> $              color n's pixels for this 6-row band, CR
-//! ...
-//! #n <chars> -              last color in band → Graphics New Line
-//! ESC \                     String Terminator
-//! ```
-//! Each sixel character encodes one column:
-//!   `char = '?' (63) + 6-bit mask`  (bit 0 = top row, bit 5 = bottom row)
-//! Runs of identical characters are RLE-compressed as `!count char`.
+use ratatui::buffer::CellDiffOption;
+// Fast palette-aware Sixel widget for Doom's indexed framebuffer.
+//
+// ## Performance design
+//
+// The generic ratatui-image path quantizes 192 KB of RGB data per frame (~20-50 ms).
+// Doom already has a 256-color indexed buffer, so we skip quantization entirely and
+// encode directly from palette indices.
+//
+// Three bottlenecks addressed vs. a naive implementation:
+//
+// 1. **`col_bits` zeroing** — use a dirty-color list; only zero the ~30-50 colors that
+//    actually appeared last band, not all 256 × dst_w bytes.
+// 2. **Accumulation** — iterate in *source* pixel coordinates (src_w = 320) and fill
+//    contiguous runs of dst columns, instead of iterating every dst pixel (dst_w = 1760+)
+//    with a scatter-write per pixel.  Division is replaced by a precomputed table.
+// 3. **Active-color scan** — skip the O(256 × dst_w) `any()` check; dirty tracking
+//    tells us exactly which colors need emission.
+//
+// ## Sixel format summary
+// ```text
+// ESC P <params> q          DCS introducer
+// #n;2;R;G;B                color register n = RGB (0-100 scale)
+// #n <chars> $              color n's pixels for this 6-row band, CR
+// ...
+// #n <chars> -              last color in band → Graphics New Line
+// ESC \                     String Terminator
+// ```
+// Each sixel character encodes one column:
+//   `char = '?' (63) + 6-bit mask`  (bit 0 = top row, bit 5 = bottom row)
+// Runs of identical characters are RLE-compressed as `!count char`.
 
 use std::fmt::Write as FmtWrite;
 
@@ -114,7 +115,8 @@ impl Widget for DoomSixelWidget<'_> {
                     skip_first = true;
                     continue;
                 }
-                buf.cell_mut((x, y)).map(|cell| cell.set_skip(true));
+                buf.cell_mut((x, y))
+                    .map(|cell| cell.set_diff_option(CellDiffOption::Skip));
             }
         }
     }

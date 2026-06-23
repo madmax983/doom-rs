@@ -366,7 +366,7 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
             if let Some(pz) = player_z {
                 for sector in &mut lv.sectors {
                     if sector.special == 9 && pz == sector.floor_height as i32 {
-                        gs.player.secret_count += 1;
+                        gs.stats.secret_count += 1;
                         sector.special = 0;
                     }
                 }
@@ -1945,12 +1945,12 @@ mod tests {
         let mut gs = make_game_state();
         // Player mobj is at z=0, matching the secret sector floor.
         let mut level = make_secret_level(0);
-        assert_eq!(gs.player.secret_count, 0);
+        assert_eq!(gs.stats.secret_count, 0);
 
         gs.tick(TicCmd::default(), Some(&mut level));
 
         assert_eq!(
-            gs.player.secret_count, 1,
+            gs.stats.secret_count, 1,
             "entering a secret sector (special=9) must increment secret_count"
         );
     }
@@ -1961,7 +1961,7 @@ mod tests {
         let mut level = make_secret_level(0);
 
         gs.tick(TicCmd::default(), Some(&mut level));
-        assert_eq!(gs.player.secret_count, 1);
+        assert_eq!(gs.stats.secret_count, 1);
         assert_eq!(
             level.sectors[0].special, 0,
             "secret sector special must be cleared after discovery"
@@ -1970,7 +1970,7 @@ mod tests {
         // Tick again -- sector no longer has special=9, count must not increase.
         gs.tick(TicCmd::default(), Some(&mut level));
         assert_eq!(
-            gs.player.secret_count, 1,
+            gs.stats.secret_count, 1,
             "secret_count must not increment again after sector special is cleared"
         );
     }
