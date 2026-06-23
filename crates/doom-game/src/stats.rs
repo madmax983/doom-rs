@@ -1,3 +1,9 @@
+//! End-of-level map statistics and tracking (kills, items, secrets).
+//!
+//! This module defines the [`LevelStats`] structure, which monitors the player's
+//! progress throughout a map. It tracks the number of monsters killed, items collected,
+//! and secret sectors discovered, as well as the map's totals.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {

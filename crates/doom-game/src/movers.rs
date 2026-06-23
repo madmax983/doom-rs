@@ -1,3 +1,12 @@
+//! Dynamic sector movers and environmental specials.
+//!
+//! In Doom, the architecture is not strictly static. This module defines the various
+//! moving structures and environmental hazards that bring levels to life.
+//!
+//! Movers included here represent doors, lifts, crushing ceilings, perpetual platforms,
+//! scrolling walls, and conveyor belts, along with light flicker effects and damage
+//! sectors. The structures herein track their ongoing animation state.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

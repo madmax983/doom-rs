@@ -1,3 +1,10 @@
+//! Sprite occlusion and clipping via manual ArrayVec-like portal histories.
+//!
+//! When sprites are drawn, they need to correctly clip against walls and portals
+//! (like windows or ledges). Since a single sprite column rarely clips through
+//! more than 4-8 portals, this module provides [`SpriteClipHistory`], a zero-allocation
+//! stack that records clipping steps.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.

@@ -1,3 +1,10 @@
+//! Dynamic difficulty adjustment and pacing AI.
+//!
+//! This module introduces an AI Director that monitors the player's performance
+//! (like current health) and orchestrates spawning behavior. By producing
+//! [`DirectorAction`]s, it aims to maintain a balanced flow—spawning relief
+//! when the player is struggling, and ambush encounters when they are doing well.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

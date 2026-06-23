@@ -1,3 +1,12 @@
+//! Sound propagation and acoustic event queues.
+//!
+//! This module defines the game's acoustic events via [`SoundRequest`] and handles
+//! sound propagation across sectors through [`SoundPropagation`].
+//!
+//! Rather than directly playing audio, the game simulation queues discrete events
+//! that describe *what* happened (e.g., a monster waking up or a weapon firing).
+//! The orchestrator (like `doom-app`) later maps these requests to actual WAD lumps.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;
