@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**[Eliminate Per-Tic Heap Allocations for Demos]**
+**Learning:** `Vec::clone()` is heavily used during Demo replay (`next_tic_cmds` returning `Option<Vec<DemoTicCmd>>`) creating a heap allocation on every single game tic. Replacing the return type with a slice reference `Option<&[DemoTicCmd]>` completely avoids the allocation and provides identical functionality to callers while retaining memory safety.
+**Action:** Always prefer returning references and slice references `&[T]` instead of cloning or returning `Vec<T>` where ownership is strictly not required, especially on frame-by-frame or tick-by-tick iterations.
