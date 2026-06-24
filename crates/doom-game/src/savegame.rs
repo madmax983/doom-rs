@@ -16,8 +16,8 @@ use crate::player::{PlayerState, PspriteState};
 use crate::savegame_vanilla;
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
-    GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
-    PlatformStatus, ScrollingWall,
+    GameState, LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection,
+    PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
 };
 use doom_types::limits::{NUM_POWERS, NUM_PSPRITES};
 use doom_types::mobj_kind::MobjKind;
@@ -637,6 +637,24 @@ fn read_light_special(r: &mut ReadCursor<'_>) -> Result<LightSpecial, SaveError>
     })
 }
 
+fn write_sector_light_effect(w: &mut WriteCursor, l: &SectorLightEffect) {
+    w.write_u32(l.sector_index as u32);
+    w.write_u16(l.effect_type as u16);
+    w.write_i16(l.base_light);
+    w.write_i16(l.min_light);
+    w.write_u32(l.timer);
+}
+
+fn read_sector_light_effect(r: &mut ReadCursor<'_>) -> Result<SectorLightEffect, SaveError> {
+    Ok(SectorLightEffect {
+        sector_index: r.read_u32()? as usize,
+        effect_type: LightEffectType::from_repr(r.read_u16()?).ok_or(SaveError::Truncated)?,
+        base_light: r.read_i16()?,
+        min_light: r.read_i16()?,
+        timer: r.read_u32()?,
+    })
+}
+
 fn write_ceiling_type(w: &mut WriteCursor, ct: CeilingType) {
     w.write_u8(ct as u8);
 }
@@ -923,6 +941,12 @@ fn save_game_doomrs(gs: &GameState, level_name: &[u8; 8], skill: u8, description
         write_light_special(&mut w, light);
     }
 
+    // --- Sector light effects ---
+    w.write_u32(gs.movers.sector_lights.len() as u32);
+    for effect in &gs.movers.sector_lights {
+        write_sector_light_effect(&mut w, effect);
+    }
+
     // --- Ceiling movers ---
     w.write_u32(gs.movers.active_ceilings.len() as u32);
     for ceil in &gs.movers.active_ceilings {
@@ -1087,6 +1111,17 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
         active_lights.push(read_light_special(&mut r)?);
     }
 
+    // --- Sector light effects ---
+    let sector_light_count = r.read_u32()? as usize;
+    let max_sector_lights = (r.data.len().saturating_sub(r.pos)) / 14;
+    if sector_light_count > max_sector_lights {
+        return Err(SaveError::Truncated);
+    }
+    let mut sector_lights = Vec::with_capacity(sector_light_count);
+    for _ in 0..sector_light_count {
+        sector_lights.push(read_sector_light_effect(&mut r)?);
+    }
+
     // --- Ceiling movers ---
     let ceiling_count = r.read_u32()? as usize;
     let max_ceilings = (r.data.len().saturating_sub(r.pos)) / 36;
@@ -1221,6 +1256,7 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
     state.stats.total_secrets = total_secrets;
     state.movers.active_doors = active_doors;
     state.movers.active_lights = active_lights;
+    state.movers.sector_lights = sector_lights;
     state.movers.active_ceilings = active_ceilings;
     state.movers.active_floors = active_floors;
     state.movers.active_platforms = active_platforms;
