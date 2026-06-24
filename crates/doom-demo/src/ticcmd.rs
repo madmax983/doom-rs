@@ -48,7 +48,7 @@ impl DemoTicCmd {
     ///
     /// Returns `None` if `data.len() < 4`.
     #[must_use]
-    pub fn from_bytes(data: &[u8]) -> Option<Self> {
+    pub const fn from_bytes(data: &[u8]) -> Option<Self> {
         if data.len() < DEMO_TIC_SIZE {
             return None;
         }

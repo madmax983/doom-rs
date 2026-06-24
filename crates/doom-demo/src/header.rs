@@ -98,7 +98,7 @@ impl LmpHeader {
     ///
     /// Returns `None` if the data is shorter than 13 bytes.
     #[must_use]
-    pub fn from_bytes(data: &[u8]) -> Option<Self> {
+    pub const fn from_bytes(data: &[u8]) -> Option<Self> {
         if data.len() < LMP_HEADER_SIZE {
             return None;
         }

@@ -176,7 +176,12 @@ fn parse_pnames(data: &[u8]) -> Vec<String> {
         return Vec::new();
     }
     let count = u32::from_le_bytes([data[0], data[1], data[2], data[3]]) as usize;
-    let mut names = Vec::with_capacity(count);
+
+    // Havoc 👺: Defend against OOM from fuzzed PNAMES lump count.
+    let max_names = data.len().saturating_sub(4) / 8;
+    let safe_capacity = count.min(max_names);
+
+    let mut names = Vec::with_capacity(safe_capacity);
 
     for i in 0..count {
         let off = 4 + i * 8;
@@ -262,7 +267,12 @@ fn parse_texture_lump<'a, F>(
 
         // Parse MapPatch entries (10 bytes each), starting at tex_offset + 22.
         let patches_start = tex_offset + 22;
-        let mut patches = Vec::with_capacity(patch_count);
+
+        // Havoc 👺: Defend against OOM and huge allocations from fuzzed lengths.
+        let max_patches_in_data = data.len().saturating_sub(patches_start) / 10;
+        let safe_patch_capacity = patch_count.min(max_patches_in_data);
+
+        let mut patches = Vec::with_capacity(safe_patch_capacity);
         for p in 0..patch_count {
             let poff = patches_start + p * 10;
             if poff + 10 > data.len() {

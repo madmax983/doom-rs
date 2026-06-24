@@ -1060,8 +1060,8 @@ mod tests {
     #[test]
     fn punctuation_glyphs_are_non_blank() {
         let font = make_font();
-        let chars = [b'!', b'.', b',', b'?', b':', b'-', b'\'', b'(', b')', b'/'];
-        for &ch in &chars {
+        let chars = b"!.,?:-'()/";
+        for &ch in chars {
             let idx = (ch - 32) as usize;
             let glyph = font.glyph(idx);
             let total_bits: u32 = glyph.iter().map(|&b| b.count_ones()).sum();
