@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactor DFS God Function in MapAnalyzer**
+**Learning:** `MapAnalyzer::chokepoints` accumulated 7 state variables causing it to become a "God Function", and suffered from "Boolean Blindness" with redundant destructuring like `let (low_u, disc_v) = (low_time.get(&u).copied(), discovery_time.get(&v).copied()); if let (Some(low_u), Some(disc_v)) = (low_u, disc_v)`.
+**Action:** Bundle the variables into a dedicated `#[derive(Default)] struct DfsState` and inline the guard clauses `if let (Some(low_u), Some(disc_v)) = (low_time.get(&u).copied(), discovery_time.get(&v).copied())` to drastically simplify the helper function and improve readability.
