@@ -164,7 +164,9 @@ fn run_blit_thread(
                                     past_first = true;
                                     continue;
                                 }
-                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                                f.buffer_mut().cell_mut((x, y)).map(|c| {
+                                    c.set_diff_option(ratatui::buffer::CellDiffOption::Skip)
+                                });
                             }
                         }
                     }
@@ -1091,7 +1093,11 @@ mod tests {
 
         let count_before = modifier_sample_count();
         loop_.poll_events();
-        assert_eq!(modifier_sample_count(), count_before);
+        assert_eq!(
+            modifier_sample_count(),
+            count_before,
+            "poll_events should not sample modifiers"
+        );
     }
 
     #[test]

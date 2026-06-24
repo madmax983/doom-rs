@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2024-06-25 - [Fix ratatui deprecations cleanly without ignoring]
+**Confusion:** Resolving ratatui deprecations around `Cell::set_skip` by using `#[allow(deprecated)]` avoids warning failures but ignores the underlying API change.
+**Clarification:** Replaced `cell.set_skip(true)` with `cell.set_diff_option(ratatui::buffer::CellDiffOption::Skip)` directly to correctly transition to the updated API and silence the warnings permanently without suppressing valid compiler checks. Also documented the missing items in `doom-renderer::sprite_clip` and crate-level documentation.
