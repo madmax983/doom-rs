@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 //! Fixed-step Doom game loop: 35 tic/sec simulation, variable render rate.
 //!
 //! Ported from `abrash/src/platform/tui.rs` with these changes:

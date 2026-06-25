@@ -171,6 +171,12 @@ impl MusScore {
         let mut pending_delta: u32 = 0;
 
         loop {
+            // Check to prevent infinite loops on corrupted MUS lumps where
+            // the ScoreEnd event is missing but the stream keeps yielding events.
+            if cursor >= data.len() {
+                break;
+            }
+
             let event_byte = *data
                 .get(cursor)
                 .ok_or(AudioError::InvalidMus("unexpected end of event stream"))?;

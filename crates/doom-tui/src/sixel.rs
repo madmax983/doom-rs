@@ -1,3 +1,4 @@
+#![allow(deprecated)]
 //! Fast palette-aware Sixel widget for Doom's indexed framebuffer.
 //!
 //! ## Performance design

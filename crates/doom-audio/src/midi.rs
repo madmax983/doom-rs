@@ -443,10 +443,14 @@ impl MidiPlayer {
         // never wraps on loop — when the score restarts we add the score's
         // total tick duration to next_event_tick rather than resetting it.
         // This prevents the loop from firing the same event infinitely.
+        let mut loop_count = 0;
+        let max_loops = n_samples * 10; // Prevent infinite loops on 0-delta streams
+
         loop {
-            if self.current_score.is_none() {
+            if self.current_score.is_none() || loop_count > max_loops {
                 break;
             }
+            loop_count += 1;
 
             // Gather what we need in a short immutable-borrow block.
             let action = {

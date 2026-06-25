@@ -69,15 +69,15 @@ impl<'a> MapAnalyzer<'a> {
         let mut articulation_points = HashSet::new();
         let mut time = 0;
 
-        for &node in self.graph.adjacency_list.keys() {
-            if !visited.contains(&node) {
+        for &root in self.graph.adjacency_list.keys() {
+            if !visited.contains(&root) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let mut stack = vec![(root, self.graph.adjacency_list.get(&root).unwrap().iter())];
 
-                visited.insert(node);
+                visited.insert(root);
                 time += 1;
-                discovery_time.insert(node, time);
-                low_time.insert(node, time);
+                discovery_time.insert(root, time);
+                low_time.insert(root, time);
                 let mut children_map: HashMap<usize, usize> = HashMap::new();
 
                 while let Some((u, mut neighbors_iter)) = stack.pop() {
@@ -127,7 +127,7 @@ impl<'a> MapAnalyzer<'a> {
                                     articulation_points.insert(p);
                                 }
                             }
-                        } else if *children_map.get(&u).unwrap_or(&0) > 1 {
+                        } else if u == root && *children_map.get(&u).unwrap_or(&0) > 1 {
                             articulation_points.insert(u);
                         }
                     }
