@@ -1,11 +1,13 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🔭 Vantage: Spec for Resilient Map Topology Analysis
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+👤 **User Story:**
+As a Player or Map Creator, I want the engine to robustly load and analyze any valid Doom map, even maliciously crafted or highly nested ones, so that the game does not inexplicably crash with stack overflows.
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+✅ **Acceptance Criteria:**
+- Must rewrite the map topology analysis (DFS) to use an iterative approach with a `Vec` as a stack.
+- Must pass all existing tests, including tests against maps containing over 10,000 deep nodes.
+- Must not introduce significant performance regressions for average-sized maps.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🚫 **Out of Scope:**
+- Adding new map analysis features (e.g., shortest path, flow analysis).
+- Modifying other rendering or logic components unrelated to graph traversal.
