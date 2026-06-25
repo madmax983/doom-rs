@@ -21,9 +21,10 @@ use doom_types::{FIXED_ONE, Fixed16_16};
 use crate::mobj::MobjHandle;
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
-    GameState, LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection,
+    GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection,
     PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
 };
+use doom_types::primitives::LightEffectType;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -89,10 +90,10 @@ pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandl
             continue;
         }
 
-        let dmg: i32 = match crate::state::SectorDamageType::from_repr(sector.special) {
-            Some(crate::state::SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
-            Some(crate::state::SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
-            Some(crate::state::SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
+        let dmg: i32 = match doom_types::primitives::SectorDamageType::from_repr(sector.special) {
+            Some(doom_types::primitives::SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
+            Some(doom_types::primitives::SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
+            Some(doom_types::primitives::SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
             _ => continue,
         };
 
@@ -149,16 +150,16 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
             continue;
         }
 
-        let Some(damage_type) = crate::state::SectorDamageType::from_repr(sector.special) else {
+        let Some(damage_type) = doom_types::primitives::SectorDamageType::from_repr(sector.special) else {
             continue;
         };
 
         let (damage, ignores_radsuit) = match damage_type {
-            crate::state::SectorDamageType::NukageBlink => (PERIODIC_DAMAGE_NUKAGE_BLINK, false),
-            crate::state::SectorDamageType::Hellslime => (PERIODIC_DAMAGE_HELLSLIME, false),
-            crate::state::SectorDamageType::Nukage => (PERIODIC_DAMAGE_NUKAGE, false),
-            crate::state::SectorDamageType::GodExit => (PERIODIC_DAMAGE_GOD_EXIT, true),
-            crate::state::SectorDamageType::SuperHellslime => {
+            doom_types::primitives::SectorDamageType::NukageBlink => (PERIODIC_DAMAGE_NUKAGE_BLINK, false),
+            doom_types::primitives::SectorDamageType::Hellslime => (PERIODIC_DAMAGE_HELLSLIME, false),
+            doom_types::primitives::SectorDamageType::Nukage => (PERIODIC_DAMAGE_NUKAGE, false),
+            doom_types::primitives::SectorDamageType::GodExit => (PERIODIC_DAMAGE_GOD_EXIT, true),
+            doom_types::primitives::SectorDamageType::SuperHellslime => {
                 (PERIODIC_DAMAGE_SUPER_HELLSLIME, false)
             }
         };
@@ -168,7 +169,7 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
         }
 
         // God exit specific behavior
-        if damage_type == crate::state::SectorDamageType::GodExit {
+        if damage_type == doom_types::primitives::SectorDamageType::GodExit {
             if let Some(mo) = gs.mobjslab.get(handle) {
                 if mo.health <= 10 {
                     gs.exit_request = Some(ExitRequest::Normal);
@@ -5860,15 +5861,15 @@ mod tests {
         );
         assert_eq!(
             gs.movers.sector_lights[0].effect_type,
-            crate::state::LightEffectType::BlinkRandom
+            doom_types::primitives::LightEffectType::BlinkRandom
         );
         assert_eq!(
             gs.movers.sector_lights[1].effect_type,
-            crate::state::LightEffectType::Blink05s
+            doom_types::primitives::LightEffectType::Blink05s
         );
         assert_eq!(
             gs.movers.sector_lights[2].effect_type,
-            crate::state::LightEffectType::Blink1s
+            doom_types::primitives::LightEffectType::Blink1s
         );
     }
 
@@ -5916,14 +5917,15 @@ mod tests {
 
     #[test]
     fn light_effect_type_derives_partial_eq() {
-        use crate::state::LightEffectType;
+        use doom_types::primitives::LightEffectType;
         assert_eq!(LightEffectType::BlinkRandom, LightEffectType::BlinkRandom);
         assert_ne!(LightEffectType::Blink05s, LightEffectType::Blink1s);
     }
 
     #[test]
     fn sector_light_effect_clone_works() {
-        use crate::state::{LightEffectType, SectorLightEffect};
+        use crate::state::SectorLightEffect;
+        use doom_types::primitives::LightEffectType;
         let effect = SectorLightEffect {
             sector_index: 0,
             effect_type: LightEffectType::Oscillate,
@@ -6030,7 +6032,8 @@ mod tests {
 
     #[test]
     fn game_state_clone_includes_sector_lights() {
-        use crate::state::{LightEffectType, SectorLightEffect};
+        use crate::state::SectorLightEffect;
+        use doom_types::primitives::LightEffectType;
         let mut gs = GameState::new("TEST");
         gs.movers.sector_lights.push(SectorLightEffect {
             sector_index: 0,
@@ -6095,11 +6098,11 @@ mod tests {
         assert_eq!(gs.movers.sector_lights.len(), 2);
         assert_eq!(
             gs.movers.sector_lights[0].effect_type,
-            crate::state::LightEffectType::Oscillate
+            doom_types::primitives::LightEffectType::Oscillate
         );
         assert_eq!(
             gs.movers.sector_lights[1].effect_type,
-            crate::state::LightEffectType::FireFlicker
+            doom_types::primitives::LightEffectType::FireFlicker
         );
     }
 
