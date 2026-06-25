@@ -320,7 +320,7 @@ impl PlayerState {
             if *cur >= max {
                 return false;
             }
-            *cur = (*cur + amount).min(max);
+            *cur = cur.saturating_add(amount).min(max);
             true
         } else {
             false
@@ -772,6 +772,14 @@ mod proptests {
         fn havoc_player_health_damage_does_not_panic(start_health in i32::MIN..i32::MAX, amount in i32::MIN..i32::MAX) {
             let mut p = PlayerState { health: start_health, ..Default::default() };
             p.apply_damage(amount);
+        }
+
+        #[test]
+        fn havoc_give_ammo_does_not_panic(start_ammo in 0u32..=u32::MAX, amount in 0u32..=u32::MAX) {
+            let mut p = PlayerState::default();
+            p.max_ammo[0] = u32::MAX;
+            p.ammo[0] = start_ammo;
+            p.give_ammo(0, amount);
         }
     }
 }
