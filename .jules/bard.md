@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-05-18 - [Resolved missing documentation warnings for binary crate root]
+**Confusion:** Cargo emits `-D missing_docs` warnings for empty `src/lib.rs` files located alongside a binary `src/main.rs`. Even if `src/main.rs` is fully documented, the presence of `lib.rs` causes Cargo to treat the project as both a binary and a library crate, demanding module-level documentation for the library portion.
+**Clarification:** To fix the warning without adding unnecessary documentation for a non-existent public API, the empty `src/lib.rs` file should be deleted. This signals to Cargo that `doom-app` is purely a binary crate, resolving the warning and correctly reflecting the project's architecture.
