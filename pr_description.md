@@ -1,11 +1,5 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🎨 Mosaic: UI Polish for Pathfinding CLI
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🖌️ **Before:** The `--pathfind` CLI output printed a raw, single-line log message for the resulting path.
+✨ **After:** The pathfinding output now uses `comfy-table` to render a structured, visually appealing table, maintaining consistency with other CLI features like `--analyze` and `--map-stats`.
+🖼️ **Visuals:** A rounded-corner table with "Feature" and "Data" columns, coloring the path sequence green to ensure important information pops.
