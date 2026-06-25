@@ -137,7 +137,7 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
     let az = mo.z.to_int();
 
     // Check if player has RadSuit active.
-    let has_radsuit = gs.player.powers[crate::player::powers::PW_IRONFEET] > 0;
+    let has_radsuit = gs.player.powers[doom_types::powers::PW_IRONFEET] > 0;
 
     for sector in &level.sectors {
         if sector.special == 0 {
@@ -2501,8 +2501,8 @@ fn activate_doors(
         // --- Types 26/27/28: locked raise-and-close door ---
         26 => {
             // Blue card or skull required.
-            if gs.player.has_key(crate::player::KEY_BLUE_CARD)
-                || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
+            if gs.player.has_key(doom_types::keys::KEY_BLUE_CARD)
+                || gs.player.has_key(doom_types::keys::KEY_BLUE_SKULL)
             {
                 let Some(sector_idx) = level
                     .sidedefs
@@ -2521,8 +2521,8 @@ fn activate_doors(
         }
         27 => {
             // Yellow key required.
-            if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
-                || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
+            if gs.player.has_key(doom_types::keys::KEY_YELLOW_CARD)
+                || gs.player.has_key(doom_types::keys::KEY_YELLOW_SKULL)
             {
                 let Some(sector_idx) = level
                     .sidedefs
@@ -2541,8 +2541,8 @@ fn activate_doors(
         }
         28 => {
             // Red key required.
-            if gs.player.has_key(crate::player::KEY_RED_CARD)
-                || gs.player.has_key(crate::player::KEY_RED_SKULL)
+            if gs.player.has_key(doom_types::keys::KEY_RED_CARD)
+                || gs.player.has_key(doom_types::keys::KEY_RED_SKULL)
             {
                 let Some(sector_idx) = level
                     .sidedefs
@@ -2687,8 +2687,8 @@ fn activate_doors(
 
         // Type 99: SR Blue key door open-stay.
         99 => {
-            if gs.player.has_key(crate::player::KEY_BLUE_CARD)
-                || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
+            if gs.player.has_key(doom_types::keys::KEY_BLUE_CARD)
+                || gs.player.has_key(doom_types::keys::KEY_BLUE_SKULL)
             {
                 let Some(sector_idx) = level
                     .sidedefs
@@ -2708,8 +2708,8 @@ fn activate_doors(
 
         // Type 133: S1 Blue key door open-stay (blazing).
         133 => {
-            if gs.player.has_key(crate::player::KEY_BLUE_CARD)
-                || gs.player.has_key(crate::player::KEY_BLUE_SKULL)
+            if gs.player.has_key(doom_types::keys::KEY_BLUE_CARD)
+                || gs.player.has_key(doom_types::keys::KEY_BLUE_SKULL)
             {
                 let Some(sector_idx) = level
                     .sidedefs
@@ -2729,8 +2729,8 @@ fn activate_doors(
 
         // Type 134: SR Red key door open-stay.
         134 => {
-            if gs.player.has_key(crate::player::KEY_RED_CARD)
-                || gs.player.has_key(crate::player::KEY_RED_SKULL)
+            if gs.player.has_key(doom_types::keys::KEY_RED_CARD)
+                || gs.player.has_key(doom_types::keys::KEY_RED_SKULL)
             {
                 let Some(sector_idx) = level
                     .sidedefs
@@ -2750,8 +2750,8 @@ fn activate_doors(
 
         // Type 135: S1 Red key door open-stay (blazing).
         135 => {
-            if gs.player.has_key(crate::player::KEY_RED_CARD)
-                || gs.player.has_key(crate::player::KEY_RED_SKULL)
+            if gs.player.has_key(doom_types::keys::KEY_RED_CARD)
+                || gs.player.has_key(doom_types::keys::KEY_RED_SKULL)
             {
                 let Some(sector_idx) = level
                     .sidedefs
@@ -2771,8 +2771,8 @@ fn activate_doors(
 
         // Type 136: SR Yellow key door open-stay.
         136 => {
-            if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
-                || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
+            if gs.player.has_key(doom_types::keys::KEY_YELLOW_CARD)
+                || gs.player.has_key(doom_types::keys::KEY_YELLOW_SKULL)
             {
                 let Some(sector_idx) = level
                     .sidedefs
@@ -2792,8 +2792,8 @@ fn activate_doors(
 
         // Type 137: S1 Yellow key door open-stay (blazing).
         137 => {
-            if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
-                || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
+            if gs.player.has_key(doom_types::keys::KEY_YELLOW_CARD)
+                || gs.player.has_key(doom_types::keys::KEY_YELLOW_SKULL)
             {
                 let Some(sector_idx) = level
                     .sidedefs
@@ -4449,8 +4449,8 @@ mod tests {
         let mut level = make_door_level_with_special(0, 26);
 
         // Player has no blue key.
-        assert!(!gs.player.has_key(crate::player::KEY_BLUE_CARD));
-        assert!(!gs.player.has_key(crate::player::KEY_BLUE_SKULL));
+        assert!(!gs.player.has_key(doom_types::keys::KEY_BLUE_CARD));
+        assert!(!gs.player.has_key(doom_types::keys::KEY_BLUE_SKULL));
 
         activate_linedef(&mut gs, &mut level, 0);
 
@@ -4467,7 +4467,7 @@ mod tests {
         let mut level = make_door_level_with_special(0, 26);
 
         // Give player the blue card.
-        gs.player.give_key(crate::player::KEY_BLUE_CARD);
+        gs.player.give_key(doom_types::keys::KEY_BLUE_CARD);
 
         activate_linedef(&mut gs, &mut level, 0);
 
@@ -4485,7 +4485,7 @@ mod tests {
         let mut level = make_door_level_with_special(0, 26);
 
         // Give player the blue skull.
-        gs.player.give_key(crate::player::KEY_BLUE_SKULL);
+        gs.player.give_key(doom_types::keys::KEY_BLUE_SKULL);
 
         activate_linedef(&mut gs, &mut level, 0);
 
@@ -5694,7 +5694,7 @@ mod tests {
         let handle = make_actor_at_z(&mut gs, 0);
         gs.player = crate::player::PlayerState::pistol_start(handle);
         // Give player RadSuit.
-        gs.player.powers[crate::player::powers::PW_IRONFEET] = 100;
+        gs.player.powers[doom_types::powers::PW_IRONFEET] = 100;
         let level = make_damage_level(0, 7);
 
         gs.stats.level_time = 32;
@@ -6112,7 +6112,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         let handle = make_actor_at_z(&mut gs, 0);
         gs.player = crate::player::PlayerState::pistol_start(handle);
-        gs.player.powers[crate::player::powers::PW_IRONFEET] = 100;
+        gs.player.powers[doom_types::powers::PW_IRONFEET] = 100;
         let level = make_damage_level(0, 11);
 
         gs.stats.level_time = 32;
@@ -8434,7 +8434,7 @@ mod tests {
         );
 
         // Give blue card and try again.
-        gs.player.give_key(crate::player::KEY_BLUE_CARD);
+        gs.player.give_key(doom_types::keys::KEY_BLUE_CARD);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.movers.active_doors.len(),
@@ -8463,7 +8463,7 @@ mod tests {
         );
 
         // Give red card and try again.
-        gs.player.give_key(crate::player::KEY_RED_CARD);
+        gs.player.give_key(doom_types::keys::KEY_RED_CARD);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.movers.active_doors.len(),
@@ -8492,7 +8492,7 @@ mod tests {
         );
 
         // Give yellow card and try again.
-        gs.player.give_key(crate::player::KEY_YELLOW_CARD);
+        gs.player.give_key(doom_types::keys::KEY_YELLOW_CARD);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.movers.active_doors.len(),
@@ -8659,7 +8659,7 @@ mod tests {
         assert_eq!(gs.movers.active_doors.len(), 0);
 
         // Give blue skull and try again.
-        gs.player.give_key(crate::player::KEY_BLUE_SKULL);
+        gs.player.give_key(doom_types::keys::KEY_BLUE_SKULL);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_doors.len(), 1);
         assert_eq!(
@@ -8684,7 +8684,7 @@ mod tests {
         assert_eq!(gs.movers.active_doors.len(), 0);
 
         // Give red skull and try again.
-        gs.player.give_key(crate::player::KEY_RED_SKULL);
+        gs.player.give_key(doom_types::keys::KEY_RED_SKULL);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_doors.len(), 1);
         assert_eq!(gs.movers.active_doors[0].speed, BLAZING_DOOR_SPEED);
@@ -8706,7 +8706,7 @@ mod tests {
         assert_eq!(gs.movers.active_doors.len(), 0);
 
         // Give yellow skull and try again.
-        gs.player.give_key(crate::player::KEY_YELLOW_SKULL);
+        gs.player.give_key(doom_types::keys::KEY_YELLOW_SKULL);
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_doors.len(), 1);
         assert_eq!(gs.movers.active_doors[0].speed, BLAZING_DOOR_SPEED);

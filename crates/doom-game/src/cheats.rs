@@ -18,8 +18,8 @@
 
 use doom_types::limits::MAX_AMMO;
 
-use crate::player::powers;
 use crate::state::GameState;
+use doom_types::powers;
 
 // ---------------------------------------------------------------------------
 // Cheat sequences (lowercase)

@@ -32,12 +32,12 @@ impl KeyType {
     /// Convert to the player key bitmask constant.
     pub fn to_bitmask(self) -> u8 {
         match self {
-            KeyType::BlueCard => crate::player::KEY_BLUE_CARD,
-            KeyType::RedCard => crate::player::KEY_RED_CARD,
-            KeyType::YellowCard => crate::player::KEY_YELLOW_CARD,
-            KeyType::BlueSkull => crate::player::KEY_BLUE_SKULL,
-            KeyType::RedSkull => crate::player::KEY_RED_SKULL,
-            KeyType::YellowSkull => crate::player::KEY_YELLOW_SKULL,
+            KeyType::BlueCard => doom_types::keys::KEY_BLUE_CARD,
+            KeyType::RedCard => doom_types::keys::KEY_RED_CARD,
+            KeyType::YellowCard => doom_types::keys::KEY_YELLOW_CARD,
+            KeyType::BlueSkull => doom_types::keys::KEY_BLUE_SKULL,
+            KeyType::RedSkull => doom_types::keys::KEY_RED_SKULL,
+            KeyType::YellowSkull => doom_types::keys::KEY_YELLOW_SKULL,
         }
     }
 
@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn player_has_blue_card() {
         let mut gs = make_gs_with_player();
-        gs.player.give_key(crate::player::KEY_BLUE_CARD);
+        gs.player.give_key(doom_types::keys::KEY_BLUE_CARD);
         assert!(player_has_key(&gs, KeyType::BlueCard));
     }
 
@@ -209,28 +209,28 @@ mod tests {
     #[test]
     fn player_has_yellow_card() {
         let mut gs = make_gs_with_player();
-        gs.player.give_key(crate::player::KEY_YELLOW_CARD);
+        gs.player.give_key(doom_types::keys::KEY_YELLOW_CARD);
         assert!(player_has_key(&gs, KeyType::YellowCard));
     }
 
     #[test]
     fn player_has_blue_skull() {
         let mut gs = make_gs_with_player();
-        gs.player.give_key(crate::player::KEY_BLUE_SKULL);
+        gs.player.give_key(doom_types::keys::KEY_BLUE_SKULL);
         assert!(player_has_key(&gs, KeyType::BlueSkull));
     }
 
     #[test]
     fn player_has_red_skull() {
         let mut gs = make_gs_with_player();
-        gs.player.give_key(crate::player::KEY_RED_SKULL);
+        gs.player.give_key(doom_types::keys::KEY_RED_SKULL);
         assert!(player_has_key(&gs, KeyType::RedSkull));
     }
 
     #[test]
     fn player_has_yellow_skull() {
         let mut gs = make_gs_with_player();
-        gs.player.give_key(crate::player::KEY_YELLOW_SKULL);
+        gs.player.give_key(doom_types::keys::KEY_YELLOW_SKULL);
         assert!(player_has_key(&gs, KeyType::YellowSkull));
     }
 

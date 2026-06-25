@@ -8,9 +8,10 @@
 //! left in the world -- `p_touch_special_thing` returns `false`.
 
 use crate::mobj::{MobjHandle, flags};
-use crate::player::{self, powers};
+
 use crate::state::GameState;
 use doom_types::mobj_kind::MobjKind;
+use doom_types::powers;
 use doom_types::weapons::AmmoType;
 use doom_types::weapons::WeaponType;
 
@@ -403,27 +404,27 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
 
         // ---- Keys ----
         MobjKind::BlueCard => {
-            gs.player.give_key(player::KEY_BLUE_CARD);
+            gs.player.give_key(doom_types::keys::KEY_BLUE_CARD);
             true // Keys are always picked up
         }
         MobjKind::YellowCard => {
-            gs.player.give_key(player::KEY_YELLOW_CARD);
+            gs.player.give_key(doom_types::keys::KEY_YELLOW_CARD);
             true
         }
         MobjKind::RedCard => {
-            gs.player.give_key(player::KEY_RED_CARD);
+            gs.player.give_key(doom_types::keys::KEY_RED_CARD);
             true
         }
         MobjKind::BlueSkull => {
-            gs.player.give_key(player::KEY_BLUE_SKULL);
+            gs.player.give_key(doom_types::keys::KEY_BLUE_SKULL);
             true
         }
         MobjKind::YellowSkull => {
-            gs.player.give_key(player::KEY_YELLOW_SKULL);
+            gs.player.give_key(doom_types::keys::KEY_YELLOW_SKULL);
             true
         }
         MobjKind::RedSkull => {
-            gs.player.give_key(player::KEY_RED_SKULL);
+            gs.player.give_key(doom_types::keys::KEY_RED_SKULL);
             true
         }
 
@@ -863,22 +864,22 @@ mod tests {
     #[test]
     fn pickup_blue_card_sets_key_bit() {
         let mut gs = make_game_state();
-        assert!(!gs.player.has_key(player::KEY_BLUE_CARD));
+        assert!(!gs.player.has_key(doom_types::keys::KEY_BLUE_CARD));
         let item = spawn_item(&mut gs, MobjKind::BlueCard, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert!(gs.player.has_key(player::KEY_BLUE_CARD));
+        assert!(gs.player.has_key(doom_types::keys::KEY_BLUE_CARD));
     }
 
     #[test]
     fn pickup_all_keys() {
         let mut gs = make_game_state();
         let keys = [
-            (MobjKind::BlueCard, player::KEY_BLUE_CARD),
-            (MobjKind::YellowCard, player::KEY_YELLOW_CARD),
-            (MobjKind::RedCard, player::KEY_RED_CARD),
-            (MobjKind::BlueSkull, player::KEY_BLUE_SKULL),
-            (MobjKind::YellowSkull, player::KEY_YELLOW_SKULL),
-            (MobjKind::RedSkull, player::KEY_RED_SKULL),
+            (MobjKind::BlueCard, doom_types::keys::KEY_BLUE_CARD),
+            (MobjKind::YellowCard, doom_types::keys::KEY_YELLOW_CARD),
+            (MobjKind::RedCard, doom_types::keys::KEY_RED_CARD),
+            (MobjKind::BlueSkull, doom_types::keys::KEY_BLUE_SKULL),
+            (MobjKind::YellowSkull, doom_types::keys::KEY_YELLOW_SKULL),
+            (MobjKind::RedSkull, doom_types::keys::KEY_RED_SKULL),
         ];
         for (kind, key_bit) in keys {
             let item = spawn_item(&mut gs, kind, 0, 0);
@@ -890,11 +891,11 @@ mod tests {
     #[test]
     fn pickup_blue_card_gives_key_via_p_check() {
         let mut gs = make_game_state();
-        assert!(!gs.player.has_key(player::KEY_BLUE_CARD));
+        assert!(!gs.player.has_key(doom_types::keys::KEY_BLUE_CARD));
         spawn_item(&mut gs, MobjKind::BlueCard, 0, 0);
         p_check_pickups(&mut gs);
         assert!(
-            gs.player.has_key(player::KEY_BLUE_CARD),
+            gs.player.has_key(doom_types::keys::KEY_BLUE_CARD),
             "Player should have blue card after pickup"
         );
     }
@@ -902,11 +903,11 @@ mod tests {
     #[test]
     fn pickup_red_skull_gives_key() {
         let mut gs = make_game_state();
-        assert!(!gs.player.has_key(player::KEY_RED_SKULL));
+        assert!(!gs.player.has_key(doom_types::keys::KEY_RED_SKULL));
         spawn_item(&mut gs, MobjKind::RedSkull, 0, 0);
         p_check_pickups(&mut gs);
         assert!(
-            gs.player.has_key(player::KEY_RED_SKULL),
+            gs.player.has_key(doom_types::keys::KEY_RED_SKULL),
             "Player should have red skull after pickup"
         );
     }
