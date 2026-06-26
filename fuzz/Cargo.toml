@@ -119,3 +119,10 @@ bench = false
 
 [dependencies.doom-app]
 path = "../crates/doom-app"
+
+[[bin]]
+name = "fixed_div"
+path = "fuzz_targets/fixed_div.rs"
+test = false
+doc = false
+bench = false

@@ -126,12 +126,7 @@ impl Fixed16_16 {
     pub fn fixed_div(self, rhs: Self) -> Self {
         debug_assert!(rhs.0 != 0, "FixedDiv: division by zero");
         if rhs.0 == 0 {
-            // Havoc 👺: Protect against division by zero in release builds
-            return if self.0 >= 0 {
-                Self(i32::MAX)
-            } else {
-                Self(i32::MIN)
-            };
+            panic!("FixedDiv: division by zero");
         }
         let numerator = (self.0 as i64) << FRAC_BITS;
         // Havoc 👺: Catch overflow division cases!
@@ -451,6 +446,14 @@ mod prop_tests {
             if b != 0 {
                 let _ = dividend.fixed_div(divisor);
             }
+        }
+
+        #[test]
+        #[should_panic(expected = "FixedDiv: division by zero")]
+        fn fixed_div_panics_on_zero_proptest(a in any::<i32>()) {
+            let dividend = Fixed16_16(a);
+            let divisor = Fixed16_16(0);
+            let _ = dividend.fixed_div(divisor);
         }
     }
 }
