@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+💡 **What:** Replaced `Vec::new()` with `Vec::with_capacity(128)` for `masked_columns` initialization inside `render_level_with_view_height_and_extra_light_and_fixed_colormap`.
+🎯 **Why:** The `masked_columns` vector was reallocated repeatedly on the hot path during each frame render when encountering two-sided lines and masked geometry.
+📊 **Impact:** Eliminates several vector heap reallocations per frame when pushing masked columns, providing a zero-cost initialization boost.
+🔬 **Measurement:** Run `cargo test` and observe identical rendering output with lower memory pressure per frame.
