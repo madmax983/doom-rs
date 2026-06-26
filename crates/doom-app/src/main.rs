@@ -121,6 +121,11 @@ struct Args {
     #[arg(long)]
     playdemo: Option<std::path::PathBuf>,
 
+    /// Play back a .lmp demo file headlessly as fast as possible, outputting telemetry and stats (simulator mode).
+    #[cfg(feature = "simulator")]
+    #[arg(long)]
+    simulate_demo: Option<std::path::PathBuf>,
+
     /// Play back a .lmp demo file as fast as possible to benchmark the engine (e.g. --timedemo my.lmp)
     #[arg(long)]
     timedemo: Option<std::path::PathBuf>,
@@ -2088,6 +2093,14 @@ fn validate_mode_args(args: &Args) -> std::result::Result<(), &'static str> {
     if args.server.is_some() && args.playdemo.is_some() {
         return Err("--server and --playdemo are mutually exclusive");
     }
+    #[cfg(feature = "simulator")]
+    if args.simulate_demo.is_some() && args.server.is_some() {
+        return Err("--simulate-demo and --server are mutually exclusive");
+    }
+    #[cfg(feature = "simulator")]
+    if args.simulate_demo.is_some() && args.connect.is_some() {
+        return Err("--simulate-demo and --connect are mutually exclusive");
+    }
     if args.connect.is_some() && args.record.is_some() {
         return Err("--connect and --record are mutually exclusive");
     }
@@ -2991,6 +3004,89 @@ fn run_doom(args: Args) -> Result<()> {
             );
         }
         event_loop.set_graphics_protocol(true);
+    }
+
+    #[cfg(feature = "simulator")]
+    if let Some(demo_path) = args.simulate_demo {
+        // Run completely headless and extremely fast
+        let player = load_demo_player(&demo_path)?;
+        let mut playback_app = demo_mode::DemoPlaybackApp::new_with_compat(app, player, compat);
+        let start_time = std::time::Instant::now();
+
+        while !playback_app.is_finished() {
+            playback_app.tick(doom_tui::TicInput::default());
+        }
+
+        let elapsed = start_time.elapsed();
+        let tics = playback_app.inner().gs.tic_num;
+        let stats = playback_app.inner().gs.compute_intermission_stats();
+
+        if args.json {
+            let json_data = format!(
+                r#"{{
+  "simulate_demo": true,
+  "elapsed_ms": {},
+  "total_tics": {},
+  "kills": {},
+  "total_kills": {},
+  "items": {},
+  "total_items": {},
+  "secrets": {},
+  "total_secrets": {},
+  "par_time_tics": {}
+}}"#,
+                elapsed.as_millis(),
+                tics,
+                stats.kills,
+                stats.total_kills,
+                stats.items,
+                stats.total_items,
+                stats.secrets,
+                stats.total_secrets,
+                stats.par_time_tics
+            );
+            println!("{json_data}");
+        } else {
+            use crossterm::style::Stylize;
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                println!(
+                    "{} {} Simulation complete in {:.2}ms ({} tics)",
+                    "🌟".green(),
+                    "Nova Simulator".green().bold(),
+                    elapsed.as_secs_f64() * 1000.0,
+                    tics
+                );
+                println!(
+                    "   Kills: {}/{} | Items: {}/{} | Secrets: {}/{}",
+                    stats.kills,
+                    stats.total_kills,
+                    stats.items,
+                    stats.total_items,
+                    stats.secrets,
+                    stats.total_secrets
+                );
+            } else {
+                println!(
+                    "Simulation complete in {:.2}ms ({} tics) - Kills: {}/{}",
+                    elapsed.as_secs_f64() * 1000.0,
+                    tics,
+                    stats.kills,
+                    stats.total_kills
+                );
+            }
+        }
+
+        #[cfg(feature = "telemetry")]
+        if let Some(path) = args.telemetry_out.as_deref() {
+            if let Err(e) =
+                std::fs::write(path, playback_app.inner().gs.telemetry.export_to_geojson())
+            {
+                log::error!("Failed to write telemetry: {}", e);
+            } else {
+                println!("Telemetry written to {}", path.display());
+            }
+        }
+        return Ok(());
     }
 
     if let Some(demo_path) = args.playdemo {
@@ -5071,6 +5167,27 @@ mod tests {
         assert_eq!(
             validate_mode_args(&args).unwrap_err(),
             "--capture cannot be combined with --connect"
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "simulator")]
+    fn cli_args_parse_simulate_demo() {
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--simulate-demo",
+            "repro.lmp",
+        ]);
+        assert!(
+            args.is_ok(),
+            "args with --simulate-demo must parse successfully"
+        );
+        let args = args.expect("args parse must succeed");
+        assert_eq!(
+            args.simulate_demo.expect("simulate_demo must exist"),
+            std::path::PathBuf::from("repro.lmp")
         );
     }
 
