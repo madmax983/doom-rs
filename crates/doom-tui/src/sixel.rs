@@ -32,7 +32,11 @@
 use std::fmt::Write as FmtWrite;
 
 use doom_renderer::{Framebuffer, PaletteLut};
-use ratatui::{buffer::Buffer, layout::Rect, widgets::Widget};
+use ratatui::{
+    buffer::{Buffer, CellDiffOption},
+    layout::Rect,
+    widgets::Widget,
+};
 
 /// Palette-aware Sixel widget for a Doom framebuffer.
 pub struct DoomSixelWidget<'a> {
@@ -114,7 +118,8 @@ impl Widget for DoomSixelWidget<'_> {
                     skip_first = true;
                     continue;
                 }
-                buf.cell_mut((x, y)).map(|cell| cell.set_skip(true));
+                buf.cell_mut((x, y))
+                    .map(|cell| cell.set_diff_option(CellDiffOption::Skip));
             }
         }
     }

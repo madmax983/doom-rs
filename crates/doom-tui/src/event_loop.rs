@@ -51,6 +51,7 @@ use image::{DynamicImage, RgbImage};
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
+    buffer::CellDiffOption,
     layout::{Constraint, Direction, Layout},
     style::{Color, Style},
     widgets::Paragraph,
@@ -164,7 +165,9 @@ fn run_blit_thread(
                                     past_first = true;
                                     continue;
                                 }
-                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                                f.buffer_mut()
+                                    .cell_mut((x, y))
+                                    .map(|c| c.set_diff_option(CellDiffOption::Skip));
                             }
                         }
                     }
