@@ -15,14 +15,14 @@ Currently, control schemes are hardcoded or rely on out-of-game configuration ed
   - Duplicate bindings (e.g., binding "Fire" to the same key as "Use") either gracefully swap or display a clear warning without breaking the game state.
 
 ## 🔍 Gap Analysis
-- **Current State:** The Options menu has a "Controls" placeholder item (`MenuAction::Noop`). Key mappings are likely statically defined in `doom-tui/src/input.rs` or `event_loop.rs`. Gamepad support (`gilrs`) is being implemented but lacks dynamic rebinding.
-- **Standard Libs / Market:** Almost all PC games provide key rebinding. In Rust, this involves maintaining a dynamic `HashMap<Action, InputEvent>` mapping instead of matching hardcoded events.
+- **Current State:** The Options menu has a placeholder item for controls. Key mappings are statically defined. Gamepad support is being implemented but lacks dynamic rebinding.
+- **Standard Libs / Market:** Almost all PC games provide key rebinding.
 
 ## ✅ Acceptance Criteria
-- Must implement a new `MenuPage` (e.g., `MenuPage::CustomizeControls`) accessible from `MenuPage::Options`.
+- Must implement a new customization menu accessible from the Options screen.
 - Must list all primary actions (Move Forward, Move Backward, Turn Left, Turn Right, Strafe Left, Strafe Right, Fire, Use, Run, Map).
 - Must implement an "input capture" state in the menu that waits for the next keystroke or gamepad button press to assign the binding.
-- Must serialize the updated keymap to `doom_config.toml` (or equivalent persistent config).
+- Must serialize the updated keymap to the persistent configuration.
 - Must include a "Reset to Defaults" option.
 
 ## 🚫 Out of Scope
