@@ -4992,7 +4992,7 @@ mod tests {
     #[test]
     fn cli_args_compat_rejects_invalid_value() {
         let err = Args::try_parse_from(["doom-app", "--wad", "doom1.wad", "--compat", "banana"])
-            .unwrap_err();
+            .expect_err("invalid value should be rejected");
         let msg = err.to_string();
         assert!(msg.contains("invalid value"), "{msg}");
         assert!(msg.contains("banana"), "{msg}");
@@ -5031,7 +5031,7 @@ mod tests {
         .expect("args with record capture should parse");
 
         assert_eq!(
-            validate_mode_args(&args).unwrap_err(),
+            validate_mode_args(&args).expect_err("should return error for invalid mode arguments"),
             "--capture cannot be combined with --record"
         );
     }
@@ -5050,7 +5050,7 @@ mod tests {
         .expect("args with server capture should parse");
 
         assert_eq!(
-            validate_mode_args(&args).unwrap_err(),
+            validate_mode_args(&args).expect_err("should return error for invalid mode arguments"),
             "--capture cannot be combined with --server"
         );
     }
@@ -5069,7 +5069,7 @@ mod tests {
         .expect("args with connect capture should parse");
 
         assert_eq!(
-            validate_mode_args(&args).unwrap_err(),
+            validate_mode_args(&args).expect_err("should return error for invalid mode arguments"),
             "--capture cannot be combined with --connect"
         );
     }
@@ -5133,7 +5133,7 @@ mod tests {
         .expect("args with turn-based connect should parse");
 
         assert_eq!(
-            validate_mode_args(&args).unwrap_err(),
+            validate_mode_args(&args).expect_err("should return error for invalid mode arguments"),
             "--turn-based is only supported in single-player mode"
         );
     }

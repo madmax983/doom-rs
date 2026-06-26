@@ -1,11 +1,6 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🛡️ Sentry: Replace `unwrap()` and `unwrap_err()` with `expect()` and `expect_err()`
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🎯 Target: `crates/doom-map/src/analyzer.rs`, `crates/doom-map/src/lumps.rs`, `crates/doom-app/src/main.rs`, `crates/doom-net/src/transport.rs` and `crates/doom-tui/src/event_loop.rs` & `crates/doom-tui/src/sixel.rs`
+💣 Risk: Obscured test failure context or uninformative panics.
+🧪 Strategy: Replaced `.unwrap()` and `.unwrap_err()` with `.expect()` or `.expect_err()` providing explicit failure messages, and fixed deprecation warnings with `ratatui::buffer::CellDiffOption::Skip`.
+🔬 Verification: `cargo test` and `cargo doc` have been successfully run.

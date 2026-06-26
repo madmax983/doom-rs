@@ -114,7 +114,8 @@ impl Widget for DoomSixelWidget<'_> {
                     skip_first = true;
                     continue;
                 }
-                buf.cell_mut((x, y)).map(|cell| cell.set_skip(true));
+                buf.cell_mut((x, y))
+                    .map(|cell| cell.set_diff_option(ratatui::buffer::CellDiffOption::Skip));
             }
         }
     }
