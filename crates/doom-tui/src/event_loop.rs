@@ -164,7 +164,9 @@ fn run_blit_thread(
                                     past_first = true;
                                     continue;
                                 }
-                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                                f.buffer_mut().cell_mut((x, y)).map(|c| {
+                                    c.set_diff_option(ratatui::buffer::CellDiffOption::Skip)
+                                });
                             }
                         }
                     }

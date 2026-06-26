@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**[Iterator Dispatch Optimization]**
+**Learning:** Functions that query level structures to trigger game logic (like `sectors_by_tag`) often use `.collect()` to return a `Vec`, allocating memory every time a linedef action fires. Returning `impl Iterator` avoids this overhead entirely.
+**Action:** Replace `Vec` returns with `impl Iterator` and use `move` closures for lookups that simply filter and iterate over game state.

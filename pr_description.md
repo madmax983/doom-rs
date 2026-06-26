@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+💡 **What:** Refactored `sectors_by_tag` in `linedef_dispatch.rs` to return `impl Iterator` instead of a collected `Vec<usize>`. Fixed `set_skip(true)` deprecation warnings by changing it to `set_diff_option(ratatui::buffer::CellDiffOption::Skip)` in `doom-tui`.
+🎯 **Why:** `sectors_by_tag` is called frequently whenever tagged linedef actions (doors, stairs, crushers) are dispatched. Collecting the matching sector indices into a `Vec` created an unnecessary heap allocation on this hot path.
+📊 **Impact:** Eliminates a heap allocation on every tagged sector linedef dispatch, slightly reducing memory pressure and GC overhead during gameplay. Cleans up 4 compile warnings regarding ratatui `set_skip` deprecation.
+🔬 **Measurement:** Run `cargo test` and `cargo clippy --all-targets --all-features -- -D warnings` to verify behavior remains identical and cleanly passes without warnings. The borrow checker ensures lifetime safety of the returned iterator.
