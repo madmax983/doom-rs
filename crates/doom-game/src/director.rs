@@ -1,19 +1,44 @@
+//! The AI Director dynamically influences the game based on the player's performance.
+//!
+//! This module determines what kinds of events or monsters should be spawned
+//! in response to the current [`PlayerState`].
+
 use crate::PlayerState;
 
+/// The action the AI Director has decided to take this tick.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirectorAction {
+    /// The player is doing well; spawn additional enemies or threats.
     SpawnAmbush,
+    /// The player is struggling; spawn health or ammo, or reduce threat.
     SpawnRelief,
+    /// Maintain the current status quo.
     Maintain,
 }
 
+/// The AI Director evaluates the player's status and issues commands to alter the game environment.
+///
+/// ## Examples
+///
+/// ```rust
+/// use doom_game::director::{AiDirector, DirectorAction};
+/// use doom_game::player::PlayerState;
+/// use doom_game::mobj::MobjHandle;
+///
+/// let mut director = AiDirector::new();
+/// let player = PlayerState::pistol_start(MobjHandle::NULL);
+/// let action = director.tick(&player);
+/// assert_eq!(action, DirectorAction::SpawnAmbush); // Pistol start health is 100 > 80
+/// ```
 pub struct AiDirector;
 
 impl AiDirector {
+    /// Creates a new AI Director instance.
     pub fn new() -> Self {
         Self
     }
 
+    /// Evaluates the given [`PlayerState`] and determines the next [`DirectorAction`].
     pub fn tick(&mut self, player: &PlayerState) -> DirectorAction {
         let health = player.health();
 
