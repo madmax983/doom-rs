@@ -1,11 +1,6 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🌟 Nova: Achievements System
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+💡 **The Spark:** We track a bunch of end-of-level stats (kills, items, secrets, time) but don't reward the player for mastery! Can we combine `GameState` and `LevelStats` to award achievements?
+🚀 **The Feature:** Added a new `achievements` module behind a feature flag. It evaluates the `GameState` to award `Pacifist`, `Completionist`, and `Speedrunner` achievements.
+🔮 **The Potential:** UI components can now display shiny badges at the intermission screen or integrate with platform-specific achievement APIs.
+⚠️ **Risk:** Low. Completely isolated in `crates/doom-game/src/achievements.rs` behind a feature flag.
