@@ -327,9 +327,7 @@ impl SfxMixer {
 
     /// Stop all sounds immediately.
     pub fn stop_all(&mut self) {
-        for slot in &mut self.channels {
-            *slot = None;
-        }
+        self.channels.fill(None);
     }
 
     /// Number of currently active channels.

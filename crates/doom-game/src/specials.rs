@@ -2791,24 +2791,22 @@ fn activate_doors(
         }
 
         // Type 137: S1 Yellow key door open-stay (blazing).
-        137 => {
-            if gs.player.has_key(crate::player::KEY_YELLOW_CARD)
-                || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)
-            {
-                let Some(sector_idx) = level
-                    .sidedefs
-                    .get(left_sidedef as usize)
-                    .map(|sd| sd.sector as usize)
-                else {
-                    return;
-                };
-                open_blazing_door(
-                    gs,
-                    level,
-                    sector_idx,
-                    crate::linedef_dispatch::DoorBehavior::OpenStay,
-                );
-            }
+        137 if (gs.player.has_key(crate::player::KEY_YELLOW_CARD)
+            || gs.player.has_key(crate::player::KEY_YELLOW_SKULL)) =>
+        {
+            let Some(sector_idx) = level
+                .sidedefs
+                .get(left_sidedef as usize)
+                .map(|sd| sd.sector as usize)
+            else {
+                return;
+            };
+            open_blazing_door(
+                gs,
+                level,
+                sector_idx,
+                crate::linedef_dispatch::DoorBehavior::OpenStay,
+            );
         }
         _ => {}
     }

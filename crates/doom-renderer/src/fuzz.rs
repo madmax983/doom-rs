@@ -62,7 +62,6 @@ pub fn draw_fuzz_column(
         return;
     }
 
-    let y_top = y_top.max(0);
     let y_bot = y_bot.min(FB_HEIGHT - 1);
 
     for y in y_top..=y_bot {

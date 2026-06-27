@@ -1,10 +1,11 @@
-## 2024-05-18 - [Havoc: OOM on TEXTURE1 parser]
-**Learning:** Doom's TEXTURE1 parsing uses a direct 4-byte `num_textures` read to allocate `Vec::with_capacity(num_textures)`. Fuzzing this length with large values triggers an immediate OOM.
-**Action:** Use `.min(data.len() / 4)` to clamp lengths derived from WAD/lump headers, preventing massive allocations while still ensuring we parse valid entries up to the slice boundary.
+**[loom-deadlock-doom-audio]**
+**Learning:** `loom` can effectively detect deadlocks caused by concurrent calls to non-atomic shared structures in `Mutex`. In `doom-audio` testing, `SfxMixer::stop_all()` used an iterator approach to assign `None` to channels which compiled fine under normal conditions, but raised issues when analyzed for data races/deadlocks or linting (`clippy::manual_slice_fill`). It could have masked more serious concurrency flaws if other threads accessed partial state.
+**Action:** Always prefer atomic-like mass assignments (`fill`) when working inside a lock to minimize the critical section duration and prevent partial state exposure, especially when fuzzing or using `loom`.
 
-**Havoc: Bounds-checking allocations**
-**Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust,  attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
-**Action:** Use  when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
-**Havoc: Bounds-checking allocations**
-**Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
-**Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+**[fuzzer-oom-dehacked-buffer]**
+**Learning:** Parsing untrusted payloads with lengths directly feeding `Vec::with_capacity` (or iterating bounds) is a prime target for OOMs from fuzzers (or malicious actors). The engine was protected against OOM in Dehacked strings via physical bounds checking (`count.min(data.len() / entry_size)`), demonstrating the need to validate logical limits against actual byte constraints.
+**Action:** Never trust parsed integer lengths. Always constrain allocations by physical limits derived from the payload size before allocating.
+
+**[unnecessary-min-or-max]**
+**Learning:** Fuzzers and edge-case testing might highlight redundant code paths that do nothing because the bounds check is logically impossible to fail (e.g., `max(0)` on an unsigned integer or an already-checked condition).
+**Action:** Remove redundant logic that clutters the execution path.

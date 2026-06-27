@@ -642,13 +642,11 @@ impl MidiPlayer {
                         self.channel_program[idx] = *value;
                     }
                     // MUS controller 3 = volume.
-                    3 => {
-                        if self.channel_map[idx] != 0xFF {
-                            let opl_ch = self.channel_map[idx];
-                            let tl = 63u8.saturating_sub(*value / 2);
-                            let car_reg = opl2_car_reg(opl_ch);
-                            self.opl.write(0x40 + car_reg, tl.min(63));
-                        }
+                    3 if self.channel_map[idx] != 0xFF => {
+                        let opl_ch = self.channel_map[idx];
+                        let tl = 63u8.saturating_sub(*value / 2);
+                        let car_reg = opl2_car_reg(opl_ch);
+                        self.opl.write(0x40 + car_reg, tl.min(63));
                     }
                     _ => {}
                 }
