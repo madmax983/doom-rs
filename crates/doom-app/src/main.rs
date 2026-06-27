@@ -326,12 +326,17 @@ pub(crate) struct DoomGame {
 
 const DEAD_PLAYER_VIEW_HEIGHT: i32 = 6;
 
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub(crate) enum PlayerStatus {
+    Alive,
+    Dead,
+}
+
 #[inline]
-fn next_player_view_height(current: i32, player_dead: bool) -> i32 {
-    if player_dead {
-        current.saturating_sub(1).max(DEAD_PLAYER_VIEW_HEIGHT)
-    } else {
-        PLAYER_HEIGHT
+pub(crate) fn next_player_view_height(current: i32, player_status: PlayerStatus) -> i32 {
+    match player_status {
+        PlayerStatus::Dead => current.saturating_sub(1).max(DEAD_PLAYER_VIEW_HEIGHT),
+        PlayerStatus::Alive => PLAYER_HEIGHT,
     }
 }
 
@@ -1179,8 +1184,12 @@ impl DoomApp for DoomGame {
 
         if !paused {
             self.gs.tick(cmd, Some(&mut self.level));
-            self.player_view_height =
-                next_player_view_height(self.player_view_height, self.gs.player.is_dead());
+            let status = if self.gs.player.is_dead() {
+                PlayerStatus::Dead
+            } else {
+                PlayerStatus::Alive
+            };
+            self.player_view_height = next_player_view_height(self.player_view_height, status);
             self.tick_weapon_anim();
             self.phase_controller.tick(&mut self.gs);
         }

@@ -192,10 +192,13 @@ impl DemoPlaybackApp {
     /// and process cheats/saves).
     fn tick_cmd(&mut self, cmd: TicCmd) {
         self.inner.gs.tick(cmd, Some(&mut self.inner.level));
-        self.inner.player_view_height = super::next_player_view_height(
-            self.inner.player_view_height,
-            self.inner.gs.player.is_dead(),
-        );
+        let status = if self.inner.gs.player.is_dead() {
+            super::PlayerStatus::Dead
+        } else {
+            super::PlayerStatus::Alive
+        };
+        self.inner.player_view_height =
+            super::next_player_view_height(self.inner.player_view_height, status);
         self.inner.tick_weapon_anim();
     }
 
