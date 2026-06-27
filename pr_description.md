@@ -1,11 +1,6 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+👤 **User Story:** As a Server Admin or Player, I want the map analysis engine to gracefully handle extremely complex or maliciously crafted maps, so that my game does not crash or hang during loading.
+✅ **Acceptance Criteria:**
+- The engine must successfully analyze linear segment maps containing over 10,000 deep nodes without crashing.
+- Must gracefully handle highly segmented topologies.
+- Any topological analysis must be bound by available heap memory, not stack depth.
+🚫 **Out of Scope:** Optimizing map rendering performance or changing map formats.
