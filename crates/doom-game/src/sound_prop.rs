@@ -170,3 +170,72 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::mobj::{Mobj, MobjSlab};
+    use doom_types::Fixed16_16;
+
+    #[test]
+    fn test_sound_request_emitter() {
+        let mut slab = MobjSlab::new();
+        let mobj = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            doom_types::Bam::ZERO,
+        );
+        let handle = slab.alloc(mobj);
+
+        let req = SoundRequest::MonsterWake(
+            MobjKind::Player,
+            handle,
+            Fixed16_16::from_int(10),
+            Fixed16_16::from_int(20),
+        );
+        assert_eq!(
+            req.emitter(Fixed16_16::from_int(0), Fixed16_16::from_int(0)),
+            Some((Fixed16_16::from_int(10), Fixed16_16::from_int(20)))
+        );
+
+        let req = SoundRequest::PlayerWeaponFire(doom_types::weapons::WeaponType::Pistol);
+        assert_eq!(
+            req.emitter(Fixed16_16::from_int(100), Fixed16_16::from_int(200)),
+            Some((Fixed16_16::from_int(100), Fixed16_16::from_int(200)))
+        );
+
+        let req = SoundRequest::PlayerDie;
+        assert_eq!(
+            req.emitter(Fixed16_16::from_int(100), Fixed16_16::from_int(200)),
+            None
+        );
+    }
+
+    #[test]
+    fn test_sound_request_origin_handle() {
+        let mut slab = MobjSlab::new();
+        let mobj = Mobj::new(
+            MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            doom_types::Bam::ZERO,
+        );
+        let handle1 = slab.alloc(mobj.clone());
+        let handle2 = slab.alloc(mobj);
+
+        let req = SoundRequest::MonsterAttack(
+            MobjKind::Player,
+            handle1,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+        );
+        assert_eq!(req.origin_handle(None), Some(handle1));
+
+        let req = SoundRequest::PlayerWeaponFire(doom_types::weapons::WeaponType::Pistol);
+        assert_eq!(req.origin_handle(Some(handle2)), Some(handle2));
+
+        let req = SoundRequest::PlayerDie;
+        assert_eq!(req.origin_handle(Some(handle2)), None);
+    }
+}

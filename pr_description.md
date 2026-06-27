@@ -1,11 +1,6 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🛡️ Sentry: [test coverage improvement]
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🎯 Target: `crates/doom-game/src/sound_prop.rs` - `SoundRequest` enum variants (like `MonsterWake` and `MonsterDie`).
+💣 Risk: Missing test coverage for core domain logic in sound propagation. Without these tests, a refactoring error could cause issues when working with the enums.
+🧪 Strategy: Added comprehensive unit tests within `mod tests` testing the instantiation of `SoundRequest` enum variants (such as `MonsterWake`), ensuring the enum instances hold the correct position and handle data. Also resolved an unrelated deprecation warning in `doom-tui` to pass strict clippy checks.
+🔬 Verification: Run `cargo test -p doom-game --lib`
