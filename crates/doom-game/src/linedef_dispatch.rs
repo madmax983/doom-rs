@@ -12,8 +12,9 @@
 use doom_map::Level;
 
 use crate::mobj::MobjHandle;
-use crate::state::{ExitRequest, GameState, LockedDoorColor, SoundRequest};
+use crate::state::{GameState, SoundRequest};
 use crate::switch::KeyType;
+use doom_types::{ExitRequest, LockedDoorColor};
 
 // ---------------------------------------------------------------------------
 // Trigger types
@@ -1805,7 +1806,7 @@ mod tests {
         assert_eq!(
             gs.sound.sound_queue,
             vec![crate::state::SoundRequest::PlayerUseLockedDoor(
-                crate::state::LockedDoorColor::Blue,
+                doom_types::LockedDoorColor::Blue,
             )],
             "player should get Doom-style keyed-door feedback"
         );

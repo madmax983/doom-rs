@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🕸️ Tangle: `ExitRequest` and `LockedDoorColor` enums were defined in `doom-game`, but widely used in presentation crates like `doom-app`. This caused UI components to depend directly on the entire game engine crate just for basic enum definitions, creating tight coupling between rendering and core game state.
+📐 Blueprint: Extracted `ExitRequest` and `LockedDoorColor` into `doom-types/src/primitives.rs` and re-exported them in `doom-types/src/lib.rs`. `doom-game` and `doom-app` imports were updated to reference the primitive from the shared types crate, creating a clean dependency hierarchy where both presentation and logic rely on foundational types.
+🧱 Stability: Reduced coupling, cleaner dependency hierarchy.
+🔬 Verification: Builds successfully, strict separation enforced.

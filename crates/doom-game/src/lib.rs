@@ -120,7 +120,7 @@ pub use specials::{
     tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
     tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
-pub use state::{ExitRequest, GameState, LockedDoorColor};
+pub use state::GameState;
 pub use states::STATES;
 pub use states::sprite_names;
 pub use stats::LevelStats;

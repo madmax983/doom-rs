@@ -20,10 +20,11 @@ use doom_types::{FIXED_ONE, Fixed16_16};
 
 use crate::mobj::MobjHandle;
 use crate::state::{
-    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
-    GameState, LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection,
-    PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
+    CeilingMover, CeilingType, ConveyorBelt, DoorMover, FloorMover, FloorType, GameState,
+    LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection, PerpetualPlatform,
+    PlatformStatus, ScrollingWall, SectorLightEffect,
 };
+use doom_types::ExitRequest;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -5351,7 +5352,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(ExitRequest::Normal),
             "type 11 must set ExitRequest::Normal"
         );
     }
@@ -5364,7 +5365,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Secret),
+            Some(ExitRequest::Secret),
             "type 51 must set ExitRequest::Secret"
         );
     }
@@ -5377,7 +5378,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(ExitRequest::Normal),
             "type 52 (walk trigger) must set ExitRequest::Normal"
         );
     }
@@ -5390,7 +5391,7 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Secret),
+            Some(ExitRequest::Secret),
             "type 124 (walk trigger) must set ExitRequest::Secret"
         );
     }
@@ -5720,7 +5721,7 @@ mod tests {
         assert_eq!(mo.health, 5, "God exit must deal 20 damage");
         assert_eq!(
             gs.exit_request,
-            Some(crate::state::ExitRequest::Normal),
+            Some(ExitRequest::Normal),
             "God exit must set ExitRequest::Normal when health <= 10"
         );
     }

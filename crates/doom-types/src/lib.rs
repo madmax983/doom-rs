@@ -19,6 +19,7 @@ pub use angle::{ANG45, ANG90, ANG180, ANG270, Bam};
 pub use bbox::BBox;
 pub use compat::CompatibilityProfile;
 pub use fixed::{FIXED_ONE, FRAC_BITS, Fixed16_16};
+pub use primitives::{ExitRequest, LockedDoorColor};
 pub use ticcmd::{TicCmd, bt};
 pub use vec2::Vec2Fixed;
 

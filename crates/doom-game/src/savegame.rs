@@ -15,10 +15,11 @@ use crate::mobj::{Mobj, MobjHandle, MobjSlab, StateNum};
 use crate::player::{PlayerState, PspriteState};
 use crate::savegame_vanilla;
 use crate::state::{
-    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
-    GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
-    PlatformStatus, ScrollingWall,
+    CeilingMover, CeilingType, ConveyorBelt, DoorMover, FloorMover, FloorType, GameState,
+    LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus,
+    ScrollingWall,
 };
+use doom_types::ExitRequest;
 use doom_types::limits::{NUM_POWERS, NUM_PSPRITES};
 use doom_types::mobj_kind::MobjKind;
 use doom_types::weapons::WeaponType;
