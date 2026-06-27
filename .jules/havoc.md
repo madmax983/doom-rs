@@ -8,3 +8,7 @@
 **Havoc: Bounds-checking allocations**
 **Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
 **Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+
+**Fixed16_16 division by zero/overflow panics**
+**Learning:** Found an edge case in Fixed16_16 math via fuzzing: division of `i32::MIN` by `-1` triggers an unhandled `attempt to compute i32::MIN / -1_i32, which would overflow` panic due to signed division boundaries in Rust.
+**Action:** Manually intercept `numerator == i64::MIN && rhs.0 == -1` to safely truncate rather than panicking in `fixed_div`.
