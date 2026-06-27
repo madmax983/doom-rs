@@ -1,0 +1,12 @@
+--- event_loop.rs
++++ event_loop.rs
+@@ -163,8 +163,9 @@
+             // For every pixel in the graphic, we tell ratatui to "skip" drawing the cell underneath.
+             // This is a terrible hack, but we don't have ratatui's image layers natively available.
+             for y in img_rect.y..img_rect.bottom() {
+                 for x in img_rect.x..img_rect.right() {
++                    #[allow(deprecated)]
+                     f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                 }
+             }
+         }
