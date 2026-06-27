@@ -2527,7 +2527,6 @@ fn run_doom(args: Args) -> Result<()> {
     }
 
     if let Some(path_str) = &args.pathfind {
-        use crossterm::style::Stylize;
         let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
         // Avoids an unnecessary heap allocation from .collect::<Vec<_>>()
         if let Some((start_str, end_str)) = path_str.split_once(',') {
@@ -2554,12 +2553,25 @@ fn run_doom(args: Args) -> Result<()> {
                             path_str.push_str(&s.to_string());
                         }
                         if is_tty {
-                            println!(
-                                "{} {} {}",
-                                "🗺️ ".green(),
-                                "Path found:".green().bold(),
-                                path_str.cyan()
-                            );
+                            let mut table = comfy_table::Table::new();
+                            table
+                                .load_preset(comfy_table::presets::UTF8_FULL)
+                                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
+                                .set_header(vec![
+                                    comfy_table::Cell::new("Status")
+                                        .fg(comfy_table::Color::Cyan)
+                                        .add_attribute(comfy_table::Attribute::Bold),
+                                    comfy_table::Cell::new("Path")
+                                        .fg(comfy_table::Color::Cyan)
+                                        .add_attribute(comfy_table::Attribute::Bold),
+                                ])
+                                .add_row(vec![
+                                    comfy_table::Cell::new("🗺️  Found")
+                                        .fg(comfy_table::Color::Green),
+                                    comfy_table::Cell::new(&path_str).fg(comfy_table::Color::Cyan),
+                                ]);
+                            println!("{table}");
                         } else {
                             println!("Path found: {}", path_str);
                         }
@@ -2572,16 +2584,28 @@ fn run_doom(args: Args) -> Result<()> {
                         println!("{json_data}");
                     } else {
                         if is_tty {
-                            println!(
-                                "{} {}",
-                                "❌".yellow(),
-                                format!(
-                                    "No path found between sector {} and sector {}",
-                                    start, end
-                                )
-                                .yellow()
-                                .bold()
-                            );
+                            let mut table = comfy_table::Table::new();
+                            table
+                                .load_preset(comfy_table::presets::UTF8_FULL)
+                                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
+                                .set_header(vec![
+                                    comfy_table::Cell::new("Status")
+                                        .fg(comfy_table::Color::Red)
+                                        .add_attribute(comfy_table::Attribute::Bold),
+                                    comfy_table::Cell::new("Error")
+                                        .fg(comfy_table::Color::Red)
+                                        .add_attribute(comfy_table::Attribute::Bold),
+                                ])
+                                .add_row(vec![
+                                    comfy_table::Cell::new("❌ Failed").fg(comfy_table::Color::Red),
+                                    comfy_table::Cell::new(format!(
+                                        "No path found between sector {} and sector {}",
+                                        start, end
+                                    ))
+                                    .fg(comfy_table::Color::Yellow),
+                                ]);
+                            println!("{table}");
                         } else {
                             println!("No path found between sector {} and sector {}", start, end);
                         }
@@ -2595,7 +2619,24 @@ fn run_doom(args: Args) -> Result<()> {
                     println!("{json_data}");
                 } else {
                     if is_tty {
-                        println!("{} {}", "❌".yellow(), msg.yellow().bold());
+                        let mut table = comfy_table::Table::new();
+                        table
+                            .load_preset(comfy_table::presets::UTF8_FULL)
+                            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
+                            .set_header(vec![
+                                comfy_table::Cell::new("Status")
+                                    .fg(comfy_table::Color::Red)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                                comfy_table::Cell::new("Error")
+                                    .fg(comfy_table::Color::Red)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ])
+                            .add_row(vec![
+                                comfy_table::Cell::new("❌ Failed").fg(comfy_table::Color::Red),
+                                comfy_table::Cell::new(msg).fg(comfy_table::Color::Yellow),
+                            ]);
+                        println!("{table}");
                     } else {
                         println!("{}", msg);
                     }
@@ -2608,7 +2649,24 @@ fn run_doom(args: Args) -> Result<()> {
                 println!("{json_data}");
             } else {
                 if is_tty {
-                    println!("{} {}", "❌".yellow(), msg.yellow().bold());
+                    let mut table = comfy_table::Table::new();
+                    table
+                        .load_preset(comfy_table::presets::UTF8_FULL)
+                        .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                        .set_content_arrangement(comfy_table::ContentArrangement::Dynamic)
+                        .set_header(vec![
+                            comfy_table::Cell::new("Status")
+                                .fg(comfy_table::Color::Red)
+                                .add_attribute(comfy_table::Attribute::Bold),
+                            comfy_table::Cell::new("Error")
+                                .fg(comfy_table::Color::Red)
+                                .add_attribute(comfy_table::Attribute::Bold),
+                        ])
+                        .add_row(vec![
+                            comfy_table::Cell::new("❌ Failed").fg(comfy_table::Color::Red),
+                            comfy_table::Cell::new(msg).fg(comfy_table::Color::Yellow),
+                        ]);
+                    println!("{table}");
                 } else {
                     println!("{}", msg);
                 }
