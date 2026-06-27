@@ -1,11 +1,6 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+Title: 🎻 Bard: [documentation update]
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+📖 Chapter: The `director` module.
+🔦 Insight: Explained how the `AiDirector` monitors player health to dynamically spawn ambushes or relief, balancing the game's difficulty.
+🧪 Example: Added an executable doctest demonstrating the `tick` function's behavior at different health thresholds.
+🖼️ Preview: (docs verified via cargo doc)
