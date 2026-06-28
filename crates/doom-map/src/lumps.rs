@@ -940,4 +940,18 @@ mod tests {
     fn bad_lump_length_errors() {
         assert!(Thing::parse_lump(&[0u8; 7]).is_err()); // 7 not divisible by 10
     }
+
+    #[test]
+    fn reject_parse_lump_overflow() {
+        let n = usize::MAX / 2 + 1;
+        let err = Reject::parse_lump(&[], n).expect_err("Should detect overflow");
+        match err {
+            LumpParseError::BadRejectSize { n_sectors, expected, actual } => {
+                assert_eq!(n_sectors, n);
+                assert_eq!(expected, usize::MAX);
+                assert_eq!(actual, 0);
+            }
+            _ => panic!("Expected BadRejectSize"),
+        }
+    }
 }

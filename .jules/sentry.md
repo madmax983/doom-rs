@@ -56,3 +56,14 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-18 - Replacing unwrap_err() in tests
+**Learning:** Found instances of `.unwrap_err()` in test files (like `udmf.rs`) that obscured test failure context by panic-ing with a generic error message, which violates Sentry's principle that tests should provide meaningful context.
+**Action:** Replaced `.unwrap_err()` with `.expect_err("should parse fail")` to explicitly document the invariant and assist debugging.
+
+## 2026-05-18 - Handling out-of-bounds state transitions safely
+**Learning:** Found an edge case in `tick_psprite_slot` in `weapons.rs` where an invalid/corrupted state would fall back to `StateNum::NULL` via `unwrap_or`, but this fallback branch lacked any test coverage to prove it resolved cleanly rather than causing undefined behavior.
+**Action:** Added targeted test case `tick_psprite_invalid_next_state_becomes_null` in `weapons.rs` to reach 100% test coverage on weapon state transitions.
+
+## 2026-05-18 - Reject overflow bounds testing
+**Learning:** `Reject::parse_lump` used `checked_mul` bounds checking but lacked a test actually asserting it would catch a genuine `usize` overflow correctly.
+**Action:** Added `reject_parse_lump_overflow` passing `usize::MAX / 2 + 1` to prove the `checked_mul` safety wrapper works securely.
