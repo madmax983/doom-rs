@@ -1,11 +1,5 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🎨 Mosaic: UI Polish for [doom-app CLI]
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🖌️ **Before:** The `--pathfind` CLI output displayed raw paths as a single line separated by arrows (e.g., `0 ➔ 18 ➔ 15 ➔ 143 ➔ 5`).
+✨ **After:** The `--pathfind` output is now formatted into a beautiful, easy-to-read table.
+🖼️ **Visuals:** Added `comfy-table` formatting showing the step index and sector ID, matching the style of other CLI flags like `--map-stats` and `--analyze`.
