@@ -14,7 +14,7 @@
 
 use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
 use doom_renderer::PaletteLut;
-use doom_tui::sixel::encode_doom_sixel;
+use doom_tui::encode_doom_sixel;
 
 const SRC_W: usize = 320;
 const SRC_H: usize = 200;
