@@ -1,11 +1,6 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+⚡ Bolt: Pre-allocate vector for masked columns in main render loop
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+💡 What: Changed the instantiation of `masked_columns` from `Vec::new()` to `Vec::with_capacity(SCREEN_W)`.
+🎯 Why: `masked_columns` is allocated in the main rendering pass (`render_level_with_view_height_and_extra_light_and_fixed_colormap`), which is an extremely hot path called once per frame. Because we know that the maximum number of masked columns generated cannot exceed the screen width (`SCREEN_W` = 320), pre-allocating the vector eliminates dynamic memory reallocations during the frame loop.
+📊 Impact: Removes heap reallocations for `masked_columns` per frame.
+🔬 Measurement: Run `cargo test` and `cargo run` to verify rendering logic remains unaffected and frame consistency improves.
