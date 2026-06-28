@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+## 2025-03-02 - Eliminate Vec Allocation for sector tags
+**Learning:** Functions filtering sequences and returning a static `Vec<usize>` (e.g., `sectors_by_tag`) inherently heap-allocate memory. Replacing the return type with `impl Iterator<Item = usize> + '_` by simply returning the iterator chain (removing `.collect()`) enables zero-cost abstraction when the caller only loops over the values. Note that when the iterator is constructed using a closure that captures local state (like the `tag` parameter), the closure must use the `move` keyword (e.g. `.filter(move |(_, s)| s.tag == tag)`) so that it takes ownership of the parameter. Otherwise, Rust's borrow checker rejects it due to the closure capturing a temporary reference that drops before the returned iterator finishes iterating.
+**Action:** Replace helper functions returning `.collect()` arrays on hot paths with `impl Iterator` to avoid heap allocations. Ensure captured parameters use the `move` keyword inside mapped or filtered closures.
