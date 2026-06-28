@@ -1206,24 +1206,19 @@ pub fn ev_do_donut(gs: &mut GameState, level: &Level, trigger_sector: usize) -> 
         // Find it by looking at linedefs fronting the hole sector — the ring
         // is the other sector that isn't the trigger sector.
         let hole_ld_indices = sector_linedefs(level, hole_sector);
-        let mut ring_floor: Option<i16> = None;
-
-        for hole_ld in hole_ld_indices {
+        let ring_floor = hole_ld_indices.into_iter().find_map(|hole_ld| {
             let hld = &level.linedefs[hole_ld];
             if hld.left_sidedef == SIDEDEF_NONE {
-                continue;
+                return None;
             }
-            let Some(sd) = level.sidedefs.get(hld.left_sidedef as usize) else {
-                continue;
-            };
+            let sd = level.sidedefs.get(hld.left_sidedef as usize)?;
             let ring_sector = sd.sector as usize;
             if ring_sector != hole_sector && ring_sector != trigger_sector {
-                if let Some(s) = level.sectors.get(ring_sector) {
-                    ring_floor = Some(s.floor_height);
-                    break;
-                }
+                level.sectors.get(ring_sector).map(|s| s.floor_height)
+            } else {
+                None
             }
-        }
+        });
 
         let target = match ring_floor {
             Some(h) => h,
@@ -3753,9 +3748,8 @@ pub fn tick_conveyors(gs: &mut GameState, level: Option<&Level>) {
         return;
     }
 
-    let level = match level {
-        Some(lv) => lv,
-        None => return, // Cannot determine sector membership without level geometry.
+    let Some(level) = level else {
+        return; // Cannot determine sector membership without level geometry.
     };
 
     // Iterate all live actors and apply push if standing in a conveyor sector.
