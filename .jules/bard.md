@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-06-28 - [Documented the AI Director]
+**Confusion:** The `director` module (hidden behind the `director` feature flag) lacked any documentation explaining its purpose. The `AiDirector` and `DirectorAction` types had no comments, making it unclear how the game's dynamic difficulty adjustment worked or what thresholds it used.
+**Clarification:** Added a module-level `//!` comment explaining the concept of the AI Director and flow state. Added struct and enum-level docs, and an executable doc-test for `AiDirector::tick` demonstrating the threshold behaviors based on player health.
