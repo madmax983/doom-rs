@@ -109,7 +109,7 @@ pub use sound::{
     monster_should_wake, p_noise_alert,
 };
 pub use sound_prop::{SoundPropagation, SoundRequest};
-pub use spawn::{GameMode, Skill, spawn_level_things};
+pub use spawn::spawn_level_things;
 pub use specials::{
     StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_ceiling_crush_and_raise,
     ev_ceiling_crush_raise_fast, ev_ceiling_crush_stop, ev_ceiling_lower_and_crush,

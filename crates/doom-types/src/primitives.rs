@@ -114,68 +114,35 @@ impl SectorSpecial {
     pub const NORMAL: Self = Self(0);
 }
 
-/// Skill level 0..=4.
-///
-/// Represents the five classic Doom difficulty levels.
-/// Constraining this to 0-4 prevents out-of-bounds array access when spawning
-/// entities (which often have `skill` bit flags).
-///
-/// # Examples
-/// ```
-/// use doom_types::primitives::SkillLevel;
-///
-/// // "Hurt Me Plenty"
-/// let hmp = SkillLevel::HMP;
-/// assert_eq!(hmp.raw(), 2);
-///
-/// // Invalid skill level.
-/// assert!(SkillLevel::new(5).is_none());
-/// ```
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SkillLevel(u8);
+/// Skill level for thing filtering and gameplay difficulty.
+#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
+pub enum Skill {
+    /// I'm Too Young To Die.
+    Baby = 0,
+    /// Hey, Not Too Rough.
+    Easy = 1,
+    /// Hurt Me Plenty.
+    Medium = 2,
+    /// Ultra-Violence.
+    Hard = 3,
+    /// Nightmare!
+    Nightmare = 4,
+}
 
-impl SkillLevel {
-    /// Validates and constructs a `SkillLevel`.
-    ///
-    /// The Doom engine requires skill levels to be strictly bounded between 0 and 4.
-    /// This prevents out-of-bounds array access when querying skill-dependent tables,
-    /// such as entity spawn flags or skill-specific modifications. Returns `None` if
-    /// the provided value falls outside the classic 0-4 range.
+impl Skill {
+    /// Convert an integer to a `Skill`.
     ///
     /// # Examples
     /// ```
-    /// use doom_types::primitives::SkillLevel;
+    /// use doom_types::primitives::Skill;
     ///
-    /// // Valid skill level.
-    /// let skill = SkillLevel::new(2).unwrap();
-    /// assert_eq!(skill.raw(), 2);
+    /// assert_eq!(Skill::from_num(2), Some(Skill::Medium));
+    /// assert_eq!(Skill::from_num(5), None);
     /// ```
-    #[inline]
-    pub const fn new(v: u8) -> Option<Self> {
-        if v <= 4 { Some(Self(v)) } else { None }
+    pub fn from_num(n: u8) -> Option<Self> {
+        Self::from_repr(n)
     }
-
-    /// # Examples
-    /// ```
-    /// use doom_types::primitives::SkillLevel;
-    /// let s = SkillLevel::UV;
-    /// assert_eq!(s.raw(), 3);
-    /// ```
-    #[inline]
-    pub const fn raw(self) -> u8 {
-        self.0
-    }
-
-    /// "I'm Too Young To Die" - The easiest difficulty, featuring reduced damage and doubled ammo.
-    pub const ITYTD: Self = Self(0);
-    /// "Hey, Not Too Rough" - A gentle introduction, equivalent to normal monster placement with standard ammo.
-    pub const HNTR: Self = Self(1);
-    /// "Hurt Me Plenty" - The default Doom experience, offering a balanced challenge.
-    pub const HMP: Self = Self(2);
-    /// "Ultra-Violence" - For seasoned players, maximizing monster spawns and aggressiveness.
-    pub const UV: Self = Self(3);
-    /// "Nightmare!" - A brutal, fast-paced challenge with respawning monsters and double ammo.
-    pub const NM: Self = Self(4);
 }
 
 /// Player number 0..=3.
@@ -304,11 +271,6 @@ mod tests {
         let s2 = SectorSpecial::new(5).unwrap();
         assert_eq!(s2.raw(), 5);
 
-        let skill = SkillLevel::UV;
-        assert_eq!(skill.raw(), 3);
-        let skill2 = SkillLevel::new(2).unwrap();
-        assert_eq!(skill2.raw(), 2);
-
         let p = PlayerNum::new(2).unwrap();
         assert_eq!(p.raw(), 2);
     }
@@ -329,8 +291,8 @@ mod tests {
 
     #[test]
     fn skill_level_rejects_over_4() {
-        assert!(SkillLevel::new(5).is_none());
-        assert_eq!(SkillLevel::new(4).unwrap().raw(), 4);
+        assert_eq!(Skill::from_num(5), None);
+        assert_eq!(Skill::from_num(4), Some(Skill::Nightmare));
     }
 
     #[test]
@@ -344,4 +306,13 @@ mod tests {
         assert!(Brightness::new(255).is_some());
         assert!(Brightness::new(0).is_some());
     }
+}
+
+/// Dictates whether to spawn multiplayer-only things or act as single-player.
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum GameMode {
+    /// Standard single-player mode.
+    SinglePlayer,
+    /// Deathmatch multiplayer mode.
+    Deathmatch,
 }

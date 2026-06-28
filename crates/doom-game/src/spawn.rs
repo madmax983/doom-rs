@@ -19,31 +19,6 @@ use doom_types::mobj_kind::MobjKind;
 // Skill level
 // ---------------------------------------------------------------------------
 
-/// Skill level for thing filtering.
-#[derive(strum_macros::FromRepr, Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Skill {
-    /// I'm Too Young To Die.
-    Baby = 0,
-    /// Hey, Not Too Rough.
-    Easy = 1,
-    /// Hurt Me Plenty.
-    Medium = 2,
-    /// Ultra-Violence.
-    Hard = 3,
-    /// Nightmare!
-    Nightmare = 4,
-}
-
-impl Skill {
-    /// Convert an integer to a `Skill`.
-    ///
-    /// Returns `None` for any out-of-range value.
-    pub fn from_num(n: u8) -> Option<Self> {
-        Self::from_repr(n)
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Thing flag bits (from the WAD THINGS lump)
 // ---------------------------------------------------------------------------
@@ -143,14 +118,7 @@ fn should_spawn_for_skill(thing_flags: u16, skill: Skill) -> bool {
 // Public API
 // ---------------------------------------------------------------------------
 
-/// Dictates whether to spawn multiplayer-only things.
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum GameMode {
-    /// Standard single-player mode.
-    SinglePlayer,
-    /// Deathmatch multiplayer mode.
-    Deathmatch,
-}
+use doom_types::primitives::{GameMode, Skill};
 
 /// Spawn all things from the level's THINGS lump into the game state.
 ///

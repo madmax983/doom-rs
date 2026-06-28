@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Extract Skill & GameMode to Shared Primitives]**
+**Tangle:** The `Skill` and `GameMode` enums were defined in `doom-game/src/spawn.rs` and widely used by presentation crates like `doom-app` and `doom-renderer`, creating tight coupling to the game engine for basic runtime configurations. Additionally, `doom-types/src/primitives.rs` defined a duplicate concept `SkillLevel` as a newtype, violating DRY.
+**Blueprint:** Extracted `Skill` and `GameMode` into `doom-types/src/primitives.rs`, replacing the redundant `SkillLevel` struct. Removed the re-exports from `doom-game` and updated presentation crates to import them directly from the shared types crate, enforcing a cleaner dependency hierarchy.

@@ -8,7 +8,7 @@ use doom_types::Fixed16_16;
 
 use crate::mobj::MobjSlab;
 use crate::player::PlayerState;
-use crate::spawn::Skill;
+use doom_types::primitives::Skill;
 
 use crate::random::DoomRng;
 use crate::stats::LevelStats;

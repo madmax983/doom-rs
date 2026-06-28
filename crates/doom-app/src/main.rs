@@ -25,6 +25,7 @@
 //!
 //! Usage: doom-app --iwad doom1.wad [--pwad mod.wad] [--warp E1M1]
 
+use doom_types::primitives::Skill;
 mod audio_system;
 mod cheats;
 mod cogmind;
@@ -41,7 +42,7 @@ use doom_game::LockedDoorColor;
 use doom_game::cheats as game_cheats;
 use doom_game::dehacked::DehPatch;
 use doom_game::{
-    AutomapState, GamePhase, GamePhaseController, GameState, Skill, TitleScreen, init_conveyors,
+    AutomapState, GamePhase, GamePhaseController, GameState, TitleScreen, init_conveyors,
     init_scrolling_walls, init_sector_lights, kind_to_doomed_type, spawn_level_things,
 };
 use doom_game::{MOBJINFO, STATES};
@@ -552,7 +553,7 @@ impl DoomGame {
                     &mut self.gs,
                     &self.level,
                     sk,
-                    doom_game::GameMode::SinglePlayer,
+                    doom_types::primitives::GameMode::SinglePlayer,
                 );
                 init_scrolling_walls(&mut self.gs, &self.level);
                 init_conveyors(&mut self.gs, &self.level);
@@ -662,7 +663,7 @@ impl DoomGame {
             &mut gs,
             &level,
             self.skill,
-            doom_game::GameMode::SinglePlayer,
+            doom_types::primitives::GameMode::SinglePlayer,
         );
 
         if let (Some(mut player), Some(handle)) = (carried_player, player_handle) {
@@ -2623,7 +2624,7 @@ fn run_doom(args: Args) -> Result<()> {
             &mut gs,
             &level,
             Skill::Medium,
-            doom_game::GameMode::SinglePlayer,
+            doom_types::primitives::GameMode::SinglePlayer,
         );
         let stats = gs.compute_intermission_stats();
 
@@ -2731,7 +2732,12 @@ fn run_doom(args: Args) -> Result<()> {
         .checked_sub(1)
         .and_then(Skill::from_num)
         .unwrap_or(Skill::Medium);
-    spawn_level_things(&mut gs, &level, skill, doom_game::GameMode::SinglePlayer);
+    spawn_level_things(
+        &mut gs,
+        &level,
+        skill,
+        doom_types::primitives::GameMode::SinglePlayer,
+    );
 
     // Apply DeHackEd patch if one was specified.
     if let Some(ref deh_path) = args.deh {
