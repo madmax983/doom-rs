@@ -1,11 +1,5 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🎨 Mosaic: UI Polish for Engine Failure
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🖌️ **Before:** Fatal engine errors printed plain, ugly text with a simple prefix and indentation for the reason, which looks like a raw log file instead of a polished CLI tool.
+✨ **After:** Wrapped the top-level error and its causes in a styled `comfy_table` with red headers, rounded corners, and bullet points, creating a clean dashboard-style error widget.
+🖼️ **Visuals:** Shows an ASCII table with a red "❌ Engine Failure" header, the primary error description below, and a list of internal reasons formatted as bullet points in a dark grey color.
