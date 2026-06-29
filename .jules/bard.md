@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-06-29 - [Clarified missing module docs and resolved empty lib crate]
+**Confusion:** Several core gameplay modules (`sound_prop`, `stats`, `director`, `movers`) and rendering structures (`sprite_clip`) lacked module-level documentation (`//!`), making it difficult to understand *why* they exist and how they fit into the overall architecture. Additionally, an empty `crates/doom-app/src/lib.rs` file was causing a `-D missing_docs` error.
+**Clarification:** Added module-level stories (`//!`) explaining the architectural "Why" for these modules. Added `## Examples` doc-tests to `AiDirector::tick` and `SpriteClipHistory` to show executable usage. Removed the empty `lib.rs` from `doom-app` to resolve the linting error, as it is a pure binary crate.

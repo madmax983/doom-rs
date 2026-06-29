@@ -1,3 +1,16 @@
+//! Sector Movers and Environment Specials.
+//!
+//! Lifts, doors, crushers, and flickering lights.
+//!
+//! This module defines the state for all dynamic map elements (Movers). In Doom,
+//! doors aren't actors; they are simply sectors whose floor or ceiling heights change
+//! over time.
+//!
+//! **The "Why":** Movers are decoupled from the static BSP map data. When a linedef
+//! is activated, a new mover is spawned and attached to the sector. `doom-game` ticks
+//! these movers every frame, applying physics (like crushing damage) to any actor caught
+//! between the changing floor and ceiling heights.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

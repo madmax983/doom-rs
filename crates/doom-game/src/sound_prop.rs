@@ -1,3 +1,14 @@
+//! Sound Propagation and Acoustic Simulation.
+//!
+//! In the Doom engine, sound isn't just an audio effect—it's a core gameplay mechanic.
+//! This module tracks how sounds bounce off walls, travel through sectors, and alert
+//! monsters. When a gun fires or an enemy wakes up, it emits a `SoundRequest`. These
+//! events are queued up during a tick, allowing the game logic to alert actors while
+//! the `doom-app` drains the queue to play the actual audio via `doom-audio`.
+//!
+//! **The "Why":** Decoupling game logic from audio drivers ensures deterministic
+//! demos and enables "deaf" monsters (ambush flags) to selectively ignore these events.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

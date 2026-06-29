@@ -1,3 +1,15 @@
+//! Gameplay Statistics Tracking.
+//!
+//! Tracking player performance for the classic Doom intermission screen.
+//!
+//! This module manages the `LevelStats` struct, which records the trinity of Doom metrics:
+//! Kills, Items, and Secrets. The game loop increments these counters when a monster
+//! dies, an item is picked up, or a sector with the secret property is entered.
+//!
+//! **The "Why":** Isolating stats from player state allows intermission screens to
+//! easily calculate percentages without needing to traverse the entire map or actor list
+//! at the end of a level.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {

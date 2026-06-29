@@ -1,3 +1,15 @@
+//! Sprite Clipping Data Structures.
+//!
+//! Handles vertical clipping boundaries for rendered sprites.
+//!
+//! When drawing sprites, we must ensure they don't render over walls that are in front
+//! of them. Since the software renderer draws front-to-back, it records the upper and
+//! lower visible window of the screen (the "clip").
+//!
+//! **The "Why":** Software rendering performance. Instead of per-pixel depth buffers (Z-buffers),
+//! Doom uses vertical 1D columns. The structs here manage that clipping history efficiently without
+//! heap allocations.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
@@ -15,6 +27,17 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new, empty clip history.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    ///
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 10, silhouette_height: 5.0 });
+    /// ```
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {

@@ -1,3 +1,14 @@
+//! AI Director Logic.
+//!
+//! Determines overarching AI behavioral changes based on player performance.
+//!
+//! While individual monsters have their own state machines (`A_Chase`, `A_Look`),
+//! the `AiDirector` analyzes the player's health and resources to orchestrate
+//! high-level map tension.
+//!
+//! **The "Why":** Injecting dynamic tension. The director signals spawners to spawn
+//! ambushes when the player is healthy, and relief items when they are struggling.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,6 +25,23 @@ impl AiDirector {
         Self
     }
 
+    /// Evaluates the player's condition and returns the appropriate action.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_game::director::{AiDirector, DirectorAction};
+    /// use doom_game::PlayerState;
+    /// use doom_game::mobj::MobjHandle;
+    /// use doom_types::limits::MAX_HEALTH;
+    ///
+    /// let mut director = AiDirector::new();
+    /// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
+    ///
+    /// // High health triggers an ambush!
+    /// player.set_health_capped(MAX_HEALTH, MAX_HEALTH);
+    /// assert_eq!(director.tick(&player), DirectorAction::SpawnAmbush);
+    /// ```
     pub fn tick(&mut self, player: &PlayerState) -> DirectorAction {
         let health = player.health();
 
