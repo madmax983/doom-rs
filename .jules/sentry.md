@@ -56,3 +56,7 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-20 - Uncovered fallback to StateNum::NULL in weapons state machine transitions
+
+**Learning:** `tick_psprite_slot` handles transitioning a psprite's state when its tics reach zero. If the lookup for `next_state` returns `None` (e.g. invalid state index), it falls back to `StateNum::NULL` in an `unwrap_or(StateNum::NULL)`. This fallback path was completely uncovered by tests, though similar uncovered branches had been previously discovered in `tick_mobj`.
+**Action:** Added targeted test case `tick_psprite_slot_invalid_state_transitions_to_null` in `weapons.rs` to reach 100% test coverage on weapon state transitions. Always ensure all fallback values in state machines are explicitly covered.

@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🎯 Target: `crates/doom-game/src/weapons.rs` / `tick_psprite_slot`
+💣 Risk: The fallback to `StateNum::NULL` when encountering an invalid next_state was entirely untested, leaving a potential panic or bug unverified if the default behavior is modified in the future.
+🧪 Strategy: Added a new unit test `tick_psprite_slot_invalid_state_transitions_to_null` to explicitly verify that `tick_psprite_slot` correctly falls back to `StateNum::NULL` when evaluating a state with an invalid configuration.
+🔬 Verification: `cargo test --all-targets --all-features`
