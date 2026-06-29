@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🎯 Target: `tick_psprite_slot` function in `crates/doom-game/src/weapons.rs`.
+💣 Risk: `tick_psprite_slot` assumes that the current weapon state points to a valid entry in the `STATES` array. An invalid `StateNum` injected from an external source (like a corrupted save file or dehacked patch) would bypass the fallback and cause a panic if it was unwrapped. The existing code uses `.unwrap_or(StateNum::NULL)` properly, but this fallback logic was completely untested, meaning regressions could reintroduce a panic.
+🧪 Strategy: Wrote a unit test (`tick_psprite_slot_invalid_state_transitions_to_null`) that forcibly assigns an out-of-bounds `StateNum` to the player's weapon psprite and advances the tic. Verified that the engine gracefully falls back to `StateNum::NULL` instead of panicking.
+🔬 Verification: `cargo test --all-features -p doom-game`

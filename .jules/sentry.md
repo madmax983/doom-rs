@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-06-29 - Fixed unwrap panics in weapon psprite state ticking
+**Learning:** The psprite state ticking logic implicitly assumed that the transition arrays are well-formed. However, game states can contain out-of-bounds indices (for example via bad demo/save data). `StateNum::NULL` provides a clean fallback to prevent crashes.
+**Action:** Wrote a test case `tick_psprite_slot_invalid_state_transitions_to_null` that injects an invalid psprite state and verifies the state drops to NULL safely without panicking.

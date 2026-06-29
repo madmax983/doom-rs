@@ -837,6 +837,20 @@ mod tests {
         }
     }
 
+    #[test]
+    fn tick_psprite_slot_invalid_state_transitions_to_null() {
+        let mut gs = make_game_state();
+        gs.player.psprites[psprite_slots::WEAPON].state = crate::mobj::StateNum(9999);
+        gs.player.psprites[psprite_slots::WEAPON].tics = 1;
+
+        tick_psprite_slot(&mut gs, psprite_slots::WEAPON, TicCmd::default(), None);
+
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            crate::mobj::StateNum::NULL
+        );
+    }
+
     fn count_mobjs_of_kind(gs: &GameState, kind: MobjKind) -> usize {
         gs.mobjslab
             .iter_handles()
