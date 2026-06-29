@@ -1358,9 +1358,9 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     };
     let angle = mo.angle;
 
-    let spread = crate::random::p_missile_angle_spread(gs);
+    let spread = crate::random::p_missile_angle_spread(&mut gs.rng);
     let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
-    let damage = crate::random::p_damage_with_variance(gs, 3);
+    let damage = crate::random::p_damage_with_variance(&mut gs.rng, 3);
     let cpos_kind = gs
         .mobjslab
         .get(handle)
@@ -1614,9 +1614,9 @@ fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     };
     let angle = mo.angle;
 
-    let spread = crate::random::p_missile_angle_spread(gs);
+    let spread = crate::random::p_missile_angle_spread(&mut gs.rng);
     let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
-    let damage = crate::random::p_damage_with_variance(gs, 3);
+    let damage = crate::random::p_damage_with_variance(&mut gs.rng, 3);
     let mut intercepts = smallvec::SmallVec::new();
     crate::combat::p_line_attack(
         gs,

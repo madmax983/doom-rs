@@ -198,7 +198,7 @@ pub fn select_next_weapon(gs: &GameState) -> Option<WeaponType> {
 /// Fire the pistol: consume 1 Clip (Bullets), fire 1 hitscan ray.
 ///
 /// Spread: `p_subrandom() << 18` BAM.
-/// Damage: `p_damage_with_variance(gs, 5)` = 5..40.
+/// Damage: `p_damage_with_variance(&mut gs.rng, 5)` = 5..40.
 pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
     if !consume_ammo(gs, WeaponType::Pistol) {
         return;
@@ -213,7 +213,7 @@ pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
     let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
     let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
-    let damage = p_damage_with_variance(gs, 5);
+    let damage = p_damage_with_variance(&mut gs.rng, 5);
 
     p_line_attack(
         gs,
@@ -228,7 +228,7 @@ pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
 
 /// Fire the shotgun: consume 1 Shell, fire 7 pellets.
 ///
-/// Each pellet: spread `p_subrandom() << 18`, damage `p_damage_with_variance(gs, 5)`.
+/// Each pellet: spread `p_subrandom() << 18`, damage `p_damage_with_variance(&mut gs.rng, 5)`.
 pub fn p_fire_shotgun(gs: &mut GameState, level: Option<&Level>) {
     if !consume_ammo(gs, WeaponType::Shotgun) {
         return;
@@ -246,7 +246,7 @@ pub fn p_fire_shotgun(gs: &mut GameState, level: Option<&Level>) {
     for _ in 0..7 {
         let spread = gs.p_subrandom() << 18;
         let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
-        let damage = p_damage_with_variance(gs, 5);
+        let damage = p_damage_with_variance(&mut gs.rng, 5);
         p_line_attack(
             gs,
             handle,
@@ -262,7 +262,7 @@ pub fn p_fire_shotgun(gs: &mut GameState, level: Option<&Level>) {
 /// Fire the super shotgun: consume 2 Shells, fire 20 pellets.
 ///
 /// Each pellet: spread `p_subrandom() << 19` (wider), damage
-/// `p_damage_with_variance(gs, 5)`.
+/// `p_damage_with_variance(&mut gs.rng, 5)`.
 pub fn p_fire_super_shotgun(gs: &mut GameState, level: Option<&Level>) {
     if !consume_ammo(gs, WeaponType::SuperShotgun) {
         return;
@@ -280,7 +280,7 @@ pub fn p_fire_super_shotgun(gs: &mut GameState, level: Option<&Level>) {
     for _ in 0..20 {
         let spread = gs.p_subrandom() << 19;
         let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
-        let damage = p_damage_with_variance(gs, 5);
+        let damage = p_damage_with_variance(&mut gs.rng, 5);
         p_line_attack(
             gs,
             handle,
@@ -311,7 +311,7 @@ pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
     let mut intercepts = smallvec::SmallVec::new();
     let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
     let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
-    let damage = p_damage_with_variance(gs, 5);
+    let damage = p_damage_with_variance(&mut gs.rng, 5);
 
     p_line_attack(
         gs,
@@ -330,7 +330,7 @@ pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
 
 /// Fire the fist: no ammo, hitscan at MELEERANGE.
 ///
-/// Damage: `p_damage_with_variance(gs, 2)` = 2..16.
+/// Damage: `p_damage_with_variance(&mut gs.rng, 2)` = 2..16.
 /// If Berserk active (`powers[PW_STRENGTH] > 0`): damage *= 10.
 pub fn p_fire_fist(gs: &mut GameState, level: Option<&Level>) {
     let handle = gs.player.handle;
@@ -339,7 +339,7 @@ pub fn p_fire_fist(gs: &mut GameState, level: Option<&Level>) {
     };
     let base_angle = a;
 
-    let mut damage = p_damage_with_variance(gs, 2);
+    let mut damage = p_damage_with_variance(&mut gs.rng, 2);
 
     // Berserk multiplier.
     if gs.player.powers[PW_STRENGTH] > 0 {
@@ -366,7 +366,7 @@ pub fn p_fire_fist(gs: &mut GameState, level: Option<&Level>) {
 
 /// Fire the chainsaw: no ammo, hitscan at MELEERANGE+1.
 ///
-/// Damage: `p_damage_with_variance(gs, 2)` = 2..16.
+/// Damage: `p_damage_with_variance(&mut gs.rng, 2)` = 2..16.
 /// On hit: turn player toward target (auto-aim snap).
 pub fn p_fire_chainsaw(gs: &mut GameState, level: Option<&Level>) {
     let handle = gs.player.handle;
@@ -375,7 +375,7 @@ pub fn p_fire_chainsaw(gs: &mut GameState, level: Option<&Level>) {
     };
     let base_angle = a;
 
-    let damage = p_damage_with_variance(gs, 2);
+    let damage = p_damage_with_variance(&mut gs.rng, 2);
 
     let spread = gs.p_subrandom() << 18;
     let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
@@ -721,12 +721,12 @@ mod tests {
 
     #[test]
     fn pistol_damage_range_is_5_to_40() {
-        // p_damage_with_variance(gs, 5) returns 5 * (1..=8) = 5..=40
+        // p_damage_with_variance(&mut gs.rng, 5) returns 5 * (1..=8) = 5..=40
         let mut gs = GameState::new("test");
         let mut min_seen = i32::MAX;
         let mut max_seen = i32::MIN;
         for _ in 0..256 {
-            let dmg = p_damage_with_variance(&mut gs, 5);
+            let dmg = p_damage_with_variance(&mut gs.rng, 5);
             min_seen = min_seen.min(dmg);
             max_seen = max_seen.max(dmg);
         }
@@ -977,7 +977,7 @@ mod tests {
         let mut min_seen = i32::MAX;
         let mut max_seen = i32::MIN;
         for _ in 0..256 {
-            let dmg = p_damage_with_variance(&mut gs, 2);
+            let dmg = p_damage_with_variance(&mut gs.rng, 2);
             min_seen = min_seen.min(dmg);
             max_seen = max_seen.max(dmg);
         }
@@ -1006,13 +1006,13 @@ mod tests {
 
     #[test]
     fn fist_berserk_damage_range_is_20_to_160() {
-        // The berserk fist does p_damage_with_variance(gs, 2) * 10.
-        // p_damage_with_variance(gs, 2) returns 2..16, so berserk = 20..160.
+        // The berserk fist does p_damage_with_variance(&mut gs.rng, 2) * 10.
+        // p_damage_with_variance(&mut gs.rng, 2) returns 2..16, so berserk = 20..160.
         let mut gs = GameState::new("test");
         let mut min_seen = i32::MAX;
         let mut max_seen = i32::MIN;
         for _ in 0..256 {
-            let dmg = p_damage_with_variance(&mut gs, 2) * 10;
+            let dmg = p_damage_with_variance(&mut gs.rng, 2) * 10;
             min_seen = min_seen.min(dmg);
             max_seen = max_seen.max(dmg);
         }

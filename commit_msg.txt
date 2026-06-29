@@ -1,3 +1,5 @@
+🗺️ Atlas: [architectural change] Resolve circular dependencies in doom-game
+
 🕸️ Tangle: The `doom-game` crate contained three circular dependencies that violated the clean directed acyclic graph structure:
 1. `random` <-> `state`: `random` functions like `p_damage_with_variance` took `&mut GameState` as an argument, while `state` imported `DoomRng` from `random`.
 2. `spawn` <-> `state`: `spawn` used `&mut GameState`, and `state` imported the `Skill` enum from `spawn`.

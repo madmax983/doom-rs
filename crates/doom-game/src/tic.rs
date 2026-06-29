@@ -193,7 +193,7 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
     let initial_generation = gs.mobjslab.next_generation();
 
     let player_handle = gs.player.handle;
-    let is_nightmare = gs.skill == crate::spawn::Skill::Nightmare;
+    let is_nightmare = gs.skill == crate::state::Skill::Nightmare;
 
     for i in 0..initial_slot_count {
         let Some(handle) = gs.mobjslab.handle_at(i) else {

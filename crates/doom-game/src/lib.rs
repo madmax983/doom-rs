@@ -31,7 +31,6 @@ pub mod player;
 pub mod projectile;
 pub mod random;
 pub mod savegame;
-mod savegame_vanilla;
 pub mod sight;
 pub mod snapshot;
 pub mod sound;
@@ -98,7 +97,6 @@ pub use savegame::{
     MAX_SAVE_SLOTS, SAVE_MAGIC, SaveError, SaveFormat, SaveGame, SaveHeader, detect_save_format,
     load_game, save_game, save_game_with_format, save_slot_filename,
 };
-pub use savegame_vanilla::VanillaSaveHeader;
 pub use sight::{
     p_aim_line_slope, p_check_sight, p_look_for_players, point_on_side, ray_crosses_linedef,
     sector_from_subsector,
@@ -109,7 +107,7 @@ pub use sound::{
     monster_should_wake, p_noise_alert,
 };
 pub use sound_prop::{SoundPropagation, SoundRequest};
-pub use spawn::{GameMode, Skill, spawn_level_things};
+pub use spawn::{GameMode, spawn_level_things};
 pub use specials::{
     StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_ceiling_crush_and_raise,
     ev_ceiling_crush_raise_fast, ev_ceiling_crush_stop, ev_ceiling_lower_and_crush,
@@ -120,7 +118,7 @@ pub use specials::{
     tick_ceilings, tick_conveyors, tick_floors, tick_lifts, tick_platforms, tick_scrollers,
     tick_sector_damage, tick_sector_lights, tick_sector_secrets, tick_sector_specials,
 };
-pub use state::{ExitRequest, GameState, LockedDoorColor};
+pub use state::{ExitRequest, GameState, LockedDoorColor, Skill};
 pub use states::STATES;
 pub use states::sprite_names;
 pub use stats::LevelStats;
