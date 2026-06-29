@@ -1,11 +1,10 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🔭 Vantage: Spec for Map Analyzer Stability
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+👤 **User Story:** "As a Player, I want the game engine to gracefully load any map, so that my game doesn't crash even if the map is extremely complex, maliciously constructed, or highly segmented."
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+✅ **Acceptance Criteria:**
+- Must process highly nested map topologies without crashing.
+- Must ensure engine stability when loading arbitrary or maliciously constructed WAD files.
+- Must maintain the correctness of the map analysis while improving stability.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🚫 **Out of Scope:** Optimizing map loading speed beyond what is necessary for stability.
