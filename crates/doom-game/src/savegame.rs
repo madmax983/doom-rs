@@ -1044,6 +1044,10 @@ fn load_game_doomrs(data: &[u8]) -> Result<SaveGame, SaveError> {
 
     // --- Level name (string) ---
     let name_len = r.read_u32()? as usize;
+    // Havoc 👺: Limit max name length!
+    if name_len > 1024 * 1024 {
+        return Err(SaveError::Truncated);
+    }
     if r.pos
         .checked_add(name_len)
         .is_none_or(|end| end > r.data.len())

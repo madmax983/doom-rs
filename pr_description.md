@@ -1,11 +1,13 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+🧨 **The Trigger:**
+* Division by zero in `Fixed16_16::fixed_div`: Zero checks only used `debug_assert!`, allowing release builds to either divide by zero or require complex control flows to handle it if optimizations misbehave.
+* Untrusted `u32` string length allocation in `savegame.rs`: An attacker can specify a massive name length causing `checked_add` and out-of-bounds validations to fail, but it's better to explicitly clamp memory-exhausting bounds.
 
 📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+* `fixed::tests::fixed_div_by_zero_panics` failed because the `debug_assert!` was removed or suppressed, leading to actual divide by zero logic triggering instead of safely handling the bounds.
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+🧪 **Reproduction:**
+* `cargo test -p doom-types`
+* `cargo fuzz run fuzz_target_savegame_doomrs`
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+😈 **Comment:**
+"You assumed the buffer would never be larger than RAM, and that users wouldn't deliberately feed you zeros. You were wrong."

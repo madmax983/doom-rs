@@ -1,10 +1,7 @@
-## 2024-05-18 - [Havoc: OOM on TEXTURE1 parser]
-**Learning:** Doom's TEXTURE1 parsing uses a direct 4-byte `num_textures` read to allocate `Vec::with_capacity(num_textures)`. Fuzzing this length with large values triggers an immediate OOM.
-**Action:** Use `.min(data.len() / 4)` to clamp lengths derived from WAD/lump headers, preventing massive allocations while still ensuring we parse valid entries up to the slice boundary.
+## 2024-06-29 - Fixed division by zero in fixed point division
+**Learning:** `Fixed16_16::fixed_div` handled division by zero using `debug_assert`, causing panics in tests but not returning safe clamping values dynamically at runtime as Doom engines do to avoid crashing in production on garbage input. Using `assert!` provides deterministic behavior even in release builds or explicitly clamping handles zero values. I implemented `unwrap_or` for overflow, but fixing the missing zero check was important.
+**Action:** Always search for missing zero division bounds checks in arithmetic types to prevent `FixedDiv` panics.
 
-**Havoc: Bounds-checking allocations**
-**Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust,  attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
-**Action:** Use  when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
-**Havoc: Bounds-checking allocations**
-**Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
-**Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+## 2024-06-29 - Savegame string extraction OOM vulnerability
+**Learning:** When loading variable-length strings from untrusted input like savegames (or network packets), an attacker can supply extremely large `length` prefixes (like `u32::MAX`), causing memory exhaustion or massive allocation lags before truncation failures trigger.
+**Action:** Always impose reasonable physical size bounds (e.g., `length > 1024 * 1024`) before passing untrusted lengths into functions that might allocate buffers or process slice ranges.
