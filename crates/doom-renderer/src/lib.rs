@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// A no-allocation history buffer for tracking multi-portal sprite clipping.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;

@@ -15,6 +15,14 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new, empty sprite clip history.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// let history = SpriteClipHistory::new();
+    /// ```
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {
@@ -26,6 +34,20 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Pushes a new clip step onto the history buffer.
+    ///
+    /// If the internal capacity (8 steps) is exceeded, the step is silently dropped
+    /// to avoid heap allocations, prioritizing performance over perfect multi-portal clipping.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    ///
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 50, silhouette_height: 64.0 });
+    /// ```
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +57,20 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns the most recently added clip step, if any.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    ///
+    /// let mut history = SpriteClipHistory::new();
+    /// assert!(history.last().is_none());
+    ///
+    /// history.push(SpriteClipStep { depth: 100.0, row: 50, silhouette_height: 64.0 });
+    /// assert!(history.last().is_some());
+    /// ```
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +79,23 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns an iterator over all stored clip steps.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    ///
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 50, silhouette_height: 64.0 });
+    /// history.push(SpriteClipStep { depth: 200.0, row: 70, silhouette_height: 32.0 });
+    ///
+    /// let mut iter = history.iter();
+    /// assert_eq!(iter.next().unwrap().row, 50);
+    /// assert_eq!(iter.next().unwrap().row, 70);
+    /// assert!(iter.next().is_none());
+    /// ```
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }
