@@ -1,11 +1,13 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+Title: ⚒️ Forge: Refactored boolean blindness in FaceState::tick
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+**🚮 Smell:**
+The `FaceState::tick` function took multiple boolean arguments (`is_firing` and `is_invulnerable`), leading to Boolean Blindness and obscuring the intent at call sites (e.g., `face.tick(100, false, true, None)`).
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+**✨ Solution:**
+Extracted these boolean arguments into strongly typed enums (`WeaponFiring` and `Invulnerability`) and updated the function signature and all call sites accordingly.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+**🧼 Benefit:**
+This refactoring significantly reduces cognitive load by making call sites self-documenting and enforces correct usage at compile time, eliminating the possibility of mixing up the boolean arguments.
+
+**🛡️ Verification:**
+Tests passed. No logic changed.
