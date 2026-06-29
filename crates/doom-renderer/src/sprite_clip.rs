@@ -1,7 +1,32 @@
+//! Sprite clipping history tracking.
+//!
+//! This module provides `SpriteClipHistory`, a stack-allocated structure
+//! used to track a column's depth through rendering portals without
+//! dynamically allocating on the heap. It uses a fixed-size array since
+//! columns rarely clip through more than a handful of portals.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
 /// In Doom, a single column rarely clips through more than 4-8 portals.
+///
+/// # Examples
+///
+/// ```
+/// use doom_renderer::sprite_clip::SpriteClipHistory;
+/// use doom_renderer::render::SpriteClipStep;
+///
+/// let mut history = SpriteClipHistory::new();
+/// let step = SpriteClipStep {
+///     depth: 100.0,
+///     row: 20,
+///     silhouette_height: 50.0,
+/// };
+///
+/// history.push(step.clone());
+///
+/// assert_eq!(history.last(), Some(&step));
+/// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SpriteClipHistory {
     steps: [SpriteClipStep; 8],
@@ -26,6 +51,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Appends a step, silently dropping overflow to ensure zero allocations.
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;

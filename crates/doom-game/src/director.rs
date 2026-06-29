@@ -1,12 +1,37 @@
+//! The AI Director.
+//!
+//! This module defines the `AiDirector` which monitors player state and
+//! dictates the pacing of enemy encounters by issuing `DirectorAction`s.
+
 use crate::PlayerState;
 
+/// The action dictated by the AI Director to control pacing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirectorAction {
+    /// Spawn enemies aggressively (e.g. when player is healthy).
     SpawnAmbush,
+    /// Spawn health items or fewer enemies (e.g. when player is hurt).
     SpawnRelief,
+    /// Maintain the current pace.
     Maintain,
 }
 
+/// A system that monitors the game state to dynamically adjust difficulty.
+///
+/// # Examples
+///
+/// ```
+/// use doom_game::director::{AiDirector, DirectorAction};
+/// use doom_game::PlayerState;
+/// use doom_game::mobj::MobjHandle;
+/// use doom_types::limits::MAX_HEALTH;
+///
+/// let mut director = AiDirector::new();
+/// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
+/// player.set_health_capped(10, MAX_HEALTH);
+///
+/// assert_eq!(director.tick(&player), DirectorAction::SpawnRelief);
+/// ```
 pub struct AiDirector;
 
 impl AiDirector {
@@ -14,6 +39,7 @@ impl AiDirector {
         Self
     }
 
+    /// Evaluates the current [`PlayerState`] and determines the next [`DirectorAction`].
     pub fn tick(&mut self, player: &PlayerState) -> DirectorAction {
         let health = player.health();
 
