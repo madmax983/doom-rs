@@ -197,12 +197,11 @@ fn get_alive_target_with_pos(
         return None;
     }
     let target = mo.target;
-    let mo_x = mo.x;
-    let mo_y = mo.y;
-    if gs.mobjslab.get(target).map(|t| t.is_dead()).unwrap_or(true) {
+    let target_mo = gs.mobjslab.get(target)?;
+    if target_mo.is_dead() {
         return None;
     }
-    Some((target, mo_x, mo_y))
+    Some((target, mo.x, mo.y))
 }
 
 /// Dispatches a monster or projectile behavior action by its index.
@@ -588,17 +587,13 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         if let Some(actor_sector) = actor_sector {
             if let Some(sound_target) = crate::sound::get_sound_target(gs, actor_sector) {
                 // Verify the sound target is alive.
-                let target_alive = gs
-                    .mobjslab
-                    .get(sound_target)
-                    .map(|t| !t.is_dead())
-                    .unwrap_or(false);
-
-                if target_alive
-                    && (!is_ambush || crate::sight::p_check_sight(gs, lv, handle, sound_target))
-                {
-                    transition_to_see_state(gs, handle, mo_kind, sound_target);
-                    return;
+                if let Some(target_mo) = gs.mobjslab.get(sound_target) {
+                    if !target_mo.is_dead()
+                        && (!is_ambush || crate::sight::p_check_sight(gs, lv, handle, sound_target))
+                    {
+                        transition_to_see_state(gs, handle, mo_kind, sound_target);
+                        return;
+                    }
                 }
             }
         }
@@ -606,13 +601,10 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     // --- Step 2: Look for players by line-of-sight ---
     // Check the player exists and is alive.
-    let player_alive = gs
-        .mobjslab
-        .get(player_handle)
-        .map(|p| !p.is_dead())
-        .unwrap_or(false);
-
-    if !player_alive {
+    let Some(player_mo) = gs.mobjslab.get(player_handle) else {
+        return;
+    };
+    if player_mo.is_dead() {
         return;
     }
 
