@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-18 - Prevent panic on unreachable in wall_glyph and SessionTelemetry
+**Learning:** Removing unreachable!() in SessionTelemetry::export_to_geojson and adding exhaustive tests for wall_glyph ensures we don't have unnecessary panic fuse points.
+**Action:** Always replace unreachable!() where logic allows exhaustive matching, or provide exhaustive test cases for masked bitwise operations.
