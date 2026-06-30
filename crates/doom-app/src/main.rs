@@ -1251,9 +1251,17 @@ impl DoomApp for DoomGame {
             }
             // Tick face FSM every tic.
             {
-                let is_firing = self.gs.player.attack_down;
+                let is_firing = if self.gs.player.attack_down {
+                    doom_game::face::WeaponFiring::Firing
+                } else {
+                    doom_game::face::WeaponFiring::Idle
+                };
                 let is_invulnerable =
-                    self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+                    if self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0 {
+                        doom_game::face::Invulnerability::Active
+                    } else {
+                        doom_game::face::Invulnerability::Inactive
+                    };
                 self.face_state
                     .tick(cur_health, is_firing, is_invulnerable, None);
             }
