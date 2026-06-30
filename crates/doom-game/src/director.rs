@@ -1,5 +1,12 @@
+//! The Artificial Intelligence Director for dynamic difficulty scaling.
+//!
+//! This module contains the [`AiDirector`] which monitors the player's health
+//! and alters the spawn rate of monsters and items to maintain tension without
+//! overwhelming the player.
+
 use crate::PlayerState;
 
+/// The action chosen by the AI director based on the current player state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirectorAction {
     SpawnAmbush,
@@ -7,13 +14,39 @@ pub enum DirectorAction {
     Maintain,
 }
 
+/// A stateful director that monitors the player's performance.
 pub struct AiDirector;
 
 impl AiDirector {
+    /// Creates a new AI Director.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::director::AiDirector;
+    /// let director = AiDirector::new();
+    /// ```
     pub fn new() -> Self {
         Self
     }
 
+    /// Evaluates the player's current state and decides the next action.
+    ///
+    /// If the player's health is high, it spawns an ambush. If health is low,
+    /// it spawns relief items. Otherwise, it maintains the current difficulty.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_game::director::{AiDirector, DirectorAction};
+    /// use doom_game::player::PlayerState;
+    /// use doom_game::mobj::MobjHandle;
+    /// use doom_types::limits::MAX_HEALTH;
+    ///
+    /// let mut director = AiDirector::new();
+    /// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
+    /// player.set_health_capped(MAX_HEALTH, MAX_HEALTH);
+    ///
+    /// assert_eq!(director.tick(&player), DirectorAction::SpawnAmbush);
+    /// ```
     pub fn tick(&mut self, player: &PlayerState) -> DirectorAction {
         let health = player.health();
 
