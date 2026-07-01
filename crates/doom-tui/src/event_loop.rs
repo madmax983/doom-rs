@@ -159,6 +159,7 @@ fn run_blit_thread(
                         }
                         let mut past_first = false;
                         for y in chunks[0].top()..chunks[0].bottom() {
+                            #[allow(deprecated)]
                             for x in chunks[0].left()..chunks[0].right() {
                                 if !past_first {
                                     past_first = true;

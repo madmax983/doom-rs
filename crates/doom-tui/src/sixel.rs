@@ -109,6 +109,7 @@ impl Widget for DoomSixelWidget<'_> {
         }
         let mut skip_first = false;
         for y in area.top()..area.bottom() {
+            #[allow(deprecated)]
             for x in area.left()..area.right() {
                 if !skip_first {
                     skip_first = true;
