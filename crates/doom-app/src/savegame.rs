@@ -41,17 +41,9 @@ pub(crate) enum SaveError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
-    /// Save file header does not match any recognized format.
-    #[error("invalid save file magic")]
-    BadMagic,
-
-    /// Save file has an unsupported version number. Only modern sorcery is permitted.
-    #[error("unsupported save version")]
-    BadVersion,
-
-    /// The save payload was truncated. An incomplete incantation!
-    #[error("save payload truncated")]
-    Truncated,
+    /// Engine-level save/load error.
+    #[error(transparent)]
+    Engine(#[from] doom_game::savegame::SaveError),
 
     /// The save file exists, but not in the format required by the active compatibility mode.
     #[error("save file format mismatch: expected {expected:?}, found {actual:?}")]
@@ -59,25 +51,8 @@ pub(crate) enum SaveError {
         expected: SaveFormat,
         actual: SaveFormat,
     },
-
-    /// Vanilla DSG payload support has not landed yet.
-    #[error("vanilla DSG payload support is not implemented yet")]
-    UnsupportedVanillaDsg,
 }
 
-impl From<doom_game::savegame::SaveError> for SaveError {
-    fn from(err: doom_game::savegame::SaveError) -> Self {
-        match err {
-            doom_game::savegame::SaveError::TooShort => SaveError::Truncated,
-            doom_game::savegame::SaveError::BadMagic => SaveError::BadMagic,
-            doom_game::savegame::SaveError::BadVersion => SaveError::BadVersion,
-            doom_game::savegame::SaveError::Truncated => SaveError::Truncated,
-            doom_game::savegame::SaveError::UnsupportedVanillaDsg => {
-                SaveError::UnsupportedVanillaDsg
-            }
-        }
-    }
-}
 
 /// Map an app-level compatibility profile to the required on-disk save format.
 #[must_use]
@@ -330,7 +305,7 @@ mod tests {
 
         let err = save_game(&path, &gs, 1, CompatibilityProfile::VanillaStrict)
             .expect_err("strict save should fail until vanilla payload support exists");
-        assert!(matches!(err, SaveError::UnsupportedVanillaDsg));
+        assert!(matches!(err, SaveError::Engine(doom_game::savegame::SaveError::UnsupportedVanillaDsg)));
         assert!(
             !path.exists(),
             "strict save failure must not leave behind a DoomRs save file"
@@ -364,7 +339,7 @@ mod tests {
 
         let err = load_game(&path, CompatibilityProfile::VanillaStrict)
             .expect_err("strict load should reject unimplemented vanilla payloads explicitly");
-        assert!(matches!(err, SaveError::UnsupportedVanillaDsg));
+        assert!(matches!(err, SaveError::Engine(doom_game::savegame::SaveError::UnsupportedVanillaDsg)));
 
         let _ = std::fs::remove_file(&path);
     }

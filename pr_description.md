@@ -1,11 +1,5 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🗺️ Atlas: [Abstract SaveError via NewType]
+🕸️ Tangle: The `SaveError` in `doom-app` was redefining engine-level variants (`BadMagic`, `Truncated`) and mapping them manually via a `From` block, which leads to maintenance overhead.
+📐 Blueprint: Wrapped `doom_game::savegame::SaveError` inside a new `Engine` variant on `doom_app::savegame::SaveError` and removed the manual `From` implementation, allowing `thiserror` to handle it.
+🧱 Stability: Reduced code duplication and tightened the error boundary between application and engine.
+🔬 Verification: Builds successfully, all tests pass.
