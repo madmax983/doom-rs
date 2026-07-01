@@ -72,7 +72,10 @@ impl<'a> MapAnalyzer<'a> {
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let Some(neighbors) = self.graph.adjacency_list.get(&node) else {
+                    continue;
+                };
+                let mut stack = vec![(node, neighbors.iter())];
 
                 visited.insert(node);
                 time += 1;
@@ -97,7 +100,13 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            if let Some(v_neighbors) = self.graph.adjacency_list.get(&v) {
+                                stack.push((v, v_neighbors.iter()));
+                            } else {
+                                // Provide an empty iterator of the right type.
+                                static EMPTY_SET: std::sync::OnceLock<std::collections::HashSet<usize>> = std::sync::OnceLock::new();
+                                stack.push((v, EMPTY_SET.get_or_init(std::collections::HashSet::new).iter()));
+                            }
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -299,5 +308,37 @@ mod tests {
         let analyzer = MapAnalyzer::new(&graph);
         let chokes = analyzer.chokepoints();
         assert_eq!(chokes.len(), 9999);
+    }
+
+    #[test]
+    fn test_chokepoints_missing_node_in_adj() {
+        let mut adj = HashMap::new();
+        // node 0 connects to 1 and 2
+        adj.insert(0, HashSet::from([1, 2]));
+        // node 1 connects to 0 and 2
+        adj.insert(1, HashSet::from([0, 2]));
+        // node 2 is MISSING from the adjacency list entirely!
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+
+        let analyzer = MapAnalyzer::new(&graph);
+        let _chokes = analyzer.chokepoints(); // Should not panic!
+    }
+
+    #[test]
+    fn test_isolated_areas_missing_node_in_adj() {
+        let mut adj = HashMap::new();
+        // node 0 connects to 1 and 2
+        adj.insert(0, HashSet::from([1, 2]));
+        // node 1 connects to 0 and 2
+        adj.insert(1, HashSet::from([0, 2]));
+        // node 2 is MISSING from the adjacency list entirely!
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+
+        let analyzer = MapAnalyzer::new(&graph);
+        let _areas = analyzer.isolated_areas(); // Should not panic!
     }
 }

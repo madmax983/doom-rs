@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-24 - Handle missing nodes in analyzer gracefully
+**Learning:** `analyzer.rs` DFS traversal relied on `unwrap()` assuming any neighbor edge targets had entries in the adjacency list, which isn't guaranteed and led to panic during some chaotic conditions.
+**Action:** Replace `unwrap()` with `if let Some()` in traversal logic to gracefully handle unmapped node targets.
