@@ -1380,6 +1380,24 @@ mod tests {
     }
 
     #[test]
+    fn tick_psprite_slot_with_invalid_next_state_removes_psprite() {
+        let mut gs = make_game_state();
+        setup_psprites(&mut gs.player);
+
+        // Force the weapon psprite into an invalid state with 1 tic remaining.
+        gs.player.psprites[psprite_slots::WEAPON].state = crate::mobj::StateNum(65535);
+        gs.player.psprites[psprite_slots::WEAPON].tics = 1;
+
+        tick_psprites(&mut gs, TicCmd::default(), None);
+
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            StateNum::NULL,
+            "tick_psprite_slot falling back to StateNum::NULL should set the state to NULL"
+        );
+    }
+
+    #[test]
     fn super_shotgun_empty_after_firing_lowers_at_reload_check() {
         let mut gs = make_game_state();
         gs.player.weapon = WeaponType::SuperShotgun;
