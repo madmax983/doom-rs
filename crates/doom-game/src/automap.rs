@@ -201,7 +201,8 @@ pub trait AutomapCanvas {
 
 /// Simple pixel buffer for testing automap drawing.
 #[derive(Clone)]
-pub struct TestCanvas {
+#[cfg(test)]
+pub(crate) struct TestCanvas {
     /// Pixel data (row-major, width * height).
     pub data: Vec<u8>,
     /// Width in pixels.
@@ -210,6 +211,7 @@ pub struct TestCanvas {
     pub h: i32,
 }
 
+#[cfg(test)]
 impl TestCanvas {
     /// Create a new canvas of the given dimensions, filled with zeros.
     pub fn new(w: i32, h: i32) -> Self {
@@ -231,6 +233,7 @@ impl TestCanvas {
     }
 }
 
+#[cfg(test)]
 impl AutomapCanvas for TestCanvas {
     fn set_pixel(&mut self, x: i32, y: i32, color: u8) {
         if x >= 0 && x < self.w && y >= 0 && y < self.h {

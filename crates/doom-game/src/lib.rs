@@ -60,8 +60,8 @@ pub use director::*;
 
 pub use actions::{Action, dispatch_action, p_move, p_new_chase_dir};
 pub use automap::{
-    AutomapCanvas, AutomapState, TestCanvas, ThingCategory, classify_thing, draw_automap_full,
-    draw_grid, draw_line, draw_thing_marker, init_seen_lines, line_color, mark_lines_seen,
+    AutomapCanvas, AutomapState, ThingCategory, classify_thing, draw_automap_full, draw_grid,
+    draw_line, draw_thing_marker, init_seen_lines, line_color, mark_lines_seen,
     mark_subsector_lines_seen, thing_marker_color, world_to_screen,
 };
 pub use cheats::{CheatBuffer, CheatCode, apply_cheat, cheat_message, check_cheats};
