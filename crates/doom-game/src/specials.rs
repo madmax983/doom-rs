@@ -852,6 +852,34 @@ pub fn ev_floor_lower_to_nearest(gs: &mut GameState, level: &Level, tag: u16, sp
     }
 }
 
+/// Raise floor to 8 units below the lowest adjacent ceiling on all sectors matching `tag`.
+pub fn ev_floor_raise_to_lowest_ceiling_minus_8(
+    gs: &mut GameState,
+    level: &Level,
+    tag: u16,
+    speed: i16,
+    crush: crate::state::CrushBehavior,
+) {
+    for (idx, target) in level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| (i, lowest_adjacent_ceiling(level, i) - 8))
+    {
+        activate_floor_raise_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            crush,
+            FloorType::RaiseCrush,
+        );
+    }
+}
+
 /// Raise floor to lowest adjacent ceiling on all sectors matching `tag`.
 pub fn ev_floor_raise_to_lowest_ceiling(
     gs: &mut GameState,
@@ -876,6 +904,27 @@ pub fn ev_floor_raise_to_lowest_ceiling(
             speed,
             crush,
             FloorType::RaiseCrush,
+        );
+    }
+}
+
+/// Lower floor to 8 units above the highest adjacent floor on all sectors matching `tag`.
+pub fn ev_floor_lower_to_highest_plus_8(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
+    for (idx, target) in level
+        .sectors
+        .iter()
+        .enumerate()
+        .filter(|(_, s)| s.tag == tag)
+        .map(|(i, _)| (i, highest_adjacent_floor(level, i) + 8))
+    {
+        activate_floor_lower_single_typed(
+            gs,
+            level,
+            idx,
+            tag,
+            target,
+            speed,
+            FloorType::LowerToHighest,
         );
     }
 }
@@ -3082,21 +3131,13 @@ fn activate_floors(
         // Type 56: W1 Floor raise to 8 below lowest adjacent ceiling (crush).
         56 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = lowest_adjacent_ceiling(level, idx) - 8;
-                    activate_floor_raise_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        crate::state::CrushBehavior::Crush,
-                        FloorType::RaiseCrush,
-                    );
-                }
-            }
+            ev_floor_raise_to_lowest_ceiling_minus_8(
+                gs,
+                level,
+                tag,
+                1,
+                crate::state::CrushBehavior::Crush,
+            );
         }
 
         // Type 58: W1 Raise floor 24.
@@ -3126,21 +3167,13 @@ fn activate_floors(
         // Type 65: SR Raise floor to 8 below lowest ceiling + crush.
         65 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = lowest_adjacent_ceiling(level, idx) - 8;
-                    activate_floor_raise_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        crate::state::CrushBehavior::Crush,
-                        FloorType::RaiseCrush,
-                    );
-                }
-            }
+            ev_floor_raise_to_lowest_ceiling_minus_8(
+                gs,
+                level,
+                tag,
+                1,
+                crate::state::CrushBehavior::Crush,
+            );
         }
 
         // Type 67: SR Raise floor 32 + change.
@@ -3182,21 +3215,13 @@ fn activate_floors(
         // Type 94: WR Raise floor to 8 below lowest ceiling + crush.
         94 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = lowest_adjacent_ceiling(level, idx) - 8;
-                    activate_floor_raise_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        crate::state::CrushBehavior::Crush,
-                        FloorType::RaiseCrush,
-                    );
-                }
-            }
+            ev_floor_raise_to_lowest_ceiling_minus_8(
+                gs,
+                level,
+                tag,
+                1,
+                crate::state::CrushBehavior::Crush,
+            );
         }
 
         // Type 95: WR Raise floor to next highest + change texture.
@@ -3230,20 +3255,7 @@ fn activate_floors(
         // Type 36: W1 Lower floor to highest adjacent - 8 (turbo).
         36 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
-            }
+            ev_floor_lower_to_highest_plus_8(gs, level, tag, 4);
         }
 
         // Type 37: W1 Lower floor to lowest adjacent + change texture/type.
@@ -3273,58 +3285,19 @@ fn activate_floors(
         // Type 69: SR Lower floor to highest adjacent - 8.
         69 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        1,
-                        FloorType::LowerToHighest,
-                    );
-                }
-            }
+            ev_floor_lower_to_highest_plus_8(gs, level, tag, 1);
         }
 
         // Type 70: SR Lower floor to highest adjacent - 8 (turbo).
         70 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
-            }
+            ev_floor_lower_to_highest_plus_8(gs, level, tag, 4);
         }
 
         // Type 71: S1 Lower floor to highest adjacent - 8 (turbo).
         71 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
-            }
+            ev_floor_lower_to_highest_plus_8(gs, level, tag, 4);
         }
 
         // Type 82: WR Lower floor to lowest adjacent floor.
@@ -3348,20 +3321,7 @@ fn activate_floors(
         // Type 98: WR Lower floor to highest adjacent - 8 (turbo).
         98 => {
             let tag = level.linedefs[linedef_idx].tag;
-            for idx in 0..level.sectors.len() {
-                if level.sectors[idx].tag == tag {
-                    let target = highest_adjacent_floor(level, idx) + 8;
-                    activate_floor_lower_single_typed(
-                        gs,
-                        level,
-                        idx,
-                        tag,
-                        target,
-                        4,
-                        FloorType::LowerToHighest,
-                    );
-                }
-            }
+            ev_floor_lower_to_highest_plus_8(gs, level, tag, 4);
         }
 
         // Type 102: S1 Lower floor to highest adjacent floor.

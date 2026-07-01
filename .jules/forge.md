@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactor manual sector loops for floor movers**
+**Learning:** `activate_floors` contained verbose, repeated `for` loops iterating over all sectors to calculate targets and dispatch `activate_floor_raise_single_typed` and `activate_floor_lower_single_typed` for numerous linedef types (56, 65, 94, 36, 69, 70, 71, 98).
+**Action:** Extract the repeated logic into clear helper functions like `ev_floor_raise_to_lowest_ceiling_minus_8` and `ev_floor_lower_to_highest_plus_8`. Replace the manual loops in the `match` arms with calls to these new helpers to eliminate boilerplate and cognitive load.
