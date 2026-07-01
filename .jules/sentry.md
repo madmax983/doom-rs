@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-20 - MapAnalyzer missing adjacency lookup gracefully handles
+**Learning:** Found an uncovered branch in `MapAnalyzer::chokepoints` where calling `unwrap()` on `.get(&v)` crashes when analyzing asymmetric or malformed maps where child nodes do not exist as top-level keys in the adjacency list. Using `unwrap_or(empty_set)` avoids the panic by yielding an empty iterator via a static `OnceLock<HashSet<usize>>` initialized empty set.
+**Action:** When performing graph traversals or iterators where lookup can fail due to malformed data, use static empty sets via `OnceLock` instead of `unwrap()` to provide fallback empty iterators without performance overhead.

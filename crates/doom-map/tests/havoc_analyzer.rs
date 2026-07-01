@@ -43,6 +43,17 @@ fn havoc_test_analyzer_does_not_panic_on_asymmetric_edges() {
 }
 
 #[test]
+fn havoc_test_analyzer_panics_on_missing_nodes() {
+    let mut adj = HashMap::new();
+    adj.insert(0, HashSet::from([1, 2]));
+    let graph = SectorGraph {
+        adjacency_list: adj,
+    };
+    let analyzer = MapAnalyzer::new(&graph);
+    let _ = analyzer.chokepoints();
+}
+
+#[test]
 fn havoc_test_analyzer_missing_back_edges() {
     let mut adj = HashMap::new();
     adj.insert(0, HashSet::from([1, 2]));
