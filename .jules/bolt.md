@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Eliminate Per-Frame Masked Column Heap Allocations**
+**Learning:** `Vec::new()` was being instantiated per frame inside `render_level` to collect masked columns. This caused unnecessary heap allocations on the hot render path. `smallvec` is a superior alternative for small numbers of dynamic collections.
+**Action:** Use `smallvec::SmallVec<[T; N]>` instead of `Vec::new()` for hot-path frame rendering loop collections.
