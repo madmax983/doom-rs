@@ -653,8 +653,8 @@ fn write_ceiling_mover(w: &mut WriteCursor, c: &CeilingMover) {
     w.write_i16(c.normal_speed);
     w.write_i32(c.crush_damage);
     write_move_direction(w, c.direction);
-    w.write_bool(c.silent);
-    w.write_bool(c.remove_when_done);
+    w.write_bool(c.sound == crate::movers::CrusherSound::Silent);
+    w.write_bool(c.duration == crate::movers::CrusherDuration::OneShot);
     w.write_u16(c.tag);
     write_ceiling_type(w, c.ceiling_type);
 }
@@ -668,8 +668,16 @@ fn read_ceiling_mover(r: &mut ReadCursor<'_>) -> Result<CeilingMover, SaveError>
         normal_speed: r.read_i16()?,
         crush_damage: r.read_i32()?,
         direction: read_move_direction(r)?,
-        silent: r.read_bool()?,
-        remove_when_done: r.read_bool()?,
+        sound: if r.read_bool()? {
+            crate::movers::CrusherSound::Silent
+        } else {
+            crate::movers::CrusherSound::Noisy
+        },
+        duration: if r.read_bool()? {
+            crate::movers::CrusherDuration::OneShot
+        } else {
+            crate::movers::CrusherDuration::Perpetual
+        },
         tag: r.read_u16()?,
         ceiling_type: read_ceiling_type(r)?,
     })
@@ -1808,8 +1816,8 @@ mod tests {
             normal_speed: 1,
             crush_damage: 10,
             direction: MoveDirection::Down,
-            silent: false,
-            remove_when_done: false,
+            sound: crate::movers::CrusherSound::Noisy,
+            duration: crate::movers::CrusherDuration::Perpetual,
             tag: 42,
             ceiling_type: CeilingType::CrushAndRaise,
         });

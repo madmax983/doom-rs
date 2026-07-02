@@ -1441,7 +1441,7 @@ pub fn tick_ceilings(gs: &mut GameState, level: &mut Level) {
         let top = ceiling.top_height;
         let bottom = ceiling.bottom_height;
         let crush_dmg = ceiling.crush_damage;
-        let remove_when_done = ceiling.remove_when_done;
+        let remove_when_done = ceiling.duration == crate::movers::CrusherDuration::OneShot;
         let normal_speed = ceiling.normal_speed;
         let ceiling_type = ceiling.ceiling_type;
 
@@ -1638,8 +1638,8 @@ pub fn ev_ceiling_crush_and_raise(gs: &mut GameState, level: &Level, tag: u16, s
         CrusherParams {
             speed,
             crush_damage: 10,
-            silent: false,
-            remove_when_done: false,
+            sound: crate::movers::CrusherSound::Noisy,
+            duration: crate::movers::CrusherDuration::Perpetual,
             ceiling_type: CeilingType::CrushAndRaise,
         },
     );
@@ -1656,8 +1656,8 @@ pub fn ev_ceiling_lower_and_crush(gs: &mut GameState, level: &Level, tag: u16, s
         CrusherParams {
             speed,
             crush_damage: 0,
-            silent: false,
-            remove_when_done: true,
+            sound: crate::movers::CrusherSound::Noisy,
+            duration: crate::movers::CrusherDuration::OneShot,
             ceiling_type: CeilingType::LowerAndCrush,
         },
     );
@@ -1674,8 +1674,8 @@ pub fn ev_ceiling_lower_to_floor(gs: &mut GameState, level: &Level, tag: u16, sp
         CrusherParams {
             speed,
             crush_damage: 0,
-            silent: false,
-            remove_when_done: true,
+            sound: crate::movers::CrusherSound::Noisy,
+            duration: crate::movers::CrusherDuration::OneShot,
             ceiling_type: CeilingType::LowerToFloor,
         },
     );
@@ -1699,8 +1699,8 @@ pub fn ev_ceiling_crush_raise_fast(gs: &mut GameState, level: &Level, tag: u16, 
         CrusherParams {
             speed,
             crush_damage: 10,
-            silent: false,
-            remove_when_done: false,
+            sound: crate::movers::CrusherSound::Noisy,
+            duration: crate::movers::CrusherDuration::Perpetual,
             ceiling_type: CeilingType::FastCrushAndRaise,
         },
     );
@@ -1736,8 +1736,8 @@ pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) 
             normal_speed: 2,
             crush_damage: 0,
             direction: MoveDirection::Up,
-            silent: false,
-            remove_when_done: true,
+            sound: crate::movers::CrusherSound::Noisy,
+            duration: crate::movers::CrusherDuration::OneShot,
             tag,
             ceiling_type: CeilingType::RaiseToHighest,
         });
@@ -1752,11 +1752,12 @@ pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) 
 /// ```
 /// # use doom_game::specials::CrusherParams;
 /// # use doom_game::state::CeilingType;
+/// # use doom_game::movers::{CrusherSound, CrusherDuration};
 /// let params = CrusherParams {
 ///     speed: 2,
 ///     crush_damage: 10,
-///     silent: false,
-///     remove_when_done: false,
+///     sound: CrusherSound::Noisy,
+///     duration: CrusherDuration::Perpetual,
 ///     ceiling_type: CeilingType::CrushAndRaise,
 /// };
 /// ```
@@ -1765,10 +1766,10 @@ pub struct CrusherParams {
     pub speed: i16,
     /// Damage dealt to actors caught under the ceiling when it bottoms out.
     pub crush_damage: i32,
-    /// If true, the crusher does not play standard movement sounds.
-    pub silent: bool,
-    /// If true, the crusher is removed from the active mover list after one cycle.
-    pub remove_when_done: bool,
+    /// Does this crusher play sound?
+    pub sound: crate::movers::CrusherSound,
+    /// Does this crusher stop after one cycle?
+    pub duration: crate::movers::CrusherDuration,
     /// The state-machine type controlling the oscillation/raising pattern.
     pub ceiling_type: CeilingType,
 }
@@ -1803,8 +1804,8 @@ fn activate_crusher(gs: &mut GameState, level: &Level, tag: u16, params: Crusher
             normal_speed: params.speed,
             crush_damage: params.crush_damage,
             direction: MoveDirection::Down,
-            silent: params.silent,
-            remove_when_done: params.remove_when_done,
+            sound: params.sound,
+            duration: params.duration,
             tag,
             ceiling_type: params.ceiling_type,
         });
@@ -2887,8 +2888,8 @@ fn activate_ceilings(
                 CrusherParams {
                     speed: 2,
                     crush_damage: 10,
-                    silent: false,
-                    remove_when_done: true,
+                    sound: crate::movers::CrusherSound::Noisy,
+                    duration: crate::movers::CrusherDuration::OneShot,
                     ceiling_type: CeilingType::LowerAndCrush,
                 },
             );
@@ -2928,8 +2929,8 @@ fn activate_ceilings(
                 CrusherParams {
                     speed: 2,
                     crush_damage: 10,
-                    silent: true,
-                    remove_when_done: false,
+                    sound: crate::movers::CrusherSound::Silent,
+                    duration: crate::movers::CrusherDuration::Perpetual,
                     ceiling_type: CeilingType::SilentCrush,
                 },
             );
@@ -5304,8 +5305,8 @@ mod tests {
             normal_speed: 2,
             crush_damage: 10,
             direction: MoveDirection::Down,
-            silent: false,
-            remove_when_done: false,
+            sound: crate::movers::CrusherSound::Noisy,
+            duration: crate::movers::CrusherDuration::Perpetual,
             tag: 1,
             ceiling_type: CeilingType::CrushAndRaise,
         });
@@ -7171,8 +7172,8 @@ mod tests {
             normal_speed: 2,
             crush_damage: 10,
             direction: MoveDirection::Down,
-            silent: false,
-            remove_when_done: false,
+            sound: crate::movers::CrusherSound::Noisy,
+            duration: crate::movers::CrusherDuration::Perpetual,
             tag: 7,
             ceiling_type: CeilingType::CrushAndRaise,
         };
@@ -7183,8 +7184,8 @@ mod tests {
         assert_eq!(mover.normal_speed, 2);
         assert_eq!(mover.crush_damage, 10);
         assert_eq!(mover.direction, MoveDirection::Down);
-        assert!(!mover.silent);
-        assert!(!mover.remove_when_done);
+        assert_eq!(mover.sound, crate::movers::CrusherSound::Noisy);
+        assert_eq!(mover.duration, crate::movers::CrusherDuration::Perpetual);
         assert_eq!(mover.tag, 7);
         assert_eq!(mover.ceiling_type, CeilingType::CrushAndRaise);
     }
@@ -7497,8 +7498,8 @@ mod tests {
             CrusherParams {
                 speed: 4,
                 crush_damage: 10,
-                silent: false,
-                remove_when_done: false,
+                sound: crate::movers::CrusherSound::Noisy,
+                duration: crate::movers::CrusherDuration::Perpetual,
                 ceiling_type: CeilingType::CrushAndRaise,
             },
         );
@@ -7548,7 +7549,10 @@ mod tests {
             CeilingType::FastCrushAndRaise
         );
         assert_eq!(gs.movers.active_ceilings[0].speed, 2);
-        assert!(!gs.movers.active_ceilings[0].remove_when_done);
+        assert_eq!(
+            gs.movers.active_ceilings[0].duration,
+            crate::movers::CrusherDuration::Perpetual
+        );
     }
 
     #[test]
@@ -7597,8 +7601,9 @@ mod tests {
             gs.movers.active_ceilings[0].crush_damage, 10,
             "type 49 has crush damage 10"
         );
-        assert!(
-            gs.movers.active_ceilings[0].remove_when_done,
+        assert_eq!(
+            gs.movers.active_ceilings[0].duration,
+            crate::movers::CrusherDuration::OneShot,
             "type 49 is one-shot"
         );
     }
@@ -7700,12 +7705,14 @@ mod tests {
             gs.movers.active_ceilings[0].ceiling_type,
             CeilingType::SilentCrush
         );
-        assert!(
-            gs.movers.active_ceilings[0].silent,
+        assert_eq!(
+            gs.movers.active_ceilings[0].sound,
+            crate::movers::CrusherSound::Silent,
             "type 141 must set silent=true"
         );
-        assert!(
-            !gs.movers.active_ceilings[0].remove_when_done,
+        assert_eq!(
+            gs.movers.active_ceilings[0].duration,
+            crate::movers::CrusherDuration::Perpetual,
             "type 141 is perpetual"
         );
     }
@@ -7809,8 +7816,8 @@ mod tests {
             normal_speed: 2,
             crush_damage: 10,
             direction: MoveDirection::Down,
-            silent: true,
-            remove_when_done: false,
+            sound: crate::movers::CrusherSound::Silent,
+            duration: crate::movers::CrusherDuration::Perpetual,
             tag: 1,
             ceiling_type: CeilingType::SilentCrush,
         });
@@ -7822,7 +7829,10 @@ mod tests {
             CeilingType::SilentCrush
         );
         assert_eq!(gs2.movers.active_ceilings[0].normal_speed, 2);
-        assert!(gs2.movers.active_ceilings[0].silent);
+        assert_eq!(
+            gs2.movers.active_ceilings[0].sound,
+            crate::movers::CrusherSound::Silent
+        );
     }
 
     #[test]
@@ -7836,8 +7846,8 @@ mod tests {
             normal_speed: 4,
             crush_damage: 10,
             direction: MoveDirection::Up,
-            silent: true,
-            remove_when_done: false,
+            sound: crate::movers::CrusherSound::Silent,
+            duration: crate::movers::CrusherDuration::Perpetual,
             tag: 99,
             ceiling_type: CeilingType::SilentCrush,
         });
@@ -7864,8 +7874,8 @@ mod tests {
         assert_eq!(c.normal_speed, 4);
         assert_eq!(c.crush_damage, 10);
         assert_eq!(c.direction, MoveDirection::Up);
-        assert!(c.silent);
-        assert!(!c.remove_when_done);
+        assert_eq!(c.sound, crate::movers::CrusherSound::Silent);
+        assert_eq!(c.duration, crate::movers::CrusherDuration::Perpetual);
         assert_eq!(c.tag, 99);
         assert_eq!(c.ceiling_type, CeilingType::SilentCrush);
     }
@@ -7883,8 +7893,8 @@ mod tests {
             CrusherParams {
                 speed: 4,
                 crush_damage: 10,
-                silent: true,
-                remove_when_done: false,
+                sound: crate::movers::CrusherSound::Silent,
+                duration: crate::movers::CrusherDuration::Perpetual,
                 ceiling_type: CeilingType::SilentCrush,
             },
         );
@@ -7930,8 +7940,8 @@ mod tests {
             CrusherParams {
                 speed: 4,
                 crush_damage: 10,
-                silent: false,
-                remove_when_done: false,
+                sound: crate::movers::CrusherSound::Noisy,
+                duration: crate::movers::CrusherDuration::Perpetual,
                 ceiling_type: CeilingType::FastCrushAndRaise,
             },
         );

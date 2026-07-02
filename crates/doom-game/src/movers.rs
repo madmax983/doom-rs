@@ -77,15 +77,28 @@ pub struct CeilingMover {
     pub crush_damage: i32,
     /// Current movement direction.
     pub direction: MoveDirection,
-    /// Some crushers make no sound.
-    pub silent: bool,
-    /// `true` for one-shot crushers that remove themselves when done,
-    /// `false` for perpetual oscillating crushers.
-    pub remove_when_done: bool,
+    /// Does this crusher play sound?
+    pub sound: CrusherSound,
+    /// Does this crusher oscillate perpetually or stop after one cycle?
+    pub duration: CrusherDuration,
     /// Tag from the activating linedef (used by line type 57 to stop crushers).
     pub tag: u16,
     /// The type of ceiling motion.
     pub ceiling_type: CeilingType,
+}
+
+/// Defines if a crusher plays sound.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CrusherSound {
+    Noisy,
+    Silent,
+}
+
+/// Defines if a crusher stops after one cycle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CrusherDuration {
+    Perpetual,
+    OneShot,
 }
 
 /// Defines whether a floor mover applies crushing damage when moving.

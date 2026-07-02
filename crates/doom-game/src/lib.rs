@@ -80,9 +80,10 @@ pub use mobj::{Mobj, MobjHandle, MobjSlab, StateNum, flags};
 pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_slide_move, p_try_move};
 pub use movers::{
-    CeilingMover, CeilingType, ConveyorBelt, CrushBehavior, DoorMover, FloorMover, FloorType,
-    LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection, PerpetualPlatform,
-    PlatformStatus, ScrollingWall, SectorLightEffect, SectorMovers,
+    CeilingMover, CeilingType, ConveyorBelt, CrushBehavior, CrusherDuration, CrusherSound,
+    DoorMover, FloorMover, FloorType, LiftMover, LiftStatus, LightEffectType, LightSpecial,
+    MoveDirection, PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
+    SectorMovers,
 };
 pub use phase::{GamePhase, GamePhaseController, MapId};
 pub use pickups::{
