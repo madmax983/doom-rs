@@ -2169,7 +2169,7 @@ fn handle_export(
                 path.display().to_string().cyan()
             );
         } else {
-            println!("{} {} to {}", success_verb, success_noun, path.display());
+            println!("{} {} {} to {}", success_icon, success_verb, success_noun, path.display());
         }
     }
 
@@ -2334,7 +2334,7 @@ fn run_doom(args: Args) -> Result<()> {
                     output_path.display().to_string().cyan()
                 );
             } else {
-                println!("Exported demo CSV to {}", output_path.display());
+                println!("🌟 Exported demo CSV to {}", output_path.display());
             }
         }
         return Ok(());
@@ -2358,7 +2358,7 @@ fn run_doom(args: Args) -> Result<()> {
                     wav_path.display().to_string().cyan()
                 );
             } else {
-                println!("Exported music WAV to {}", wav_path.display());
+                println!("🎵 Exported music WAV to {}", wav_path.display());
             }
         }
         return Ok(());
@@ -2386,7 +2386,7 @@ fn run_doom(args: Args) -> Result<()> {
                     sfx_wav_path.display().to_string().cyan()
                 );
             } else {
-                println!("Exported SFX WAV to {}", sfx_wav_path.display());
+                println!("🔊 Exported SFX WAV to {}", sfx_wav_path.display());
             }
         }
         return Ok(());
@@ -2450,7 +2450,7 @@ fn run_doom(args: Args) -> Result<()> {
                     warp_str.cyan()
                 );
             } else {
-                println!("Completed tactical analysis for {}", warp_str);
+                println!("🌟 Completed tactical analysis for {}", warp_str);
             }
 
             let mut chokepoints_str = String::new();
@@ -2516,7 +2516,7 @@ fn run_doom(args: Args) -> Result<()> {
                         area_str.push_str(&s.to_string());
                     }
                     table.add_row(vec![
-                        comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
+                        comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
                         comfy_table::Cell::new(area_str),
                     ]);
                 }
@@ -2561,7 +2561,7 @@ fn run_doom(args: Args) -> Result<()> {
                                 path_str.cyan()
                             );
                         } else {
-                            println!("Path found: {}", path_str);
+                            println!("🗺️  Path found: {}", path_str);
                         }
                     }
                 } else {
@@ -2583,7 +2583,7 @@ fn run_doom(args: Args) -> Result<()> {
                                 .bold()
                             );
                         } else {
-                            println!("No path found between sector {} and sector {}", start, end);
+                            println!("❌ No path found between sector {} and sector {}", start, end);
                         }
                     }
                 }
@@ -2597,7 +2597,7 @@ fn run_doom(args: Args) -> Result<()> {
                     if is_tty {
                         println!("{} {}", "❌".yellow(), msg.yellow().bold());
                     } else {
-                        println!("{}", msg);
+                        println!("❌ {}", msg);
                     }
                 }
             }
@@ -2610,7 +2610,7 @@ fn run_doom(args: Args) -> Result<()> {
                 if is_tty {
                     println!("{} {}", "❌".yellow(), msg.yellow().bold());
                 } else {
-                    println!("{}", msg);
+                    println!("❌ {}", msg);
                 }
             }
         }
@@ -2699,23 +2699,23 @@ fn run_doom(args: Args) -> Result<()> {
                         comfy_table::Cell::new("Value"),
                     ])
                     .add_row(vec![
-                        comfy_table::Cell::new("Map"),
+                        comfy_table::Cell::new("🗺️  Map"),
                         comfy_table::Cell::new(warp_str.to_string()),
                     ])
                     .add_row(vec![
-                        comfy_table::Cell::new("Total Kills"),
+                        comfy_table::Cell::new("💀 Total Kills"),
                         comfy_table::Cell::new(stats.total_kills.to_string()),
                     ])
                     .add_row(vec![
-                        comfy_table::Cell::new("Total Items"),
+                        comfy_table::Cell::new("📦 Total Items"),
                         comfy_table::Cell::new(stats.total_items.to_string()),
                     ])
                     .add_row(vec![
-                        comfy_table::Cell::new("Total Secrets"),
+                        comfy_table::Cell::new("🕵️  Total Secrets"),
                         comfy_table::Cell::new(stats.total_secrets.to_string()),
                     ])
                     .add_row(vec![
-                        comfy_table::Cell::new("Par Time"),
+                        comfy_table::Cell::new("⏱️  Par Time"),
                         comfy_table::Cell::new(par_time_formatted),
                     ]);
             }
