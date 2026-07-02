@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-20 - Added Missing StateNum::NULL test for tick_psprite_slot fallback
+**Learning:** Found an uncovered branch related to the fallback `StateNum::NULL` handling in `weapons.rs` when `unwrap_or(StateNum::NULL)` defaults due to the current psprite state being an invalid index, mirroring a similar bug found previously in `tic.rs`.
+**Action:** Added targeted test case `tick_psprite_slot_with_invalid_next_state_falls_back_to_null` in `weapons.rs` to ensure comprehensive test coverage on psprite state transitions.

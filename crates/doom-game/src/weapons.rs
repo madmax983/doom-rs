@@ -1404,4 +1404,25 @@ mod tests {
             "running the super shotgun dry should stage the next usable weapon"
         );
     }
+
+    #[test]
+    fn tick_psprite_slot_with_invalid_next_state_falls_back_to_null() {
+        let mut gs = make_game_state();
+        let slot = psprite_slots::WEAPON;
+        // set an invalid state that has no corresponding STATES entry
+        gs.player.psprites[slot].state = StateNum(9999);
+        gs.player.psprites[slot].tics = 0; // ready to transition
+
+        tick_psprite_slot(&mut gs, slot, TicCmd::default(), None);
+
+        assert_eq!(
+            gs.player.psprites[slot].state,
+            StateNum::NULL,
+            "tick_psprite_slot should gracefully fall back to StateNum::NULL when transitioning from an invalid state"
+        );
+        assert_eq!(
+            gs.player.psprites[slot].tics, 0,
+            "falling back to StateNum::NULL should also reset tics to 0"
+        );
+    }
 }
