@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+💡 What: Updated `sectors_by_tag` to return a stack-allocated `smallvec::SmallVec<[usize; 8]>` instead of a `Vec<usize>`.
+🎯 Why: Searching sectors by tag is called frequently during game loop evaluation of active linedefs and triggers (e.g. donuts, stairs, teleport). Collecting the matched indices into a dynamic heap `Vec` every time caused unnecessary heap memory allocations. Using `impl Iterator` causes a lifetime borrow issue over the Level struct preventing subsequent mutation, so `SmallVec` is the perfect zero-cost abstraction for this.
+📊 Impact: Eliminates multiple heap allocations per frame when iterating tagged sectors in trigger handlers.
+🔬 Measurement: Run `cargo clippy --all-targets --all-features -- -D warnings && cargo test` and observe identical gameplay trigger behavior without intermediate heap allocations.

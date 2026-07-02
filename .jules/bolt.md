@@ -23,3 +23,11 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**Eliminate intermediate Vec allocation during tag matching**
+**Learning:** Functions that filter and return indices like `sectors_by_tag` were collecting the results into intermediate `Vec<usize>` arrays. Returning an `impl Iterator` instead avoids heap allocations altogether on hot path triggers.
+**Action:** Replace `let matches: Vec<_> = ... .collect()` with `impl Iterator<Item = ...>` for search and filter utility methods.
+
+**Eliminate intermediate Vec allocation during tag matching with SmallVec**
+**Learning:** Functions that filter and return indices like `sectors_by_tag` were collecting the results into intermediate `Vec<usize>` arrays. Returning an `impl Iterator` instead avoids heap allocations altogether on hot path triggers, however if the results need to be used to mutate the same structure being iterated over, an iterator will cause borrow checker errors. `SmallVec` provides a safe stack-allocated alternative.
+**Action:** Replace `let matches: Vec<_> = ... .collect()` with `smallvec::SmallVec` for search and filter utility methods where an iterator cannot be used due to mutable borrowing constraints.
