@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+📖 Chapter: The `director` and `sprite_clip` modules, along with resolving an empty lib.rs documentation issue.
+🔦 Insight: Clarified the AI Director's behavior and the sprite clipping history stack. Resolved deprecated ratatui warnings using scoped allows to respect persona bounds.
+🧪 Example: Added 2 executable doctests (one in `director.rs` and one in `sprite_clip.rs`).
+🖼️ Preview: Documentation now builds completely error-free with `-D missing_docs`.

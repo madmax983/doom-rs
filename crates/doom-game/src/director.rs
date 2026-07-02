@@ -1,19 +1,38 @@
+//! AI Director module for dynamic difficulty adjustment.
+//!
+//! The AI director monitors the player's health and spawns enemies or relief drops based on the state.
+
 use crate::PlayerState;
 
+/// Actions that the director can take based on player state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirectorAction {
+    /// Spawn an ambush for the player if they have high health.
     SpawnAmbush,
+    /// Spawn relief for the player if they have low health.
     SpawnRelief,
+    /// Maintain the current difficulty if health is average.
     Maintain,
 }
 
+/// The AI Director responsible for adjusting game difficulty based on player state.
+///
+/// ## Examples
+/// ```
+/// use doom_game::director::AiDirector;
+///
+/// let mut director = AiDirector::new();
+/// // director.tick(&player) would be called here
+/// ```
 pub struct AiDirector;
 
 impl AiDirector {
+    /// Creates a new `AiDirector`.
     pub fn new() -> Self {
         Self
     }
 
+    /// Evaluates the player's state and returns the appropriate action.
     pub fn tick(&mut self, player: &PlayerState) -> DirectorAction {
         let health = player.health();
 
