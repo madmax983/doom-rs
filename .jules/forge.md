@@ -63,3 +63,6 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+**Eliminate Boolean Blindness in FaceState**
+**Learning:** Using `bool` arguments in function signatures (e.g. `is_firing: bool, is_invulnerable: bool`) makes call sites unreadable and prone to accidental argument swapping.
+**Action:** Replace primitive `bool` arguments with strictly typed enums (e.g. `PlayerFiringStatus`, `PlayerInvulnerability`) to enforce type-safety and improve call-site readability.

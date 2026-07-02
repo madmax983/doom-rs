@@ -79,6 +79,18 @@ fn priority(kind: FaceKind) -> u8 {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerFiringStatus {
+    Firing,
+    NotFiring,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PlayerInvulnerability {
+    Invulnerable,
+    Vulnerable,
+}
+
 // ---------------------------------------------------------------------------
 // FaceState
 // ---------------------------------------------------------------------------
@@ -134,19 +146,19 @@ impl FaceState {
     pub fn tick(
         &mut self,
         health: i32,
-        is_firing: bool,
-        is_invulnerable: bool,
+        firing_status: PlayerFiringStatus,
+        invulnerability: PlayerInvulnerability,
         attacker_angle: Option<Bam>,
     ) {
         let tier = health_tier(health);
 
         // --- Firing streak counter ---
-        if is_firing {
+        if firing_status == PlayerFiringStatus::Firing {
             self.firing_tics = self.firing_tics.saturating_add(1);
         } else {
             self.firing_tics = 0;
         }
-        self.was_firing = is_firing;
+        self.was_firing = firing_status == PlayerFiringStatus::Firing;
 
         // --- Idle glance countdown ---
         if self.idle_countdown > 0 {
@@ -173,7 +185,7 @@ impl FaceState {
         self.last_was_dead = false;
 
         // 2. God mode
-        if is_invulnerable {
+        if invulnerability == PlayerInvulnerability::Invulnerable {
             self.set_face(FaceKind::GodMode, GOD_HOLD_TICS);
             self.damage_this_tic = 0;
             return;
@@ -355,7 +367,12 @@ mod tests {
     }
 
     fn tick_simple(face: &mut FaceState, health: i32) {
-        face.tick(health, false, false, None);
+        face.tick(
+            health,
+            PlayerFiringStatus::NotFiring,
+            PlayerInvulnerability::Vulnerable,
+            None,
+        );
     }
 
     #[test]
@@ -374,14 +391,24 @@ mod tests {
     fn death_takes_highest_priority() {
         let mut face = make_face();
         // Simulate god mode + death simultaneously — dead wins.
-        face.tick(0, false, true, None);
+        face.tick(
+            0,
+            PlayerFiringStatus::NotFiring,
+            PlayerInvulnerability::Invulnerable,
+            None,
+        );
         assert_eq!(face.kind, FaceKind::Dead);
     }
 
     #[test]
     fn god_mode_overrides_normal() {
         let mut face = make_face();
-        face.tick(100, false, true, None);
+        face.tick(
+            100,
+            PlayerFiringStatus::NotFiring,
+            PlayerInvulnerability::Invulnerable,
+            None,
+        );
         assert_eq!(face.kind, FaceKind::GodMode);
     }
 
@@ -389,7 +416,12 @@ mod tests {
     fn ouch_on_20_damage() {
         let mut face = make_face();
         face.on_damage(20, Bam(0));
-        face.tick(80, false, false, Some(Bam(0)));
+        face.tick(
+            80,
+            PlayerFiringStatus::NotFiring,
+            PlayerInvulnerability::Vulnerable,
+            Some(Bam(0)),
+        );
         assert!(matches!(face.kind, FaceKind::Ouch { .. }));
     }
 
@@ -397,7 +429,12 @@ mod tests {
     fn pain_on_small_damage() {
         let mut face = make_face();
         face.on_damage(5, Bam(0));
-        face.tick(95, false, false, Some(Bam(0)));
+        face.tick(
+            95,
+            PlayerFiringStatus::NotFiring,
+            PlayerInvulnerability::Vulnerable,
+            Some(Bam(0)),
+        );
         assert!(matches!(face.kind, FaceKind::Pain { .. }));
     }
 
@@ -414,7 +451,12 @@ mod tests {
         let mut face = make_face();
         // Fire for RAMPAGE_THRESHOLD tics.
         for _ in 0..RAMPAGE_THRESHOLD {
-            face.tick(100, true, false, None);
+            face.tick(
+                100,
+                PlayerFiringStatus::Firing,
+                PlayerInvulnerability::Vulnerable,
+                None,
+            );
         }
         assert!(matches!(face.kind, FaceKind::Rampage { .. }));
     }

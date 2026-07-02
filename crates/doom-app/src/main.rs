@@ -1251,11 +1251,18 @@ impl DoomApp for DoomGame {
             }
             // Tick face FSM every tic.
             {
-                let is_firing = self.gs.player.attack_down;
-                let is_invulnerable =
-                    self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0;
+                let firing_status = if self.gs.player.attack_down {
+                    doom_game::face::PlayerFiringStatus::Firing
+                } else {
+                    doom_game::face::PlayerFiringStatus::NotFiring
+                };
+                let invulnerability = if self.gs.player.powers[doom_game::player::powers::PW_INVULNERABILITY] > 0 {
+                    doom_game::face::PlayerInvulnerability::Invulnerable
+                } else {
+                    doom_game::face::PlayerInvulnerability::Vulnerable
+                };
                 self.face_state
-                    .tick(cur_health, is_firing, is_invulnerable, None);
+                    .tick(cur_health, firing_status, invulnerability, None);
             }
             if self.debug_log.is_some() {
                 // Log player snapshot every 35 tics (once per second of gametime).
