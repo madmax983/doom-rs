@@ -69,10 +69,20 @@ impl<'a> MapAnalyzer<'a> {
         let mut articulation_points = HashSet::new();
         let mut time = 0;
 
+        static EMPTY_SET: std::sync::OnceLock<HashSet<usize>> = std::sync::OnceLock::new();
+        let empty_set = EMPTY_SET.get_or_init(HashSet::new);
+
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let mut stack = vec![(
+                    node,
+                    self.graph
+                        .adjacency_list
+                        .get(&node)
+                        .unwrap_or(empty_set)
+                        .iter(),
+                )];
 
                 visited.insert(node);
                 time += 1;
@@ -97,7 +107,14 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((
+                                v,
+                                self.graph
+                                    .adjacency_list
+                                    .get(&v)
+                                    .unwrap_or(empty_set)
+                                    .iter(),
+                            ));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -264,6 +281,20 @@ mod tests {
         };
         let analyzer = MapAnalyzer::new(&graph);
         assert_eq!(analyzer.chokepoints(), vec![]);
+    }
+
+    #[test]
+    fn test_chokepoints_missing_node() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1, 2]));
+        adj.insert(1, HashSet::from([0, 2]));
+        adj.insert(2, HashSet::from([0, 1, 3]));
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        let chokes = analyzer.chokepoints();
+        assert_eq!(chokes, vec![]);
     }
 
     #[test]

@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-07-03 - [Missing Nodes in Graph Traversal]
+**Learning:** In graph traversal algorithms (e.g., DFS or Tarjan's), when handling missing or unmapped adjacency nodes, push a fallback empty iterator/state onto the stack rather than skipping the push entirely. Skipping the push can break the node's lifecycle (e.g., marked 'visited' but never 'popped'), causing logic bugs in post-processing.
+**Action:** Use an empty iterator fallback (e.g., via `std::sync::OnceLock`) when querying unmapped nodes to maintain correct state machine transitions.
