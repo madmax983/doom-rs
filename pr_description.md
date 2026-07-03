@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🎯 Target: `savegame_vanilla::parse_header`, `savegame_vanilla::load_game`, `savegame_vanilla::save_game`
+💣 Risk: Invalid or corrupt vanilla savegame headers could cause panics or silent failures if not properly parsed and rejected. Unsupported loads/saves could also fail silently without returning the expected `UnsupportedVanillaDsg` error.
+🧪 Strategy: Added unit tests that explicitly construct a valid vanilla header and then test boundary and failure conditions, including short data (`TooShort`), bad magic bytes (`BadMagic`), unsupported version strings (`BadVersion`), and unsupported load/save executions.
+🔬 Verification: Run `cargo test --manifest-path crates/doom-game/Cargo.toml --all-targets --all-features` to verify.

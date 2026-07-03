@@ -107,3 +107,85 @@ fn version_string(bytes: &[u8]) -> Option<&str> {
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     core::str::from_utf8(&bytes[..end]).ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::savegame::SaveError;
+
+    fn valid_vanilla_header() -> [u8; VANILLA_HEADER_LEN] {
+        let mut data = [0u8; VANILLA_HEADER_LEN];
+
+        let desc = b"save1";
+        data[..desc.len()].copy_from_slice(desc);
+
+        let ver = b"version 109";
+        data[DESCRIPTION_LEN..DESCRIPTION_LEN + ver.len()].copy_from_slice(ver);
+
+        let offset = DESCRIPTION_LEN + VERSION_LEN;
+        data[offset] = 2;
+        data[offset + 1] = 1;
+        data[offset + 2] = 1;
+
+        data[offset + 3] = 1;
+
+        data[offset + 7] = 0x01;
+        data[offset + 8] = 0x02;
+        data[offset + 9] = 0x03;
+
+        data
+    }
+
+    #[test]
+    fn parse_header_too_short() {
+        let data = [0u8; VANILLA_HEADER_LEN - 1];
+        assert_eq!(parse_header(&data).unwrap_err(), SaveError::TooShort);
+    }
+
+    #[test]
+    fn parse_header_bad_magic() {
+        let mut data = valid_vanilla_header();
+        data[DESCRIPTION_LEN] = b'b';
+        assert_eq!(parse_header(&data).unwrap_err(), SaveError::BadMagic);
+    }
+
+    #[test]
+    fn parse_header_bad_version() {
+        let mut data = valid_vanilla_header();
+        let bad_ver = b"version 999\0\0\0\0\0";
+        data[DESCRIPTION_LEN..DESCRIPTION_LEN + 16].copy_from_slice(bad_ver);
+        assert_eq!(parse_header(&data).unwrap_err(), SaveError::BadVersion);
+    }
+
+    #[test]
+    fn parse_header_success() {
+        let data = valid_vanilla_header();
+        let header = parse_header(&data).unwrap();
+
+        assert!(header.description.starts_with(b"save1"));
+        assert!(header.version.starts_with(b"version 109"));
+        assert_eq!(header.skill, 2);
+        assert_eq!(header.episode, 1);
+        assert_eq!(header.map, 1);
+        assert_eq!(header.players_in_game, [1, 0, 0, 0]);
+        assert_eq!(header.level_time, 197121);
+    }
+
+    #[test]
+    fn load_game_unsupported() {
+        let data = valid_vanilla_header();
+        assert_eq!(
+            load_game(&data).unwrap_err(),
+            SaveError::UnsupportedVanillaDsg
+        );
+    }
+
+    #[test]
+    fn save_game_unsupported() {
+        let gs = GameState::new("E1M1");
+        assert_eq!(
+            save_game(&gs, b"E1M1\0\0\0\0", 2, "test").unwrap_err(),
+            SaveError::UnsupportedVanillaDsg
+        );
+    }
+}

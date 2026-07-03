@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-04-26 - Add Unit Tests for savegame_vanilla.rs
+**Learning:** Found an uncovered area in `savegame_vanilla.rs` where vanilla savegame header parsing and failure conditions for load/save logic were not tested.
+**Action:** Added targeted test cases `parse_header_too_short`, `parse_header_bad_magic`, `parse_header_bad_version`, `parse_header_success`, `load_game_unsupported`, and `save_game_unsupported` to `savegame_vanilla.rs` to reach full test coverage for the vanilla save header parsing module.
