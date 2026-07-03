@@ -977,12 +977,7 @@ impl DoomGame {
             }
         }
     }
-}
-
-impl DoomApp for DoomGame {
-    fn tick(&mut self, input: TicInput) {
-        let transition_pressed = self.transition_input_pressed(&input);
-
+    fn tick_title_screen(&mut self, input: &TicInput) -> bool {
         // --- Title screen mode ---
         // While the title screen is showing, route input to the menu and skip
         // all game simulation.  StartGame dismisses the title screen.
@@ -1009,9 +1004,12 @@ impl DoomApp for DoomGame {
                 // Backspace = back in menu (alternative to Escape).
                 self.menu.back();
             }
-            return;
+            return true;
         }
+        false
+    }
 
+    fn tick_intermission(&mut self, transition_pressed: bool) -> bool {
         match self.phase_controller.phase() {
             GamePhase::Intermission { .. } => {
                 if let Some(renderer) = self.intermission_renderer.as_mut() {
@@ -1031,7 +1029,7 @@ impl DoomApp for DoomGame {
                     self.load_map_after_intermission(map_id, PlayerStateCarry::Carry);
                 }
                 self.update_intermission_renderer();
-                return;
+                true
             }
             GamePhase::Finale { .. } => {
                 if transition_pressed {
@@ -1041,11 +1039,13 @@ impl DoomApp for DoomGame {
                 if matches!(self.phase_controller.phase(), GamePhase::TitleScreen) {
                     self.enter_title_screen();
                 }
-                return;
+                true
             }
-            GamePhase::TitleScreen | GamePhase::Playing => {}
+            GamePhase::TitleScreen | GamePhase::Playing => false,
         }
+    }
 
+    fn tick_in_game_menu(&mut self, input: &TicInput) {
         // Tick menu skull animation each tic regardless of menu state.
         self.menu.tick();
 
@@ -1073,7 +1073,9 @@ impl DoomApp for DoomGame {
                 }
             }
         }
+    }
 
+    fn tick_console_and_cheats(&mut self, input: &TicInput) {
         if let Some(ch) = input.console_char {
             if ch == '`' || ch == '~' {
                 // Toggle the console overlay on backtick/tilde.
@@ -1132,7 +1134,9 @@ impl DoomApp for DoomGame {
 
         // Tick down cheat message timer.
         self.hud_messages.tick();
+    }
 
+    fn tick_quick_save_load(&mut self, input: &TicInput) {
         // Quick save (F5).
         if input.f5_save {
             if let Err(e) = savegame::save_game(&self.save_path, &self.gs, 0, self.compat) {
@@ -1164,47 +1168,25 @@ impl DoomApp for DoomGame {
                 }
             }
         }
+    }
 
-        let cmd = crate::net_mode::ticinput_to_ticcmd(input);
-
-        // Pause the game simulation while the menu is open during gameplay.
-        // Title screen and intermission handle their own timing; only Playing
-        // needs the pause.
-        let paused =
-            self.menu.is_active() && matches!(self.phase_controller.phase(), GamePhase::Playing);
-
-        // Snapshot kill/item counts before the tick to detect changes.
-        let pre_kills = self.gs.player.kill_count;
-        let pre_items = self.gs.player.item_count;
-
-        if !paused {
-            self.gs.tick(cmd, Some(&mut self.level));
-            self.player_view_height =
-                next_player_view_height(self.player_view_height, self.gs.player.is_dead());
-            self.tick_weapon_anim();
-            self.phase_controller.tick(&mut self.gs);
-        }
-        self.update_intermission_renderer();
-        if let Some(map_id) = self.phase_controller.should_load_map() {
-            self.load_map_after_intermission(map_id, PlayerStateCarry::Carry);
-        }
-
+    fn tick_sound_events(&mut self) {
         // Drain the game's sound event queue.  Each event maps to a DS* lump
         // name and a priority.  The SfxMixer's 8-channel priority system handles
         // contention — weapon-priority sounds always win; monster sounds compete
         // with each other, matching Doom's original S_StartSound behaviour.
-        {
-            let events = std::mem::take(&mut self.gs.sound.sound_queue);
+        let events = std::mem::take(&mut self.gs.sound.sound_queue);
 
-            #[cfg(feature = "sound_ripples")]
-            if self.title_screen.is_none() {
-                self.cogmind_state
-                    .effects
-                    .spawn_sound_ripples(&events, &self.gs);
-            }
-            self.handle_sound_events(events);
+        #[cfg(feature = "sound_ripples")]
+        if self.title_screen.is_none() {
+            self.cogmind_state
+                .effects
+                .spawn_sound_ripples(&events, &self.gs);
         }
+        self.handle_sound_events(events);
+    }
 
+    fn tick_player_damage_and_logging(&mut self, pre_kills: u32, pre_items: u32) {
         // Log kill and item events.
         if self.debug_log.is_some() {
             if self.gs.player.kill_count > pre_kills {
@@ -1268,6 +1250,51 @@ impl DoomApp for DoomGame {
             }
             self.prev_health = cur_health;
         }
+    }
+}
+
+impl DoomApp for DoomGame {
+    fn tick(&mut self, input: TicInput) {
+        let transition_pressed = self.transition_input_pressed(&input);
+
+        if self.tick_title_screen(&input) {
+            return;
+        }
+
+        if self.tick_intermission(transition_pressed) {
+            return;
+        }
+
+        self.tick_in_game_menu(&input);
+        self.tick_console_and_cheats(&input);
+        self.tick_quick_save_load(&input);
+
+        let cmd = crate::net_mode::ticinput_to_ticcmd(input);
+
+        // Pause the game simulation while the menu is open during gameplay.
+        // Title screen and intermission handle their own timing; only Playing
+        // needs the pause.
+        let paused =
+            self.menu.is_active() && matches!(self.phase_controller.phase(), GamePhase::Playing);
+
+        // Snapshot kill/item counts before the tick to detect changes.
+        let pre_kills = self.gs.player.kill_count;
+        let pre_items = self.gs.player.item_count;
+
+        if !paused {
+            self.gs.tick(cmd, Some(&mut self.level));
+            self.player_view_height =
+                next_player_view_height(self.player_view_height, self.gs.player.is_dead());
+            self.tick_weapon_anim();
+            self.phase_controller.tick(&mut self.gs);
+        }
+        self.update_intermission_renderer();
+        if let Some(map_id) = self.phase_controller.should_load_map() {
+            self.load_map_after_intermission(map_id, PlayerStateCarry::Carry);
+        }
+
+        self.tick_sound_events();
+        self.tick_player_damage_and_logging(pre_kills, pre_items);
 
         // Update automap center to follow the player position.
         if self.automap.active {
