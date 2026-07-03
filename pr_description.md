@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+📖 Chapter: Documented the `doom-game::director` and `doom-renderer::sprite_clip` modules.
+🔦 Insight: Clarified what the AI Director does (difficulty adjustment based on player health) and explained sprite clip histories to avoid heap allocations. Added a module level document to `doom-app` to satisfy missing documentation warnings.
+🧪 Example: Added executable doctests for `AiDirector` and `SpriteClipHistory`.
+🖼️ Preview: Resolved all `missing_docs` and deprecation warnings across crates.
