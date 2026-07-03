@@ -1,11 +1,6 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+⚡ Bolt: [Reduce heap allocations in main render loop]
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+💡 What: Changed the initialization of `masked_columns` from `Vec::new()` to `Vec::with_capacity(SCREEN_W)` in the main render loop.
+🎯 Why: `masked_columns` stores the masked midtexture columns generated in the main wall pass. Pre-allocating it with a logical upper bound avoids dynamic heap resizing and multiple re-allocations per frame when storing masked spans.
+📊 Impact: Eliminates `masked_columns` reallocation overhead in the core rendering hot path.
+🔬 Measurement: Run `cargo clippy --all-targets --all-features` and `cargo test` to ensure performance check constraints pass.
