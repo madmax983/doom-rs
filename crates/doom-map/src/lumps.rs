@@ -657,7 +657,7 @@ impl Blockmap {
         let x_count = u16::from_le_bytes([data[4], data[5]]);
         let y_count = u16::from_le_bytes([data[6], data[7]]);
 
-        let n_blocks = x_count as usize * y_count as usize;
+        let n_blocks = (x_count as usize).saturating_mul(y_count as usize);
 
         // Prevent OOM from large x_count/y_count values by clamping to physical size
         let max_possible = data.len().saturating_sub(Self::HEADER_BYTES) / 2;
@@ -687,9 +687,15 @@ impl Blockmap {
     /// Returns an empty iterator if the block index is out of range or the
     /// offset points past the lump.
     pub fn block_linedefs(&self, col: usize, row: usize) -> impl Iterator<Item = u16> + '_ {
-        let idx = row * self.x_count as usize + col;
-        let offset = self.offsets.get(idx).copied().unwrap_or(0) as usize;
-        let byte_offset = offset * 2;
+        let idx = row
+            .checked_mul(self.x_count as usize)
+            .and_then(|r| r.checked_add(col));
+        let offset = idx.and_then(|i| self.offsets.get(i).copied());
+
+        let byte_offset = match offset {
+            Some(o) => o as usize * 2,
+            None => self.raw.len(), // out of bounds, so iteration will immediately return None
+        };
 
         // Block lists start with 0x0000 and are terminated by 0xFFFF.
         let data = &self.raw;

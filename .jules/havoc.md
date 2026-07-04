@@ -8,3 +8,6 @@
 **Havoc: Bounds-checking allocations**
 **Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
 **Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+## 2024-07-04 - Integer overflow during Blockmap coordinate mapping
+**Learning:** In Rust, blind multiplication like `row * self.x_count + col` could overflow if `row` or `col` values are exceptionally large, such as when parsing malicious inputs or running a fuzzer.
+**Action:** Always use `checked_mul` and `checked_add` when parsing binary data with user-provided offset/stride lengths, and fallback safely using `.and_then()` to handle None results.
