@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+💡 What: Replaced an intermediate `Vec` allocation with direct appending to a pre-allocated vector during BSP traversal.
+🎯 Why: The previous `ordered_subsector_segs` allocated a `Vec` using `.collect()` for every subsector processed during the rendering pass, creating thousands of unnecessary heap allocations per frame.
+📊 Impact: Eliminates a `Vec` allocation for every subsector in the view cone per frame.
+🔬 Measurement: Run `cargo bench` on `renderer_bench` to observe reduced allocator pressure.

@@ -44,22 +44,26 @@ pub fn collect_front_to_back_seg_indices(
         return (0..level.segs.len()).collect();
     };
 
+    let mut out = Vec::with_capacity(level.segs.len());
+    let mut seen = vec![false; level.segs.len()];
+
     // Trivial BSP: one subsector.
     if bsp.nodes().is_empty() {
         if let Some(ss) = bsp.ssectors().first() {
-            return ordered_subsector_segs(
+            append_ordered_subsector_segs(
                 level,
                 ss.first_seg as usize,
                 ss.seg_count as usize,
                 player_x,
                 player_y,
+                &mut seen,
+                &mut out,
             );
+            return out;
         }
         return (0..level.segs.len()).collect();
     }
 
-    let mut out = Vec::with_capacity(level.segs.len());
-    let mut seen = vec![false; level.segs.len()];
     let mut stack = Vec::new();
     let root = (bsp.nodes().len() - 1) as u16;
     stack.push(BspChild::Node(root));
@@ -68,19 +72,15 @@ pub fn collect_front_to_back_seg_indices(
         match child {
             BspChild::Subsector(ss_idx) => {
                 if let Some(ss) = bsp.ssectors().get(ss_idx as usize) {
-                    let segs = ordered_subsector_segs(
+                    append_ordered_subsector_segs(
                         level,
                         ss.first_seg as usize,
                         ss.seg_count as usize,
                         player_x,
                         player_y,
+                        &mut seen,
+                        &mut out,
                     );
-                    for seg_idx in segs {
-                        if !seen[seg_idx] {
-                            seen[seg_idx] = true;
-                            out.push(seg_idx);
-                        }
-                    }
                 }
             }
             BspChild::Node(node_idx) => {
@@ -114,20 +114,31 @@ pub fn collect_front_to_back_seg_indices(
     }
 }
 
-fn ordered_subsector_segs(
+/// Avoids an intermediate `.collect::<Vec<_>>()` by processing segments inline.
+fn append_ordered_subsector_segs(
     level: &Level,
     first_seg: usize,
     seg_count: usize,
     player_x: i32,
     player_y: i32,
-) -> Vec<usize> {
+    seen: &mut [bool],
+    out: &mut Vec<usize>,
+) {
     let end = first_seg.saturating_add(seg_count).min(level.segs.len());
-    let mut segs: Vec<usize> = (first_seg..end).collect();
-    if !subsector_needs_hardening_sort(level, first_seg, end - first_seg) {
-        return segs;
+    let needs_sort = subsector_needs_hardening_sort(level, first_seg, end - first_seg);
+
+    let start_idx = out.len();
+    #[allow(clippy::needless_range_loop)]
+    for seg_idx in first_seg..end {
+        if !seen[seg_idx] {
+            seen[seg_idx] = true;
+            out.push(seg_idx);
+        }
     }
-    segs.sort_by_key(|&seg_idx| seg_sort_key(level, seg_idx, player_x, player_y));
-    segs
+
+    if needs_sort {
+        out[start_idx..].sort_by_key(|&seg_idx| seg_sort_key(level, seg_idx, player_x, player_y));
+    }
 }
 
 fn subsector_needs_hardening_sort(level: &Level, first_seg: usize, seg_count: usize) -> bool {
