@@ -687,9 +687,17 @@ impl Blockmap {
     /// Returns an empty iterator if the block index is out of range or the
     /// offset points past the lump.
     pub fn block_linedefs(&self, col: usize, row: usize) -> impl Iterator<Item = u16> + '_ {
-        let idx = row * self.x_count as usize + col;
-        let offset = self.offsets.get(idx).copied().unwrap_or(0) as usize;
-        let byte_offset = offset * 2;
+        let (_idx, offset) = if col >= self.x_count as usize || row >= self.y_count as usize {
+            (0, 0)
+        } else {
+            let idx = row * self.x_count as usize + col;
+            (idx, self.offsets.get(idx).copied().unwrap_or(0) as usize)
+        };
+        let byte_offset = if col >= self.x_count as usize || row >= self.y_count as usize {
+            self.raw.len()
+        } else {
+            offset * 2
+        };
 
         // Block lists start with 0x0000 and are terminated by 0xFFFF.
         let data = &self.raw;
@@ -939,5 +947,21 @@ mod tests {
     #[test]
     fn bad_lump_length_errors() {
         assert!(Thing::parse_lump(&[0u8; 7]).is_err()); // 7 not divisible by 10
+    }
+
+    #[test]
+    fn blockmap_block_linedefs_out_of_bounds_returns_empty() {
+        let mut data = [0u8; 12];
+        data[0..2].copy_from_slice(&0i16.to_le_bytes()); // x
+        data[2..4].copy_from_slice(&0i16.to_le_bytes()); // y
+        data[4..6].copy_from_slice(&1u16.to_le_bytes()); // w
+        data[6..8].copy_from_slice(&1u16.to_le_bytes()); // h
+        data[8..10].copy_from_slice(&5u16.to_le_bytes()); // offset to list
+        data[10..12].copy_from_slice(&0xFFFFu16.to_le_bytes()); // terminator
+        let blockmap = Blockmap::parse_lump(&data).expect("value must exist in test");
+
+        // Out of bounds row/col
+        let mut it = blockmap.block_linedefs(10, 10);
+        assert_eq!(it.next(), None);
     }
 }
