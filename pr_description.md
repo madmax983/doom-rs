@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+💡 What: Replaced `let mut masked_columns = Vec::new()` with `Vec::with_capacity(SCREEN_W)` in `render_level_with_view_height_and_extra_light_and_fixed_colormap`.
+🎯 Why: `masked_columns` is allocated in the hot loop of the wall pass for every frame. Using `Vec::new()` causes repeated dynamic heap allocations when columns are pushed during rendering. `SCREEN_W` is the logical upper bound for the number of screen columns.
+📊 Impact: Removes initial dynamic memory reallocations for `masked_columns` per frame.
+🔬 Measurement: Run `cargo clippy` and `cargo test` to verify changes, test rendering performance visually or by checking allocations.
