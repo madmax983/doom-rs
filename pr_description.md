@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🚮 Smell: Boolean Blindness in `hitscan_shot_angle` where passing `true` obscures the intent of the accuracy parameter at the call site.
+✨ Solution: Extracted an explicit enum `HitscanAccuracy` (`AccurateFirstShot` and `Spread`) to strongly type the accuracy state and replace the boolean.
+🧼 Benefit: Improves call site readability and prevents semantic ambiguity by replacing raw boolean values with descriptive type variants.
+🛡️ Verification: Tests passed. No logic changed.
