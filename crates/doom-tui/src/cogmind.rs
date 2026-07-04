@@ -281,6 +281,24 @@ impl CogmindHud {
             Style::default().fg(Color::DarkGray),
         ));
 
+        // -- Style Rank (Optional) --
+        #[cfg(feature = "style_meter")]
+        if let Some(rank) = self.style_rank {
+            let rank_color = match rank {
+                doom_game::style::StyleRank::Dismal => Color::DarkGray,
+                doom_game::style::StyleRank::Crazy => Color::DarkGray,
+                doom_game::style::StyleRank::Badass => Color::Blue,
+                doom_game::style::StyleRank::Apocalyptic => Color::Blue,
+                doom_game::style::StyleRank::Savage => Color::Yellow,
+                doom_game::style::StyleRank::Sick => Color::Yellow,
+                doom_game::style::StyleRank::SmokinSexyStyle => Color::Red,
+            };
+
+            let style = Style::default().fg(rank_color).add_modifier(Modifier::BOLD);
+
+            spans.push(Span::styled(format!("  [Style: {}]", rank.name()), style));
+        }
+
         Line::from(spans)
     }
 }
@@ -594,6 +612,19 @@ mod tests {
         let line = hud.to_line();
         let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
         assert!(text.contains("E1M3"), "HUD should show level: {text}");
+    }
+
+    #[test]
+    #[cfg(feature = "style_meter")]
+    fn hud_to_line_contains_style_rank() {
+        let mut hud = make_test_hud();
+        hud.style_rank = Some(doom_game::style::StyleRank::Badass);
+        let line = hud.to_line();
+        let text: String = line.spans.iter().map(|s| s.content.as_ref()).collect();
+        assert!(
+            text.contains("[Style: Badass]"),
+            "HUD should show Badass rank: {text}"
+        );
     }
 
     #[test]
