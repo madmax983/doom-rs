@@ -164,7 +164,10 @@ fn run_blit_thread(
                                     past_first = true;
                                     continue;
                                 }
-                                f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                                #[allow(deprecated)]
+                                {
+                                    f.buffer_mut().cell_mut((x, y)).map(|c| c.set_skip(true));
+                                }
                             }
                         }
                     }
@@ -209,12 +212,6 @@ fn run_blit_thread(
 // ─────────────────────────────────────────────────────────────────────────────
 // Modifier polling
 // ─────────────────────────────────────────────────────────────────────────────
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-struct ModifierSnapshot {
-    shift: Option<bool>,
-    control: Option<bool>,
-}
 
 #[cfg(test)]
 static MODIFIER_SAMPLE_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -394,7 +391,7 @@ fn query_refresh_rate() -> u32 {
     }
 }
 
-fn sampled_modifier_snapshot() -> ModifierSnapshot {
+fn sampled_modifier_snapshot() -> crate::input::ModifierSnapshot {
     #[cfg(test)]
     MODIFIER_SAMPLE_COUNT.fetch_add(1, Ordering::Relaxed);
 
@@ -407,14 +404,14 @@ fn sampled_modifier_snapshot() -> ModifierSnapshot {
         let is_down =
             |virtual_key: i32| unsafe { (GetAsyncKeyState(virtual_key) as u16 & 0x8000) != 0 };
 
-        ModifierSnapshot {
+        crate::input::ModifierSnapshot {
             shift: Some(is_down(VK_SHIFT as i32)),
             control: Some(is_down(VK_CONTROL as i32)),
         }
     }
     #[cfg(not(target_os = "windows"))]
     {
-        ModifierSnapshot::default()
+        crate::input::ModifierSnapshot::default()
     }
 }
 
@@ -480,7 +477,7 @@ impl DoomEventLoop {
 
     fn sync_sampled_modifiers(&mut self) {
         let snapshot = sampled_modifier_snapshot();
-        self.input.sync_modifiers(snapshot.shift, snapshot.control);
+        self.input.sync_modifiers(snapshot);
     }
 
     fn drain_ready_tics<A: DoomApp>(&mut self, app: &mut A) {
@@ -741,10 +738,10 @@ impl DoomEventLoop {
         while event::poll(Duration::from_millis(0)).unwrap_or(false) {
             match event::read() {
                 Ok(event::Event::Key(key)) => {
-                    self.input.sync_modifiers(
-                        Some(key.modifiers.contains(KeyModifiers::SHIFT)),
-                        Some(key.modifiers.contains(KeyModifiers::CONTROL)),
-                    );
+                    self.input.sync_modifiers(crate::input::ModifierSnapshot {
+                        shift: Some(key.modifiers.contains(KeyModifiers::SHIFT)),
+                        control: Some(key.modifiers.contains(KeyModifiers::CONTROL)),
+                    });
 
                     match key.kind {
                         KeyEventKind::Press => {

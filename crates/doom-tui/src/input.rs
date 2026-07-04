@@ -18,6 +18,12 @@
 use crossterm::event::{KeyCode, ModifierKeyCode};
 use std::collections::HashSet;
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct ModifierSnapshot {
+    pub shift: Option<bool>,
+    pub control: Option<bool>,
+}
+
 /// Movement speed per tic when a walk key is held.
 pub const MOVE_SPEED: i8 = 50;
 /// Turn amount per tic when a turn key is held.
@@ -158,11 +164,11 @@ impl InputState {
     ///
     /// `None` leaves the existing state unchanged so callers can refresh only
     /// the modifiers they can observe on the current platform.
-    pub fn sync_modifiers(&mut self, shift: Option<bool>, control: Option<bool>) {
-        if let Some(down) = shift {
+    pub fn sync_modifiers(&mut self, snapshot: ModifierSnapshot) {
+        if let Some(down) = snapshot.shift {
             self.shift_held = down;
         }
-        if let Some(down) = control {
+        if let Some(down) = snapshot.control {
             self.control_held = down;
         }
     }
@@ -407,10 +413,16 @@ mod tests {
     #[test]
     fn sampled_control_state_sets_and_clears_attack_button() {
         let mut s = InputState::new();
-        s.sync_modifiers(None, Some(true));
+        s.sync_modifiers(ModifierSnapshot {
+            shift: None,
+            control: Some(true),
+        });
         assert_ne!(s.to_tic_input().buttons & buttons::BT_ATTACK, 0);
 
-        s.sync_modifiers(None, Some(false));
+        s.sync_modifiers(ModifierSnapshot {
+            shift: None,
+            control: Some(false),
+        });
         assert_eq!(s.to_tic_input().buttons & buttons::BT_ATTACK, 0);
     }
 

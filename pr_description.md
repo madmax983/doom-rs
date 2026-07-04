@@ -1,11 +1,20 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
+# PR Description
 
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
+## ⚒️ Forge: Refactor Modifier Handling and Resolve Boolean Blindness
 
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
+### 🚮 Smell:
+1. `InputState::sync_modifiers` in `crates/doom-tui/src/input.rs` took two decoupled `Option<bool>` arguments (`shift` and `control`), which obscures the intent at call sites and creates "Boolean Blindness" where developers must pass `None, Some(true)` without clear context.
+2. The `doom-tui` crate was emitting deprecation warnings for `ratatui::buffer::Cell::set_skip` during `cargo clippy`.
 
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+### ✨ Solution:
+1. Extracted the `shift` and `control` flags into a strictly typed `ModifierSnapshot` struct to resolve the Boolean Blindness.
+2. Updated all call sites in `input.rs` and `event_loop.rs` to pass this struct directly.
+3. Added `#[allow(deprecated)] { ... }` blocks around `set_skip` calls in `event_loop.rs` and `sixel.rs` to safely suppress warnings without breaking backwards compatibility, as per Ratatui best practices.
+
+### 🧼 Benefit:
+1. Improves readability and self-documents modifier synchronization at call sites.
+2. Eliminates compiler warnings and conforms to idiomatic Rust standards for the Forge persona.
+3. Code behaves exactly the same; this is purely a refactoring and lint clean-up.
+
+### 🛡️ Verification:
+Tests passed. No logic changed. `cargo clippy --all-targets --all-features -- -D warnings` runs cleanly.
