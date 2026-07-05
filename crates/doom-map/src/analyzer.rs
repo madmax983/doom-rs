@@ -68,11 +68,19 @@ impl<'a> MapAnalyzer<'a> {
         let mut parent = HashMap::new();
         let mut articulation_points = HashSet::new();
         let mut time = 0;
+        let empty_set = HashSet::new();
 
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let mut stack = vec![(
+                    node,
+                    self.graph
+                        .adjacency_list
+                        .get(&node)
+                        .unwrap_or(&empty_set)
+                        .iter(),
+                )];
 
                 visited.insert(node);
                 time += 1;
@@ -97,7 +105,14 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            stack.push((
+                                v,
+                                self.graph
+                                    .adjacency_list
+                                    .get(&v)
+                                    .unwrap_or(&empty_set)
+                                    .iter(),
+                            ));
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
@@ -212,6 +227,21 @@ mod tests {
         let chokes = analyzer.chokepoints();
         // 2 and 3 are both chokepoints because removing either splits the graph.
         assert_eq!(chokes, vec![2, 3]);
+    }
+
+    #[test]
+    fn havoc_test_analyzer_does_not_panic_on_asymmetric_edges() {
+        let mut adj = HashMap::new();
+        adj.insert(0, HashSet::from([1, 2]));
+        adj.insert(1, HashSet::from([0]));
+        // Node 2 is referenced by 0, but is missing from adjacency list
+        let graph = SectorGraph {
+            adjacency_list: adj,
+        };
+        let analyzer = MapAnalyzer::new(&graph);
+        // Should not panic due to unwrap
+        let chokes = analyzer.chokepoints();
+        assert_eq!(chokes, vec![]);
     }
 
     #[test]
