@@ -982,13 +982,15 @@ mod tests {
     #[test]
     fn tick_world_processes_scrolling_walls() {
         let mut gs = make_game_state();
-        gs.movers.scrolling_walls.push(crate::state::ScrollingWall {
-            linedef_index: 0,
-            speed_x: 1,
-            speed_y: 0,
-            accumulated_x: 0,
-            accumulated_y: 0,
-        });
+        gs.movers
+            .scrolling_walls
+            .push(crate::movers::ScrollingWall {
+                linedef_index: 0,
+                speed_x: 1,
+                speed_y: 0,
+                accumulated_x: 0,
+                accumulated_y: 0,
+            });
 
         tick_world(&mut gs, None);
 
@@ -2231,13 +2233,15 @@ mod tests {
         let missile_handle = gs.mobjslab.alloc(missile);
 
         // Add a scrolling wall.
-        gs.movers.scrolling_walls.push(crate::state::ScrollingWall {
-            linedef_index: 0,
-            speed_x: 2,
-            speed_y: 0,
-            accumulated_x: 0,
-            accumulated_y: 0,
-        });
+        gs.movers
+            .scrolling_walls
+            .push(crate::movers::ScrollingWall {
+                linedef_index: 0,
+                speed_x: 2,
+                speed_y: 0,
+                accumulated_x: 0,
+                accumulated_y: 0,
+            });
 
         tick_world(&mut gs, None);
 

@@ -12,13 +12,13 @@ use doom_types::limits::{NUM_AMMO, NUM_WEAPONS};
 use doom_types::{Bam, Fixed16_16};
 
 use crate::mobj::{Mobj, MobjHandle, MobjSlab, StateNum};
+use crate::movers::{
+    CeilingMover, CeilingType, ConveyorBelt, DoorMover, FloorMover, FloorType, LiftMover,
+    LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform, PlatformStatus, ScrollingWall,
+};
 use crate::player::{PlayerState, PspriteState};
 use crate::savegame_vanilla;
-use crate::state::{
-    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
-    GameState, LiftMover, LiftStatus, LightSpecial, MoveDirection, PerpetualPlatform,
-    PlatformStatus, ScrollingWall,
-};
+use crate::state::{ExitRequest, GameState};
 use doom_types::limits::{NUM_POWERS, NUM_PSPRITES};
 use doom_types::mobj_kind::MobjKind;
 use doom_types::weapons::WeaponType;
@@ -692,7 +692,7 @@ fn write_floor_mover(w: &mut WriteCursor, fm: &FloorMover) {
     w.write_i16(fm.return_height);
     w.write_bool(fm.waiting);
     w.write_i32(fm.wait_remaining);
-    w.write_bool(fm.crush == crate::state::CrushBehavior::Crush);
+    w.write_bool(fm.crush == crate::movers::CrushBehavior::Crush);
     w.write_u16(fm.tag);
     write_floor_type(w, fm.floor_type);
 }
@@ -708,9 +708,9 @@ fn read_floor_mover(r: &mut ReadCursor<'_>) -> Result<FloorMover, SaveError> {
         waiting: r.read_bool()?,
         wait_remaining: r.read_i32()?,
         crush: if r.read_bool()? {
-            crate::state::CrushBehavior::Crush
+            crate::movers::CrushBehavior::Crush
         } else {
-            crate::state::CrushBehavior::NoCrush
+            crate::movers::CrushBehavior::NoCrush
         },
         tag: r.read_u16()?,
         floor_type: read_floor_type(r)?,
@@ -1632,7 +1632,7 @@ mod tests {
             return_height: 0,
             waiting: false,
             wait_remaining: 0,
-            crush: crate::state::CrushBehavior::Crush,
+            crush: crate::movers::CrushBehavior::Crush,
             tag: 7,
             floor_type: FloorType::LowerToLowest,
         });
@@ -1645,7 +1645,7 @@ mod tests {
             loaded.state.movers.active_floors[0].direction,
             MoveDirection::Down
         );
-        assert!(loaded.state.movers.active_floors[0].crush == crate::state::CrushBehavior::Crush);
+        assert!(loaded.state.movers.active_floors[0].crush == crate::movers::CrushBehavior::Crush);
     }
 
     // --- Test 18: save_slot_filename format ---
