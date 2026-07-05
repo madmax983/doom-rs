@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Optimized data structures for keeping track of rendering visibility over layered portals.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;

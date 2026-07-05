@@ -54,6 +54,7 @@ pub mod weapon_fire;
 pub mod weapons;
 
 #[cfg(feature = "director")]
+/// Dynamic difficulty adjustment system.
 pub mod director;
 #[cfg(feature = "director")]
 pub use director::*;
