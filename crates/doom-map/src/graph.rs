@@ -10,9 +10,14 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 /// A topological graph representing the connectivity of sectors in a map.
 /// Sectors are nodes, and two-sided linedefs acting as portals are edges.
+///
+/// Note on Performance: The adjacency list uses a `Vec` rather than a `HashMap`
+/// because sector indices are dense, sequential integers starting from 0.
+/// Pre-allocating a `Vec` based on the number of sectors avoids hashing overhead
+/// and unnecessary heap allocations during graph traversal and analysis.
 pub struct SectorGraph {
     /// Adjacency list: sector_index -> list of connected sector_indices
-    pub adjacency_list: HashMap<usize, HashSet<usize>>,
+    pub adjacency_list: Vec<HashSet<usize>>,
 }
 
 impl SectorGraph {
@@ -21,12 +26,7 @@ impl SectorGraph {
     /// one sector to another via their front and back sidedefs.
     #[must_use]
     pub fn build(level: &Level) -> Self {
-        let mut adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::new();
-
-        // Initialize empty sets for all sectors
-        for i in 0..level.sectors.len() {
-            adjacency_list.insert(i, HashSet::new());
-        }
+        let mut adjacency_list = vec![HashSet::new(); level.sectors.len()];
 
         for ld in &level.linedefs {
             if ld.is_two_sided() {
@@ -38,10 +38,10 @@ impl SectorGraph {
                     let s2 = left_sd.sector as usize;
 
                     if s1 != s2 {
-                        if let Some(edges) = adjacency_list.get_mut(&s1) {
+                        if let Some(edges) = adjacency_list.get_mut(s1) {
                             edges.insert(s2);
                         }
-                        if let Some(edges) = adjacency_list.get_mut(&s2) {
+                        if let Some(edges) = adjacency_list.get_mut(s2) {
                             edges.insert(s1);
                         }
                     }
@@ -80,7 +80,7 @@ impl SectorGraph {
                 return Some(path);
             }
 
-            if let Some(neighbors) = self.adjacency_list.get(&current) {
+            if let Some(neighbors) = self.adjacency_list.get(current) {
                 for &neighbor in neighbors {
                     if !visited.contains(&neighbor) {
                         visited.insert(neighbor);
@@ -100,7 +100,7 @@ impl SectorGraph {
         let mut dot = String::from("digraph SectorGraph {\n");
         dot.push_str("    node [shape=circle, style=filled, fillcolor=lightblue];\n");
 
-        for (&node, neighbors) in &self.adjacency_list {
+        for (node, neighbors) in self.adjacency_list.iter().enumerate() {
             if neighbors.is_empty() {
                 dot.push_str(&format!("    {};\n", node));
             } else {

@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Zero-Cost Graph Building using Vec instead of HashMap**
+**Learning:** `SectorGraph::build` was using a `HashMap<usize, HashSet<usize>>` where the keys are dense, sequential 0-indexed integer identifiers corresponding directly to `level.sectors`. Using a HashMap here incurs unnecessary heap allocations and hashing overhead.
+**Action:** When optimizing data structures mapping dense, sequential 0-indexed keys (like sector indices), replace `HashMap<usize, T>` with `Vec<T>`, pre-allocating the vector using `vec![T::default(); len]`.
