@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Stop NUM_POWERS and NUM_PSPRITES Re-export Leak]**
+**Tangle:** `doom-game/src/player.rs` unnecessarily re-exported `doom_types::limits::{NUM_POWERS, NUM_PSPRITES}` via `pub use`. This broke strict module boundaries and leaked basic limit constants through the game logic crate rather than enforcing direct usage of the foundational `doom-types` crate.
+**Blueprint:** Removed the `pub use` re-exports from `doom-game/src/player.rs` and replaced them with internal `use` statements.
