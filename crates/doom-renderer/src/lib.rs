@@ -61,7 +61,7 @@ pub use menu_render::{
     draw_overlay_patch, draw_title_screen, draw_title_screen_wad,
 };
 pub use palette::{PaletteLut, Rgb};
-pub use palette_flash::{PaletteFlash, PaletteFlashState};
+pub use palette_flash::PaletteFlashState;
 pub use patch_cache::PatchCache;
 pub use render::{
     MaskedColumnDraw, PLAYER_HEIGHT, RenderOut, draw_masked_columns, render_level,

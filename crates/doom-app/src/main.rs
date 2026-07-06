@@ -49,7 +49,7 @@ use doom_map::Level;
 use doom_renderer::IDENTITY_COLORMAP;
 use doom_renderer::{
     ActorRenderInfo, AnimState, BitmapFont, ColormapCache, FlatCache, Framebuffer,
-    IntermissionRenderer, PLAYER_HEIGHT, PaletteFlash, PaletteLut, PatchCache, RenderOut,
+    IntermissionRenderer, PLAYER_HEIGHT, PaletteFlashState, PaletteLut, PatchCache, RenderOut,
     SpriteCache, SpriteClip, TextureCache, WadFont, WeaponAnimState, WeaponTransition,
     draw_automap_ex, draw_finale_wad, draw_intermission, draw_intermission_wad, draw_menu_wad,
     draw_status_bar_wad, draw_title_screen_wad, draw_weapon_animated_with_override,
@@ -281,7 +281,7 @@ pub(crate) struct DoomGame {
     /// Animated texture state (flat + wall animation sequences, ticked per tic).
     anim_state: AnimState,
     /// Palette flash controller (pain/pickup/rad-suit full-screen tints).
-    palette_flash: PaletteFlash,
+    palette_flash: PaletteFlashState,
     /// Switch texture pair lookup (SW1xxx <-> SW2xxx bidirectional).
     #[cfg(test)]
     switch_list: SwitchList,
@@ -440,7 +440,7 @@ impl DoomGame {
             colormap_cache,
             compat,
             anim_state: AnimState::new(),
-            palette_flash: PaletteFlash::new(),
+            palette_flash: PaletteFlashState::new(),
             #[cfg(test)]
             switch_list: SwitchList::new(),
             prev_health: initial_health,
@@ -1223,15 +1223,25 @@ impl DoomApp for DoomGame {
         // Advance palette flash timer (pain/pickup/rad-suit tints).
         self.palette_flash.tick();
 
+        // Synchronize state-based flashes.
+        let rad_suit_tics = self.gs.player.powers[doom_game::player::powers::PW_IRONFEET];
+        self.palette_flash.set_rad_suit(rad_suit_tics as i32);
+        let berserk_tics = self.gs.player.powers[doom_game::player::powers::PW_STRENGTH];
+        self.palette_flash.set_berserk(berserk_tics as i32);
+
+        // If the player picked up an item this tic, trigger bonus flash.
+        if self.gs.player.bonus_count > 0 {
+            self.palette_flash.add_bonus();
+            self.gs.player.bonus_count = 0; // Consume the event
+        }
+
         // Detect player damage and trigger a pain flash + hurt sound.
         {
             let cur_health = self.gs.player.health();
             if cur_health < self.prev_health {
                 let damage = self.prev_health - cur_health;
-                // Pain palette indices 1-8 (increasing red tint).
-                // Simple formula: one palette step per 8 HP lost, clamped.
-                let palette = ((damage / 8) as usize).clamp(1, 8);
-                self.palette_flash.trigger(palette, 12);
+                self.palette_flash.add_pain(damage);
+
                 // Signal face FSM about damage.
                 self.face_state.on_damage(damage, Bam::ZERO);
                 // Play DSPLPAIN on any damage taken.
@@ -4550,7 +4560,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Test 14: DoomGame creates with PaletteFlash initialized
+    // Test 14: DoomGame creates with PaletteFlashState initialized
     // -----------------------------------------------------------------------
 
     #[test]
@@ -4559,12 +4569,12 @@ mod tests {
         assert_eq!(
             game.palette_flash.active_palette(),
             0,
-            "PaletteFlash must start at palette 0 (no flash)"
+            "PaletteFlashState must start at palette 0 (no flash)"
         );
         assert_eq!(
-            game.palette_flash.remaining(),
+            game.palette_flash.pain_count(),
             0,
-            "PaletteFlash remaining must be 0 at creation"
+            "PaletteFlashState pain_count must be 0 at creation"
         );
     }
 
@@ -4583,27 +4593,27 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Test 16: PaletteFlash tick integration (trigger -> non-zero -> decays)
+    // Test 16: PaletteFlash tick integration (add_pain -> non-zero -> decays)
     // -----------------------------------------------------------------------
 
     #[test]
     fn palette_flash_tick_integration() {
         let mut game = make_doom_game();
 
-        // Manually trigger a pain flash (palette 4, 3 tics duration).
-        game.palette_flash.trigger(4, 3);
+        // Manually trigger a pain flash (32 damage maps to palette 4).
+        game.palette_flash.add_pain(32);
         assert_eq!(
             game.active_palette(),
             4,
             "active_palette must be 4 after trigger"
         );
 
-        // Tick 3 times (palette_flash.tick is called inside game.tick).
-        for _ in 0..3 {
+        // Tick 32 times (palette_flash.tick is called inside game.tick).
+        for _ in 0..32 {
             game.tick(TicInput::default());
         }
 
-        // After 3 tics the flash should have expired back to 0.
+        // After 32 tics the flash should have expired back to 0.
         assert_eq!(
             game.active_palette(),
             0,
@@ -4684,7 +4694,7 @@ mod tests {
             "pain flash palette should be 3 for 30 damage (30/8 = 3)"
         );
         assert!(
-            game.palette_flash.remaining() > 0,
+            game.palette_flash.pain_count() > 0,
             "pain flash should have remaining tics"
         );
     }
@@ -4733,7 +4743,7 @@ mod tests {
 
     #[test]
     fn pain_flash_palette_scales_with_damage() {
-        // Small damage (7 HP): palette = max(7/8, 1) = 1
+        // Small damage (7 HP): palette = max(7*8/64, 1) = 1
         {
             let mut game = make_doom_game();
             let handle = game.gs.player.handle;
@@ -4745,11 +4755,11 @@ mod tests {
             assert_eq!(
                 game.palette_flash.active_palette(),
                 1,
-                "7 damage should give palette 1 (7/8=0, clamped to 1)"
+                "7 damage should give palette 1 (7*8/64=0, clamped to 1)"
             );
         }
 
-        // Large damage (80 HP): palette = min(80/8, 8) = 8
+        // Large damage (80 HP): palette = min(80*8/64, 8) = 8
         {
             let mut game = make_doom_game();
             let handle = game.gs.player.handle;
@@ -4761,7 +4771,7 @@ mod tests {
             assert_eq!(
                 game.palette_flash.active_palette(),
                 8,
-                "80 damage should give palette 8 (80/8=10, clamped to 8)"
+                "80 damage should give palette 8 (80*8/64=10, clamped to 8)"
             );
         }
     }
