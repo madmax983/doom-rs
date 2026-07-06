@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-04-26 - [Blockmap out-of-bounds indexing fallback panic risk]
+**Learning:** `Blockmap::block_linedefs` used `.unwrap_or(0)` for handling out of bounds block grid accesses. Because offset 0 is the start of the blockmap header (origin X/Y coordinates), it would erroneously parse these coordinates as linedef IDs instead of returning an empty iterator.
+**Action:** Always check offset mapping arrays against `None` explicitly rather than defaulting to `0` which often points to valid but unrelated binary data, returning empty Iterators or `None` on boundary overflow.

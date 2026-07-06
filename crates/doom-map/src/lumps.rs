@@ -688,26 +688,32 @@ impl Blockmap {
     /// offset points past the lump.
     pub fn block_linedefs(&self, col: usize, row: usize) -> impl Iterator<Item = u16> + '_ {
         let idx = row * self.x_count as usize + col;
-        let offset = self.offsets.get(idx).copied().unwrap_or(0) as usize;
-        let byte_offset = offset * 2;
+        let offset = self.offsets.get(idx).copied();
 
-        // Block lists start with 0x0000 and are terminated by 0xFFFF.
-        let data = &self.raw;
-        let mut pos = byte_offset;
-        // Skip the leading 0x0000 sentinel if present.
-        if pos + 1 < data.len() {
-            let first = u16::from_le_bytes([data[pos], data[pos + 1]]);
-            if first == 0x0000 {
-                pos += 2;
+        let mut pos = if let Some(off) = offset {
+            let byte_offset = (off as usize) * 2;
+            let data = &self.raw;
+            let mut p = byte_offset;
+            // Skip the leading 0x0000 sentinel if present.
+            if p + 1 < data.len() {
+                let first = u16::from_le_bytes([data[p], data[p + 1]]);
+                if first == 0x0000 {
+                    p += 2;
+                }
             }
-        }
+            Some(p)
+        } else {
+            None
+        };
 
         std::iter::from_fn(move || {
-            if pos + 1 >= data.len() {
+            let p = pos?;
+            let data = &self.raw;
+            if p + 1 >= data.len() {
                 return None;
             }
-            let val = u16::from_le_bytes([data[pos], data[pos + 1]]);
-            pos += 2;
+            let val = u16::from_le_bytes([data[p], data[p + 1]]);
+            pos = Some(p + 2);
             if val == 0xFFFF { None } else { Some(val) }
         })
     }
@@ -899,6 +905,25 @@ mod tests {
         assert_eq!(verts.len(), 2);
         assert_eq!(verts[0], Vertex { x: -10, y: 20 });
         assert_eq!(verts[1], Vertex { x: 30, y: -40 });
+    }
+
+    #[test]
+    fn blockmap_out_of_bounds_returns_empty() {
+        let mut data = vec![0u8; 14];
+        // Setup minimal blockmap: origin (0, 0), columns=1, rows=1
+        data[4..6].copy_from_slice(&1u16.to_le_bytes());
+        data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        data[8..10].copy_from_slice(&5u16.to_le_bytes()); // offset
+        data[10..12].copy_from_slice(&0u16.to_le_bytes()); // list start
+        data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes()); // list end
+
+        let blockmap = Blockmap::parse_lump(&data).expect("value must exist in test");
+        // Within bounds
+        let mut it = blockmap.block_linedefs(0, 0);
+        assert_eq!(it.next(), None);
+        // Out of bounds: should not fallback to offset 0 (which contains origin)
+        let mut it2 = blockmap.block_linedefs(1, 1);
+        assert_eq!(it2.next(), None);
     }
 
     #[test]
