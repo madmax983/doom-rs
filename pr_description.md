@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🧨 **The Trigger:** An out of bounds index into blockmap logic using `.unwrap_or(0)` as fallback for missing offsets yields 0 and parses the blockmap map properties header as map data.
+📉 **The Stack Trace:** (OOB Read / Infinite Loop / Logic Bug)
+🧪 **Reproduction:** Call `blockmap.block_linedefs(1, 1)` with a `1x1` size map.
+😈 **Comment:** You assumed the buffer would always have valid offsets or 0 meant empty. You were wrong.

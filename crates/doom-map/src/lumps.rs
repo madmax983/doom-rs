@@ -688,17 +688,18 @@ impl Blockmap {
     /// offset points past the lump.
     pub fn block_linedefs(&self, col: usize, row: usize) -> impl Iterator<Item = u16> + '_ {
         let idx = row * self.x_count as usize + col;
-        let offset = self.offsets.get(idx).copied().unwrap_or(0) as usize;
-        let byte_offset = offset * 2;
-
-        // Block lists start with 0x0000 and are terminated by 0xFFFF.
         let data = &self.raw;
-        let mut pos = byte_offset;
-        // Skip the leading 0x0000 sentinel if present.
-        if pos + 1 < data.len() {
-            let first = u16::from_le_bytes([data[pos], data[pos + 1]]);
-            if first == 0x0000 {
-                pos += 2;
+        let mut pos = data.len();
+
+        if let Some(&offset) = self.offsets.get(idx) {
+            let byte_offset = offset as usize * 2;
+            pos = byte_offset;
+            // Skip the leading 0x0000 sentinel if present.
+            if pos + 1 < data.len() {
+                let first = u16::from_le_bytes([data[pos], data[pos + 1]]);
+                if first == 0x0000 {
+                    pos += 2;
+                }
             }
         }
 
@@ -872,6 +873,21 @@ mod prop_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn havoc_block_linedefs_oob_reads_header() {
+        let data: Vec<u8> = vec![
+            0xAA, 0xAA, 0xBB, 0xBB, // x, y (not valid sentinel)
+            0x01, 0x00, 0x01, 0x00, // w, h (1x1)
+            0x05, 0x00,             // offset to block list
+            0x00, 0x00, 0xFF, 0xFF, // Valid list
+        ];
+        let blockmap = Blockmap::parse_lump(&data).unwrap();
+        // Out of bounds read: col=1, row=1 -> idx=2.
+        let mut iter = blockmap.block_linedefs(1, 1);
+
+        assert_eq!(iter.next(), None);
+    }
 
     #[test]
     fn parse_single_thing() {
