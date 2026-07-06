@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Tracks portal depths to slice tall sprites that intersect varying floor/ceiling heights.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;

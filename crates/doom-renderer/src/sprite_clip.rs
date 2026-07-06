@@ -15,6 +15,13 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new, empty sprite clip history.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// let history = SpriteClipHistory::new();
+    /// ```
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {
@@ -26,6 +33,16 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Records a new portal transition to slice a sprite.
+    /// Drops the step if the fixed-capacity history is full.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 50, silhouette_height: 64.0 });
+    /// ```
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +52,16 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Inspects the most recent clip step to avoid recording duplicates.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 50, silhouette_height: 64.0 });
+    /// assert!(history.last().is_some());
+    /// ```
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +70,16 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Streams portal depths to slice tall sprites during masked rendering.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 50, silhouette_height: 64.0 });
+    /// assert_eq!(history.iter().count(), 1);
+    /// ```
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }
