@@ -1,11 +1,4 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+🎯 Target: Player ammo fetching, vanilla savegame version string parsing, and doomrs savegame description loading.
+💣 Risk: Untested `unwrap_or()` fallback logic obscuring potential panics or silent data corruption during out-of-bounds indexing or malformed UTF-8 processing.
+🧪 Strategy: Added targeted unit tests to verify `PlayerState::ammo` handles invalid index 999, `version_string` safely parses buffers without null terminators, and `load_game` gracefully defaults to `""` on invalid UTF-8 descriptions.
+🔬 Verification: Run `cargo test -p doom-game` to verify all fallback branches execute without panics.

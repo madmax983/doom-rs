@@ -107,3 +107,20 @@ fn version_string(bytes: &[u8]) -> Option<&str> {
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     core::str::from_utf8(&bytes[..end]).ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_string_missing_null_terminator() {
+        let bytes = b"version1.0";
+        assert_eq!(version_string(bytes), Some("version1.0"));
+    }
+
+    #[test]
+    fn version_string_with_null_terminator() {
+        let bytes = b"version1.0\0ignored";
+        assert_eq!(version_string(bytes), Some("version1.0"));
+    }
+}

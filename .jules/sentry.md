@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-20 - Uncovered fallback branches in unwrap_or
+**Learning:** Fallback branches on unwrap_or(0) or unwrap_or("") handling out-of-bounds array access and invalid utf-8 sequences were not explicitly tested, presenting hidden edge cases.
+**Action:** Always write tests targeting the specific failure paths and fallback values when using unwrap_or to protect against panic regressions.

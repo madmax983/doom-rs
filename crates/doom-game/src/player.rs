@@ -775,3 +775,14 @@ mod proptests {
         }
     }
 }
+#[cfg(test)]
+mod tests_sentry {
+    use super::*;
+
+    #[test]
+    fn player_ammo_out_of_bounds_fallback() {
+        let mut p = PlayerState::default();
+        assert_eq!(p.ammo(999), 0);
+        assert!(!p.give_ammo(999, 10));
+    }
+}

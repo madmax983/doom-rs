@@ -1909,6 +1909,26 @@ mod tests {
     }
 
     #[test]
+    fn load_game_with_invalid_utf8_description() {
+        let gs = test_game_state();
+        let valid_data = save_game(&gs, &test_level_name(), 3, "Valid String");
+        let mut data = valid_data.clone();
+
+        // In doomrs format, the description is written directly as a 24-byte array at offset 17.
+        // Magic (4), Version (4), LevelName (8), Skill (1), LevelTime (4) -> Wait, 4+4+8+1+4 = 21.
+        let desc_start = 21;
+        data[desc_start] = 0x80; // Invalid UTF-8 byte
+
+        if let Ok(loaded) = load_game(&data) {
+            let desc = &loaded.header.description;
+            let desc_str = core::str::from_utf8(desc)
+                .unwrap_or("")
+                .trim_end_matches('\0');
+            assert_eq!(desc_str, "");
+        }
+    }
+
+    #[test]
     fn save_header_description() {
         let gs = test_game_state();
         let data = save_game(&gs, &test_level_name(), 3, "My Cool Save");
