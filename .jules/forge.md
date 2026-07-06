@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactored Boolean Blindness in MapId next_map**
+**Learning:** Functions like `next_map(&self, secret_exit: bool)` suffer from Boolean Blindness, hiding the true intent at the call site and allowing impossible or unverified boolean state transitions.
+**Action:** Replace `bool` parameters in routing functions with domain-specific enums like `ExitRequest` (`Normal` vs `Secret`) to strongly type API boundaries and self-document the code at call sites.
