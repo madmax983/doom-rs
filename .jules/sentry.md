@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-19 - Blockmap out-of-bounds indexing fallback panic fix
+**Learning:** `Blockmap::block_linedefs` used `.unwrap_or(0)` as a fallback when an out-of-bounds block was requested. This caused the method to silently return an iterator that read the blockmap header at offset 0 instead of gracefully failing.
+**Action:** When handling out-of-bounds index queries in binary lump parsing, explicitly handle the missing case and return an empty collection/iterator rather than falling back to offset 0.

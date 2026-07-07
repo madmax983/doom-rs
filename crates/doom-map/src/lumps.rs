@@ -688,12 +688,15 @@ impl Blockmap {
     /// offset points past the lump.
     pub fn block_linedefs(&self, col: usize, row: usize) -> impl Iterator<Item = u16> + '_ {
         let idx = row * self.x_count as usize + col;
-        let offset = self.offsets.get(idx).copied().unwrap_or(0) as usize;
-        let byte_offset = offset * 2;
+        let offset = self.offsets.get(idx).copied();
+
+        let mut pos = match offset {
+            Some(o) => (o as usize) * 2,
+            None => self.raw.len(), // Out of bounds, start at end to return empty iterator
+        };
 
         // Block lists start with 0x0000 and are terminated by 0xFFFF.
         let data = &self.raw;
-        let mut pos = byte_offset;
         // Skip the leading 0x0000 sentinel if present.
         if pos + 1 < data.len() {
             let first = u16::from_le_bytes([data[pos], data[pos + 1]]);
@@ -939,5 +942,33 @@ mod tests {
     #[test]
     fn bad_lump_length_errors() {
         assert!(Thing::parse_lump(&[0u8; 7]).is_err()); // 7 not divisible by 10
+    }
+
+    #[test]
+    fn blockmap_out_of_bounds_returns_empty_iterator() {
+        // Construct a dummy blockmap with 1x1 size (header is 4 words = 8 bytes)
+        // Header: x_origin(0), y_origin(0), x_count(1), y_count(1)
+        // Offsets: offset 0 points to word 5 (byte 10)
+        // Data: block starts at byte 10 with 0x0000, 0xFFFF
+        let mut data = [0u8; 14];
+        data[0..2].copy_from_slice(&0i16.to_le_bytes()); // x_origin
+        data[2..4].copy_from_slice(&0i16.to_le_bytes()); // y_origin
+        data[4..6].copy_from_slice(&1i16.to_le_bytes()); // x_count
+        data[6..8].copy_from_slice(&1i16.to_le_bytes()); // y_count
+        data[8..10].copy_from_slice(&5u16.to_le_bytes()); // offset to block list
+        data[10..12].copy_from_slice(&0u16.to_le_bytes()); // block list start (0x0000)
+        data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes()); // block list end (0xFFFF)
+
+        let bm = Blockmap::parse_lump(&data).expect("value must exist in test");
+
+        // Out of bounds queries should return an empty iterator, not the header data at offset 0
+        let mut iter1 = bm.block_linedefs(1, 0);
+        assert_eq!(iter1.next(), None);
+
+        let mut iter2 = bm.block_linedefs(0, 1);
+        assert_eq!(iter2.next(), None);
+
+        let mut iter3 = bm.block_linedefs(5, 5);
+        assert_eq!(iter3.next(), None);
     }
 }
