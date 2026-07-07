@@ -429,7 +429,7 @@ mod tests {
     #[test]
     fn connect_to_invalid_address_fails() {
         let mut transport = NetTransport::bind("127.0.0.1:0").expect("value must exist in test");
-        let err = transport.connect_to("invalid").unwrap_err();
+        let err = transport.connect_to("invalid").expect_err("should fail on invalid input");
         assert_eq!(err.kind(), io::ErrorKind::InvalidInput);
     }
 
@@ -443,7 +443,7 @@ mod tests {
             state_checksum: 0,
             cmds: [TicCmd::default(); MAX_PLAYERS],
         };
-        let err = transport.send_packet(&pkt).unwrap_err();
+        let err = transport.send_packet(&pkt).expect_err("should fail when sending on unconnected socket");
         // Socket behavior without connect depends on the OS.
         // It could be NotConnected, ConnectionRefused, AddrNotAvailable, InvalidInput
         // We just care that it correctly returned an error rather than panicking.

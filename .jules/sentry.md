@@ -56,3 +56,10 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2026-05-10 - Doom-net uses unwraps in assertions
+**Learning:** We replaced `.unwrap_err()` with `.expect_err()` to meet the Sentry rule in `transport.rs`.
+**Action:** Consistently replace `.unwrap_err()` in addition to `.unwrap()` inside test assertions.
+
+## 2026-05-11 - Panic on out-of-bounds queries in linedef indices
+**Learning:** `Blockmap::block_linedefs` in `doom-map` used `.unwrap_or(0)` for an out of bounds query fallback, returning an invalid slice iteration from offset 0, which could cause test/runtime panics when analyzing bad input arrays in binary lump parsing.
+**Action:** Always safely check `get(idx)` bounds and return an empty iterator (e.g., `std::iter::from_fn(|| None)`) or `None` instead of `unwrap_or(0)` fallback values when the index implies bad array sizes.
