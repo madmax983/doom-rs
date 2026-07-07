@@ -54,6 +54,7 @@ pub mod weapon_fire;
 pub mod weapons;
 
 #[cfg(feature = "director")]
+/// AI Director for dynamic difficulty scaling and spawning pacing.
 pub mod director;
 #[cfg(feature = "director")]
 pub use director::*;

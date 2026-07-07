@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Tracks sprite silhouettes against portal boundaries during depth rendering.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
