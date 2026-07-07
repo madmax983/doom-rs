@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Manages sprite occlusion arrays to prevent sprites from bleeding through solid walls.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
