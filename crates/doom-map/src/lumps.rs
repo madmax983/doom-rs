@@ -688,19 +688,22 @@ impl Blockmap {
     /// offset points past the lump.
     pub fn block_linedefs(&self, col: usize, row: usize) -> impl Iterator<Item = u16> + '_ {
         let idx = row * self.x_count as usize + col;
-        let offset = self.offsets.get(idx).copied().unwrap_or(0) as usize;
-        let byte_offset = offset * 2;
-
-        // Block lists start with 0x0000 and are terminated by 0xFFFF.
         let data = &self.raw;
-        let mut pos = byte_offset;
-        // Skip the leading 0x0000 sentinel if present.
-        if pos + 1 < data.len() {
-            let first = u16::from_le_bytes([data[pos], data[pos + 1]]);
-            if first == 0x0000 {
-                pos += 2;
+
+        let mut pos = if let Some(&o) = self.offsets.get(idx) {
+            let mut p = (o as usize) * 2;
+            // Skip the leading 0x0000 sentinel if present.
+            if p + 1 < data.len() {
+                let first = u16::from_le_bytes([data[p], data[p + 1]]);
+                if first == 0x0000 {
+                    p += 2;
+                }
             }
-        }
+            p
+        } else {
+            // Point past the end of the data to yield an empty iterator
+            data.len()
+        };
 
         std::iter::from_fn(move || {
             if pos + 1 >= data.len() {
@@ -872,6 +875,25 @@ mod prop_tests {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn havoc_blockmap_oob() {
+        // Havoc 👺: Out-of-bounds blockmap queries should return empty, not header garbage
+        let data: Vec<u8> = vec![
+            0, 0, 0, 0, // origin
+            1, 0, // cols = 1
+            1, 0, // rows = 1
+            4, 0, // offset[0] = 4
+        ];
+        let blockmap = Blockmap::parse_lump(&data).unwrap();
+
+        // Query out of bounds
+        let mut iter = blockmap.block_linedefs(99, 99);
+        assert!(
+            iter.next().is_none(),
+            "Expected empty iterator for OOB blockmap query"
+        );
+    }
 
     #[test]
     fn parse_single_thing() {
