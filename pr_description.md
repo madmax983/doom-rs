@@ -1,11 +1,3 @@
-🧨 **The Trigger:** `analyzer.chokepoints()` recursive DFS causes a stack overflow on highly nested topologies, effectively crashing the program on malicious or highly segmented input maps.
-
-📉 **The Stack Trace:**
-```
-thread 'main' (42123) has overflowed its stack
-fatal runtime error: stack overflow, aborting
-```
-
-🧪 **Reproduction:** "Run `cargo test --package doom-map` with a linear segment map containing over 10,000 deep nodes."
-
-😈 **Comment:** "You assumed call stacks scale linearly with your WADs. You were wrong."
+📖 Chapter: Documented the `doom-renderer::sprite_clip` module.
+🔦 Insight: Added a module-level story (`//!`) framing the purpose of tracking sprite visibility masks, and documented `SpriteClipHistory`'s exact use cases to prevent heap allocations.
+🔬 Example: Added executable `## Examples` to `new`, `push`, `last`, and `iter`.

@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2024-07-31 - [Clarified SpriteClipHistory purpose and limits]
+**Confusion:** The `doom-renderer::sprite_clip` module lacked high-level documentation explaining what it actually did, and the methods for `SpriteClipHistory` had no examples demonstrating how to use the stack-allocated struct or why it ignores pushes past its length (avoiding allocations).
+**Clarification:** Added a module-level doc comment (`//!`) framing the purpose of tracking sprite visibility masks. Added executable `## Examples` to all public methods of `SpriteClipHistory`, explicitly demonstrating the stack-allocated behavior without repeating function names uselessly.
