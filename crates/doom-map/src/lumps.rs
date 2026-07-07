@@ -688,12 +688,15 @@ impl Blockmap {
     /// offset points past the lump.
     pub fn block_linedefs(&self, col: usize, row: usize) -> impl Iterator<Item = u16> + '_ {
         let idx = row * self.x_count as usize + col;
-        let offset = self.offsets.get(idx).copied().unwrap_or(0) as usize;
-        let byte_offset = offset * 2;
+        let offset = self.offsets.get(idx).copied();
+
+        let data = &self.raw;
+        let mut pos = match offset {
+            Some(o) => o as usize * 2,
+            None => data.len(), // Force empty iterator
+        };
 
         // Block lists start with 0x0000 and are terminated by 0xFFFF.
-        let data = &self.raw;
-        let mut pos = byte_offset;
         // Skip the leading 0x0000 sentinel if present.
         if pos + 1 < data.len() {
             let first = u16::from_le_bytes([data[pos], data[pos + 1]]);
