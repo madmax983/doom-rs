@@ -10,7 +10,7 @@ doom-rs is already a **remarkably complete** Doom engine: ~115k lines of Rust ac
 
 The parity gaps are therefore **not** "big missing features" — they are **vanilla-fidelity** gaps: the things Chocolate Doom exists to guarantee. The single most important framing point:
 
-> **doom-rs is a terminal (TUI) port, not an SDL port.** It renders a vanilla-style 8-bit paletted software framebuffer, but presents it in the terminal (ratatui/crossterm: halfblocks/sixel/kitty/etc.). There is no SDL2/wgpu window. This means *pixel-for-pixel display fidelity* and *DOS input feel* — two of Chocolate Doom's stated goals — are out of scope by design. What **is** achievable and valuable is **simulation-level parity**: bit-exact playsim, demo sync, vanilla limits/overflow behavior, config/savegame/CLI compatibility. This roadmap targets simulation parity and treats presentation parity as explicitly non-goal.
+> **doom-rs is a terminal (TUI) port, not an SDL port.** It renders a vanilla-style 8-bit paletted software framebuffer, but presents it in the terminal (ratatui/crossterm: halfblocks/sixel/kitty/etc.). There is no SDL2/wgpu window today. This means *pixel-for-pixel display fidelity* and *DOS input feel* — two of Chocolate Doom's stated goals — are out of scope for the *simulation-parity* effort. What **is** achievable and valuable here is **simulation-level parity**: bit-exact playsim, demo sync, vanilla limits/overflow behavior, config/savegame/CLI compatibility. This roadmap targets simulation parity; presentation is a **separate workstream**, and the chosen path for a windowed presentation is the **`abrash`** library (decision §6.2, design in [`ABRASH_INTEGRATION.md`](ABRASH_INTEGRATION.md)) rather than a from-scratch SDL/GPU backend.
 
 **Top 5 gaps (highest severity first):**
 1. **Vanilla limits & overflow behavior** — doom-rs uses dynamic `Vec`/`ArrayVec` clip buffers and verification-oriented caps, so it is effectively *limit-removing*. It will not reproduce visplane-overflow crashes, tutti-frutti, medusa, all-ghosts/intercepts overflow, or the "no more plats" fatal — all of which Chocolate reproduces on purpose.
@@ -36,7 +36,7 @@ The user also named **Iron Doom** as a parity target. It is **real** and is _not
 - **Status:** young/niche — first release **v0.1.0 on 2024-12-24**, single author, ~55 stars, ~12 commits at time of research. The author explicitly flags the **legacy-demo desync caveat** (readability refactors risk breaking bit-exact sync) — the exact tension this roadmap centers on.
 - **Announcement:** [Doomworld: "Iron Doom 0.1.0 (Dec 24, 2024)"](https://www.doomworld.com/forum/topic/150233-iron-doom-010-dec-24-2024/).
 
-**Implication:** Iron Doom is doom-rs's closest existing peer (Rust + Chocolate-based + same demo-sync tension). Because it targets the strict-Chocolate bar, "match Iron Doom" and "match Chocolate Doom" point at the **same simulation-fidelity bar** — so this roadmap serves both. Iron Doom's C→Rust mapping (Bevy ECS) and its readability-vs-bit-exactness notes are worth studying. _Flag for the user: confirm whether Iron Doom is meant as (a) the fidelity bar (same as Chocolate) or (b) a codebase to cross-reference — this roadmap assumes (a)._
+**Implication:** Iron Doom is doom-rs's closest existing peer (Rust + Chocolate-based + same demo-sync tension). Iron Doom's C→Rust mapping (Bevy ECS) and its readability-vs-bit-exactness notes are worth studying. **Decision (see §6):** Iron Doom is a **code cross-reference only**, not a fidelity target — **Chocolate Doom is the sole fidelity bar**. Because Iron Doom itself targets the strict-Chocolate bar, its implementation choices remain a useful reference while the acceptance tests stay anchored on Chocolate.
 
 **Crispy Doom** (in case it was the intended target — no evidence it is): Chocolate + optional limit-removal, hi-res (640×400+), widescreen, uncapped fps, mouselook/crosshair, full DeHackEd+BEX — all **off by default**, preserving demo/config/save/net compat. Distinction: **Chocolate = strict replica; Crispy = Chocolate + opt-in QoL; Iron Doom = Rust rewrite of the strict-Chocolate target.** If limit-removal/hi-res is ever wanted without breaking vanilla compat, Crispy is the model — see M2's opt-in framing.
 
@@ -130,8 +130,8 @@ Sources: [Static limits](https://doomwiki.org/wiki/Static_limits), [Compatibilit
 - Doom II cast call (`F_CastPrint`/castorder); finale art/bunny screens.
 - DeHackEd BEX completeness (`[PARS]`, `[HELPER]`, `[SPRITES]`, BEX string mnemonics).
 
-**Explicit non-goals (terminal port)**
-- Pixel-identical SDL display output and DOS input-timing "feel" — precluded by the terminal presentation layer. If ever desired, they require an SDL/GPU presentation backend, tracked separately from parity.
+**Presentation (separate workstream, not part of simulation parity)**
+- Pixel-identical display output and DOS input-timing "feel" are **not** part of the simulation-parity effort and are **not** delivered by the terminal path. A windowed presentation path is planned via the **`abrash`** library (decision §6.2) rather than a from-scratch SDL2/wgpu backend; design in [`ABRASH_INTEGRATION.md`](ABRASH_INTEGRATION.md). This is tracked as its own workstream — it does not gate, and is not gated by, the simulation-parity milestones (M1–M9).
 
 ## 5. Prioritized milestone plan
 
@@ -167,7 +167,12 @@ Doom II cast call, finale art/bunny screens, and DeHackEd BEX completeness (`[PA
 ### Sequencing rationale
 M1 is the bedrock — demo sync validates the entire playsim and is prerequisite for M8. M2 is next because limit/overflow behavior is the sharpest *observable* divergence and shares test infrastructure with M1. M3 unblocks correct content for demos and CLI. M4/M5 are the compatibility surface users touch first and are low-risk. M6/M7 are self-contained. M8 depends on M1. M9 is polish and can slot in opportunistically.
 
-## 6. Open questions for the user
-1. **Iron Doom intent** — is Iron Doom meant as the fidelity bar (same as Chocolate, this roadmap's assumption) or as a Rust codebase to cross-reference for the C→Rust mapping?
-2. **Terminal vs SDL** — is simulation-level parity the accepted definition of "parity" here, or is a pixel-accurate SDL/GPU presentation backend also in scope (a large separate effort)?
-3. **Limit-removing default** — keep doom-rs's limit-removing behavior as default with vanilla limits opt-in (Crispy model), or make strict-vanilla the default?
+## 6. Resolved decisions
+
+The three questions that previously stood open here have been decided:
+
+1. **Fidelity bar → Chocolate Doom (only).** Chocolate Doom is *the* fidelity bar; every parity acceptance test is measured against it. **Iron Doom** (`Henrique194/iron-doom`) is demoted to a **code cross-reference** — a source of idiomatic C→Rust mapping ideas — and is **not** a fidelity target. _Rationale: two fidelity bars is one too many; Iron Doom is young/single-author and itself only approximates Chocolate, so anchoring on Chocolate keeps the target stable and unambiguous._
+
+2. **Presentation layer → the `abrash` library.** Rather than building a new SDL2/wgpu presentation backend from scratch, the user's own **`abrash`** graphics library (named after Michael Abrash) plugs in as doom-rs's presentation layer for a windowed path. _Rationale: `abrash` is already Rust, already ships a `winit`+`softbuffer` software presenter, and doom-tui's event loop was in fact ported from `abrash`'s TUI backend — so it is a natural fit and avoids a from-scratch SDL/GPU dependency. Integration design is tracked in [`ABRASH_INTEGRATION.md`](ABRASH_INTEGRATION.md), as a workstream separate from simulation parity._
+
+3. **Vanilla limits → limit-removing stays the DEFAULT; vanilla static limits are opt-in.** doom-rs keeps its current limit-removing behavior as the default, and vanilla fixed-size limits + overflow emulation become an opt-in `vanilla-compat` mode (see M2). _Rationale: this is the Crispy Doom model — QoL/robustness by default, strict-vanilla when explicitly requested — and it matches how doom-rs is already built._
