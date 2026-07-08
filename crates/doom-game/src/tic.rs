@@ -74,25 +74,51 @@ pub fn p_set_mobj_state(
     new_state: StateNum,
     level: Option<&Level>,
 ) -> bool {
-    // S_NULL means the actor is done — caller should remove it.
-    if new_state == StateNum::NULL {
-        return false;
-    }
-
-    let action = match crate::states::STATES.get(new_state.0 as usize) {
-        Some(entry) => {
-            if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.state = new_state;
-                mo.tics = entry.tics;
-            }
-            entry.action
+    // Port of vanilla `P_SetMobjState`'s `do { ... } while (!mobj->tics)` loop:
+    // a state with `tics == 0` chains immediately to its `next_state` within the
+    // same call, firing every intermediate action (and consuming their RNG).
+    //
+    // `guard` mirrors nothing in vanilla 1.9 (which has no cycle limit) but
+    // protects against a malformed all-zero-tic state cycle hanging the sim.
+    let mut state = new_state;
+    let mut guard = 0u32;
+    loop {
+        // S_NULL means the actor is done — caller should remove it.
+        if state == StateNum::NULL {
+            return false;
         }
-        None => return false,
-    };
 
-    // Fire action on state entry (needs &mut self — all borrows released above).
-    if action != crate::actions::Action::NoAction as u8 {
-        crate::actions::dispatch_action(gs, handle, action, level);
+        let entry = match crate::states::STATES.get(state.0 as usize) {
+            Some(entry) => *entry,
+            None => return false,
+        };
+
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.state = state;
+            mo.tics = entry.tics;
+        }
+
+        // Fire action on state entry (needs &mut self — borrow released above).
+        if entry.action != crate::actions::Action::NoAction as u8 {
+            crate::actions::dispatch_action(gs, handle, entry.action, level);
+        }
+
+        // Re-read tics: the action may have changed state/tics (e.g. via a
+        // nested transition). Vanilla loops while the current tics are 0.
+        let tics = match gs.mobjslab.get(handle) {
+            Some(mo) => mo.tics,
+            // Mobj vanished during the action — nothing more to chain.
+            None => return true,
+        };
+        if tics != 0 {
+            break;
+        }
+
+        state = entry.next_state;
+        guard += 1;
+        if guard > 1024 {
+            break;
+        }
     }
 
     true
