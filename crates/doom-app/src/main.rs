@@ -257,6 +257,11 @@ struct Args {
     /// determinism self-check (used with --verify-demo). Defaults to 2.
     #[arg(long, default_value = "2")]
     verify_runs: u32,
+
+    /// Path to write a per-draw RNG call-trace CSV (`leveltime,seq,retval,caller`)
+    /// captured during demo replay (used with --verify-demo).
+    #[arg(long)]
+    verify_rng_trace: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -2238,6 +2243,9 @@ struct VerifyRun {
     final_items: u32,
     final_secrets: u32,
     final_rndindex: u32,
+    /// Optional RNG call-trace CSV (`leveltime,seq,retval,caller`), populated
+    /// only when `--verify-rng-trace` requested it for this run.
+    rng_trace_csv: Option<String>,
 }
 
 /// Header line shared byte-for-byte with the reference oracle.
@@ -2251,7 +2259,11 @@ fn verify_replay_once(
     warp_str: &str,
     header: &doom_demo::LmpHeader,
     demo_bytes: &[u8],
+    rng_trace: bool,
 ) -> Result<VerifyRun> {
+    if rng_trace {
+        doom_game::rng_trace_enable();
+    }
     // A fresh, mutable level per run: gs.tick mutates sector heights, etc.
     let mut level = Level::from_wad_stack(wad_stack, warp_str).with_context(|| {
         format!("Could not load map '{warp_str}' for demo verification.")
@@ -2285,6 +2297,11 @@ fn verify_replay_once(
         let Some(cmd) = player.next_tic() else {
             break VerifyEndReason::DemoConsumed;
         };
+        if rng_trace {
+            // Stamp draws with the pre-increment leveltime, matching vanilla
+            // P_Ticker order (thinkers run, then leveltime++).
+            doom_game::rng_trace_set_leveltime(gs.stats.level_time);
+        }
         gs.tick(cmd, Some(&mut level));
 
         // Read player-0 mobj state AFTER simulating this tic.
@@ -2348,6 +2365,18 @@ fn verify_replay_once(
         final_items: gs.player.item_count,
         final_secrets: gs.player.secret_count,
         final_rndindex: gs.rng.index(),
+        rng_trace_csv: if rng_trace {
+            let entries = doom_game::rng_trace_take();
+            let mut s = String::with_capacity(48 * entries.len() + 32);
+            s.push_str("leveltime,seq,retval,caller\n");
+            use std::fmt::Write as _;
+            for e in &entries {
+                let _ = writeln!(s, "{},{},{},{}", e.leveltime, e.seq, e.retval, e.caller);
+            }
+            Some(s)
+        } else {
+            None
+        },
     })
 }
 
@@ -2395,8 +2424,21 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
 
     let runs = args.verify_runs.max(1);
     let mut results: Vec<VerifyRun> = Vec::with_capacity(runs as usize);
-    for _ in 0..runs {
-        results.push(verify_replay_once(wad_stack, &warp_str, &header, &demo_bytes)?);
+    for run_idx in 0..runs {
+        // Only trace the first run to avoid backtrace overhead on the rest.
+        let trace = args.verify_rng_trace.is_some() && run_idx == 0;
+        results.push(verify_replay_once(
+            wad_stack, &warp_str, &header, &demo_bytes, trace,
+        )?);
+    }
+
+    if let Some(ref trace_path) = args.verify_rng_trace {
+        if let Some(csv) = results[0].rng_trace_csv.as_ref() {
+            std::fs::write(trace_path, csv.as_bytes()).with_context(|| {
+                format!("Could not write RNG trace to '{}'", trace_path.display())
+            })?;
+            println!("rng trace         : {}", trace_path.display());
+        }
     }
 
     // Cross-run determinism check: every CSV must be byte-identical.

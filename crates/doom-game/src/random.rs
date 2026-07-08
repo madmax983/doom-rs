@@ -6,6 +6,116 @@
 
 use crate::state::GameState;
 
+use std::cell::RefCell;
+
+// ---------------------------------------------------------------------------
+// RNG call-tracing (opt-in microscope for demo-sync work)
+// ---------------------------------------------------------------------------
+
+/// A single recorded `P_Random` draw.
+pub struct RngTraceEntry {
+    /// `level_time` at the moment of the draw.
+    pub leveltime: u32,
+    /// Global draw sequence number (0-based, across the whole replay).
+    pub seq: u32,
+    /// The value returned by the draw.
+    pub retval: u8,
+    /// Best-effort caller symbol (first game frame outside the RNG module).
+    pub caller: String,
+}
+
+struct RngTraceState {
+    entries: Vec<RngTraceEntry>,
+    leveltime: u32,
+    seq: u32,
+}
+
+thread_local! {
+    static RNG_TRACE: RefCell<Option<RngTraceState>> = const { RefCell::new(None) };
+}
+
+/// Begin recording every `P_Random` draw on this thread.
+pub fn rng_trace_enable() {
+    RNG_TRACE.with(|t| {
+        *t.borrow_mut() = Some(RngTraceState {
+            entries: Vec::new(),
+            leveltime: 0,
+            seq: 0,
+        });
+    });
+}
+
+/// Update the `level_time` stamp attached to subsequent draws.
+pub fn rng_trace_set_leveltime(leveltime: u32) {
+    RNG_TRACE.with(|t| {
+        if let Some(s) = t.borrow_mut().as_mut() {
+            s.leveltime = leveltime;
+        }
+    });
+}
+
+/// Stop recording and return all captured draws (empty if never enabled).
+pub fn rng_trace_take() -> Vec<RngTraceEntry> {
+    RNG_TRACE.with(|t| t.borrow_mut().take().map(|s| s.entries).unwrap_or_default())
+}
+
+/// Extract the most relevant caller symbol from a captured backtrace.
+///
+/// Walks the frames top-to-bottom and returns the first `doom_game` symbol
+/// that is not part of the RNG plumbing itself.
+fn caller_from_backtrace() -> String {
+    let bt = std::backtrace::Backtrace::force_capture();
+    let text = format!("{bt}");
+    for line in text.lines() {
+        let line = line.trim();
+        let sym = match line.find(": ") {
+            Some(pos) => line[pos + 2..].trim(),
+            None => continue,
+        };
+        if !sym.contains("doom_game") {
+            continue;
+        }
+        if sym.contains("::random::")
+            || sym.contains("next_byte")
+            || sym.contains("p_random")
+            || sym.contains("p_subrandom")
+            || sym.contains("::p_random")
+            || sym.contains("rng_trace")
+        {
+            continue;
+        }
+        let sym = sym.strip_suffix('"').unwrap_or(sym);
+        let cleaned = match sym.rfind("::h") {
+            Some(pos) if sym[pos + 3..].chars().all(|c| c.is_ascii_hexdigit()) => &sym[..pos],
+            _ => sym,
+        };
+        return cleaned.to_string();
+    }
+    "?".to_string()
+}
+
+/// Record a single draw if tracing is active (called from `next_byte`).
+#[inline]
+fn rng_trace_record(retval: u8) {
+    let active = RNG_TRACE.with(|t| t.borrow().is_some());
+    if !active {
+        return;
+    }
+    let caller = caller_from_backtrace();
+    RNG_TRACE.with(|t| {
+        if let Some(s) = t.borrow_mut().as_mut() {
+            let seq = s.seq;
+            s.seq += 1;
+            s.entries.push(RngTraceEntry {
+                leveltime: s.leveltime,
+                seq,
+                retval,
+                caller,
+            });
+        }
+    });
+}
+
 /// Doom's original 256-entry pseudo-random number table (from `m_random.c`).
 ///
 /// The sequence is deterministic and identical on all network peers, making
@@ -51,7 +161,9 @@ impl DoomRng {
     #[inline]
     pub fn next_byte(&mut self) -> u8 {
         self.index = (self.index + 1) & 255;
-        RNG_TABLE[self.index as usize]
+        let val = RNG_TABLE[self.index as usize];
+        rng_trace_record(val);
+        val
     }
 
     /// Current table index (for snapshot / serialization).

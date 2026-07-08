@@ -93,6 +93,7 @@ pub use projectile::{
     ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
 };
 pub use random::{DoomRng, RNG_TABLE};
+pub use random::{RngTraceEntry, rng_trace_enable, rng_trace_set_leveltime, rng_trace_take};
 pub use random::{p_damage_with_variance, p_missile_angle_spread, p_random_chance, randomize_tics};
 pub use savegame::{
     MAX_SAVE_SLOTS, SAVE_MAGIC, SaveError, SaveFormat, SaveGame, SaveHeader, detect_save_format,
