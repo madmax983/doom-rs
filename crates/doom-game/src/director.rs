@@ -1,3 +1,8 @@
+//! AI Director for dynamic difficulty adjustment.
+//!
+//! The [`AiDirector`] monitors player performance (e.g., health) and dynamically spawns
+//! monsters to maintain a consistent level of tension.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -1,3 +1,8 @@
+//! Sound propagation and emission.
+//!
+//! The simulation logic does not play audio directly; instead, it emits [`SoundRequest`]s
+//! which the app layer interprets and routes to the audio backend.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

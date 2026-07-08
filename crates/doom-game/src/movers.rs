@@ -1,3 +1,8 @@
+//! Sector movers: doors, floors, and ceilings.
+//!
+//! This module provides the [`DoorMover`] and related types for animating sector
+//! geometry during gameplay.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

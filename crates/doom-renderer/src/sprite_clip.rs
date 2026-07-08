@@ -1,3 +1,8 @@
+//! Sprite clipping and portal history.
+//!
+//! The [`SpriteClipHistory`] avoids allocating vectors on the heap for short sprite clip histories,
+//! recording the depth and silhouette of portals a column passes through.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.

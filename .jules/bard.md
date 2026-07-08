@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2024-11-20 - [Fixed Missing Module Docs across Crates]
+**Confusion:** Several modules across `doom-app`, `doom-game`, and `doom-renderer` lacked `//!` module-level documentation. This resulted in `cargo doc` emitting `missing_docs` lint warnings for the workspace when `missing_docs = "warn"` was enabled, leaving users confused about the purpose of modules like `director`, `movers`, `sound_prop`, `stats`, and `sprite_clip`.
+**Clarification:** Added missing `//!` module-level documentation blocks to `crates/doom-app/src/lib.rs`, `crates/doom-game/src/director.rs`, `crates/doom-game/src/movers.rs`, `crates/doom-game/src/sound_prop.rs`, `crates/doom-game/src/stats.rs`, and `crates/doom-renderer/src/sprite_clip.rs` describing the high-level intent and contents of the modules.
