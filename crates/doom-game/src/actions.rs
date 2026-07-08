@@ -2735,14 +2735,14 @@ mod tests {
             .expect("item must exist in tests")
             .reactiontime = 0;
 
-        // RNG_TABLE[11] = 140.
+        // P_Random increments before reading, so set_index(10) yields RNG_TABLE[11] = 140.
         // demon: dist = 200, random = 140 -> can_fire = false
         // trooper: dist = 108, random = 140 -> can_fire = true
 
-        gs.rng.set_index(11);
+        gs.rng.set_index(10);
         let can_fire_demon = p_check_missile_range(&mut gs, demon, player_handle, None);
 
-        gs.rng.set_index(11);
+        gs.rng.set_index(10);
         let can_fire_trooper = p_check_missile_range(&mut gs, trooper, player_handle, None);
 
         assert!(
@@ -2765,16 +2765,17 @@ mod tests {
             .expect("item must exist in tests")
             .reactiontime = 0;
 
-        // RNG_TABLE[6] = 149 (false).
-        // RNG_TABLE[20] = 154 (true).
+        // P_Random increments before reading:
+        // set_index(5)  -> RNG_TABLE[6]  = 149 (false).
+        // set_index(19) -> RNG_TABLE[20] = 154 (true).
 
-        gs.rng.set_index(6);
+        gs.rng.set_index(5);
         assert!(
             !p_check_missile_range(&mut gs, cyber, player_handle, None),
             "Cyberdemon should fail with random=149 vs dist=154"
         );
 
-        gs.rng.set_index(20);
+        gs.rng.set_index(19);
         assert!(
             p_check_missile_range(&mut gs, cyber, player_handle, None),
             "Cyberdemon should fire with random=154 vs dist=154"

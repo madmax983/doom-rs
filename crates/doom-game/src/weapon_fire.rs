@@ -761,7 +761,9 @@ mod tests {
 
         let mut gs = make_game_state();
         let target_handle = spawn_shootable_target(&mut gs, 512, 0, 8, 20);
-        gs.rng.set_index(16);
+        // P_Random increments before reading; set_index(15) reproduces the same
+        // spread byte sequence that previously started at index 16.
+        gs.rng.set_index(15);
         gs.player.attack_down = true;
 
         p_fire_pistol(&mut gs, None);
@@ -921,7 +923,9 @@ mod tests {
 
         let mut gs = make_game_state();
         let target_handle = spawn_shootable_target(&mut gs, 512, 0, 8, 20);
-        gs.rng.set_index(16);
+        // P_Random increments before reading; set_index(15) reproduces the same
+        // spread byte sequence that previously started at index 16.
+        gs.rng.set_index(15);
         gs.player.attack_down = true;
 
         p_fire_chaingun(&mut gs, None);
