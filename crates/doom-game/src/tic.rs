@@ -49,8 +49,10 @@ pub const PLAYER_SPEED_SCALE: i32 = 2048;
 /// Doom original: `0xE800` stored as a fixed-point fraction.
 pub const FRICTION: Fixed16_16 = Fixed16_16(0x0000_E800);
 
-/// Maximum horizontal velocity per axis (15 map units).
-pub const MAXMOVE: Fixed16_16 = Fixed16_16(15 << 16);
+/// Maximum horizontal velocity per axis (30 map units).
+///
+/// Doom original: `p_local.h` `MAXMOVE (30*FRACUNIT)`.
+pub const MAXMOVE: Fixed16_16 = Fixed16_16(30 << 16);
 
 // ---------------------------------------------------------------------------
 // p_set_mobj_state — canonical state transition (port of P_SetMobjState)
