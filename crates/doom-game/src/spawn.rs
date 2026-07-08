@@ -67,9 +67,27 @@ const MTF_MULTIPLAYER: u16 = 0x0010;
 const BAM_PER_DEGREE: u32 = (0x1_0000_0000u64 / 360) as u32;
 
 /// Convert a degrees value (0-359) from a Thing to a BAM angle.
+///
+/// Retained for reference/tests; spawn now uses [`spawn_angle_to_bam`] for
+/// vanilla-exact spawn angles.
 #[inline]
+#[cfg_attr(not(test), allow(dead_code))]
 fn degrees_to_bam(degrees: u16) -> Bam {
     Bam((degrees as u32).wrapping_mul(BAM_PER_DEGREE))
+}
+
+/// ANG45 in BAM units (45 degrees).
+const ANG45_BAM: u32 = 0x2000_0000;
+
+/// Convert a map thing's spawn angle to BAM exactly as vanilla
+/// `P_SpawnMapThing` does: `mobj->angle = ANG45 * (mthing->angle / 45)`.
+///
+/// The integer divide-then-multiply makes cardinal/ordinal angles bit-exact
+/// (e.g. 90° -> ANG45 * 2 = 0x4000_0000), matching demo playback. This differs
+/// from the general [`degrees_to_bam`] scaling used elsewhere.
+#[inline]
+fn spawn_angle_to_bam(degrees: u16) -> Bam {
+    Bam(ANG45_BAM.wrapping_mul((degrees as u32) / 45))
 }
 
 // ---------------------------------------------------------------------------
@@ -185,7 +203,9 @@ pub fn spawn_level_things(
         };
 
         // --- Angle conversion ---
-        let angle = degrees_to_bam(thing.angle);
+        // Spawn angles use vanilla's exact ANG45 * (deg/45) formula so that
+        // cardinal/ordinal spawn angles are bit-exact for demo sync.
+        let angle = spawn_angle_to_bam(thing.angle);
         let x = Fixed16_16::from_int(thing.x as i32);
         let y = Fixed16_16::from_int(thing.y as i32);
 
@@ -204,9 +224,9 @@ pub fn spawn_level_things(
         // --- Non-player things (monsters, items, decorations) ---
         let mut mo = Mobj::new(kind, x, y, angle);
         apply_mobjinfo_defaults(&mut mo);
-        if mo.tics > 0 && skill != Skill::Nightmare {
-            mo.tics = 1 + i16::from(gs.p_random() % (mo.tics as u8));
-        }
+        // Vanilla P_SpawnMapThing/P_SpawnMobj set mobj->tics = st->tics
+        // directly and do NOT consume any P_Random byte at spawn time.
+        // (apply_mobjinfo_defaults already set mo.tics = spawnstate.tics.)
         sync_mobj_to_level(level, &mut mo);
 
         // Apply ambush flag from thing flags (deaf monsters).
@@ -752,7 +772,9 @@ mod tests {
     }
 
     #[test]
-    fn spawn_nonplayer_randomizes_positive_spawn_tics_outside_nightmare() {
+    fn spawn_nonplayer_uses_spawnstate_tics_and_consumes_no_rng() {
+        // Vanilla P_SpawnMobj sets mobj->tics = st->tics directly and does NOT
+        // call P_Random at spawn time (critical for demo sync).
         let level = make_test_level_with_things(vec![Thing {
             x: 64,
             y: 0,
@@ -760,8 +782,20 @@ mod tests {
             kind: 3004,
             flags: 7,
         }]);
+
+        // Expected spawn tics = the Trooper's spawnstate tics (no randomization).
+        let mut reference = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(0),
+            Fixed16_16::from_int(0),
+            Bam::ZERO,
+        );
+        apply_mobjinfo_defaults(&mut reference);
+        let expected_tics = reference.tics;
+
         let mut gs = GameState::new("E1M1");
-        gs.rng.set_index(3); // 220 % 10 = 0, so Doom-style randomized tics should become 1.
+        gs.rng.set_index(3);
+        let index_before = gs.rng.index();
 
         spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let trooper = gs
@@ -771,8 +805,13 @@ mod tests {
             .expect("trooper should spawn");
 
         assert_eq!(
-            trooper.tics, 1,
-            "non-Nightmare map thing spawn should randomize initial positive tics"
+            trooper.tics, expected_tics,
+            "spawn tics must equal spawnstate tics (no randomization)"
+        );
+        assert_eq!(
+            gs.rng.index(),
+            index_before,
+            "spawn must not consume any RNG bytes"
         );
     }
 
