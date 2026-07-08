@@ -241,6 +241,22 @@ struct Args {
     /// Print the map statistics or tactical analysis as raw JSON. Only valid when combined with --map-stats, --analyze, or --pathfind.
     #[arg(long)]
     json: bool,
+
+    /// Headless demo-verification harness: replay a demo with NO rendering/audio
+    /// and write a per-tic determinism log. SOURCE is either a path to an
+    /// external .lmp file OR a lump name (DEMO1/DEMO2/DEMO3) resolved from the
+    /// loaded IWAD. Level, skill, and game flags are driven from the demo header.
+    #[arg(long, value_name = "SOURCE")]
+    verify_demo: Option<String>,
+
+    /// Path to write the per-tic verification CSV (used with --verify-demo).
+    #[arg(long)]
+    verify_log: Option<std::path::PathBuf>,
+
+    /// Number of times to replay the demo from scratch for the cross-run
+    /// determinism self-check (used with --verify-demo). Defaults to 2.
+    #[arg(long, default_value = "2")]
+    verify_runs: u32,
 }
 
 // ---------------------------------------------------------------------------
@@ -2176,6 +2192,318 @@ fn handle_export(
     Ok(true)
 }
 
+// ---------------------------------------------------------------------------
+// Headless demo-verification harness (--verify-demo)
+// ---------------------------------------------------------------------------
+
+/// Why a single verification replay stopped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VerifyEndReason {
+    /// The demo tic stream was fully consumed.
+    DemoConsumed,
+    /// The level signalled an exit (`gs.exit_request` became `Some`).
+    LevelExit,
+    /// The replay stopped early (e.g. the player mobj disappeared).
+    EarlyStop,
+}
+
+impl VerifyEndReason {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::DemoConsumed => "demo-stream-fully-consumed",
+            Self::LevelExit => "level-exit",
+            Self::EarlyStop => "early-stop",
+        }
+    }
+}
+
+/// Result of a single verification replay run.
+struct VerifyRun {
+    /// Per-tic CSV (including the header line), terminated by a trailing newline.
+    csv: String,
+    /// Number of demo ticcmds actually applied.
+    total_tics: usize,
+    /// Why the replay stopped.
+    reason: VerifyEndReason,
+    // Final player-0 state (captured after the last applied tic).
+    final_px_raw: i32,
+    final_py_raw: i32,
+    final_pz_raw: i32,
+    final_px_int: i32,
+    final_py_int: i32,
+    final_pz_int: i32,
+    final_angle: u32,
+    final_health: i32,
+    final_kills: u32,
+    final_items: u32,
+    final_secrets: u32,
+    final_rndindex: u32,
+}
+
+/// Header line shared byte-for-byte with the reference oracle.
+const VERIFY_CSV_HEADER: &str =
+    "i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime";
+
+/// Build a fresh level for `warp_str`, spawn things from the demo header, and
+/// replay the demo, emitting one CSV row per applied ticcmd.
+fn verify_replay_once(
+    wad_stack: &WadStack,
+    warp_str: &str,
+    header: &doom_demo::LmpHeader,
+    demo_bytes: &[u8],
+) -> Result<VerifyRun> {
+    // A fresh, mutable level per run: gs.tick mutates sector heights, etc.
+    let mut level = Level::from_wad_stack(wad_stack, warp_str).with_context(|| {
+        format!("Could not load map '{warp_str}' for demo verification.")
+    })?;
+
+    // Fresh game state: RNG index starts at 0. No title/menu code runs, so the
+    // only RNG advancement before the first tic comes from monster-spawn tic
+    // randomization inside `spawn_level_things`, exactly as in vanilla.
+    let mut gs = GameState::new(warp_str);
+
+    // Skill is driven by the demo header (0-based: 0=ITYTD .. 4=Nightmare).
+    let skill = Skill::from_num(header.skill).unwrap_or(Skill::Medium);
+    spawn_level_things(&mut gs, &level, skill, doom_game::GameMode::SinglePlayer);
+
+    // Mirror the level-setup specials that the real playback pipeline
+    // (`DoomGame::new_with_compat`) initializes, so the simulation matches a
+    // normal playthrough as closely as possible.
+    init_scrolling_walls(&mut gs, &level);
+    init_conveyors(&mut gs, &level);
+    init_sector_lights(&mut gs, &level);
+
+    let mut player = DemoPlayer::from_lmp(demo_bytes)
+        .ok_or_else(|| anyhow::anyhow!("Failed to parse demo LMP data"))?;
+
+    let mut csv = String::with_capacity(64 * player.total_tics().max(1) + 64);
+    csv.push_str(VERIFY_CSV_HEADER);
+    csv.push('\n');
+
+    let mut i: usize = 0;
+    let reason = loop {
+        let Some(cmd) = player.next_tic() else {
+            break VerifyEndReason::DemoConsumed;
+        };
+        gs.tick(cmd, Some(&mut level));
+
+        // Read player-0 mobj state AFTER simulating this tic.
+        let Some(mo) = gs.mobjslab.get(gs.player.handle) else {
+            break VerifyEndReason::EarlyStop;
+        };
+        let px = mo.x.raw();
+        let py = mo.y.raw();
+        let pz = mo.z.raw();
+        let angle = mo.angle.raw();
+
+        let rndindex = gs.rng.index();
+        let health = gs.player.health();
+        let kills = gs.player.kill_count;
+        let items = gs.player.item_count;
+        let secrets = gs.player.secret_count;
+        let leveltime = gs.stats.level_time;
+
+        use std::fmt::Write as _;
+        let _ = writeln!(
+            csv,
+            "{i},{rndindex},{px},{py},{pz},{angle},{health},{kills},{items},{secrets},{leveltime}"
+        );
+        i += 1;
+
+        // Stop once the level signals an exit (the row for the exiting tic has
+        // already been emitted above).
+        if gs.exit_request.is_some() {
+            break VerifyEndReason::LevelExit;
+        }
+    };
+
+    // Capture final player-0 state for the console summary.
+    let (final_px_raw, final_py_raw, final_pz_raw, final_px_int, final_py_int, final_pz_int, final_angle) =
+        match gs.mobjslab.get(gs.player.handle) {
+            Some(mo) => (
+                mo.x.raw(),
+                mo.y.raw(),
+                mo.z.raw(),
+                mo.x.to_int(),
+                mo.y.to_int(),
+                mo.z.to_int(),
+                mo.angle.raw(),
+            ),
+            None => (0, 0, 0, 0, 0, 0, 0),
+        };
+
+    Ok(VerifyRun {
+        csv,
+        total_tics: i,
+        reason,
+        final_px_raw,
+        final_py_raw,
+        final_pz_raw,
+        final_px_int,
+        final_py_int,
+        final_pz_int,
+        final_angle,
+        final_health: gs.player.health(),
+        final_kills: gs.player.kill_count,
+        final_items: gs.player.item_count,
+        final_secrets: gs.player.secret_count,
+        final_rndindex: gs.rng.index(),
+    })
+}
+
+/// Derive the warp string (e.g. `E1M5` or `MAP03`) from the demo header,
+/// preferring whichever candidate actually loads from the WAD stack.
+fn verify_warp_from_header(wad_stack: &WadStack, header: &doom_demo::LmpHeader) -> String {
+    let episode = header.episode.max(1);
+    let map = header.map.max(1);
+    let candidates = [format!("E{episode}M{map}"), format!("MAP{map:02}")];
+    for cand in &candidates {
+        if Level::from_wad_stack(wad_stack, cand).is_ok() {
+            return cand.clone();
+        }
+    }
+    // Fall back to the Doom 1 form even if it did not load, so the caller
+    // surfaces a clear load error.
+    candidates.into_iter().next().unwrap_or_else(|| "E1M1".to_owned())
+}
+
+/// Resolve demo bytes from `source`: a filesystem path if it exists, otherwise
+/// a WAD lump name (DEMO1/DEMO2/DEMO3) pulled from the loaded IWAD.
+fn verify_resolve_demo_bytes(wad_stack: &WadStack, source: &str) -> Result<(Vec<u8>, String)> {
+    let path = std::path::Path::new(source);
+    if path.is_file() {
+        let bytes = std::fs::read(path)
+            .with_context(|| format!("Failed to read demo file '{source}'"))?;
+        return Ok((bytes, format!("file:{source}")));
+    }
+    match wad_stack.lump_data(source) {
+        Some(data) => Ok((data.to_vec(), format!("lump:{source}"))),
+        None => Err(anyhow::anyhow!(
+            "Demo source '{source}' is neither an existing file nor a lump present in the loaded WAD(s)"
+        )),
+    }
+}
+
+fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()> {
+    let (demo_bytes, source_label) = verify_resolve_demo_bytes(wad_stack, source)?;
+
+    let header = doom_demo::LmpHeader::from_bytes(&demo_bytes).ok_or_else(|| {
+        anyhow::anyhow!("Demo source '{source}' is too short to contain a 13-byte v1.9 header")
+    })?;
+
+    let warp_str = verify_warp_from_header(wad_stack, &header);
+
+    let runs = args.verify_runs.max(1);
+    let mut results: Vec<VerifyRun> = Vec::with_capacity(runs as usize);
+    for _ in 0..runs {
+        results.push(verify_replay_once(wad_stack, &warp_str, &header, &demo_bytes)?);
+    }
+
+    // Cross-run determinism check: every CSV must be byte-identical.
+    let first_csv = &results[0].csv;
+    let mut determinism_pass = true;
+    let mut first_diff_row: Option<usize> = None;
+    let mut diff_run: Option<usize> = None;
+    for (run_idx, r) in results.iter().enumerate().skip(1) {
+        if r.csv.as_bytes() != first_csv.as_bytes() {
+            determinism_pass = false;
+            diff_run = Some(run_idx);
+            // Locate the first differing row (0-based data-row index, i.e. the
+            // header line is row index -1 and is skipped from the count).
+            let base_lines: Vec<&str> = first_csv.lines().collect();
+            let this_lines: Vec<&str> = r.csv.lines().collect();
+            let max = base_lines.len().max(this_lines.len());
+            for li in 0..max {
+                let a = base_lines.get(li).copied().unwrap_or("");
+                let b = this_lines.get(li).copied().unwrap_or("");
+                if a != b {
+                    // li == 0 is the header line; data rows start at li == 1.
+                    first_diff_row = Some(li.saturating_sub(1));
+                    break;
+                }
+            }
+            break;
+        }
+    }
+
+    // Write the per-tic CSV (all runs are identical when determinism passes;
+    // we always write run 0's log).
+    if let Some(ref log_path) = args.verify_log {
+        std::fs::write(log_path, first_csv.as_bytes()).with_context(|| {
+            format!(
+                "Could not write verification log to '{}'",
+                log_path.display()
+            )
+        })?;
+    }
+
+    // --- Console summary ---
+    let r0 = &results[0];
+    let flags_set = header.deathmatch != 0
+        || header.respawn
+        || header.fast
+        || header.nomonsters;
+
+    println!("=== doom-rs demo verification ===");
+    println!("demo source       : {source_label}");
+    println!(
+        "header            : version={} skill={} episode={} map={} -> warp={warp_str}",
+        header.version, header.skill, header.episode, header.map
+    );
+    println!(
+        "header flags       : deathmatch={} respawn={} fast={} nomonsters={}",
+        header.deathmatch,
+        u8::from(header.respawn),
+        u8::from(header.fast),
+        u8::from(header.nomonsters),
+    );
+    if header.nomonsters || header.fast || header.respawn {
+        println!(
+            "WARNING           : nomonsters/fast/respawn are NOT wired into spawn_level_things; \
+             this replay ignores them and may desync from vanilla."
+        );
+    }
+    let _ = flags_set;
+    println!("demo tics in file : {}", {
+        // Reconstruct the parsed tic count for reporting.
+        DemoPlayer::from_lmp(&demo_bytes).map_or(0, |p| p.total_tics())
+    });
+    println!("total tics played : {}", r0.total_tics);
+    println!("stop reason       : {}", r0.reason.as_str());
+    println!(
+        "final player pos  : raw=({},{},{})  int=({},{},{}) map units",
+        r0.final_px_raw,
+        r0.final_py_raw,
+        r0.final_pz_raw,
+        r0.final_px_int,
+        r0.final_py_int,
+        r0.final_pz_int
+    );
+    println!("final angle (BAM) : {}", r0.final_angle);
+    println!("final health      : {}", r0.final_health);
+    println!(
+        "final k/i/s       : kills={} items={} secrets={}",
+        r0.final_kills, r0.final_items, r0.final_secrets
+    );
+    println!("final rndindex    : {}", r0.final_rndindex);
+    if determinism_pass {
+        println!("determinism ({runs}x): PASS");
+    } else {
+        println!(
+            "determinism ({runs}x): FAIL (run {} differs; first differing row index {})",
+            diff_run.unwrap_or(0),
+            first_diff_row
+                .map(|r| r.to_string())
+                .unwrap_or_else(|| "unknown".to_owned()),
+        );
+    }
+    if let Some(ref log_path) = args.verify_log {
+        println!("per-tic log       : {}", log_path.display());
+    }
+
+    Ok(())
+}
+
 fn run_doom(args: Args) -> Result<()> {
     // Initialize trig tables (required for sin/cos in the game simulation).
     // SAFETY: called exactly once at startup, single-threaded, before any
@@ -2215,6 +2543,14 @@ fn run_doom(args: Args) -> Result<()> {
                 pwad_path.display()
             )
         })?;
+    }
+
+    // Headless demo-verification harness. Runs a fully self-contained replay
+    // (no rendering, no audio, no title/menu) driven entirely by the demo
+    // header, and writes a per-tic determinism log. Trig tables were already
+    // initialized at the top of `run_doom`.
+    if let Some(ref source) = args.verify_demo {
+        return run_verify_demo(&args, &wad_stack, source);
     }
 
     // Build the PLAYPAL blit palette (for terminal RGB conversion).
