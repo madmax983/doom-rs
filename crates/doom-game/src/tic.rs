@@ -54,6 +54,11 @@ pub const FRICTION: Fixed16_16 = Fixed16_16(0x0000_E800);
 /// Doom original: `p_local.h` `MAXMOVE (30*FRACUNIT)`.
 pub const MAXMOVE: Fixed16_16 = Fixed16_16(30 << 16);
 
+/// Downward acceleration applied per tic to airborne, gravity-affected actors.
+///
+/// Doom original: `p_local.h` `GRAVITY (FRACUNIT)`.
+pub const GRAVITY: Fixed16_16 = Fixed16_16(1 << 16);
+
 // ---------------------------------------------------------------------------
 // p_set_mobj_state — canonical state transition (port of P_SetMobjState)
 // ---------------------------------------------------------------------------
@@ -518,6 +523,24 @@ impl GameState {
 fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
     let handle = gs.player.handle;
 
+    // Vanilla `onground` (P_MovePlayer): the player may only accelerate while
+    // resting on the floor. Computed from the floor under the *current*
+    // position (the previous tic's `floorz`), before any movement this tic.
+    // With no level (unit tests) we treat the player as grounded, preserving
+    // the historical always-thrust behaviour those tests assert.
+    let onground = match level.as_deref() {
+        Some(lv) => gs
+            .mobjslab
+            .get(handle)
+            .and_then(|mo| {
+                let (z, x, y) = (mo.z, mo.x, mo.y);
+                crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
+                    .map(|(floorz, _)| z <= floorz)
+            })
+            .unwrap_or(true),
+        None => true,
+    };
+
     // Thrust block: apply turn + acceleration, then release borrow.
     {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
@@ -527,14 +550,14 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         // 1. Turn: cmd.angle_turn is 16-bit BAM; shift to 32-bit BAM space.
         mo.angle = mo.angle + Bam((cmd.angle_turn as i32 as u32).wrapping_shl(16));
 
-        // 2. Forward / backward thrust.
-        if cmd.forward_move != 0 {
+        // 2. Forward / backward thrust — only while on the ground.
+        if cmd.forward_move != 0 && onground {
             let angle = mo.angle;
             p_thrust(mo, angle, cmd.forward_move);
         }
 
         // 3. Strafe: thrust perpendicular (90 degrees left of facing direction).
-        if cmd.side_move != 0 {
+        if cmd.side_move != 0 && onground {
             let strafe_angle = mo.angle - ANG90;
             p_thrust(mo, strafe_angle, cmd.side_move);
         }
@@ -567,7 +590,13 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         }
     }
 
-    // 5. Apply position + friction + clamp.
+    // Floor height under the (new) position, needed both for vanilla's
+    // "no friction while airborne" rule and for P_ZMovement below.
+    let support = level.as_deref().and_then(|lv| {
+        crate::movement::support_state_at(&gs.mobjslab, handle, final_x, final_y, lv)
+    });
+
+    // 5. Apply position, then friction (P_XYMovement) + clamp.
     {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
             return;
@@ -578,20 +607,57 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
             mo.momx = final_x - old_x;
             mo.momy = final_y - old_y;
         }
-        mo.momx = mo.momx.fixed_mul(FRICTION);
-        mo.momy = mo.momy.fixed_mul(FRICTION);
+
+        // Vanilla P_XYMovement applies friction only when the actor is resting
+        // on the floor (`mo->z <= mo->floorz`); an airborne actor keeps its full
+        // horizontal momentum. `mo.z` here is still this tic's starting z (the
+        // Z step runs afterwards), matching the p_mobj.c ordering. When we have
+        // no level (unit tests) fall back to the historical always-friction path.
+        let on_ground = match support {
+            Some((floorz, _)) => mo.z <= floorz,
+            None => true,
+        };
+        if on_ground {
+            // STOPSPEED zeroing: with no player input and sub-STOPSPEED speed,
+            // vanilla snaps momentum to zero instead of applying friction.
+            let stopspeed = Fixed16_16(0x1000);
+            let below_stop = mo.momx > -stopspeed
+                && mo.momx < stopspeed
+                && mo.momy > -stopspeed
+                && mo.momy < stopspeed;
+            if below_stop && cmd.forward_move == 0 && cmd.side_move == 0 {
+                mo.momx = Fixed16_16::ZERO;
+                mo.momy = Fixed16_16::ZERO;
+            } else {
+                mo.momx = mo.momx.fixed_mul(FRICTION);
+                mo.momy = mo.momy.fixed_mul(FRICTION);
+            }
+        }
         mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
         mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
     }
 
-    if let Some(lv) = level.as_deref()
-        && let Some((support_floor, subsector)) =
-            crate::movement::support_state_at(&gs.mobjslab, handle, final_x, final_y, lv)
+    if let Some((support_floor, subsector)) = support
         && let Some(mo) = gs.mobjslab.get_mut(handle)
     {
-        mo.z = support_floor;
         if let Some(subsector) = subsector {
             mo.subsector = subsector as u32;
+        }
+        // Vanilla P_ZMovement (floor half): advance z by momz, then either land
+        // on the floor (clamp + kill downward momentum) or, when airborne,
+        // accelerate downward under gravity. The first tic of a fall uses
+        // `-2*GRAVITY` (`momz == 0` case) exactly as in p_mobj.c, so stepping
+        // off a ledge descends gradually instead of snapping to the low floor.
+        mo.z += mo.momz;
+        if mo.z <= support_floor {
+            if mo.momz < Fixed16_16::ZERO {
+                mo.momz = Fixed16_16::ZERO;
+            }
+            mo.z = support_floor;
+        } else if mo.momz == Fixed16_16::ZERO {
+            mo.momz = -(GRAVITY + GRAVITY);
+        } else {
+            mo.momz -= GRAVITY;
         }
     }
 
