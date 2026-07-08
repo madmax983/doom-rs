@@ -1,0 +1,27 @@
+[package]
+name    = "doom-present"
+version.workspace = true
+edition.workspace = true
+
+description = "Windowed (winit/softbuffer) presenter for doom-rs, built on the abrash platform backend."
+
+[dependencies]
+# Workspace crates providing the render-target, palette, input, and app-trait seams.
+doom-renderer = { workspace = true }
+doom-tui      = { workspace = true }
+
+# abrash provides the winit window host + softbuffer software presenter.
+# Path dependency to the local checkout so this builds green in-container.
+# (A git dependency — { git = "https://github.com/madmax983/abrash" } — is more
+# portable; swap it in once the repo is reachable from the build environment.)
+abrash = { path = "../../../abrash", default-features = false, features = ["backend-winit"] }
+
+# winit/softbuffer versions are pinned to match abrash's (0.29.15 / 0.4.8) so the
+# dependency graph resolves to a single version of each and avoids duplicate-crate
+# type mismatches when we hand winit events / windows across the abrash boundary.
+winit     = "0.29"
+softbuffer = "0.4"
+
+# The input adapter targets the crossterm KeyCode/KeyModifiers types that
+# doom-tui's InputState consumes.
+crossterm = { workspace = true }
