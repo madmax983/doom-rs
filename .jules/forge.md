@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactored boolean blindness in hitscan and map exit logic**
+**Learning:** Passing boolean arguments like `accurate_first_shot` to `hitscan_shot_angle` or `secret_exit` to `next_map` creates boolean blindness, obscuring the intent at the call site.
+**Action:** Group these configuration flags into descriptive enums like `ShotAccuracy` (`AccurateFirst` vs `AlwaysSpread`) and reuse `ExitRequest` (`Normal` vs `Secret`) to self-document call sites.
