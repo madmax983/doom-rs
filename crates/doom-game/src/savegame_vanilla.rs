@@ -107,3 +107,97 @@ fn version_string(bytes: &[u8]) -> Option<&str> {
     let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
     core::str::from_utf8(&bytes[..end]).ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn version_string_handles_no_null_terminator() {
+        assert_eq!(version_string(b"version 109"), Some("version 109"));
+    }
+
+    #[test]
+    fn version_string_handles_null_terminator() {
+        assert_eq!(
+            version_string(b"version 109\0\0\0\0\0"),
+            Some("version 109")
+        );
+    }
+
+    #[test]
+    fn version_string_handles_invalid_utf8() {
+        assert_eq!(version_string(b"version 109\xFF\0"), None);
+    }
+
+    #[test]
+    fn looks_like_vanilla_dsg_rejects_too_short() {
+        assert!(!looks_like_vanilla_dsg(b"short"));
+    }
+
+    #[test]
+    fn looks_like_vanilla_dsg_accepts_valid() {
+        let mut data = vec![0; DESCRIPTION_LEN + VERSION_LEN];
+        data[DESCRIPTION_LEN..DESCRIPTION_LEN + 11].copy_from_slice(b"version 109");
+        assert!(looks_like_vanilla_dsg(&data));
+    }
+
+    #[test]
+    fn parse_header_rejects_too_short() {
+        assert!(matches!(parse_header(b"short"), Err(SaveError::TooShort)));
+    }
+
+    #[test]
+    fn parse_header_rejects_bad_magic() {
+        let data = vec![0; VANILLA_HEADER_LEN];
+        assert!(matches!(parse_header(&data), Err(SaveError::BadMagic)));
+    }
+
+    #[test]
+    fn parse_header_rejects_bad_version() {
+        let mut data = vec![0; VANILLA_HEADER_LEN];
+        data[DESCRIPTION_LEN..DESCRIPTION_LEN + 11].copy_from_slice(b"version 108");
+        assert!(matches!(parse_header(&data), Err(SaveError::BadVersion)));
+    }
+
+    #[test]
+    fn parse_header_accepts_valid() {
+        let mut data = vec![0; VANILLA_HEADER_LEN];
+        data[..4].copy_from_slice(b"desc");
+        data[DESCRIPTION_LEN..DESCRIPTION_LEN + 11].copy_from_slice(b"version 109");
+        let offset = DESCRIPTION_LEN + VERSION_LEN;
+        data[offset] = 2; // skill
+        data[offset + 1] = 1; // episode
+        data[offset + 2] = 1; // map
+        data[offset + 3..offset + 7].copy_from_slice(&[1, 0, 0, 0]); // players
+        data[offset + 7..offset + 10].copy_from_slice(&[1, 2, 3]); // time = 0x030201
+
+        let header = parse_header(&data).expect("should parse successfully");
+        assert!(header.description.starts_with(b"desc"));
+        assert!(header.version.starts_with(b"version 109"));
+        assert_eq!(header.skill, 2);
+        assert_eq!(header.episode, 1);
+        assert_eq!(header.map, 1);
+        assert_eq!(header.players_in_game, [1, 0, 0, 0]);
+        assert_eq!(header.level_time, 0x030201);
+    }
+
+    #[test]
+    fn load_game_returns_unsupported() {
+        let mut data = vec![0; VANILLA_HEADER_LEN];
+        data[DESCRIPTION_LEN..DESCRIPTION_LEN + 11].copy_from_slice(b"version 109");
+        assert!(matches!(
+            load_game(&data),
+            Err(SaveError::UnsupportedVanillaDsg)
+        ));
+    }
+
+    #[test]
+    fn save_game_returns_unsupported() {
+        let gs = GameState::new("E1M1");
+        assert!(matches!(
+            save_game(&gs, b"E1M1\0\0\0\0", 2, "test"),
+            Err(SaveError::UnsupportedVanillaDsg)
+        ));
+    }
+}

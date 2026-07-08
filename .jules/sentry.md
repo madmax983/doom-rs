@@ -56,3 +56,6 @@
 ## 2024-04-25 - Prevented generic unwrap panics across the codebase
 **Learning:** Found numerous `unwrap()` calls in test files which obscured test failure context and violated Sentry's principles.
 **Action:** Replaced `.unwrap()` with `.expect("value must exist in test")` to explicitly document the invariants in tests across multiple modules (`sight.rs`, `combat.rs`, `spawn.rs`, etc) to assist with debugging.
+## 2024-05-20 - Missing test coverage in vanilla savegame parser
+**Learning:** Found an untested fallback path in `savegame_vanilla::version_string` relying on `unwrap_or(bytes.len())` for strings missing null terminators, and completely missing test coverage for `savegame_vanilla` parser.
+**Action:** Added extensive unit tests to `savegame_vanilla.rs` to cover successful and failed parsing edge cases (like non-null-terminated strings, invalid magic, invalid version) using explicit error assertions and explicit `expect`s in valid tests.
