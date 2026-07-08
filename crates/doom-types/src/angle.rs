@@ -31,17 +31,13 @@ use crate::fixed::Fixed16_16;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Bam(pub u32);
 
-/// Precomputed sin/cos tables (2048 entries covering 0..π/2, mirrored for full circle).
+/// Whether trig lookups are "armed".
 ///
-/// Populated at startup from the WAD ANGLETOFINESHIFT + finesine data,
-/// or from the compile-time table in this module.
-///
-/// 2048 entries covering 90°, fine-shifted angle = `bam >> 19` (2048 steps per 90°).
-const FINE_TABLE_SIZE: usize = 8192; // 2048 * 4 quadrants
-static FINESINE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
-
-/// Lookup table populated at runtime.
-static mut SINE_TABLE: [Fixed16_16; FINE_TABLE_SIZE] = [Fixed16_16(0); FINE_TABLE_SIZE];
+/// The exact table is a compile-time constant ([`crate::finesine_table::FINESINE`]),
+/// so no data has to be computed at init. This flag only preserves the historical
+/// contract that `sin`/`cos` return 0 until `init_trig_tables()` is called.
+static FINESINE_READY: core::sync::atomic::AtomicBool =
+    core::sync::atomic::AtomicBool::new(false);
 
 /// Shift to convert a `Bam` to a fine-angle index (0..8191).
 pub const BAM_TO_FINE_SHIFT: u32 = 32 - 13; // >> 19 gives index in 0..8191
@@ -152,59 +148,55 @@ impl Bam {
     ///
     /// # Examples
     /// ```
-    /// use doom_types::{Bam, ANG90, FIXED_ONE};
+    /// use doom_types::{Bam, ANG90};
     /// unsafe { Bam::init_trig_tables(); }
-    /// assert_eq!(ANG90.sin(), FIXED_ONE);
+    /// // Vanilla finesine peak is 65535, not 65536.
+    /// assert_eq!(ANG90.sin().raw(), 65535);
     /// ```
     pub fn sin(self) -> Fixed16_16 {
-        if !FINESINE.load(core::sync::atomic::Ordering::Acquire) {
+        if !FINESINE_READY.load(core::sync::atomic::Ordering::Acquire) {
             return Fixed16_16::ZERO;
         }
-        // SAFETY: SINE_TABLE is only mutated once at init, before any reads.
-        unsafe { SINE_TABLE[self.fine_angle()] }
+        Fixed16_16(crate::finesine_table::FINESINE[self.fine_angle()])
     }
 
-    /// Cos lookup (sin shifted by 90°).
+    /// Cos lookup.
+    ///
+    /// Matches vanilla Doom exactly: `finecosine[i] == finesine[i + FINEANGLES/4]`,
+    /// reading the extended tail of the table rather than wrapping mod 8192.
     ///
     /// # Examples
     /// ```
-    /// use doom_types::{Bam, ANG180, FIXED_ONE};
+    /// use doom_types::{Bam, ANG180};
     /// unsafe { Bam::init_trig_tables(); }
-    /// assert_eq!(Bam::ZERO.cos(), FIXED_ONE);
-    /// assert_eq!(ANG180.cos(), -FIXED_ONE);
+    /// // Vanilla finecosine peak magnitude is 65535 (0.99998), not exactly 1.0.
+    /// assert_eq!(ANG180.cos().raw(), -65535);
     /// ```
     pub fn cos(self) -> Fixed16_16 {
-        let cos_angle = Bam(self.0.wrapping_add(ANG90.0));
-        cos_angle.sin()
+        if !FINESINE_READY.load(core::sync::atomic::Ordering::Acquire) {
+            return Fixed16_16::ZERO;
+        }
+        Fixed16_16(crate::finesine_table::FINESINE[self.fine_angle() + 2048])
     }
 
-    /// Initialize sin/cos tables from a floating-point computation.
+    /// Arm the trig lookups.
     ///
-    /// Must be called exactly once at startup, before any `sin()`/`cos()` calls.
+    /// The table itself is a compile-time constant (bit-exact to vanilla Doom's
+    /// `finesine[]`), so this only flips the readiness flag that gates `sin`/`cos`.
+    /// Kept `unsafe` and named `init_trig_tables` for call-site compatibility.
     ///
     /// # Safety
-    /// Must not be called concurrently or more than once.
+    /// Always sound; the `unsafe` marker is retained for API stability.
     ///
     /// # Examples
     /// ```
-    /// use doom_types::{Bam, ANG90, FIXED_ONE};
+    /// use doom_types::{Bam, ANG90};
     /// unsafe { Bam::init_trig_tables(); }
-    /// assert_eq!(ANG90.sin(), FIXED_ONE);
+    /// // Vanilla finesine peak is 65535, not 65536.
+    /// assert_eq!(ANG90.sin().raw(), 65535);
     /// ```
     pub unsafe fn init_trig_tables() {
-        use core::f64::consts::PI;
-        // SAFETY: single-threaded init before any reads.
-        #[allow(clippy::needless_range_loop)]
-        unsafe {
-            #[allow(clippy::needless_range_loop)]
-            for i in 0..FINE_TABLE_SIZE {
-                let angle = (i as f64) * (2.0 * PI) / (FINE_TABLE_SIZE as f64);
-                let sin_val = angle.sin();
-                core::ptr::addr_of_mut!(SINE_TABLE[i])
-                    .write(Fixed16_16((sin_val * (1 << 16) as f64) as i32));
-            }
-        }
-        FINESINE.store(true, core::sync::atomic::Ordering::Release);
+        FINESINE_READY.store(true, core::sync::atomic::Ordering::Release);
     }
 }
 
@@ -262,14 +254,10 @@ mod tests {
         // We can't guarantee before init because tests run in parallel,
         // but we can ensure it returns something sane after init.
         ensure_trig_init();
-        let sin90 = ANG90.sin();
-        assert_eq!(sin90.to_int(), 1); // sin(90) = 1.0
-
-        let cos0 = Bam::ZERO.cos();
-        assert_eq!(cos0.to_int(), 1); // cos(0) = 1.0
-
-        let cos180 = ANG180.cos();
-        assert_eq!(cos180.to_int(), -1); // cos(180) = -1.0
+        // Bit-exact vanilla `finesine`/`finecosine` values (peak magnitude 65535).
+        assert_eq!(ANG90.sin().raw(), 65535); // finesine[2048]
+        assert_eq!(Bam::ZERO.cos().raw(), 65535); // finecosine[0] == finesine[2048]
+        assert_eq!(ANG180.cos().raw(), -65535); // finecosine[4096] == finesine[6144]
     }
 
     #[test]
@@ -319,7 +307,7 @@ mod tests {
         // Every Bam value must produce a valid table index.
         for raw in [0u32, 0x1000_0000, 0x4000_0000, 0x8000_0000, 0xFFFF_FFFF] {
             let idx = Bam(raw).fine_angle();
-            assert!(idx < FINE_TABLE_SIZE, "fine_angle {idx} out of bounds");
+            assert!(idx < 8192, "fine_angle {idx} out of bounds");
         }
     }
 }
@@ -346,7 +334,7 @@ mod prop_tests {
         #[test]
         fn bam_fine_angle_always_in_bounds(a: u32) {
             let idx = Bam(a).fine_angle();
-            prop_assert!(idx < FINE_TABLE_SIZE);
+            prop_assert!(idx < 8192);
         }
     }
 }
