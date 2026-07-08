@@ -8,3 +8,6 @@
 **[Havoc: OOM and Arithmetic Overflows in Audio Processors]**
 **Learning:** Basic audio sampling processing math and absolute MIDI event time accumulations are prone to `u64` and `u32` overflows when dealing with unverified parameters like massive input sample rates (`u32::MAX`) or extreme chunk lengths, or sample rate of 0 dividing by zero and causing out of bounds allocations.
 **Action:** Always use `.saturating_add()`, `.saturating_mul()`, and `.max(1)` clamps defensively around hardware-driven mathematical constraints.
+**Blockmap OOB Silent Corruption**
+**Learning:** Using `.unwrap_or(0)` on missing offsets in blockmap causes silent fallback to the file header instead of gracefully failing.
+**Action:** Replace missing offset fallbacks with explicitly starting iteration at the end of the file or returning empty.
