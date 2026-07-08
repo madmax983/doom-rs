@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**[Refactored Primitive Obsession in trace_ray ActorCheck]**
+**Learning:** Using `[(i32, i32, i32, i32, bool)]` to represent actor bounds causes "Boolean Blindness" and "Primitive Obsession," obscuring what each primitive value represents and making the code error-prone.
+**Action:** Replace clustered tuples with a strongly typed struct (e.g., `ActorBounds { x: i32, y: i32, radius: i32, height: i32, shootable: bool }`) to self-document fields and clarify data flow at call sites.
