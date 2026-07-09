@@ -383,27 +383,12 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
 
     crate::weapons::tick_psprites(gs, cmd, level.as_deref());
 
-    // Sector specials: periodic player floor damage, etc. (immutable level borrow).
-    if let Some(lv) = level.as_deref() {
-        // Damage floors are handled by the periodic Doom path; the legacy
-        // per-tic helper is kept for isolated tests/compat only.
-        crate::specials::tick_sector_damage(gs, lv);
-    }
-
-    // Secret sector detection (special type 9): when the player is standing
-    // on a secret sector, increment their secret_count and clear the sector
-    // special so it only counts once.
+    // Sector specials — vanilla P_PlayerInSpecialSector: floor damage, secret
+    // discovery, and super-damage exit for the single sector the player's
+    // origin is actually in (not every sector sharing the player's floor z).
     if !gs.player.is_dead() {
-        if let Some(ref mut lv) = level {
-            let player_z = gs.mobjslab.get(gs.player.handle).map(|mo| mo.z.to_int());
-            if let Some(pz) = player_z {
-                for sector in &mut lv.sectors {
-                    if sector.special == 9 && pz == sector.floor_height as i32 {
-                        gs.player.secret_count += 1;
-                        sector.special = 0;
-                    }
-                }
-            }
+        if let Some(lv) = level.as_deref_mut() {
+            crate::specials::p_player_in_special_sector(gs, lv);
         }
     }
 }
@@ -2084,8 +2069,8 @@ mod tests {
             .expect("item must exist in tests")
             .health;
         assert_eq!(
-            health, 90,
-            "hellslime during gameplay should deal 5 damage on tic 0 and tic 32 only"
+            health, 80,
+            "vanilla hellslime (special 5) deals 10 damage on leveltime 0 and 32 only"
         );
     }
 

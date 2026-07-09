@@ -204,6 +204,100 @@ fn apply_sector_damage(gs: &mut GameState, handle: MobjHandle, damage: i32) {
 }
 
 // ---------------------------------------------------------------------------
+// P_PlayerInSpecialSector (vanilla-faithful)
+// ---------------------------------------------------------------------------
+
+/// Port of vanilla `P_PlayerInSpecialSector` (`p_spec.c`), called once per tic.
+///
+/// Unlike the legacy [`tick_sector_damage`] / [`tick_sector_secrets`] helpers
+/// (which scanned *every* sector whose floor height matched the player's `z`),
+/// this uses the single sector the player's origin is actually in
+/// (`player->mo->subsector->sector`) and applies the exact vanilla per-special
+/// logic:
+///
+/// - Only acts when `player->mo->z == sector->floorheight` (fully on the floor).
+/// - 5 (hellslime): 10 dmg every 32 tics unless ironfeet.
+/// - 7 (nukage): 5 dmg every 32 tics unless ironfeet.
+/// - 16 / 4 (super hellslime / strobe hurt): if `!ironfeet || P_Random() < 5`,
+///   20 dmg every 32 tics.  The `P_Random()` is consumed each tic the ironfeet
+///   player stands here (matching vanilla's short-circuit and RNG stream).
+/// - 9 (secret): `secret_count++`, clears the special.
+/// - 11 (exit super damage): 20 dmg every 32 tics, exit when health <= 10.
+pub fn p_player_in_special_sector(gs: &mut GameState, level: &mut Level) {
+    let handle = gs.player.handle;
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
+    };
+    let (px, py, pz) = (mo.x.to_int(), mo.y.to_int(), mo.z.to_int());
+
+    // sector = player->mo->subsector->sector. Use the BSP point lookup; fall
+    // back to the first sector whose floor the player rests on for the minimal
+    // BSP-less levels used by unit tests.
+    let sector_idx = level.sector_index_at(px, py).or_else(|| {
+        level
+            .sectors
+            .iter()
+            .position(|s| pz == s.floor_height as i32)
+    });
+    let Some(sector_idx) = sector_idx else {
+        return;
+    };
+
+    let special = level.sectors[sector_idx].special;
+    if special == 0 {
+        return;
+    }
+
+    // Falling, not all the way down yet?
+    if pz != level.sectors[sector_idx].floor_height as i32 {
+        return;
+    }
+
+    let leveltime = gs.stats.level_time;
+    let on_period = (leveltime & 0x1f) == 0;
+    let has_ironfeet = gs.player.powers[crate::player::powers::PW_IRONFEET] > 0;
+
+    match special {
+        5 => {
+            // HELLSLIME DAMAGE
+            if !has_ironfeet && on_period {
+                gs.damage_player(10);
+            }
+        }
+        7 => {
+            // NUKAGE DAMAGE
+            if !has_ironfeet && on_period {
+                gs.damage_player(5);
+            }
+        }
+        16 | 4 => {
+            // SUPER HELLSLIME / STROBE HURT.  `P_Random()` is only drawn when
+            // ironfeet is active (short-circuit), exactly as in vanilla.
+            if (!has_ironfeet || gs.p_random() < 5) && on_period {
+                gs.damage_player(20);
+            }
+        }
+        9 => {
+            // SECRET SECTOR
+            gs.player.secret_count += 1;
+            level.sectors[sector_idx].special = 0;
+        }
+        11 => {
+            // EXIT SUPER DAMAGE (God mode is not modeled).
+            if on_period {
+                gs.damage_player(20);
+            }
+            if let Some(mo) = gs.mobjslab.get(handle)
+                && mo.health <= 10
+            {
+                gs.exit_request = Some(ExitRequest::Normal);
+            }
+        }
+        _ => {}
+    }
+}
+
+// ---------------------------------------------------------------------------
 // player_sector_index
 // ---------------------------------------------------------------------------
 
