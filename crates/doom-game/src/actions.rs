@@ -533,19 +533,57 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
         }
         true
     } else {
-        // Movement failed. In vanilla Doom, if the blocking linedef is a door,
-        // the monster tries to open that exact door linedef.
-        if let Some(lv) = level {
-            try_open_door(gs, lv, blocking_linedef);
+        // Movement failed. Port of vanilla `P_Move`'s spechit path
+        // (`p_enemy.c`): after `P_TryMove` fails, if the blocked move contacted
+        // any special two-sided line (`numspechit > 0`), the monster stops
+        // (`actor->movedir = DI_NODIR`) and tries to use each contacted line as
+        // a door (`P_UseSpecialLine`), returning whether any opened (`good`).
+        // If no special line was contacted, `P_Move` returns false and the
+        // caller (`A_Chase`) picks a new chase direction.
+        //
+        // `numspechit` only ever counts *two-sided* special lines: vanilla
+        // `PIT_CheckLine` rejects one-sided lines (`return false`) before the
+        // `if (ld->special)` spechit-add, so one-sided special lines are never
+        // enqueued. We approximate the spechit set with the single blocking
+        // linedef, which for a shut door is that door line itself.
+        let special_blocker = level.and_then(|lv| {
+            blocking_linedef
+                .and_then(|i| lv.linedefs.get(i).map(|ld| (i, ld)))
+                .filter(|(_, ld)| {
+                    ld.is_two_sided()
+                        && ld.special != 0
+                        && ld.flags & doom_map::lumps::FLAG_SECRET == 0
+                })
+                .map(|(i, _)| i)
+        });
+        if let Some(ld_idx) = special_blocker {
+            // numspechit > 0: monster halts and attempts the door.
+            let good = level
+                .map(|lv| monster_use_special_line(gs, lv, ld_idx))
+                .unwrap_or(false);
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.movedir = DI_NODIR;
+            }
+            good
+        } else {
+            false
         }
-        false
     }
 }
 
-/// Attempt to open a door that is blocking the monster's path.
-fn try_open_door(gs: &mut GameState, level: &Level, blocking_linedef: Option<usize>) {
-    if let Some(ld_idx) = blocking_linedef {
-        let _ = crate::specials::monster_activate_door_linedef(gs, level, ld_idx);
+/// Port of vanilla `P_UseSpecialLine` restricted to the monster (`!thing->player`)
+/// path (`p_switch.c`): a monster can only activate manual door specials
+/// `1, 32, 33, 34` and never a secret line. Returns whether the line was used.
+fn monster_use_special_line(gs: &mut GameState, level: &Level, ld_idx: usize) -> bool {
+    let Some(ld) = level.linedefs.get(ld_idx) else {
+        return false;
+    };
+    if ld.flags & doom_map::lumps::FLAG_SECRET != 0 {
+        return false;
+    }
+    match ld.special {
+        1 | 32 | 33 | 34 => crate::specials::monster_activate_door_linedef(gs, level, ld_idx),
+        _ => false,
     }
 }
 
@@ -3018,6 +3056,117 @@ mod tests {
         );
     }
 
+    /// Build a two-sided E–W-blocking wall level for the P_Move spechit tests:
+    /// a vertical line at x=128 splits sector 0 (open) from a degenerate back
+    /// sector (ceil==floor==0, i.e. a shut opening), living in a neighbouring
+    /// blockmap cell so the door-open path must reach across cells. `special`
+    /// sets the linedef special (1 = openable DR door, 0 = plain blocker).
+    fn make_ns_door_level(special: u16) -> doom_map::Level {
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).expect("item must exist in tests");
+        let mut bm_data = vec![0u8; 22];
+        bm_data[4..6].copy_from_slice(&2u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&6u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&8u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[14..16].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        bm_data[16..18].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[18..20].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[20..22].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).expect("item must exist in tests");
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            }],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 128, y: -32 },
+                doom_map::Vertex { x: 128, y: 32 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 0,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap,
+        }
+    }
+
+    #[test]
+    fn p_move_plain_blocker_does_not_halt_or_open() {
+        // A shut two-sided opening with NO special: vanilla `numspechit == 0`, so
+        // `P_Move` returns false (→ `A_Chase` picks a new direction) and leaves
+        // `movedir` untouched — the spechit/door path must be special-gated.
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 104, 0);
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .movedir = DI_EAST;
+
+        let level = make_ns_door_level(0);
+        let moved = p_move(&mut gs, trooper, Some(&level));
+
+        assert!(!moved, "a non-special blocked step returns false");
+        assert_eq!(
+            gs.mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .movedir,
+            DI_EAST,
+            "a plain (non-door) block must not clear movedir"
+        );
+        assert!(
+            gs.movers.active_doors.is_empty(),
+            "no door mover for a non-special line"
+        );
+    }
+
     #[test]
     fn p_move_opens_the_actual_blocking_door() {
         let mut gs = make_game_state();
@@ -3104,7 +3253,20 @@ mod tests {
 
         let moved = p_move(&mut gs, trooper, Some(&level));
 
-        assert!(!moved, "the move should be blocked by the near door");
+        // Vanilla `P_Move` spechit path (`p_enemy.c`): a shut but openable door
+        // (special 1) blocking the step is added to `spechit`; the monster halts
+        // (`movedir = DI_NODIR`), `P_UseSpecialLine` opens it, and P_Move returns
+        // that `good` result — true here — so `A_Chase` treats the move as done
+        // and does NOT pick a new chase direction this tic.
+        assert!(moved, "opening a blocking door returns P_UseSpecialLine's good=true");
+        assert_eq!(
+            gs.mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .movedir,
+            DI_NODIR,
+            "a monster halted by a door has its movedir cleared to DI_NODIR"
+        );
         assert_eq!(
             gs.movers.active_doors.len(),
             1,
