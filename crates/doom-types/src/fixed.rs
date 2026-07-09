@@ -108,12 +108,21 @@ impl Fixed16_16 {
         Self((product >> FRAC_BITS) as i32)
     }
 
-    /// Compute `self / rhs` using a 64-bit intermediate.
+    /// Compute `self / rhs`, an exact port of vanilla Doom's `FixedDiv`
+    /// (`m_fixed.c`):
     ///
-    /// Equivalent to the C macro `FixedDiv(a, b)`.
+    /// ```c
+    /// fixed_t FixedDiv(fixed_t a, fixed_t b) {
+    ///     if ((abs(a) >> 14) >= abs(b))
+    ///         return (a ^ b) < 0 ? INT_MIN : INT_MAX;
+    ///     return (fixed_t)(((int64_t) a << 16) / b);
+    /// }
+    /// ```
     ///
-    /// # Panics
-    /// Panics (debug) if `rhs == 0`.
+    /// The overflow guard doubles as the divide-by-zero guard (`abs(b) == 0`
+    /// always triggers it), so this never panics and never divides by zero —
+    /// it saturates to `INT_MIN`/`INT_MAX` according to the sign of `a ^ b`,
+    /// matching vanilla bit-for-bit (no clamping of an out-of-range quotient).
     ///
     /// # Examples
     /// ```
@@ -124,27 +133,18 @@ impl Fixed16_16 {
     /// ```
     #[inline]
     pub fn fixed_div(self, rhs: Self) -> Self {
-        debug_assert!(rhs.0 != 0, "FixedDiv: division by zero");
-        if rhs.0 == 0 {
-            // Havoc 👺: Protect against division by zero in release builds
-            return if self.0 >= 0 {
-                Self(i32::MAX)
-            } else {
+        let a = self.0;
+        let b = rhs.0;
+        // `(abs(a) >> 14) >= abs(b)` — unsigned_abs avoids the INT_MIN abs UB.
+        if (a.unsigned_abs() >> 14) >= b.unsigned_abs() {
+            if (a ^ b) < 0 {
                 Self(i32::MIN)
-            };
+            } else {
+                Self(i32::MAX)
+            }
+        } else {
+            Self((((a as i64) << FRAC_BITS) / (b as i64)) as i32)
         }
-        let numerator = (self.0 as i64) << FRAC_BITS;
-        // Havoc 👺: Catch overflow division cases!
-        let mut result = numerator
-            .checked_div(rhs.0 as i64)
-            .unwrap_or(if numerator > 0 { i64::MAX } else { i64::MIN });
-
-        if result > i32::MAX as i64 {
-            result = i32::MAX as i64;
-        } else if result < i32::MIN as i64 {
-            result = i32::MIN as i64;
-        }
-        Self(result as i32)
     }
 
     /// Absolute value.
@@ -372,11 +372,15 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
-    fn fixed_div_by_zero_panics() {
-        let a = Fixed16_16::from_int(10);
-        let b = Fixed16_16::ZERO;
-        let _ = a.fixed_div(b);
+    fn fixed_div_by_zero_saturates_like_vanilla() {
+        // Vanilla FixedDiv does not special-case zero: `(abs(a) >> 14) >= 0`
+        // is always true, so it saturates to INT_MIN/INT_MAX by the sign of
+        // `a ^ b` (with b == 0, that is the sign of a). It never panics.
+        let pos = Fixed16_16::from_int(10);
+        let neg = Fixed16_16::from_int(-10);
+        let zero = Fixed16_16::ZERO;
+        assert_eq!(pos.fixed_div(zero), Fixed16_16::from_raw(i32::MAX));
+        assert_eq!(neg.fixed_div(zero), Fixed16_16::from_raw(i32::MIN));
     }
 
     #[test]
