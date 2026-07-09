@@ -1143,21 +1143,31 @@ fn a_face_target(gs: &mut GameState, handle: MobjHandle) {
         return;
     };
     let (target_handle, mo_x, mo_y) = (mo.target, mo.x, mo.y);
+    if target_handle == MobjHandle::NULL {
+        return;
+    }
+
+    // Vanilla clears MF_AMBUSH on facing.
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.flags &= !flags::MF_AMBUSH;
+    }
 
     let Some(t) = gs.mobjslab.get(target_handle) else {
         return;
     };
-    let (tx, ty) = (t.x, t.y);
+    let (tx, ty, t_flags) = (t.x, t.y, t.flags);
 
-    let dx = (tx - mo_x).to_int();
-    let dy = (ty - mo_y).to_int();
+    // Exact vanilla `R_PointToAngle2` (tantoangle table), not an f64 atan2.
+    let mut angle = crate::geom::r_point_to_angle2(mo_x.raw(), mo_y.raw(), tx.raw(), ty.raw());
 
-    // Use Doom's angle conventions: 0 = East, 90° = North (positive Y).
-    // Compute BAM angle from (dx, dy) using integer atan2 approximation.
-    let angle = bam_from_xy(dx, dy);
+    // Fuzzy target (spectre / invisible): jitter the aim by P_SubRandom()<<21.
+    if t_flags & flags::MF_SHADOW != 0 {
+        let spread = gs.p_subrandom() << 21;
+        angle = angle.wrapping_add(spread as u32);
+    }
 
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
-        mo.angle = angle;
+        mo.angle = Bam(angle);
     }
 }
 
@@ -1168,6 +1178,7 @@ fn a_face_target(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// This is a simplified version that handles the 8 octants; accuracy is
 /// sufficient for monster AI facing direction.
+#[cfg(test)]
 fn bam_from_xy(dx: i32, dy: i32) -> Bam {
     if dx == 0 && dy == 0 {
         return Bam(0);
