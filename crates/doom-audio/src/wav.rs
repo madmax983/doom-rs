@@ -35,7 +35,10 @@ pub fn render_mus_to_wav_mono(
     sample_rate: u32,
     loops: u32,
 ) -> Vec<u8> {
-    let total_duration: u32 = score.events.iter().map(|(d, _)| *d).sum();
+    let total_duration: u32 = score
+        .events
+        .iter()
+        .fold(0u32, |acc, (d, _)| acc.saturating_add(*d));
     if total_duration == 0 || score.events.is_empty() {
         return encode_pcm16_wav_mono(sample_rate, &[]);
     }

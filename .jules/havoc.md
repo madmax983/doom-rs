@@ -11,3 +11,6 @@
 **Blockmap OOB Silent Corruption**
 **Learning:** Using `.unwrap_or(0)` on missing offsets in blockmap causes silent fallback to the file header instead of gracefully failing.
 **Action:** Replace missing offset fallbacks with explicitly starting iteration at the end of the file or returning empty.
+**WAV Encoder Integer Overflow**
+**Learning:** Blindly summing unsanitized time deltas using `.sum()` on `u32` can panic if a malformed file injects `u32::MAX`.
+**Action:** Use `.fold(0, |acc, x| acc.saturating_add(x))` when summing untrusted lengths or deltas to prevent overflow panics.
