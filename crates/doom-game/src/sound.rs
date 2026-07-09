@@ -213,6 +213,16 @@ fn recursive_sound(
             continue;
         };
 
+        // Vanilla P_RecursiveSound: `P_LineOpening(check); if (openrange <= 0)
+        // continue;` — sound does not pass through a closed door (or any
+        // zero-height opening).  Without this the flood fill leaks through
+        // every closed door and floods the entire level at once.
+        if let Some((open_bottom, open_top)) = crate::trace::line_opening(level, ld) {
+            if open_top - open_bottom <= 0 {
+                continue;
+            }
+        }
+
         // Calculate sound block cost for this linedef.
         let blocks = if ld.flags & ML_SOUNDBLOCK != 0 { 1 } else { 0 };
         let remaining = sound_blocks_remaining - blocks;

@@ -633,6 +633,9 @@ pub static MOBJINFO: [MobjInfo; 76] = [
     MobjInfo {
         flags: flags::MF_SOLID | flags::MF_SHOOTABLE,
         spawn_health: 20,
+        spawn_state: sn(ids::S_BAR1),
+        radius: fixed(10),
+        height: fixed(42),
         ..ITEM
     }, // 64: Barrel
     // -----------------------------------------------------------------------

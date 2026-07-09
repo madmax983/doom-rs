@@ -317,16 +317,13 @@ fn check_ammo(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) -> bool {
     false
 }
 
-fn queue_weapon_sound_and_noise(gs: &mut GameState, weapon: WeaponType, level: Option<&Level>) {
+fn queue_weapon_sound_and_noise(gs: &mut GameState, weapon: WeaponType, _level: Option<&Level>) {
+    // The muzzle-flash frame only plays the fire SFX.  Monster alerting
+    // (`P_NoiseAlert`) happens earlier, in `p_fire_weapon` (vanilla
+    // `P_FireWeapon`), the tic the trigger is pulled — not here.
     gs.sound
         .sound_queue
         .push(SoundRequest::PlayerWeaponFire(weapon));
-    if !matches!(weapon, WeaponType::Fist)
-        && let Some(lv) = level
-    {
-        let handle = gs.player.handle;
-        crate::sound::p_noise_alert(gs, lv, handle, handle);
-    }
 }
 
 fn set_player_mobj_state(gs: &mut GameState, state: StateNum) {
@@ -439,9 +436,22 @@ fn a_weapon_ready(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     } else {
         0
     };
+    p_fire_weapon(gs, cmd, level);
+}
+
+/// Port of `P_FireWeapon` (`p_pspr.c`): puts the weapon into its attack state
+/// and, crucially, calls `P_NoiseAlert` the instant the trigger is pulled —
+/// several tics **before** the muzzle-flash frame actually fires the shot.
+/// Vanilla wakes nearby monsters at trigger-pull time, not at bullet time, so
+/// the sound-propagation cascade must start here, not in `A_Fire*`.
+fn p_fire_weapon(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     begin_player_weapon_attack(gs);
     let info = weapon_psprite_info(gs.player.weapon);
     set_psprite_state(gs, psprite_slots::WEAPON, info.attack, cmd, level);
+    if let Some(lv) = level {
+        let handle = gs.player.handle;
+        crate::sound::p_noise_alert(gs, lv, handle, handle);
+    }
 }
 
 fn a_lower(gs: &mut GameState) {
@@ -469,9 +479,7 @@ fn a_refire(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     let attack_held = cmd.buttons & bt::BT_ATTACK != 0;
     if attack_held && gs.player.pending_weapon.is_none() && !gs.player.is_dead() {
         gs.player.refire = gs.player.refire.saturating_add(1);
-        begin_player_weapon_attack(gs);
-        let info = weapon_psprite_info(gs.player.weapon);
-        set_psprite_state(gs, psprite_slots::WEAPON, info.attack, cmd, level);
+        p_fire_weapon(gs, cmd, level);
         return;
     }
 

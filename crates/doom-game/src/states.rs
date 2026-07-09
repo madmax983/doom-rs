@@ -146,9 +146,10 @@ pub mod sprite_names {
     pub const SPR_FSKU: u16 = 78;
     pub const SPR_FIRE: u16 = 79;
     pub const SPR_PLAS: u16 = 80;
+    pub const SPR_BAR1: u16 = 81;
     pub const SPR_NONE: u16 = 0xFFFF;
 
-    pub const SPRITE_COUNT: usize = 81;
+    pub const SPRITE_COUNT: usize = 82;
 
     /// Sprite name strings for WAD lookup.
     pub const SPRITE_NAMES: [&str; SPRITE_COUNT] = [
@@ -159,7 +160,7 @@ pub mod sprite_names {
         "IFOG", "CLIP", "SHEL", "CELL", "AMMO", "SBOX", "BPAK", "MEDI", "STIM", "BON1", "BON2",
         "SOUL", "PINV", "PINS", "SUIT", "PMAP", "PVIS", "MEGA", "ARM1", "ARM2", "BKEY", "RKEY",
         "YKEY", "BSKU", "RSKU", "YSKU", "COLU", "TBLU", "TGRN", "TRED", "SMBT", "SMGT", "SMRT",
-        "CEYE", "FSKU", "FIRE", "PLAS",
+        "CEYE", "FSKU", "FIRE", "PLAS", "BAR1",
     ];
 }
 
@@ -634,9 +635,13 @@ pub mod ids {
     pub const S_SGUN9: u16 = 374;
     /// Demon 6th death frame (vanilla `S_SARG_DIE6`).
     pub const S_SARG_DIE6: u16 = 375;
+    /// Exploding-barrel idle loop (vanilla `S_BAR1`/`S_BAR2`).  Two 6-tic frames
+    /// that cycle forever, keeping the barrel alive and `MF_SOLID` until shot.
+    pub const S_BAR1: u16 = 376;
+    pub const S_BAR2: u16 = 377;
 
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 376;
+    pub const STATES_COUNT: usize = 378;
 }
 
 // ---------------------------------------------------------------------------
@@ -1151,6 +1156,9 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SHTG, 0, 3, NONE, ids::S_SGUN9),          // 373: S_SGUN8
     st!(SPR_SHTG, 0, 7, REFIRE, ids::S_SGUN_READY),   // 374: S_SGUN9 (A_ReFire)
     st!(SPR_SARG, 13, -1, NONE, ids::S_NULL),         // 375: S_SARG_DIE6
+    // --- Exploding barrel idle loop (vanilla S_BAR1/S_BAR2, 6 tics each) ---
+    st!(SPR_BAR1, 0, 6, NONE, ids::S_BAR2),           // 376: S_BAR1
+    st!(SPR_BAR1, 1, 6, NONE, ids::S_BAR1),           // 377: S_BAR2
 ];
 
 // ---------------------------------------------------------------------------

@@ -194,6 +194,12 @@ pub fn spawn_level_things(
 ) -> Option<MobjHandle> {
     let mut player_handle: Option<MobjHandle> = None;
 
+    // Size the sound-propagation state to this level's sector count.  Vanilla
+    // clears soundtargets in P_SpawnMapThing/P_SetupLevel; without this the
+    // `sound_targets` vector stays empty and `P_NoiseAlert` can never wake a
+    // monster (weapon fire would silently fail to alert nearby monsters).
+    crate::sound::init_sound_state(gs, level.sectors.len());
+
     // Vanilla P_SpawnMapThing skill bit (p_mobj.c): sk_baby->1, sk_nightmare->4,
     // otherwise 1 << (gameskill-1).  A thing spawns only if `options & bit`.
     let skill_bit: u16 = match skill {

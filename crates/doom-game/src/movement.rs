@@ -643,6 +643,40 @@ fn try_move_with_blocker(
         return (true, None);
     }
 
+    // --- PIT_CheckThing (solid mobj-mobj clipping) ---
+    // Vanilla `P_CheckPosition` iterates nearby things (`P_BlockThingsIterator`,
+    // `PIT_CheckThing`) BEFORE lines: a move into any SOLID thing is blocked.
+    // We port the solid-blocking subset; the moving thing being a missile or a
+    // charging lost soul (MF_SKULLFLY) takes damage-dealing branches handled
+    // elsewhere (`p_move_projectiles`), so we skip the thing pass for those.
+    if mo_flags & (flags::MF_MISSILE | flags::MF_SKULLFLY) == 0 {
+        for other in slab.iter_handles() {
+            if other == handle {
+                continue;
+            }
+            let Some(t) = slab.get(other) else {
+                continue;
+            };
+            // Vanilla gate: only SOLID / SPECIAL / SHOOTABLE things are considered.
+            if t.flags & (flags::MF_SOLID | flags::MF_SPECIAL | flags::MF_SHOOTABLE) == 0 {
+                continue;
+            }
+            let blockdist = (t.radius + radius).raw();
+            if (t.x.raw() - new_x.raw()).abs() >= blockdist
+                || (t.y.raw() - new_y.raw()).abs() >= blockdist
+            {
+                // Bounding boxes don't overlap — no contact.
+                continue;
+            }
+            // `PIT_CheckThing` returns `!(thing->flags & MF_SOLID)`: a solid
+            // thing blocks the move; non-solid specials/shootables do not.
+            // (Item pickup and missile/skull damage are handled on other paths.)
+            if t.flags & flags::MF_SOLID != 0 {
+                return (false, None);
+            }
+        }
+    }
+
     let current_floor = level
         .floor_at(old_x.to_int(), old_y.to_int())
         .map(|floor| Fixed16_16::from_int(floor as i32));
