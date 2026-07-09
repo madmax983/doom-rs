@@ -355,7 +355,7 @@ mod tests {
 
     fn init_trig_tables_once() {
         static INIT: Once = Once::new();
-        INIT.call_once(|| unsafe {
+        INIT.call_once(|| {
             Bam::init_trig_tables();
         });
     }

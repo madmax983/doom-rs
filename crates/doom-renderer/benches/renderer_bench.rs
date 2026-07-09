@@ -162,9 +162,7 @@ fn bench_framebuffer_clear(c: &mut Criterion) {
 fn bench_render_level_minimal(c: &mut Criterion) {
     // init_trig_tables is required for sin/cos used inside render_level.
     // SAFETY: single-threaded benchmark init.
-    unsafe {
-        Bam::init_trig_tables();
-    }
+    Bam::init_trig_tables();
 
     let level = make_minimal_level();
     let palette = PaletteLut::grayscale();

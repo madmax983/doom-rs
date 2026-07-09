@@ -38,10 +38,10 @@ pub struct Bam(pub u32);
 ///
 /// 2048 entries covering 90°, fine-shifted angle = `bam >> 19` (2048 steps per 90°).
 const FINE_TABLE_SIZE: usize = 8192; // 2048 * 4 quadrants
-static FINESINE: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
+
 
 /// Lookup table populated at runtime.
-static mut SINE_TABLE: [Fixed16_16; FINE_TABLE_SIZE] = [Fixed16_16(0); FINE_TABLE_SIZE];
+static SINE_TABLE: once_cell::sync::OnceCell<[Fixed16_16; FINE_TABLE_SIZE]> = once_cell::sync::OnceCell::new();
 
 /// Shift to convert a `Bam` to a fine-angle index (0..8191).
 pub const BAM_TO_FINE_SHIFT: u32 = 32 - 13; // >> 19 gives index in 0..8191
@@ -153,15 +153,15 @@ impl Bam {
     /// # Examples
     /// ```
     /// use doom_types::{Bam, ANG90, FIXED_ONE};
-    /// unsafe { Bam::init_trig_tables(); }
+    /// Bam::init_trig_tables();
     /// assert_eq!(ANG90.sin(), FIXED_ONE);
     /// ```
     pub fn sin(self) -> Fixed16_16 {
-        if !FINESINE.load(core::sync::atomic::Ordering::Acquire) {
-            return Fixed16_16::ZERO;
+        if let Some(table) = SINE_TABLE.get() {
+            table[self.fine_angle()]
+        } else {
+            Fixed16_16::ZERO
         }
-        // SAFETY: SINE_TABLE is only mutated once at init, before any reads.
-        unsafe { SINE_TABLE[self.fine_angle()] }
     }
 
     /// Cos lookup (sin shifted by 90°).
@@ -169,7 +169,7 @@ impl Bam {
     /// # Examples
     /// ```
     /// use doom_types::{Bam, ANG180, FIXED_ONE};
-    /// unsafe { Bam::init_trig_tables(); }
+    /// Bam::init_trig_tables();
     /// assert_eq!(Bam::ZERO.cos(), FIXED_ONE);
     /// assert_eq!(ANG180.cos(), -FIXED_ONE);
     /// ```
@@ -188,23 +188,21 @@ impl Bam {
     /// # Examples
     /// ```
     /// use doom_types::{Bam, ANG90, FIXED_ONE};
-    /// unsafe { Bam::init_trig_tables(); }
+    /// Bam::init_trig_tables();
     /// assert_eq!(ANG90.sin(), FIXED_ONE);
     /// ```
-    pub unsafe fn init_trig_tables() {
+    pub fn init_trig_tables() {
         use core::f64::consts::PI;
-        // SAFETY: single-threaded init before any reads.
-        #[allow(clippy::needless_range_loop)]
-        unsafe {
+        SINE_TABLE.get_or_init(|| {
+            let mut table = [Fixed16_16::ZERO; FINE_TABLE_SIZE];
             #[allow(clippy::needless_range_loop)]
             for i in 0..FINE_TABLE_SIZE {
                 let angle = (i as f64) * (2.0 * PI) / (FINE_TABLE_SIZE as f64);
                 let sin_val = angle.sin();
-                core::ptr::addr_of_mut!(SINE_TABLE[i])
-                    .write(Fixed16_16((sin_val * (1 << 16) as f64) as i32));
+                table[i] = Fixed16_16((sin_val * (1 << 16) as f64) as i32);
             }
-        }
-        FINESINE.store(true, core::sync::atomic::Ordering::Release);
+            table
+        });
     }
 }
 
@@ -243,12 +241,8 @@ impl core::fmt::Display for Bam {
 mod tests {
     use super::*;
 
-    static INIT: std::sync::Once = std::sync::Once::new();
-
     fn ensure_trig_init() {
-        INIT.call_once(|| unsafe {
-            Bam::init_trig_tables();
-        });
+        Bam::init_trig_tables();
     }
 
     #[test]
