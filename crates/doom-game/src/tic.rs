@@ -2072,9 +2072,7 @@ mod tests {
     #[test]
     fn tick_player_first_pistol_shot_is_accurate() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
 
         let mut gs = make_game_state();
         let mut trooper = Mobj::new(
@@ -2202,9 +2200,7 @@ mod tests {
     #[test]
     fn dead_player_ignores_input_and_clears_held_buttons() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
 
         let mut gs = make_game_state();
         gs.player.apply_damage(200);

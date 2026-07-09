@@ -1,10 +1,13 @@
-## 2024-05-18 - [Havoc: OOM on TEXTURE1 parser]
-**Learning:** Doom's TEXTURE1 parsing uses a direct 4-byte `num_textures` read to allocate `Vec::with_capacity(num_textures)`. Fuzzing this length with large values triggers an immediate OOM.
-**Action:** Use `.min(data.len() / 4)` to clamp lengths derived from WAD/lump headers, preventing massive allocations while still ensuring we parse valid entries up to the slice boundary.
+**Overflow in Combat radius_attack**
+**Learning:** Found an integer overflow where multiplying maximum `i32` damage by `(radius - dist)` would easily panic standard `i32` bounds if the values were maliciously large (like from a fuzz target).
+**Action:** Always cast bounds and modifiers to `i64` before multiplication during distance scaling, then clamp to `i32::MIN..i32::MAX` before casting back.
+**Zero-Duration MUS Score Infinite Loop**
+**Learning:** `while` loops dependent on iterating through a sequence to reach an end state can infinitely loop if the state resets entirely within a single iteration block because of 0-time advances (e.g. an event duration of 0 causing a full loop wrapping).
+**Action:** Always validate that event sequences have a > 0 minimum duration, or impose a maximum iteration limit within loops that advance time-based state.
 
-**Havoc: Bounds-checking allocations**
-**Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust,  attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
-**Action:** Use  when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
-**Havoc: Bounds-checking allocations**
-**Learning:** Uncapped allocations driven by input (like network packets or save files) can cause AddressSanitizer/allocator Out-Of-Memory errors and Denial of Service. In Rust, `Vec::with_capacity` attempts to allocate the requested size immediately, leading to massive memory usage when the capacity is arbitrary.
-**Action:** Use `.min(REASONABLE_CAPACITY)` when reserving memory based on input-controlled sizes. Limit capacities on things like Network rollbacks or save game parsers.
+**[Havoc: OOM and Arithmetic Overflows in Audio Processors]**
+**Learning:** Basic audio sampling processing math and absolute MIDI event time accumulations are prone to `u64` and `u32` overflows when dealing with unverified parameters like massive input sample rates (`u32::MAX`) or extreme chunk lengths, or sample rate of 0 dividing by zero and causing out of bounds allocations.
+**Action:** Always use `.saturating_add()`, `.saturating_mul()`, and `.max(1)` clamps defensively around hardware-driven mathematical constraints.
+**Blockmap OOB Silent Corruption**
+**Learning:** Using `.unwrap_or(0)` on missing offsets in blockmap causes silent fallback to the file header instead of gracefully failing.
+**Action:** Replace missing offset fallbacks with explicitly starting iteration at the end of the file or returning empty.

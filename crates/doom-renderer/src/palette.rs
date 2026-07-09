@@ -173,6 +173,42 @@ impl PaletteLut {
     pub fn n_palettes(&self) -> usize {
         self.n_palettes
     }
+
+    /// Expand a palette-indexed [`Framebuffer`](crate::framebuffer::Framebuffer)
+    /// into packed 32-bit `0xFF_RR_GG_BB` (opaque ARGB) pixels.
+    ///
+    /// This is the **canonical** palette→ARGB conversion shared by presenters
+    /// that need packed 32-bit pixels (e.g. the windowed `doom-present` host,
+    /// which hands the result to `abrash`'s software presenter). The alpha byte
+    /// is always `0xFF`. Each output pixel `y * 320 + x` corresponds to the same
+    /// index in `fb.as_slice()`.
+    ///
+    /// `palette` is clamped to `[0, n_palettes)` (via [`Self::palette_slice`]).
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::framebuffer::Framebuffer;
+    /// use doom_renderer::palette::PaletteLut;
+    ///
+    /// let lut = PaletteLut::test_primary(); // 0=black,1=red,2=green,3=blue
+    /// let mut fb = Framebuffer::new();
+    /// fb.set_pixel(0, 0, 1); // red
+    /// fb.set_pixel(1, 0, 2); // green
+    /// let argb = lut.expand_argb(&fb, 0);
+    /// assert_eq!(argb[0], 0xFF_FF_00_00); // red
+    /// assert_eq!(argb[1], 0xFF_00_FF_00); // green
+    /// ```
+    #[must_use]
+    pub fn expand_argb(&self, fb: &crate::framebuffer::Framebuffer, palette: usize) -> Vec<u32> {
+        let slice = self.palette_slice(palette);
+        fb.as_slice()
+            .iter()
+            .map(|&idx| {
+                let c = slice[idx as usize];
+                0xFF00_0000 | (u32::from(c.r) << 16) | (u32::from(c.g) << 8) | u32::from(c.b)
+            })
+            .collect()
+    }
 }
 
 impl Default for PaletteLut {
@@ -240,5 +276,43 @@ mod tests {
         assert_eq!(lut.get(0, 1), Rgb::new(255, 0, 0));
         assert_eq!(lut.get(0, 2), Rgb::new(0, 255, 0));
         assert_eq!(lut.get(0, 3), Rgb::new(0, 0, 255));
+    }
+
+    #[test]
+    fn expand_argb_packs_known_indices() {
+        use crate::framebuffer::Framebuffer;
+        let lut = PaletteLut::test_primary(); // 0=black,1=red,2=green,3=blue,4+=white
+        let mut fb = Framebuffer::new();
+        fb.set_pixel(0, 0, 0); // black
+        fb.set_pixel(1, 0, 1); // red
+        fb.set_pixel(2, 0, 2); // green
+        fb.set_pixel(3, 0, 3); // blue
+        fb.set_pixel(4, 0, 4); // white
+        let argb = lut.expand_argb(&fb, 0);
+        assert_eq!(argb.len(), 64_000);
+        assert_eq!(argb[0], 0xFF_00_00_00); // black, opaque alpha
+        assert_eq!(argb[1], 0xFF_FF_00_00); // red
+        assert_eq!(argb[2], 0xFF_00_FF_00); // green
+        assert_eq!(argb[3], 0xFF_00_00_FF); // blue
+        assert_eq!(argb[4], 0xFF_FF_FF_FF); // white
+    }
+
+    #[test]
+    fn expand_argb_uses_selected_palette() {
+        use crate::framebuffer::Framebuffer;
+        // Build a LUT whose palette 0 and palette 1 differ for color index 0.
+        let mut raw = vec![0u8; PLAYPAL_SIZE];
+        // Palette 0, color 0 = (10, 20, 30)
+        raw[0] = 10;
+        raw[1] = 20;
+        raw[2] = 30;
+        // Palette 1, color 0 = (40, 50, 60)
+        raw[PLAYPAL_COLORS * 3] = 40;
+        raw[PLAYPAL_COLORS * 3 + 1] = 50;
+        raw[PLAYPAL_COLORS * 3 + 2] = 60;
+        let lut = PaletteLut::from_playpal(&raw).expect("valid playpal");
+        let fb = Framebuffer::new(); // all index 0
+        assert_eq!(lut.expand_argb(&fb, 0)[0], 0xFF_0A_14_1E);
+        assert_eq!(lut.expand_argb(&fb, 1)[0], 0xFF_28_32_3C);
     }
 }

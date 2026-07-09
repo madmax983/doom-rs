@@ -4257,7 +4257,7 @@ mod tests {
     #[test]
     fn p_use_lines_uses_fractional_angle_without_east_fallback() {
         static INIT_TRIG: std::sync::Once = std::sync::Once::new();
-        INIT_TRIG.call_once(|| unsafe {
+        INIT_TRIG.call_once(|| {
             doom_types::Bam::init_trig_tables();
         });
 

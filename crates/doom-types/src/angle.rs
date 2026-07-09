@@ -143,13 +143,12 @@ impl Bam {
     ///
     /// Maps the angle to an index in the precomputed trigonometry table.
     ///
-    /// # Safety
-    /// Safe only after `init_trig_tables()`. Returns 0 before initialization.
+    /// Returns 0 before `init_trig_tables()` has been called.
     ///
     /// # Examples
     /// ```
     /// use doom_types::{Bam, ANG90};
-    /// unsafe { Bam::init_trig_tables(); }
+    /// Bam::init_trig_tables();
     /// // Vanilla finesine peak is 65535, not 65536.
     /// assert_eq!(ANG90.sin().raw(), 65535);
     /// ```
@@ -168,7 +167,7 @@ impl Bam {
     /// # Examples
     /// ```
     /// use doom_types::{Bam, ANG180};
-    /// unsafe { Bam::init_trig_tables(); }
+    /// Bam::init_trig_tables();
     /// // Vanilla finecosine peak magnitude is 65535 (0.99998), not exactly 1.0.
     /// assert_eq!(ANG180.cos().raw(), -65535);
     /// ```
@@ -183,19 +182,18 @@ impl Bam {
     ///
     /// The table itself is a compile-time constant (bit-exact to vanilla Doom's
     /// `finesine[]`), so this only flips the readiness flag that gates `sin`/`cos`.
-    /// Kept `unsafe` and named `init_trig_tables` for call-site compatibility.
-    ///
-    /// # Safety
-    /// Always sound; the `unsafe` marker is retained for API stability.
+    /// The flag is a single atomic store, so this is safe to call from any thread
+    /// and any number of times (idempotent) — there is no mutable static and thus
+    /// no data race (the concern that motivated the historical `unsafe` marker).
     ///
     /// # Examples
     /// ```
     /// use doom_types::{Bam, ANG90};
-    /// unsafe { Bam::init_trig_tables(); }
+    /// Bam::init_trig_tables();
     /// // Vanilla finesine peak is 65535, not 65536.
     /// assert_eq!(ANG90.sin().raw(), 65535);
     /// ```
-    pub unsafe fn init_trig_tables() {
+    pub fn init_trig_tables() {
         FINESINE_READY.store(true, core::sync::atomic::Ordering::Release);
     }
 }
@@ -238,7 +236,7 @@ mod tests {
     static INIT: std::sync::Once = std::sync::Once::new();
 
     fn ensure_trig_init() {
-        INIT.call_once(|| unsafe {
+        INIT.call_once(|| {
             Bam::init_trig_tables();
         });
     }

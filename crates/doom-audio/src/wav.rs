@@ -35,6 +35,11 @@ pub fn render_mus_to_wav_mono(
     sample_rate: u32,
     loops: u32,
 ) -> Vec<u8> {
+    let total_duration: u32 = score.events.iter().map(|(d, _)| *d).sum();
+    if total_duration == 0 || score.events.is_empty() {
+        return encode_pcm16_wav_mono(sample_rate, &[]);
+    }
+
     let target_loops = loops.max(1);
 
     let mut player = MidiPlayer::new();
@@ -82,9 +87,9 @@ pub fn encode_pcm16_wav_mono(sample_rate: u32, samples: &[i16]) -> Vec<u8> {
     let channels: u16 = 1;
     let bits_per_sample: u16 = 16;
     let block_align: u16 = channels * (bits_per_sample / 8);
-    let byte_rate: u32 = sample_rate * u32::from(block_align);
-    let data_size: u32 = (samples.len() * 2) as u32;
-    let riff_size: u32 = 36 + data_size;
+    let byte_rate: u32 = sample_rate.saturating_mul(u32::from(block_align));
+    let data_size: u32 = (samples.len().saturating_mul(2)) as u32;
+    let riff_size: u32 = 36u32.saturating_add(data_size);
 
     let mut out = Vec::with_capacity(44 + data_size as usize);
     out.extend_from_slice(b"RIFF");
@@ -122,6 +127,12 @@ mod tests {
         assert_eq!(&wav[12..16], b"fmt ");
         assert_eq!(&wav[36..40], b"data");
         assert_eq!(wav.len(), 44 + 6);
+    }
+
+    #[test]
+    fn encode_pcm16_wav_resists_havoc() {
+        let samples = vec![0i16; 1];
+        let _ = encode_pcm16_wav_mono(u32::MAX, &samples);
     }
 
     #[test]

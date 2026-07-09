@@ -7,6 +7,7 @@ members = [
     "crates/doom-game",
     "crates/doom-renderer",
     "crates/doom-tui",
+    "crates/doom-present",
     "crates/doom-audio",
     "crates/doom-net",
     "crates/doom-demo",
@@ -31,6 +32,7 @@ doom-map      = { path = "crates/doom-map" }
 doom-game     = { path = "crates/doom-game" }
 doom-renderer = { path = "crates/doom-renderer" }
 doom-tui      = { path = "crates/doom-tui" }
+doom-present  = { path = "crates/doom-present" }
 doom-audio    = { path = "crates/doom-audio" }
 doom-net      = { path = "crates/doom-net" }
 doom-demo     = { path = "crates/doom-demo" }

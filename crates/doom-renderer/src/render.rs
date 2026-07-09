@@ -3563,7 +3563,7 @@ mod tests {
     fn test_render_level_with_flat_cache_none_smoke() {
         // Initialise trig tables so Bam::ZERO.cos()/sin() return correct values
         // regardless of test execution order (the guard makes this idempotent).
-        unsafe { doom_types::Bam::init_trig_tables() };
+        doom_types::Bam::init_trig_tables();
 
         let level = make_minimal_level();
         let mut fb = Framebuffer::new();
@@ -3706,9 +3706,7 @@ mod tests {
     fn init_trig() {
         // SAFETY: test environment, called at most once per process due to the
         // AtomicBool guard inside init_trig_tables.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
     }
 
     /// A two-sided seg with front_ceil > back_ceil produces pixels in the

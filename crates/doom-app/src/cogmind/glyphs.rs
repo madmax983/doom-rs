@@ -297,7 +297,7 @@ pub(crate) fn wall_glyph(neighbors: u8) -> char {
         0b1101 => '\u{2563}', // ╣  T-junction (N+S+W)
         0b1110 => '\u{2566}', // ╦  T-junction (E+S+W)
         0b1111 => '\u{256C}', // ╬  cross (all four)
-        _ => unreachable!(),
+        _ => '\u{2588}',      // Fallback
     }
 }
 
@@ -510,6 +510,11 @@ mod tests {
     #[test]
     fn wall_glyph_isolated() {
         assert_eq!(wall_glyph(0b0000), '\u{2588}'); // █
+    }
+
+    #[test]
+    fn wall_glyph_fallback() {
+        assert_eq!(wall_glyph(0b10000), '\u{2588}'); // fallback
     }
 
     #[test]

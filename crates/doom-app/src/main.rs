@@ -34,7 +34,7 @@ mod net_mode;
 mod savegame;
 
 use anyhow::{Context, Result};
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use doom_demo::{DemoPlayer, DemoRecorder, LmpHeader};
 use doom_game::FaceState;
 use doom_game::LockedDoorColor;
@@ -88,6 +88,16 @@ fn cli_styles() -> clap::builder::styling::Styles {
 
 fn parse_compatibility_profile(value: &str) -> Result<CompatibilityProfile, &'static str> {
     value.parse()
+}
+
+/// Presentation backend selection.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, ValueEnum, Default)]
+enum Present {
+    /// Render into the terminal via ratatui/crossterm (default).
+    #[default]
+    Terminal,
+    /// Render into a native desktop window (requires the `window` build feature).
+    Window,
 }
 
 #[derive(Parser, Debug)]
@@ -174,6 +184,12 @@ struct Args {
     /// Enable turn-based simulation pacing (single-player only).
     #[arg(long)]
     turn_based: bool,
+
+    /// Presentation backend: `terminal` (default) or `window`.
+    /// `window` opens a native desktop window and requires the binary to be
+    /// built with `--features window`.
+    #[arg(long, value_enum, default_value_t = Present::Terminal)]
+    present: Present,
 
     /// Export the level layout and statistics to a standalone HTML report and exit.
     #[arg(long)]
@@ -2567,9 +2583,7 @@ fn run_doom(args: Args) -> Result<()> {
     // Initialize trig tables (required for sin/cos in the game simulation).
     // SAFETY: called exactly once at startup, single-threaded, before any
     // Bam::sin() or Bam::cos() calls.
-    unsafe {
-        doom_types::Bam::init_trig_tables();
-    }
+    doom_types::Bam::init_trig_tables();
 
     let compat = args.compat;
 
@@ -3354,6 +3368,21 @@ fn run_doom(args: Args) -> Result<()> {
             .run(&mut net_app, &blit_palette)
             .map_err(|e| anyhow::anyhow!("Terminal Display Failed: {}", e))?;
         return Ok(());
+    }
+
+    // Windowed presentation backend: hand the same DoomGame + palette to the
+    // native windowed host instead of the terminal event loop. The default
+    // terminal path below is left entirely unchanged.
+    if args.present == Present::Window {
+        #[cfg(feature = "window")]
+        {
+            return doom_present::run_windowed(app, blit_palette)
+                .map_err(|e| anyhow::anyhow!("Windowed presenter failed: {}", e));
+        }
+        #[cfg(not(feature = "window"))]
+        {
+            anyhow::bail!("windowed presenter not compiled in; rebuild with `--features window`");
+        }
     }
 
     // Start the terminal event loop and run until the user quits (Q or Esc).

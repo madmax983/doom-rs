@@ -1212,6 +1212,11 @@ pub fn p_radius_attack(
             continue;
         }
 
+        // Vanilla `PIT_RadiusAttack` applies `bombdamage - dist` directly.
+        // `dist` is a non-negative i32 and the `dist >= damage` guard above
+        // ensures `0 <= dist < damage`, so `damage - dist` is in `[1, damage]`
+        // and cannot i32-overflow — this subsumes #730's overflow guard, which
+        // fixed the now-removed proportional `damage * (radius - dist)` multiply.
         damage_mobj_source(gs, handle, spot, source, damage - dist);
     }
 }
@@ -1354,9 +1359,7 @@ mod tests {
         // Vanilla P_DamageMobj: thrust = damage*(FRACUNIT>>3)*100/mass along the
         // angle from inflictor to target.  Inflictor east of nothing / target to
         // the +x side => positive momx, zero momy.
-        unsafe {
-            Bam::init_trig_tables();
-        }
+        Bam::init_trig_tables();
         let mut gs = make_game_state();
         let player = gs.player.handle; // at origin, acts as inflictor
         let trooper = spawn_trooper(&mut gs, 100, 0); // due east of inflictor
@@ -1835,9 +1838,7 @@ mod tests {
     #[test]
     fn line_attack_fallback_hits_fractional_angle_actor() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
 
         let mut gs = make_game_state();
         let src = gs.player.handle;
@@ -2243,10 +2244,7 @@ mod tests {
         let player_h = gs.mobjslab.alloc(player_mo);
         gs.player = PlayerState::pistol_start(player_h);
 
-        // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
         // Trooper essentially on top of the player, directly ahead — a
         // point-blank hit.
         let trooper = spawn_trooper(&mut gs, 96, 0);
@@ -2313,9 +2311,7 @@ mod tests {
     #[test]
     fn line_attack_with_level_hits_fractional_angle_actor() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
         let level = make_open_combat_level();
 
         let mut gs = GameState::new("test");
@@ -2359,9 +2355,7 @@ mod tests {
     #[test]
     fn line_attack_with_level_skips_target_below_autoaim_window() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
 
         let level = make_open_combat_level();
         let mut gs = make_game_state();
@@ -2404,9 +2398,7 @@ mod tests {
     #[test]
     fn line_attack_with_level_skips_low_near_target_and_hits_far_target_in_lane() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
 
         let level = make_open_combat_level();
         let mut gs = make_game_state();
@@ -2713,5 +2705,19 @@ mod tests {
             reject,
             blockmap,
         }
+    }
+
+    /// Regression for #730: a huge `bombdamage` (`i32::MAX`) must not
+    /// i32-overflow or panic. M1's vanilla `damage - dist` formula keeps the
+    /// applied value in `[1, damage]`, subsuming the original overflow guard.
+    #[test]
+    fn havoc_test_radius_attack_overflow_fix() {
+        let mut gs = make_game_state();
+        let player_handle = gs.player.handle;
+
+        let damage = i32::MAX;
+
+        // This should not panic.
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, damage, None);
     }
 }
