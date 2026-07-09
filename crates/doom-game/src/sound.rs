@@ -717,14 +717,23 @@ mod tests {
         let mut gs = make_game_state_with_sound(1);
         let player = gs.player.handle;
 
-        // Spawn an AMBUSH (deaf) monster close enough for LOS (within 4096 range).
-        let monster = spawn_monster(&mut gs, MobjKind::Trooper, 100, 0, 0, flags::MF_AMBUSH);
+        // Move the player off the anchor wall line (the one-sided wall runs
+        // along y=0 from x=0..64); a sight ray collinear with that wall would
+        // be (correctly, per vanilla P_DivlineSide) reported as crossing it.
+        if let Some(p) = gs.mobjslab.get_mut(player) {
+            p.x = Fixed16_16::from_int(10);
+            p.y = Fixed16_16::from_int(40);
+        }
+
+        // Spawn an AMBUSH (deaf) monster close enough for LOS (within 4096
+        // range) with a clear sight line (same y, off the wall axis).
+        let monster = spawn_monster(&mut gs, MobjKind::Trooper, 100, 40, 0, flags::MF_AMBUSH);
 
         // Fire noise alert.
         p_noise_alert(&mut gs, &level, player, player);
 
-        // Monster has MF_AMBUSH but player is close (within Manhattan 4096).
-        // p_check_sight should return true (same sector, close distance).
+        // Monster has MF_AMBUSH but the player is close (within Manhattan 4096)
+        // with an unobstructed line of sight, so it must wake.
         assert!(
             monster_should_wake(&gs, &level, monster),
             "ambush monster with LOS should wake from sound"
