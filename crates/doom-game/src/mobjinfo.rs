@@ -631,9 +631,10 @@ pub static MOBJINFO: [MobjInfo; 76] = [
         ..ITEM
     }, // 63: TechLamp2
     MobjInfo {
-        flags: flags::MF_SOLID | flags::MF_SHOOTABLE,
+        flags: flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_NOBLOOD,
         spawn_health: 20,
         spawn_state: sn(ids::S_BAR1),
+        death_state: sn(ids::S_BEXP),
         radius: fixed(10),
         height: fixed(42),
         ..ITEM

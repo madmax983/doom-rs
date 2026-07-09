@@ -2271,7 +2271,16 @@ fn a_brain_explode(gs: &mut GameState, handle: MobjHandle) {
 /// (`P_RadiusAttack(thingy, thingy->target, 128)`). Reached via
 /// `P_ExplodeMissile` -> `P_SetMobjState(deathstate)` when a rocket detonates.
 fn a_explode(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    crate::combat::p_radius_attack(gs, handle, 128, Fixed16_16::from_int(128), level);
+    // Vanilla `A_Explode(thingy)` = `P_RadiusAttack(thingy, thingy->target, 128)`:
+    // the exploding thing is the blast center/inflictor, and its `target` — the
+    // actor that fired the rocket or shot the barrel — is credited with the
+    // splash kills.
+    let source = gs
+        .mobjslab
+        .get(handle)
+        .map(|m| m.target)
+        .unwrap_or(MobjHandle::NULL);
+    crate::combat::p_radius_attack(gs, handle, source, 128, level);
 }
 
 // ---------------------------------------------------------------------------
