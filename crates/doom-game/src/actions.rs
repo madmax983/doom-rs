@@ -1246,21 +1246,22 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let base_angle = mo.angle.0;
+    let base_angle = mo.angle;
 
-    // Vanilla A_PosAttack: `angle += P_SubRandom()<<20; damage = (P_Random()%5+1)*3;`
-    // (P_AimLineAttack for the vertical slope draws no RNG.)
-    let angle = Bam(base_angle.wrapping_add((gs.p_subrandom() << 20) as u32));
+    // Vanilla A_PosAttack: slope = P_AimLineAttack(actor, angle, MISSILERANGE)
+    // (no RNG); then `angle += P_SubRandom()<<20; damage = (P_Random()%5+1)*3;`.
+    let aim =
+        crate::combat::p_aim_line_attack(gs, handle, base_angle, crate::combat::MISSILERANGE, level);
+    let angle = Bam(base_angle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
     let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
-    let mut intercepts = smallvec::SmallVec::new();
     crate::combat::p_line_attack(
         gs,
         handle,
         angle,
         crate::combat::MISSILERANGE,
+        aim.slope,
         damage,
         level,
-        &mut intercepts,
     );
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
@@ -1291,23 +1292,23 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let bangle = mo.angle.0;
+    let bangle = Bam(mo.angle.0);
 
-    // Vanilla A_SPosAttack: 3 pellets, each `angle = bangle + (P_SubRandom()<<20);
-    // damage = (P_Random()%5+1)*3;` (P_AimLineAttack draws no RNG).
-    let mut intercepts = smallvec::SmallVec::new();
+    // Vanilla A_SPosAttack: slope = P_AimLineAttack(actor, bangle, MISSILERANGE)
+    // once (no RNG); then 3 pellets each `angle = bangle + (P_SubRandom()<<20);
+    // damage = (P_Random()%5+1)*3;`.
+    let aim = crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
     for _ in 0..3 {
-        let shot_angle = Bam(bangle.wrapping_add((gs.p_subrandom() << 20) as u32));
+        let shot_angle = Bam(bangle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
         let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
-        intercepts.clear();
         crate::combat::p_line_attack(
             gs,
             handle,
             shot_angle,
             crate::combat::MISSILERANGE,
+            aim.slope,
             damage,
             level,
-            &mut intercepts,
         );
     }
     if let Some(mo) = gs.mobjslab.get(handle) {
@@ -1462,25 +1463,26 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let angle = mo.angle;
+    let bangle = mo.angle;
 
-    let spread = crate::random::p_missile_angle_spread(gs);
-    let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
-    let damage = crate::random::p_damage_with_variance(gs, 3);
+    // Vanilla A_CPosAttack: slope = P_AimLineAttack(actor, bangle, MISSILERANGE)
+    // (no RNG); `angle = bangle + (P_SubRandom()<<20); damage = (P_Random()%5+1)*3;`.
+    let aim = crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
+    let shot_angle = Bam(bangle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
+    let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
     let cpos_kind = gs
         .mobjslab
         .get(handle)
         .map(|mo| mo.kind)
         .unwrap_or(MobjKind::Trooper);
-    let mut intercepts = smallvec::SmallVec::new();
     crate::combat::p_line_attack(
         gs,
         handle,
         shot_angle,
         crate::combat::MISSILERANGE,
+        aim.slope,
         damage,
         level,
-        &mut intercepts,
     );
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
@@ -1718,20 +1720,20 @@ fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let angle = mo.angle;
+    let bangle = mo.angle;
 
-    let spread = crate::random::p_missile_angle_spread(gs);
-    let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
-    let damage = crate::random::p_damage_with_variance(gs, 3);
-    let mut intercepts = smallvec::SmallVec::new();
+    // Spider Mastermind uses the A_SPosAttack pellet pattern.
+    let aim = crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
+    let shot_angle = Bam(bangle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
+    let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
     crate::combat::p_line_attack(
         gs,
         handle,
         shot_angle,
         crate::combat::MISSILERANGE,
+        aim.slope,
         damage,
         level,
-        &mut intercepts,
     );
 }
 

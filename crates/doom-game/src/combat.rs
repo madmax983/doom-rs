@@ -9,11 +9,13 @@
 //! intercept processing without map geometry.
 
 use doom_map::Level;
+use doom_types::mobj_kind::MobjKind;
 use doom_types::weapons::WeaponType;
 use doom_types::{Bam, FIXED_ONE, Fixed16_16};
 
 use crate::mobj::{MobjHandle, StateNum, flags};
 use crate::state::GameState;
+use crate::states::{STATES, ids};
 use crate::trace::{self, TraceHit};
 
 /// Maximum hitscan range in map units.
@@ -22,141 +24,103 @@ pub const MISSILERANGE: Fixed16_16 = Fixed16_16(2048 << 16);
 /// Maximum melee attack range in map units (64 units).
 pub const MELEERANGE: Fixed16_16 = Fixed16_16(64 << 16);
 
-const HITSCAN_EPSILON: f32 = 1.0e-6;
-const AUTOAIM_TOP_SLOPE: f32 = 100.0 / 160.0;
-const AUTOAIM_BOTTOM_SLOPE: f32 = -100.0 / 160.0;
+// Autoaim view-slope window (P_AimLineAttack, p_map.c:1093):
+//   topslope    =  (SCREENHEIGHT/2)*FRACUNIT/(SCREENWIDTH/2) = 100*FRACUNIT/160
+//   bottomslope = -(SCREENHEIGHT/2)*FRACUNIT/(SCREENWIDTH/2)
+const AUTOAIM_TOP_SLOPE: i32 = (100 * FRAC_ONE_I32) / 160;
+const AUTOAIM_BOTTOM_SLOPE: i32 = -AUTOAIM_TOP_SLOPE;
 
+const FRAC_ONE_I32: i32 = 0x0001_0000;
+/// Blockmap-block shift in fixed-point space (`FRACBITS + 7`).
+const MAPBLOCKSHIFT: u32 = 16 + 7;
+/// `MAPBLOCKSHIFT - FRACBITS` (used to bring a fixed coord into block-frac).
+const MAPBTOFRAC: u32 = 7;
+const MAPBLOCKSIZE_MASK: i32 = (128 << 16) - 1;
+
+/// A `divline_t` (`p_maputl.c`): a directed segment in raw fixed-point.
+#[derive(Clone, Copy)]
+struct Divline {
+    x: i32,
+    y: i32,
+    dx: i32,
+    dy: i32,
+}
+
+/// Which object a hitscan intercept refers to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum HitscanInterceptKind {
+    /// Index into `level.linedefs`.
     Line(usize),
+    /// A shootable/blocking actor.
     Actor(MobjHandle),
 }
 
-/// Represents an object or wall hit along a hitscan trace line.
-///
-/// Records the fractional distance along the trace where the collision occurred,
-/// and whether it hit an actor (`MobjHandle`) or a map line (`Line`).
+/// One ordered intercept along a hitscan trace (fixed-point `frac`).
 #[derive(Clone, Copy, Debug)]
 pub struct HitscanIntercept {
-    frac: f32,
+    /// Fractional distance along the trace, raw fixed-point (`FRACUNIT == 1.0`).
+    frac: i32,
     kind: HitscanInterceptKind,
 }
 
-fn fixed_to_f32(value: Fixed16_16) -> f32 {
-    value.raw() as f32 / FIXED_ONE.raw() as f32
+/// `FixedMul` on raw `i32` fixed-point values.
+#[inline]
+fn fixed_mul_raw(a: i32, b: i32) -> i32 {
+    (((a as i64) * (b as i64)) >> 16) as i32
 }
 
-fn hitscan_shootz(z: Fixed16_16, height: Fixed16_16) -> f32 {
-    fixed_to_f32(z) + fixed_to_f32(height) * 0.5 + 8.0
-}
-
-fn ray_actor_intersection(
-    rx: f32,
-    ry: f32,
-    rdx: f32,
-    rdy: f32,
-    ax: f32,
-    ay: f32,
-    radius: f32,
-) -> Option<f32> {
-    let min_x = ax - radius;
-    let max_x = ax + radius;
-    let min_y = ay - radius;
-    let max_y = ay + radius;
-
-    let (mut t_min, mut t_max) = (f32::NEG_INFINITY, f32::INFINITY);
-
-    if rdx.abs() < HITSCAN_EPSILON {
-        if rx < min_x || rx > max_x {
-            return None;
-        }
+/// `FixedDiv` on raw `i32` fixed-point values (vanilla `m_fixed.c`).
+#[inline]
+fn fixed_div_raw(a: i32, b: i32) -> i32 {
+    if (a.unsigned_abs() >> 14) >= b.unsigned_abs() {
+        if (a ^ b) < 0 { i32::MIN } else { i32::MAX }
     } else {
-        let t1 = (min_x - rx) / rdx;
-        let t2 = (max_x - rx) / rdx;
-        let (t_near, t_far) = if t1 < t2 { (t1, t2) } else { (t2, t1) };
-        t_min = t_min.max(t_near);
-        t_max = t_max.min(t_far);
-    }
-
-    if rdy.abs() < HITSCAN_EPSILON {
-        if ry < min_y || ry > max_y {
-            return None;
-        }
-    } else {
-        let t1 = (min_y - ry) / rdy;
-        let t2 = (max_y - ry) / rdy;
-        let (t_near, t_far) = if t1 < t2 { (t1, t2) } else { (t2, t1) };
-        t_min = t_min.max(t_near);
-        t_max = t_max.min(t_far);
-    }
-
-    if t_min > t_max || t_max < 0.0 {
-        return None;
-    }
-
-    let t = if t_min >= 0.0 { t_min } else { t_max };
-    (t >= 0.0).then_some(t)
-}
-
-fn collect_actor_hitscan_intercepts(
-    gs: &GameState,
-    source: MobjHandle,
-    sx: f32,
-    sy: f32,
-    rdx: f32,
-    rdy: f32,
-    intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
-) {
-    intercepts.clear();
-
-    for handle in gs.mobjslab.iter_handles() {
-        if handle == source {
-            continue;
-        }
-
-        let Some(mo) = gs.mobjslab.get(handle) else {
-            continue;
-        };
-        if mo.health <= 0 || mo.flags & flags::MF_SHOOTABLE == 0 {
-            continue;
-        }
-
-        if let Some(frac) = ray_actor_intersection(
-            sx,
-            sy,
-            rdx,
-            rdy,
-            fixed_to_f32(mo.x),
-            fixed_to_f32(mo.y),
-            fixed_to_f32(mo.radius),
-        ) {
-            if (0.0..=1.0).contains(&frac) {
-                intercepts.push(HitscanIntercept {
-                    frac,
-                    kind: HitscanInterceptKind::Actor(handle),
-                });
-            }
-        }
+        (((a as i64) << 16) / (b as i64)) as i32
     }
 }
 
-fn sort_hitscan_intercepts(intercepts: &mut [HitscanIntercept]) {
-    intercepts.sort_by(|a, b| {
-        let frac_cmp = a.frac.total_cmp(&b.frac);
-        if frac_cmp.is_ne() {
-            return frac_cmp;
+/// Port of `P_PointOnDivlineSide` (`p_maputl.c:157`). Returns 0 (front) or 1 (back).
+fn p_point_on_divline_side(x: i32, y: i32, line: &Divline) -> i32 {
+    if line.dx == 0 {
+        if x <= line.x {
+            return i32::from(line.dy > 0);
         }
+        return i32::from(line.dy < 0);
+    }
+    if line.dy == 0 {
+        if y <= line.y {
+            return i32::from(line.dx < 0);
+        }
+        return i32::from(line.dx > 0);
+    }
 
-        match (a.kind, b.kind) {
-            (HitscanInterceptKind::Line(_), HitscanInterceptKind::Actor(_)) => {
-                std::cmp::Ordering::Less
-            }
-            (HitscanInterceptKind::Actor(_), HitscanInterceptKind::Line(_)) => {
-                std::cmp::Ordering::Greater
-            }
-            _ => std::cmp::Ordering::Equal,
+    let dx = x.wrapping_sub(line.x);
+    let dy = y.wrapping_sub(line.y);
+
+    // Quick sign-bit decision.
+    if ((line.dy ^ line.dx ^ dx ^ dy) & i32::MIN) != 0 {
+        if ((line.dy ^ dx) & i32::MIN) != 0 {
+            return 1;
         }
-    });
+        return 0;
+    }
+
+    let left = fixed_mul_raw(line.dy >> 8, dx >> 8);
+    let right = fixed_mul_raw(dy >> 8, line.dx >> 8);
+
+    if right < left { 0 } else { 1 }
+}
+
+/// Port of `P_InterceptVector` (`p_maputl.c:227`). Returns the fractional
+/// intercept of `v2` (the trace) with `v1`, raw fixed-point, or 0 if parallel.
+fn p_intercept_vector(v2: &Divline, v1: &Divline) -> i32 {
+    let den = fixed_mul_raw(v1.dy >> 8, v2.dx).wrapping_sub(fixed_mul_raw(v1.dx >> 8, v2.dy));
+    if den == 0 {
+        return 0;
+    }
+    let num = fixed_mul_raw((v1.x.wrapping_sub(v2.x)) >> 8, v1.dy)
+        .wrapping_add(fixed_mul_raw((v2.y.wrapping_sub(v1.y)) >> 8, v1.dx));
+    fixed_div_raw(num, den)
 }
 
 // ---------------------------------------------------------------------------
@@ -422,151 +386,641 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
 }
 
 // ---------------------------------------------------------------------------
-// p_line_attack
+// Fixed-point path traverse (P_PathTraverse + PTR_AimTraverse/ShootTraverse)
 // ---------------------------------------------------------------------------
 
-/// Query the first actor a hitscan attack would strike.
-pub(crate) fn p_line_attack_target(
+/// Attack shot height: `z + (height>>1) + 8*FRACUNIT` (raw fixed).
+#[inline]
+fn hitscan_shootz(z: i32, height: i32) -> i32 {
+    z.wrapping_add(height >> 1).wrapping_add(8 << 16)
+}
+
+/// Two-sided line opening in raw fixed-point heights.
+struct LineOpen {
+    open_bottom: i32,
+    open_top: i32,
+    front_floor: i32,
+    front_ceil: i32,
+    back: Option<(i32, i32)>, // (back_floor, back_ceil)
+}
+
+fn line_open(level: &Level, ld: &doom_map::Linedef) -> Option<LineOpen> {
+    let front_sec = level
+        .sidedefs
+        .get(ld.right_sidedef as usize)
+        .and_then(|sd| level.sectors.get(sd.sector as usize))?;
+    let front_floor = i32::from(front_sec.floor_height) << 16;
+    let front_ceil = i32::from(front_sec.ceil_height) << 16;
+
+    let back = if ld.left_sidedef != doom_map::SIDEDEF_NONE {
+        level
+            .sidedefs
+            .get(ld.left_sidedef as usize)
+            .and_then(|sd| level.sectors.get(sd.sector as usize))
+            .map(|s| (i32::from(s.floor_height) << 16, i32::from(s.ceil_height) << 16))
+    } else {
+        None
+    };
+
+    let (open_bottom, open_top) = match back {
+        Some((bf, bc)) => (front_floor.max(bf), front_ceil.min(bc)),
+        None => (front_floor, front_ceil),
+    };
+    Some(LineOpen {
+        open_bottom,
+        open_top,
+        front_floor,
+        front_ceil,
+        back,
+    })
+}
+
+#[inline]
+fn is_sky_flat(name: &[u8; 8]) -> bool {
+    name[0].eq_ignore_ascii_case(&b'F')
+        && name[1] == b'_'
+        && name[2].eq_ignore_ascii_case(&b'S')
+        && name[3].eq_ignore_ascii_case(&b'K')
+        && name[4].eq_ignore_ascii_case(&b'Y')
+        && name[5] == b'1'
+}
+
+/// `PIT_AddLineIntercepts` (`p_maputl.c:566`) for one linedef.
+fn add_line_intercept(
+    level: &Level,
+    trace: &Divline,
+    ld_idx: usize,
+    out: &mut smallvec::SmallVec<[HitscanIntercept; 24]>,
+) {
+    let ld = &level.linedefs[ld_idx];
+    let (Some(v1), Some(v2)) = (
+        level.vertexes.get(ld.from_vertex as usize),
+        level.vertexes.get(ld.to_vertex as usize),
+    ) else {
+        return;
+    };
+    let v1x = i32::from(v1.x) << 16;
+    let v1y = i32::from(v1.y) << 16;
+    let v2x = i32::from(v2.x) << 16;
+    let v2y = i32::from(v2.y) << 16;
+
+    // Hitscan/melee traces always exceed 16 map units in some axis, so vanilla
+    // uses P_PointOnDivlineSide (never the short-trace P_PointOnLineSide path).
+    let s1 = p_point_on_divline_side(v1x, v1y, trace);
+    let s2 = p_point_on_divline_side(v2x, v2y, trace);
+    if s1 == s2 {
+        return; // line isn't crossed
+    }
+    let dl = Divline {
+        x: v1x,
+        y: v1y,
+        dx: v2x.wrapping_sub(v1x),
+        dy: v2y.wrapping_sub(v1y),
+    };
+    let frac = p_intercept_vector(trace, &dl);
+    if frac < 0 {
+        return; // behind source
+    }
+    out.push(HitscanIntercept {
+        frac,
+        kind: HitscanInterceptKind::Line(ld_idx),
+    });
+}
+
+/// `PIT_AddThingIntercepts` (`p_maputl.c:611`) for one actor.
+fn add_thing_intercept(
+    trace: &Divline,
+    handle: MobjHandle,
+    mo: &crate::mobj::Mobj,
+    out: &mut smallvec::SmallVec<[HitscanIntercept; 24]>,
+) {
+    let r = mo.radius.raw();
+    let (mx, my) = (mo.x.raw(), mo.y.raw());
+    // corner-to-corner crossection depending on trace direction
+    let tracepositive = (trace.dx ^ trace.dy) > 0;
+    let (x1, y1, x2, y2) = if tracepositive {
+        (mx - r, my + r, mx + r, my - r)
+    } else {
+        (mx - r, my - r, mx + r, my + r)
+    };
+    let s1 = p_point_on_divline_side(x1, y1, trace);
+    let s2 = p_point_on_divline_side(x2, y2, trace);
+    if s1 == s2 {
+        return;
+    }
+    let dl = Divline {
+        x: x1,
+        y: y1,
+        dx: x2.wrapping_sub(x1),
+        dy: y2.wrapping_sub(y1),
+    };
+    let frac = p_intercept_vector(trace, &dl);
+    if frac < 0 {
+        return;
+    }
+    out.push(HitscanIntercept {
+        frac,
+        kind: HitscanInterceptKind::Actor(handle),
+    });
+}
+
+/// Port of `P_PathTraverse` (`p_maputl.c:862`).  Collects ordered line/actor
+/// intercepts along `x1,y1 -> x2,y2` (raw fixed) and returns the effective
+/// `trace` divline (including the "don't side exactly on a line" nudge) so the
+/// caller can position puffs/blood exactly as vanilla does.  Intercepts are
+/// sorted ascending by `frac`.
+fn p_path_traverse(
     gs: &GameState,
-    source: MobjHandle,
-    angle: Bam,
-    range: Fixed16_16,
     level: Option<&Level>,
-    intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
-) -> Option<MobjHandle> {
-    let mo = gs.mobjslab.get(source)?;
-    let (sx, sy, shootz) = (
-        fixed_to_f32(mo.x),
-        fixed_to_f32(mo.y),
-        hitscan_shootz(mo.z, mo.height),
-    );
+    source: MobjHandle,
+    mut x1: i32,
+    mut y1: i32,
+    x2: i32,
+    y2: i32,
+    out: &mut smallvec::SmallVec<[HitscanIntercept; 24]>,
+) -> Divline {
+    out.clear();
 
-    let angle_cos = angle.cos().raw() as f32 / FIXED_ONE.raw() as f32;
-    let angle_sin = angle.sin().raw() as f32 / FIXED_ONE.raw() as f32;
-    let range_f = fixed_to_f32(range);
+    let Some(level) = level else {
+        // No geometry: test all shootable actors against the raw trace.
+        let trace = Divline {
+            x: x1,
+            y: y1,
+            dx: x2.wrapping_sub(x1),
+            dy: y2.wrapping_sub(y1),
+        };
+        for handle in gs.mobjslab.iter_handles() {
+            if handle == source {
+                continue;
+            }
+            let Some(mo) = gs.mobjslab.get(handle) else {
+                continue;
+            };
+            add_thing_intercept(&trace, handle, mo, out);
+        }
+        out.sort_by(|a, b| a.frac.cmp(&b.frac));
+        return trace;
+    };
 
-    if range_f <= 0.0 || (angle_cos.abs() < HITSCAN_EPSILON && angle_sin.abs() < HITSCAN_EPSILON) {
-        return None;
+    let bmaporgx = i32::from(level.blockmap.x_origin) << 16;
+    let bmaporgy = i32::from(level.blockmap.y_origin) << 16;
+    let bmapwidth = i32::from(level.blockmap.x_count);
+    let bmapheight = i32::from(level.blockmap.y_count);
+
+    // "don't side exactly on a line"
+    if ((x1.wrapping_sub(bmaporgx)) & MAPBLOCKSIZE_MASK) == 0 {
+        x1 = x1.wrapping_add(FRAC_ONE_I32);
+    }
+    if ((y1.wrapping_sub(bmaporgy)) & MAPBLOCKSIZE_MASK) == 0 {
+        y1 = y1.wrapping_add(FRAC_ONE_I32);
     }
 
-    let rdx = angle_cos * range_f;
-    let rdy = angle_sin * range_f;
-    collect_actor_hitscan_intercepts(gs, source, sx, sy, rdx, rdy, intercepts);
+    let trace = Divline {
+        x: x1,
+        y: y1,
+        dx: x2.wrapping_sub(x1),
+        dy: y2.wrapping_sub(y1),
+    };
 
-    if let Some(lv) = level {
-        for (linedef_idx, linedef) in lv.linedefs.iter().enumerate() {
-            let Some(v1) = lv.vertexes.get(linedef.from_vertex as usize) else {
-                continue;
-            };
-            let Some(v2) = lv.vertexes.get(linedef.to_vertex as usize) else {
-                continue;
-            };
+    let rx1 = x1.wrapping_sub(bmaporgx);
+    let ry1 = y1.wrapping_sub(bmaporgy);
+    let xt1 = rx1 >> MAPBLOCKSHIFT;
+    let yt1 = ry1 >> MAPBLOCKSHIFT;
+    let rx2 = x2.wrapping_sub(bmaporgx);
+    let ry2 = y2.wrapping_sub(bmaporgy);
+    let xt2 = rx2 >> MAPBLOCKSHIFT;
+    let yt2 = ry2 >> MAPBLOCKSHIFT;
 
-            if let Some(frac) = trace::ray_linedef_intersection(
-                sx,
-                sy,
-                rdx,
-                rdy,
-                v1.x as f32,
-                v1.y as f32,
-                v2.x as f32,
-                v2.y as f32,
-            ) {
-                if (0.0..=1.0).contains(&frac) {
-                    intercepts.push(HitscanIntercept {
-                        frac,
-                        kind: HitscanInterceptKind::Line(linedef_idx),
-                    });
+    let dx = x2.wrapping_sub(x1);
+    let dy = y2.wrapping_sub(y1);
+
+    let (mapxstep, mut ystep);
+    let partial_x;
+    if xt2 > xt1 {
+        mapxstep = 1;
+        partial_x = FRAC_ONE_I32 - (rx1 >> MAPBTOFRAC & (FRAC_ONE_I32 - 1));
+        ystep = fixed_div_raw(dy, dx.abs());
+    } else if xt2 < xt1 {
+        mapxstep = -1;
+        partial_x = rx1 >> MAPBTOFRAC & (FRAC_ONE_I32 - 1);
+        ystep = fixed_div_raw(dy, dx.abs());
+    } else {
+        mapxstep = 0;
+        partial_x = FRAC_ONE_I32;
+        ystep = 256 * FRAC_ONE_I32;
+    }
+    let mut yintercept = (ry1 >> MAPBTOFRAC).wrapping_add(fixed_mul_raw(partial_x, ystep));
+
+    let (mapystep, mut xstep);
+    let partial_y;
+    if yt2 > yt1 {
+        mapystep = 1;
+        partial_y = FRAC_ONE_I32 - (ry1 >> MAPBTOFRAC & (FRAC_ONE_I32 - 1));
+        xstep = fixed_div_raw(dx, dy.abs());
+    } else if yt2 < yt1 {
+        mapystep = -1;
+        partial_y = ry1 >> MAPBTOFRAC & (FRAC_ONE_I32 - 1);
+        xstep = fixed_div_raw(dx, dy.abs());
+    } else {
+        mapystep = 0;
+        partial_y = FRAC_ONE_I32;
+        xstep = 256 * FRAC_ONE_I32;
+    }
+    let mut xintercept = (rx1 >> MAPBTOFRAC).wrapping_add(fixed_mul_raw(partial_y, xstep));
+    let _ = (&mut ystep, &mut xstep);
+
+    let mut mapx = xt1;
+    let mut mapy = yt1;
+    let mut tested_lines: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
+    let mut visited: smallvec::SmallVec<[(i32, i32); 64]> = smallvec::SmallVec::new();
+
+    for _ in 0..64 {
+        if mapx >= 0 && mapx < bmapwidth && mapy >= 0 && mapy < bmapheight {
+            for ld_idx in level
+                .blockmap
+                .block_linedefs(mapx as usize, mapy as usize)
+            {
+                let ld_idx = ld_idx as usize;
+                if ld_idx >= level.linedefs.len() || tested_lines.contains(&ld_idx) {
+                    continue;
                 }
+                tested_lines.push(ld_idx);
+                add_line_intercept(level, &trace, ld_idx, out);
             }
+        }
+        visited.push((mapx, mapy));
+
+        if mapx == xt2 && mapy == yt2 {
+            break;
+        }
+        if (yintercept >> 16) == mapy {
+            yintercept = yintercept.wrapping_add(ystep);
+            mapx += mapxstep;
+        } else if (xintercept >> 16) == mapx {
+            xintercept = xintercept.wrapping_add(xstep);
+            mapy += mapystep;
         }
     }
 
-    sort_hitscan_intercepts(intercepts);
+    // Things (P_BlockThingsIterator): every blockmap-linked actor whose home
+    // cell was traversed.  Order is immaterial — the list is frac-sorted.
+    for handle in gs.mobjslab.iter_handles() {
+        if handle == source {
+            continue;
+        }
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            continue;
+        };
+        if mo.flags & flags::MF_NOBLOCKMAP != 0 {
+            continue; // not linked into the blockmap
+        }
+        let bx = (mo.x.raw().wrapping_sub(bmaporgx)) >> MAPBLOCKSHIFT;
+        let by = (mo.y.raw().wrapping_sub(bmaporgy)) >> MAPBLOCKSHIFT;
+        if visited.iter().any(|&(cx, cy)| cx == bx && cy == by) {
+            add_thing_intercept(&trace, handle, mo, out);
+        }
+    }
+
+    out.sort_by(|a, b| a.frac.cmp(&b.frac));
+    trace
+}
+
+// ---------------------------------------------------------------------------
+// P_SpawnPuff / P_SpawnBlood
+// ---------------------------------------------------------------------------
+
+/// Port of `P_SpawnPuff` (`p_mobj.c:881`).  `attackrange` is raw fixed.
+fn p_spawn_puff(gs: &mut GameState, level: Option<&Level>, x: i32, y: i32, z: i32, attackrange: i32) {
+    let z = z.wrapping_add(gs.p_subrandom() << 10);
+    let h = crate::spawn::p_spawn_mobj(
+        gs,
+        level,
+        Fixed16_16(x),
+        Fixed16_16(y),
+        Fixed16_16(z),
+        MobjKind::BulletPuff,
+    );
+    let r = (gs.p_random() & 3) as i16;
+    if let Some(mo) = gs.mobjslab.get_mut(h) {
+        mo.momz = FIXED_ONE;
+        mo.tics -= r;
+        if mo.tics < 1 {
+            mo.tics = 1;
+        }
+    }
+    // Don't make punches spark on the wall.
+    if attackrange == MELEERANGE.raw() {
+        let sn = StateNum(ids::S_PUFF3);
+        let tics = STATES[ids::S_PUFF3 as usize].tics;
+        if let Some(mo) = gs.mobjslab.get_mut(h) {
+            mo.state = sn;
+            mo.tics = tics;
+        }
+    }
+}
+
+/// Port of `P_SpawnBlood` (`p_mobj.c:908`).
+fn p_spawn_blood(gs: &mut GameState, level: Option<&Level>, x: i32, y: i32, z: i32, damage: i32) {
+    let z = z.wrapping_add(gs.p_subrandom() << 10);
+    let h = crate::spawn::p_spawn_mobj(
+        gs,
+        level,
+        Fixed16_16(x),
+        Fixed16_16(y),
+        Fixed16_16(z),
+        MobjKind::Blood,
+    );
+    let r = (gs.p_random() & 3) as i16;
+    if let Some(mo) = gs.mobjslab.get_mut(h) {
+        mo.momz = Fixed16_16(2 << 16);
+        mo.tics -= r;
+        if mo.tics < 1 {
+            mo.tics = 1;
+        }
+    }
+    if damage <= 12 && damage >= 9 {
+        set_mobj_state_raw(gs, h, ids::S_BLOOD2);
+    } else if damage < 9 {
+        set_mobj_state_raw(gs, h, ids::S_BLOOD3);
+    }
+}
+
+fn set_mobj_state_raw(gs: &mut GameState, h: MobjHandle, state: u16) {
+    let tics = STATES[state as usize].tics;
+    if let Some(mo) = gs.mobjslab.get_mut(h) {
+        mo.state = StateNum(state);
+        mo.tics = tics;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// P_AimLineAttack / P_LineAttack
+// ---------------------------------------------------------------------------
+
+/// Result of `P_AimLineAttack`: the autoaim vertical `slope` and the actor
+/// that was aimed at (if any).
+#[derive(Clone, Copy, Debug)]
+pub struct AimResult {
+    /// Vertical aim slope (raw fixed).  `0` when no target was acquired.
+    pub slope: i32,
+    /// The actor aimed at, or `None`.
+    pub linetarget: Option<MobjHandle>,
+}
+
+/// Port of `P_AimLineAttack` (`p_map.c:1075`).  Traces an autoaim ray and
+/// returns the vertical slope + `linetarget`.  Draws no RNG.
+pub fn p_aim_line_attack(
+    gs: &GameState,
+    source: MobjHandle,
+    angle: Bam,
+    distance: Fixed16_16,
+    level: Option<&Level>,
+) -> AimResult {
+    let none = AimResult {
+        slope: 0,
+        linetarget: None,
+    };
+    let Some(mo) = gs.mobjslab.get(source) else {
+        return none;
+    };
+    let t1x = mo.x.raw();
+    let t1y = mo.y.raw();
+    let shootz = hitscan_shootz(mo.z.raw(), mo.height.raw());
+    let dist_i = distance.to_int();
+    let x2 = t1x.wrapping_add(dist_i.wrapping_mul(angle.cos().raw()));
+    let y2 = t1y.wrapping_add(dist_i.wrapping_mul(angle.sin().raw()));
+    let attackrange = distance.raw();
 
     let mut topslope = AUTOAIM_TOP_SLOPE;
     let mut bottomslope = AUTOAIM_BOTTOM_SLOPE;
 
-    for intercept in intercepts.iter() {
-        let dist = intercept.frac * range_f;
-        if dist <= HITSCAN_EPSILON {
-            continue;
-        }
+    let mut intercepts = smallvec::SmallVec::new();
+    p_path_traverse(gs, level, source, t1x, t1y, x2, y2, &mut intercepts);
 
-        match intercept.kind {
-            HitscanInterceptKind::Line(linedef_idx) => {
-                let Some(lv) = level else {
+    for ic in intercepts.iter() {
+        match ic.kind {
+            HitscanInterceptKind::Line(ld_idx) => {
+                let Some(lvl) = level else {
                     continue;
                 };
-                let Some(linedef) = lv.linedefs.get(linedef_idx) else {
-                    continue;
+                let ld = &lvl.linedefs[ld_idx];
+                if !ld.is_two_sided() {
+                    return none; // stop
+                }
+                let Some(open) = line_open(lvl, ld) else {
+                    return none;
                 };
-
-                if !linedef.is_two_sided() {
-                    return None;
+                if open.open_bottom >= open.open_top {
+                    return none; // stop
                 }
-
-                let (open_bottom, open_top) = trace::line_opening(lv, linedef)?;
-                if open_top <= open_bottom {
-                    return None;
+                let dist = fixed_mul_raw(attackrange, ic.frac);
+                let floor_diff = open
+                    .back
+                    .map(|(bf, _)| open.front_floor != bf)
+                    .unwrap_or(true);
+                if floor_diff {
+                    let slope = fixed_div_raw(open.open_bottom.wrapping_sub(shootz), dist);
+                    if slope > bottomslope {
+                        bottomslope = slope;
+                    }
                 }
-
-                let open_bottom_slope = (open_bottom as f32 - shootz) / dist;
-                let open_top_slope = (open_top as f32 - shootz) / dist;
-
-                if open_bottom_slope > bottomslope {
-                    bottomslope = open_bottom_slope;
+                let ceil_diff = open
+                    .back
+                    .map(|(_, bc)| open.front_ceil != bc)
+                    .unwrap_or(true);
+                if ceil_diff {
+                    let slope = fixed_div_raw(open.open_top.wrapping_sub(shootz), dist);
+                    if slope < topslope {
+                        topslope = slope;
+                    }
                 }
-                if open_top_slope < topslope {
-                    topslope = open_top_slope;
-                }
-
                 if topslope <= bottomslope {
-                    return None;
+                    return none; // stop
                 }
             }
             HitscanInterceptKind::Actor(handle) => {
-                let Some(mo) = gs.mobjslab.get(handle) else {
+                let Some(th) = gs.mobjslab.get(handle) else {
                     continue;
                 };
-                let target_bottom_slope = (fixed_to_f32(mo.z) - shootz) / dist;
-                let target_top_slope = (fixed_to_f32(mo.z + mo.height) - shootz) / dist;
-
-                if target_top_slope < bottomslope || target_bottom_slope > topslope {
+                if handle == source || th.flags & flags::MF_SHOOTABLE == 0 {
                     continue;
                 }
+                let dist = fixed_mul_raw(attackrange, ic.frac);
+                let mut thingtopslope =
+                    fixed_div_raw(th.z.raw().wrapping_add(th.height.raw()).wrapping_sub(shootz), dist);
+                if thingtopslope < bottomslope {
+                    continue; // over
+                }
+                let mut thingbottomslope = fixed_div_raw(th.z.raw().wrapping_sub(shootz), dist);
+                if thingbottomslope > topslope {
+                    continue; // under
+                }
+                if thingtopslope > topslope {
+                    thingtopslope = topslope;
+                }
+                if thingbottomslope < bottomslope {
+                    thingbottomslope = bottomslope;
+                }
+                let aimslope = (thingtopslope.wrapping_add(thingbottomslope)) / 2;
+                return AimResult {
+                    slope: aimslope,
+                    linetarget: Some(handle),
+                };
+            }
+        }
+    }
 
-                return Some(handle);
+    none
+}
+
+/// Port of `P_LineAttack` (`p_map.c:1117`).  Fires along `angle` at the given
+/// vertical `slope`, spawning puffs on walls and blood on monsters, and
+/// applying damage.  Returns the actor hit (if any).
+pub fn p_line_attack(
+    gs: &mut GameState,
+    source: MobjHandle,
+    angle: Bam,
+    distance: Fixed16_16,
+    slope: i32,
+    damage: i32,
+    level: Option<&Level>,
+) -> Option<MobjHandle> {
+    let (t1x, t1y, shootz) = {
+        let mo = gs.mobjslab.get(source)?;
+        (mo.x.raw(), mo.y.raw(), hitscan_shootz(mo.z.raw(), mo.height.raw()))
+    };
+    let dist_i = distance.to_int();
+    let x2 = t1x.wrapping_add(dist_i.wrapping_mul(angle.cos().raw()));
+    let y2 = t1y.wrapping_add(dist_i.wrapping_mul(angle.sin().raw()));
+    let attackrange = distance.raw();
+    let aimslope = slope;
+
+    let mut intercepts = smallvec::SmallVec::new();
+    let trace = p_path_traverse(gs, level, source, t1x, t1y, x2, y2, &mut intercepts);
+
+    for ic in intercepts.iter().copied().collect::<smallvec::SmallVec<[HitscanIntercept; 24]>>() {
+        match ic.kind {
+            HitscanInterceptKind::Line(ld_idx) => {
+                // PTR_ShootTraverse — line case.
+                let lvl = level.expect("line intercepts require a level");
+                let ld = &lvl.linedefs[ld_idx];
+
+                let mut hit_line = !ld.is_two_sided();
+                if ld.is_two_sided() {
+                    if let Some(open) = line_open(lvl, ld) {
+                        let dist = fixed_mul_raw(attackrange, ic.frac);
+                        match open.back {
+                            None => {
+                                // e6y missed-back-side emulation.
+                                let s = fixed_div_raw(open.open_bottom.wrapping_sub(shootz), dist);
+                                if s > aimslope {
+                                    hit_line = true;
+                                }
+                                let s = fixed_div_raw(open.open_top.wrapping_sub(shootz), dist);
+                                if s < aimslope {
+                                    hit_line = true;
+                                }
+                            }
+                            Some((bf, bc)) => {
+                                if open.front_floor != bf {
+                                    let s =
+                                        fixed_div_raw(open.open_bottom.wrapping_sub(shootz), dist);
+                                    if s > aimslope {
+                                        hit_line = true;
+                                    }
+                                }
+                                if open.front_ceil != bc {
+                                    let s = fixed_div_raw(open.open_top.wrapping_sub(shootz), dist);
+                                    if s < aimslope {
+                                        hit_line = true;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        hit_line = true;
+                    }
+                }
+
+                if !hit_line {
+                    continue; // shot passes through
+                }
+
+                // Position a bit closer to the wall.
+                let frac = ic.frac.wrapping_sub(fixed_div_raw(4 << 16, attackrange));
+                let x = trace.x.wrapping_add(fixed_mul_raw(trace.dx, frac));
+                let y = trace.y.wrapping_add(fixed_mul_raw(trace.dy, frac));
+                let z = shootz.wrapping_add(fixed_mul_raw(aimslope, fixed_mul_raw(frac, attackrange)));
+
+                // Don't shoot the sky.
+                let front_sec = lvl
+                    .sidedefs
+                    .get(ld.right_sidedef as usize)
+                    .and_then(|sd| lvl.sectors.get(sd.sector as usize));
+                if let Some(front) = front_sec
+                    && is_sky_flat(&front.ceil_flat)
+                {
+                    if z > (i32::from(front.ceil_height) << 16) {
+                        return None;
+                    }
+                    let back_sky = (ld.left_sidedef != doom_map::SIDEDEF_NONE)
+                        .then(|| {
+                            lvl.sidedefs
+                                .get(ld.left_sidedef as usize)
+                                .and_then(|sd| lvl.sectors.get(sd.sector as usize))
+                                .map(|s| is_sky_flat(&s.ceil_flat))
+                                .unwrap_or(false)
+                        })
+                        .unwrap_or(false);
+                    if back_sky {
+                        return None;
+                    }
+                }
+
+                p_spawn_puff(gs, level, x, y, z, attackrange);
+                return None; // stop
+            }
+            HitscanInterceptKind::Actor(handle) => {
+                let (thz, thh, thflags) = {
+                    let Some(th) = gs.mobjslab.get(handle) else {
+                        continue;
+                    };
+                    if handle == source || th.flags & flags::MF_SHOOTABLE == 0 {
+                        continue;
+                    }
+                    (th.z.raw(), th.height.raw(), th.flags)
+                };
+                let dist = fixed_mul_raw(attackrange, ic.frac);
+                let thingtopslope =
+                    fixed_div_raw(thz.wrapping_add(thh).wrapping_sub(shootz), dist);
+                if thingtopslope < aimslope {
+                    continue; // over
+                }
+                let thingbottomslope = fixed_div_raw(thz.wrapping_sub(shootz), dist);
+                if thingbottomslope > aimslope {
+                    continue; // under
+                }
+
+                // hit thing — position a bit closer.
+                let frac = ic.frac.wrapping_sub(fixed_div_raw(10 << 16, attackrange));
+                let x = trace.x.wrapping_add(fixed_mul_raw(trace.dx, frac));
+                let y = trace.y.wrapping_add(fixed_mul_raw(trace.dy, frac));
+                let z = shootz.wrapping_add(fixed_mul_raw(aimslope, fixed_mul_raw(frac, attackrange)));
+
+                if thflags & flags::MF_NOBLOOD != 0 {
+                    p_spawn_puff(gs, level, x, y, z, attackrange);
+                } else {
+                    p_spawn_blood(gs, level, x, y, z, damage);
+                }
+                if damage > 0 {
+                    damage_mobj(gs, handle, source, damage);
+                }
+                return Some(handle); // stop
             }
         }
     }
 
     None
-}
-
-/// Hitscan attack with optional wall-occluded slope clipping.
-///
-/// Fires a ray from `source` in direction `angle` up to `range` map units.
-/// When `level` is `Some`, ordered line and actor intercepts clip the
-/// autoaim slope window Doom-style before selecting a target. When `level` is
-/// `None`, only actor intercepts are considered.
-///
-/// Returns `Some(handle)` if an actor was hit and damaged, `None` otherwise.
-///
-/// ⚡ Bolt Optimization:
-/// `intercepts` uses `SmallVec` to avoid heap allocations on the hitscan hot path.
-pub fn p_line_attack(
-    gs: &mut GameState,
-    source: MobjHandle,
-    angle: Bam,
-    range: Fixed16_16,
-    damage: i32,
-    level: Option<&Level>,
-    intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
-) -> Option<MobjHandle> {
-    let hit = p_line_attack_target(gs, source, angle, range, level, intercepts)?;
-    damage_mobj(gs, hit, source, damage);
-    Some(hit)
 }
 
 // ---------------------------------------------------------------------------
@@ -683,10 +1137,25 @@ mod tests {
     use crate::mobj::Mobj;
     use crate::player::PlayerState;
     use crate::state::GameState;
-    use crate::states::ids;
     use doom_types::TicCmd;
     use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
+
+    /// Test shim preserving the historical `p_line_attack` signature (with an
+    /// `intercepts` scratch buffer and no explicit slope).  Forwards to the
+    /// vanilla `super::p_line_attack` with a level (horizontal) `slope == 0`,
+    /// which is correct for the same-height targets these tests use.
+    fn p_line_attack(
+        gs: &mut GameState,
+        source: MobjHandle,
+        angle: Bam,
+        range: Fixed16_16,
+        damage: i32,
+        level: Option<&Level>,
+        _intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
+    ) -> Option<MobjHandle> {
+        super::p_line_attack(gs, source, angle, range, 0, damage, level)
+    }
 
     // -----------------------------------------------------------------------
     // Helpers — adapted from actions.rs tests
@@ -1148,11 +1617,13 @@ mod tests {
     fn line_attack_skips_dead_actors() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        // Kill the trooper first.
-        gs.mobjslab
-            .get_mut(trooper)
-            .expect("value must exist in test")
-            .health = 0;
+        // Kill the trooper first.  A real corpse (P_KillMobj) also clears
+        // MF_SHOOTABLE, which is what the shoot-traverse checks.
+        {
+            let mo = gs.mobjslab.get_mut(trooper).expect("value must exist in test");
+            mo.health = 0;
+            mo.flags &= !flags::MF_SHOOTABLE;
+        }
 
         let src = gs.player.handle;
         // Even if trig tables were initialized and the geometry lined up,
@@ -1582,28 +2053,31 @@ mod tests {
         let player_h = gs.mobjslab.alloc(player_mo);
         gs.player = PlayerState::pistol_start(player_h);
 
-        // Trooper directly on top of the player — trig tables don't matter
-        // because the ray has zero direction (cos=sin=0).
-        let trooper = spawn_trooper(&mut gs, 64, 1);
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
+        // Trooper essentially on top of the player, directly ahead — a
+        // point-blank hit.
+        let trooper = spawn_trooper(&mut gs, 96, 0);
 
         let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
             Bam::ZERO,
-            Fixed16_16::from_int(10),
+            Fixed16_16::from_int(64),
             5,
             Some(&level),
             &mut intercepts,
         );
-        // With uninitialized trig, result is None.
-        assert!(result.is_none());
-        assert_eq!(
+        assert_eq!(result, Some(trooper), "point-blank target must be hit");
+        assert!(
             gs.mobjslab
                 .get(trooper)
                 .expect("value must exist in test")
-                .health,
-            20
+                .health
+                < 20
         );
     }
 
@@ -1666,8 +2140,10 @@ mod tests {
         let player_h = gs.mobjslab.alloc(player_mo);
         gs.player = PlayerState::pistol_start(player_h);
 
-        let trooper = spawn_trooper(&mut gs, 512, -21);
-        let angle = Bam(((-8i32) << 18) as u32);
+        // Vanilla P_LineAttack fires straight down `angle` (no horizontal
+        // autoaim); a target on that axis is hit.
+        let trooper = spawn_trooper(&mut gs, 512, 0);
+        let angle = Bam::ZERO;
 
         let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(

@@ -467,11 +467,13 @@ pub static MOBJINFO: [MobjInfo; 76] = [
     // 18: BulletPuff
     MobjInfo {
         flags: flags::MF_NOBLOCKMAP | flags::MF_NOGRAVITY,
+        spawn_state: sn(ids::S_PUFF1),
         ..ITEM
     },
     // 19: Blood
     MobjInfo {
         flags: flags::MF_NOBLOCKMAP,
+        spawn_state: sn(ids::S_BLOOD1),
         ..ITEM
     },
     // 20: SmokeTrail

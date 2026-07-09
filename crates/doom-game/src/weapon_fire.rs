@@ -9,11 +9,10 @@
 use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
 
-use crate::combat::{MELEERANGE, MISSILERANGE, p_line_attack, p_line_attack_target};
-use crate::mobj::MobjHandle;
+use crate::combat::{MELEERANGE, MISSILERANGE, p_aim_line_attack, p_line_attack};
+use crate::mobj::{MobjHandle, flags};
 use crate::player::powers::PW_STRENGTH;
 use crate::projectile::p_spawn_player_missile;
-use crate::random::p_damage_with_variance;
 use crate::state::{GameState, SoundRequest};
 use doom_types::mobj_kind::MobjKind;
 use doom_types::weapons::AmmoType;
@@ -38,7 +37,9 @@ pub const AMMO_PER_SHOT: [(WeaponType, AmmoType, u32); 9] = [
     (WeaponType::Chainsaw, AmmoType::None, 0),
 ];
 
-const BULLET_AUTOAIM_RANGE: Fixed16_16 = Fixed16_16(1024 << 16);
+/// Autoaim probe range for `P_BulletSlope`: `16*64*FRACUNIT` = 1024 units.
+const BULLET_AUTOAIM_RANGE: Fixed16_16 = Fixed16_16(16 * 64 << 16);
+/// Horizontal probe step used by `P_BulletSlope` (`1<<26` BAM).
 const BULLET_AUTOAIM_SIDE_PROBE: u32 = 1 << 26;
 
 // ---------------------------------------------------------------------------
@@ -109,49 +110,62 @@ fn player_angle(gs: &GameState) -> Option<Bam> {
     gs.mobjslab.get(gs.player.handle).map(|mo| mo.angle)
 }
 
-#[inline]
-fn hitscan_shot_angle(gs: &mut GameState, base_angle: Bam, accurate_first_shot: bool) -> Bam {
-    if accurate_first_shot && !gs.player.attack_down {
-        return base_angle;
+/// Port of `P_BulletSlope` (`p_pspr.c:608`).  Determines the vertical autoaim
+/// slope by probing the player's facing angle, then `+1<<26`, then `-1<<26`
+/// for a target within 1024 units.  Horizontal aim is unaffected (the shot
+/// itself always uses `mo->angle`).  Draws no RNG.
+fn p_bullet_slope(gs: &GameState, source: MobjHandle, level: Option<&Level>) -> i32 {
+    let Some(base) = gs.mobjslab.get(source).map(|m| m.angle) else {
+        return 0;
+    };
+    let mut aim = p_aim_line_attack(gs, source, base, BULLET_AUTOAIM_RANGE, level);
+    if aim.linetarget.is_none() {
+        let an = Bam(base.0.wrapping_add(BULLET_AUTOAIM_SIDE_PROBE));
+        aim = p_aim_line_attack(gs, source, an, BULLET_AUTOAIM_RANGE, level);
+        if aim.linetarget.is_none() {
+            let an = Bam(base.0.wrapping_sub(BULLET_AUTOAIM_SIDE_PROBE));
+            aim = p_aim_line_attack(gs, source, an, BULLET_AUTOAIM_RANGE, level);
+        }
     }
-
-    let spread = gs.p_subrandom() << 18;
-    Bam(base_angle.0.wrapping_add(spread as u32))
+    aim.slope
 }
 
-fn bullet_autoaim_angle(
-    gs: &GameState,
-    handle: MobjHandle,
-    base_angle: Bam,
+/// Port of `P_GunShot` (`p_pspr.c:632`).  Fires one hitscan pellet straight
+/// ahead (`mo->angle`, plus `P_SubRandom()<<18` spread when inaccurate) at the
+/// precomputed `bulletslope`.
+fn p_gun_shot(
+    gs: &mut GameState,
+    source: MobjHandle,
+    accurate: bool,
+    slope: i32,
     level: Option<&Level>,
-    intercepts: &mut smallvec::SmallVec<[crate::combat::HitscanIntercept; 16]>,
-) -> Bam {
-    let right_probe = Bam(base_angle.0.wrapping_add(BULLET_AUTOAIM_SIDE_PROBE));
-    let left_probe = Bam(base_angle.0.wrapping_sub(BULLET_AUTOAIM_SIDE_PROBE));
-
-    [base_angle, right_probe, left_probe]
-        .into_iter()
-        .find(|angle| {
-            p_line_attack_target(gs, handle, *angle, BULLET_AUTOAIM_RANGE, level, intercepts)
-                .is_some()
-        })
-        .unwrap_or(base_angle)
+) {
+    let damage = 5 * ((gs.p_random() as i32) % 3 + 1);
+    let Some(base) = gs.mobjslab.get(source).map(|m| m.angle) else {
+        return;
+    };
+    let angle = if accurate {
+        base
+    } else {
+        Bam(base.0.wrapping_add((gs.p_subrandom() << 18) as u32))
+    };
+    p_line_attack(gs, source, angle, MISSILERANGE, slope, damage, level);
 }
 
-fn snap_player_to_target(gs: &mut GameState, target_handle: crate::mobj::MobjHandle) {
+/// Turn the player's actor to face a hit target using the exact vanilla
+/// `R_PointToAngle2` (`p_pspr.c` melee turn).
+fn face_target_after_melee(gs: &mut GameState, target_handle: MobjHandle) {
     let handle = gs.player.handle;
     if let (Some(src), Some(tgt)) = (
         gs.mobjslab.get(handle).map(|m| (m.x, m.y)),
         gs.mobjslab.get(target_handle).map(|m| (m.x, m.y)),
     ) {
-        let dx = tgt.0 - src.0;
-        let dy = tgt.1 - src.1;
-        let dx_f = dx.to_int() as f32;
-        let dy_f = dy.to_int() as f32;
-        let angle_rad = dy_f.atan2(dx_f);
-        let new_angle =
-            Bam((angle_rad / std::f32::consts::TAU * (u32::MAX as f64 + 1.0) as f32) as u32);
-
+        let new_angle = Bam(crate::geom::r_point_to_angle2(
+            src.0.raw(),
+            src.1.raw(),
+            tgt.0.raw(),
+            tgt.1.raw(),
+        ));
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
             mo.angle = new_angle;
         }
@@ -195,208 +209,144 @@ pub fn select_next_weapon(gs: &GameState) -> Option<WeaponType> {
 // Hitscan weapons
 // ---------------------------------------------------------------------------
 
-/// Fire the pistol: consume 1 Clip (Bullets), fire 1 hitscan ray.
-///
-/// Spread: `p_subrandom() << 18` BAM.
-/// Damage: `p_damage_with_variance(gs, 5)` = 5..40.
+/// Fire the pistol (`A_FirePistol`, `p_pspr.c:650`).  One accurate-on-first-
+/// shot hitscan ray at the `P_BulletSlope` autoaim slope.
 pub fn p_fire_pistol(gs: &mut GameState, level: Option<&Level>) {
     if !consume_ammo(gs, WeaponType::Pistol) {
         return;
     }
-
     let handle = gs.player.handle;
-    let Some(a) = player_angle(gs) else {
-        return;
-    };
-    let base_angle = a;
-
-    let mut intercepts = smallvec::SmallVec::new();
-    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
-    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
-    let damage = p_damage_with_variance(gs, 5);
-
-    p_line_attack(
-        gs,
-        handle,
-        shot_angle,
-        MISSILERANGE,
-        damage,
-        level,
-        &mut intercepts,
-    );
+    let accurate = gs.player.refire == 0;
+    let slope = p_bullet_slope(gs, handle, level);
+    p_gun_shot(gs, handle, accurate, slope, level);
 }
 
-/// Fire the shotgun: consume 1 Shell, fire 7 pellets.
-///
-/// Each pellet: spread `p_subrandom() << 18`, damage `p_damage_with_variance(gs, 5)`.
+/// Fire the shotgun (`A_FireShotgun`, `p_pspr.c:673`).  7 inaccurate pellets
+/// sharing one `P_BulletSlope` autoaim slope.
 pub fn p_fire_shotgun(gs: &mut GameState, level: Option<&Level>) {
     if !consume_ammo(gs, WeaponType::Shotgun) {
         return;
     }
-
     let handle = gs.player.handle;
-    let Some(a) = player_angle(gs) else {
-        return;
-    };
-    let base_angle = a;
-
-    let mut intercepts = smallvec::SmallVec::new();
-    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
-
+    let slope = p_bullet_slope(gs, handle, level);
     for _ in 0..7 {
-        let spread = gs.p_subrandom() << 18;
-        let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
-        let damage = p_damage_with_variance(gs, 5);
-        p_line_attack(
-            gs,
-            handle,
-            shot_angle,
-            MISSILERANGE,
-            damage,
-            level,
-            &mut intercepts,
-        );
+        p_gun_shot(gs, handle, false, slope, level);
     }
 }
 
-/// Fire the super shotgun: consume 2 Shells, fire 20 pellets.
-///
-/// Each pellet: spread `p_subrandom() << 19` (wider), damage
-/// `p_damage_with_variance(gs, 5)`.
+/// Fire the super shotgun (`A_FireShotgun2`, `p_pspr.c:699`).  20 pellets,
+/// each with its own `P_SubRandom()<<ANGLETOFINESHIFT` angle spread and a
+/// `bulletslope + (P_SubRandom()<<5)` vertical jitter.
 pub fn p_fire_super_shotgun(gs: &mut GameState, level: Option<&Level>) {
     if !consume_ammo(gs, WeaponType::SuperShotgun) {
         return;
     }
-
     let handle = gs.player.handle;
-    let Some(a) = player_angle(gs) else {
+    let bulletslope = p_bullet_slope(gs, handle, level);
+    let Some(base) = player_angle(gs) else {
         return;
     };
-    let base_angle = a;
-
-    let mut intercepts = smallvec::SmallVec::new();
-    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
-
     for _ in 0..20 {
-        let spread = gs.p_subrandom() << 19;
-        let shot_angle = Bam(autoaim_angle.0.wrapping_add(spread as u32));
-        let damage = p_damage_with_variance(gs, 5);
-        p_line_attack(
-            gs,
-            handle,
-            shot_angle,
-            MISSILERANGE,
-            damage,
-            level,
-            &mut intercepts,
-        );
+        let damage = 5 * ((gs.p_random() as i32) % 3 + 1);
+        // ANGLETOFINESHIFT == 19.
+        let angle = Bam(base.0.wrapping_add((gs.p_subrandom() << 19) as u32));
+        let slope = bulletslope.wrapping_add(gs.p_subrandom() << 5);
+        p_line_attack(gs, handle, angle, MISSILERANGE, slope, damage, level);
     }
 }
 
-/// Fire the chaingun: consume 1 Clip (Bullets), fire 1 hitscan ray.
-///
-/// Same parameters as pistol; the faster fire rate comes from the weapon
-/// state machine (shorter re-fire delay), not from this function.
+/// Fire the chaingun (`A_FireCGun`, `p_pspr.c:735`).  Same single-pellet
+/// hitscan as the pistol; the fast fire rate comes from the psprite states.
 pub fn p_fire_chaingun(gs: &mut GameState, level: Option<&Level>) {
     if !consume_ammo(gs, WeaponType::Chaingun) {
         return;
     }
-
     let handle = gs.player.handle;
-    let Some(a) = player_angle(gs) else {
-        return;
-    };
-    let base_angle = a;
-
-    let mut intercepts = smallvec::SmallVec::new();
-    let autoaim_angle = bullet_autoaim_angle(gs, handle, base_angle, level, &mut intercepts);
-    let shot_angle = hitscan_shot_angle(gs, autoaim_angle, true);
-    let damage = p_damage_with_variance(gs, 5);
-
-    p_line_attack(
-        gs,
-        handle,
-        shot_angle,
-        MISSILERANGE,
-        damage,
-        level,
-        &mut intercepts,
-    );
+    let accurate = gs.player.refire == 0;
+    let slope = p_bullet_slope(gs, handle, level);
+    p_gun_shot(gs, handle, accurate, slope, level);
 }
 
 // ---------------------------------------------------------------------------
 // Melee weapons
 // ---------------------------------------------------------------------------
 
-/// Fire the fist: no ammo, hitscan at MELEERANGE.
+/// Fire the fist (`A_Punch`, `p_pspr.c:456`).
 ///
-/// Damage: `p_damage_with_variance(gs, 2)` = 2..16.
-/// If Berserk active (`powers[PW_STRENGTH] > 0`): damage *= 10.
+/// Damage `(P_Random()%10+1)<<1`, ×10 with Berserk.  Aims with
+/// `P_AimLineAttack` at the spread angle, then turns to face a hit target.
 pub fn p_fire_fist(gs: &mut GameState, level: Option<&Level>) {
     let handle = gs.player.handle;
-    let Some(a) = player_angle(gs) else {
+    let Some(base) = player_angle(gs) else {
         return;
     };
-    let base_angle = a;
 
-    let mut damage = p_damage_with_variance(gs, 2);
-
-    // Berserk multiplier.
+    let mut damage = ((gs.p_random() as i32) % 10 + 1) << 1;
     if gs.player.powers[PW_STRENGTH] > 0 {
         damage *= 10;
     }
 
-    let spread = gs.p_subrandom() << 18;
-    let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
+    let angle = Bam(base.0.wrapping_add((gs.p_subrandom() << 18) as u32));
+    let slope = p_aim_line_attack(gs, handle, angle, MELEERANGE, level);
+    p_line_attack(gs, handle, angle, MELEERANGE, slope.slope, damage, level);
 
-    let mut intercepts = smallvec::SmallVec::new();
-    let hit = p_line_attack(
-        gs,
-        handle,
-        shot_angle,
-        MELEERANGE,
-        damage,
-        level,
-        &mut intercepts,
-    );
-    if let Some(target_handle) = hit {
-        snap_player_to_target(gs, target_handle);
+    if let Some(target_handle) = slope.linetarget {
+        face_target_after_melee(gs, target_handle);
     }
 }
 
-/// Fire the chainsaw: no ammo, hitscan at MELEERANGE+1.
+/// Fire the chainsaw (`A_Saw`, `p_pspr.c:490`).
 ///
-/// Damage: `p_damage_with_variance(gs, 2)` = 2..16.
-/// On hit: turn player toward target (auto-aim snap).
+/// Damage `2*(P_Random()%10+1)` at `MELEERANGE+1`; marks the actor
+/// `MF_JUSTATTACKED` and swivels toward a hit target.
 pub fn p_fire_chainsaw(gs: &mut GameState, level: Option<&Level>) {
     let handle = gs.player.handle;
-    let Some(a) = player_angle(gs) else {
+    let Some(base) = player_angle(gs) else {
         return;
     };
-    let base_angle = a;
 
-    let damage = p_damage_with_variance(gs, 2);
+    let damage = 2 * ((gs.p_random() as i32) % 10 + 1);
+    let angle = Bam(base.0.wrapping_add((gs.p_subrandom() << 18) as u32));
 
-    let spread = gs.p_subrandom() << 18;
-    let shot_angle = Bam(base_angle.0.wrapping_add(spread as u32));
-
-    // MELEERANGE + 1 map unit for chainsaw (slightly longer reach).
+    // MELEERANGE + 1 so the puff doesn't skip the flash.
     let chainsaw_range = Fixed16_16(MELEERANGE.0 + (1 << 16));
+    let slope = p_aim_line_attack(gs, handle, angle, chainsaw_range, level);
+    p_line_attack(gs, handle, angle, chainsaw_range, slope.slope, damage, level);
 
-    let mut intercepts = smallvec::SmallVec::new();
-    let hit = p_line_attack(
-        gs,
-        handle,
-        shot_angle,
-        chainsaw_range,
-        damage,
-        level,
-        &mut intercepts,
-    );
+    let Some(target_handle) = slope.linetarget else {
+        return;
+    };
 
-    // Auto-aim snap: if we hit something, turn the player toward the target.
-    if let Some(target_handle) = hit {
-        snap_player_to_target(gs, target_handle);
+    // Swivel toward the target and flag the attack (p_pspr.c:512-527).
+    if let (Some((sx, sy, sangle)), Some((tx, ty))) = (
+        gs.mobjslab.get(handle).map(|m| (m.x, m.y, m.angle)),
+        gs.mobjslab.get(target_handle).map(|m| (m.x, m.y)),
+    ) {
+        let to_target = Bam(crate::geom::r_point_to_angle2(
+            sx.raw(),
+            sy.raw(),
+            tx.raw(),
+            ty.raw(),
+        ));
+        let delta = to_target.0.wrapping_sub(sangle.0);
+        const ANG90: u32 = 0x4000_0000;
+        const ANG180: u32 = 0x8000_0000;
+        let new_angle = if delta > ANG180 {
+            // target is to the left
+            if (delta as i32) < -((ANG90 / 20) as i32) {
+                to_target.0.wrapping_add(ANG90 / 21)
+            } else {
+                sangle.0.wrapping_sub(ANG90 / 20)
+            }
+        } else if delta > ANG90 / 20 {
+            to_target.0.wrapping_sub(ANG90 / 21)
+        } else {
+            sangle.0.wrapping_add(ANG90 / 20)
+        };
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.angle = Bam(new_angle);
+            mo.flags |= flags::MF_JUSTATTACKED;
+        }
     }
 }
 
@@ -720,18 +670,19 @@ mod tests {
     }
 
     #[test]
-    fn pistol_damage_range_is_5_to_40() {
-        // p_damage_with_variance(gs, 5) returns 5 * (1..=8) = 5..=40
+    fn pistol_damage_range_is_5_10_or_15() {
+        // Vanilla P_GunShot: damage = 5*(P_Random()%3+1) => {5, 10, 15}.
         let mut gs = GameState::new("test");
         let mut min_seen = i32::MAX;
         let mut max_seen = i32::MIN;
         for _ in 0..256 {
-            let dmg = p_damage_with_variance(&mut gs, 5);
+            let dmg = 5 * ((gs.p_random() as i32) % 3 + 1);
+            assert!(matches!(dmg, 5 | 10 | 15), "damage must be 5, 10, or 15");
             min_seen = min_seen.min(dmg);
             max_seen = max_seen.max(dmg);
         }
-        assert!(min_seen >= 5, "min damage {min_seen} must be >= 5");
-        assert!(max_seen <= 40, "max damage {max_seen} must be <= 40");
+        assert_eq!(min_seen, 5);
+        assert_eq!(max_seen, 15);
     }
 
     #[test]
@@ -756,17 +707,41 @@ mod tests {
     }
 
     #[test]
-    fn pistol_refire_uses_spread_and_can_miss_exactly_aimed_target() {
+    fn pistol_refire_draws_extra_subrandom_spread() {
         init_trig();
+        // No target, no level: P_GunShot's only draws are the damage byte
+        // (accurate) plus a P_SubRandom (2 bytes) when refiring.
+        let mut acc = make_game_state();
+        acc.player.refire = 0;
+        let i = acc.rng.index();
+        p_fire_pistol(&mut acc, None);
+        let acc_draws = acc.rng.index().wrapping_sub(i) & 255;
 
+        let mut refire = make_game_state();
+        refire.player.refire = 1;
+        let j = refire.rng.index();
+        p_fire_pistol(&mut refire, None);
+        let refire_draws = refire.rng.index().wrapping_sub(j) & 255;
+
+        assert_eq!(acc_draws, 1, "accurate pistol shot draws only the damage byte");
+        assert_eq!(
+            refire_draws, 3,
+            "refire pistol shot also draws P_SubRandom (2 bytes)"
+        );
+    }
+
+    #[test]
+    fn pistol_has_no_horizontal_autoaim() {
+        init_trig();
+        // Vanilla P_BulletSlope only sets a vertical slope; the shot fires
+        // straight down mo->angle.  A target 50 units off the firing axis at
+        // 512 units range is therefore missed.
+        let level = make_open_level();
         let mut gs = make_game_state();
-        let target_handle = spawn_shootable_target(&mut gs, 512, 0, 8, 20);
-        // P_Random increments before reading; set_index(15) reproduces the same
-        // spread byte sequence that previously started at index 16.
-        gs.rng.set_index(15);
-        gs.player.attack_down = true;
+        let target_handle = spawn_shootable_target(&mut gs, 512, 50, 20, 20);
+        gs.player.refire = 0;
 
-        p_fire_pistol(&mut gs, None);
+        p_fire_pistol(&mut gs, Some(&level));
 
         assert_eq!(
             gs.mobjslab
@@ -774,19 +749,17 @@ mod tests {
                 .expect("value must exist in test")
                 .health,
             20,
-            "refire pistol shot should still use spread"
+            "off-axis target must not be hit — Doom bullets have no horizontal autoaim"
         );
     }
 
     #[test]
-    fn pistol_autoaim_probe_hits_target_slightly_right_of_center() {
+    fn pistol_hits_on_axis_target() {
         init_trig();
-
         let level = make_open_level();
         let mut gs = make_game_state();
-        let target_handle = spawn_shootable_target(&mut gs, 512, 50, 20, 20);
-        gs.rng.set_index(16);
-        gs.player.attack_down = false;
+        let target_handle = spawn_shootable_target(&mut gs, 512, 0, 20, 20);
+        gs.player.refire = 0;
 
         p_fire_pistol(&mut gs, Some(&level));
 
@@ -796,29 +769,7 @@ mod tests {
                 .expect("value must exist in test")
                 .health
                 < 20,
-            "pistol autoaim probe should acquire a target within Doom's side-angle search"
-        );
-    }
-
-    #[test]
-    fn pistol_autoaim_probe_hits_target_slightly_left_of_center() {
-        init_trig();
-
-        let level = make_open_level();
-        let mut gs = make_game_state();
-        let target_handle = spawn_shootable_target(&mut gs, 512, -50, 20, 20);
-        gs.rng.set_index(16);
-        gs.player.attack_down = false;
-
-        p_fire_pistol(&mut gs, Some(&level));
-
-        assert!(
-            gs.mobjslab
-                .get(target_handle)
-                .expect("value must exist in test")
-                .health
-                < 20,
-            "pistol autoaim probe should search both sides of center"
+            "on-axis target must be hit"
         );
     }
 
@@ -918,37 +869,34 @@ mod tests {
     }
 
     #[test]
-    fn chaingun_refire_uses_spread_and_can_miss_exactly_aimed_target() {
+    fn chaingun_refire_draws_extra_subrandom_spread() {
         init_trig();
+        let mut acc = make_game_state();
+        acc.player.refire = 0;
+        let i = acc.rng.index();
+        p_fire_chaingun(&mut acc, None);
+        let acc_draws = acc.rng.index().wrapping_sub(i) & 255;
 
-        let mut gs = make_game_state();
-        let target_handle = spawn_shootable_target(&mut gs, 512, 0, 8, 20);
-        // P_Random increments before reading; set_index(15) reproduces the same
-        // spread byte sequence that previously started at index 16.
-        gs.rng.set_index(15);
-        gs.player.attack_down = true;
+        let mut refire = make_game_state();
+        refire.player.refire = 1;
+        let j = refire.rng.index();
+        p_fire_chaingun(&mut refire, None);
+        let refire_draws = refire.rng.index().wrapping_sub(j) & 255;
 
-        p_fire_chaingun(&mut gs, None);
-
+        assert_eq!(acc_draws, 1, "accurate chaingun shot draws only the damage byte");
         assert_eq!(
-            gs.mobjslab
-                .get(target_handle)
-                .expect("value must exist in test")
-                .health,
-            20,
-            "held chaingun shots should keep spread"
+            refire_draws, 3,
+            "refire chaingun shot also draws P_SubRandom (2 bytes)"
         );
     }
 
     #[test]
-    fn chaingun_autoaim_probe_hits_target_slightly_off_center() {
+    fn chaingun_hits_on_axis_target() {
         init_trig();
-
         let level = make_open_level();
         let mut gs = make_game_state();
-        let target_handle = spawn_shootable_target(&mut gs, 512, 50, 20, 20);
-        gs.rng.set_index(16);
-        gs.player.attack_down = false;
+        let target_handle = spawn_shootable_target(&mut gs, 512, 0, 20, 20);
+        gs.player.refire = 0;
 
         p_fire_chaingun(&mut gs, Some(&level));
 
@@ -958,7 +906,7 @@ mod tests {
                 .expect("value must exist in test")
                 .health
                 < 20,
-            "chaingun should reuse the same Doom bullet autoaim probe as the pistol"
+            "on-axis target must be hit by the chaingun"
         );
     }
 
@@ -976,17 +924,18 @@ mod tests {
     }
 
     #[test]
-    fn fist_damage_range_is_2_to_16() {
+    fn fist_damage_range_is_2_to_20() {
+        // Vanilla A_Punch: damage = (P_Random()%10+1)<<1 => even 2..=20.
         let mut gs = GameState::new("test");
         let mut min_seen = i32::MAX;
         let mut max_seen = i32::MIN;
         for _ in 0..256 {
-            let dmg = p_damage_with_variance(&mut gs, 2);
+            let dmg = ((gs.p_random() as i32) % 10 + 1) << 1;
             min_seen = min_seen.min(dmg);
             max_seen = max_seen.max(dmg);
         }
-        assert!(min_seen >= 2, "min fist damage {min_seen} must be >= 2");
-        assert!(max_seen <= 16, "max fist damage {max_seen} must be <= 16");
+        assert_eq!(min_seen, 2, "min fist damage must be 2");
+        assert_eq!(max_seen, 20, "max fist damage must be 20");
     }
 
     #[test]
@@ -1009,25 +958,19 @@ mod tests {
     }
 
     #[test]
-    fn fist_berserk_damage_range_is_20_to_160() {
-        // The berserk fist does p_damage_with_variance(gs, 2) * 10.
-        // p_damage_with_variance(gs, 2) returns 2..16, so berserk = 20..160.
+    fn fist_berserk_damage_range_is_20_to_200() {
+        // The berserk fist does A_Punch damage ×10 => ((P_Random()%10+1)<<1)*10,
+        // i.e. multiples of 20 in 20..=200.
         let mut gs = GameState::new("test");
         let mut min_seen = i32::MAX;
         let mut max_seen = i32::MIN;
         for _ in 0..256 {
-            let dmg = p_damage_with_variance(&mut gs, 2) * 10;
+            let dmg = (((gs.p_random() as i32) % 10 + 1) << 1) * 10;
             min_seen = min_seen.min(dmg);
             max_seen = max_seen.max(dmg);
         }
-        assert!(
-            min_seen >= 20,
-            "min berserk damage {min_seen} must be >= 20"
-        );
-        assert!(
-            max_seen <= 160,
-            "max berserk damage {max_seen} must be <= 160"
-        );
+        assert_eq!(min_seen, 20, "min berserk damage must be 20");
+        assert_eq!(max_seen, 200, "max berserk damage must be 200");
     }
 
     #[test]

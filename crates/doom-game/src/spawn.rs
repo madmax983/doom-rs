@@ -137,6 +137,35 @@ fn sync_mobj_to_level(level: &Level, mo: &mut Mobj) {
     }
 }
 
+/// Port of `P_SpawnMobj` (`p_mobj.c:547`) for direct (non-map-thing) spawns
+/// such as puffs, blood, and projectiles.
+///
+/// Draws exactly one `P_Random()` for `lastlook` (as vanilla `P_SpawnMobj`
+/// does for every mobj), applies the type's `mobjinfo` defaults, and places
+/// the mobj at the explicit `z`.  Unlike map-thing spawning it does **not**
+/// randomize the initial animation tics (that is a `P_SpawnMapThing` step).
+pub fn p_spawn_mobj(
+    gs: &mut GameState,
+    level: Option<&Level>,
+    x: Fixed16_16,
+    y: Fixed16_16,
+    z: Fixed16_16,
+    kind: MobjKind,
+) -> MobjHandle {
+    // P_SpawnMobj (p_mobj.c:547): mobj->lastlook = P_Random() % MAXPLAYERS.
+    let _lastlook = (gs.p_random() as u32) % (MAXPLAYERS as u32);
+
+    let mut mo = Mobj::new(kind, x, y, Bam::ZERO);
+    apply_mobjinfo_defaults(&mut mo);
+    mo.z = z;
+    if let Some(level) = level
+        && let Some(ss) = level.subsector_index_at(x.to_int(), y.to_int())
+    {
+        mo.subsector = ss as u32;
+    }
+    gs.mobjslab.alloc(mo)
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
