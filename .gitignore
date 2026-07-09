@@ -11,3 +11,4 @@ gameplay.log
 .claude/
 audio-diag.txt
 crates/doom-game/fuzz/
+/test-wads/

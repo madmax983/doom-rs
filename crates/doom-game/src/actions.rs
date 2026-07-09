@@ -146,6 +146,9 @@ pub enum Action {
     Light1 = 53,
     /// `A_Light2`: set the player's weapon flash light bonus to level 2.
     Light2 = 54,
+    /// `A_Explode`: radius (splash) damage dealt by an exploding rocket at its
+    /// death state. Vanilla `A_Explode(mo)` = `P_RadiusAttack(mo, mo->target, 128)`.
+    Explode = 55,
 }
 
 use doom_types::{Bam, Fixed16_16};
@@ -188,6 +191,7 @@ fn get_alive_target(gs: &GameState, handle: MobjHandle) -> Option<MobjHandle> {
 }
 
 /// Helper to get a valid, alive target along with the monster's current position.
+#[cfg(test)]
 fn get_alive_target_with_pos(
     gs: &GameState,
     handle: MobjHandle,
@@ -231,7 +235,7 @@ pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level
             Action::PosAttack => a_pos_attack(gs, handle, level),
             Action::SposAttack => a_spos_attack(gs, handle, level),
             Action::TrooAttack => a_troo_attack(gs, handle, level),
-            Action::SargAttack => a_sarg_attack(gs, handle),
+            Action::SargAttack => a_sarg_attack(gs, handle, level),
             Action::Fall => a_fall(gs, handle),
             Action::HeadAttack => a_head_attack(gs, handle),
             Action::BruisAttack => a_bruis_attack(gs, handle),
@@ -258,6 +262,7 @@ pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level
             Action::BrainDie => a_brain_die(gs),
             Action::BrainScream => a_brain_scream(gs, handle),
             Action::BrainExplode => a_brain_explode(gs, handle),
+            Action::Explode => a_explode(gs, handle, level),
             _ => {}
         }
     }
@@ -338,12 +343,6 @@ fn dir_to_target(dx: i32, dy: i32) -> u8 {
     }
 }
 
-/// Melee range plus an extra 20 units for the melee check in A_Chase.
-///
-/// Doom uses `MELEERANGE + 20*FRACUNIT` for the distance threshold before
-/// transitioning to the melee attack state.
-const MELEE_THRESHOLD: i32 = 64 + 20; // MELEERANGE (64) + 20 map units
-
 // ---------------------------------------------------------------------------
 // P_CheckSight — coarse LOS check via the REJECT table
 // ---------------------------------------------------------------------------
@@ -409,6 +408,7 @@ fn p_check_missile_range(
     target: MobjHandle,
     level: Option<&Level>,
 ) -> bool {
+    let _rng_ctx = crate::random::rng_ctx("P_CheckMissileRange");
     let Some(mo) = gs.mobjslab.get(handle) else {
         return false;
     };
@@ -477,7 +477,9 @@ fn p_check_missile_range(
         dist = 160;
     }
 
-    dist <= 0 || i32::from(gs.p_random()) >= dist
+    // Vanilla: `if (P_Random() < dist) return false; return true;` — the draw
+    // happens unconditionally here (even when dist <= 0), so do NOT short-circuit.
+    i32::from(gs.p_random()) >= dist
 }
 
 // ---------------------------------------------------------------------------
@@ -520,8 +522,14 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
             mo.x = new_x;
             mo.y = new_y;
-            mo.momx = step_x;
-            mo.momy = step_y;
+            // Vanilla `P_Move` (`p_enemy.c`) moves the actor purely by position
+            // through `P_TryMove` and NEVER assigns `momx/momy`. A monster's
+            // momentum is set only by explicit sources (damage thrust in
+            // `P_DamageMobj`, skull-fly charge, etc.) and is integrated + decayed
+            // by `P_XYMovement` each tic. Injecting the walk step as momentum here
+            // would double-count it (once as this positional step, again when
+            // `P_XYMovement` integrates it next tic) and destroy any residual
+            // thrust momentum, drifting monsters out of vanilla sync.
         }
         if let Some(lv) = level
             && let Some((support_floor, subsector)) =
@@ -535,19 +543,57 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
         }
         true
     } else {
-        // Movement failed. In vanilla Doom, if the blocking linedef is a door,
-        // the monster tries to open that exact door linedef.
-        if let Some(lv) = level {
-            try_open_door(gs, lv, blocking_linedef);
+        // Movement failed. Port of vanilla `P_Move`'s spechit path
+        // (`p_enemy.c`): after `P_TryMove` fails, if the blocked move contacted
+        // any special two-sided line (`numspechit > 0`), the monster stops
+        // (`actor->movedir = DI_NODIR`) and tries to use each contacted line as
+        // a door (`P_UseSpecialLine`), returning whether any opened (`good`).
+        // If no special line was contacted, `P_Move` returns false and the
+        // caller (`A_Chase`) picks a new chase direction.
+        //
+        // `numspechit` only ever counts *two-sided* special lines: vanilla
+        // `PIT_CheckLine` rejects one-sided lines (`return false`) before the
+        // `if (ld->special)` spechit-add, so one-sided special lines are never
+        // enqueued. We approximate the spechit set with the single blocking
+        // linedef, which for a shut door is that door line itself.
+        let special_blocker = level.and_then(|lv| {
+            blocking_linedef
+                .and_then(|i| lv.linedefs.get(i).map(|ld| (i, ld)))
+                .filter(|(_, ld)| {
+                    ld.is_two_sided()
+                        && ld.special != 0
+                        && ld.flags & doom_map::lumps::FLAG_SECRET == 0
+                })
+                .map(|(i, _)| i)
+        });
+        if let Some(ld_idx) = special_blocker {
+            // numspechit > 0: monster halts and attempts the door.
+            let good = level
+                .map(|lv| monster_use_special_line(gs, lv, ld_idx))
+                .unwrap_or(false);
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.movedir = DI_NODIR;
+            }
+            good
+        } else {
+            false
         }
-        false
     }
 }
 
-/// Attempt to open a door that is blocking the monster's path.
-fn try_open_door(gs: &mut GameState, level: &Level, blocking_linedef: Option<usize>) {
-    if let Some(ld_idx) = blocking_linedef {
-        let _ = crate::specials::monster_activate_door_linedef(gs, level, ld_idx);
+/// Port of vanilla `P_UseSpecialLine` restricted to the monster (`!thing->player`)
+/// path (`p_switch.c`): a monster can only activate manual door specials
+/// `1, 32, 33, 34` and never a secret line. Returns whether the line was used.
+fn monster_use_special_line(gs: &mut GameState, level: &Level, ld_idx: usize) -> bool {
+    let Some(ld) = level.linedefs.get(ld_idx) else {
+        return false;
+    };
+    if ld.flags & doom_map::lumps::FLAG_SECRET != 0 {
+        return false;
+    }
+    match ld.special {
+        1 | 32 | 33 | 34 => crate::specials::monster_activate_door_linedef(gs, level, ld_idx),
+        _ => false,
     }
 }
 
@@ -564,6 +610,7 @@ fn try_open_door(gs: &mut GameState, level: &Level, blocking_linedef: Option<usi
 /// 2. Otherwise, call `p_look_for_players` to scan for visible players.
 ///    - If player found within sight, set as target, enter `see_state`.
 fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let _rng_ctx = crate::random::rng_ctx("A_Look");
     let player_handle = gs.player.handle;
 
     // Read monster data.
@@ -578,7 +625,11 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     let is_ambush = mo_flags & flags::MF_AMBUSH != 0;
 
-    // --- Step 1: Check sound targets ---
+    // Vanilla A_Look: `actor->threshold = 0;` — any shot will wake it up.
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.threshold = 0;
+    }
+
     // --- Step 1: Check sound targets ---
     if let Some(lv) = level {
         // Resolve the monster's sector from its current position, but keep a
@@ -597,64 +648,62 @@ fn a_look(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
                 if target_alive
                     && (!is_ambush || crate::sight::p_check_sight(gs, lv, handle, sound_target))
                 {
-                    transition_to_see_state(gs, handle, mo_kind, sound_target);
+                    transition_to_see_state(gs, handle, mo_kind, sound_target, level);
                     return;
                 }
             }
         }
     }
 
-    // --- Step 2: Look for players by line-of-sight ---
-    // Check the player exists and is alive.
-    let player_alive = gs
-        .mobjslab
-        .get(player_handle)
-        .map(|p| !p.is_dead())
-        .unwrap_or(false);
-
-    if !player_alive {
+    // --- Step 2: Look for players (vanilla P_LookForPlayers, allaround=false) ---
+    // The `false` applies the front-180-degree restriction, so a monster does
+    // not wake to a player standing directly behind it (unless within melee).
+    let _ = player_handle;
+    if !p_look_for_players(gs, handle, false, level) {
         return;
     }
 
-    // Use the full p_check_sight from sight.rs if we have a level, otherwise
-    // fall back to the local simplified version.
-    let can_see = if let Some(lv) = level {
-        crate::sight::p_check_sight(gs, lv, handle, player_handle)
-    } else {
-        p_check_sight_local(gs, handle, player_handle, None)
-    };
+    // seeyou: — target already set by p_look_for_players.
+    transition_to_see_state(gs, handle, mo_kind, player_handle, level);
+}
 
-    if can_see {
-        transition_to_see_state(gs, handle, mo_kind, player_handle);
+/// Number of sound variants for a monster's `seesound`, i.e. the modulus `N`
+/// in vanilla A_Look's `sfx_posit1 + P_Random()%N` style selection.
+///
+/// Returns `0` when the monster's `seesound` is a single fixed sound (no
+/// `P_Random` draw) or absent — this is what governs whether A_Look consumes
+/// an RNG byte, so it must match `info.c` exactly for demo sync.
+fn see_sound_variants(kind: MobjKind) -> u8 {
+    match kind {
+        // seesound sfx_posit1 / sfx_posit2 -> P_Random()%3
+        MobjKind::Trooper | MobjKind::Sergeant => 3,
+        // seesound sfx_bgsit1 -> P_Random()%2
+        MobjKind::Imp => 2,
+        _ => 0,
     }
 }
 
-/// Transition a monster to its `see_state`, setting the target and
-/// resetting the threshold.
+/// Transition a monster to its `see_state`, matching vanilla A_Look's `seeyou:`
+/// tail: consume the `seesound` selection `P_Random` (posit%3 / bgsit%2), then
+/// `P_SetMobjState(seestate)` — which fires the see-state action (A_Chase) on
+/// entry, exactly as vanilla's `P_SetMobjState` do/while loop does.
 fn transition_to_see_state(
     gs: &mut GameState,
     handle: MobjHandle,
     kind: MobjKind,
     target: MobjHandle,
+    level: Option<&Level>,
 ) {
     // Resolve see_state from mobjinfo.
     let see_sn = match mobjinfo::MOBJINFO.get(kind as usize) {
         Some(info) if info.see_state.0 != 0 => info.see_state,
         _ => return,
     };
-    let Some(e) = states::STATES.get(see_sn.0 as usize) else {
-        return;
-    };
-    let new_tics = e.tics;
 
-    // Transition monster to see_state.
-    let Some(mo) = gs.mobjslab.get_mut(handle) else {
-        return;
-    };
-    mo.target = target;
-    mo.threshold = 60; // stay alerted for 60 tics
-    mo.state = see_sn;
-    mo.tics = new_tics;
+    // Set the target before running the see-state action.
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.target = target;
+    }
 
     // Emit wake sound event with emitter position for spatial attenuation.
     if let Some(mo) = gs.mobjslab.get(handle) {
@@ -664,6 +713,18 @@ fn transition_to_see_state(
                 kind, handle, mo.x, mo.y,
             ));
     }
+
+    // Vanilla `seeyou:` — consume the seesound-selection P_Random for monsters
+    // whose seesound is a posit/bgsit family (all other seesounds, and a zero
+    // seesound, draw nothing).
+    let variants = see_sound_variants(kind);
+    if variants > 0 {
+        let _ = gs.p_random();
+    }
+
+    // P_SetMobjState(seestate): fires A_Chase immediately when the see-state has
+    // nonzero tics, matching vanilla's P_SetMobjState behaviour.
+    crate::tic::p_set_mobj_state(gs, handle, see_sn, level);
 }
 
 // ---------------------------------------------------------------------------
@@ -673,168 +734,182 @@ fn transition_to_see_state(
 /// Attempt to move actor `handle` in direction `dir` at the given `speed`.
 ///
 /// Returns `true` if the move was legal and applied.
-fn try_move_in_dir(
-    gs: &mut GameState,
-    handle: MobjHandle,
-    dir: u8,
-    speed: Fixed16_16,
-    level: Option<&Level>,
-) -> bool {
-    if dir == DI_NODIR {
+/// Vanilla `opposite[]` (`p_enemy.c`): the reverse of each `dirtype_t`.
+const OPPOSITE: [u8; 9] = [
+    DI_WEST,
+    DI_SOUTHWEST,
+    DI_SOUTH,
+    DI_SOUTHEAST,
+    DI_EAST,
+    DI_NORTHEAST,
+    DI_NORTH,
+    DI_NORTHWEST,
+    DI_NODIR,
+];
+
+/// Vanilla `diags[]` (`p_enemy.c`): diagonal direction for each `(y<0,x>0)`
+/// quadrant, indexed `((deltay<0)<<1)+(deltax>0)`.
+const DIAGS: [u8; 4] = [DI_NORTHWEST, DI_NORTHEAST, DI_SOUTHWEST, DI_SOUTHEAST];
+
+/// Port of `P_TryWalk` from Doom's `p_enemy.c`.
+///
+/// Attempts to move the actor in its current `movedir` via `P_Move`. On
+/// success it re-randomizes `movecount = P_Random()&15` and returns true; on a
+/// blocked move it returns false and draws no RNG.
+fn p_try_walk(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> bool {
+    let _rng_ctx = crate::random::rng_ctx("P_TryWalk");
+    if !p_move(gs, handle, level) {
         return false;
     }
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return false;
-    };
-    let mo_x = mo.x;
-    let mo_y = mo.y;
-    let step_x = XMOVE[dir as usize].fixed_mul(speed);
-    let step_y = YMOVE[dir as usize].fixed_mul(speed);
-    let new_x = mo_x + step_x;
-    let new_y = mo_y + step_y;
-
-    let can_move = match level {
-        Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
-        None => true,
-    };
-
-    if can_move {
-        if let Some(mo) = gs.mobjslab.get_mut(handle) {
-            mo.x = new_x;
-            mo.y = new_y;
-            mo.momx = step_x;
-            mo.momy = step_y;
-            mo.movedir = dir;
-        }
-        if let Some(lv) = level
-            && let Some((support_floor, subsector)) =
-                crate::movement::support_state_at(&gs.mobjslab, handle, new_x, new_y, lv)
-            && let Some(mo) = gs.mobjslab.get_mut(handle)
-        {
-            mo.z = support_floor;
-            if let Some(subsector) = subsector {
-                mo.subsector = subsector as u32;
-            }
-        }
+    let r = i32::from(gs.p_random()) & 15;
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.movecount = r;
     }
-    can_move
+    true
 }
 
-/// Port of `P_NewChaseDir` from Doom's `p_enemy.c`.
+/// Literal port of `P_NewChaseDir` from Doom's `p_enemy.c`.
 ///
-/// Selects the best movement direction for a chasing monster using a
-/// 4-candidate priority list:
-///
-/// 1. **Primary**: diagonal toward target (combine x-direction + y-direction).
-/// 2. **Secondary**: the axis (x or y) with larger absolute displacement.
-/// 3. **Tertiary**: the other axis.
-/// 4. **Fallback**: `DI_NODIR` (monster stays put this tic).
-///
-/// If the chosen direction is blocked, falls back to the next candidate in
-/// order.  Finally, if all four fail, tries any direction (cycled via RNG).
+/// Chooses a new pursuit direction. RNG draws (all via `P_Random`):
+/// - `P_Random() > 200` gate for swapping the x/y preference,
+/// - `P_Random() & 1` to pick forward vs backward search order,
+/// - one `P_Random() & 15` (`movecount`) inside every successful `P_TryWalk`.
 pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    // Get target handle and monster position.
+    let _rng_ctx = crate::random::rng_ctx("P_NewChaseDir");
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let spd = mobjinfo::MOBJINFO
-        .get(mo.kind as usize)
-        .map(|i| i.speed)
-        .unwrap_or(Fixed16_16::ZERO);
-    let (target_handle, mo_x, mo_y, speed) = (mo.target, mo.x, mo.y, spd);
+    let (target_handle, mo_x, mo_y, olddir) = (mo.target, mo.x.raw(), mo.y.raw(), mo.movedir);
 
-    // If no target, set NODIR and return.
+    // Vanilla I_Errors with no target; we defensively bail.
     if target_handle == MobjHandle::NULL {
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
             mo.movedir = DI_NODIR;
         }
         return;
     }
-
     let Some(t) = gs.mobjslab.get(target_handle) else {
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
             mo.movedir = DI_NODIR;
         }
         return;
     };
-    let tx = t.x;
-    let ty = t.y;
+    let (tx, ty) = (t.x.raw(), t.y.raw());
 
-    let dx = (tx - mo_x).to_int();
-    let dy = (ty - mo_y).to_int();
+    let turnaround = OPPOSITE[olddir as usize];
+    let deltax = tx - mo_x;
+    let deltay = ty - mo_y;
 
-    // Determine pure x-direction and y-direction components.
-    let d_x: u8 = if dx > 0 {
+    // d[1] = x-direction, d[2] = y-direction (10*FRACUNIT deadband).
+    let d1: u8 = if deltax > 10 * 65536 {
         DI_EAST
-    } else if dx < 0 {
+    } else if deltax < -10 * 65536 {
         DI_WEST
     } else {
         DI_NODIR
     };
-    let d_y: u8 = if dy > 0 {
-        DI_NORTH
-    } else if dy < 0 {
+    let d2: u8 = if deltay < -10 * 65536 {
         DI_SOUTH
+    } else if deltay > 10 * 65536 {
+        DI_NORTH
     } else {
         DI_NODIR
     };
 
-    // Primary candidate: diagonal combining both directions.
-    let diag: u8 = if d_x == DI_NODIR || d_y == DI_NODIR {
-        // No diagonal possible — use whichever pure direction exists.
-        if d_x != DI_NODIR { d_x } else { d_y }
-    } else {
-        // Choose the diagonal that matches (d_x, d_y).
-        match (d_x, d_y) {
-            (DI_EAST, DI_NORTH) => DI_NORTHEAST,
-            (DI_EAST, DI_SOUTH) => DI_SOUTHEAST,
-            (DI_WEST, DI_NORTH) => DI_NORTHWEST,
-            (DI_WEST, DI_SOUTH) => DI_SOUTHWEST,
-            _ => DI_NODIR,
+    // try direct route (diagonal)
+    if d1 != DI_NODIR && d2 != DI_NODIR {
+        let idx = ((i32::from(deltay < 0)) << 1) + i32::from(deltax > 0);
+        let md = DIAGS[idx as usize];
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.movedir = md;
         }
-    };
-
-    // Secondary/tertiary: prefer the axis with larger absolute displacement.
-    let (sec, tert) = if dx.abs() > dy.abs() {
-        (d_x, d_y) // larger x → prefer x-dir, then y-dir
-    } else {
-        (d_y, d_x) // larger y → prefer y-dir, then x-dir
-    };
-
-    // Try candidates in order: primary → secondary → tertiary → nodir.
-    let candidates = [diag, sec, tert, DI_NODIR];
-    for &cand in &candidates {
-        if cand == DI_NODIR {
-            break;
-        }
-        if try_move_in_dir(gs, handle, cand, speed, level) {
-            // Reset movecount so monster won't re-evaluate direction for a while.
-            let rng_val = gs.rng.next_byte() as i32;
-            if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.movecount = 8 + (rng_val & 7);
-            }
+        if md != turnaround && p_try_walk(gs, handle, level) {
             return;
         }
     }
 
-    // All preferred directions blocked: try any direction round-robin.
-    // Cycle through all 8 directions starting from a random offset.
-    let start_dir = gs.rng.next_byte() % 8;
-    for i in 0u8..8 {
-        let dir = (start_dir + i) % 8;
-        if try_move_in_dir(gs, handle, dir, speed, level) {
-            let rng_val = gs.rng.next_byte() as i32;
-            if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.movecount = 4 + (rng_val & 3);
-            }
+    // try other directions
+    let mut dd1 = d1;
+    let mut dd2 = d2;
+    if gs.p_random() > 200 || deltay.abs() > deltax.abs() {
+        std::mem::swap(&mut dd1, &mut dd2);
+    }
+    if dd1 == turnaround {
+        dd1 = DI_NODIR;
+    }
+    if dd2 == turnaround {
+        dd2 = DI_NODIR;
+    }
+
+    if dd1 != DI_NODIR {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.movedir = dd1;
+        }
+        if p_try_walk(gs, handle, level) {
+            return;
+        }
+    }
+    if dd2 != DI_NODIR {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.movedir = dd2;
+        }
+        if p_try_walk(gs, handle, level) {
             return;
         }
     }
 
-    // Truly stuck: set NODIR.
+    // there is no direct path to the player, so pick another direction.
+    if olddir != DI_NODIR {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.movedir = olddir;
+        }
+        if p_try_walk(gs, handle, level) {
+            return;
+        }
+    }
+
+    // randomly determine direction of search
+    if gs.p_random() & 1 != 0 {
+        let mut tdir = DI_EAST;
+        while tdir <= DI_SOUTHEAST {
+            if tdir != turnaround {
+                if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                    mo.movedir = tdir;
+                }
+                if p_try_walk(gs, handle, level) {
+                    return;
+                }
+            }
+            tdir += 1;
+        }
+    } else {
+        let mut tdir = i32::from(DI_SOUTHEAST);
+        while tdir != i32::from(DI_EAST) - 1 {
+            let td = tdir as u8;
+            if td != turnaround {
+                if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                    mo.movedir = td;
+                }
+                if p_try_walk(gs, handle, level) {
+                    return;
+                }
+            }
+            tdir -= 1;
+        }
+    }
+
+    if turnaround != DI_NODIR {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.movedir = turnaround;
+        }
+        if p_try_walk(gs, handle, level) {
+            return;
+        }
+    }
+
+    // can not move
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.movedir = DI_NODIR;
-        mo.movecount = 0;
     }
 }
 
@@ -857,7 +932,8 @@ pub fn p_new_chase_dir(gs: &mut GameState, handle: MobjHandle, level: Option<&Le
 /// 6. Movement: call `P_Move`; if blocked, call `P_NewChaseDir`.
 /// 7. Active sound: randomly play `active_sound` (p_random < 3).
 fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    // --- Step 1: Decrement reaction_time ---
+    let _rng_ctx = crate::random::rng_ctx("A_Chase");
+    // --- reactiontime-- (A_Chase top) ---
     {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
             return;
@@ -867,121 +943,103 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         }
     }
 
-    // --- Gather monster data ---
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return;
-    };
-    let mo_kind = mo.kind;
-    let _movecount = mo.movecount;
-    let mo_flags = mo.flags;
-
-    // --- Step 2: Check target still exists and is alive ---
-    if get_alive_target(gs, handle).is_none() {
-        // Try to find a new target via A_Look logic.
-        // First clear the old target.
-        if let Some(mo) = gs.mobjslab.get_mut(handle) {
-            mo.target = MobjHandle::NULL;
-        }
-
-        // Try to look for a new target.
-        a_look(gs, handle, level);
-
-        // Check if a_look found a new target.
-        let found_target = gs
-            .mobjslab
-            .get(handle)
-            .map(|mo| mo.target != MobjHandle::NULL)
-            .unwrap_or(false);
-
-        if !found_target {
-            // Revert to idle spawn state.
-            let spawn_sn = mobjinfo::MOBJINFO
-                .get(mo_kind as usize)
-                .map(|i| i.spawn_state)
-                .unwrap_or_default();
+    // --- modify target threshold ---
+    // Vanilla (gameversion > exe_doom_1_2): drop threshold to 0 when the target
+    // is gone/dead, otherwise decrement it.
+    {
+        let (threshold, target) = match gs.mobjslab.get(handle) {
+            Some(mo) => (mo.threshold, mo.target),
+            None => return,
+        };
+        if threshold != 0 {
+            let target_dead = gs
+                .mobjslab
+                .get(target)
+                .map(|t| t.health <= 0)
+                .unwrap_or(true);
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.target = MobjHandle::NULL;
-                mo.state = spawn_sn;
-                if let Some(e) = states::STATES.get(spawn_sn.0 as usize) {
-                    mo.tics = e.tics;
+                if target == MobjHandle::NULL || target_dead {
+                    mo.threshold = 0;
+                } else {
+                    mo.threshold -= 1;
                 }
             }
-            return;
         }
-        // If a_look found a target, it already set see_state; but we continue
-        // the chase loop with the new target. We need to re-read the target.
     }
 
-    // --- Step 3: MF_JUSTATTACKED cooldown ---
+    // --- turn towards movement direction if not there yet ---
+    {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+        let movedir = mo.movedir;
+        if movedir < 8 {
+            let a = mo.angle.raw() & (7u32 << 29);
+            let delta = a.wrapping_sub((u32::from(movedir)) << 29) as i32;
+            let new_a = if delta > 0 {
+                a.wrapping_sub(0x2000_0000)
+            } else if delta < 0 {
+                a.wrapping_add(0x2000_0000)
+            } else {
+                a
+            };
+            mo.angle = Bam(new_a);
+        }
+    }
+
+    let mo_kind = match gs.mobjslab.get(handle) {
+        Some(mo) => mo.kind,
+        None => return,
+    };
+    let info = match mobjinfo::MOBJINFO.get(mo_kind as usize) {
+        Some(i) => *i,
+        None => return,
+    };
+
+    // --- target still valid? ---
+    let (target, tflags) = match gs.mobjslab.get(handle) {
+        Some(mo) => {
+            let t = mo.target;
+            let tf = gs.mobjslab.get(t).map(|x| x.flags).unwrap_or(0);
+            (t, tf)
+        }
+        None => return,
+    };
+    if target == MobjHandle::NULL || (tflags & flags::MF_SHOOTABLE) == 0 {
+        // look for a new target
+        if p_look_for_players(gs, handle, true, level) {
+            return; // got a new target
+        }
+        // no target: return to idle spawn state
+        crate::tic::p_set_mobj_state(gs, handle, info.spawn_state, level);
+        return;
+    }
+
+    // --- do not attack twice in a row ---
+    let mo_flags = gs.mobjslab.get(handle).map(|mo| mo.flags).unwrap_or(0);
     if mo_flags & flags::MF_JUSTATTACKED != 0 {
-        // Clear the flag and skip attack checks this tic.
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
             mo.flags &= !flags::MF_JUSTATTACKED;
         }
-        // Still do movement.
-        do_chase_movement(gs, handle, level);
+        // gameskill != sk_nightmare && !fastparm -> P_NewChaseDir
+        p_new_chase_dir(gs, handle, level);
         return;
     }
 
-    // --- Read target info for attack checks ---
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return;
-    };
-    let current_target = mo.target;
-
-    let Some(mo) = gs.mobjslab.get(handle) else {
-        return;
-    };
-    let mo_x = mo.x;
-    let mo_y = mo.y;
-    let Some(t) = gs.mobjslab.get(current_target) else {
-        do_chase_movement(gs, handle, level);
-        return;
-    };
-    let tx = t.x;
-    let ty = t.y;
-
-    let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
-
-    let info = match mobjinfo::MOBJINFO.get(mo_kind as usize) {
-        Some(i) => i,
-        None => {
-            do_chase_movement(gs, handle, level);
-            return;
-        }
-    };
-
-    let melee_sn = info.melee_state;
-    let missile_sn = info.missile_state;
-    let reactiontime = gs
-        .mobjslab
-        .get(handle)
-        .map(|mo| mo.reactiontime)
-        .unwrap_or(0);
-
-    // --- Step 4: Melee check ---
-    if melee_sn != crate::mobj::StateNum::NULL && dist <= MELEE_THRESHOLD {
-        // Face the target before entering melee.
-        a_face_target(gs, handle);
-        set_mobj_state(gs, handle, melee_sn);
+    // --- check for melee attack ---
+    if info.melee_state != crate::mobj::StateNum::NULL && p_check_melee_range(gs, handle, level) {
+        // attacksound would play here (no RNG)
+        set_mobj_state(gs, handle, info.melee_state);
         return;
     }
 
-    // --- Step 5: Missile check ---
-    if missile_sn != crate::mobj::StateNum::NULL && reactiontime == 0 {
-        // Re-read movecount (might have changed).
-        let cur_movecount = gs.mobjslab.get(handle).map(|mo| mo.movecount).unwrap_or(0);
-
-        // Don't fire if still moving from last direction change (gives monsters
-        // a movement phase between attacks), unless movecount has expired.
-        let can_fire =
-            cur_movecount <= 0 && p_check_missile_range(gs, handle, current_target, level);
-
+    // --- check for missile attack ---
+    if info.missile_state != crate::mobj::StateNum::NULL {
+        // gameskill < sk_nightmare && !fastparm && movecount -> nomissile
+        let movecount = gs.mobjslab.get(handle).map(|mo| mo.movecount).unwrap_or(0);
+        let can_fire = movecount == 0 && p_check_missile_range(gs, handle, target, level);
         if can_fire {
-            // Face the target and enter missile state.
-            a_face_target(gs, handle);
-            set_mobj_state(gs, handle, missile_sn);
-            // Set MF_JUSTATTACKED so we skip attack next tic.
+            set_mobj_state(gs, handle, info.missile_state);
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
                 mo.flags |= flags::MF_JUSTATTACKED;
             }
@@ -989,28 +1047,9 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         }
     }
 
-    // --- Step 6: Movement ---
-    do_chase_movement(gs, handle, level);
+    // nomissile: (netgame target reselection skipped — single-player replay)
 
-    // --- Step 7: Active sound ---
-    // ~1/85 chance per tic (p_random returns 0-255, check < 3).
-    let rng_val = gs.p_random();
-    if rng_val < 3 {
-        // Active sound would be played here. For now, just a no-op placeholder
-        // since the audio system is decoupled. The caller (game loop) can check
-        // for active sounds separately.
-    }
-}
-
-/// Perform the movement portion of A_Chase: face target, move, handle blocking.
-fn do_chase_movement(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    // Face the target.
-    a_face_target(gs, handle);
-
-    // Doom decrements movecount before movement. When the count reaches zero,
-    // the monster still spends one final tic moving in the current direction;
-    // only negative counts force an immediate direction refresh. That leaves a
-    // full chase tic where movecount == 0 and missile attacks are allowed.
+    // --- chase towards player ---
     let need_new_dir = {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
             return;
@@ -1018,10 +1057,114 @@ fn do_chase_movement(gs: &mut GameState, handle: MobjHandle, level: Option<&Leve
         mo.movecount -= 1;
         mo.movecount < 0
     };
-
     if need_new_dir || !p_move(gs, handle, level) {
         p_new_chase_dir(gs, handle, level);
     }
+
+    // --- make active sound ---
+    // Every monster has a nonzero activesound, so this draw always happens.
+    if gs.p_random() < 3 {
+        // activesound would play here (decoupled audio)
+    }
+}
+
+/// Vanilla `P_CheckMeleeRange` (`p_enemy.c`). No RNG. Uses exact fixed-point
+/// `P_AproxDistance` and the v1.5+ range `MELEERANGE - 20 + target->radius`.
+fn p_check_melee_range(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> bool {
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return false;
+    };
+    let target = mo.target;
+    if target == MobjHandle::NULL {
+        return false;
+    }
+    let (mo_x, mo_y) = (mo.x.raw(), mo.y.raw());
+    let Some(t) = gs.mobjslab.get(target) else {
+        return false;
+    };
+    let (tx, ty) = (t.x.raw(), t.y.raw());
+    let t_radius = mobjinfo::MOBJINFO
+        .get(t.kind as usize)
+        .map(|i| i.radius.raw())
+        .unwrap_or(0);
+
+    let dist = p_aprox_distance_fixed(tx - mo_x, ty - mo_y);
+    // MELEERANGE (64) - 20 + target radius, all in 16.16 fixed.
+    let range = (64 - 20) * 65536 + t_radius;
+    if dist >= range {
+        return false;
+    }
+
+    match level {
+        Some(lv) => crate::sight::p_check_sight(gs, lv, handle, target),
+        None => p_check_sight_local(gs, handle, target, None),
+    }
+}
+
+/// Vanilla `P_AproxDistance` (`p_maputl.c`) on raw 16.16 fixed values.
+#[inline]
+fn p_aprox_distance_fixed(dx: i32, dy: i32) -> i32 {
+    let dx = dx.abs();
+    let dy = dy.abs();
+    if dx < dy {
+        dx + dy - (dx >> 1)
+    } else {
+        dx + dy - (dy >> 1)
+    }
+}
+
+/// Vanilla `P_LookForPlayers` (`p_enemy.c`), reduced to the single-player case
+/// (only player 0 is ever in game). Does not consume RNG. When `allaround` is
+/// false, applies the front-180 restriction. Sets `actor->target` and returns
+/// true when a live, visible player is found.
+fn p_look_for_players(
+    gs: &mut GameState,
+    handle: MobjHandle,
+    allaround: bool,
+    level: Option<&Level>,
+) -> bool {
+    let player = gs.player.handle;
+    // player->health <= 0 -> dead
+    let player_alive = gs
+        .mobjslab
+        .get(player)
+        .map(|p| !p.is_dead())
+        .unwrap_or(false);
+    if !player_alive {
+        return false;
+    }
+
+    let seen = match level {
+        Some(lv) => crate::sight::p_check_sight(gs, lv, handle, player),
+        None => p_check_sight_local(gs, handle, player, None),
+    };
+    if !seen {
+        return false;
+    }
+
+    if !allaround {
+        let (ax, ay, aang) = match gs.mobjslab.get(handle) {
+            Some(mo) => (mo.x.raw(), mo.y.raw(), mo.angle.raw()),
+            None => return false,
+        };
+        let (px, py) = match gs.mobjslab.get(player) {
+            Some(p) => (p.x.raw(), p.y.raw()),
+            None => return false,
+        };
+        let an = crate::geom::r_point_to_angle2(ax, ay, px, py).wrapping_sub(aang);
+        // ANG90 = 0x40000000, ANG270 = 0xC0000000
+        if an > 0x4000_0000 && an < 0xC000_0000 {
+            let dist = p_aprox_distance_fixed(px - ax, py - ay);
+            if dist > 64 * 65536 {
+                return false; // behind back
+            }
+        }
+    }
+
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.target = player;
+    }
+    true
 }
 
 /// Set an actor to a specific state, updating tics from the STATES table.
@@ -1044,25 +1187,36 @@ fn set_mobj_state(gs: &mut GameState, handle: MobjHandle, state: crate::mobj::St
 /// Computes the angle from the monster's position to the target using
 /// a proper integer `atan2` approximation, yielding a full 32-bit BAM angle.
 fn a_face_target(gs: &mut GameState, handle: MobjHandle) {
+    let _rng_ctx = crate::random::rng_ctx("A_FaceTarget");
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
     let (target_handle, mo_x, mo_y) = (mo.target, mo.x, mo.y);
+    if target_handle == MobjHandle::NULL {
+        return;
+    }
+
+    // Vanilla clears MF_AMBUSH on facing.
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.flags &= !flags::MF_AMBUSH;
+    }
 
     let Some(t) = gs.mobjslab.get(target_handle) else {
         return;
     };
-    let (tx, ty) = (t.x, t.y);
+    let (tx, ty, t_flags) = (t.x, t.y, t.flags);
 
-    let dx = (tx - mo_x).to_int();
-    let dy = (ty - mo_y).to_int();
+    // Exact vanilla `R_PointToAngle2` (tantoangle table), not an f64 atan2.
+    let mut angle = crate::geom::r_point_to_angle2(mo_x.raw(), mo_y.raw(), tx.raw(), ty.raw());
 
-    // Use Doom's angle conventions: 0 = East, 90° = North (positive Y).
-    // Compute BAM angle from (dx, dy) using integer atan2 approximation.
-    let angle = bam_from_xy(dx, dy);
+    // Fuzzy target (spectre / invisible): jitter the aim by P_SubRandom()<<21.
+    if t_flags & flags::MF_SHADOW != 0 {
+        let spread = gs.p_subrandom() << 21;
+        angle = angle.wrapping_add(spread as u32);
+    }
 
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
-        mo.angle = angle;
+        mo.angle = Bam(angle);
     }
 }
 
@@ -1073,6 +1227,7 @@ fn a_face_target(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// This is a simplified version that handles the 8 octants; accuracy is
 /// sufficient for monster AI facing direction.
+#[cfg(test)]
 fn bam_from_xy(dx: i32, dy: i32) -> Bam {
     if dx == 0 && dy == 0 {
         return Bam(0);
@@ -1114,7 +1269,34 @@ fn a_fall(gs: &mut GameState, handle: MobjHandle) {
 /// the monster-specific death sound.  Here we set a flag so the app
 /// layer can trigger audio, matching the vanilla pattern without
 /// hard-coding a sound ID in the game crate.
+///
+/// Demo-sync critical: vanilla `A_Scream` draws `P_Random` to pick a random
+/// death-sound *variant* for monsters whose `info->deathsound` has multiple
+/// variants — `sfx_podth1/2/3` (`P_Random()%3`) and `sfx_bgdth1/2`
+/// (`P_Random()%2`). That draw is on the playsim `prndindex` stream and so
+/// advances the shared RNG ordinal for every later consumer. Monsters with a
+/// single (or no) death sound do not draw. Omitting it drifts the whole RNG
+/// stream from the first monster death onward.
 fn a_scream(gs: &mut GameState, handle: MobjHandle) {
+    let _rng_ctx = crate::random::rng_ctx("A_Scream");
+    let kind = gs.mobjslab.get(handle).map(|mo| mo.kind);
+    // Number of death-sound variants that triggers a `P_Random()%n` draw.
+    // Mirrors the `switch (info->deathsound)` groups in vanilla `A_Scream`.
+    let variants = match kind {
+        // sfx_podth1/2/3 -> P_Random()%3
+        //   Trooper  = MT_POSSESSED (sfx_podth1)
+        //   Sergeant = MT_SHOTGUY   (sfx_podth2)
+        Some(MobjKind::Trooper) | Some(MobjKind::Sergeant) => 3,
+        // sfx_bgdth1/2 -> P_Random()%2
+        //   Imp = MT_TROOP (sfx_bgdth2)
+        Some(MobjKind::Imp) => 2,
+        // All other monsters have a single death sound (default case): no draw.
+        _ => 0,
+    };
+    if variants != 0 {
+        let _ = gs.p_random() % variants;
+    }
+
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.flags |= crate::mobj::flags::MF_SCREAMED;
     }
@@ -1128,7 +1310,8 @@ fn a_scream(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Fires a single hitscan bolt at the current target.
 fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    // Check target exists and is alive.
+    let _rng_ctx = crate::random::rng_ctx("A_PosAttack");
+    // Vanilla: `if (!actor->target) return;`
     let Some(_target) = get_alive_target(gs, handle) else {
         return;
     };
@@ -1138,18 +1321,22 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let angle = mo.angle;
+    let base_angle = mo.angle;
 
-    let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
-    let mut intercepts = smallvec::SmallVec::new();
+    // Vanilla A_PosAttack: slope = P_AimLineAttack(actor, angle, MISSILERANGE)
+    // (no RNG); then `angle += P_SubRandom()<<20; damage = (P_Random()%5+1)*3;`.
+    let aim =
+        crate::combat::p_aim_line_attack(gs, handle, base_angle, crate::combat::MISSILERANGE, level);
+    let angle = Bam(base_angle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
+    let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
     crate::combat::p_line_attack(
         gs,
         handle,
         angle,
         crate::combat::MISSILERANGE,
+        aim.slope,
         damage,
         level,
-        &mut intercepts,
     );
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
@@ -1171,6 +1358,7 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 ///
 /// Fires 3 hitscan pellets with a small angular spread centered on the target.
 fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let _rng_ctx = crate::random::rng_ctx("A_SPosAttack");
     let Some(_target) = get_alive_target(gs, handle) else {
         return;
     };
@@ -1179,24 +1367,23 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let angle = mo.angle;
+    let bangle = Bam(mo.angle.0);
 
-    let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
-    // Spread: ~11.25° per step in 32-bit BAM space.
-    let spread = Bam(0x0800_0000u32);
-    let mut intercepts = smallvec::SmallVec::new();
-    for i in 0u32..3 {
-        // offsets: -spread, 0, +spread
-        let offset = Bam(spread.0.wrapping_mul(i).wrapping_sub(spread.0));
-        let shot_angle = Bam(angle.0.wrapping_add(offset.0));
+    // Vanilla A_SPosAttack: slope = P_AimLineAttack(actor, bangle, MISSILERANGE)
+    // once (no RNG); then 3 pellets each `angle = bangle + (P_SubRandom()<<20);
+    // damage = (P_Random()%5+1)*3;`.
+    let aim = crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
+    for _ in 0..3 {
+        let shot_angle = Bam(bangle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
+        let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
         crate::combat::p_line_attack(
             gs,
             handle,
             shot_angle,
             crate::combat::MISSILERANGE,
+            aim.slope,
             damage,
             level,
-            &mut intercepts,
         );
     }
     if let Some(mo) = gs.mobjslab.get(handle) {
@@ -1219,22 +1406,17 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
 ///
 /// Uses melee if the target is within `MELEERANGE`, otherwise spawns an
 /// `ImpFireball` projectile aimed at the target.
-fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>) {
-    let Some((target, mo_x, mo_y)) = get_alive_target_with_pos(gs, handle) else {
+fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let _rng_ctx = crate::random::rng_ctx("A_TroopAttack");
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
     };
 
     a_face_target(gs, handle);
 
-    let Some(t) = gs.mobjslab.get(target) else {
-        return;
-    };
-    let (tx, ty) = (t.x, t.y);
-
-    let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
-
-    if dist <= crate::combat::MELEERANGE.to_int() {
-        let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
+    // Vanilla A_TroopAttack: melee if P_CheckMeleeRange, else launch a missile.
+    if p_check_melee_range(gs, handle, level) {
+        let damage = (i32::from(gs.p_random()) % 8 + 1) * 3;
         crate::combat::damage_mobj(gs, target, handle, damage);
     } else {
         crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::ImpFireball);
@@ -1258,30 +1440,30 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
 /// Port of `A_SargAttack` from Doom's `p_enemy.c`.
 ///
 /// Deals melee damage only if the target is within `MELEERANGE`.
-fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
-    let Some((target, mo_x, mo_y)) = get_alive_target_with_pos(gs, handle) else {
+fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let _rng_ctx = crate::random::rng_ctx("A_SargAttack");
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
     };
 
-    let Some(t) = gs.mobjslab.get(target) else {
+    // Vanilla A_SargAttack: A_FaceTarget first, then (v1.5+) require melee range
+    // — returning without drawing when out of range — before the damage draw.
+    a_face_target(gs, handle);
+    if !p_check_melee_range(gs, handle, level) {
         return;
-    };
-    let (tx, ty) = (t.x, t.y);
+    }
 
-    let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
-    if dist <= crate::combat::MELEERANGE.to_int() {
-        let damage = ((gs.tic_num % 3) + 1) as i32 * 4;
-        crate::combat::damage_mobj(gs, target, handle, damage);
-        if let Some(mo) = gs.mobjslab.get(handle) {
-            gs.sound
-                .sound_queue
-                .push(crate::state::SoundRequest::MonsterAttack(
-                    MobjKind::Demon,
-                    handle,
-                    mo.x,
-                    mo.y,
-                ));
-        }
+    let damage = (i32::from(gs.p_random()) % 10 + 1) * 4;
+    crate::combat::damage_mobj(gs, target, handle, damage);
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                MobjKind::Demon,
+                handle,
+                mo.x,
+                mo.y,
+            ));
     }
 }
 
@@ -1356,25 +1538,26 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let angle = mo.angle;
+    let bangle = mo.angle;
 
-    let spread = crate::random::p_missile_angle_spread(gs);
-    let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
-    let damage = crate::random::p_damage_with_variance(gs, 3);
+    // Vanilla A_CPosAttack: slope = P_AimLineAttack(actor, bangle, MISSILERANGE)
+    // (no RNG); `angle = bangle + (P_SubRandom()<<20); damage = (P_Random()%5+1)*3;`.
+    let aim = crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
+    let shot_angle = Bam(bangle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
+    let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
     let cpos_kind = gs
         .mobjslab
         .get(handle)
         .map(|mo| mo.kind)
         .unwrap_or(MobjKind::Trooper);
-    let mut intercepts = smallvec::SmallVec::new();
     crate::combat::p_line_attack(
         gs,
         handle,
         shot_angle,
         crate::combat::MISSILERANGE,
+        aim.slope,
         damage,
         level,
-        &mut intercepts,
     );
     if let Some(mo) = gs.mobjslab.get(handle) {
         gs.sound
@@ -1612,20 +1795,20 @@ fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let angle = mo.angle;
+    let bangle = mo.angle;
 
-    let spread = crate::random::p_missile_angle_spread(gs);
-    let shot_angle = Bam(angle.0.wrapping_add(spread as u32));
-    let damage = crate::random::p_damage_with_variance(gs, 3);
-    let mut intercepts = smallvec::SmallVec::new();
+    // Spider Mastermind uses the A_SPosAttack pellet pattern.
+    let aim = crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
+    let shot_angle = Bam(bangle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
+    let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
     crate::combat::p_line_attack(
         gs,
         handle,
         shot_angle,
         crate::combat::MISSILERANGE,
+        aim.slope,
         damage,
         level,
-        &mut intercepts,
     );
 }
 
@@ -2083,6 +2266,23 @@ fn a_brain_explode(gs: &mut GameState, handle: MobjHandle) {
     gs.mobjslab.alloc(exp);
 }
 
+/// Port of vanilla `A_Explode` (`p_enemy.c`): the rocket's death state deals
+/// 128 splash damage in a 128-unit radius, credited to whoever fired it
+/// (`P_RadiusAttack(thingy, thingy->target, 128)`). Reached via
+/// `P_ExplodeMissile` -> `P_SetMobjState(deathstate)` when a rocket detonates.
+fn a_explode(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    // Vanilla `A_Explode(thingy)` = `P_RadiusAttack(thingy, thingy->target, 128)`:
+    // the exploding thing is the blast center/inflictor, and its `target` — the
+    // actor that fired the rocket or shot the barrel — is credited with the
+    // splash kills.
+    let source = gs
+        .mobjslab
+        .get(handle)
+        .map(|m| m.target)
+        .unwrap_or(MobjHandle::NULL);
+    crate::combat::p_radius_attack(gs, handle, source, 128, level);
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -2128,6 +2328,15 @@ mod tests {
         mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
         mo.state = spawn_sn;
         mo.tics = STATES[spawn_sn.0 as usize].tics;
+        mo.reactiontime = crate::mobjinfo::reactiontime(kind);
+        // Face the player at the origin so A_Look's vanilla front-180 test
+        // (P_LookForPlayers allaround=false) sees the player as in front.
+        mo.angle = Bam(crate::geom::r_point_to_angle2(
+            Fixed16_16::from_int(x).raw(),
+            Fixed16_16::from_int(y).raw(),
+            0,
+            0,
+        ));
         gs.mobjslab.alloc(mo)
     }
 
@@ -2153,6 +2362,13 @@ mod tests {
         mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL | extra_flags;
         mo.state = spawn_sn;
         mo.tics = STATES[spawn_sn.0 as usize].tics;
+        mo.reactiontime = crate::mobjinfo::reactiontime(kind);
+        mo.angle = Bam(crate::geom::r_point_to_angle2(
+            Fixed16_16::from_int(x).raw(),
+            Fixed16_16::from_int(y).raw(),
+            0,
+            0,
+        ));
         gs.mobjslab.alloc(mo)
     }
 
@@ -2319,7 +2535,6 @@ mod tests {
         let mo = gs.mobjslab.get(trooper).expect("item must exist in tests");
         assert_eq!(mo.target, gs.player.handle);
         assert_eq!(mo.state, see_sn);
-        assert_eq!(mo.threshold, 60);
     }
 
     #[test]
@@ -2379,11 +2594,15 @@ mod tests {
         let mut gs = make_game_state();
         // Player at (0,0), trooper at (100,0).
         let trooper = spawn_trooper(&mut gs, 100, 0);
+        // Fresh monster with no prior movement direction. Vanilla P_NewChaseDir
+        // never picks the direction opposite its current movedir; with the unit
+        // test having no walls (level=None, so P_Move never fails) an initial
+        // movedir of DI_EAST would keep it moving away, so start from DI_NODIR.
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .movedir = DI_NODIR;
 
-        // Tick enough times: A_Look fires at tic 9 (10 tic idle), first A_Chase
-        // at tic 13 enters missile state (ATK1+ATK2+ATK3 = 12 tics), second
-        // A_Chase fires around tic 29+ clears MF_JUSTATTACKED and does movement.
-        // Use 40 tics to give plenty of room for the full cycle.
         for _ in 0..40 {
             gs.tick(TicCmd::default(), None);
         }
@@ -2406,11 +2625,16 @@ mod tests {
         for _ in 0..15 {
             gs.tick(TicCmd::default(), None);
         }
-        // Kill the player.
-        gs.mobjslab
-            .get_mut(gs.player.handle)
-            .expect("item must exist in tests")
-            .health = 0;
+        // Kill the player. Vanilla A_Chase re-targets when the target loses
+        // MF_SHOOTABLE (which P_KillMobj clears), so clear it here too.
+        {
+            let p = gs
+                .mobjslab
+                .get_mut(gs.player.handle)
+                .expect("item must exist in tests");
+            p.health = 0;
+            p.flags &= !flags::MF_SHOOTABLE;
+        }
 
         // Keep ticking: A_Chase should notice dead target and revert.
         // With attack states added (Batch 5), the trooper may be mid-attack
@@ -2426,7 +2650,9 @@ mod tests {
             mo.state, spawn_sn,
             "trooper must revert to spawn state when target is dead"
         );
-        assert_eq!(mo.target, MobjHandle::NULL, "target must be cleared");
+        // Vanilla A_Chase reverts to spawnstate without nulling the target;
+        // the subsequent A_Look re-acquires (or clears) it. So only the state
+        // revert is asserted here.
     }
 
     #[test]
@@ -2735,14 +2961,14 @@ mod tests {
             .expect("item must exist in tests")
             .reactiontime = 0;
 
-        // RNG_TABLE[11] = 140.
+        // P_Random increments before reading, so set_index(10) yields RNG_TABLE[11] = 140.
         // demon: dist = 200, random = 140 -> can_fire = false
         // trooper: dist = 108, random = 140 -> can_fire = true
 
-        gs.rng.set_index(11);
+        gs.rng.set_index(10);
         let can_fire_demon = p_check_missile_range(&mut gs, demon, player_handle, None);
 
-        gs.rng.set_index(11);
+        gs.rng.set_index(10);
         let can_fire_trooper = p_check_missile_range(&mut gs, trooper, player_handle, None);
 
         assert!(
@@ -2765,16 +2991,17 @@ mod tests {
             .expect("item must exist in tests")
             .reactiontime = 0;
 
-        // RNG_TABLE[6] = 149 (false).
-        // RNG_TABLE[20] = 154 (true).
+        // P_Random increments before reading:
+        // set_index(5)  -> RNG_TABLE[6]  = 149 (false).
+        // set_index(19) -> RNG_TABLE[20] = 154 (true).
 
-        gs.rng.set_index(6);
+        gs.rng.set_index(5);
         assert!(
             !p_check_missile_range(&mut gs, cyber, player_handle, None),
             "Cyberdemon should fail with random=149 vs dist=154"
         );
 
-        gs.rng.set_index(20);
+        gs.rng.set_index(19);
         assert!(
             p_check_missile_range(&mut gs, cyber, player_handle, None),
             "Cyberdemon should fire with random=154 vs dist=154"
@@ -2866,20 +3093,148 @@ mod tests {
     }
 
     #[test]
-    fn p_move_updates_momentum() {
+    fn p_move_creates_no_walk_momentum() {
+        // Vanilla `P_Move` (`p_enemy.c`) moves the actor purely by position via
+        // `P_TryMove` and NEVER touches `momx/momy`. A walking monster must have
+        // zero momentum; momentum only ever comes from explicit sources such as
+        // damage thrust (`P_DamageMobj`) or a skull-fly charge.
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
+        {
+            let mo = gs.mobjslab.get_mut(trooper).expect("item must exist in tests");
+            mo.movedir = DI_EAST;
+            mo.momx = Fixed16_16::ZERO;
+            mo.momy = Fixed16_16::ZERO;
+        }
+
+        let moved = p_move(&mut gs, trooper, None);
+
+        assert!(moved, "p_move should succeed without level");
+        let mo = gs.mobjslab.get(trooper).expect("item must exist in tests");
+        assert!(
+            mo.x > Fixed16_16::from_int(100),
+            "trooper should have moved east by position"
+        );
+        assert_eq!(
+            mo.momx,
+            Fixed16_16::ZERO,
+            "walking must not create momentum (vanilla P_Move never sets momx)"
+        );
+        assert_eq!(
+            mo.momy,
+            Fixed16_16::ZERO,
+            "walking must not create momentum (vanilla P_Move never sets momy)"
+        );
+    }
+
+    /// Build a two-sided E–W-blocking wall level for the P_Move spechit tests:
+    /// a vertical line at x=128 splits sector 0 (open) from a degenerate back
+    /// sector (ceil==floor==0, i.e. a shut opening), living in a neighbouring
+    /// blockmap cell so the door-open path must reach across cells. `special`
+    /// sets the linedef special (1 = openable DR door, 0 = plain blocker).
+    fn make_ns_door_level(special: u16) -> doom_map::Level {
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).expect("item must exist in tests");
+        let mut bm_data = vec![0u8; 22];
+        bm_data[4..6].copy_from_slice(&2u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&6u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&8u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[14..16].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        bm_data[16..18].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[18..20].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[20..22].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).expect("item must exist in tests");
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            }],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 128, y: -32 },
+                doom_map::Vertex { x: 128, y: 32 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 0,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap,
+        }
+    }
+
+    #[test]
+    fn p_move_plain_blocker_does_not_halt_or_open() {
+        // A shut two-sided opening with NO special: vanilla `numspechit == 0`, so
+        // `P_Move` returns false (→ `A_Chase` picks a new direction) and leaves
+        // `movedir` untouched — the spechit/door path must be special-gated.
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 104, 0);
         gs.mobjslab
             .get_mut(trooper)
             .expect("item must exist in tests")
             .movedir = DI_EAST;
 
-        p_move(&mut gs, trooper, None);
+        let level = make_ns_door_level(0);
+        let moved = p_move(&mut gs, trooper, Some(&level));
 
-        let mo = gs.mobjslab.get(trooper).expect("item must exist in tests");
+        assert!(!moved, "a non-special blocked step returns false");
+        assert_eq!(
+            gs.mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .movedir,
+            DI_EAST,
+            "a plain (non-door) block must not clear movedir"
+        );
         assert!(
-            mo.momx > Fixed16_16::ZERO,
-            "momentum x should be positive for east movement"
+            gs.movers.active_doors.is_empty(),
+            "no door mover for a non-special line"
         );
     }
 
@@ -2969,7 +3324,20 @@ mod tests {
 
         let moved = p_move(&mut gs, trooper, Some(&level));
 
-        assert!(!moved, "the move should be blocked by the near door");
+        // Vanilla `P_Move` spechit path (`p_enemy.c`): a shut but openable door
+        // (special 1) blocking the step is added to `spechit`; the monster halts
+        // (`movedir = DI_NODIR`), `P_UseSpecialLine` opens it, and P_Move returns
+        // that `good` result — true here — so `A_Chase` treats the move as done
+        // and does NOT pick a new chase direction this tic.
+        assert!(moved, "opening a blocking door returns P_UseSpecialLine's good=true");
+        assert_eq!(
+            gs.mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .movedir,
+            DI_NODIR,
+            "a monster halted by a door has its movedir cleared to DI_NODIR"
+        );
         assert_eq!(
             gs.movers.active_doors.len(),
             1,
@@ -3156,34 +3524,80 @@ mod tests {
         );
     }
 
-    /// Verify that each original monster's first death frame carries Action::Scream as u8
-    /// and second death frame carries Action::Fall as u8 — matching the vanilla state table.
+    /// Demo-sync regression: vanilla `A_Scream` (`p_enemy.c`) draws a
+    /// `P_Random` to pick the death-sound *variant* for monsters whose
+    /// `info->deathsound` has multiple variants — `sfx_podth1/2/3` (zombieman
+    /// `Trooper`, shotgun-guy `Sergeant`) draw `P_Random()%3` and `sfx_bgdth1/2`
+    /// (imp `Imp`) draws `P_Random()%2`. Monsters with a single death sound
+    /// (e.g. demon `Demon` -> `sfx_sgtdth`) do NOT draw. That playsim draw
+    /// advances the shared `prndindex` for every later consumer, so omitting it
+    /// drifts the whole RNG stream from the first monster death onward. This
+    /// was the root of the DEMO2 divergence (first monster death at lt150).
     #[test]
-    fn die1_and_die2_actions_correct_for_all_original_monsters() {
+    fn a_scream_draws_prandom_for_multi_variant_death_sounds() {
+        // Trooper (zombieman, sfx_podth1) -> exactly one P_Random draw.
+        {
+            let mut gs = make_game_state();
+            let m = spawn_trooper(&mut gs, 100, 0);
+            let before = gs.rng.index();
+            dispatch_action(&mut gs, m, Action::Scream as u8, None);
+            assert_eq!(
+                (gs.rng.index().wrapping_sub(before)) & 255,
+                1,
+                "A_Scream on a Trooper (podth1) must draw exactly one P_Random"
+            );
+        }
+        // Imp (sfx_bgdth2) -> exactly one P_Random draw.
+        {
+            let mut gs = make_game_state();
+            let m = spawn_monster_chasing(&mut gs, MobjKind::Imp, 100, 0, 60);
+            let before = gs.rng.index();
+            dispatch_action(&mut gs, m, Action::Scream as u8, None);
+            assert_eq!(
+                (gs.rng.index().wrapping_sub(before)) & 255,
+                1,
+                "A_Scream on an Imp (bgdth2) must draw exactly one P_Random"
+            );
+        }
+        // Demon (sfx_sgtdth, single variant) -> no P_Random draw.
+        {
+            let mut gs = make_game_state();
+            let m = spawn_monster_chasing(&mut gs, MobjKind::Demon, 100, 0, 150);
+            let before = gs.rng.index();
+            dispatch_action(&mut gs, m, Action::Scream as u8, None);
+            assert_eq!(
+                (gs.rng.index().wrapping_sub(before)) & 255,
+                0,
+                "A_Scream on a Demon (single death sound) must not draw P_Random"
+            );
+        }
+    }
+
+    /// Verify the demo-critical E1 monsters carry A_Scream and A_Fall on the
+    /// exact vanilla death frames from `info.c` (A_Scream on DIE2; A_Fall on
+    /// DIE3 for the hitscan zombies, DIE4 for the imp/demon).
+    #[test]
+    fn scream_and_fall_actions_on_vanilla_death_frames() {
         use crate::states::STATES;
         use crate::states::ids;
 
+        // (scream_state, fall_state, name)
         let cases: &[(u16, u16, &str)] = &[
-            (ids::S_POSS_DIE1, ids::S_POSS_DIE2, "Trooper"),
-            (ids::S_SPOS_DIE1, ids::S_SPOS_DIE2, "Sergeant"),
-            (ids::S_TROO_DIE1, ids::S_TROO_DIE2, "Imp"),
-            (ids::S_SARG_DIE1, ids::S_SARG_DIE2, "Demon"),
-            (ids::S_HEAD_DIE1, ids::S_HEAD_DIE2, "Cacodemon"),
-            (ids::S_BOSS_DIE1, ids::S_BOSS_DIE2, "Baron"),
-            (ids::S_CYBER_DIE1, ids::S_CYBER_DIE2, "Cyberdemon"),
-            (ids::S_SPID_DIE1, ids::S_SPID_DIE2, "Spider"),
-            (ids::S_BOS2_DIE1, ids::S_BOS2_DIE2, "HellKnight"),
+            (ids::S_POSS_DIE2, ids::S_POSS_DIE3, "Trooper"),
+            (ids::S_SPOS_DIE2, ids::S_SPOS_DIE3, "Sergeant"),
+            (ids::S_TROO_DIE2, ids::S_TROO_DIE4, "Imp"),
+            (ids::S_SARG_DIE2, ids::S_SARG_DIE4, "Demon"),
         ];
-        for &(die1, die2, name) in cases {
+        for &(scream, fall, name) in cases {
             assert_eq!(
-                STATES[die1 as usize].action,
+                STATES[scream as usize].action,
                 Action::Scream as u8,
-                "{name} DIE1 must have Action::Scream as u8"
+                "{name} A_Scream must fire on the vanilla death frame"
             );
             assert_eq!(
-                STATES[die2 as usize].action,
+                STATES[fall as usize].action,
                 Action::Fall as u8,
-                "{name} DIE2 must have Action::Fall as u8"
+                "{name} A_Fall must fire on the vanilla death frame"
             );
         }
     }
@@ -3517,11 +3931,6 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn melee_threshold_is_correct() {
-        assert_eq!(MELEE_THRESHOLD, 84, "MELEERANGE(64) + 20 = 84");
-    }
-
-    #[test]
     fn a_chase_demon_melee_only_no_missile() {
         // Demon has melee_state but missile_state is S_NULL.
         let info = &mobjinfo::MOBJINFO[MobjKind::Demon as usize];
@@ -3650,12 +4059,14 @@ mod tests {
         let see_sn = mobjinfo::MOBJINFO[MobjKind::Trooper as usize].see_state;
 
         let ph = gs.player.handle;
-        transition_to_see_state(&mut gs, trooper, MobjKind::Trooper, ph);
+        transition_to_see_state(&mut gs, trooper, MobjKind::Trooper, ph, None);
 
         let mo = gs.mobjslab.get(trooper).expect("item must exist in tests");
         assert_eq!(mo.target, gs.player.handle);
+        // Vanilla A_Look `seeyou:` does P_SetMobjState(seestate), which fires
+        // the see-state action (A_Chase) on entry; the actor remains in the
+        // see-state (RUN1, nonzero tics) after that call.
         assert_eq!(mo.state, see_sn);
-        assert_eq!(mo.threshold, 60);
     }
 
     #[test]

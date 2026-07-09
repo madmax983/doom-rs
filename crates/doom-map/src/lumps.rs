@@ -71,6 +71,9 @@ pub const FLAG_TWO_SIDED: u16 = 0x0004;
 pub const FLAG_DONTPEGTOP: u16 = 0x0008;
 /// Linedef flags bit for lower-unpegged / bottom-pegged textures.
 pub const FLAG_DONTPEGBOTTOM: u16 = 0x0010;
+/// Linedef flags bit for secret lines (`ML_SECRET`): shown as one-sided on the
+/// automap and never openable by monsters via `P_UseSpecialLine`.
+pub const FLAG_SECRET: u16 = 0x0020;
 
 /// Sentinel value meaning "no sidedef assigned".
 pub const SIDEDEF_NONE: u16 = 0xFFFF;

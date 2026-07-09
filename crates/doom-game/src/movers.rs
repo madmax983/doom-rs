@@ -288,7 +288,11 @@ pub enum SectorDamageType {
 // Sector light effect types (extended)
 // ---------------------------------------------------------------------------
 
-/// Type of light effect applied to a sector.
+/// Type of light effect applied to a sector (legacy `active_lights` system).
+///
+/// Used by `specials::spawn_level_specials` / `specials::tick_lights`, which are
+/// retained for the non-demo game path.  The demo-accurate light thinkers use
+/// [`LightThinkerKind`] / [`SectorLightEffect`] instead.
 #[derive(strum_macros::FromRepr, Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u16)]
 pub enum LightEffectType {
@@ -308,22 +312,51 @@ pub enum LightEffectType {
     FireFlicker = 17,
 }
 
-/// Extended sector light effect with per-sector state tracking.
+/// Kind of vanilla light thinker attached to a sector special.
 ///
-/// Created by `specials::init_sector_lights` from sector specials.
-/// Ticked each tic by `specials::tick_sector_lights`.
+/// Mirrors the thinkers spawned by chocolate-doom `P_SpawnSpecials`
+/// (`p_lights.c`): `T_LightFlash`, `T_StrobeFlash`, `T_FireFlicker`, `T_Glow`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LightThinkerKind {
+    /// `T_LightFlash` — sector special 1 (randomly blinking light).
+    LightFlash,
+    /// `T_StrobeFlash` — sector specials 2, 3, 4, 12, 13.
+    Strobe,
+    /// `T_FireFlicker` — sector special 17.
+    FireFlicker,
+    /// `T_Glow` — sector special 8 (smoothly glowing light).
+    Glow,
+}
+
+/// A vanilla sector light thinker.
+///
+/// Created by `specials::init_sector_lights` (a port of the light cases of
+/// `P_SpawnSpecials`) and advanced each tic by `specials::tick_sector_lights`
+/// (a port of `T_LightFlash` / `T_StrobeFlash` / `T_FireFlicker` / `T_Glow`).
+/// Field layout follows the vanilla `lightflash_t` / `strobe_t` / `glow_t`
+/// structs closely enough to reproduce the exact `P_Random` consumption.
 #[derive(Debug, Clone)]
 pub struct SectorLightEffect {
     /// Index into `level.sectors`.
     pub sector_index: usize,
-    /// Type of light animation.
-    pub effect_type: LightEffectType,
-    /// Base (bright) light level for this sector.
-    pub base_light: i16,
-    /// Minimum (dark) light level for this sector.
+    /// Which vanilla thinker this is.
+    pub kind: LightThinkerKind,
+    /// Tics remaining until the next toggle (vanilla `count`).
+    pub count: i32,
+    /// Bright light level (vanilla `maxlight`).
+    pub max_light: i16,
+    /// Dark light level (vanilla `minlight`).
     pub min_light: i16,
-    /// Timer counting down to next state change.
-    pub timer: u32,
+    /// LightFlash `maxtime` (mask for the dark->bright reload).
+    pub max_time: i32,
+    /// LightFlash `mintime` (mask for the bright->dark reload).
+    pub min_time: i32,
+    /// Strobe `darktime`.
+    pub dark_time: i32,
+    /// Strobe `brighttime`.
+    pub bright_time: i32,
+    /// Glow direction (+1 brightening, -1 darkening).
+    pub glow_dir: i32,
 }
 
 // ---------------------------------------------------------------------------

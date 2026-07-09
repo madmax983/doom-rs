@@ -17,6 +17,7 @@ pub mod cheats;
 pub mod combat;
 pub mod dehacked;
 pub mod face;
+pub mod geom;
 pub mod intermission;
 pub mod linedef_dispatch;
 pub mod menu;
@@ -43,6 +44,7 @@ pub mod state;
 pub mod states;
 /// Level statistics tracking (kills, items, secrets, etc).
 pub mod stats;
+mod tantoangle;
 #[cfg(feature = "style_meter")]
 pub mod style;
 pub mod switch;
@@ -81,8 +83,8 @@ pub use mobjinfo::{MOBJINFO, MobjInfo};
 pub use movement::{MAX_STEP_HEIGHT, p_slide_move, p_try_move};
 pub use movers::{
     CeilingMover, CeilingType, ConveyorBelt, CrushBehavior, DoorMover, FloorMover, FloorType,
-    LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection, PerpetualPlatform,
-    PlatformStatus, ScrollingWall, SectorLightEffect, SectorMovers,
+    LiftMover, LiftStatus, LightEffectType, LightSpecial, LightThinkerKind, MoveDirection,
+    PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect, SectorMovers,
 };
 pub use phase::{GamePhase, GamePhaseController, MapId};
 pub use pickups::{
@@ -90,9 +92,10 @@ pub use pickups::{
 };
 pub use player::PlayerState;
 pub use projectile::{
-    ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
+    ProjectileInfo, p_spawn_missile, p_spawn_player_missile, projectile_info,
 };
 pub use random::{DoomRng, RNG_TABLE};
+pub use random::{RngTraceEntry, rng_trace_enable, rng_trace_set_leveltime, rng_trace_take};
 pub use random::{p_damage_with_variance, p_missile_angle_spread, p_random_chance, randomize_tics};
 pub use savegame::{
     MAX_SAVE_SLOTS, SAVE_MAGIC, SaveError, SaveFormat, SaveGame, SaveHeader, detect_save_format,

@@ -4,16 +4,19 @@
 //!
 //! When a `Level` reference is available, `p_line_attack` processes ordered
 //! wall/actor intercepts with Doom-style vertical slope clipping, and
-//! `p_radius_attack` uses Euclidean distance with LOS checking.  When no level
-//! is provided (unit tests, pre-map-load), hitscan falls back to actor-only
-//! intercept processing without map geometry.
+//! `p_radius_attack` uses vanilla `max(|dx|,|dy|)` distance with a
+//! `P_CheckSight` line-of-sight gate.  When no level is provided (unit tests,
+//! pre-map-load), hitscan falls back to actor-only intercept processing without
+//! map geometry and the radius attack skips the sight check.
 
 use doom_map::Level;
+use doom_types::mobj_kind::MobjKind;
+use doom_types::weapons::WeaponType;
 use doom_types::{Bam, FIXED_ONE, Fixed16_16};
 
 use crate::mobj::{MobjHandle, StateNum, flags};
 use crate::state::GameState;
-use crate::trace::{self, TraceHit};
+use crate::states::{STATES, ids};
 
 /// Maximum hitscan range in map units.
 pub const MISSILERANGE: Fixed16_16 = Fixed16_16(2048 << 16);
@@ -21,141 +24,103 @@ pub const MISSILERANGE: Fixed16_16 = Fixed16_16(2048 << 16);
 /// Maximum melee attack range in map units (64 units).
 pub const MELEERANGE: Fixed16_16 = Fixed16_16(64 << 16);
 
-const HITSCAN_EPSILON: f32 = 1.0e-6;
-const AUTOAIM_TOP_SLOPE: f32 = 100.0 / 160.0;
-const AUTOAIM_BOTTOM_SLOPE: f32 = -100.0 / 160.0;
+// Autoaim view-slope window (P_AimLineAttack, p_map.c:1093):
+//   topslope    =  (SCREENHEIGHT/2)*FRACUNIT/(SCREENWIDTH/2) = 100*FRACUNIT/160
+//   bottomslope = -(SCREENHEIGHT/2)*FRACUNIT/(SCREENWIDTH/2)
+const AUTOAIM_TOP_SLOPE: i32 = (100 * FRAC_ONE_I32) / 160;
+const AUTOAIM_BOTTOM_SLOPE: i32 = -AUTOAIM_TOP_SLOPE;
 
+const FRAC_ONE_I32: i32 = 0x0001_0000;
+/// Blockmap-block shift in fixed-point space (`FRACBITS + 7`).
+const MAPBLOCKSHIFT: u32 = 16 + 7;
+/// `MAPBLOCKSHIFT - FRACBITS` (used to bring a fixed coord into block-frac).
+const MAPBTOFRAC: u32 = 7;
+const MAPBLOCKSIZE_MASK: i32 = (128 << 16) - 1;
+
+/// A `divline_t` (`p_maputl.c`): a directed segment in raw fixed-point.
+#[derive(Clone, Copy)]
+struct Divline {
+    x: i32,
+    y: i32,
+    dx: i32,
+    dy: i32,
+}
+
+/// Which object a hitscan intercept refers to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum HitscanInterceptKind {
+    /// Index into `level.linedefs`.
     Line(usize),
+    /// A shootable/blocking actor.
     Actor(MobjHandle),
 }
 
-/// Represents an object or wall hit along a hitscan trace line.
-///
-/// Records the fractional distance along the trace where the collision occurred,
-/// and whether it hit an actor (`MobjHandle`) or a map line (`Line`).
+/// One ordered intercept along a hitscan trace (fixed-point `frac`).
 #[derive(Clone, Copy, Debug)]
 pub struct HitscanIntercept {
-    frac: f32,
+    /// Fractional distance along the trace, raw fixed-point (`FRACUNIT == 1.0`).
+    frac: i32,
     kind: HitscanInterceptKind,
 }
 
-fn fixed_to_f32(value: Fixed16_16) -> f32 {
-    value.raw() as f32 / FIXED_ONE.raw() as f32
+/// `FixedMul` on raw `i32` fixed-point values.
+#[inline]
+fn fixed_mul_raw(a: i32, b: i32) -> i32 {
+    (((a as i64) * (b as i64)) >> 16) as i32
 }
 
-fn hitscan_shootz(z: Fixed16_16, height: Fixed16_16) -> f32 {
-    fixed_to_f32(z) + fixed_to_f32(height) * 0.5 + 8.0
-}
-
-fn ray_actor_intersection(
-    rx: f32,
-    ry: f32,
-    rdx: f32,
-    rdy: f32,
-    ax: f32,
-    ay: f32,
-    radius: f32,
-) -> Option<f32> {
-    let min_x = ax - radius;
-    let max_x = ax + radius;
-    let min_y = ay - radius;
-    let max_y = ay + radius;
-
-    let (mut t_min, mut t_max) = (f32::NEG_INFINITY, f32::INFINITY);
-
-    if rdx.abs() < HITSCAN_EPSILON {
-        if rx < min_x || rx > max_x {
-            return None;
-        }
+/// `FixedDiv` on raw `i32` fixed-point values (vanilla `m_fixed.c`).
+#[inline]
+fn fixed_div_raw(a: i32, b: i32) -> i32 {
+    if (a.unsigned_abs() >> 14) >= b.unsigned_abs() {
+        if (a ^ b) < 0 { i32::MIN } else { i32::MAX }
     } else {
-        let t1 = (min_x - rx) / rdx;
-        let t2 = (max_x - rx) / rdx;
-        let (t_near, t_far) = if t1 < t2 { (t1, t2) } else { (t2, t1) };
-        t_min = t_min.max(t_near);
-        t_max = t_max.min(t_far);
-    }
-
-    if rdy.abs() < HITSCAN_EPSILON {
-        if ry < min_y || ry > max_y {
-            return None;
-        }
-    } else {
-        let t1 = (min_y - ry) / rdy;
-        let t2 = (max_y - ry) / rdy;
-        let (t_near, t_far) = if t1 < t2 { (t1, t2) } else { (t2, t1) };
-        t_min = t_min.max(t_near);
-        t_max = t_max.min(t_far);
-    }
-
-    if t_min > t_max || t_max < 0.0 {
-        return None;
-    }
-
-    let t = if t_min >= 0.0 { t_min } else { t_max };
-    (t >= 0.0).then_some(t)
-}
-
-fn collect_actor_hitscan_intercepts(
-    gs: &GameState,
-    source: MobjHandle,
-    sx: f32,
-    sy: f32,
-    rdx: f32,
-    rdy: f32,
-    intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
-) {
-    intercepts.clear();
-
-    for handle in gs.mobjslab.iter_handles() {
-        if handle == source {
-            continue;
-        }
-
-        let Some(mo) = gs.mobjslab.get(handle) else {
-            continue;
-        };
-        if mo.health <= 0 || mo.flags & flags::MF_SHOOTABLE == 0 {
-            continue;
-        }
-
-        if let Some(frac) = ray_actor_intersection(
-            sx,
-            sy,
-            rdx,
-            rdy,
-            fixed_to_f32(mo.x),
-            fixed_to_f32(mo.y),
-            fixed_to_f32(mo.radius),
-        ) {
-            if (0.0..=1.0).contains(&frac) {
-                intercepts.push(HitscanIntercept {
-                    frac,
-                    kind: HitscanInterceptKind::Actor(handle),
-                });
-            }
-        }
+        (((a as i64) << 16) / (b as i64)) as i32
     }
 }
 
-fn sort_hitscan_intercepts(intercepts: &mut [HitscanIntercept]) {
-    intercepts.sort_by(|a, b| {
-        let frac_cmp = a.frac.total_cmp(&b.frac);
-        if frac_cmp.is_ne() {
-            return frac_cmp;
+/// Port of `P_PointOnDivlineSide` (`p_maputl.c:157`). Returns 0 (front) or 1 (back).
+fn p_point_on_divline_side(x: i32, y: i32, line: &Divline) -> i32 {
+    if line.dx == 0 {
+        if x <= line.x {
+            return i32::from(line.dy > 0);
         }
+        return i32::from(line.dy < 0);
+    }
+    if line.dy == 0 {
+        if y <= line.y {
+            return i32::from(line.dx < 0);
+        }
+        return i32::from(line.dx > 0);
+    }
 
-        match (a.kind, b.kind) {
-            (HitscanInterceptKind::Line(_), HitscanInterceptKind::Actor(_)) => {
-                std::cmp::Ordering::Less
-            }
-            (HitscanInterceptKind::Actor(_), HitscanInterceptKind::Line(_)) => {
-                std::cmp::Ordering::Greater
-            }
-            _ => std::cmp::Ordering::Equal,
+    let dx = x.wrapping_sub(line.x);
+    let dy = y.wrapping_sub(line.y);
+
+    // Quick sign-bit decision.
+    if ((line.dy ^ line.dx ^ dx ^ dy) & i32::MIN) != 0 {
+        if ((line.dy ^ dx) & i32::MIN) != 0 {
+            return 1;
         }
-    });
+        return 0;
+    }
+
+    let left = fixed_mul_raw(line.dy >> 8, dx >> 8);
+    let right = fixed_mul_raw(dy >> 8, line.dx >> 8);
+
+    if right < left { 0 } else { 1 }
+}
+
+/// Port of `P_InterceptVector` (`p_maputl.c:227`). Returns the fractional
+/// intercept of `v2` (the trace) with `v1`, raw fixed-point, or 0 if parallel.
+fn p_intercept_vector(v2: &Divline, v1: &Divline) -> i32 {
+    let den = fixed_mul_raw(v1.dy >> 8, v2.dx).wrapping_sub(fixed_mul_raw(v1.dx >> 8, v2.dy));
+    if den == 0 {
+        return 0;
+    }
+    let num = fixed_mul_raw((v1.x.wrapping_sub(v2.x)) >> 8, v1.dy)
+        .wrapping_add(fixed_mul_raw((v2.y.wrapping_sub(v1.y)) >> 8, v1.dx));
+    fixed_div_raw(num, den)
 }
 
 // ---------------------------------------------------------------------------
@@ -175,6 +140,28 @@ fn sort_hitscan_intercepts(intercepts: &mut [HitscanIntercept]) {
 /// Returns immediately if `target` does not have `MF_SHOOTABLE` or is
 /// already dead.
 pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle, damage: i32) {
+    // Hitscan / melee / self-inflicted callers use a single actor as both the
+    // damage inflictor (knockback origin) and the source (kill credit /
+    // retaliation target), matching vanilla where those callers pass the same
+    // pointer for both `inflictor` and `source`.
+    damage_mobj_source(gs, target, inflictor, inflictor, damage);
+}
+
+/// Port of vanilla `P_DamageMobj(target, inflictor, source, damage)` with the
+/// `inflictor` (the projectile/impact that determines knockback direction) and
+/// `source` (the actor credited with the kill and retaliated against) kept
+/// distinct. `PIT_CheckThing`'s missile branch calls this with
+/// `inflictor = missile`, `source = missile->target` (the shooter), so the
+/// victim is knocked back away from the *missile* (its impact point) while the
+/// *shooter* gets kill credit and becomes the victim's new AI target — exactly
+/// as vanilla does.
+pub fn damage_mobj_source(
+    gs: &mut GameState,
+    target: MobjHandle,
+    inflictor: MobjHandle,
+    source: MobjHandle,
+    damage: i32,
+) {
     // Guard: must exist, be shootable, and be alive.
     {
         let Some(mo) = gs.mobjslab.get(target) else {
@@ -185,6 +172,85 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         }
         if mo.health <= 0 {
             return;
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // P_DamageMobj knockback thrust (p_inter.c:816-843).
+    //
+    //   if (inflictor && !(target->flags & MF_NOCLIP)
+    //       && (!source || !source->player
+    //           || source->player->readyweapon != wp_chainsaw)) {
+    //       ang = R_PointToAngle2(inflictor->x, inflictor->y, target->x, target->y);
+    //       thrust = damage*(FRACUNIT>>3)*100/target->info->mass;
+    //       if (damage < 40 && damage > target->health
+    //           && target->z - inflictor->z > 64*FRACUNIT && (P_Random()&1)) {
+    //           ang += ANG180; thrust *= 4;
+    //       }
+    //       ang >>= ANGLETOFINESHIFT;
+    //       target->momx += FixedMul(thrust, finecosine[ang]);
+    //       target->momy += FixedMul(thrust, finesine[ang]);
+    //   }
+    //
+    // `inflictor` is both inflictor and source for all our hitscan/melee/
+    // projectile callers.  The MF_SKULLFLY momentum-clear (p_inter.c:805) is
+    // also applied here, matching vanilla order (before the thrust).
+    {
+        let (tgt_x, tgt_y, tgt_z, tgt_flags, tgt_mass, tgt_health) = {
+            let Some(mo) = gs.mobjslab.get(target) else {
+                return;
+            };
+            let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
+            (mo.x, mo.y, mo.z, mo.flags, info.mass, mo.health)
+        };
+
+        // Lost soul (MF_SKULLFLY) loses its charge momentum when hurt.
+        if tgt_flags & flags::MF_SKULLFLY != 0 {
+            if let Some(mo) = gs.mobjslab.get_mut(target) {
+                mo.momx = Fixed16_16::ZERO;
+                mo.momy = Fixed16_16::ZERO;
+                mo.momz = Fixed16_16::ZERO;
+            }
+        }
+
+        // Vanilla gates the "no knockback" case on the *source* wielding a
+        // chainsaw (`!source->player || readyweapon != wp_chainsaw`).
+        let source_is_chainsaw =
+            source == gs.player.handle && gs.player.weapon == WeaponType::Chainsaw;
+
+        if inflictor != MobjHandle::NULL
+            && tgt_flags & flags::MF_NOCLIP == 0
+            && !source_is_chainsaw
+        {
+            if let Some(inf) = gs.mobjslab.get(inflictor) {
+                let (ix, iy, iz) = (inf.x, inf.y, inf.z);
+                let mut ang =
+                    crate::geom::r_point_to_angle2(ix.raw(), iy.raw(), tgt_x.raw(), tgt_y.raw());
+                // thrust = damage*(FRACUNIT>>3)*100/mass, all 32-bit integer math.
+                let mut thrust = damage
+                    .wrapping_mul(FIXED_ONE.raw() >> 3)
+                    .wrapping_mul(100)
+                    / tgt_mass.max(1);
+
+                // "make fall forwards sometimes" — the only RNG draw in the
+                // thrust path, gated by the first three conditions (C `&&`).
+                if damage < 40
+                    && damage > tgt_health
+                    && (tgt_z.raw().wrapping_sub(iz.raw())) > (64 << 16)
+                    && (gs.p_random() & 1) != 0
+                {
+                    ang = ang.wrapping_add(0x8000_0000); // ANG180
+                    thrust = thrust.wrapping_mul(4);
+                }
+
+                let fine = Bam(ang);
+                let dmx = Fixed16_16(thrust).fixed_mul(fine.cos());
+                let dmy = Fixed16_16(thrust).fixed_mul(fine.sin());
+                if let Some(mo) = gs.mobjslab.get_mut(target) {
+                    mo.momx += dmx;
+                    mo.momy += dmy;
+                }
+            }
         }
     }
 
@@ -228,66 +294,102 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         damage
     };
 
-    let retaliation = if target != gs.player.handle && inflictor != MobjHandle::NULL {
-        gs.mobjslab.get(target).map(|mo| {
-            let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
-
-            (mo.state == info.spawn_state && info.see_state != StateNum::NULL)
-                .then_some(info.see_state)
-        })
-    } else {
-        None
-    };
-
-    // Apply damage + inflictor.
+    // Apply damage to health. Vanilla runs the kill check first; only a
+    // *surviving* victim gets the pain roll, `reactiontime = 0`, and the
+    // retaliation re-target (handled in the `else` branch below), exactly as
+    // `P_DamageMobj` orders them.
     let new_health = {
         let Some(mo) = gs.mobjslab.get_mut(target) else {
             return;
         };
         mo.health = mo.health.saturating_sub(effective_damage).max(0);
-        if inflictor != MobjHandle::NULL {
-            mo.target = inflictor;
-            if target != gs.player.handle {
-                mo.threshold = 60;
-                mo.flags |= flags::MF_JUSTHIT;
-                if let Some(see_state) = retaliation.flatten() {
-                    mo.state = see_state;
-                    mo.tics = crate::states::STATES[see_state.0 as usize].tics;
-                }
-            }
-        }
         mo.health
     };
 
     if new_health <= 0 {
         // -------------------------------------------------------------------
-        // Death transition — use p_set_mobj_state so the entry action
-        // (A_Scream on the first death frame) fires correctly.
+        // P_KillMobj (p_inter.c:675).  Order matters for the RNG stream:
+        //   flags/height, killcount, P_SetMobjState(deathstate) [no RNG],
+        //   `tics -= P_Random()&3`, then the item-drop `P_SpawnMobj`
+        //   (lastlook) for zombie/shotgun/chaingun corpses.
         // -------------------------------------------------------------------
-        let (death_sn, kind): (StateNum, _) = {
+        let (kind, was_countkill, is_skull): (MobjKind, bool, bool) = {
             let Some(mo) = gs.mobjslab.get(target) else {
                 return;
             };
             (
-                crate::mobjinfo::MOBJINFO[mo.kind as usize].death_state,
                 mo.kind,
+                mo.flags & flags::MF_COUNTKILL != 0,
+                mo.kind == MobjKind::LostSoul,
             )
         };
+
+        // target->flags &= ~(MF_SHOOTABLE|MF_FLOAT|MF_SKULLFLY);
+        // if (type != MT_SKULL) target->flags &= ~MF_NOGRAVITY;
+        // target->flags |= MF_CORPSE|MF_DROPOFF;  target->height >>= 2;
+        if let Some(mo) = gs.mobjslab.get_mut(target) {
+            mo.flags &= !(flags::MF_SHOOTABLE | flags::MF_FLOAT | flags::MF_SKULLFLY);
+            if !is_skull {
+                mo.flags &= !flags::MF_NOGRAVITY;
+            }
+            mo.flags |= flags::MF_CORPSE | flags::MF_DROPOFF;
+            mo.height = Fixed16_16(mo.height.raw() >> 2);
+        }
+
+        // Kill credit.  Single-player (`!netgame`) always credits player 0,
+        // whether the killer is the player, another monster, or the
+        // environment (p_inter.c:691-704).
+        if was_countkill {
+            gs.player.kill_count += 1;
+        }
+
+        let death_sn = crate::mobjinfo::MOBJINFO[kind as usize].death_state;
         if death_sn != StateNum::NULL {
             crate::tic::p_set_mobj_state(gs, target, death_sn, None);
         }
+        // `target->tics -= P_Random()&3; if(tics<1)tics=1;` (p_inter.c:735).
+        {
+            let r = (gs.p_random() & 3) as i16;
+            if let Some(mo) = gs.mobjslab.get_mut(target) {
+                mo.tics -= r;
+                if mo.tics < 1 {
+                    mo.tics = 1;
+                }
+            }
+        }
+
+        // Drop stuff: MT_POSSESSED/MT_WOLFSS -> MT_CLIP, MT_SHOTGUY ->
+        // MT_SHOTGUN, MT_CHAINGUY -> MT_CHAINGUN.  The P_SpawnMobj draws one
+        // `lastlook` P_Random — it MUST follow the tics draw above.
+        let drop = match kind {
+            MobjKind::Trooper | MobjKind::WolfSS => Some(MobjKind::Clip),
+            MobjKind::Sergeant => Some(MobjKind::Shotgun),
+            _ => None,
+        };
+        if let Some(drop_kind) = drop {
+            let (dx, dy, dz) = gs
+                .mobjslab
+                .get(target)
+                .map(|mo| (mo.x, mo.y, mo.z))
+                .unwrap_or_default();
+            let dh = crate::spawn::p_spawn_mobj(gs, None, dx, dy, dz, drop_kind);
+            if let Some(mo) = gs.mobjslab.get_mut(dh) {
+                mo.flags |= flags::MF_DROPPED;
+            }
+        }
+
         let (sx, sy) = gs
             .mobjslab
             .get(target)
             .map(|mo| (mo.x, mo.y))
             .unwrap_or_default();
         #[cfg(feature = "style_meter")]
-        if inflictor == gs.player.handle {
+        if source == gs.player.handle {
             gs.style.register_kill(gs.tic_num);
         }
 
         #[cfg(feature = "telemetry")]
-        if inflictor == gs.player.handle {
+        if source == gs.player.handle {
             let name = format!("{:?}", kind);
             gs.telemetry.record(
                 gs.tic_num,
@@ -301,24 +403,77 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             .push(crate::state::SoundRequest::MonsterDie(kind, target, sx, sy));
     } else {
         // -------------------------------------------------------------------
-        // Pain transition — probabilistic via p_random()
+        // Pain transition. Vanilla: `if ((P_Random() < info->painchance) &&
+        // !(target->flags & MF_SKULLFLY)) { ... P_SetMobjState(painstate); }`.
+        // C evaluates P_Random() as the left operand of `&&`, so the draw is
+        // UNCONDITIONAL for every non-lethal hit (even painchance==0 or an
+        // absent painstate) — only whether the pain state is entered is gated.
         // -------------------------------------------------------------------
-        let (pain_sn, pain_chance): (StateNum, u8) = {
+        let (pain_sn, pain_chance, skullfly): (StateNum, u8, bool) = {
             let Some(mo) = gs.mobjslab.get(target) else {
                 return;
             };
             let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
-            (info.pain_state, info.pain_chance)
+            (
+                info.pain_state,
+                info.pain_chance,
+                mo.flags & flags::MF_SKULLFLY != 0,
+            )
         };
-        if pain_sn != StateNum::NULL && pain_chance > 0 {
-            // Doom's original check: `if (P_Random() < info->painchance)`
-            let roll = gs.p_random();
-            if roll < pain_chance {
-                if let Some(entry) = crate::states::STATES.get(pain_sn.0 as usize) {
-                    let new_tics = entry.tics;
-                    if let Some(mo) = gs.mobjslab.get_mut(target) {
-                        mo.state = pain_sn;
-                        mo.tics = new_tics;
+        let roll = gs.p_random();
+        // Vanilla: `if ((P_Random() < painchance) && !SKULLFLY) { flags |=
+        // MF_JUSTHIT; P_SetMobjState(painstate); }`. MF_JUSTHIT ("fight back!")
+        // is set ONLY when the pain roll succeeds — not on every hit.
+        if roll < pain_chance && !skullfly {
+            if let Some(mo) = gs.mobjslab.get_mut(target) {
+                mo.flags |= flags::MF_JUSTHIT;
+            }
+            if pain_sn != StateNum::NULL
+                && let Some(entry) = crate::states::STATES.get(pain_sn.0 as usize)
+            {
+                let new_tics = entry.tics;
+                if let Some(mo) = gs.mobjslab.get_mut(target) {
+                    mo.state = pain_sn;
+                    mo.tics = new_tics;
+                }
+            }
+        }
+
+        // `target->reactiontime = 0;` — "we're awake now..." (p_inter.c). The
+        // victim can attack on the very next A_Chase instead of waiting out its
+        // reaction delay.
+        if let Some(mo) = gs.mobjslab.get_mut(target) {
+            mo.reactiontime = 0;
+        }
+
+        // Retaliation re-target (p_inter.c): `if ((!threshold || type==VILE) &&
+        // source && source != target && source->type != VILE) { target->target
+        // = source; threshold = BASETHRESHOLD; if (state == spawnstate &&
+        // seestate) P_SetMobjState(seestate); }`. Gated on the victim not
+        // already being locked onto a threat (threshold == 0).
+        if source != MobjHandle::NULL && source != target {
+            let (threshold, tgt_kind, cur_state) = {
+                let Some(mo) = gs.mobjslab.get(target) else {
+                    return;
+                };
+                (mo.threshold, mo.kind, mo.state)
+            };
+            let src_is_vile = gs
+                .mobjslab
+                .get(source)
+                .map(|s| s.kind == MobjKind::ArchVile)
+                .unwrap_or(false);
+            let tgt_is_vile = tgt_kind == MobjKind::ArchVile;
+            if (threshold == 0 || tgt_is_vile) && !src_is_vile {
+                let info = &crate::mobjinfo::MOBJINFO[tgt_kind as usize];
+                let see_state = info.see_state;
+                let enter_see = cur_state == info.spawn_state && see_state != StateNum::NULL;
+                if let Some(mo) = gs.mobjslab.get_mut(target) {
+                    mo.target = source;
+                    mo.threshold = 100;
+                    if enter_see {
+                        mo.state = see_state;
+                        mo.tics = crate::states::STATES[see_state.0 as usize].tics;
                     }
                 }
             }
@@ -327,121 +482,636 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
 }
 
 // ---------------------------------------------------------------------------
-// p_line_attack
+// Fixed-point path traverse (P_PathTraverse + PTR_AimTraverse/ShootTraverse)
 // ---------------------------------------------------------------------------
 
-/// Query the first actor a hitscan attack would strike.
-pub(crate) fn p_line_attack_target(
+/// Attack shot height: `z + (height>>1) + 8*FRACUNIT` (raw fixed).
+#[inline]
+fn hitscan_shootz(z: i32, height: i32) -> i32 {
+    z.wrapping_add(height >> 1).wrapping_add(8 << 16)
+}
+
+/// Two-sided line opening in raw fixed-point heights.
+struct LineOpen {
+    open_bottom: i32,
+    open_top: i32,
+    front_floor: i32,
+    front_ceil: i32,
+    back: Option<(i32, i32)>, // (back_floor, back_ceil)
+}
+
+fn line_open(level: &Level, ld: &doom_map::Linedef) -> Option<LineOpen> {
+    let front_sec = level
+        .sidedefs
+        .get(ld.right_sidedef as usize)
+        .and_then(|sd| level.sectors.get(sd.sector as usize))?;
+    let front_floor = i32::from(front_sec.floor_height) << 16;
+    let front_ceil = i32::from(front_sec.ceil_height) << 16;
+
+    let back = if ld.left_sidedef != doom_map::SIDEDEF_NONE {
+        level
+            .sidedefs
+            .get(ld.left_sidedef as usize)
+            .and_then(|sd| level.sectors.get(sd.sector as usize))
+            .map(|s| (i32::from(s.floor_height) << 16, i32::from(s.ceil_height) << 16))
+    } else {
+        None
+    };
+
+    let (open_bottom, open_top) = match back {
+        Some((bf, bc)) => (front_floor.max(bf), front_ceil.min(bc)),
+        None => (front_floor, front_ceil),
+    };
+    Some(LineOpen {
+        open_bottom,
+        open_top,
+        front_floor,
+        front_ceil,
+        back,
+    })
+}
+
+#[inline]
+fn is_sky_flat(name: &[u8; 8]) -> bool {
+    name[0].eq_ignore_ascii_case(&b'F')
+        && name[1] == b'_'
+        && name[2].eq_ignore_ascii_case(&b'S')
+        && name[3].eq_ignore_ascii_case(&b'K')
+        && name[4].eq_ignore_ascii_case(&b'Y')
+        && name[5] == b'1'
+}
+
+/// `PIT_AddLineIntercepts` (`p_maputl.c:566`) for one linedef.
+fn add_line_intercept(
+    level: &Level,
+    trace: &Divline,
+    ld_idx: usize,
+    out: &mut smallvec::SmallVec<[HitscanIntercept; 24]>,
+) {
+    let ld = &level.linedefs[ld_idx];
+    let (Some(v1), Some(v2)) = (
+        level.vertexes.get(ld.from_vertex as usize),
+        level.vertexes.get(ld.to_vertex as usize),
+    ) else {
+        return;
+    };
+    let v1x = i32::from(v1.x) << 16;
+    let v1y = i32::from(v1.y) << 16;
+    let v2x = i32::from(v2.x) << 16;
+    let v2y = i32::from(v2.y) << 16;
+
+    // Hitscan/melee traces always exceed 16 map units in some axis, so vanilla
+    // uses P_PointOnDivlineSide (never the short-trace P_PointOnLineSide path).
+    let s1 = p_point_on_divline_side(v1x, v1y, trace);
+    let s2 = p_point_on_divline_side(v2x, v2y, trace);
+    if s1 == s2 {
+        return; // line isn't crossed
+    }
+    let dl = Divline {
+        x: v1x,
+        y: v1y,
+        dx: v2x.wrapping_sub(v1x),
+        dy: v2y.wrapping_sub(v1y),
+    };
+    let frac = p_intercept_vector(trace, &dl);
+    if frac < 0 {
+        return; // behind source
+    }
+    out.push(HitscanIntercept {
+        frac,
+        kind: HitscanInterceptKind::Line(ld_idx),
+    });
+}
+
+/// `PIT_AddThingIntercepts` (`p_maputl.c:611`) for one actor.
+fn add_thing_intercept(
+    trace: &Divline,
+    handle: MobjHandle,
+    mo: &crate::mobj::Mobj,
+    out: &mut smallvec::SmallVec<[HitscanIntercept; 24]>,
+) {
+    let r = mo.radius.raw();
+    let (mx, my) = (mo.x.raw(), mo.y.raw());
+    // corner-to-corner crossection depending on trace direction
+    let tracepositive = (trace.dx ^ trace.dy) > 0;
+    let (x1, y1, x2, y2) = if tracepositive {
+        (mx - r, my + r, mx + r, my - r)
+    } else {
+        (mx - r, my - r, mx + r, my + r)
+    };
+    let s1 = p_point_on_divline_side(x1, y1, trace);
+    let s2 = p_point_on_divline_side(x2, y2, trace);
+    if s1 == s2 {
+        return;
+    }
+    let dl = Divline {
+        x: x1,
+        y: y1,
+        dx: x2.wrapping_sub(x1),
+        dy: y2.wrapping_sub(y1),
+    };
+    let frac = p_intercept_vector(trace, &dl);
+    if frac < 0 {
+        return;
+    }
+    out.push(HitscanIntercept {
+        frac,
+        kind: HitscanInterceptKind::Actor(handle),
+    });
+}
+
+/// Port of `P_PathTraverse` (`p_maputl.c:862`).  Collects ordered line/actor
+/// intercepts along `x1,y1 -> x2,y2` (raw fixed) and returns the effective
+/// `trace` divline (including the "don't side exactly on a line" nudge) so the
+/// caller can position puffs/blood exactly as vanilla does.  Intercepts are
+/// sorted ascending by `frac`.
+fn p_path_traverse(
     gs: &GameState,
-    source: MobjHandle,
-    angle: Bam,
-    range: Fixed16_16,
     level: Option<&Level>,
-    intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
-) -> Option<MobjHandle> {
-    let mo = gs.mobjslab.get(source)?;
-    let (sx, sy, shootz) = (
-        fixed_to_f32(mo.x),
-        fixed_to_f32(mo.y),
-        hitscan_shootz(mo.z, mo.height),
-    );
+    source: MobjHandle,
+    mut x1: i32,
+    mut y1: i32,
+    x2: i32,
+    y2: i32,
+    out: &mut smallvec::SmallVec<[HitscanIntercept; 24]>,
+) -> Divline {
+    out.clear();
 
-    let angle_cos = angle.cos().raw() as f32 / FIXED_ONE.raw() as f32;
-    let angle_sin = angle.sin().raw() as f32 / FIXED_ONE.raw() as f32;
-    let range_f = fixed_to_f32(range);
+    let Some(level) = level else {
+        // No geometry: test all shootable actors against the raw trace.
+        let trace = Divline {
+            x: x1,
+            y: y1,
+            dx: x2.wrapping_sub(x1),
+            dy: y2.wrapping_sub(y1),
+        };
+        for handle in gs.mobjslab.iter_handles() {
+            if handle == source {
+                continue;
+            }
+            let Some(mo) = gs.mobjslab.get(handle) else {
+                continue;
+            };
+            add_thing_intercept(&trace, handle, mo, out);
+        }
+        out.sort_by(|a, b| a.frac.cmp(&b.frac));
+        return trace;
+    };
 
-    if range_f <= 0.0 || (angle_cos.abs() < HITSCAN_EPSILON && angle_sin.abs() < HITSCAN_EPSILON) {
-        return None;
+    let bmaporgx = i32::from(level.blockmap.x_origin) << 16;
+    let bmaporgy = i32::from(level.blockmap.y_origin) << 16;
+    let bmapwidth = i32::from(level.blockmap.x_count);
+    let bmapheight = i32::from(level.blockmap.y_count);
+
+    // "don't side exactly on a line"
+    if ((x1.wrapping_sub(bmaporgx)) & MAPBLOCKSIZE_MASK) == 0 {
+        x1 = x1.wrapping_add(FRAC_ONE_I32);
+    }
+    if ((y1.wrapping_sub(bmaporgy)) & MAPBLOCKSIZE_MASK) == 0 {
+        y1 = y1.wrapping_add(FRAC_ONE_I32);
     }
 
-    let rdx = angle_cos * range_f;
-    let rdy = angle_sin * range_f;
-    collect_actor_hitscan_intercepts(gs, source, sx, sy, rdx, rdy, intercepts);
+    let trace = Divline {
+        x: x1,
+        y: y1,
+        dx: x2.wrapping_sub(x1),
+        dy: y2.wrapping_sub(y1),
+    };
 
-    if let Some(lv) = level {
-        for (linedef_idx, linedef) in lv.linedefs.iter().enumerate() {
-            let Some(v1) = lv.vertexes.get(linedef.from_vertex as usize) else {
-                continue;
-            };
-            let Some(v2) = lv.vertexes.get(linedef.to_vertex as usize) else {
-                continue;
-            };
+    let rx1 = x1.wrapping_sub(bmaporgx);
+    let ry1 = y1.wrapping_sub(bmaporgy);
+    let xt1 = rx1 >> MAPBLOCKSHIFT;
+    let yt1 = ry1 >> MAPBLOCKSHIFT;
+    let rx2 = x2.wrapping_sub(bmaporgx);
+    let ry2 = y2.wrapping_sub(bmaporgy);
+    let xt2 = rx2 >> MAPBLOCKSHIFT;
+    let yt2 = ry2 >> MAPBLOCKSHIFT;
 
-            if let Some(frac) = trace::ray_linedef_intersection(
-                sx,
-                sy,
-                rdx,
-                rdy,
-                v1.x as f32,
-                v1.y as f32,
-                v2.x as f32,
-                v2.y as f32,
-            ) {
-                if (0.0..=1.0).contains(&frac) {
-                    intercepts.push(HitscanIntercept {
-                        frac,
-                        kind: HitscanInterceptKind::Line(linedef_idx),
-                    });
+    let dx = x2.wrapping_sub(x1);
+    let dy = y2.wrapping_sub(y1);
+
+    let (mapxstep, mut ystep);
+    let partial_x;
+    if xt2 > xt1 {
+        mapxstep = 1;
+        partial_x = FRAC_ONE_I32 - (rx1 >> MAPBTOFRAC & (FRAC_ONE_I32 - 1));
+        ystep = fixed_div_raw(dy, dx.abs());
+    } else if xt2 < xt1 {
+        mapxstep = -1;
+        partial_x = rx1 >> MAPBTOFRAC & (FRAC_ONE_I32 - 1);
+        ystep = fixed_div_raw(dy, dx.abs());
+    } else {
+        mapxstep = 0;
+        partial_x = FRAC_ONE_I32;
+        ystep = 256 * FRAC_ONE_I32;
+    }
+    let mut yintercept = (ry1 >> MAPBTOFRAC).wrapping_add(fixed_mul_raw(partial_x, ystep));
+
+    let (mapystep, mut xstep);
+    let partial_y;
+    if yt2 > yt1 {
+        mapystep = 1;
+        partial_y = FRAC_ONE_I32 - (ry1 >> MAPBTOFRAC & (FRAC_ONE_I32 - 1));
+        xstep = fixed_div_raw(dx, dy.abs());
+    } else if yt2 < yt1 {
+        mapystep = -1;
+        partial_y = ry1 >> MAPBTOFRAC & (FRAC_ONE_I32 - 1);
+        xstep = fixed_div_raw(dx, dy.abs());
+    } else {
+        mapystep = 0;
+        partial_y = FRAC_ONE_I32;
+        xstep = 256 * FRAC_ONE_I32;
+    }
+    let mut xintercept = (rx1 >> MAPBTOFRAC).wrapping_add(fixed_mul_raw(partial_y, xstep));
+    let _ = (&mut ystep, &mut xstep);
+
+    let mut mapx = xt1;
+    let mut mapy = yt1;
+    let mut tested_lines: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
+    let mut visited: smallvec::SmallVec<[(i32, i32); 64]> = smallvec::SmallVec::new();
+
+    for _ in 0..64 {
+        if mapx >= 0 && mapx < bmapwidth && mapy >= 0 && mapy < bmapheight {
+            for ld_idx in level
+                .blockmap
+                .block_linedefs(mapx as usize, mapy as usize)
+            {
+                let ld_idx = ld_idx as usize;
+                if ld_idx >= level.linedefs.len() || tested_lines.contains(&ld_idx) {
+                    continue;
                 }
+                tested_lines.push(ld_idx);
+                add_line_intercept(level, &trace, ld_idx, out);
             }
+        }
+        visited.push((mapx, mapy));
+
+        if mapx == xt2 && mapy == yt2 {
+            break;
+        }
+        if (yintercept >> 16) == mapy {
+            yintercept = yintercept.wrapping_add(ystep);
+            mapx += mapxstep;
+        } else if (xintercept >> 16) == mapx {
+            xintercept = xintercept.wrapping_add(xstep);
+            mapy += mapystep;
         }
     }
 
-    sort_hitscan_intercepts(intercepts);
+    // Things (P_BlockThingsIterator): every blockmap-linked actor whose home
+    // cell was traversed.  Order is immaterial — the list is frac-sorted.
+    for handle in gs.mobjslab.iter_handles() {
+        if handle == source {
+            continue;
+        }
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            continue;
+        };
+        if mo.flags & flags::MF_NOBLOCKMAP != 0 {
+            continue; // not linked into the blockmap
+        }
+        let bx = (mo.x.raw().wrapping_sub(bmaporgx)) >> MAPBLOCKSHIFT;
+        let by = (mo.y.raw().wrapping_sub(bmaporgy)) >> MAPBLOCKSHIFT;
+        if visited.iter().any(|&(cx, cy)| cx == bx && cy == by) {
+            add_thing_intercept(&trace, handle, mo, out);
+        }
+    }
+
+    out.sort_by(|a, b| a.frac.cmp(&b.frac));
+    trace
+}
+
+// ---------------------------------------------------------------------------
+// P_SpawnPuff / P_SpawnBlood
+// ---------------------------------------------------------------------------
+
+/// Port of `P_SpawnPuff` (`p_mobj.c:881`).  `attackrange` is raw fixed.
+fn p_spawn_puff(gs: &mut GameState, level: Option<&Level>, x: i32, y: i32, z: i32, attackrange: i32) {
+    let z = z.wrapping_add(gs.p_subrandom() << 10);
+    let h = crate::spawn::p_spawn_mobj(
+        gs,
+        level,
+        Fixed16_16(x),
+        Fixed16_16(y),
+        Fixed16_16(z),
+        MobjKind::BulletPuff,
+    );
+    let r = (gs.p_random() & 3) as i16;
+    if let Some(mo) = gs.mobjslab.get_mut(h) {
+        mo.momz = FIXED_ONE;
+        mo.tics -= r;
+        if mo.tics < 1 {
+            mo.tics = 1;
+        }
+    }
+    // Don't make punches spark on the wall.
+    if attackrange == MELEERANGE.raw() {
+        let sn = StateNum(ids::S_PUFF3);
+        let tics = STATES[ids::S_PUFF3 as usize].tics;
+        if let Some(mo) = gs.mobjslab.get_mut(h) {
+            mo.state = sn;
+            mo.tics = tics;
+        }
+    }
+}
+
+/// Port of `P_SpawnBlood` (`p_mobj.c:908`).
+fn p_spawn_blood(gs: &mut GameState, level: Option<&Level>, x: i32, y: i32, z: i32, damage: i32) {
+    let z = z.wrapping_add(gs.p_subrandom() << 10);
+    let h = crate::spawn::p_spawn_mobj(
+        gs,
+        level,
+        Fixed16_16(x),
+        Fixed16_16(y),
+        Fixed16_16(z),
+        MobjKind::Blood,
+    );
+    let r = (gs.p_random() & 3) as i16;
+    if let Some(mo) = gs.mobjslab.get_mut(h) {
+        mo.momz = Fixed16_16(2 << 16);
+        mo.tics -= r;
+        if mo.tics < 1 {
+            mo.tics = 1;
+        }
+    }
+    if damage <= 12 && damage >= 9 {
+        set_mobj_state_raw(gs, h, ids::S_BLOOD2);
+    } else if damage < 9 {
+        set_mobj_state_raw(gs, h, ids::S_BLOOD3);
+    }
+}
+
+fn set_mobj_state_raw(gs: &mut GameState, h: MobjHandle, state: u16) {
+    let tics = STATES[state as usize].tics;
+    if let Some(mo) = gs.mobjslab.get_mut(h) {
+        mo.state = StateNum(state);
+        mo.tics = tics;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// P_AimLineAttack / P_LineAttack
+// ---------------------------------------------------------------------------
+
+/// Result of `P_AimLineAttack`: the autoaim vertical `slope` and the actor
+/// that was aimed at (if any).
+#[derive(Clone, Copy, Debug)]
+pub struct AimResult {
+    /// Vertical aim slope (raw fixed).  `0` when no target was acquired.
+    pub slope: i32,
+    /// The actor aimed at, or `None`.
+    pub linetarget: Option<MobjHandle>,
+}
+
+/// Port of `P_AimLineAttack` (`p_map.c:1075`).  Traces an autoaim ray and
+/// returns the vertical slope + `linetarget`.  Draws no RNG.
+pub fn p_aim_line_attack(
+    gs: &GameState,
+    source: MobjHandle,
+    angle: Bam,
+    distance: Fixed16_16,
+    level: Option<&Level>,
+) -> AimResult {
+    let none = AimResult {
+        slope: 0,
+        linetarget: None,
+    };
+    let Some(mo) = gs.mobjslab.get(source) else {
+        return none;
+    };
+    let t1x = mo.x.raw();
+    let t1y = mo.y.raw();
+    let shootz = hitscan_shootz(mo.z.raw(), mo.height.raw());
+    let dist_i = distance.to_int();
+    let x2 = t1x.wrapping_add(dist_i.wrapping_mul(angle.cos().raw()));
+    let y2 = t1y.wrapping_add(dist_i.wrapping_mul(angle.sin().raw()));
+    let attackrange = distance.raw();
 
     let mut topslope = AUTOAIM_TOP_SLOPE;
     let mut bottomslope = AUTOAIM_BOTTOM_SLOPE;
 
-    for intercept in intercepts.iter() {
-        let dist = intercept.frac * range_f;
-        if dist <= HITSCAN_EPSILON {
-            continue;
-        }
+    let mut intercepts = smallvec::SmallVec::new();
+    p_path_traverse(gs, level, source, t1x, t1y, x2, y2, &mut intercepts);
 
-        match intercept.kind {
-            HitscanInterceptKind::Line(linedef_idx) => {
-                let Some(lv) = level else {
+    for ic in intercepts.iter() {
+        match ic.kind {
+            HitscanInterceptKind::Line(ld_idx) => {
+                let Some(lvl) = level else {
                     continue;
                 };
-                let Some(linedef) = lv.linedefs.get(linedef_idx) else {
-                    continue;
+                let ld = &lvl.linedefs[ld_idx];
+                if !ld.is_two_sided() {
+                    return none; // stop
+                }
+                let Some(open) = line_open(lvl, ld) else {
+                    return none;
                 };
-
-                if !linedef.is_two_sided() {
-                    return None;
+                if open.open_bottom >= open.open_top {
+                    return none; // stop
                 }
-
-                let (open_bottom, open_top) = trace::line_opening(lv, linedef)?;
-                if open_top <= open_bottom {
-                    return None;
+                let dist = fixed_mul_raw(attackrange, ic.frac);
+                let floor_diff = open
+                    .back
+                    .map(|(bf, _)| open.front_floor != bf)
+                    .unwrap_or(true);
+                if floor_diff {
+                    let slope = fixed_div_raw(open.open_bottom.wrapping_sub(shootz), dist);
+                    if slope > bottomslope {
+                        bottomslope = slope;
+                    }
                 }
-
-                let open_bottom_slope = (open_bottom as f32 - shootz) / dist;
-                let open_top_slope = (open_top as f32 - shootz) / dist;
-
-                if open_bottom_slope > bottomslope {
-                    bottomslope = open_bottom_slope;
+                let ceil_diff = open
+                    .back
+                    .map(|(_, bc)| open.front_ceil != bc)
+                    .unwrap_or(true);
+                if ceil_diff {
+                    let slope = fixed_div_raw(open.open_top.wrapping_sub(shootz), dist);
+                    if slope < topslope {
+                        topslope = slope;
+                    }
                 }
-                if open_top_slope < topslope {
-                    topslope = open_top_slope;
-                }
-
                 if topslope <= bottomslope {
-                    return None;
+                    return none; // stop
                 }
             }
             HitscanInterceptKind::Actor(handle) => {
-                let Some(mo) = gs.mobjslab.get(handle) else {
+                let Some(th) = gs.mobjslab.get(handle) else {
                     continue;
                 };
-                let target_bottom_slope = (fixed_to_f32(mo.z) - shootz) / dist;
-                let target_top_slope = (fixed_to_f32(mo.z + mo.height) - shootz) / dist;
-
-                if target_top_slope < bottomslope || target_bottom_slope > topslope {
+                if handle == source || th.flags & flags::MF_SHOOTABLE == 0 {
                     continue;
                 }
+                let dist = fixed_mul_raw(attackrange, ic.frac);
+                let mut thingtopslope =
+                    fixed_div_raw(th.z.raw().wrapping_add(th.height.raw()).wrapping_sub(shootz), dist);
+                if thingtopslope < bottomslope {
+                    continue; // over
+                }
+                let mut thingbottomslope = fixed_div_raw(th.z.raw().wrapping_sub(shootz), dist);
+                if thingbottomslope > topslope {
+                    continue; // under
+                }
+                if thingtopslope > topslope {
+                    thingtopslope = topslope;
+                }
+                if thingbottomslope < bottomslope {
+                    thingbottomslope = bottomslope;
+                }
+                let aimslope = (thingtopslope.wrapping_add(thingbottomslope)) / 2;
+                return AimResult {
+                    slope: aimslope,
+                    linetarget: Some(handle),
+                };
+            }
+        }
+    }
 
-                return Some(handle);
+    none
+}
+
+/// Port of `P_LineAttack` (`p_map.c:1117`).  Fires along `angle` at the given
+/// vertical `slope`, spawning puffs on walls and blood on monsters, and
+/// applying damage.  Returns the actor hit (if any).
+pub fn p_line_attack(
+    gs: &mut GameState,
+    source: MobjHandle,
+    angle: Bam,
+    distance: Fixed16_16,
+    slope: i32,
+    damage: i32,
+    level: Option<&Level>,
+) -> Option<MobjHandle> {
+    let (t1x, t1y, shootz) = {
+        let mo = gs.mobjslab.get(source)?;
+        (mo.x.raw(), mo.y.raw(), hitscan_shootz(mo.z.raw(), mo.height.raw()))
+    };
+    let dist_i = distance.to_int();
+    let x2 = t1x.wrapping_add(dist_i.wrapping_mul(angle.cos().raw()));
+    let y2 = t1y.wrapping_add(dist_i.wrapping_mul(angle.sin().raw()));
+    let attackrange = distance.raw();
+    let aimslope = slope;
+
+    let mut intercepts = smallvec::SmallVec::new();
+    let trace = p_path_traverse(gs, level, source, t1x, t1y, x2, y2, &mut intercepts);
+
+    for ic in intercepts.iter().copied().collect::<smallvec::SmallVec<[HitscanIntercept; 24]>>() {
+        match ic.kind {
+            HitscanInterceptKind::Line(ld_idx) => {
+                // PTR_ShootTraverse — line case.
+                let lvl = level.expect("line intercepts require a level");
+                let ld = &lvl.linedefs[ld_idx];
+
+                let mut hit_line = !ld.is_two_sided();
+                if ld.is_two_sided() {
+                    if let Some(open) = line_open(lvl, ld) {
+                        let dist = fixed_mul_raw(attackrange, ic.frac);
+                        match open.back {
+                            None => {
+                                // e6y missed-back-side emulation.
+                                let s = fixed_div_raw(open.open_bottom.wrapping_sub(shootz), dist);
+                                if s > aimslope {
+                                    hit_line = true;
+                                }
+                                let s = fixed_div_raw(open.open_top.wrapping_sub(shootz), dist);
+                                if s < aimslope {
+                                    hit_line = true;
+                                }
+                            }
+                            Some((bf, bc)) => {
+                                if open.front_floor != bf {
+                                    let s =
+                                        fixed_div_raw(open.open_bottom.wrapping_sub(shootz), dist);
+                                    if s > aimslope {
+                                        hit_line = true;
+                                    }
+                                }
+                                if open.front_ceil != bc {
+                                    let s = fixed_div_raw(open.open_top.wrapping_sub(shootz), dist);
+                                    if s < aimslope {
+                                        hit_line = true;
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        hit_line = true;
+                    }
+                }
+
+                if !hit_line {
+                    continue; // shot passes through
+                }
+
+                // Position a bit closer to the wall.
+                let frac = ic.frac.wrapping_sub(fixed_div_raw(4 << 16, attackrange));
+                let x = trace.x.wrapping_add(fixed_mul_raw(trace.dx, frac));
+                let y = trace.y.wrapping_add(fixed_mul_raw(trace.dy, frac));
+                let z = shootz.wrapping_add(fixed_mul_raw(aimslope, fixed_mul_raw(frac, attackrange)));
+
+                // Don't shoot the sky.
+                let front_sec = lvl
+                    .sidedefs
+                    .get(ld.right_sidedef as usize)
+                    .and_then(|sd| lvl.sectors.get(sd.sector as usize));
+                if let Some(front) = front_sec
+                    && is_sky_flat(&front.ceil_flat)
+                {
+                    if z > (i32::from(front.ceil_height) << 16) {
+                        return None;
+                    }
+                    let back_sky = (ld.left_sidedef != doom_map::SIDEDEF_NONE)
+                        .then(|| {
+                            lvl.sidedefs
+                                .get(ld.left_sidedef as usize)
+                                .and_then(|sd| lvl.sectors.get(sd.sector as usize))
+                                .map(|s| is_sky_flat(&s.ceil_flat))
+                                .unwrap_or(false)
+                        })
+                        .unwrap_or(false);
+                    if back_sky {
+                        return None;
+                    }
+                }
+
+                p_spawn_puff(gs, level, x, y, z, attackrange);
+                return None; // stop
+            }
+            HitscanInterceptKind::Actor(handle) => {
+                let (thz, thh, thflags) = {
+                    let Some(th) = gs.mobjslab.get(handle) else {
+                        continue;
+                    };
+                    if handle == source || th.flags & flags::MF_SHOOTABLE == 0 {
+                        continue;
+                    }
+                    (th.z.raw(), th.height.raw(), th.flags)
+                };
+                let dist = fixed_mul_raw(attackrange, ic.frac);
+                let thingtopslope =
+                    fixed_div_raw(thz.wrapping_add(thh).wrapping_sub(shootz), dist);
+                if thingtopslope < aimslope {
+                    continue; // over
+                }
+                let thingbottomslope = fixed_div_raw(thz.wrapping_sub(shootz), dist);
+                if thingbottomslope > aimslope {
+                    continue; // under
+                }
+
+                // hit thing — position a bit closer.
+                let frac = ic.frac.wrapping_sub(fixed_div_raw(10 << 16, attackrange));
+                let x = trace.x.wrapping_add(fixed_mul_raw(trace.dx, frac));
+                let y = trace.y.wrapping_add(fixed_mul_raw(trace.dy, frac));
+                let z = shootz.wrapping_add(fixed_mul_raw(aimslope, fixed_mul_raw(frac, attackrange)));
+
+                if thflags & flags::MF_NOBLOOD != 0 {
+                    p_spawn_puff(gs, level, x, y, z, attackrange);
+                } else {
+                    p_spawn_blood(gs, level, x, y, z, damage);
+                }
+                if damage > 0 {
+                    damage_mobj(gs, handle, source, damage);
+                }
+                return Some(handle); // stop
             }
         }
     }
@@ -449,62 +1119,42 @@ pub(crate) fn p_line_attack_target(
     None
 }
 
-/// Hitscan attack with optional wall-occluded slope clipping.
-///
-/// Fires a ray from `source` in direction `angle` up to `range` map units.
-/// When `level` is `Some`, ordered line and actor intercepts clip the
-/// autoaim slope window Doom-style before selecting a target. When `level` is
-/// `None`, only actor intercepts are considered.
-///
-/// Returns `Some(handle)` if an actor was hit and damaged, `None` otherwise.
-///
-/// ⚡ Bolt Optimization:
-/// `intercepts` uses `SmallVec` to avoid heap allocations on the hitscan hot path.
-pub fn p_line_attack(
-    gs: &mut GameState,
-    source: MobjHandle,
-    angle: Bam,
-    range: Fixed16_16,
-    damage: i32,
-    level: Option<&Level>,
-    intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
-) -> Option<MobjHandle> {
-    let hit = p_line_attack_target(gs, source, angle, range, level, intercepts)?;
-    damage_mobj(gs, hit, source, damage);
-    Some(hit)
-}
-
 // ---------------------------------------------------------------------------
 // p_radius_attack
 // ---------------------------------------------------------------------------
 
-/// Splash damage from an explosion centered on `source`.
+/// Splash (concussion) damage from an explosion — a faithful port of vanilla
+/// `P_RadiusAttack` / `PIT_RadiusAttack` (`p_map.c`).
 ///
-/// Every live, shootable actor (except `source` itself) within `radius` map
-/// units (Euclidean distance) receives proportional damage that falls off
-/// linearly from `damage` at the center to 1 at the edge.
+/// * `spot` is the explosion center (the `bombspot`, e.g. the exploding barrel
+///   or rocket); it is passed to `P_DamageMobj` as the *inflictor* so knockback
+///   points away from the blast origin.
+/// * `source` is the `bombsource` — whoever gets kill credit / is retaliated
+///   against (for a barrel, the player who shot it; for a rocket, the shooter).
+///   May be `MobjHandle::NULL`.
+/// * `damage` is `bombdamage`: it doubles as the maximum blast **range** in map
+///   units, exactly as vanilla (`if (dist >= bombdamage) return`).
 ///
-/// When `level` is `Some`, a LOS check is performed (via `trace_ray` with
-/// `check_actors=false`) to ensure walls don't block the blast. When `None`,
-/// no LOS check is performed (fallback for unit tests).
+/// For each shootable actor, vanilla computes
+/// `dist = max(|dx|,|dy|); dist = (dist - thing->radius) >> FRACBITS;` (clamped
+/// at 0), skips it when `dist >= bombdamage`, and — if `P_CheckSight(thing,
+/// spot)` succeeds — deals `bombdamage - dist`. The Cyberdemon and Spider
+/// Mastermind take no concussion damage. When `level` is `None` (unit tests)
+/// the sight check is skipped.
 pub fn p_radius_attack(
     gs: &mut GameState,
+    spot: MobjHandle,
     source: MobjHandle,
     damage: i32,
-    radius: Fixed16_16,
     level: Option<&Level>,
 ) {
-    let radius_int = radius.to_int();
-    if radius_int <= 0 {
-        return;
-    }
-    let radius_f = radius_int as f32;
-
-    // Extract source position before iterating.
-    let Some(mo) = gs.mobjslab.get(source) else {
-        return;
+    // Explosion center.
+    let (sx, sy) = {
+        let Some(mo) = gs.mobjslab.get(spot) else {
+            return;
+        };
+        (mo.x.raw(), mo.y.raw())
     };
-    let (sx, sy) = (mo.x.to_int(), mo.y.to_int());
 
     // Collect iteration boundaries up front.
     let initial_slot_count = gs.mobjslab.slot_count();
@@ -519,64 +1169,55 @@ pub fn p_radius_attack(
             continue;
         }
 
-        if handle == source {
-            continue;
-        }
-
         // Extract actor data.
-        let Some(mo) = gs.mobjslab.get(handle) else {
-            continue;
+        let (ax, ay, radius, alive, shootable, kind) = {
+            let Some(mo) = gs.mobjslab.get(handle) else {
+                continue;
+            };
+            (
+                mo.x.raw(),
+                mo.y.raw(),
+                mo.radius.raw(),
+                mo.health > 0,
+                mo.flags & flags::MF_SHOOTABLE != 0,
+                mo.kind,
+            )
         };
-        let (ax, ay, alive, shootable) = (
-            mo.x.to_int(),
-            mo.y.to_int(),
-            mo.health > 0,
-            mo.flags & flags::MF_SHOOTABLE != 0,
-        );
 
         if !alive || !shootable {
             continue;
         }
 
-        // Euclidean distance.
-        let dx_f = (ax - sx) as f32;
-        let dy_f = (ay - sy) as f32;
-
-        // Box bounding check to avoid expensive .sqrt() for distant actors.
-        if dx_f.abs() >= radius_f || dy_f.abs() >= radius_f {
+        // Boss spider and cyborg take no damage from concussion.
+        if kind == MobjKind::Cyberdemon || kind == MobjKind::SpiderMastermind {
             continue;
         }
 
-        let dist_f = (dx_f * dx_f + dy_f * dy_f).sqrt();
+        // dist = max(|dx|,|dy|); dist = (dist - thing->radius) >> FRACBITS.
+        let dx = ax.wrapping_sub(sx).wrapping_abs();
+        let dy = ay.wrapping_sub(sy).wrapping_abs();
+        let dmax = if dx > dy { dx } else { dy };
+        let mut dist = dmax.wrapping_sub(radius) >> 16;
+        if dist < 0 {
+            dist = 0;
+        }
+        if dist >= damage {
+            continue; // out of range
+        }
 
-        if dist_f >= radius_f {
+        // Must be in direct path (vanilla `P_CheckSight(thing, bombspot)`).
+        if let Some(lv) = level
+            && !crate::sight::p_check_sight(gs, lv, handle, spot)
+        {
             continue;
         }
 
-        // LOS check: ensure no wall blocks the blast line.
-        if let Some(lv) = level {
-            let total_dist = dist_f.max(1.0);
-            let cos_a = dx_f / total_dist;
-            let sin_a = dy_f / total_dist;
-            let los = trace::trace_ray(
-                lv,
-                sx,
-                sy,
-                cos_a,
-                sin_a,
-                total_dist,
-                trace::ActorCheck::Ignore,
-            );
-            if matches!(los.hit, TraceHit::Wall { .. }) {
-                continue; // Wall blocks the blast.
-            }
-        }
-
-        let dist_i = dist_f as i32;
-        let actual = (((damage as i64 * (radius_int - dist_i) as i64) / radius_int as i64)
-            .clamp(i32::MIN as i64, i32::MAX as i64) as i32)
-            .max(1);
-        damage_mobj(gs, handle, source, actual);
+        // Vanilla `PIT_RadiusAttack` applies `bombdamage - dist` directly.
+        // `dist` is a non-negative i32 and the `dist >= damage` guard above
+        // ensures `0 <= dist < damage`, so `damage - dist` is in `[1, damage]`
+        // and cannot i32-overflow — this subsumes #730's overflow guard, which
+        // fixed the now-removed proportional `damage * (radius - dist)` multiply.
+        damage_mobj_source(gs, handle, spot, source, damage - dist);
     }
 }
 
@@ -590,10 +1231,25 @@ mod tests {
     use crate::mobj::Mobj;
     use crate::player::PlayerState;
     use crate::state::GameState;
-    use crate::states::ids;
     use doom_types::TicCmd;
     use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
+
+    /// Test shim preserving the historical `p_line_attack` signature (with an
+    /// `intercepts` scratch buffer and no explicit slope).  Forwards to the
+    /// vanilla `super::p_line_attack` with a level (horizontal) `slope == 0`,
+    /// which is correct for the same-height targets these tests use.
+    fn p_line_attack(
+        gs: &mut GameState,
+        source: MobjHandle,
+        angle: Bam,
+        range: Fixed16_16,
+        damage: i32,
+        level: Option<&Level>,
+        _intercepts: &mut smallvec::SmallVec<[HitscanIntercept; 16]>,
+    ) -> Option<MobjHandle> {
+        super::p_line_attack(gs, source, angle, range, 0, damage, level)
+    }
 
     // -----------------------------------------------------------------------
     // Helpers — adapted from actions.rs tests
@@ -699,7 +1355,94 @@ mod tests {
     }
 
     #[test]
-    fn damage_wakes_monster_and_marks_justhit() {
+    fn damage_applies_knockback_thrust_along_inflictor_axis() {
+        // Vanilla P_DamageMobj: thrust = damage*(FRACUNIT>>3)*100/mass along the
+        // angle from inflictor to target.  Inflictor east of nothing / target to
+        // the +x side => positive momx, zero momy.
+        Bam::init_trig_tables();
+        let mut gs = make_game_state();
+        let player = gs.player.handle; // at origin, acts as inflictor
+        let trooper = spawn_trooper(&mut gs, 100, 0); // due east of inflictor
+        gs.rng.set_index(3);
+
+        damage_mobj(&mut gs, trooper, player, 5);
+
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
+        // thrust = 5*8192*100/100 = 40960; FixedMul(40960, finecosine[0]) ~= 40959.
+        assert!(
+            mo.momx.raw() > 1000,
+            "thrust should push the target away from the inflictor (+x), got {}",
+            mo.momx.raw()
+        );
+        assert!(
+            mo.momy.raw().abs() < mo.momx.raw() / 100,
+            "thrust is essentially axis-aligned east, got momy={}",
+            mo.momy.raw()
+        );
+    }
+
+    #[test]
+    fn lethal_damage_credits_a_kill_and_corpses_stop_being_shootable() {
+        // Vanilla P_KillMobj: single-player credits players[0].killcount for any
+        // MF_COUNTKILL death, clears MF_SHOOTABLE, and sets MF_CORPSE.
+        let mut gs = make_game_state();
+        let player = gs.player.handle;
+        let trooper = spawn_trooper(&mut gs, 100, 0); // 20 health, MF_COUNTKILL
+        assert_eq!(gs.player.kill_count, 0);
+
+        damage_mobj(&mut gs, trooper, player, 50); // lethal
+
+        assert_eq!(gs.player.kill_count, 1, "kill must be credited");
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
+        assert!(mo.health <= 0, "target must be dead");
+        assert_eq!(
+            mo.flags & flags::MF_SHOOTABLE,
+            0,
+            "corpse must lose MF_SHOOTABLE so later shots pass through"
+        );
+        assert_ne!(mo.flags & flags::MF_CORPSE, 0, "corpse must gain MF_CORPSE");
+    }
+
+    #[test]
+    fn zombie_death_drops_a_clip() {
+        // MT_POSSESSED (Trooper) drops MT_CLIP on death (p_inter.c:749).
+        let mut gs = make_game_state();
+        let player = gs.player.handle;
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        let before = gs.mobjslab.iter_handles().count();
+
+        damage_mobj(&mut gs, trooper, player, 50);
+
+        let clip = gs
+            .mobjslab
+            .iter_handles()
+            .filter_map(|h| gs.mobjslab.get(h))
+            .find(|m| m.kind == MobjKind::Clip && m.flags & flags::MF_DROPPED != 0);
+        assert!(clip.is_some(), "zombieman corpse must drop a dropped Clip");
+        assert_eq!(
+            gs.mobjslab.iter_handles().count(),
+            before + 1,
+            "exactly one dropped item spawns"
+        );
+    }
+
+    #[test]
+    fn damage_with_null_inflictor_applies_no_thrust() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        damage_mobj(&mut gs, trooper, MobjHandle::NULL, 5);
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
+        assert_eq!(mo.momx.raw(), 0);
+        assert_eq!(mo.momy.raw(), 0);
+    }
+
+    #[test]
+    fn damage_wakes_monster_without_pain_leaves_justhit_clear() {
+        // Vanilla `P_DamageMobj`: the retaliation block (`target = source;
+        // threshold = BASETHRESHOLD; wake into seestate`) runs on ANY hit, but
+        // `MF_JUSTHIT` is set ONLY inside the pain block (when the pain roll
+        // succeeds). Here the roll (220) fails the trooper's pain chance (200),
+        // so the monster wakes and retaliates but must NOT be flagged JUSTHIT.
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
         let player = gs.player.handle;
@@ -719,13 +1462,18 @@ mod tests {
             "monster should retaliate against the attacker"
         );
         assert_eq!(
-            mo.threshold, 60,
-            "monster should enter alert threshold after being hit"
+            mo.threshold, 100,
+            "monster should enter BASETHRESHOLD alert after being hit"
         );
-        assert_ne!(
+        assert_eq!(
             mo.flags & flags::MF_JUSTHIT,
             0,
-            "monster should be marked JUSTHIT for immediate retaliation"
+            "JUSTHIT must NOT be set when the pain roll fails (vanilla sets it \
+             only inside the pain block)"
+        );
+        assert_eq!(
+            mo.reactiontime, 0,
+            "damage must reset reactiontime to 0 (\"we're awake now\")"
         );
         assert_ne!(
             spawn_state, see_state,
@@ -734,6 +1482,33 @@ mod tests {
         assert_eq!(
             mo.state, see_state,
             "idle monster should wake into see_state when damaged"
+        );
+    }
+
+    #[test]
+    fn damage_marks_justhit_only_on_pain_success() {
+        // When the pain roll succeeds (roll < painchance), vanilla sets
+        // MF_JUSTHIT so the victim fights back at once.
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        let player = gs.player.handle;
+
+        // Find an RNG index whose next byte is < the trooper's pain chance so
+        // the pain roll succeeds.
+        let pain_chance = crate::mobjinfo::MOBJINFO[MobjKind::Trooper as usize].pain_chance;
+        for idx in 0..=255u32 {
+            gs.rng.set_index(idx);
+            if gs.rng.clone().next_byte() < pain_chance {
+                break;
+            }
+        }
+        damage_mobj(&mut gs, trooper, player, 5);
+
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
+        assert_ne!(
+            mo.flags & flags::MF_JUSTHIT,
+            0,
+            "monster should be flagged JUSTHIT when the pain roll succeeds"
         );
     }
 
@@ -918,11 +1693,13 @@ mod tests {
         );
     }
 
-    /// Regression: damage_mobj kills via p_set_mobj_state, which fires the entry
-    /// action (A_Scream).  If we ever revert to direct state assignment A_Scream
-    /// will silently stop firing and MF_SCREAMED will not be set.
+    /// Regression: death runs through p_set_mobj_state, which fires each
+    /// frame's entry action.  In vanilla `info.c` A_Scream is on DIE2 (not the
+    /// death-entry frame DIE1), so it fires once the state machine advances a
+    /// frame — not immediately on the killing blow.
     #[test]
     fn lethal_damage_fires_a_scream_via_p_set_mobj_state() {
+        use crate::states::ids;
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
 
@@ -938,6 +1715,23 @@ mod tests {
 
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 20);
 
+        // Enters death at DIE1 (no action in vanilla); scream not yet fired.
+        assert_eq!(
+            gs.mobjslab
+                .get(trooper)
+                .expect("value must exist in test")
+                .state,
+            crate::mobj::StateNum(ids::S_POSS_DIE1),
+            "lethal damage must enter the death sequence at DIE1"
+        );
+
+        // Advancing one death frame (to DIE2) fires A_Scream via the entry action.
+        crate::tic::p_set_mobj_state(
+            &mut gs,
+            trooper,
+            crate::mobj::StateNum(ids::S_POSS_DIE2),
+            None,
+        );
         assert_ne!(
             gs.mobjslab
                 .get(trooper)
@@ -945,7 +1739,7 @@ mod tests {
                 .flags
                 & crate::mobj::flags::MF_SCREAMED,
             0,
-            "lethal damage must set MF_SCREAMED (A_Scream fired by p_set_mobj_state)"
+            "A_Scream on DIE2 must set MF_SCREAMED (fired by p_set_mobj_state)"
         );
     }
 
@@ -1016,11 +1810,13 @@ mod tests {
     fn line_attack_skips_dead_actors() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        // Kill the trooper first.
-        gs.mobjslab
-            .get_mut(trooper)
-            .expect("value must exist in test")
-            .health = 0;
+        // Kill the trooper first.  A real corpse (P_KillMobj) also clears
+        // MF_SHOOTABLE, which is what the shoot-traverse checks.
+        {
+            let mo = gs.mobjslab.get_mut(trooper).expect("value must exist in test");
+            mo.health = 0;
+            mo.flags &= !flags::MF_SHOOTABLE;
+        }
 
         let src = gs.player.handle;
         // Even if trig tables were initialized and the geometry lined up,
@@ -1080,8 +1876,8 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 50, 0); // 50 units east of origin
 
         let player_handle = gs.player.handle;
-        // Explode at origin with radius 200 — trooper is well within range.
-        p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(200), None);
+        // Explode at origin (bombdamage 100) — trooper 50 units away is in range.
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
 
         let health = gs
             .mobjslab
@@ -1249,7 +2045,7 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 500, 0);
 
         let player_handle = gs.player.handle;
-        p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
 
         let health = gs
             .mobjslab
@@ -1448,28 +2244,28 @@ mod tests {
         let player_h = gs.mobjslab.alloc(player_mo);
         gs.player = PlayerState::pistol_start(player_h);
 
-        // Trooper directly on top of the player — trig tables don't matter
-        // because the ray has zero direction (cos=sin=0).
-        let trooper = spawn_trooper(&mut gs, 64, 1);
+        doom_types::Bam::init_trig_tables();
+        // Trooper essentially on top of the player, directly ahead — a
+        // point-blank hit.
+        let trooper = spawn_trooper(&mut gs, 96, 0);
 
         let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
             &mut gs,
             player_h,
             Bam::ZERO,
-            Fixed16_16::from_int(10),
+            Fixed16_16::from_int(64),
             5,
             Some(&level),
             &mut intercepts,
         );
-        // With uninitialized trig, result is None.
-        assert!(result.is_none());
-        assert_eq!(
+        assert_eq!(result, Some(trooper), "point-blank target must be hit");
+        assert!(
             gs.mobjslab
                 .get(trooper)
                 .expect("value must exist in test")
-                .health,
-            20
+                .health
+                < 20
         );
     }
 
@@ -1530,8 +2326,10 @@ mod tests {
         let player_h = gs.mobjslab.alloc(player_mo);
         gs.player = PlayerState::pistol_start(player_h);
 
-        let trooper = spawn_trooper(&mut gs, 512, -21);
-        let angle = Bam(((-8i32) << 18) as u32);
+        // Vanilla P_LineAttack fires straight down `angle` (no horizontal
+        // autoaim); a target on that axis is hit.
+        let trooper = spawn_trooper(&mut gs, 512, 0);
+        let angle = Bam::ZERO;
 
         let mut intercepts = smallvec::SmallVec::new();
         let result = p_line_attack(
@@ -1659,17 +2457,17 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn radius_attack_euclidean_distance() {
-        // Test that Euclidean distance is used, not Manhattan.
-        // Actor at (70, 70) from source at (0, 0):
-        //   Manhattan distance = 140
-        //   Euclidean distance = sqrt(70^2 + 70^2) ≈ 98.99
-        // With radius=100: Manhattan says no (140 >= 100), Euclidean says yes (99 < 100).
+    fn radius_attack_uses_max_axis_distance() {
+        // Vanilla `PIT_RadiusAttack` uses `dist = max(|dx|,|dy|)` (Chebyshev),
+        // NOT Euclidean. Actor at (90, 90) from the blast at (0, 0):
+        //   Euclidean distance = sqrt(90^2 + 90^2) ≈ 127  (>= 100, would MISS)
+        //   max-axis distance   = 90, minus radius 20 = 70 (< 100, HITS)
+        // So a vanilla max-axis blast damages it; the old Euclidean path did not.
         let mut gs = make_game_state();
-        let trooper = spawn_trooper(&mut gs, 70, 70);
+        let trooper = spawn_trooper(&mut gs, 90, 90);
 
         let player_handle = gs.player.handle;
-        p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
 
         let health = gs
             .mobjslab
@@ -1678,30 +2476,55 @@ mod tests {
             .health;
         assert!(
             health < 20,
-            "Euclidean distance ~99 < radius 100 → should take damage, health={health}"
+            "max-axis dist 90-20=70 < bombdamage 100 → must take damage, health={health}"
         );
     }
 
     #[test]
-    fn radius_attack_no_damage_outside_euclidean_radius() {
-        // Actor at (80, 80) from source at (0, 0):
-        //   Euclidean distance = sqrt(80^2 + 80^2) ≈ 113.14
-        // With radius=100: outside Euclidean radius → no damage.
+    fn radius_attack_credits_bombsource_not_spot() {
+        // Vanilla `A_Explode` passes `bombspot->target` as the bombsource, so a
+        // monster caught in a barrel/rocket blast retaliates against the actor
+        // that set it off (the player), never against the exploding thing. This
+        // pins the demo-sync fix where the DEMO1 barrel splash made the imp
+        // target the (dead) barrel instead of the player.
         let mut gs = make_game_state();
-        let trooper = spawn_trooper(&mut gs, 80, 80);
+        let player = gs.player.handle;
+        // Bomb spot 400 units from the player so the player is out of the blast.
+        let spot = spawn_trooper(&mut gs, 400, 0);
+        // Victim 40 units from the spot — inside the 128 blast.
+        let victim = spawn_trooper(&mut gs, 440, 0);
+        gs.mobjslab
+            .get_mut(victim)
+            .expect("value must exist in test")
+            .health = 200;
+
+        p_radius_attack(&mut gs, spot, player, 128, None);
+
+        let mo = gs.mobjslab.get(victim).expect("value must exist in test");
+        assert!(mo.health < 200, "victim must take splash damage");
+        assert_eq!(
+            mo.target, player,
+            "victim must retaliate against the bombsource (player), not the spot"
+        );
+    }
+
+    #[test]
+    fn radius_attack_no_damage_beyond_max_axis_range() {
+        // Vanilla out-of-range gate: `if ((max(|dx|,|dy|) - radius) >> FRACBITS
+        // >= bombdamage) return`. Actor at (140, 0), radius 20:
+        //   dist = 140 - 20 = 120 >= bombdamage 100 → no damage.
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 140, 0);
 
         let player_handle = gs.player.handle;
-        p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
 
         let health = gs
             .mobjslab
             .get(trooper)
             .expect("value must exist in test")
             .health;
-        assert_eq!(
-            health, 20,
-            "Euclidean distance ~113 >= radius 100 → no damage"
-        );
+        assert_eq!(health, 20, "max-axis dist 120 >= bombdamage 100 → no damage");
     }
 
     #[test]
@@ -1723,7 +2546,7 @@ mod tests {
             .health = 200;
 
         let player_handle = gs.player.handle;
-        p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
 
         let close_health = gs
             .mobjslab
@@ -1742,9 +2565,12 @@ mod tests {
     }
 
     #[test]
-    fn radius_attack_los_blocked_by_wall() {
-        // With a level, walls should block splash damage.
-        let level = make_combat_test_level(); // wall at y=64
+    fn radius_attack_los_blocked_hides_target() {
+        // Vanilla `PIT_RadiusAttack` only damages a thing when `P_CheckSight
+        // (thing, bombspot)` succeeds. A REJECT table that marks the two actors'
+        // sectors mutually invisible makes `p_check_sight` return false, so the
+        // blast must not reach the trooper even though it is well within range.
+        let level = make_reject_blocked_level();
         let mut gs = GameState::new("test");
         let mut player_mo = Mobj::new(
             MobjKind::Player,
@@ -1757,16 +2583,10 @@ mod tests {
         let player_h = gs.mobjslab.alloc(player_mo);
         gs.player = PlayerState::pistol_start(player_h);
 
-        // Trooper at (64, 100) — behind the wall at y=64, within blast radius.
-        let trooper = spawn_trooper(&mut gs, 64, 100);
+        // Trooper 32 units away — within the blast, but hidden by the reject.
+        let trooper = spawn_trooper(&mut gs, 64, 32);
 
-        p_radius_attack(
-            &mut gs,
-            player_h,
-            200,
-            Fixed16_16::from_int(200),
-            Some(&level),
-        );
+        p_radius_attack(&mut gs, player_h, MobjHandle::NULL, 200, Some(&level));
 
         let health = gs
             .mobjslab
@@ -1775,14 +2595,15 @@ mod tests {
             .health;
         assert_eq!(
             health, 20,
-            "trooper behind wall should not take splash damage"
+            "trooper hidden by the reject table must not take splash damage"
         );
     }
 
     #[test]
     fn radius_attack_damages_in_los() {
-        // With a level, actors with clear LOS should take damage.
-        let level = make_combat_test_level(); // wall at y=64
+        // With a clear line of sight (all-visible reject), an in-range actor
+        // takes splash damage.
+        let level = make_combat_test_level();
         let mut gs = GameState::new("test");
         let mut player_mo = Mobj::new(
             MobjKind::Player,
@@ -1795,16 +2616,10 @@ mod tests {
         let player_h = gs.mobjslab.alloc(player_mo);
         gs.player = PlayerState::pistol_start(player_h);
 
-        // Trooper at (64, 32) — in front of the wall, clear LOS.
+        // Trooper at (64, 32) — clear LOS, within the blast.
         let trooper = spawn_trooper(&mut gs, 64, 32);
 
-        p_radius_attack(
-            &mut gs,
-            player_h,
-            100,
-            Fixed16_16::from_int(200),
-            Some(&level),
-        );
+        p_radius_attack(&mut gs, player_h, MobjHandle::NULL, 100, Some(&level));
 
         let health = gs
             .mobjslab
@@ -1817,15 +2632,92 @@ mod tests {
         );
     }
 
+    /// Minimal single-sector level whose REJECT marks the sector as unable to
+    /// see itself, so `p_check_sight` returns false for any pair of actors in
+    /// it. Nodes are empty, so sector resolution falls back to the actors'
+    /// subsector (0 -> sector 0) and the reject check fires.
+    fn make_reject_blocked_level() -> doom_map::Level {
+        use doom_map::{Blockmap, Linedef, Reject, SIDEDEF_NONE, Sector, Seg, Sidedef, Ssector, Vertex};
+
+        let verts = vec![Vertex { x: 0, y: 0 }, Vertex { x: 128, y: 0 }];
+        let sds = vec![Sidedef {
+            x_offset: 0,
+            y_offset: 0,
+            upper_texture: [0; 8],
+            lower_texture: [0; 8],
+            middle_texture: [0; 8],
+            sector: 0,
+        }];
+        let lds = vec![Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0,
+            special: 0,
+            tag: 0,
+            right_sidedef: 0,
+            left_sidedef: SIDEDEF_NONE,
+        }];
+        let segs = vec![Seg {
+            from_vertex: 0,
+            to_vertex: 1,
+            angle: 0,
+            linedef: 0,
+            direction: 0,
+            offset: 0,
+        }];
+        let ssectors = vec![Ssector {
+            seg_count: 1,
+            first_seg: 0,
+        }];
+        let secs = vec![Sector {
+            floor_height: 0,
+            ceil_height: 128,
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: 0,
+        }];
+
+        let mut bm_raw = Vec::new();
+        bm_raw.extend_from_slice(&0i16.to_le_bytes());
+        bm_raw.extend_from_slice(&0i16.to_le_bytes());
+        bm_raw.extend_from_slice(&1u16.to_le_bytes());
+        bm_raw.extend_from_slice(&1u16.to_le_bytes());
+        bm_raw.extend_from_slice(&5u16.to_le_bytes());
+        bm_raw.extend_from_slice(&0x0000u16.to_le_bytes());
+        bm_raw.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_raw).expect("blockmap parse");
+
+        // Reject bit (0,0) set => sector 0 cannot see sector 0 (all blocked).
+        let reject = Reject::parse_lump(&[0x01u8], 1).expect("reject parse");
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: lds,
+            sidedefs: sds,
+            vertexes: verts,
+            segs,
+            ssectors,
+            nodes: vec![],
+            sectors: secs,
+            reject,
+            blockmap,
+        }
+    }
+
+    /// Regression for #730: a huge `bombdamage` (`i32::MAX`) must not
+    /// i32-overflow or panic. M1's vanilla `damage - dist` formula keeps the
+    /// applied value in `[1, damage]`, subsuming the original overflow guard.
     #[test]
     fn havoc_test_radius_attack_overflow_fix() {
         let mut gs = make_game_state();
         let player_handle = gs.player.handle;
 
         let damage = i32::MAX;
-        let radius = Fixed16_16::from_int(100);
 
-        // This should not panic
-        p_radius_attack(&mut gs, player_handle, damage, radius, None);
+        // This should not panic.
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, damage, None);
     }
 }

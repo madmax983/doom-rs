@@ -158,14 +158,26 @@ impl SoundRequest {
 }
 
 /// Sound propagation and event queues.
+///
+/// Mirrors vanilla Doom's `P_RecursiveSound` state exactly:
+/// - `sound_gen` is the global `validcount`, incremented once per `P_NoiseAlert`.
+/// - `sound_valid[sec]` is the per-sector `validcount` stamp.
+/// - `sound_traversed[sec]` is the per-sector `soundtraversed` value, i.e.
+///   `soundblocks + 1` — the number of `ML_SOUNDBLOCK` lines crossed to reach
+///   the sector, plus one.  A sector may be re-entered within the same flood if
+///   it is reached at a strictly-lower block depth (see `recursive_sound`).
 #[derive(Clone, Debug, Default)]
 pub struct SoundPropagation {
     /// Per-sector sound target: which actor made noise that this sector "heard".
     /// Indexed by sector index. `None` = no noise has reached this sector.
     pub sound_targets: Vec<Option<MobjHandle>>,
-    /// Per-sector generation counter for flood-fill visited tracking.
-    pub sound_traversed: Vec<u32>,
-    /// Current sound generation counter.
+    /// Per-sector `validcount` stamp (vanilla `sec->validcount`).
+    pub sound_valid: Vec<u32>,
+    /// Per-sector `soundtraversed` = `soundblocks + 1` (vanilla
+    /// `sec->soundtraversed`).  Only meaningful when `sound_valid[sec]` equals
+    /// the current `sound_gen`.
+    pub sound_traversed: Vec<i32>,
+    /// Global `validcount`, incremented once per `P_NoiseAlert`.
     pub sound_gen: u32,
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,

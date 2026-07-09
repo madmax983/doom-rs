@@ -30,6 +30,7 @@
 //! ```
 
 use doom_map::Level;
+use doom_types::mobj_kind::MobjKind;
 use doom_types::{ANG90, Bam, Fixed16_16, TicCmd, bt};
 
 use crate::mobj::{MobjHandle, StateNum, flags};
@@ -49,8 +50,15 @@ pub const PLAYER_SPEED_SCALE: i32 = 2048;
 /// Doom original: `0xE800` stored as a fixed-point fraction.
 pub const FRICTION: Fixed16_16 = Fixed16_16(0x0000_E800);
 
-/// Maximum horizontal velocity per axis (15 map units).
-pub const MAXMOVE: Fixed16_16 = Fixed16_16(15 << 16);
+/// Maximum horizontal velocity per axis (30 map units).
+///
+/// Doom original: `p_local.h` `MAXMOVE (30*FRACUNIT)`.
+pub const MAXMOVE: Fixed16_16 = Fixed16_16(30 << 16);
+
+/// Downward acceleration applied per tic to airborne, gravity-affected actors.
+///
+/// Doom original: `p_local.h` `GRAVITY (FRACUNIT)`.
+pub const GRAVITY: Fixed16_16 = Fixed16_16(1 << 16);
 
 // ---------------------------------------------------------------------------
 // p_set_mobj_state — canonical state transition (port of P_SetMobjState)
@@ -72,25 +80,51 @@ pub fn p_set_mobj_state(
     new_state: StateNum,
     level: Option<&Level>,
 ) -> bool {
-    // S_NULL means the actor is done — caller should remove it.
-    if new_state == StateNum::NULL {
-        return false;
-    }
-
-    let action = match crate::states::STATES.get(new_state.0 as usize) {
-        Some(entry) => {
-            if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.state = new_state;
-                mo.tics = entry.tics;
-            }
-            entry.action
+    // Port of vanilla `P_SetMobjState`'s `do { ... } while (!mobj->tics)` loop:
+    // a state with `tics == 0` chains immediately to its `next_state` within the
+    // same call, firing every intermediate action (and consuming their RNG).
+    //
+    // `guard` mirrors nothing in vanilla 1.9 (which has no cycle limit) but
+    // protects against a malformed all-zero-tic state cycle hanging the sim.
+    let mut state = new_state;
+    let mut guard = 0u32;
+    loop {
+        // S_NULL means the actor is done — caller should remove it.
+        if state == StateNum::NULL {
+            return false;
         }
-        None => return false,
-    };
 
-    // Fire action on state entry (needs &mut self — all borrows released above).
-    if action != crate::actions::Action::NoAction as u8 {
-        crate::actions::dispatch_action(gs, handle, action, level);
+        let entry = match crate::states::STATES.get(state.0 as usize) {
+            Some(entry) => *entry,
+            None => return false,
+        };
+
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.state = state;
+            mo.tics = entry.tics;
+        }
+
+        // Fire action on state entry (needs &mut self — borrow released above).
+        if entry.action != crate::actions::Action::NoAction as u8 {
+            crate::actions::dispatch_action(gs, handle, entry.action, level);
+        }
+
+        // Re-read tics: the action may have changed state/tics (e.g. via a
+        // nested transition). Vanilla loops while the current tics are 0.
+        let tics = match gs.mobjslab.get(handle) {
+            Some(mo) => mo.tics,
+            // Mobj vanished during the action — nothing more to chain.
+            None => return true,
+        };
+        if tics != 0 {
+            break;
+        }
+
+        state = entry.next_state;
+        guard += 1;
+        if guard > 1024 {
+            break;
+        }
     }
 
     true
@@ -117,24 +151,63 @@ enum TickMobjResult {
 /// - Skips dead `MF_COUNTKILL` actors (corpses don't need AI processing,
 ///   but still need state machine advancement for death animations).
 fn tick_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> TickMobjResult {
-    // --- Phase 1: Momentum-based position update for missiles ---
-    // In Doom's P_MobjThinker, missiles advance by momentum EVERY tic,
-    // before the state machine countdown. This is separate from the full
-    // projectile collision system in p_move_projectiles.
+    // --- Phase 1: Missile momentum + collision (vanilla P_XYMovement / P_ZMovement) ---
+    // In `P_MobjThinker`, a missile advances by its momentum EVERY tic, BEFORE
+    // its state machine, through the same swept `P_XYMovement` path monsters
+    // use: it steps via `P_TryMove` (whose `PIT_CheckThing` missile branch
+    // damages a shootable actor it overlaps, drawing `(P_Random()%8+1)*damage`)
+    // and calls `P_ExplodeMissile` on a blocked step, then `P_ZMovement`
+    // explodes it on the floor/ceiling. This replaces the old naive
+    // `mo.x += momx` integration plus the separate, non-swept
+    // `p_move_projectiles` stepper — which moved missiles twice per tic, ignored
+    // z, and used an unswept AABB test, so a fireball reached and struck its
+    // target several tics early (DEMO3/E1M7 hit the player at lt192 instead of
+    // vanilla's lt206).
+    {
+        let is_missile = gs
+            .mobjslab
+            .get(handle)
+            .map(|m| m.flags & flags::MF_MISSILE != 0)
+            .unwrap_or(false);
+        if is_missile {
+            // momentum movement (vanilla gate: momx || momy; skulls only for AI)
+            let has_momentum = gs
+                .mobjslab
+                .get(handle)
+                .map(|m| m.momx != Fixed16_16::ZERO || m.momy != Fixed16_16::ZERO)
+                .unwrap_or(false);
+            if has_momentum {
+                p_xy_movement_missile(gs, handle, level);
+            }
+            // z movement — only while still a missile (P_XYMovement may have just
+            // exploded it, clearing MF_MISSILE).
+            let still_missile = gs
+                .mobjslab
+                .get(handle)
+                .map(|m| m.flags & flags::MF_MISSILE != 0)
+                .unwrap_or(false);
+            if still_missile {
+                p_z_movement_missile(gs, handle, level);
+            }
+        }
+    }
+
+    // --- Phase 1b: Monster / thing momentum integration (vanilla P_XYMovement) ---
+    // In `P_MobjThinker` (p_mobj.c), ANY mobj carrying momentum runs
+    // `P_XYMovement` BEFORE its state machine (the AI) advances. Missiles are
+    // handled by Phase 1 above and the player by
+    // `p_move_player`; this covers monsters and anything holding residual
+    // thrust momentum (from `P_DamageMobj`) or a Lost Soul skull-fly charge.
+    // Vanilla `P_Move` does NOT create walk momentum, so an idle monster has
+    // zero momentum here and this is a cheap no-op; a shot monster's thrust
+    // momentum is integrated into position and decayed by friction each tic,
+    // matching vanilla's per-tic drift exactly.
     {
         let Some(mo) = gs.mobjslab.get(handle) else {
             return TickMobjResult::Remove;
         };
-        if mo.flags & flags::MF_MISSILE != 0 {
-            let momx = mo.momx;
-            let momy = mo.momy;
-            let momz = mo.momz;
-            // Release the shared borrow, take a mutable one.
-            if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.x += momx;
-                mo.y += momy;
-                mo.z += momz;
-            }
+        if mo.flags & flags::MF_MISSILE == 0 {
+            p_xy_movement_mobj(gs, handle, level);
         }
     }
 
@@ -186,29 +259,64 @@ fn tick_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> T
 ///
 /// The player mobj is skipped (its state machine is managed separately
 /// by `tick_player`).
-pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
-    // Collect iteration boundaries to avoid borrow conflicts and guarantee determinism.
-    // We only process mobjs that existed at the start of the tic.
-    let initial_slot_count = gs.mobjslab.slot_count();
-    let initial_generation = gs.mobjslab.next_generation();
+/// Snapshot every live actor handle ordered by ascending `generation`.
+///
+/// Vanilla `P_RunThinkers` walks the thinker list in INSERTION (creation)
+/// order — `P_AddThinker` appends each new thinker to the tail. Our slab's
+/// monotonic `generation` counter reproduces that order exactly: an actor's
+/// generation is its global creation index. Iterating by raw slot index
+/// instead would tick actors in free-list-reuse order, so a missile that
+/// occupies a recycled low slot would think BEFORE the monsters it was created
+/// after — shifting which `P_Random` byte its damage roll consumes (e.g. an imp
+/// fireball rolling a different `(P_Random()%8+1)*3`) and desyncing from vanilla
+/// even though the total per-tic draw count matches.
+fn actors_by_generation(slab: &crate::mobj::MobjSlab) -> Vec<MobjHandle> {
+    let mut handles: Vec<MobjHandle> = (0..slab.slot_count())
+        .filter_map(|i| slab.handle_at(i))
+        .collect();
+    // Generations are globally unique, so the ordering is total and stable.
+    handles.sort_unstable_by_key(|h| h.generation);
+    handles
+}
 
+pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
+    // Process every actor that existed at the start of the tic, then the
+    // this-tic-spawned missiles, all in creation (generation) order.
+    let initial_generation = gs.mobjslab.next_generation();
+    tick_existing_mobjs_in_gen_range(gs, level, 0, initial_generation, initial_generation);
+    tick_same_tic_missiles(gs, level, initial_generation);
+}
+
+/// Tick every actor that existed at tic start (`generation < initial_generation`)
+/// whose `generation` falls in `[gen_lo, gen_hi)`, in ascending generation order.
+///
+/// Splitting the tic-start actors by generation lets `tick_world` interleave the
+/// sector-light pass at the vanilla thinker-list position (after setup monsters,
+/// before gameplay-spawned actors). `[0, initial_generation)` ticks them all.
+fn tick_existing_mobjs_in_gen_range(
+    gs: &mut GameState,
+    level: Option<&Level>,
+    gen_lo: u32,
+    gen_hi: u32,
+    initial_generation: u32,
+) {
     let player_handle = gs.player.handle;
     let is_nightmare = gs.skill == crate::spawn::Skill::Nightmare;
 
-    for i in 0..initial_slot_count {
-        let Some(handle) = gs.mobjslab.handle_at(i) else {
-            continue;
-        };
-        // Skip mobjs spawned during this iteration.
-        if handle.generation >= initial_generation {
-            continue;
-        }
+    // Snapshot the tic-start actors and tick them in creation (generation)
+    // order to match vanilla thinker order (see `actors_by_generation`).
+    let tick_order: Vec<MobjHandle> = actors_by_generation(&gs.mobjslab)
+        .into_iter()
+        // Only actors that existed at tic start; skip the player (tick_player).
+        .filter(|h| {
+            h.generation < initial_generation
+                && h.generation >= gen_lo
+                && h.generation < gen_hi
+                && *h != player_handle
+        })
+        .collect();
 
-        // Skip the player mobj — it's handled by tick_player.
-        if handle == player_handle {
-            continue;
-        }
-
+    for handle in tick_order {
         // Skip freed mobjs (may have been removed by an earlier iteration).
         if gs.mobjslab.get(handle).is_none() {
             continue;
@@ -243,6 +351,43 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
     }
 }
 
+fn tick_same_tic_missiles(gs: &mut GameState, level: Option<&Level>, initial_generation: u32) {
+    let player_handle = gs.player.handle;
+    // --- Same-tic missile spawn step (vanilla P_RunThinkers ordering) ---
+    // Vanilla appends a newly spawned thinker to the END of the list, so a
+    // missile a monster launches from its `A_*Attack` (fired DURING the loop
+    // above) is reached and thinker'd on the SAME tic — taking its first
+    // `P_XYMovement` step immediately. The loop above only visited mobjs that
+    // existed at tic start (`generation < initial_generation`), so those
+    // monster-fired missiles would otherwise sit still for a tic and reach
+    // their target one step late (a fireball would strike the player a tic off
+    // vanilla). Give every missile spawned this tic its first move now.
+    // Player-fired missiles are spawned in `tick_player` (before this function)
+    // so they already have `generation < initial_generation` and moved above;
+    // missiles never spawn further missiles, so one follow-up pass is exact.
+    // Tick this-tic-spawned missiles in generation (creation) order too, so a
+    // monster that fires several missiles in one tic advances them in the same
+    // order vanilla's tail-appended thinker list would.
+    let missile_order: Vec<MobjHandle> = actors_by_generation(&gs.mobjslab)
+        .into_iter()
+        .filter(|h| h.generation >= initial_generation && *h != player_handle)
+        .collect();
+    for handle in missile_order {
+        let is_missile = gs
+            .mobjslab
+            .get(handle)
+            .map(|m| m.flags & flags::MF_MISSILE != 0)
+            .unwrap_or(false);
+        if !is_missile {
+            continue;
+        }
+        let result = tick_mobj(gs, handle, level);
+        if matches!(result, TickMobjResult::Remove) {
+            gs.mobjslab.free(handle);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // tick_world — the master per-tic function
 // ---------------------------------------------------------------------------
@@ -261,25 +406,69 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
 /// 7. `tick_lights` + `tick_sector_lights` — sector light effects
 /// 8. `tick_scrollers` — scrolling wall textures
 /// 9. `tick_conveyors` — conveyor belt forces
-/// 10. `p_move_projectiles` — projectile movement and collision
+/// 10. (Missiles are advanced per-actor inside `tick_all_mobjs`, step 1.)
 /// 11. Increment `gs.stats.level_time`
 ///
 /// This does NOT process player input — call `tick_player` before this.
 pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
-    // 1. Advance all actor state machines.
-    tick_all_mobjs(gs, level.as_deref());
+    let initial_generation = gs.mobjslab.next_generation();
 
-    // 2-6. Sector movers (doors, ceilings, floors, lifts, platforms).
-    if let Some(lv) = level.as_deref_mut() {
-        crate::specials::tick_doors(gs, lv);
-        crate::specials::tick_ceilings(gs, lv);
-        crate::specials::tick_floors(gs, lv);
-        crate::specials::tick_lifts(gs, lv);
-        crate::specials::tick_platforms(gs, lv);
+    // Vanilla's single thinker list runs in creation order:
+    //   [setup map things]  [setup sector specials]  [gameplay spawns]
+    // Sector-light thinkers (which draw P_Random) were created during
+    // P_SpawnSpecials — after every map monster but before any actor spawned
+    // during play. When the setup boundary has been frozen we reproduce that
+    // ordering: tick setup monsters, then the sector-light pass, then
+    // gameplay-spawned actors. Otherwise fall back to the legacy "all mobjs,
+    // then lights" order (unit tests and callers that never freeze it).
+    let boundary = gs.thinker_setup_boundary;
+    if boundary != u32::MAX {
+        // 1a. Setup-era actors (created by P_SetupLevel).
+        tick_existing_mobjs_in_gen_range(gs, level.as_deref(), 0, boundary, initial_generation);
 
-        // 7. Light effects.
-        crate::specials::tick_lights(gs, lv);
-        crate::specials::tick_sector_lights(gs, lv);
+        // 1b. Setup-time sector-light thinkers tick here, at their vanilla
+        //     thinker-list position (before any gameplay-spawned actor).
+        if let Some(lv) = level.as_deref_mut() {
+            crate::specials::tick_lights(gs, lv);
+            crate::specials::tick_sector_lights(gs, lv);
+        }
+
+        // 1c. Gameplay-era actors (missiles, etc.) and this-tic-spawned
+        //     missiles, all after the setup-time lights.
+        tick_existing_mobjs_in_gen_range(
+            gs,
+            level.as_deref(),
+            boundary,
+            initial_generation,
+            initial_generation,
+        );
+        tick_same_tic_missiles(gs, level.as_deref(), initial_generation);
+
+        // 2-6. Sector movers (doors, ceilings, floors, lifts, platforms).
+        //      RNG-neutral; kept after the actor passes as before.
+        if let Some(lv) = level.as_deref_mut() {
+            crate::specials::tick_doors(gs, lv);
+            crate::specials::tick_ceilings(gs, lv);
+            crate::specials::tick_floors(gs, lv);
+            crate::specials::tick_lifts(gs, lv);
+            crate::specials::tick_platforms(gs, lv);
+        }
+    } else {
+        // 1. Advance all actor state machines.
+        tick_all_mobjs(gs, level.as_deref());
+
+        // 2-6. Sector movers (doors, ceilings, floors, lifts, platforms).
+        if let Some(lv) = level.as_deref_mut() {
+            crate::specials::tick_doors(gs, lv);
+            crate::specials::tick_ceilings(gs, lv);
+            crate::specials::tick_floors(gs, lv);
+            crate::specials::tick_lifts(gs, lv);
+            crate::specials::tick_platforms(gs, lv);
+
+            // 7. Light effects.
+            crate::specials::tick_lights(gs, lv);
+            crate::specials::tick_sector_lights(gs, lv);
+        }
     }
 
     // 8. Scrolling walls (no level mutation needed).
@@ -288,8 +477,9 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
     // 9. Conveyor belts: push actors standing in conveyor sectors.
     crate::specials::tick_conveyors(gs, level.as_deref());
 
-    // 10. Move projectiles: advance missile actors and check collisions.
-    crate::projectile::p_move_projectiles(gs, level.as_deref());
+    // 10. Missiles are advanced inside `tick_all_mobjs` (vanilla `P_MobjThinker`
+    //     runs `P_XYMovement`/`P_ZMovement` per missile in thinker order), so
+    //     there is no longer a separate projectile-stepping pass here.
 
     // 11. Increment level time.
     gs.stats.level_time = gs.stats.level_time.wrapping_add(1);
@@ -317,6 +507,40 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
         gs.player.use_down = false;
         return;
     }
+
+    // Sector specials — vanilla `P_PlayerThink` runs `P_PlayerInSpecialSector`
+    // BEFORE the player mobj's position/z is integrated for this tic (position
+    // integration happens later in `P_MobjThinker`, after `P_PlayerThink`).
+    // In doom-rs `p_move_player` integrates the player's z inline, so the check
+    // must run FIRST — sampling the position/z left over from the previous tic,
+    // exactly as vanilla does. Sampling after `p_move_player` would see the z
+    // one tic early (e.g. reaching a nukage floor mid-descent) and apply
+    // spurious floor damage vanilla does not. `leveltime` is unchanged by this
+    // ordering (it is incremented later, in `tick_world`).
+    if let Some(lv) = level.as_deref_mut() {
+        crate::specials::p_player_in_special_sector(gs, lv);
+    }
+
+    // Capture the player's position BEFORE this tic's movement is integrated.
+    //
+    // Vanilla `P_MovePlayer` only sets the player's momentum (`P_Thrust`); the
+    // position itself is integrated later in `P_XYMovement`, which runs in
+    // `P_RunThinkers` — AFTER `P_MovePsprites`. doom-rs instead integrates the
+    // player's position inline here in `p_move_player`. So when the weapon
+    // psprite action functions run (`A_FirePistol` etc., in `tick_psprites`
+    // below), vanilla samples the player origin from the END of the PREVIOUS
+    // tic (this tic's angle is already applied, but the position is not yet
+    // integrated), whereas a naive doom-rs would sample this tic's post-move
+    // position — one movement step ahead. That one-tic-late origin skews every
+    // hitscan's `P_LineAttack` / knockback `R_PointToAngle2(player, target)`.
+    //
+    // Preserve vanilla timing by running `tick_psprites` against the pre-move
+    // position (with this tic's freshly-applied angle) and restoring the real
+    // post-move position afterward. See the `tick_psprites` call below.
+    let pre_move_pos = gs
+        .mobjslab
+        .get(gs.player.handle)
+        .map(|mo| (mo.x, mo.y, mo.z, mo.subsector));
 
     // Movement + attack (immutable level borrow).
     p_move_player(gs, cmd, level.as_deref_mut());
@@ -348,30 +572,33 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
         }
     }
 
-    crate::weapons::tick_psprites(gs, cmd, level.as_deref());
-
-    // Sector specials: periodic player floor damage, etc. (immutable level borrow).
-    if let Some(lv) = level.as_deref() {
-        // Damage floors are handled by the periodic Doom path; the legacy
-        // per-tic helper is kept for isolated tests/compat only.
-        crate::specials::tick_sector_damage(gs, lv);
+    // Weapon psprites (vanilla `P_MovePsprites`). Vanilla runs this against the
+    // player's pre-integration position (see `pre_move_pos` above), so restore
+    // that position for the duration of the psprite tick — keeping this tic's
+    // already-applied angle and momentum — then put the real post-move position
+    // back so `tick_world` and the per-tic snapshot observe the current origin.
+    let post_move_pos = gs
+        .mobjslab
+        .get(gs.player.handle)
+        .map(|mo| (mo.x, mo.y, mo.z, mo.subsector));
+    if let Some((x, y, z, subsector)) = pre_move_pos
+        && let Some(mo) = gs.mobjslab.get_mut(gs.player.handle)
+    {
+        mo.x = x;
+        mo.y = y;
+        mo.z = z;
+        mo.subsector = subsector;
     }
 
-    // Secret sector detection (special type 9): when the player is standing
-    // on a secret sector, increment their secret_count and clear the sector
-    // special so it only counts once.
-    if !gs.player.is_dead() {
-        if let Some(ref mut lv) = level {
-            let player_z = gs.mobjslab.get(gs.player.handle).map(|mo| mo.z.to_int());
-            if let Some(pz) = player_z {
-                for sector in &mut lv.sectors {
-                    if sector.special == 9 && pz == sector.floor_height as i32 {
-                        gs.player.secret_count += 1;
-                        sector.special = 0;
-                    }
-                }
-            }
-        }
+    crate::weapons::tick_psprites(gs, cmd, level.as_deref());
+
+    if let Some((x, y, z, subsector)) = post_move_pos
+        && let Some(mo) = gs.mobjslab.get_mut(gs.player.handle)
+    {
+        mo.x = x;
+        mo.y = y;
+        mo.z = z;
+        mo.subsector = subsector;
     }
 }
 
@@ -490,6 +717,24 @@ impl GameState {
 fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
     let handle = gs.player.handle;
 
+    // Vanilla `onground` (P_MovePlayer): the player may only accelerate while
+    // resting on the floor. Computed from the floor under the *current*
+    // position (the previous tic's `floorz`), before any movement this tic.
+    // With no level (unit tests) we treat the player as grounded, preserving
+    // the historical always-thrust behaviour those tests assert.
+    let onground = match level.as_deref() {
+        Some(lv) => gs
+            .mobjslab
+            .get(handle)
+            .and_then(|mo| {
+                let (z, x, y) = (mo.z, mo.x, mo.y);
+                crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
+                    .map(|(floorz, _)| z <= floorz)
+            })
+            .unwrap_or(true),
+        None => true,
+    };
+
     // Thrust block: apply turn + acceleration, then release borrow.
     {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
@@ -499,75 +744,152 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         // 1. Turn: cmd.angle_turn is 16-bit BAM; shift to 32-bit BAM space.
         mo.angle = mo.angle + Bam((cmd.angle_turn as i32 as u32).wrapping_shl(16));
 
-        // 2. Forward / backward thrust.
-        if cmd.forward_move != 0 {
+        // 2. Forward / backward thrust — only while on the ground.
+        if cmd.forward_move != 0 && onground {
             let angle = mo.angle;
             p_thrust(mo, angle, cmd.forward_move);
         }
 
         // 3. Strafe: thrust perpendicular (90 degrees left of facing direction).
-        if cmd.side_move != 0 {
+        if cmd.side_move != 0 && onground {
             let strafe_angle = mo.angle - ANG90;
             p_thrust(mo, strafe_angle, cmd.side_move);
         }
     }
 
-    // 4. Compute proposed position, then collision-test (needs shared borrow).
+    // 4. P_XYMovement: clamp momentum to MAXMOVE, then step-and-collide.
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
     let old_x = mo.x;
     let old_y = mo.y;
-    let new_x = mo.x + mo.momx;
-    let new_y = mo.y + mo.momy;
-    let mut moved = match level.as_deref() {
-        Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
-        None => true,
-    };
-    let mut final_x = new_x;
-    let mut final_y = new_y;
 
-    if !moved {
-        if let Some(lv) = level.as_deref() {
-            let (sx, sy) =
-                crate::movement::p_slide_move(&gs.mobjslab, handle, old_x, old_y, new_x, new_y, lv);
-            if sx != old_x || sy != old_y {
-                moved = true;
-                final_x = sx;
-                final_y = sy;
-            }
-        }
-    }
-
-    // 5. Apply position + friction + clamp.
     {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
             return;
         };
-        if moved {
-            mo.x = final_x;
-            mo.y = final_y;
-            mo.momx = final_x - old_x;
-            mo.momy = final_y - old_y;
-        }
-        mo.momx = mo.momx.fixed_mul(FRICTION);
-        mo.momy = mo.momy.fixed_mul(FRICTION);
         mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
         mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
     }
 
-    if let Some(lv) = level.as_deref()
-        && let Some((support_floor, subsector)) =
-            crate::movement::support_state_at(&gs.mobjslab, handle, final_x, final_y, lv)
-        && let Some(mo) = gs.mobjslab.get_mut(handle)
-    {
-        mo.z = support_floor;
-        if let Some(subsector) = subsector {
-            mo.subsector = subsector as u32;
+    // Vanilla P_XYMovement move-stepping: split moves whose magnitude exceeds
+    // MAXMOVE/2 into halves (P_TryMove per step), sliding along walls on a
+    // blocked step. With no level (unit tests) apply the momentum directly.
+    match level.as_deref() {
+        Some(lv) => {
+            let (mut xmove, mut ymove) = {
+                let mo = gs.mobjslab.get(handle).expect("player exists");
+                (mo.momx.raw(), mo.momy.raw())
+            };
+            let half = (MAXMOVE.raw()) / 2;
+            loop {
+                let (ptryx, ptryy);
+                // Vanilla checks only the positive overflow bound here.
+                if xmove > half || ymove > half {
+                    let mo = gs.mobjslab.get(handle).expect("player exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove / 2);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove / 2);
+                    xmove >>= 1;
+                    ymove >>= 1;
+                } else {
+                    let mo = gs.mobjslab.get(handle).expect("player exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove);
+                    xmove = 0;
+                    ymove = 0;
+                }
+
+                if !crate::movement::p_try_move_commit(&mut gs.mobjslab, handle, ptryx, ptryy, lv) {
+                    // Blocked: player slides along the wall.
+                    crate::movement::p_slide_move_vanilla(&mut gs.mobjslab, handle, lv);
+                }
+
+                if xmove == 0 && ymove == 0 {
+                    break;
+                }
+            }
+        }
+        None => {
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.x += mo.momx;
+                mo.y += mo.momy;
+            }
         }
     }
 
-    if moved && (final_x != old_x || final_y != old_y) {
+    let (final_x, final_y) = {
+        let mo = gs.mobjslab.get(handle).expect("player exists");
+        (mo.x, mo.y)
+    };
+
+    // Floor height under the (new) position, needed both for vanilla's
+    // "no friction while airborne" rule and for P_ZMovement below.
+    let support = level.as_deref().and_then(|lv| {
+        crate::movement::support_state_at(&gs.mobjslab, handle, final_x, final_y, lv)
+    });
+
+    // 5. Friction (P_XYMovement) + clamp. Momentum is already the post-slide
+    //    velocity (P_SlideMove updated it); do NOT recompute it from the net
+    //    displacement, which would discard the tangential slide component.
+    {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+
+        // Vanilla P_XYMovement applies friction only when the actor is resting
+        // on the floor (`mo->z <= mo->floorz`); an airborne actor keeps its full
+        // horizontal momentum. `mo.z` here is still this tic's starting z (the
+        // Z step runs afterwards), matching the p_mobj.c ordering. When we have
+        // no level (unit tests) fall back to the historical always-friction path.
+        let on_ground = match support {
+            Some((floorz, _)) => mo.z <= floorz,
+            None => true,
+        };
+        if on_ground {
+            // STOPSPEED zeroing: with no player input and sub-STOPSPEED speed,
+            // vanilla snaps momentum to zero instead of applying friction.
+            let stopspeed = Fixed16_16(0x1000);
+            let below_stop = mo.momx > -stopspeed
+                && mo.momx < stopspeed
+                && mo.momy > -stopspeed
+                && mo.momy < stopspeed;
+            if below_stop && cmd.forward_move == 0 && cmd.side_move == 0 {
+                mo.momx = Fixed16_16::ZERO;
+                mo.momy = Fixed16_16::ZERO;
+            } else {
+                mo.momx = mo.momx.fixed_mul(FRICTION);
+                mo.momy = mo.momy.fixed_mul(FRICTION);
+            }
+        }
+        mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
+        mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
+    }
+
+    if let Some((support_floor, subsector)) = support
+        && let Some(mo) = gs.mobjslab.get_mut(handle)
+    {
+        if let Some(subsector) = subsector {
+            mo.subsector = subsector as u32;
+        }
+        // Vanilla P_ZMovement (floor half): advance z by momz, then either land
+        // on the floor (clamp + kill downward momentum) or, when airborne,
+        // accelerate downward under gravity. The first tic of a fall uses
+        // `-2*GRAVITY` (`momz == 0` case) exactly as in p_mobj.c, so stepping
+        // off a ledge descends gradually instead of snapping to the low floor.
+        mo.z += mo.momz;
+        if mo.z <= support_floor {
+            if mo.momz < Fixed16_16::ZERO {
+                mo.momz = Fixed16_16::ZERO;
+            }
+            mo.z = support_floor;
+        } else if mo.momz == Fixed16_16::ZERO {
+            mo.momz = -(GRAVITY + GRAVITY);
+        } else {
+            mo.momz -= GRAVITY;
+        }
+    }
+
+    if final_x != old_x || final_y != old_y {
         if let Some(lv) = level {
             crate::linedef_dispatch::check_cross_lines(
                 gs,
@@ -601,6 +923,408 @@ fn p_thrust(mo: &mut crate::mobj::Mobj, angle: Bam, move_units: i8) {
     let thrust = Fixed16_16::from_raw(move_units as i32 * PLAYER_SPEED_SCALE);
     mo.momx += angle.cos().fixed_mul(thrust);
     mo.momy += angle.sin().fixed_mul(thrust);
+}
+
+// ---------------------------------------------------------------------------
+// P_XYMovement — non-player mobj momentum integration
+// ---------------------------------------------------------------------------
+
+/// Port of vanilla `P_XYMovement` (`p_mobj.c`) for NON-PLAYER, NON-MISSILE
+/// mobjs — monsters and any thing carrying momentum.
+///
+/// The player runs its own inline copy in `p_move_player` (which additionally
+/// wall-slides and gates the STOPSPEED zeroing on player input); missiles run
+/// `p_xy_movement_missile`. This handles the remaining actors: it
+/// integrates `momx/momy` into position (with `P_TryMove` collision, zeroing
+/// momentum on a blocked step exactly as vanilla does for non-player,
+/// non-missile things) and then applies STOPSPEED zeroing / `FRICTION` decay.
+///
+/// Crucially, `P_Move` never creates walk momentum, so a monster only reaches
+/// the friction path here when it holds residual thrust momentum (set by
+/// `P_DamageMobj`) or a Lost Soul skull-fly charge — reproducing vanilla's
+/// per-tic drift-and-decay of a shot monster.
+fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let (momx0, momy0, flags0) = {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        (mo.momx, mo.momy, mo.flags)
+    };
+
+    // Vanilla: with no momentum, only MF_SKULLFLY does anything — the skull
+    // slammed into something, so drop the flag and return to its spawn state.
+    if momx0 == Fixed16_16::ZERO && momy0 == Fixed16_16::ZERO {
+        if flags0 & flags::MF_SKULLFLY != 0 {
+            let spawn_state = {
+                let mo = gs.mobjslab.get(handle).expect("mobj exists");
+                crate::mobjinfo::MOBJINFO[mo.kind as usize].spawn_state
+            };
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.flags &= !flags::MF_SKULLFLY;
+                mo.momx = Fixed16_16::ZERO;
+                mo.momy = Fixed16_16::ZERO;
+                mo.momz = Fixed16_16::ZERO;
+            }
+            p_set_mobj_state(gs, handle, spawn_state, level);
+        }
+        return;
+    }
+
+    // Clamp momentum to MAXMOVE.
+    {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+        mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
+        mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
+    }
+
+    // Step-and-move loop (splits steps larger than MAXMOVE/2, as vanilla does).
+    match level {
+        Some(lv) => {
+            let (mut xmove, mut ymove) = {
+                let mo = gs.mobjslab.get(handle).expect("mobj exists");
+                (mo.momx.raw(), mo.momy.raw())
+            };
+            let half = MAXMOVE.raw() / 2;
+            loop {
+                let (ptryx, ptryy);
+                if xmove > half || ymove > half {
+                    let mo = gs.mobjslab.get(handle).expect("mobj exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove / 2);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove / 2);
+                    xmove >>= 1;
+                    ymove >>= 1;
+                } else {
+                    let mo = gs.mobjslab.get(handle).expect("mobj exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove);
+                    xmove = 0;
+                    ymove = 0;
+                }
+
+                if !crate::movement::p_try_move_commit(&mut gs.mobjslab, handle, ptryx, ptryy, lv) {
+                    // Vanilla: a non-player, non-missile blocked move stops dead
+                    // (`mo->momx = mo->momy = 0`). Missiles never reach here.
+                    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                        mo.momx = Fixed16_16::ZERO;
+                        mo.momy = Fixed16_16::ZERO;
+                    }
+                }
+
+                if xmove == 0 && ymove == 0 {
+                    break;
+                }
+            }
+        }
+        None => {
+            // No level (unit tests): integrate momentum directly.
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.x += mo.momx;
+                mo.y += mo.momy;
+            }
+        }
+    }
+
+    // Friction / STOPSPEED. Missiles and skull-fly charges never get friction.
+    let (flags1, mz) = {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        (mo.flags, mo.z)
+    };
+    if flags1 & (flags::MF_MISSILE | flags::MF_SKULLFLY) != 0 {
+        return;
+    }
+
+    // No friction while airborne (`mo->z > mo->floorz`). With no level we fall
+    // back to the always-friction path (matching the unit-test convention).
+    if let Some(lv) = level {
+        let (x, y) = {
+            let mo = gs.mobjslab.get(handle).expect("mobj exists");
+            (mo.x, mo.y)
+        };
+        if let Some((floorz, _)) = crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
+            && mz > floorz
+        {
+            return;
+        }
+    }
+
+    // STOPSPEED zeroing / FRICTION decay. For a non-player thing the vanilla
+    // player-input clause is vacuously satisfied, so sub-STOPSPEED momentum
+    // snaps to zero and everything else is multiplied by FRICTION (0xE800).
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        let stopspeed = Fixed16_16(0x1000);
+        let below_stop = mo.momx > -stopspeed
+            && mo.momx < stopspeed
+            && mo.momy > -stopspeed
+            && mo.momy < stopspeed;
+        if below_stop {
+            mo.momx = Fixed16_16::ZERO;
+            mo.momy = Fixed16_16::ZERO;
+        } else {
+            mo.momx = mo.momx.fixed_mul(FRICTION);
+            mo.momy = mo.momy.fixed_mul(FRICTION);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Missile movement — vanilla P_XYMovement / P_ZMovement missile branches
+// ---------------------------------------------------------------------------
+
+/// Vanilla `P_XYMovement` for an `MF_MISSILE` actor: clamp momentum to
+/// `MAXMOVE`, then step-and-collide through `P_TryMove` in the same halving
+/// loop the player and monsters use. On a blocked step the missile is exploded
+/// (`P_ExplodeMissile`) instead of stopping/sliding. Missiles never get
+/// friction, so there is no post-loop decay.
+fn p_xy_movement_missile(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    // Clamp momentum to MAXMOVE (vanilla `if (momx > MAXMOVE) momx = MAXMOVE;`).
+    {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+        mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
+        mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
+    }
+
+    match level {
+        Some(lv) => {
+            let (mut xmove, mut ymove) = {
+                let mo = gs.mobjslab.get(handle).expect("missile exists");
+                (mo.momx.raw(), mo.momy.raw())
+            };
+            let half = MAXMOVE.raw() / 2;
+            loop {
+                let (ptryx, ptryy);
+                // Vanilla checks only the positive overflow bound here.
+                if xmove > half || ymove > half {
+                    let mo = gs.mobjslab.get(handle).expect("missile exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove / 2);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove / 2);
+                    xmove >>= 1;
+                    ymove >>= 1;
+                } else {
+                    let mo = gs.mobjslab.get(handle).expect("missile exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove);
+                    xmove = 0;
+                    ymove = 0;
+                }
+
+                if !p_try_move_missile(gs, handle, ptryx, ptryy, lv) {
+                    // Blocked by a thing or a wall: explode the missile.
+                    p_explode_missile(gs, handle, level);
+                    return;
+                }
+
+                if xmove == 0 && ymove == 0 {
+                    break;
+                }
+            }
+        }
+        None => {
+            // No level (unit tests): integrate momentum directly, no collision.
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                let (mx, my) = (mo.momx, mo.momy);
+                mo.x += mx;
+                mo.y += my;
+            }
+        }
+    }
+}
+
+/// Vanilla `P_ZMovement` restricted to the missile case. Projectiles carry
+/// `MF_NOGRAVITY`, so this simply advances `z` by `momz` and explodes the
+/// missile on contact with the floor or ceiling.
+fn p_z_movement_missile(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    // adjust height
+    let (x, y, new_z, height) = {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+        mo.z += mo.momz;
+        (mo.x, mo.y, mo.z, mo.height)
+    };
+
+    let Some(lv) = level else {
+        return; // no level (unit tests): no floor/ceiling to hit
+    };
+
+    // Floor: highest contacted floor under the missile's bbox (~tmfloorz).
+    let floorz = crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
+        .map(|(f, _)| f)
+        .unwrap_or(Fixed16_16::ZERO);
+    if new_z <= floorz {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.z = floorz;
+            mo.momz = Fixed16_16::ZERO;
+        }
+        p_explode_missile(gs, handle, level);
+        return;
+    }
+
+    // Ceiling: subsector-sector ceiling at the missile's origin (~tmceilingz).
+    let ceilingz = lv
+        .sector_index_at(x.to_int(), y.to_int())
+        .and_then(|si| lv.sectors.get(si))
+        .map(|s| Fixed16_16::from_int(s.ceil_height as i32));
+    if let Some(cz) = ceilingz
+        && new_z + height > cz
+    {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.z = cz - height;
+            mo.momz = Fixed16_16::ZERO;
+        }
+        p_explode_missile(gs, handle, level);
+    }
+}
+
+/// Vanilla `P_TryMove` for a missile step: run the `PIT_CheckThing` missile
+/// pass (things are checked BEFORE lines in `P_CheckPosition`), then the
+/// line/geometry pass, committing the new position only when both succeed.
+/// Returns `false` when the step is blocked (by a thing or a wall) — the caller
+/// then calls `P_ExplodeMissile`.
+fn p_try_move_missile(
+    gs: &mut GameState,
+    handle: MobjHandle,
+    x: Fixed16_16,
+    y: Fixed16_16,
+    level: &Level,
+) -> bool {
+    // Things first (may deal damage as a side effect and block the step).
+    if !missile_check_things(gs, handle, x, y) {
+        return false;
+    }
+    // Then lines. `p_try_move` skips its own thing pass for MF_MISSILE, so this
+    // is purely the wall/opening/step geometry check.
+    if !crate::movement::p_try_move(&gs.mobjslab, handle, x, y, level) {
+        return false;
+    }
+    // Commit the new position (vanilla P_TryMove sets mo->x/mo->y on success).
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.x = x;
+        mo.y = y;
+    }
+    true
+}
+
+/// Vanilla `PIT_CheckThing` restricted to the `MF_MISSILE` branch, evaluated at
+/// the proposed step position `(x, y)`. Returns `false` if the missile is
+/// blocked by a thing — after dealing `(P_Random()%8+1)*damage` to a shootable
+/// victim, or harmlessly against a same-species monster / a solid non-shootable
+/// obstacle. Iterates in slot order as an O(n²) stand-in for the blockmap
+/// `P_BlockThingsIterator`.
+fn missile_check_things(
+    gs: &mut GameState,
+    handle: MobjHandle,
+    x: Fixed16_16,
+    y: Fixed16_16,
+) -> bool {
+    let (m_radius, m_z, m_height, m_target, m_kind) = {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return true;
+        };
+        (mo.radius, mo.z, mo.height, mo.target, mo.kind)
+    };
+    let base_damage = crate::projectile::projectile_info(m_kind)
+        .map(|pi| pi.damage)
+        .unwrap_or(0);
+    let target_kind = gs.mobjslab.get(m_target).map(|mt| mt.kind);
+
+    let initial_slot_count = gs.mobjslab.slot_count();
+    let initial_generation = gs.mobjslab.next_generation();
+
+    for i in 0..initial_slot_count {
+        let Some(other) = gs.mobjslab.handle_at(i) else {
+            continue;
+        };
+        if other == handle || other.generation >= initial_generation {
+            continue;
+        }
+        let Some(t) = gs.mobjslab.get(other) else {
+            continue;
+        };
+        // Vanilla gate: only SOLID / SPECIAL / SHOOTABLE things are considered.
+        if t.flags & (flags::MF_SOLID | flags::MF_SPECIAL | flags::MF_SHOOTABLE) == 0 {
+            continue;
+        }
+        let (tx, ty, tz, t_height, t_flags, t_kind) =
+            (t.x, t.y, t.z, t.height, t.flags, t.kind);
+
+        // blockdist = thing->radius + tmthing->radius; reject if bbox misses.
+        let blockdist = (t.radius + m_radius).raw();
+        if (tx.raw() - x.raw()).abs() >= blockdist || (ty.raw() - y.raw()).abs() >= blockdist {
+            continue;
+        }
+
+        // See if it went over / under.
+        if m_z.raw() > tz.raw() + t_height.raw() {
+            continue; // overhead
+        }
+        if m_z.raw() + m_height.raw() < tz.raw() {
+            continue; // underneath
+        }
+
+        // Don't hit same species as the originator (covers the shooter itself).
+        if let Some(tk) = target_kind {
+            let same_species = tk == t_kind
+                || (tk == MobjKind::HellKnight && t_kind == MobjKind::BaronOfHell)
+                || (tk == MobjKind::BaronOfHell && t_kind == MobjKind::HellKnight);
+            if same_species {
+                if other == m_target {
+                    continue; // never hit the actor that fired it
+                }
+                if t_kind != MobjKind::Player {
+                    // Explode, but do no damage (monsters don't hurt kin).
+                    return false;
+                }
+            }
+        }
+
+        if t_flags & flags::MF_SHOOTABLE == 0 {
+            // Didn't do any damage: block only if the obstacle is solid.
+            return t_flags & flags::MF_SOLID == 0;
+        }
+
+        // Damage / explode. `(P_Random()%8+1)*damage` on the playsim stream.
+        let damage = ((gs.p_random() % 8) as i32 + 1) * base_damage;
+        crate::combat::damage_mobj_source(gs, other, handle, m_target, damage);
+        return false; // don't traverse any more
+    }
+
+    true
+}
+
+/// Vanilla `P_ExplodeMissile` (`p_mobj.c`): stop the missile, switch it to its
+/// death animation (which fires the death-state action, e.g. `A_Explode` for a
+/// rocket), randomize the first death frame's duration by `P_Random()&3`, and
+/// clear `MF_MISSILE` so it is no longer treated as a projectile.
+fn p_explode_missile(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let death_state = {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+        mo.momx = Fixed16_16::ZERO;
+        mo.momy = Fixed16_16::ZERO;
+        mo.momz = Fixed16_16::ZERO;
+        crate::mobjinfo::MOBJINFO[mo.kind as usize].death_state
+    };
+
+    // P_SetMobjState(deathstate) fires the death-state action (rocket ->
+    // A_Explode -> radius attack) before the RNG draw below, matching vanilla.
+    p_set_mobj_state(gs, handle, death_state, level);
+
+    // th->tics -= P_Random()&3; if (th->tics < 1) th->tics = 1;
+    let r = (gs.p_random() & 3) as i16;
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.tics -= r;
+        if mo.tics < 1 {
+            mo.tics = 1;
+        }
+        mo.flags &= !flags::MF_MISSILE;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -692,6 +1416,211 @@ mod tests {
     }
 
     // =======================================================================
+    // Tests: missile movement / collision (vanilla P_XYMovement / PIT_CheckThing
+    // / P_ExplodeMissile)
+    // =======================================================================
+
+    /// Regression for the retired double-move: a missile must advance by its
+    /// momentum EXACTLY ONCE per tic. The old engine integrated missiles once in
+    /// `tick_mobj` AND again in a separate `p_move_projectiles` pass, doubling
+    /// their speed (a fireball reached its target ~twice as fast). With one
+    /// unified `P_XYMovement` path, one `tick_mobj` call = one momentum step.
+    #[test]
+    fn missile_moves_once_per_tic_not_twice() {
+        let mut gs = make_game_state();
+        let missile = make_missile(7, -4, 0);
+        let handle = gs.mobjslab.alloc(missile);
+
+        let _ = tick_mobj(&mut gs, handle, None);
+
+        let mo = gs.mobjslab.get(handle).expect("missile exists");
+        assert_eq!(mo.x, Fixed16_16::from_int(7), "x advances by momx exactly once");
+        assert_eq!(mo.y, Fixed16_16::from_int(-4), "y advances by momy exactly once");
+    }
+
+    /// Regression pinning `P_ExplodeMissile`: switch the missile to its death
+    /// state, zero its momentum, clear `MF_MISSILE`, and draw exactly one
+    /// `P_Random()&3` (adjusting the death frame's tics, clamped to >= 1). The
+    /// imp fireball death state carries no action, so the only RNG draw here is
+    /// that single `&3`.
+    #[test]
+    fn p_explode_missile_enters_deathstate_clears_flag_and_draws_one_rng() {
+        let mut gs = make_game_state();
+        let mut mo = Mobj::new(
+            MobjKind::ImpFireball,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.flags = flags::MF_MISSILE | flags::MF_NOGRAVITY | flags::MF_NOBLOCKMAP;
+        mo.momx = Fixed16_16::from_int(9);
+        mo.momy = Fixed16_16::from_int(-2);
+        mo.momz = Fixed16_16::from_int(1);
+        mo.health = 1000;
+        let handle = gs.mobjslab.alloc(mo);
+
+        let death_state = crate::mobjinfo::MOBJINFO[MobjKind::ImpFireball as usize].death_state;
+        let before = gs.rng.index();
+        p_explode_missile(&mut gs, handle, None);
+        assert_eq!(
+            (gs.rng.index().wrapping_sub(before)) & 255,
+            1,
+            "P_ExplodeMissile must draw exactly one P_Random()&3"
+        );
+
+        let mo = gs.mobjslab.get(handle).expect("exploding missile exists");
+        assert_eq!(mo.state, death_state, "missile enters its death state");
+        assert_eq!(mo.flags & flags::MF_MISSILE, 0, "MF_MISSILE must be cleared");
+        assert_eq!(mo.momx, Fixed16_16::ZERO);
+        assert_eq!(mo.momy, Fixed16_16::ZERO);
+        assert_eq!(mo.momz, Fixed16_16::ZERO);
+        let base = crate::states::STATES[death_state.0 as usize].tics;
+        assert!(mo.tics >= 1 && mo.tics <= base, "tics {} in [1,{base}]", mo.tics);
+    }
+
+    /// Regression pinning the `PIT_CheckThing` missile branch: a missile
+    /// overlapping a shootable actor deals `(P_Random()%8 + 1) * damage` to it
+    /// (drawing that `P_Random`), attributes the hit, and reports the step as
+    /// blocked (so the caller explodes the missile). The imp fireball's base
+    /// damage is 3, so the victim loses between 3 and 24 health.
+    #[test]
+    fn missile_check_things_damages_shootable_with_scaled_random_draw() {
+        let mut gs = make_game_state();
+        // A missile co-located with a shootable imp; fired by the player so the
+        // player is skipped as the shooter.
+        let mut proj = Mobj::new(
+            MobjKind::ImpFireball,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        proj.flags = flags::MF_MISSILE | flags::MF_NOGRAVITY | flags::MF_NOBLOCKMAP;
+        proj.radius = Fixed16_16::from_int(6);
+        proj.height = Fixed16_16::from_int(8);
+        proj.health = 1000;
+        proj.target = gs.player.handle;
+        let missile = gs.mobjslab.alloc(proj);
+
+        let mut victim = Mobj::new(
+            MobjKind::Imp,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        victim.health = 60;
+        victim.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        victim.radius = Fixed16_16::from_int(20);
+        victim.height = Fixed16_16::from_int(56);
+        let victim_h = gs.mobjslab.alloc(victim);
+
+        let before = gs.rng.index();
+        let blocked = !missile_check_things(&mut gs, missile, Fixed16_16::ZERO, Fixed16_16::ZERO);
+        assert!(blocked, "overlapping a shootable must block the step (explode)");
+        assert!(
+            (gs.rng.index().wrapping_sub(before)) & 255 >= 1,
+            "the (P_Random()%8+1) damage draw must advance the RNG"
+        );
+
+        let victim = gs.mobjslab.get(victim_h).expect("victim exists");
+        let dealt = 60 - victim.health;
+        assert!(
+            (3..=24).contains(&dealt),
+            "imp fireball deals 3..=24 (=(1..=8)*3), dealt {dealt}"
+        );
+    }
+
+    /// The missile must skip its own shooter (`mo.target`): a fireball flying
+    /// over the imp that launched it passes straight through, dealing no damage
+    /// and drawing no RNG.
+    #[test]
+    fn missile_check_things_skips_its_shooter() {
+        let mut gs = make_game_state();
+        // Place the shooter + missile well away from the origin player so only
+        // the shooter is a collision candidate at the tested position.
+        let px = Fixed16_16::from_int(500);
+        let py = Fixed16_16::from_int(500);
+        let mut shooter = Mobj::new(MobjKind::Imp, px, py, Bam::ZERO);
+        shooter.health = 60;
+        shooter.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        shooter.radius = Fixed16_16::from_int(20);
+        shooter.height = Fixed16_16::from_int(56);
+        let shooter_h = gs.mobjslab.alloc(shooter);
+
+        let mut proj = Mobj::new(MobjKind::ImpFireball, px, py, Bam::ZERO);
+        proj.flags = flags::MF_MISSILE | flags::MF_NOGRAVITY | flags::MF_NOBLOCKMAP;
+        proj.radius = Fixed16_16::from_int(6);
+        proj.height = Fixed16_16::from_int(8);
+        proj.health = 1000;
+        proj.target = shooter_h; // fired BY this imp
+        let missile = gs.mobjslab.alloc(proj);
+
+        let before = gs.rng.index();
+        let passed = missile_check_things(&mut gs, missile, px, py);
+        assert!(passed, "missile must pass through its own shooter");
+        assert_eq!(gs.rng.index(), before, "no RNG draw when skipping the shooter");
+        let shooter = gs.mobjslab.get(shooter_h).expect("shooter exists");
+        assert_eq!(shooter.health, 60, "shooter takes no damage from its own missile");
+    }
+
+    // =======================================================================
+    // Tests: monster momentum (vanilla P_XYMovement)
+    // =======================================================================
+
+    #[test]
+    fn walking_monster_gains_no_momentum_but_thrust_decays_by_friction() {
+        // Regression for the vanilla demo-sync bug: `P_Move` used to inject the
+        // walk step as momentum. Vanilla `P_Move` never does — a monster's
+        // momentum comes only from thrust and is decayed each tic by
+        // `P_XYMovement`'s FRICTION (0xE800). Here we give a trooper explicit
+        // thrust momentum (as `P_DamageMobj` would) and tick it; its position
+        // must advance by that momentum and the momentum must scale by FRICTION.
+        let mut gs = make_game_state();
+        let mut mo = make_trooper(StateNum(ids::S_POSS_STND), 100);
+        // Above STOPSPEED (0x1000) so friction multiplies rather than zeroing.
+        let momx = Fixed16_16::from_raw(0x30000); // 3.0 units/tic
+        let momy = Fixed16_16::from_raw(-0x18000); // -1.5 units/tic
+        mo.momx = momx;
+        mo.momy = momy;
+        let (x0, y0) = (mo.x, mo.y);
+        let handle = gs.mobjslab.alloc(mo);
+
+        let _ = tick_mobj(&mut gs, handle, None);
+
+        let mo = gs.mobjslab.get(handle).expect("trooper exists");
+        // Position advanced by the pre-friction momentum (integration).
+        assert_eq!(mo.x, x0 + momx, "x should advance by momx");
+        assert_eq!(mo.y, y0 + momy, "y should advance by momy");
+        // Momentum decayed by FRICTION exactly.
+        assert_eq!(
+            mo.momx,
+            momx.fixed_mul(FRICTION),
+            "momx must decay by FRICTION"
+        );
+        assert_eq!(
+            mo.momy,
+            momy.fixed_mul(FRICTION),
+            "momy must decay by FRICTION"
+        );
+    }
+
+    #[test]
+    fn sub_stopspeed_monster_momentum_snaps_to_zero() {
+        // Vanilla P_XYMovement snaps a resting thing's sub-STOPSPEED momentum to
+        // zero (the player-input clause is vacuous for a monster).
+        let mut gs = make_game_state();
+        let mut mo = make_trooper(StateNum(ids::S_POSS_STND), 100);
+        mo.momx = Fixed16_16::from_raw(0x800); // below STOPSPEED (0x1000)
+        mo.momy = Fixed16_16::from_raw(-0x800);
+        let handle = gs.mobjslab.alloc(mo);
+
+        let _ = tick_mobj(&mut gs, handle, None);
+
+        let mo = gs.mobjslab.get(handle).expect("trooper exists");
+        assert_eq!(mo.momx, Fixed16_16::ZERO, "sub-STOPSPEED momx snaps to 0");
+        assert_eq!(mo.momy, Fixed16_16::ZERO, "sub-STOPSPEED momy snaps to 0");
+    }
+
+    // =======================================================================
     // Tests: p_set_mobj_state
     // =======================================================================
 
@@ -744,7 +1673,7 @@ mod tests {
 
         let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE1));
-        assert_eq!(mo.tics, 8, "POSS_DIE1 has 8 tics");
+        assert_eq!(mo.tics, 5, "POSS_DIE1 has 5 tics (vanilla)");
     }
 
     #[test]
@@ -825,7 +1754,7 @@ mod tests {
     #[test]
     fn tick_mobj_chain_through_die1_to_die2() {
         let mut gs = make_game_state();
-        // S_POSS_DIE1: 8 tics, next = S_POSS_DIE2
+        // S_POSS_DIE1: 5 tics (vanilla), next = S_POSS_DIE2
         let trooper = make_trooper(StateNum(ids::S_POSS_DIE1), 1);
         let handle = gs.mobjslab.alloc(trooper);
 
@@ -834,7 +1763,7 @@ mod tests {
 
         let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE2));
-        assert_eq!(mo.tics, 8, "DIE2 runs for 8 tics before DIE3");
+        assert_eq!(mo.tics, 5, "DIE2 runs for 5 tics before DIE3");
     }
 
     #[test]
@@ -931,6 +1860,95 @@ mod tests {
             mo.tics, 5,
             "player mobj should not be ticked by tick_all_mobjs"
         );
+    }
+
+    #[test]
+    fn actors_by_generation_orders_by_creation_not_slot() {
+        // Reproduce the free-list slot-reuse that desyncs missile-vs-monster
+        // thinker order from vanilla: after a low slot is recycled by a
+        // later-created actor, iteration MUST still be in creation
+        // (generation) order — the actor in the recycled low slot ticks LAST.
+        let mut gs = make_game_state();
+        let a = gs.mobjslab.alloc(make_trooper(StateNum(ids::S_POSS_STND), 5));
+        let b = gs.mobjslab.alloc(make_trooper(StateNum(ids::S_POSS_STND), 5));
+        // Free `a` (its low slot enters the free list) then allocate `c`, which
+        // reuses `a`'s slot but carries a higher generation than `b`.
+        gs.mobjslab.free(a);
+        let c = gs.mobjslab.alloc(make_missile(1, 0, 0));
+
+        assert!(
+            c.index < b.index,
+            "test precondition: `c` must reuse the lower recycled slot"
+        );
+        assert!(
+            c.generation > b.generation,
+            "test precondition: `c` is created after `b`"
+        );
+
+        let order = actors_by_generation(&gs.mobjslab);
+        // Player (gen 1) first, then b, then c — creation order, not slot order.
+        assert_eq!(
+            order.last().copied(),
+            Some(c),
+            "recycled-slot actor `c` must tick last (highest generation)"
+        );
+        let bi = order.iter().position(|&h| h == b).unwrap();
+        let ci = order.iter().position(|&h| h == c).unwrap();
+        assert!(bi < ci, "`b` (older) must tick before `c` (newer)");
+    }
+
+    #[test]
+    fn tick_world_interleaved_light_pass_matches_legacy_when_no_gameplay_actors() {
+        use crate::movers::{LightThinkerKind, SectorLightEffect};
+
+        // A pending LightFlash that fires (draws P_Random) on the next tic.
+        fn pending_light() -> SectorLightEffect {
+            SectorLightEffect {
+                sector_index: 0,
+                kind: LightThinkerKind::LightFlash,
+                count: 1, // `--count == 0` this tic -> toggles and draws
+                max_light: 200,
+                min_light: 100,
+                max_time: 64,
+                min_time: 7,
+                dark_time: 0,
+                bright_time: 0,
+                glow_dir: 0,
+            }
+        }
+
+        // Legacy path (boundary unset): light pass runs after the mobj pass.
+        let mut legacy = make_game_state();
+        let mut lv_legacy = make_secret_level(0);
+        legacy.movers.sector_lights.push(pending_light());
+        assert_eq!(legacy.thinker_setup_boundary, u32::MAX);
+        let idx_before = legacy.rng.index();
+        tick_world(&mut legacy, Some(&mut lv_legacy));
+        let legacy_light = lv_legacy.sectors[0].light_level;
+        let legacy_draws = legacy.rng.index().wrapping_sub(idx_before);
+
+        // Interleaved path (boundary frozen): the sector-light pass moves to the
+        // vanilla thinker-list position. With no gameplay-spawned actors present
+        // it must still tick the light exactly once, identically to legacy.
+        let mut interleaved = make_game_state();
+        let mut lv_inter = make_secret_level(0);
+        interleaved.movers.sector_lights.push(pending_light());
+        interleaved.freeze_thinker_setup_boundary();
+        assert_ne!(interleaved.thinker_setup_boundary, u32::MAX);
+        let idx_before = interleaved.rng.index();
+        tick_world(&mut interleaved, Some(&mut lv_inter));
+        let inter_light = lv_inter.sectors[0].light_level;
+        let inter_draws = interleaved.rng.index().wrapping_sub(idx_before);
+
+        assert_eq!(
+            legacy_draws, inter_draws,
+            "interleaved light pass must draw the same P_Random count as legacy"
+        );
+        assert_eq!(
+            legacy_light, inter_light,
+            "interleaved light pass must produce the same light level as legacy"
+        );
+        assert!(inter_draws >= 1, "the pending LightFlash must draw this tic");
     }
 
     #[test]
@@ -1070,6 +2088,82 @@ mod tests {
         gs.rng.set_index(16);
         gs.player.attack_down = false;
 
+        // Vanilla A_FirePistol is on PISTOL2, so the shot lands 4 tics into the
+        // fire animation (fifth tick_player call).
+        for _ in 0..5 {
+            tick_player(
+                &mut gs,
+                TicCmd {
+                    buttons: bt::BT_ATTACK,
+                    ..Default::default()
+                },
+                None,
+            );
+        }
+
+        assert!(
+            gs.mobjslab
+                .get(trooper_handle)
+                .expect("item must exist in tests")
+                .health
+                < 20,
+            "first pistol shot through tick_player should be accurate"
+        );
+    }
+
+    #[test]
+    fn weapon_fire_samples_pre_move_player_position() {
+        // Regression: the weapon action functions (`A_FirePistol` etc.) must
+        // sample the player origin vanilla samples. In vanilla `P_MovePlayer`
+        // only sets momentum; the position is integrated later in
+        // `P_XYMovement` (during `P_RunThinkers`), which runs AFTER
+        // `P_MovePsprites`. So the hitscan fires from the pre-integration
+        // position (this tic's angle, the previous tic's position). doom-rs
+        // integrates the player position inline in `p_move_player`, so
+        // `tick_player` must restore the pre-move position for the psprite tick.
+        //
+        // Here the player moves +y perpendicular to its +x aim. A shot from the
+        // pre-move position (y=0) hits a trooper on the x-axis; a shot from the
+        // post-move position (y=30, one MAXMOVE step north) would sail 30 units
+        // over the 16-unit-radius trooper and miss.
+        //
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
+
+        let mut gs = make_game_state();
+
+        // Trooper straddling the x-axis, 512 units east of the player.
+        let mut trooper = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(512),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        trooper.health = 20;
+        trooper.radius = Fixed16_16::from_int(16);
+        trooper.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        let trooper_handle = gs.mobjslab.alloc(trooper);
+        gs.rng.set_index(16);
+
+        // Give the player northward momentum (clamped to MAXMOVE = 30) and force
+        // the pistol into the frame just before `A_FirePistol` fires, so the shot
+        // resolves on this single `tick_player` call.
+        {
+            let mo = gs
+                .mobjslab
+                .get_mut(gs.player.handle)
+                .expect("player must exist");
+            mo.momy = Fixed16_16::from_int(40);
+        }
+        gs.player.psprites[crate::player::psprite_slots::WEAPON] = crate::player::PspriteState {
+            state: StateNum(ids::S_PISTOL1),
+            tics: 1,
+            sx: 0,
+            sy: 0,
+        };
+
         tick_player(
             &mut gs,
             TicCmd {
@@ -1079,13 +2173,27 @@ mod tests {
             None,
         );
 
+        // The fire sampled the pre-move (y=0) origin, so the trooper is hit.
         assert!(
             gs.mobjslab
                 .get(trooper_handle)
-                .expect("item must exist in tests")
+                .expect("trooper must exist")
                 .health
                 < 20,
-            "first pistol shot through tick_player should be accurate"
+            "weapon fire must sample the pre-move player position (vanilla \
+             P_MovePsprites runs before player position integration)"
+        );
+
+        // The player mobj still ends the tic at its real post-move position: the
+        // pre-move restore is only in effect for the psprite tick.
+        let mo = gs
+            .mobjslab
+            .get(gs.player.handle)
+            .expect("player must exist");
+        assert_eq!(
+            mo.y,
+            Fixed16_16::from_int(30),
+            "player must end the tic at the integrated post-move position"
         );
     }
 
@@ -1139,10 +2247,16 @@ mod tests {
             ..Default::default()
         };
 
-        tick_player(&mut gs, cmd, None);
+        // Vanilla pistol: A_FirePistol is on PISTOL2, so the first shot lands
+        // 4 tics into the fire animation.
+        for _ in 0..5 {
+            tick_player(&mut gs, cmd, None);
+        }
         assert_eq!(gs.player.ammo(AmmoType::Bullets as usize), 49);
 
-        for _ in 0..9 {
+        // The vanilla fire cycle is 14 tics (PISTOL1..PISTOL3 before A_ReFire),
+        // so the next shot is not until tic 18.
+        for _ in 0..13 {
             tick_player(&mut gs, cmd, None);
         }
         assert_eq!(
@@ -1155,7 +2269,7 @@ mod tests {
         assert_eq!(
             gs.player.ammo(AmmoType::Bullets as usize),
             48,
-            "held pistol should refire on the same tic the ready state is re-entered"
+            "held pistol should refire once the vanilla 14-tic cycle completes"
         );
     }
 
@@ -1171,10 +2285,16 @@ mod tests {
             ..Default::default()
         };
 
-        tick_player(&mut gs, cmd, None);
+        // Vanilla shotgun: A_FireShotgun is on SGUN2, so the first shot lands
+        // 3 tics into the fire animation.
+        for _ in 0..4 {
+            tick_player(&mut gs, cmd, None);
+        }
         assert_eq!(gs.player.ammo(AmmoType::Shells as usize), 3);
 
-        for _ in 0..14 {
+        // Vanilla shotgun fire cycle is 37 tics (SGUN1..SGUN8 before A_ReFire),
+        // so the next shot is not until tic 40.
+        for _ in 0..36 {
             tick_player(&mut gs, cmd, None);
         }
         assert_eq!(
@@ -1187,12 +2307,12 @@ mod tests {
         assert_eq!(
             gs.player.ammo(AmmoType::Shells as usize),
             2,
-            "held shotgun should refire on the same tic the ready state is re-entered"
+            "held shotgun should refire once the vanilla 37-tic cycle completes"
         );
     }
 
     #[test]
-    fn rocket_launcher_has_a_windup_and_still_requires_release_to_refire() {
+    fn rocket_launcher_has_a_windup_and_auto_refires_when_held() {
         let mut gs = make_game_state();
         gs.player.weapons[WeaponType::RocketLauncher as usize] = true;
         gs.player.weapon = WeaponType::RocketLauncher;
@@ -1233,14 +2353,16 @@ mod tests {
             "the launcher should spawn a rocket when the fire state begins"
         );
 
-        for _ in 0..(crate::weapon_fire::weapon_refire_tics(WeaponType::RocketLauncher) + 5) {
+        // Vanilla `S_MISSILE3` carries A_ReFire, so a held launcher auto-refires
+        // once the ~20-tic fire cycle completes (next rocket near tic 28).
+        for _ in 0..20 {
             tick_player(&mut gs, cmd, None);
         }
 
         assert_eq!(
             gs.player.ammo(AmmoType::Rockets as usize),
-            2,
-            "held rocket launcher should require a release before the next shot"
+            1,
+            "held rocket launcher auto-refires via A_ReFire once its cycle completes"
         );
     }
 
@@ -1351,6 +2473,50 @@ mod tests {
     }
 
     #[test]
+    fn imp_run_state_advances_every_three_tics() {
+        // Regression for the RUN-cadence bug: a chasing imp (TROO) must hold each
+        // RUN state for 3 tics (vanilla info.c), not 4. Enter S_TROO_RUN1 fresh
+        // (tics loaded from the table via p_set_mobj_state), keep a live target so
+        // A_Chase does not revert to idle, and confirm it advances to RUN2 on the
+        // 3rd tick and not before.
+        let mut gs = make_game_state();
+        let mut imp = make_trooper(StateNum(ids::S_TROO_STND), 1);
+        imp.kind = MobjKind::Imp;
+        let handle = gs.mobjslab.alloc(imp);
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("imp must exist in tests")
+            .target = gs.player.handle;
+
+        // Enter RUN1 fresh so tics come from the STATES table.
+        assert!(p_set_mobj_state(
+            &mut gs,
+            handle,
+            StateNum(ids::S_TROO_RUN1),
+            None
+        ));
+        assert_eq!(
+            gs.mobjslab.get(handle).unwrap().tics,
+            3,
+            "TROO_RUN1 must load 3 tics"
+        );
+
+        // Two ticks: still in RUN1.
+        tick_mobj(&mut gs, handle, None);
+        assert_eq!(gs.mobjslab.get(handle).unwrap().state, StateNum(ids::S_TROO_RUN1));
+        tick_mobj(&mut gs, handle, None);
+        assert_eq!(gs.mobjslab.get(handle).unwrap().state, StateNum(ids::S_TROO_RUN1));
+
+        // Third tick: advances to RUN2 (cadence = 3, not 4).
+        tick_mobj(&mut gs, handle, None);
+        assert_eq!(
+            gs.mobjslab.get(handle).unwrap().state,
+            StateNum(ids::S_TROO_RUN2),
+            "imp must advance RUN state every 3 tics, not 4"
+        );
+    }
+
+    #[test]
     fn state_transition_pain_without_target_returns_to_idle() {
         let mut gs = make_game_state();
         // S_POSS_PAIN now resumes S_POSS_RUN1, but without a target A_Chase
@@ -1410,7 +2576,7 @@ mod tests {
 
         let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE2));
-        assert_eq!(mo.tics, 8, "DIE2 runs for 8 tics before chaining to DIE3");
+        assert_eq!(mo.tics, 5, "DIE2 runs for 5 tics before chaining to DIE3");
     }
 
     // =======================================================================
@@ -1496,26 +2662,31 @@ mod tests {
     }
 
     #[test]
-    fn non_missile_does_not_advance_position() {
+    fn non_missile_advances_by_momentum() {
+        // Vanilla `P_MobjThinker` runs `P_XYMovement` for ANY mobj carrying
+        // momentum, integrating it into position before the state machine. A
+        // monster holding thrust momentum therefore advances each tic (and the
+        // momentum then decays by friction).
         let mut gs = make_game_state();
-        let mut trooper = make_trooper(StateNum(ids::S_POSS_STND), 1);
-        trooper.momx = Fixed16_16::from_int(5);
-        trooper.momy = Fixed16_16::from_int(3);
+        let mut trooper = make_trooper(StateNum(ids::S_POSS_STND), 100);
+        let momx = Fixed16_16::from_int(5);
+        let momy = Fixed16_16::from_int(3);
+        trooper.momx = momx;
+        trooper.momy = momy;
         let handle = gs.mobjslab.alloc(trooper);
 
         tick_mobj(&mut gs, handle, None);
 
         let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
-        // Non-missile actors don't get position updates from tick_mobj.
         assert_eq!(
             mo.x,
-            Fixed16_16::from_int(5000),
-            "non-missile x should not change"
+            Fixed16_16::from_int(5000) + momx,
+            "non-missile x should advance by momx"
         );
         assert_eq!(
             mo.y,
-            Fixed16_16::from_int(5000),
-            "non-missile y should not change"
+            Fixed16_16::from_int(5000) + momy,
+            "non-missile y should advance by momy"
         );
     }
 
@@ -1986,8 +3157,8 @@ mod tests {
             .expect("item must exist in tests")
             .health;
         assert_eq!(
-            health, 90,
-            "hellslime during gameplay should deal 5 damage on tic 0 and tic 32 only"
+            health, 80,
+            "vanilla hellslime (special 5) deals 10 damage on leveltime 0 and 32 only"
         );
     }
 
@@ -2003,6 +3174,8 @@ mod tests {
         mo.x = Fixed16_16::from_int(96);
         mo.y = Fixed16_16::ZERO;
         mo.z = Fixed16_16::from_int(64);
+        // Vanilla P_XYMovement clamps momentum to MAXMOVE (30) before moving,
+        // so this -40 request advances only -30 units this tic (96 -> 66).
         mo.momx = Fixed16_16::from_int(-40);
 
         tick_player(&mut gs, TicCmd::default(), Some(&mut level));
@@ -2011,7 +3184,7 @@ mod tests {
             .mobjslab
             .get(gs.player.handle)
             .expect("player should exist");
-        assert_eq!(mo.x, Fixed16_16::from_int(56));
+        assert_eq!(mo.x, Fixed16_16::from_int(66));
         assert_eq!(
             mo.z,
             Fixed16_16::from_int(64),
@@ -2048,9 +3221,10 @@ mod tests {
             .mobjslab
             .get(gs.player.handle)
             .expect("player should exist");
+        // Tic 1 clamps -40 -> -30 (96 -> 66); tic 2 moves -4 (66 -> 62).
         assert_eq!(
             mo.x,
-            Fixed16_16::from_int(52),
+            Fixed16_16::from_int(62),
             "player should continue descending instead of getting stuck on the stair edge"
         );
     }

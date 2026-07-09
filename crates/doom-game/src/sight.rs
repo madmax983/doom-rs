@@ -163,39 +163,268 @@ fn sight_eye_z(z: Fixed16_16, height: Fixed16_16) -> Fixed16_16 {
 }
 
 // ---------------------------------------------------------------------------
-// Parametric intersection fraction
+// Vanilla BSP line-of-sight traversal (p_sight.c)
 // ---------------------------------------------------------------------------
+//
+// This is a faithful port of Doom's `P_CrossBSPNode` / `P_CrossSubsector` /
+// `P_DivlineSide` / `P_InterceptVector2`.  Vanilla does NOT iterate the
+// linedef array; it descends the BSP from the head node, and inside each
+// crossed subsector clips the sight against the two-sided lines' openings by
+// *accumulating* `topslope`/`bottomslope` in fixed-point.  All coordinates
+// here are `fixed_t` (16.16), matching vanilla: map vertexes and node/sector
+// values are shifted `<< FRACBITS`, mobj positions/heights are already fixed.
 
-/// Compute the parametric `t` (fraction along the ray) where the ray from
-/// `(rx1, ry1)` to `(rx2, ry2)` crosses the linedef.
+/// Bit in a BSP child pointer that marks the child as a subsector leaf.
+const NF_SUBSECTOR: u16 = 0x8000;
+
+/// A directed line segment in fixed-point, mirroring vanilla's `divline_t`.
+#[derive(Clone, Copy)]
+struct Divline {
+    x: i32,
+    y: i32,
+    dx: i32,
+    dy: i32,
+}
+
+/// Port of vanilla `P_DivlineSide`: returns 0 (front), 1 (back), or 2 (on).
 ///
-/// Returns a value in `[0.0, 1.0]` (as a pair `(numerator, denominator)` in i64)
-/// if the ray intersects the linedef, or `None` if the lines are parallel.
-fn ray_linedef_frac(
-    rx1: i64,
-    ry1: i64,
-    rx2: i64,
-    ry2: i64,
-    lx1: i64,
-    ly1: i64,
-    lx2: i64,
-    ly2: i64,
-) -> Option<(i64, i64)> {
-    let rdx = rx2 - rx1;
-    let rdy = ry2 - ry1;
-    let ldx = lx2 - lx1;
-    let ldy = ly2 - ly1;
-
-    let denom = rdx * ldy - rdy * ldx;
-    if denom == 0 {
-        return None; // parallel
+/// Uses the exact `>> FRACBITS` shifts and wrapping `int` multiply of the
+/// original so the true/false verdict matches vanilla bit-for-bit.
+fn divline_side(x: i32, y: i32, node: &Divline) -> i32 {
+    if node.dx == 0 {
+        if x == node.x {
+            return 2;
+        }
+        if x <= node.x {
+            return i32::from(node.dy > 0);
+        }
+        return i32::from(node.dy < 0);
     }
 
-    let num = ldx * (ry1 - ly1) - ldy * (rx1 - lx1);
+    if node.dy == 0 {
+        // NOTE: vanilla compares `x` to `node->y` here (not `node->x`); this
+        // quirk is preserved deliberately for demo-exact behavior.
+        if x == node.y {
+            return 2;
+        }
+        if y <= node.y {
+            return i32::from(node.dx < 0);
+        }
+        return i32::from(node.dx > 0);
+    }
 
-    // We want 0 <= num/denom <= 1 (accounting for sign of denom).
-    // Instead of dividing, check sign conditions.
-    Some((num, denom))
+    let dx = x.wrapping_sub(node.x);
+    let dy = y.wrapping_sub(node.y);
+
+    let left = (node.dy >> 16).wrapping_mul(dx >> 16);
+    let right = (dy >> 16).wrapping_mul(node.dx >> 16);
+
+    if right < left {
+        0 // front side
+    } else if left == right {
+        2
+    } else {
+        1 // back side
+    }
+}
+
+/// Port of vanilla `P_InterceptVector2(v2 = strace, v1 = divl)`: the fractional
+/// intercept of `v2` along `v1`, in fixed-point.
+fn intercept_vector2(v2: &Divline, v1: &Divline) -> i32 {
+    let fmul = |a: i32, b: i32| Fixed16_16(a).fixed_mul(Fixed16_16(b)).0;
+    let fdiv = |a: i32, b: i32| Fixed16_16(a).fixed_div(Fixed16_16(b)).0;
+
+    let den = fmul(v1.dy >> 8, v2.dx).wrapping_sub(fmul(v1.dx >> 8, v2.dy));
+    if den == 0 {
+        return 0;
+    }
+    let num = fmul((v1.x.wrapping_sub(v2.x)) >> 8, v1.dy)
+        .wrapping_add(fmul((v2.y.wrapping_sub(v1.y)) >> 8, v1.dx));
+    fdiv(num, den)
+}
+
+/// Mutable state carried through the recursive BSP sight traversal, mirroring
+/// the module-level statics vanilla uses in `p_sight.c`.
+struct SightState<'a> {
+    level: &'a Level,
+    strace: Divline,
+    t2x: i32,
+    t2y: i32,
+    sightzstart: i32,
+    topslope: i32,
+    bottomslope: i32,
+    /// Per-linedef "already checked the other side?" flags (vanilla validcount).
+    line_seen: Vec<bool>,
+}
+
+impl SightState<'_> {
+    #[inline]
+    fn vertex_fixed(&self, v: u16) -> (i32, i32) {
+        let vx = &self.level.vertexes[v as usize];
+        ((vx.x as i32) << 16, (vx.y as i32) << 16)
+    }
+
+    /// Port of `P_CrossSubsector`: returns `true` if `strace` crosses the
+    /// subsector without being blocked.
+    fn cross_subsector(&mut self, num: usize) -> bool {
+        let Some(sub) = self.level.ssectors.get(num) else {
+            return true;
+        };
+        let first = sub.first_seg as usize;
+        let end = first + sub.seg_count as usize;
+
+        for seg_idx in first..end {
+            let Some(seg) = self.level.segs.get(seg_idx) else {
+                continue;
+            };
+            let line_idx = seg.linedef as usize;
+            let Some(line) = self.level.linedefs.get(line_idx) else {
+                continue;
+            };
+
+            // Already checked the other side of this line?
+            if self.line_seen.get(line_idx).copied().unwrap_or(true) {
+                continue;
+            }
+            if let Some(flag) = self.line_seen.get_mut(line_idx) {
+                *flag = true;
+            }
+
+            // Line's own vertices (the linedef, not the seg).
+            let (v1x, v1y) = self.vertex_fixed(line.from_vertex);
+            let (v2x, v2y) = self.vertex_fixed(line.to_vertex);
+
+            let s1 = divline_side(v1x, v1y, &self.strace);
+            let s2 = divline_side(v2x, v2y, &self.strace);
+            if s1 == s2 {
+                continue; // line isn't crossed
+            }
+
+            let divl = Divline {
+                x: v1x,
+                y: v1y,
+                dx: v2x.wrapping_sub(v1x),
+                dy: v2y.wrapping_sub(v1y),
+            };
+            let s1 = divline_side(self.strace.x, self.strace.y, &divl);
+            let s2 = divline_side(self.t2x, self.t2y, &divl);
+            if s1 == s2 {
+                continue; // line isn't crossed
+            }
+
+            // Determine front/back sectors from the seg's side (direction).
+            let side = seg.direction;
+            let (front_sd, back_sd) = if side == 0 {
+                (line.right_sidedef, line.left_sidedef)
+            } else {
+                (line.left_sidedef, line.right_sidedef)
+            };
+
+            // Backsector NULL (one-sided / glass hack) or not two-sided: blocks.
+            if !line.is_two_sided() || back_sd == doom_map::SIDEDEF_NONE {
+                return false;
+            }
+            let (Some(front_side), Some(back_side)) = (
+                self.level.sidedefs.get(front_sd as usize),
+                self.level.sidedefs.get(back_sd as usize),
+            ) else {
+                return false;
+            };
+            let front = &self.level.sectors[front_side.sector as usize];
+            let back = &self.level.sectors[back_side.sector as usize];
+
+            let front_floor = (front.floor_height as i32) << 16;
+            let front_ceil = (front.ceil_height as i32) << 16;
+            let back_floor = (back.floor_height as i32) << 16;
+            let back_ceil = (back.ceil_height as i32) << 16;
+
+            // No wall to block sight with (identical opening)?
+            if front_floor == back_floor && front_ceil == back_ceil {
+                continue;
+            }
+
+            let opentop = front_ceil.min(back_ceil);
+            let openbottom = front_floor.max(back_floor);
+
+            // Quick test for totally closed doors.
+            if openbottom >= opentop {
+                return false;
+            }
+
+            let frac = intercept_vector2(&self.strace, &divl);
+
+            if front_floor != back_floor {
+                let slope = Fixed16_16(openbottom.wrapping_sub(self.sightzstart))
+                    .fixed_div(Fixed16_16(frac))
+                    .0;
+                if slope > self.bottomslope {
+                    self.bottomslope = slope;
+                }
+            }
+
+            if front_ceil != back_ceil {
+                let slope = Fixed16_16(opentop.wrapping_sub(self.sightzstart))
+                    .fixed_div(Fixed16_16(frac))
+                    .0;
+                if slope < self.topslope {
+                    self.topslope = slope;
+                }
+            }
+
+            if self.topslope <= self.bottomslope {
+                return false;
+            }
+        }
+
+        // Passed the subsector ok.
+        true
+    }
+
+    /// Port of `P_CrossBSPNode`: returns `true` if `strace` crosses the node.
+    ///
+    /// `bspnum` is an `i32` so the vanilla `bspnum == -1` head-node case (a map
+    /// with zero BSP nodes) is preserved.
+    fn cross_bsp_node(&mut self, bspnum: i32) -> bool {
+        if bspnum & i32::from(NF_SUBSECTOR) != 0 {
+            if bspnum == -1 {
+                return self.cross_subsector(0);
+            }
+            return self.cross_subsector((bspnum & !i32::from(NF_SUBSECTOR)) as usize);
+        }
+
+        let Some(bsp) = self.level.nodes.get(bspnum as usize) else {
+            return true;
+        };
+        let node = Divline {
+            x: (bsp.x as i32) << 16,
+            y: (bsp.y as i32) << 16,
+            dx: (bsp.dx as i32) << 16,
+            dy: (bsp.dy as i32) << 16,
+        };
+        let right_child = bsp.right_child as i32;
+        let left_child = bsp.left_child as i32;
+
+        // Decide which side the start point is on.
+        let mut side = divline_side(self.strace.x, self.strace.y, &node);
+        if side == 2 {
+            side = 0; // an "on" should cross both sides
+        }
+
+        // Cross the starting side.
+        let start_child = if side == 0 { right_child } else { left_child };
+        if !self.cross_bsp_node(start_child) {
+            return false;
+        }
+
+        // If the partition plane isn't actually crossed, we're done.
+        if side == divline_side(self.t2x, self.t2y, &node) {
+            return true;
+        }
+
+        // Cross the ending side.
+        let end_child = if side == 0 { left_child } else { right_child };
+        self.cross_bsp_node(end_child)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -244,106 +473,42 @@ pub fn p_check_sight(
     let src_sector = sector_from_position_or_subsector(level, src_x, src_y, src_subsector);
     let tgt_sector = sector_from_position_or_subsector(level, tgt_x, tgt_y, tgt_subsector);
 
-    // Step 1: Reject table quick-reject.
+    // Step 1: REJECT table trivial rejection (vanilla `P_CheckSight`).
+    // Vanilla does NOT trivially accept same-sector pairs; it always walks the
+    // BSP after the reject check.
     if let (Some(ss), Some(ts)) = (src_sector, tgt_sector) {
         if !level.reject.visible(ss, ts) {
             return false;
         }
-
-        // Step 2: Trivial acceptance -- same sector, skip line traversal.
-        if ss == ts {
-            return true;
-        }
     }
 
-    // Compute sight Z heights (eye height = z + 3/4 * height).
-    let src_eye_z = sight_eye_z(src_z, src_height);
-    let tgt_eye_z = sight_eye_z(tgt_z, tgt_height);
+    // Vanilla sight geometry (all fixed-point):
+    //   sightzstart = t1->z + t1->height - (t1->height >> 2)
+    //   topslope    = (t2->z + t2->height) - sightzstart
+    //   bottomslope = t2->z - sightzstart
+    let sightzstart = sight_eye_z(src_z, src_height).0;
+    let topslope = (tgt_z.0.wrapping_add(tgt_height.0)).wrapping_sub(sightzstart);
+    let bottomslope = tgt_z.0.wrapping_sub(sightzstart);
 
-    // Step 3: Line traversal -- check every linedef the ray crosses.
-    let rx1 = src_x.to_int() as i64;
-    let ry1 = src_y.to_int() as i64;
-    let rx2 = tgt_x.to_int() as i64;
-    let ry2 = tgt_y.to_int() as i64;
+    let mut state = SightState {
+        level,
+        strace: Divline {
+            x: src_x.0,
+            y: src_y.0,
+            dx: tgt_x.0.wrapping_sub(src_x.0),
+            dy: tgt_y.0.wrapping_sub(src_y.0),
+        },
+        t2x: tgt_x.0,
+        t2y: tgt_y.0,
+        sightzstart,
+        topslope,
+        bottomslope,
+        line_seen: vec![false; level.linedefs.len()],
+    };
 
-    for (ld_idx, ld) in level.linedefs.iter().enumerate() {
-        let v1 = &level.vertexes[ld.from_vertex as usize];
-        let v2 = &level.vertexes[ld.to_vertex as usize];
-
-        let lx1 = v1.x as i64;
-        let ly1 = v1.y as i64;
-        let lx2 = v2.x as i64;
-        let ly2 = v2.y as i64;
-
-        // Quick check: does the ray cross this linedef at all?
-        if !ray_crosses_linedef(src_x, src_y, tgt_x, tgt_y, ld_idx, level) {
-            continue;
-        }
-
-        // One-sided line: always blocks LOS.
-        if !ld.is_two_sided() {
-            return false;
-        }
-
-        // Two-sided line: check the opening.
-        let Some(sd) = level.sidedefs.get(ld.right_sidedef as usize) else {
-            return false;
-        };
-        let right_sd = sd;
-        let Some(sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
-            return false;
-        };
-        let left_sd = sd;
-
-        let front_sector = &level.sectors[right_sd.sector as usize];
-        let back_sector = &level.sectors[left_sd.sector as usize];
-
-        let open_floor = front_sector.floor_height.max(back_sector.floor_height) as i64;
-        let open_ceil = front_sector.ceil_height.min(back_sector.ceil_height) as i64;
-
-        // If the opening is closed (floor >= ceiling), LOS is blocked.
-        if open_ceil <= open_floor {
-            return false;
-        }
-
-        // Check if the sight line's Z at this crossing passes through the opening.
-        // Compute the parametric fraction `t` along the ray where it crosses.
-        let frac = ray_linedef_frac(rx1, ry1, rx2, ry2, lx1, ly1, lx2, ly2);
-
-        if let Some((num, denom)) = frac {
-            // Compute sight Z at the crossing point.
-            // sight_z = src_eye_z + t * (tgt_eye_z - src_eye_z)
-            // where t = num / denom.
-            // To avoid floating point: sight_z_frac = src_eye_z * denom + num * dz
-            let src_z_raw = src_eye_z.to_int() as i64;
-            let tgt_z_raw = tgt_eye_z.to_int() as i64;
-            let dz = tgt_z_raw - src_z_raw;
-
-            // sight_z = src_z_raw + (num * dz) / denom
-            // We need to handle the sign of denom carefully.
-            let sight_z = if denom != 0 {
-                // Normalize: ensure denom is positive for comparison
-                let (n, d) = if denom < 0 {
-                    (-num, -denom)
-                } else {
-                    (num, denom)
-                };
-                // Clamp t to [0, 1] -- but we know the ray crosses, so t should be valid.
-                // sight_z = src_z_raw + n * dz / d
-                src_z_raw + (n * dz) / d
-            } else {
-                src_z_raw // degenerate -- parallel, shouldn't happen since we crossed
-            };
-
-            // Check: does the sight line Z pass through the opening?
-            if sight_z <= open_floor || sight_z >= open_ceil {
-                return false;
-            }
-        }
-    }
-
-    // Ray reached target without being blocked.
-    true
+    // The head node is the last node output; a nodeless map yields bspnum -1.
+    let head = level.nodes.len() as i32 - 1;
+    state.cross_bsp_node(head)
 }
 
 // ---------------------------------------------------------------------------
@@ -459,7 +624,9 @@ mod tests {
     use crate::mobj::{Mobj, flags};
     use crate::player::PlayerState;
     use crate::state::GameState;
-    use doom_map::{Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex};
+    use doom_map::{
+        Blockmap, Linedef, Node, NodeBBox, Reject, Sector, Seg, Sidedef, Ssector, Vertex,
+    };
     use doom_types::mobj_kind::MobjKind;
     use doom_types::{Bam, Fixed16_16};
 
@@ -1335,6 +1502,130 @@ mod tests {
         );
     }
 
+    /// Build a two-sector level joined by a vertical two-sided portal at x=64,
+    /// with a real 1-node BSP so `p_check_sight` exercises `cross_bsp_node`
+    /// recursion (west subsector 0 = sector 0, east subsector 1 = sector 1).
+    /// `east_floor` sets sector 1's floor so callers can raise a blocking step.
+    fn make_bsp_portal_level(east_floor: i16) -> Level {
+        let sectors = vec![make_sector(0, 128), make_sector(east_floor, 128)];
+        // Right side of the (64,-128)->(64,128) line faces east (sector 1);
+        // left side faces west (sector 0).
+        let sidedefs = vec![make_sidedef(1), make_sidedef(0)];
+        let vertexes = vec![Vertex { x: 64, y: -128 }, Vertex { x: 64, y: 128 }];
+        let linedefs = vec![make_two_sided_linedef(0, 1, 0, 1)];
+        let segs = vec![
+            // subsector 0 (west, sector 0): seg faces west -> left sidedef.
+            Seg {
+                from_vertex: 1,
+                to_vertex: 0,
+                angle: 0,
+                linedef: 0,
+                direction: 1,
+                offset: 0,
+            },
+            // subsector 1 (east, sector 1): seg faces east -> right sidedef.
+            Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            },
+        ];
+        let ssectors = vec![
+            Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            },
+            Ssector {
+                seg_count: 1,
+                first_seg: 1,
+            },
+        ];
+        // Partition line x=64 pointing +y. P_DivlineSide sends x<64 to side 1
+        // (left child) and x>64 to side 0 (right child).
+        let bbox = NodeBBox {
+            ymax: 128,
+            ymin: -128,
+            xmin: -128,
+            xmax: 256,
+        };
+        let nodes = vec![Node {
+            x: 64,
+            y: -128,
+            dx: 0,
+            dy: 256,
+            right_bbox: bbox,
+            left_bbox: bbox,
+            right_child: 0x8000 | 1, // side 0 (east) -> subsector 1
+            left_child: 0x8000,      // side 1 (west) -> subsector 0
+        }];
+        let reject = Reject::parse_lump(&[0u8; 1], 2).expect("value must exist in test");
+
+        Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes,
+            sectors,
+            reject,
+            blockmap: make_minimal_blockmap(),
+        }
+    }
+
+    #[test]
+    fn sight_bsp_portal_full_opening_visible() {
+        // Regression: vanilla walks the BSP (cross_bsp_node -> cross_subsector).
+        // Equal front/back heights make the portal a non-occluder, so a level
+        // sight line passes.
+        let level = make_bsp_portal_level(0);
+        let (mut gs, player_h) = make_gs_with_player(32, 0);
+        gs.mobjslab
+            .get_mut(player_h)
+            .expect("value must exist in test")
+            .subsector = 0;
+        let monster = spawn_actor(&mut gs, 96, 0, 1, 20);
+
+        assert!(
+            p_check_sight(&gs, &level, player_h, monster),
+            "clear portal with equal heights must allow sight through the BSP"
+        );
+    }
+
+    #[test]
+    fn sight_bsp_portal_high_step_blocks() {
+        // Regression pinning vanilla's accumulate-slope floor clipping across
+        // the BSP portal: the east sector floor is a 100-unit step. The player
+        // on the low floor (eye z=42) cannot see the monster standing on the
+        // step (feet z=100) because openbottom (100) clips bottomslope above
+        // topslope -> P_CrossSubsector returns false.
+        let level = make_bsp_portal_level(100);
+        let (mut gs, player_h) = make_gs_with_player(32, 0);
+        gs.mobjslab
+            .get_mut(player_h)
+            .expect("value must exist in test")
+            .subsector = 0;
+        gs.mobjslab
+            .get_mut(player_h)
+            .expect("value must exist in test")
+            .z = Fixed16_16::ZERO;
+        let monster = spawn_actor(&mut gs, 96, 0, 1, 20);
+        gs.mobjslab
+            .get_mut(monster)
+            .expect("value must exist in test")
+            .z = Fixed16_16::from_int(100);
+
+        assert!(
+            !p_check_sight(&gs, &level, player_h, monster),
+            "a 100-unit floor step must block the low-eye sight line (vanilla slope clip)"
+        );
+    }
+
     #[test]
     fn sight_reject_immediate_false() {
         // Level with 2 sectors, reject table says sector 0 can't see sector 1.
@@ -1464,12 +1755,12 @@ mod tests {
 
     #[test]
     fn sight_z_above_ceiling_blocked() {
-        // Two sectors: front floor=0 ceil=50, back floor=0 ceil=50.
-        // Actors at z=0, height=56 -> eye = 42.
-        // Opening: floor=0, ceil=50. Eye=42 is within [0, 50] -> should pass.
-        // Now raise z so eye exceeds ceiling:
-        // z=20, eye = 20 + 42 = 62. 62 >= 50 -> blocked.
-        let level = make_portal_level(0, 50, 0, 50);
+        // Vanilla only clips against a two-sided line when the front/back
+        // heights DIFFER (otherwise it is not an occluder and is skipped).
+        // Front ceil=128, back ceil=40 -> opentop=40. Both actors at z=20,
+        // height=56 -> sightzstart=62, above the 40-unit opening top, so
+        // topslope is clipped below bottomslope and sight is blocked.
+        let level = make_portal_level(0, 128, 0, 40);
         let (mut gs, player_h) = make_gs_with_player(32, 0);
         gs.mobjslab
             .get_mut(player_h)
