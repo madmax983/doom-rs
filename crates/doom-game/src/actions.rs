@@ -1265,7 +1265,34 @@ fn a_fall(gs: &mut GameState, handle: MobjHandle) {
 /// the monster-specific death sound.  Here we set a flag so the app
 /// layer can trigger audio, matching the vanilla pattern without
 /// hard-coding a sound ID in the game crate.
+///
+/// Demo-sync critical: vanilla `A_Scream` draws `P_Random` to pick a random
+/// death-sound *variant* for monsters whose `info->deathsound` has multiple
+/// variants — `sfx_podth1/2/3` (`P_Random()%3`) and `sfx_bgdth1/2`
+/// (`P_Random()%2`). That draw is on the playsim `prndindex` stream and so
+/// advances the shared RNG ordinal for every later consumer. Monsters with a
+/// single (or no) death sound do not draw. Omitting it drifts the whole RNG
+/// stream from the first monster death onward.
 fn a_scream(gs: &mut GameState, handle: MobjHandle) {
+    let _rng_ctx = crate::random::rng_ctx("A_Scream");
+    let kind = gs.mobjslab.get(handle).map(|mo| mo.kind);
+    // Number of death-sound variants that triggers a `P_Random()%n` draw.
+    // Mirrors the `switch (info->deathsound)` groups in vanilla `A_Scream`.
+    let variants = match kind {
+        // sfx_podth1/2/3 -> P_Random()%3
+        //   Trooper  = MT_POSSESSED (sfx_podth1)
+        //   Sergeant = MT_SHOTGUY   (sfx_podth2)
+        Some(MobjKind::Trooper) | Some(MobjKind::Sergeant) => 3,
+        // sfx_bgdth1/2 -> P_Random()%2
+        //   Imp = MT_TROOP (sfx_bgdth2)
+        Some(MobjKind::Imp) => 2,
+        // All other monsters have a single death sound (default case): no draw.
+        _ => 0,
+    };
+    if variants != 0 {
+        let _ = gs.p_random() % variants;
+    }
+
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.flags |= crate::mobj::flags::MF_SCREAMED;
     }
@@ -3474,6 +3501,55 @@ mod tests {
             0,
             "A_Scream must set MF_SCREAMED"
         );
+    }
+
+    /// Demo-sync regression: vanilla `A_Scream` (`p_enemy.c`) draws a
+    /// `P_Random` to pick the death-sound *variant* for monsters whose
+    /// `info->deathsound` has multiple variants — `sfx_podth1/2/3` (zombieman
+    /// `Trooper`, shotgun-guy `Sergeant`) draw `P_Random()%3` and `sfx_bgdth1/2`
+    /// (imp `Imp`) draws `P_Random()%2`. Monsters with a single death sound
+    /// (e.g. demon `Demon` -> `sfx_sgtdth`) do NOT draw. That playsim draw
+    /// advances the shared `prndindex` for every later consumer, so omitting it
+    /// drifts the whole RNG stream from the first monster death onward. This
+    /// was the root of the DEMO2 divergence (first monster death at lt150).
+    #[test]
+    fn a_scream_draws_prandom_for_multi_variant_death_sounds() {
+        // Trooper (zombieman, sfx_podth1) -> exactly one P_Random draw.
+        {
+            let mut gs = make_game_state();
+            let m = spawn_trooper(&mut gs, 100, 0);
+            let before = gs.rng.index();
+            dispatch_action(&mut gs, m, Action::Scream as u8, None);
+            assert_eq!(
+                (gs.rng.index().wrapping_sub(before)) & 255,
+                1,
+                "A_Scream on a Trooper (podth1) must draw exactly one P_Random"
+            );
+        }
+        // Imp (sfx_bgdth2) -> exactly one P_Random draw.
+        {
+            let mut gs = make_game_state();
+            let m = spawn_monster_chasing(&mut gs, MobjKind::Imp, 100, 0, 60);
+            let before = gs.rng.index();
+            dispatch_action(&mut gs, m, Action::Scream as u8, None);
+            assert_eq!(
+                (gs.rng.index().wrapping_sub(before)) & 255,
+                1,
+                "A_Scream on an Imp (bgdth2) must draw exactly one P_Random"
+            );
+        }
+        // Demon (sfx_sgtdth, single variant) -> no P_Random draw.
+        {
+            let mut gs = make_game_state();
+            let m = spawn_monster_chasing(&mut gs, MobjKind::Demon, 100, 0, 150);
+            let before = gs.rng.index();
+            dispatch_action(&mut gs, m, Action::Scream as u8, None);
+            assert_eq!(
+                (gs.rng.index().wrapping_sub(before)) & 255,
+                0,
+                "A_Scream on a Demon (single death sound) must not draw P_Random"
+            );
+        }
     }
 
     /// Verify the demo-critical E1 monsters carry A_Scream and A_Fall on the
