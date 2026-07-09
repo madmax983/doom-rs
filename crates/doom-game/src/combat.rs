@@ -4,9 +4,10 @@
 //!
 //! When a `Level` reference is available, `p_line_attack` processes ordered
 //! wall/actor intercepts with Doom-style vertical slope clipping, and
-//! `p_radius_attack` uses Euclidean distance with LOS checking.  When no level
-//! is provided (unit tests, pre-map-load), hitscan falls back to actor-only
-//! intercept processing without map geometry.
+//! `p_radius_attack` uses vanilla `max(|dx|,|dy|)` distance with a
+//! `P_CheckSight` line-of-sight gate.  When no level is provided (unit tests,
+//! pre-map-load), hitscan falls back to actor-only intercept processing without
+//! map geometry and the radius attack skips the sight check.
 
 use doom_map::Level;
 use doom_types::mobj_kind::MobjKind;
@@ -16,7 +17,6 @@ use doom_types::{Bam, FIXED_ONE, Fixed16_16};
 use crate::mobj::{MobjHandle, StateNum, flags};
 use crate::state::GameState;
 use crate::states::{STATES, ids};
-use crate::trace::{self, TraceHit};
 
 /// Maximum hitscan range in map units.
 pub const MISSILERANGE: Fixed16_16 = Fixed16_16(2048 << 16);
@@ -140,6 +140,28 @@ fn p_intercept_vector(v2: &Divline, v1: &Divline) -> i32 {
 /// Returns immediately if `target` does not have `MF_SHOOTABLE` or is
 /// already dead.
 pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle, damage: i32) {
+    // Hitscan / melee / self-inflicted callers use a single actor as both the
+    // damage inflictor (knockback origin) and the source (kill credit /
+    // retaliation target), matching vanilla where those callers pass the same
+    // pointer for both `inflictor` and `source`.
+    damage_mobj_source(gs, target, inflictor, inflictor, damage);
+}
+
+/// Port of vanilla `P_DamageMobj(target, inflictor, source, damage)` with the
+/// `inflictor` (the projectile/impact that determines knockback direction) and
+/// `source` (the actor credited with the kill and retaliated against) kept
+/// distinct. `PIT_CheckThing`'s missile branch calls this with
+/// `inflictor = missile`, `source = missile->target` (the shooter), so the
+/// victim is knocked back away from the *missile* (its impact point) while the
+/// *shooter* gets kill credit and becomes the victim's new AI target — exactly
+/// as vanilla does.
+pub fn damage_mobj_source(
+    gs: &mut GameState,
+    target: MobjHandle,
+    inflictor: MobjHandle,
+    source: MobjHandle,
+    damage: i32,
+) {
     // Guard: must exist, be shootable, and be alive.
     {
         let Some(mo) = gs.mobjslab.get(target) else {
@@ -191,8 +213,10 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             }
         }
 
+        // Vanilla gates the "no knockback" case on the *source* wielding a
+        // chainsaw (`!source->player || readyweapon != wp_chainsaw`).
         let source_is_chainsaw =
-            inflictor == gs.player.handle && gs.player.weapon == WeaponType::Chainsaw;
+            source == gs.player.handle && gs.player.weapon == WeaponType::Chainsaw;
 
         if inflictor != MobjHandle::NULL
             && tgt_flags & flags::MF_NOCLIP == 0
@@ -270,35 +294,15 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         damage
     };
 
-    let retaliation = if target != gs.player.handle && inflictor != MobjHandle::NULL {
-        gs.mobjslab.get(target).map(|mo| {
-            let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
-
-            (mo.state == info.spawn_state && info.see_state != StateNum::NULL)
-                .then_some(info.see_state)
-        })
-    } else {
-        None
-    };
-
-    // Apply damage + inflictor.
+    // Apply damage to health. Vanilla runs the kill check first; only a
+    // *surviving* victim gets the pain roll, `reactiontime = 0`, and the
+    // retaliation re-target (handled in the `else` branch below), exactly as
+    // `P_DamageMobj` orders them.
     let new_health = {
         let Some(mo) = gs.mobjslab.get_mut(target) else {
             return;
         };
         mo.health = mo.health.saturating_sub(effective_damage).max(0);
-        if inflictor != MobjHandle::NULL {
-            mo.target = inflictor;
-            if target != gs.player.handle {
-                // Vanilla P_DamageMobj: threshold = BASETHRESHOLD (100).
-                mo.threshold = 100;
-                mo.flags |= flags::MF_JUSTHIT;
-                if let Some(see_state) = retaliation.flatten() {
-                    mo.state = see_state;
-                    mo.tics = crate::states::STATES[see_state.0 as usize].tics;
-                }
-            }
-        }
         mo.health
     };
 
@@ -380,12 +384,12 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             .map(|mo| (mo.x, mo.y))
             .unwrap_or_default();
         #[cfg(feature = "style_meter")]
-        if inflictor == gs.player.handle {
+        if source == gs.player.handle {
             gs.style.register_kill(gs.tic_num);
         }
 
         #[cfg(feature = "telemetry")]
-        if inflictor == gs.player.handle {
+        if source == gs.player.handle {
             let name = format!("{:?}", kind);
             gs.telemetry.record(
                 gs.tic_num,
@@ -417,12 +421,60 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             )
         };
         let roll = gs.p_random();
-        if roll < pain_chance && !skullfly && pain_sn != StateNum::NULL {
-            if let Some(entry) = crate::states::STATES.get(pain_sn.0 as usize) {
+        // Vanilla: `if ((P_Random() < painchance) && !SKULLFLY) { flags |=
+        // MF_JUSTHIT; P_SetMobjState(painstate); }`. MF_JUSTHIT ("fight back!")
+        // is set ONLY when the pain roll succeeds — not on every hit.
+        if roll < pain_chance && !skullfly {
+            if let Some(mo) = gs.mobjslab.get_mut(target) {
+                mo.flags |= flags::MF_JUSTHIT;
+            }
+            if pain_sn != StateNum::NULL
+                && let Some(entry) = crate::states::STATES.get(pain_sn.0 as usize)
+            {
                 let new_tics = entry.tics;
                 if let Some(mo) = gs.mobjslab.get_mut(target) {
                     mo.state = pain_sn;
                     mo.tics = new_tics;
+                }
+            }
+        }
+
+        // `target->reactiontime = 0;` — "we're awake now..." (p_inter.c). The
+        // victim can attack on the very next A_Chase instead of waiting out its
+        // reaction delay.
+        if let Some(mo) = gs.mobjslab.get_mut(target) {
+            mo.reactiontime = 0;
+        }
+
+        // Retaliation re-target (p_inter.c): `if ((!threshold || type==VILE) &&
+        // source && source != target && source->type != VILE) { target->target
+        // = source; threshold = BASETHRESHOLD; if (state == spawnstate &&
+        // seestate) P_SetMobjState(seestate); }`. Gated on the victim not
+        // already being locked onto a threat (threshold == 0).
+        if source != MobjHandle::NULL && source != target {
+            let (threshold, tgt_kind, cur_state) = {
+                let Some(mo) = gs.mobjslab.get(target) else {
+                    return;
+                };
+                (mo.threshold, mo.kind, mo.state)
+            };
+            let src_is_vile = gs
+                .mobjslab
+                .get(source)
+                .map(|s| s.kind == MobjKind::ArchVile)
+                .unwrap_or(false);
+            let tgt_is_vile = tgt_kind == MobjKind::ArchVile;
+            if (threshold == 0 || tgt_is_vile) && !src_is_vile {
+                let info = &crate::mobjinfo::MOBJINFO[tgt_kind as usize];
+                let see_state = info.see_state;
+                let enter_see = cur_state == info.spawn_state && see_state != StateNum::NULL;
+                if let Some(mo) = gs.mobjslab.get_mut(target) {
+                    mo.target = source;
+                    mo.threshold = 100;
+                    if enter_see {
+                        mo.state = see_state;
+                        mo.tics = crate::states::STATES[see_state.0 as usize].tics;
+                    }
                 }
             }
         }
@@ -1071,33 +1123,38 @@ pub fn p_line_attack(
 // p_radius_attack
 // ---------------------------------------------------------------------------
 
-/// Splash damage from an explosion centered on `source`.
+/// Splash (concussion) damage from an explosion — a faithful port of vanilla
+/// `P_RadiusAttack` / `PIT_RadiusAttack` (`p_map.c`).
 ///
-/// Every live, shootable actor (except `source` itself) within `radius` map
-/// units (Euclidean distance) receives proportional damage that falls off
-/// linearly from `damage` at the center to 1 at the edge.
+/// * `spot` is the explosion center (the `bombspot`, e.g. the exploding barrel
+///   or rocket); it is passed to `P_DamageMobj` as the *inflictor* so knockback
+///   points away from the blast origin.
+/// * `source` is the `bombsource` — whoever gets kill credit / is retaliated
+///   against (for a barrel, the player who shot it; for a rocket, the shooter).
+///   May be `MobjHandle::NULL`.
+/// * `damage` is `bombdamage`: it doubles as the maximum blast **range** in map
+///   units, exactly as vanilla (`if (dist >= bombdamage) return`).
 ///
-/// When `level` is `Some`, a LOS check is performed (via `trace_ray` with
-/// `check_actors=false`) to ensure walls don't block the blast. When `None`,
-/// no LOS check is performed (fallback for unit tests).
+/// For each shootable actor, vanilla computes
+/// `dist = max(|dx|,|dy|); dist = (dist - thing->radius) >> FRACBITS;` (clamped
+/// at 0), skips it when `dist >= bombdamage`, and — if `P_CheckSight(thing,
+/// spot)` succeeds — deals `bombdamage - dist`. The Cyberdemon and Spider
+/// Mastermind take no concussion damage. When `level` is `None` (unit tests)
+/// the sight check is skipped.
 pub fn p_radius_attack(
     gs: &mut GameState,
+    spot: MobjHandle,
     source: MobjHandle,
     damage: i32,
-    radius: Fixed16_16,
     level: Option<&Level>,
 ) {
-    let radius_int = radius.to_int();
-    if radius_int <= 0 {
-        return;
-    }
-    let radius_f = radius_int as f32;
-
-    // Extract source position before iterating.
-    let Some(mo) = gs.mobjslab.get(source) else {
-        return;
+    // Explosion center.
+    let (sx, sy) = {
+        let Some(mo) = gs.mobjslab.get(spot) else {
+            return;
+        };
+        (mo.x.raw(), mo.y.raw())
     };
-    let (sx, sy) = (mo.x.to_int(), mo.y.to_int());
 
     // Collect iteration boundaries up front.
     let initial_slot_count = gs.mobjslab.slot_count();
@@ -1112,62 +1169,50 @@ pub fn p_radius_attack(
             continue;
         }
 
-        if handle == source {
-            continue;
-        }
-
         // Extract actor data.
-        let Some(mo) = gs.mobjslab.get(handle) else {
-            continue;
+        let (ax, ay, radius, alive, shootable, kind) = {
+            let Some(mo) = gs.mobjslab.get(handle) else {
+                continue;
+            };
+            (
+                mo.x.raw(),
+                mo.y.raw(),
+                mo.radius.raw(),
+                mo.health > 0,
+                mo.flags & flags::MF_SHOOTABLE != 0,
+                mo.kind,
+            )
         };
-        let (ax, ay, alive, shootable) = (
-            mo.x.to_int(),
-            mo.y.to_int(),
-            mo.health > 0,
-            mo.flags & flags::MF_SHOOTABLE != 0,
-        );
 
         if !alive || !shootable {
             continue;
         }
 
-        // Euclidean distance.
-        let dx_f = (ax - sx) as f32;
-        let dy_f = (ay - sy) as f32;
-
-        // Box bounding check to avoid expensive .sqrt() for distant actors.
-        if dx_f.abs() >= radius_f || dy_f.abs() >= radius_f {
+        // Boss spider and cyborg take no damage from concussion.
+        if kind == MobjKind::Cyberdemon || kind == MobjKind::SpiderMastermind {
             continue;
         }
 
-        let dist_f = (dx_f * dx_f + dy_f * dy_f).sqrt();
+        // dist = max(|dx|,|dy|); dist = (dist - thing->radius) >> FRACBITS.
+        let dx = ax.wrapping_sub(sx).wrapping_abs();
+        let dy = ay.wrapping_sub(sy).wrapping_abs();
+        let dmax = if dx > dy { dx } else { dy };
+        let mut dist = dmax.wrapping_sub(radius) >> 16;
+        if dist < 0 {
+            dist = 0;
+        }
+        if dist >= damage {
+            continue; // out of range
+        }
 
-        if dist_f >= radius_f {
+        // Must be in direct path (vanilla `P_CheckSight(thing, bombspot)`).
+        if let Some(lv) = level
+            && !crate::sight::p_check_sight(gs, lv, handle, spot)
+        {
             continue;
         }
 
-        // LOS check: ensure no wall blocks the blast line.
-        if let Some(lv) = level {
-            let total_dist = dist_f.max(1.0);
-            let cos_a = dx_f / total_dist;
-            let sin_a = dy_f / total_dist;
-            let los = trace::trace_ray(
-                lv,
-                sx,
-                sy,
-                cos_a,
-                sin_a,
-                total_dist,
-                trace::ActorCheck::Ignore,
-            );
-            if matches!(los.hit, TraceHit::Wall { .. }) {
-                continue; // Wall blocks the blast.
-            }
-        }
-
-        let dist_i = dist_f as i32;
-        let actual = (damage * (radius_int - dist_i) / radius_int).max(1);
-        damage_mobj(gs, handle, source, actual);
+        damage_mobj_source(gs, handle, spot, source, damage - dist);
     }
 }
 
@@ -1389,7 +1434,12 @@ mod tests {
     }
 
     #[test]
-    fn damage_wakes_monster_and_marks_justhit() {
+    fn damage_wakes_monster_without_pain_leaves_justhit_clear() {
+        // Vanilla `P_DamageMobj`: the retaliation block (`target = source;
+        // threshold = BASETHRESHOLD; wake into seestate`) runs on ANY hit, but
+        // `MF_JUSTHIT` is set ONLY inside the pain block (when the pain roll
+        // succeeds). Here the roll (220) fails the trooper's pain chance (200),
+        // so the monster wakes and retaliates but must NOT be flagged JUSTHIT.
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
         let player = gs.player.handle;
@@ -1412,10 +1462,15 @@ mod tests {
             mo.threshold, 100,
             "monster should enter BASETHRESHOLD alert after being hit"
         );
-        assert_ne!(
+        assert_eq!(
             mo.flags & flags::MF_JUSTHIT,
             0,
-            "monster should be marked JUSTHIT for immediate retaliation"
+            "JUSTHIT must NOT be set when the pain roll fails (vanilla sets it \
+             only inside the pain block)"
+        );
+        assert_eq!(
+            mo.reactiontime, 0,
+            "damage must reset reactiontime to 0 (\"we're awake now\")"
         );
         assert_ne!(
             spawn_state, see_state,
@@ -1424,6 +1479,33 @@ mod tests {
         assert_eq!(
             mo.state, see_state,
             "idle monster should wake into see_state when damaged"
+        );
+    }
+
+    #[test]
+    fn damage_marks_justhit_only_on_pain_success() {
+        // When the pain roll succeeds (roll < painchance), vanilla sets
+        // MF_JUSTHIT so the victim fights back at once.
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        let player = gs.player.handle;
+
+        // Find an RNG index whose next byte is < the trooper's pain chance so
+        // the pain roll succeeds.
+        let pain_chance = crate::mobjinfo::MOBJINFO[MobjKind::Trooper as usize].pain_chance;
+        for idx in 0..=255u32 {
+            gs.rng.set_index(idx);
+            if gs.rng.clone().next_byte() < pain_chance {
+                break;
+            }
+        }
+        damage_mobj(&mut gs, trooper, player, 5);
+
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
+        assert_ne!(
+            mo.flags & flags::MF_JUSTHIT,
+            0,
+            "monster should be flagged JUSTHIT when the pain roll succeeds"
         );
     }
 
@@ -1793,8 +1875,8 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 50, 0); // 50 units east of origin
 
         let player_handle = gs.player.handle;
-        // Explode at origin with radius 200 — trooper is well within range.
-        p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(200), None);
+        // Explode at origin (bombdamage 100) — trooper 50 units away is in range.
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
 
         let health = gs
             .mobjslab
@@ -1962,7 +2044,7 @@ mod tests {
         let trooper = spawn_trooper(&mut gs, 500, 0);
 
         let player_handle = gs.player.handle;
-        p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
 
         let health = gs
             .mobjslab
@@ -2383,17 +2465,17 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
-    fn radius_attack_euclidean_distance() {
-        // Test that Euclidean distance is used, not Manhattan.
-        // Actor at (70, 70) from source at (0, 0):
-        //   Manhattan distance = 140
-        //   Euclidean distance = sqrt(70^2 + 70^2) ≈ 98.99
-        // With radius=100: Manhattan says no (140 >= 100), Euclidean says yes (99 < 100).
+    fn radius_attack_uses_max_axis_distance() {
+        // Vanilla `PIT_RadiusAttack` uses `dist = max(|dx|,|dy|)` (Chebyshev),
+        // NOT Euclidean. Actor at (90, 90) from the blast at (0, 0):
+        //   Euclidean distance = sqrt(90^2 + 90^2) ≈ 127  (>= 100, would MISS)
+        //   max-axis distance   = 90, minus radius 20 = 70 (< 100, HITS)
+        // So a vanilla max-axis blast damages it; the old Euclidean path did not.
         let mut gs = make_game_state();
-        let trooper = spawn_trooper(&mut gs, 70, 70);
+        let trooper = spawn_trooper(&mut gs, 90, 90);
 
         let player_handle = gs.player.handle;
-        p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
 
         let health = gs
             .mobjslab
@@ -2402,30 +2484,55 @@ mod tests {
             .health;
         assert!(
             health < 20,
-            "Euclidean distance ~99 < radius 100 → should take damage, health={health}"
+            "max-axis dist 90-20=70 < bombdamage 100 → must take damage, health={health}"
         );
     }
 
     #[test]
-    fn radius_attack_no_damage_outside_euclidean_radius() {
-        // Actor at (80, 80) from source at (0, 0):
-        //   Euclidean distance = sqrt(80^2 + 80^2) ≈ 113.14
-        // With radius=100: outside Euclidean radius → no damage.
+    fn radius_attack_credits_bombsource_not_spot() {
+        // Vanilla `A_Explode` passes `bombspot->target` as the bombsource, so a
+        // monster caught in a barrel/rocket blast retaliates against the actor
+        // that set it off (the player), never against the exploding thing. This
+        // pins the demo-sync fix where the DEMO1 barrel splash made the imp
+        // target the (dead) barrel instead of the player.
         let mut gs = make_game_state();
-        let trooper = spawn_trooper(&mut gs, 80, 80);
+        let player = gs.player.handle;
+        // Bomb spot 400 units from the player so the player is out of the blast.
+        let spot = spawn_trooper(&mut gs, 400, 0);
+        // Victim 40 units from the spot — inside the 128 blast.
+        let victim = spawn_trooper(&mut gs, 440, 0);
+        gs.mobjslab
+            .get_mut(victim)
+            .expect("value must exist in test")
+            .health = 200;
+
+        p_radius_attack(&mut gs, spot, player, 128, None);
+
+        let mo = gs.mobjslab.get(victim).expect("value must exist in test");
+        assert!(mo.health < 200, "victim must take splash damage");
+        assert_eq!(
+            mo.target, player,
+            "victim must retaliate against the bombsource (player), not the spot"
+        );
+    }
+
+    #[test]
+    fn radius_attack_no_damage_beyond_max_axis_range() {
+        // Vanilla out-of-range gate: `if ((max(|dx|,|dy|) - radius) >> FRACBITS
+        // >= bombdamage) return`. Actor at (140, 0), radius 20:
+        //   dist = 140 - 20 = 120 >= bombdamage 100 → no damage.
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 140, 0);
 
         let player_handle = gs.player.handle;
-        p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
 
         let health = gs
             .mobjslab
             .get(trooper)
             .expect("value must exist in test")
             .health;
-        assert_eq!(
-            health, 20,
-            "Euclidean distance ~113 >= radius 100 → no damage"
-        );
+        assert_eq!(health, 20, "max-axis dist 120 >= bombdamage 100 → no damage");
     }
 
     #[test]
@@ -2447,7 +2554,7 @@ mod tests {
             .health = 200;
 
         let player_handle = gs.player.handle;
-        p_radius_attack(&mut gs, player_handle, 100, Fixed16_16::from_int(100), None);
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
 
         let close_health = gs
             .mobjslab
@@ -2466,9 +2573,12 @@ mod tests {
     }
 
     #[test]
-    fn radius_attack_los_blocked_by_wall() {
-        // With a level, walls should block splash damage.
-        let level = make_combat_test_level(); // wall at y=64
+    fn radius_attack_los_blocked_hides_target() {
+        // Vanilla `PIT_RadiusAttack` only damages a thing when `P_CheckSight
+        // (thing, bombspot)` succeeds. A REJECT table that marks the two actors'
+        // sectors mutually invisible makes `p_check_sight` return false, so the
+        // blast must not reach the trooper even though it is well within range.
+        let level = make_reject_blocked_level();
         let mut gs = GameState::new("test");
         let mut player_mo = Mobj::new(
             MobjKind::Player,
@@ -2481,16 +2591,10 @@ mod tests {
         let player_h = gs.mobjslab.alloc(player_mo);
         gs.player = PlayerState::pistol_start(player_h);
 
-        // Trooper at (64, 100) — behind the wall at y=64, within blast radius.
-        let trooper = spawn_trooper(&mut gs, 64, 100);
+        // Trooper 32 units away — within the blast, but hidden by the reject.
+        let trooper = spawn_trooper(&mut gs, 64, 32);
 
-        p_radius_attack(
-            &mut gs,
-            player_h,
-            200,
-            Fixed16_16::from_int(200),
-            Some(&level),
-        );
+        p_radius_attack(&mut gs, player_h, MobjHandle::NULL, 200, Some(&level));
 
         let health = gs
             .mobjslab
@@ -2499,14 +2603,15 @@ mod tests {
             .health;
         assert_eq!(
             health, 20,
-            "trooper behind wall should not take splash damage"
+            "trooper hidden by the reject table must not take splash damage"
         );
     }
 
     #[test]
     fn radius_attack_damages_in_los() {
-        // With a level, actors with clear LOS should take damage.
-        let level = make_combat_test_level(); // wall at y=64
+        // With a clear line of sight (all-visible reject), an in-range actor
+        // takes splash damage.
+        let level = make_combat_test_level();
         let mut gs = GameState::new("test");
         let mut player_mo = Mobj::new(
             MobjKind::Player,
@@ -2519,16 +2624,10 @@ mod tests {
         let player_h = gs.mobjslab.alloc(player_mo);
         gs.player = PlayerState::pistol_start(player_h);
 
-        // Trooper at (64, 32) — in front of the wall, clear LOS.
+        // Trooper at (64, 32) — clear LOS, within the blast.
         let trooper = spawn_trooper(&mut gs, 64, 32);
 
-        p_radius_attack(
-            &mut gs,
-            player_h,
-            100,
-            Fixed16_16::from_int(200),
-            Some(&level),
-        );
+        p_radius_attack(&mut gs, player_h, MobjHandle::NULL, 100, Some(&level));
 
         let health = gs
             .mobjslab
@@ -2539,5 +2638,80 @@ mod tests {
             health < 20,
             "trooper with clear LOS should take splash damage, health={health}"
         );
+    }
+
+    /// Minimal single-sector level whose REJECT marks the sector as unable to
+    /// see itself, so `p_check_sight` returns false for any pair of actors in
+    /// it. Nodes are empty, so sector resolution falls back to the actors'
+    /// subsector (0 -> sector 0) and the reject check fires.
+    fn make_reject_blocked_level() -> doom_map::Level {
+        use doom_map::{Blockmap, Linedef, Reject, SIDEDEF_NONE, Sector, Seg, Sidedef, Ssector, Vertex};
+
+        let verts = vec![Vertex { x: 0, y: 0 }, Vertex { x: 128, y: 0 }];
+        let sds = vec![Sidedef {
+            x_offset: 0,
+            y_offset: 0,
+            upper_texture: [0; 8],
+            lower_texture: [0; 8],
+            middle_texture: [0; 8],
+            sector: 0,
+        }];
+        let lds = vec![Linedef {
+            from_vertex: 0,
+            to_vertex: 1,
+            flags: 0,
+            special: 0,
+            tag: 0,
+            right_sidedef: 0,
+            left_sidedef: SIDEDEF_NONE,
+        }];
+        let segs = vec![Seg {
+            from_vertex: 0,
+            to_vertex: 1,
+            angle: 0,
+            linedef: 0,
+            direction: 0,
+            offset: 0,
+        }];
+        let ssectors = vec![Ssector {
+            seg_count: 1,
+            first_seg: 0,
+        }];
+        let secs = vec![Sector {
+            floor_height: 0,
+            ceil_height: 128,
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: 0,
+        }];
+
+        let mut bm_raw = Vec::new();
+        bm_raw.extend_from_slice(&0i16.to_le_bytes());
+        bm_raw.extend_from_slice(&0i16.to_le_bytes());
+        bm_raw.extend_from_slice(&1u16.to_le_bytes());
+        bm_raw.extend_from_slice(&1u16.to_le_bytes());
+        bm_raw.extend_from_slice(&5u16.to_le_bytes());
+        bm_raw.extend_from_slice(&0x0000u16.to_le_bytes());
+        bm_raw.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_raw).expect("blockmap parse");
+
+        // Reject bit (0,0) set => sector 0 cannot see sector 0 (all blocked).
+        let reject = Reject::parse_lump(&[0x01u8], 1).expect("reject parse");
+
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: lds,
+            sidedefs: sds,
+            vertexes: verts,
+            segs,
+            ssectors,
+            nodes: vec![],
+            sectors: secs,
+            reject,
+            blockmap,
+        }
     }
 }

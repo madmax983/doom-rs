@@ -648,7 +648,8 @@ fn try_move_with_blocker(
     // `PIT_CheckThing`) BEFORE lines: a move into any SOLID thing is blocked.
     // We port the solid-blocking subset; the moving thing being a missile or a
     // charging lost soul (MF_SKULLFLY) takes damage-dealing branches handled
-    // elsewhere (`p_move_projectiles`), so we skip the thing pass for those.
+    // elsewhere (the missile path in `tic.rs`, `missile_check_things`), so we
+    // skip the thing pass for those.
     if mo_flags & (flags::MF_MISSILE | flags::MF_SKULLFLY) == 0 {
         for other in slab.iter_handles() {
             if other == handle {

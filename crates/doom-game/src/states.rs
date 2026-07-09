@@ -36,6 +36,7 @@ const LOAD_SHOTGUN2: u8 = crate::actions::Action::LoadShotgun2 as u8;
 const LOOK: u8 = crate::actions::Action::Look as u8;
 const LOWER: u8 = crate::actions::Action::Lower as u8;
 const NONE: u8 = crate::actions::Action::NoAction as u8;
+const EXPLODE: u8 = crate::actions::Action::Explode as u8;
 const OPEN_SHOTGUN2: u8 = crate::actions::Action::OpenShotgun2 as u8;
 const PAIN_ATTACK: u8 = crate::actions::Action::PainAttack as u8;
 const POS_ATTACK: u8 = crate::actions::Action::PosAttack as u8;
@@ -147,9 +148,10 @@ pub mod sprite_names {
     pub const SPR_FIRE: u16 = 79;
     pub const SPR_PLAS: u16 = 80;
     pub const SPR_BAR1: u16 = 81;
+    pub const SPR_BEXP: u16 = 82;
     pub const SPR_NONE: u16 = 0xFFFF;
 
-    pub const SPRITE_COUNT: usize = 82;
+    pub const SPRITE_COUNT: usize = 83;
 
     /// Sprite name strings for WAD lookup.
     pub const SPRITE_NAMES: [&str; SPRITE_COUNT] = [
@@ -160,7 +162,7 @@ pub mod sprite_names {
         "IFOG", "CLIP", "SHEL", "CELL", "AMMO", "SBOX", "BPAK", "MEDI", "STIM", "BON1", "BON2",
         "SOUL", "PINV", "PINS", "SUIT", "PMAP", "PVIS", "MEGA", "ARM1", "ARM2", "BKEY", "RKEY",
         "YKEY", "BSKU", "RSKU", "YSKU", "COLU", "TBLU", "TGRN", "TRED", "SMBT", "SMGT", "SMRT",
-        "CEYE", "FSKU", "FIRE", "PLAS", "BAR1",
+        "CEYE", "FSKU", "FIRE", "PLAS", "BAR1", "BEXP",
     ];
 }
 
@@ -639,9 +641,17 @@ pub mod ids {
     /// that cycle forever, keeping the barrel alive and `MF_SOLID` until shot.
     pub const S_BAR1: u16 = 376;
     pub const S_BAR2: u16 = 377;
+    /// Exploding-barrel death animation (vanilla `S_BEXP`..`S_BEXP5`).  On death
+    /// the barrel runs these five fullbright frames; `A_Explode` fires on entry
+    /// to `S_BEXP4` (10-tic frame), dealing 128-radius splash damage.
+    pub const S_BEXP: u16 = 378;
+    pub const S_BEXP2: u16 = 379;
+    pub const S_BEXP3: u16 = 380;
+    pub const S_BEXP4: u16 = 381;
+    pub const S_BEXP5: u16 = 382;
 
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 378;
+    pub const STATES_COUNT: usize = 383;
 }
 
 // ---------------------------------------------------------------------------
@@ -775,7 +785,7 @@ pub static STATES: &[MobjStateEntry] = &[
     // Rocket (MISL) -- fly
     st!(SPR_MISL, FB, 1, NONE, ids::S_ROCKET), // 71
     // Rocket -- death
-    st!(SPR_MISL, 1 | FB, 8, NONE, ids::S_EXPLODE2), // 72
+    st!(SPR_MISL, 1 | FB, 8, EXPLODE, ids::S_EXPLODE2), // 72
     st!(SPR_MISL, 2 | FB, 6, NONE, ids::S_EXPLODE3), // 73
     st!(SPR_MISL, 3 | FB, 4, NONE, ids::S_NULL),     // 74
     // Plasma ball (PLSS) -- fly
@@ -1159,6 +1169,14 @@ pub static STATES: &[MobjStateEntry] = &[
     // --- Exploding barrel idle loop (vanilla S_BAR1/S_BAR2, 6 tics each) ---
     st!(SPR_BAR1, 0, 6, NONE, ids::S_BAR2),           // 376: S_BAR1
     st!(SPR_BAR1, 1, 6, NONE, ids::S_BAR1),           // 377: S_BAR2
+    // --- Exploding-barrel death animation (vanilla S_BEXP..S_BEXP5). Frames
+    //     are fullbright (vanilla frame|FF_FULLBRIGHT). A_Explode fires on entry
+    //     to S_BEXP4, dealing 128-radius splash damage. ---
+    st!(SPR_BEXP, FB, 5, NONE, ids::S_BEXP2),          // 378: S_BEXP
+    st!(SPR_BEXP, 1 | FB, 5, SCREAM, ids::S_BEXP3),    // 379: S_BEXP2 (A_Scream)
+    st!(SPR_BEXP, 2 | FB, 5, NONE, ids::S_BEXP4),      // 380: S_BEXP3
+    st!(SPR_BEXP, 3 | FB, 10, EXPLODE, ids::S_BEXP5),  // 381: S_BEXP4 (A_Explode)
+    st!(SPR_BEXP, 4 | FB, 10, NONE, ids::S_NULL),      // 382: S_BEXP5
 ];
 
 // ---------------------------------------------------------------------------
@@ -1176,6 +1194,58 @@ mod tests {
         assert_eq!(e.next_state, StateNum(ids::S_NULL));
         assert_eq!(e.action, crate::actions::Action::NoAction as u8);
         assert_eq!(e.sprite, SPR_NONE);
+    }
+
+    #[test]
+    fn barrel_death_chain_matches_vanilla_bexp_states() {
+        // Vanilla exploding-barrel death: S_BEXP(5) -> S_BEXP2(5, A_Scream) ->
+        // S_BEXP3(5) -> S_BEXP4(10, A_Explode) -> S_BEXP5(10) -> S_NULL, all
+        // fullbright. `A_Explode` fires on entry to S_BEXP4, 15 tics into the
+        // animation — the demo-sync barrel splash timing hinges on this chain.
+        let explode = crate::actions::Action::Explode as u8;
+        let scream = crate::actions::Action::Scream as u8;
+        let none = crate::actions::Action::NoAction as u8;
+
+        let bexp = &STATES[ids::S_BEXP as usize];
+        assert_eq!(bexp.tics, 5);
+        assert_eq!(bexp.action, none);
+        assert_eq!(bexp.next_state, StateNum(ids::S_BEXP2));
+        assert_ne!(bexp.frame & 0x80, 0, "S_BEXP must be fullbright");
+
+        let bexp2 = &STATES[ids::S_BEXP2 as usize];
+        assert_eq!(bexp2.tics, 5);
+        assert_eq!(bexp2.action, scream, "S_BEXP2 runs A_Scream");
+        assert_eq!(bexp2.next_state, StateNum(ids::S_BEXP3));
+
+        let bexp3 = &STATES[ids::S_BEXP3 as usize];
+        assert_eq!(bexp3.tics, 5);
+        assert_eq!(bexp3.action, none);
+        assert_eq!(bexp3.next_state, StateNum(ids::S_BEXP4));
+
+        let bexp4 = &STATES[ids::S_BEXP4 as usize];
+        assert_eq!(bexp4.tics, 10);
+        assert_eq!(bexp4.action, explode, "S_BEXP4 runs A_Explode");
+        assert_eq!(bexp4.next_state, StateNum(ids::S_BEXP5));
+
+        let bexp5 = &STATES[ids::S_BEXP5 as usize];
+        assert_eq!(bexp5.tics, 10);
+        assert_eq!(bexp5.action, none);
+        assert_eq!(bexp5.next_state, StateNum(ids::S_NULL));
+    }
+
+    #[test]
+    fn barrel_mobjinfo_death_state_is_bexp() {
+        // The exploding barrel must route its death to the S_BEXP explosion
+        // chain — without this it silently vanishes when shot and never deals
+        // the splash damage vanilla does (the DEMO1 lt225 desync).
+        use doom_types::mobj_kind::MobjKind;
+        let info = &crate::mobjinfo::MOBJINFO[MobjKind::Barrel as usize];
+        assert_eq!(info.death_state, StateNum(ids::S_BEXP));
+        assert_ne!(
+            info.flags & crate::mobj::flags::MF_NOBLOOD,
+            0,
+            "barrel is MF_NOBLOOD in vanilla"
+        );
     }
 
     #[test]
