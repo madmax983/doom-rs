@@ -304,23 +304,46 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
 
     if new_health <= 0 {
         // -------------------------------------------------------------------
-        // Death transition — use p_set_mobj_state so the entry action
-        // (A_Scream on the first death frame) fires correctly.
+        // P_KillMobj (p_inter.c:675).  Order matters for the RNG stream:
+        //   flags/height, killcount, P_SetMobjState(deathstate) [no RNG],
+        //   `tics -= P_Random()&3`, then the item-drop `P_SpawnMobj`
+        //   (lastlook) for zombie/shotgun/chaingun corpses.
         // -------------------------------------------------------------------
-        let (death_sn, kind): (StateNum, _) = {
+        let (kind, was_countkill, is_skull): (MobjKind, bool, bool) = {
             let Some(mo) = gs.mobjslab.get(target) else {
                 return;
             };
             (
-                crate::mobjinfo::MOBJINFO[mo.kind as usize].death_state,
                 mo.kind,
+                mo.flags & flags::MF_COUNTKILL != 0,
+                mo.kind == MobjKind::LostSoul,
             )
         };
+
+        // target->flags &= ~(MF_SHOOTABLE|MF_FLOAT|MF_SKULLFLY);
+        // if (type != MT_SKULL) target->flags &= ~MF_NOGRAVITY;
+        // target->flags |= MF_CORPSE|MF_DROPOFF;  target->height >>= 2;
+        if let Some(mo) = gs.mobjslab.get_mut(target) {
+            mo.flags &= !(flags::MF_SHOOTABLE | flags::MF_FLOAT | flags::MF_SKULLFLY);
+            if !is_skull {
+                mo.flags &= !flags::MF_NOGRAVITY;
+            }
+            mo.flags |= flags::MF_CORPSE | flags::MF_DROPOFF;
+            mo.height = Fixed16_16(mo.height.raw() >> 2);
+        }
+
+        // Kill credit.  Single-player (`!netgame`) always credits player 0,
+        // whether the killer is the player, another monster, or the
+        // environment (p_inter.c:691-704).
+        if was_countkill {
+            gs.player.kill_count += 1;
+        }
+
+        let death_sn = crate::mobjinfo::MOBJINFO[kind as usize].death_state;
         if death_sn != StateNum::NULL {
             crate::tic::p_set_mobj_state(gs, target, death_sn, None);
         }
-        // Vanilla P_KillMobj: `target->tics -= P_Random()&3; if(tics<1)tics=1;`
-        // desynchronizes death animations. One P_Random draw per kill.
+        // `target->tics -= P_Random()&3; if(tics<1)tics=1;` (p_inter.c:735).
         {
             let r = (gs.p_random() & 3) as i16;
             if let Some(mo) = gs.mobjslab.get_mut(target) {
@@ -330,6 +353,27 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
                 }
             }
         }
+
+        // Drop stuff: MT_POSSESSED/MT_WOLFSS -> MT_CLIP, MT_SHOTGUY ->
+        // MT_SHOTGUN, MT_CHAINGUY -> MT_CHAINGUN.  The P_SpawnMobj draws one
+        // `lastlook` P_Random — it MUST follow the tics draw above.
+        let drop = match kind {
+            MobjKind::Trooper | MobjKind::WolfSS => Some(MobjKind::Clip),
+            MobjKind::Sergeant => Some(MobjKind::Shotgun),
+            _ => None,
+        };
+        if let Some(drop_kind) = drop {
+            let (dx, dy, dz) = gs
+                .mobjslab
+                .get(target)
+                .map(|mo| (mo.x, mo.y, mo.z))
+                .unwrap_or_default();
+            let dh = crate::spawn::p_spawn_mobj(gs, None, dx, dy, dz, drop_kind);
+            if let Some(mo) = gs.mobjslab.get_mut(dh) {
+                mo.flags |= flags::MF_DROPPED;
+            }
+        }
+
         let (sx, sy) = gs
             .mobjslab
             .get(target)
@@ -1286,6 +1330,51 @@ mod tests {
             mo.momy.raw().abs() < mo.momx.raw() / 100,
             "thrust is essentially axis-aligned east, got momy={}",
             mo.momy.raw()
+        );
+    }
+
+    #[test]
+    fn lethal_damage_credits_a_kill_and_corpses_stop_being_shootable() {
+        // Vanilla P_KillMobj: single-player credits players[0].killcount for any
+        // MF_COUNTKILL death, clears MF_SHOOTABLE, and sets MF_CORPSE.
+        let mut gs = make_game_state();
+        let player = gs.player.handle;
+        let trooper = spawn_trooper(&mut gs, 100, 0); // 20 health, MF_COUNTKILL
+        assert_eq!(gs.player.kill_count, 0);
+
+        damage_mobj(&mut gs, trooper, player, 50); // lethal
+
+        assert_eq!(gs.player.kill_count, 1, "kill must be credited");
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
+        assert!(mo.health <= 0, "target must be dead");
+        assert_eq!(
+            mo.flags & flags::MF_SHOOTABLE,
+            0,
+            "corpse must lose MF_SHOOTABLE so later shots pass through"
+        );
+        assert_ne!(mo.flags & flags::MF_CORPSE, 0, "corpse must gain MF_CORPSE");
+    }
+
+    #[test]
+    fn zombie_death_drops_a_clip() {
+        // MT_POSSESSED (Trooper) drops MT_CLIP on death (p_inter.c:749).
+        let mut gs = make_game_state();
+        let player = gs.player.handle;
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        let before = gs.mobjslab.iter_handles().count();
+
+        damage_mobj(&mut gs, trooper, player, 50);
+
+        let clip = gs
+            .mobjslab
+            .iter_handles()
+            .filter_map(|h| gs.mobjslab.get(h))
+            .find(|m| m.kind == MobjKind::Clip && m.flags & flags::MF_DROPPED != 0);
+        assert!(clip.is_some(), "zombieman corpse must drop a dropped Clip");
+        assert_eq!(
+            gs.mobjslab.iter_handles().count(),
+            before + 1,
+            "exactly one dropped item spawns"
         );
     }
 
