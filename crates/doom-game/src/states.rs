@@ -656,34 +656,34 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_POSS, 0, 10, LOOK, ids::S_POSS_STND2), // 1: idle A
     st!(SPR_POSS, 0, 4, CHASE, ids::S_POSS_RUN2),  // 2: run1
     st!(SPR_POSS, 1, 4, CHASE, ids::S_POSS_RUN3),  // 3: run2
-    // --- Sergeant (4..6) ---
+    // --- Sergeant (4..6) --- vanilla S_SPOS_RUN* tics = 3
     st!(SPR_SPOS, 0, 10, LOOK, ids::S_SPOS_STND2),
-    st!(SPR_SPOS, 0, 4, CHASE, ids::S_SPOS_RUN2),
-    st!(SPR_SPOS, 1, 4, CHASE, ids::S_SPOS_RUN3),
-    // --- Imp (7..9) ---
+    st!(SPR_SPOS, 0, 3, CHASE, ids::S_SPOS_RUN2),
+    st!(SPR_SPOS, 1, 3, CHASE, ids::S_SPOS_RUN3),
+    // --- Imp (7..9) --- vanilla S_TROO_RUN* tics = 3
     st!(SPR_TROO, 0, 10, LOOK, ids::S_TROO_STND2),
-    st!(SPR_TROO, 0, 4, CHASE, ids::S_TROO_RUN2),
-    st!(SPR_TROO, 1, 4, CHASE, ids::S_TROO_RUN3),
-    // --- Demon (10..12) ---
+    st!(SPR_TROO, 0, 3, CHASE, ids::S_TROO_RUN2),
+    st!(SPR_TROO, 1, 3, CHASE, ids::S_TROO_RUN3),
+    // --- Demon (10..12) --- vanilla S_SARG_RUN* tics = 2
     st!(SPR_SARG, 0, 10, LOOK, ids::S_SARG_STND2),
-    st!(SPR_SARG, 0, 4, CHASE, ids::S_SARG_RUN2),
-    st!(SPR_SARG, 1, 4, CHASE, ids::S_SARG_RUN3),
-    // --- Cacodemon (13..15) ---
+    st!(SPR_SARG, 0, 2, CHASE, ids::S_SARG_RUN2),
+    st!(SPR_SARG, 1, 2, CHASE, ids::S_SARG_RUN3),
+    // --- Cacodemon (13..15) --- vanilla S_HEAD_RUN1 tics = 3
     st!(SPR_HEAD, 0, 10, LOOK, ids::S_HEAD_STND),
-    st!(SPR_HEAD, 0, 4, CHASE, ids::S_HEAD_RUN2),
-    st!(SPR_HEAD, 1, 4, CHASE, ids::S_HEAD_RUN1),
-    // --- Baron of Hell (16..18) ---
+    st!(SPR_HEAD, 0, 3, CHASE, ids::S_HEAD_RUN2),
+    st!(SPR_HEAD, 1, 3, CHASE, ids::S_HEAD_RUN1),
+    // --- Baron of Hell (16..18) --- vanilla S_BOSS_RUN* tics = 3
     st!(SPR_BOSS, 0, 10, LOOK, ids::S_BOSS_STND),
-    st!(SPR_BOSS, 0, 4, CHASE, ids::S_BOSS_RUN2),
-    st!(SPR_BOSS, 1, 4, CHASE, ids::S_BOSS_RUN1),
-    // --- Cyberdemon (19..21) ---
+    st!(SPR_BOSS, 0, 3, CHASE, ids::S_BOSS_RUN2),
+    st!(SPR_BOSS, 1, 3, CHASE, ids::S_BOSS_RUN1),
+    // --- Cyberdemon (19..21) --- vanilla S_CYBER_RUN* tics = 3
     st!(SPR_CYBR, 0, 10, LOOK, ids::S_CYBER_STND),
-    st!(SPR_CYBR, 0, 4, CHASE, ids::S_CYBER_RUN2),
-    st!(SPR_CYBR, 1, 4, CHASE, ids::S_CYBER_RUN1),
-    // --- Spider Mastermind (22..24) ---
+    st!(SPR_CYBR, 0, 3, CHASE, ids::S_CYBER_RUN2),
+    st!(SPR_CYBR, 1, 3, CHASE, ids::S_CYBER_RUN1),
+    // --- Spider Mastermind (22..24) --- vanilla S_SPID_RUN* tics = 3
     st!(SPR_SPID, 0, 10, LOOK, ids::S_SPID_STND),
-    st!(SPR_SPID, 0, 4, CHASE, ids::S_SPID_RUN2),
-    st!(SPR_SPID, 1, 4, CHASE, ids::S_SPID_RUN1),
+    st!(SPR_SPID, 0, 3, CHASE, ids::S_SPID_RUN2),
+    st!(SPR_SPID, 1, 3, CHASE, ids::S_SPID_RUN1),
     // === Death and pain states (25..48) ===
     // Trooper — death starts at WAD frame H(7), pain at G(6)
     st!(SPR_POSS, 7, 8, SCREAM, ids::S_POSS_DIE2), // 25: die1
@@ -1093,14 +1093,14 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_POSS, 2, 4, CHASE, ids::S_POSS_RUN4), // 343: run3 (C)
     st!(SPR_POSS, 3, 4, CHASE, ids::S_POSS_RUN1), // 344: run4 (D)
     st!(SPR_SPOS, 1, 10, LOOK, ids::S_SPOS_STND), // 345: idle B
-    st!(SPR_SPOS, 2, 4, CHASE, ids::S_SPOS_RUN4), // 346: run3 (C)
-    st!(SPR_SPOS, 3, 4, CHASE, ids::S_SPOS_RUN1), // 347: run4 (D)
+    st!(SPR_SPOS, 2, 3, CHASE, ids::S_SPOS_RUN4), // 346: run3 (C) vanilla tics=3
+    st!(SPR_SPOS, 3, 3, CHASE, ids::S_SPOS_RUN1), // 347: run4 (D) vanilla tics=3
     st!(SPR_TROO, 1, 10, LOOK, ids::S_TROO_STND), // 348: idle B
-    st!(SPR_TROO, 2, 4, CHASE, ids::S_TROO_RUN4), // 349: run3 (C)
-    st!(SPR_TROO, 3, 4, CHASE, ids::S_TROO_RUN1), // 350: run4 (D)
+    st!(SPR_TROO, 2, 3, CHASE, ids::S_TROO_RUN4), // 349: run3 (C) vanilla tics=3
+    st!(SPR_TROO, 3, 3, CHASE, ids::S_TROO_RUN1), // 350: run4 (D) vanilla tics=3
     st!(SPR_SARG, 1, 10, LOOK, ids::S_SARG_STND), // 351: idle B
-    st!(SPR_SARG, 2, 4, CHASE, ids::S_SARG_RUN4), // 352: run3 (C)
-    st!(SPR_SARG, 3, 4, CHASE, ids::S_SARG_RUN1), // 353: run4 (D)
+    st!(SPR_SARG, 2, 2, CHASE, ids::S_SARG_RUN4), // 352: run3 (C) vanilla tics=2
+    st!(SPR_SARG, 3, 2, CHASE, ids::S_SARG_RUN1), // 353: run4 (D) vanilla tics=2
     st!(SPR_PLAS, FB, 4, LIGHT1, ids::S_LIGHTDONE), // 354: plasma flash1
     st!(SPR_PLAS, 1 | FB, 4, LIGHT1, ids::S_LIGHTDONE), // 355: plasma flash2
     // ===================================================================
@@ -1397,6 +1397,48 @@ mod tests {
             STATES[ids::S_SARG_RUN4 as usize].next_state,
             StateNum(ids::S_SARG_RUN1)
         );
+    }
+
+    /// Regression: RUN/SEE-state tics must match vanilla `info.c` exactly so the
+    /// A_Chase active-sound RNG draw lands on the same tic as vanilla. Vanilla
+    /// cadence: POSS=4, SPOS=3, TROO=3, SARG=2, HEAD=3, BOSS=3, CYBER=3, SPID=3.
+    /// (Previously all eight were uniformly 4, making chasing monsters advance
+    /// every 4 tics instead of vanilla's 3/2 and desyncing per-tic draw
+    /// placement.)
+    #[test]
+    fn run_state_tics_match_vanilla_info_c() {
+        let expect: &[(u16, i16)] = &[
+            (ids::S_POSS_RUN1, 4),
+            (ids::S_POSS_RUN2, 4),
+            (ids::S_POSS_RUN3, 4),
+            (ids::S_POSS_RUN4, 4),
+            (ids::S_SPOS_RUN1, 3),
+            (ids::S_SPOS_RUN2, 3),
+            (ids::S_SPOS_RUN3, 3),
+            (ids::S_SPOS_RUN4, 3),
+            (ids::S_TROO_RUN1, 3),
+            (ids::S_TROO_RUN2, 3),
+            (ids::S_TROO_RUN3, 3),
+            (ids::S_TROO_RUN4, 3),
+            (ids::S_SARG_RUN1, 2),
+            (ids::S_SARG_RUN2, 2),
+            (ids::S_SARG_RUN3, 2),
+            (ids::S_SARG_RUN4, 2),
+            (ids::S_HEAD_RUN1, 3),
+            (ids::S_HEAD_RUN2, 3),
+            (ids::S_BOSS_RUN1, 3),
+            (ids::S_BOSS_RUN2, 3),
+            (ids::S_CYBER_RUN1, 3),
+            (ids::S_CYBER_RUN2, 3),
+            (ids::S_SPID_RUN1, 3),
+            (ids::S_SPID_RUN2, 3),
+        ];
+        for &(state, tics) in expect {
+            assert_eq!(
+                STATES[state as usize].tics, tics,
+                "state {state} RUN tics must be {tics} (vanilla info.c)"
+            );
+        }
     }
 
     // -----------------------------------------------------------------------

@@ -1468,6 +1468,50 @@ mod tests {
     }
 
     #[test]
+    fn imp_run_state_advances_every_three_tics() {
+        // Regression for the RUN-cadence bug: a chasing imp (TROO) must hold each
+        // RUN state for 3 tics (vanilla info.c), not 4. Enter S_TROO_RUN1 fresh
+        // (tics loaded from the table via p_set_mobj_state), keep a live target so
+        // A_Chase does not revert to idle, and confirm it advances to RUN2 on the
+        // 3rd tick and not before.
+        let mut gs = make_game_state();
+        let mut imp = make_trooper(StateNum(ids::S_TROO_STND), 1);
+        imp.kind = MobjKind::Imp;
+        let handle = gs.mobjslab.alloc(imp);
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("imp must exist in tests")
+            .target = gs.player.handle;
+
+        // Enter RUN1 fresh so tics come from the STATES table.
+        assert!(p_set_mobj_state(
+            &mut gs,
+            handle,
+            StateNum(ids::S_TROO_RUN1),
+            None
+        ));
+        assert_eq!(
+            gs.mobjslab.get(handle).unwrap().tics,
+            3,
+            "TROO_RUN1 must load 3 tics"
+        );
+
+        // Two ticks: still in RUN1.
+        tick_mobj(&mut gs, handle, None);
+        assert_eq!(gs.mobjslab.get(handle).unwrap().state, StateNum(ids::S_TROO_RUN1));
+        tick_mobj(&mut gs, handle, None);
+        assert_eq!(gs.mobjslab.get(handle).unwrap().state, StateNum(ids::S_TROO_RUN1));
+
+        // Third tick: advances to RUN2 (cadence = 3, not 4).
+        tick_mobj(&mut gs, handle, None);
+        assert_eq!(
+            gs.mobjslab.get(handle).unwrap().state,
+            StateNum(ids::S_TROO_RUN2),
+            "imp must advance RUN state every 3 tics, not 4"
+        );
+    }
+
+    #[test]
     fn state_transition_pain_without_target_returns_to_idle() {
         let mut gs = make_game_state();
         // S_POSS_PAIN now resumes S_POSS_RUN1, but without a target A_Chase
