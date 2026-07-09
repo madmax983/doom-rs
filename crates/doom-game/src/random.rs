@@ -28,10 +28,50 @@ struct RngTraceState {
     entries: Vec<RngTraceEntry>,
     leveltime: u32,
     seq: u32,
+    /// Active caller-label context stack (top = innermost). Populated by
+    /// `RngCtx` guards so the recorded caller is exact regardless of release
+    /// inlining (which makes backtrace symbols unreliable).
+    ctx: Vec<&'static str>,
 }
 
 thread_local! {
     static RNG_TRACE: RefCell<Option<RngTraceState>> = const { RefCell::new(None) };
+}
+
+/// RAII guard that pushes a caller-label context for RNG tracing and pops it on
+/// drop. Cheap no-op when tracing is disabled. Use at the top of any function
+/// that (directly or transitively) draws `P_Random`, so the trace attributes
+/// draws to the correct vanilla category.
+#[must_use]
+pub struct RngCtx {
+    active: bool,
+}
+
+/// Push a caller-label onto the RNG-trace context stack.
+#[inline]
+pub fn rng_ctx(label: &'static str) -> RngCtx {
+    let active = RNG_TRACE.with(|t| {
+        if let Some(s) = t.borrow_mut().as_mut() {
+            s.ctx.push(label);
+            true
+        } else {
+            false
+        }
+    });
+    RngCtx { active }
+}
+
+impl Drop for RngCtx {
+    #[inline]
+    fn drop(&mut self) {
+        if self.active {
+            RNG_TRACE.with(|t| {
+                if let Some(s) = t.borrow_mut().as_mut() {
+                    s.ctx.pop();
+                }
+            });
+        }
+    }
 }
 
 /// Begin recording every `P_Random` draw on this thread.
@@ -41,6 +81,7 @@ pub fn rng_trace_enable() {
             entries: Vec::new(),
             leveltime: 0,
             seq: 0,
+            ctx: Vec::new(),
         });
     });
 }
@@ -89,19 +130,63 @@ fn caller_from_backtrace() -> String {
             Some(pos) if sym[pos + 3..].chars().all(|c| c.is_ascii_hexdigit()) => &sym[..pos],
             _ => sym,
         };
-        return cleaned.to_string();
+        // Reduce to the last path segment (the bare fn name) and map it onto the
+        // vanilla p_enemy.c / p_inter.c function category so the per-tic caller
+        // list is directly comparable against the chocolate-doom RNG summary.
+        let seg = cleaned.rsplit("::").next().unwrap_or(cleaned);
+        return map_caller(seg).to_string();
     }
     "?".to_string()
+}
+
+/// Map a doom-rs function name onto the vanilla P_Random-caller category used
+/// by the chocolate-doom trace, so per-tic `funcs` lists line up 1:1.
+fn map_caller(seg: &str) -> &str {
+    match seg {
+        "spawn_level_things" => "spawn",
+        "tick_sector_lights" | "t_light_flash" | "tick_light_flash" => "T_LightFlash",
+        "a_look" | "transition_to_see_state" => "A_Look",
+        "a_chase" => "A_Chase",
+        "p_new_chase_dir" => "P_NewChaseDir",
+        "p_try_walk" => "P_TryWalk",
+        "p_move" => "P_Move",
+        "p_check_missile_range" => "P_CheckMissileRange",
+        "a_face_target" => "A_FaceTarget",
+        "a_pos_attack" => "A_PosAttack",
+        "a_spos_attack" => "A_SPosAttack",
+        "a_troop_attack" => "A_TroopAttack",
+        "a_sarg_attack" => "A_SargAttack",
+        "a_cpos_attack" => "A_CPosAttack",
+        "a_pain" => "A_Pain",
+        "a_scream" => "A_Scream",
+        "p_damage_mobj" | "damage_mobj" => "P_DamageMobj",
+        "p_kill_mobj" | "kill_mobj" => "P_KillMobj",
+        "p_gun_shot" | "gun_shot" => "P_GunShot",
+        "p_sub_random" | "p_subrandom" => "P_SubRandom",
+        "p_spawn_puff" | "spawn_puff" => "P_SpawnPuff",
+        "p_spawn_blood" | "spawn_blood" => "P_SpawnBlood",
+        "p_aim_line_attack" | "p_line_attack" => "P_LineAttack",
+        other => other,
+    }
 }
 
 /// Record a single draw if tracing is active (called from `next_byte`).
 #[inline]
 fn rng_trace_record(retval: u8) {
-    let active = RNG_TRACE.with(|t| t.borrow().is_some());
-    if !active {
-        return;
-    }
-    let caller = caller_from_backtrace();
+    // Prefer the explicit context-stack label; only fall back to the (slow,
+    // inlining-sensitive) backtrace when no guard is active.
+    let ctx_label = RNG_TRACE.with(|t| {
+        t.borrow()
+            .as_ref()
+            .map(|s| s.ctx.last().copied())
+    });
+    let Some(ctx_label) = ctx_label else {
+        return; // tracing disabled
+    };
+    let caller = match ctx_label {
+        Some(label) => label.to_string(),
+        None => caller_from_backtrace(),
+    };
     RNG_TRACE.with(|t| {
         if let Some(s) = t.borrow_mut().as_mut() {
             let seq = s.seq;
