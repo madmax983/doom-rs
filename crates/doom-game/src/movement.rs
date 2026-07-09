@@ -139,6 +139,403 @@ pub fn p_slide_move(
     best.map(|(x, y, _)| (x, y)).unwrap_or((old_x, old_y))
 }
 
+// ---------------------------------------------------------------------------
+// Vanilla P_TryMove (committing) + P_SlideMove
+// ---------------------------------------------------------------------------
+
+/// `FRACUNIT` as a raw fixed-point integer.
+const FRACUNIT: i32 = 1 << 16;
+
+/// Attempt to move actor `handle` to `(x, y)` and, on success, commit the new
+/// position (mirroring vanilla `P_TryMove`, which sets `mo->x/mo->y`).
+///
+/// Returns `true` if the move was legal (and applied), `false` otherwise.
+pub fn p_try_move_commit(
+    slab: &mut MobjSlab,
+    handle: MobjHandle,
+    x: Fixed16_16,
+    y: Fixed16_16,
+    level: &Level,
+) -> bool {
+    if !p_try_move(slab, handle, x, y, level) {
+        return false;
+    }
+    if let Some(mo) = slab.get_mut(handle) {
+        mo.x = x;
+        mo.y = y;
+    }
+    true
+}
+
+/// Raw fixed-point endpoints + deltas of a linedef.
+struct LineGeom {
+    v1x: i32,
+    v1y: i32,
+    dx: i32,
+    dy: i32,
+}
+
+fn line_geom(level: &Level, ld: &doom_map::Linedef) -> LineGeom {
+    let v1 = &level.vertexes[ld.from_vertex as usize];
+    let v2 = &level.vertexes[ld.to_vertex as usize];
+    let v1x = (v1.x as i32) << 16;
+    let v1y = (v1.y as i32) << 16;
+    let v2x = (v2.x as i32) << 16;
+    let v2y = (v2.y as i32) << 16;
+    LineGeom {
+        v1x,
+        v1y,
+        dx: v2x - v1x,
+        dy: v2y - v1y,
+    }
+}
+
+/// Collect the linedefs a slide trace crosses, with their intercept fractions,
+/// mirroring `PIT_AddLineIntercepts` + `P_TraverseIntercepts` (`p_maputl.c`).
+///
+/// The trace runs from `(x1, y1)` by `(dx, dy)` (raw fixed-point). Only lines
+/// with `0 <= frac <= FRACUNIT` are returned, sorted ascending by `frac`.
+fn collect_slide_intercepts(
+    level: &Level,
+    x1: i32,
+    y1: i32,
+    dx: i32,
+    dy: i32,
+    out: &mut Vec<(i32, usize)>,
+) {
+    use crate::geom::{p_intercept_vector, p_point_on_divline_side, p_point_on_line_side, DivLine};
+
+    out.clear();
+    let trace = DivLine {
+        x: x1,
+        y: y1,
+        dx,
+        dy,
+    };
+    let use_divline =
+        dx > FRACUNIT * 16 || dy > FRACUNIT * 16 || dx < -FRACUNIT * 16 || dy < -FRACUNIT * 16;
+
+    let bm = &level.blockmap;
+    let x_origin = bm.x_origin as i32;
+    let y_origin = bm.y_origin as i32;
+    let x_count = bm.x_count as i32;
+    let y_count = bm.y_count as i32;
+    let to_block = |world_fixed: i32, origin: i32, count: i32| -> i32 {
+        let cell = ((world_fixed >> 16) - origin) / BLOCK_SIZE;
+        cell.max(0).min(count - 1)
+    };
+
+    let lo_x = x1.min(x1 + dx);
+    let hi_x = x1.max(x1 + dx);
+    let lo_y = y1.min(y1 + dy);
+    let hi_y = y1.max(y1 + dy);
+    let col_lo = to_block(lo_x, x_origin, x_count);
+    let col_hi = to_block(hi_x, x_origin, x_count);
+    let row_lo = to_block(lo_y, y_origin, y_count);
+    let row_hi = to_block(hi_y, y_origin, y_count);
+
+    let mut seen: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
+
+    for row in row_lo..=row_hi {
+        for col in col_lo..=col_hi {
+            for ld_idx in bm.block_linedefs(col as usize, row as usize) {
+                let ld_idx = ld_idx as usize;
+                if seen.contains(&ld_idx) {
+                    continue;
+                }
+                seen.push(ld_idx);
+                let Some(ld) = level.linedefs.get(ld_idx) else {
+                    continue;
+                };
+                let g = line_geom(level, ld);
+
+                let (s1, s2) = if use_divline {
+                    (
+                        p_point_on_divline_side(g.v1x, g.v1y, &trace),
+                        p_point_on_divline_side(g.v1x + g.dx, g.v1y + g.dy, &trace),
+                    )
+                } else {
+                    (
+                        p_point_on_line_side(trace.x, trace.y, g.v1x, g.v1y, g.dx, g.dy),
+                        p_point_on_line_side(
+                            trace.x + trace.dx,
+                            trace.y + trace.dy,
+                            g.v1x,
+                            g.v1y,
+                            g.dx,
+                            g.dy,
+                        ),
+                    )
+                };
+                if s1 == s2 {
+                    continue; // line isn't crossed by the trace
+                }
+
+                let dl = DivLine {
+                    x: g.v1x,
+                    y: g.v1y,
+                    dx: g.dx,
+                    dy: g.dy,
+                };
+                let frac = p_intercept_vector(&trace, &dl);
+                if !(0..=FRACUNIT).contains(&frac) {
+                    continue;
+                }
+                out.push((frac, ld_idx));
+            }
+        }
+    }
+
+    out.sort_by_key(|&(frac, _)| frac);
+}
+
+/// Running best-slide state shared across the three corner traces
+/// (`bestslidefrac` / `bestslideline` in `p_map.c`).
+struct SlideState {
+    best_frac: i32,
+    best_line: Option<usize>,
+}
+
+/// Port of `PTR_SlideTraverse` for one corner trace: walk the crossed lines in
+/// frac order and record the first that blocks, updating `state`.
+fn slide_traverse(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    level: &Level,
+    x1: i32,
+    y1: i32,
+    dx: i32,
+    dy: i32,
+    scratch: &mut Vec<(i32, usize)>,
+    state: &mut SlideState,
+) {
+    use crate::geom::p_point_on_line_side;
+
+    let Some((mo_x, mo_y, mo_z, mo_height)) = slab
+        .get(handle)
+        .map(|mo| (mo.x.raw(), mo.y.raw(), mo.z.raw(), mo.height.raw()))
+    else {
+        return;
+    };
+
+    collect_slide_intercepts(level, x1, y1, dx, dy, scratch);
+
+    for &(frac, ld_idx) in scratch.iter() {
+        let Some(ld) = level.linedefs.get(ld_idx) else {
+            continue;
+        };
+
+        let blocking;
+        if !ld.is_two_sided() {
+            // One-sided: only blocks from the front side.
+            let g = line_geom(level, ld);
+            if p_point_on_line_side(mo_x, mo_y, g.v1x, g.v1y, g.dx, g.dy) == 1 {
+                continue; // don't hit the back side
+            }
+            blocking = true;
+        } else {
+            // Two-sided: P_LineOpening.
+            let (open_bottom, open_top) = match crate::trace::line_opening(level, ld) {
+                Some(o) => o,
+                None => continue,
+            };
+            let opentop = open_top << 16;
+            let openbottom = open_bottom << 16;
+            let openrange = opentop - openbottom;
+
+            if openrange < mo_height {
+                blocking = true;
+            } else if opentop - mo_z < mo_height {
+                blocking = true;
+            } else if openbottom - mo_z > 24 * FRACUNIT {
+                blocking = true;
+            } else {
+                continue; // this line doesn't block movement
+            }
+        }
+
+        if blocking {
+            if frac < state.best_frac {
+                state.best_frac = frac;
+                state.best_line = Some(ld_idx);
+            }
+            return; // stop this trace at the first blocker
+        }
+    }
+}
+
+/// Port of `P_HitSlideLine` (`p_map.c`): clip `(tmxmove, tmymove)` so the next
+/// move slides along `ld`.
+fn p_hit_slide_line(
+    level: &Level,
+    ld_idx: usize,
+    slide_x: i32,
+    slide_y: i32,
+    tmxmove: &mut i32,
+    tmymove: &mut i32,
+) {
+    use crate::geom::{
+        fine_cosine, fine_sine, fixed_mul, p_aprox_distance, p_point_on_line_side,
+        r_point_to_angle2, ANG180,
+    };
+
+    let Some(ld) = level.linedefs.get(ld_idx) else {
+        return;
+    };
+    let g = line_geom(level, ld);
+
+    // ST_HORIZONTAL / ST_VERTICAL special cases.
+    if g.dy == 0 {
+        *tmymove = 0;
+        return;
+    }
+    if g.dx == 0 {
+        *tmxmove = 0;
+        return;
+    }
+
+    let side = p_point_on_line_side(slide_x, slide_y, g.v1x, g.v1y, g.dx, g.dy);
+
+    let mut lineangle = r_point_to_angle2(0, 0, g.dx, g.dy);
+    if side == 1 {
+        lineangle = lineangle.wrapping_add(ANG180);
+    }
+
+    let moveangle = r_point_to_angle2(0, 0, *tmxmove, *tmymove);
+    let mut deltaangle = moveangle.wrapping_sub(lineangle);
+    if deltaangle > ANG180 {
+        deltaangle = deltaangle.wrapping_add(ANG180);
+    }
+
+    let movelen = p_aprox_distance(*tmxmove, *tmymove);
+    let newlen = fixed_mul(movelen, fine_cosine(deltaangle));
+
+    *tmxmove = fixed_mul(newlen, fine_cosine(lineangle));
+    *tmymove = fixed_mul(newlen, fine_sine(lineangle));
+}
+
+/// Vanilla `P_SlideMove` (`p_map.c`): the blocked `momx/momy` move is retried
+/// as a slide along the first wall hit. Mutates the actor's position and
+/// momentum in place (via [`p_try_move_commit`]).
+pub fn p_slide_move_vanilla(slab: &mut MobjSlab, handle: MobjHandle, level: &Level) {
+    use crate::geom::fixed_mul;
+
+    let mut scratch: Vec<(i32, usize)> = Vec::new();
+    let mut hitcount = 0;
+
+    loop {
+        hitcount += 1;
+        if hitcount == 3 {
+            slide_stairstep(slab, handle, level);
+            return;
+        }
+
+        let Some((mo_x, mo_y, momx, momy, radius)) = slab
+            .get(handle)
+            .map(|mo| (mo.x.raw(), mo.y.raw(), mo.momx.raw(), mo.momy.raw(), mo.radius.raw()))
+        else {
+            return;
+        };
+
+        // Trace along the three leading corners.
+        let (leadx, trailx) = if momx > 0 {
+            (mo_x + radius, mo_x - radius)
+        } else {
+            (mo_x - radius, mo_x + radius)
+        };
+        let (leady, traily) = if momy > 0 {
+            (mo_y + radius, mo_y - radius)
+        } else {
+            (mo_y - radius, mo_y + radius)
+        };
+
+        let mut state = SlideState {
+            best_frac: FRACUNIT + 1,
+            best_line: None,
+        };
+
+        slide_traverse(slab, handle, level, leadx, leady, momx, momy, &mut scratch, &mut state);
+        slide_traverse(slab, handle, level, trailx, leady, momx, momy, &mut scratch, &mut state);
+        slide_traverse(slab, handle, level, leadx, traily, momx, momy, &mut scratch, &mut state);
+
+        // Move up to the wall.
+        if state.best_frac == FRACUNIT + 1 {
+            slide_stairstep(slab, handle, level);
+            return;
+        }
+
+        // Fudge a bit to make sure it doesn't hit.
+        let mut best_frac = state.best_frac - 0x800;
+        if best_frac > 0 {
+            let newx = fixed_mul(momx, best_frac);
+            let newy = fixed_mul(momy, best_frac);
+            if !p_try_move_commit(
+                slab,
+                handle,
+                Fixed16_16::from_raw(mo_x + newx),
+                Fixed16_16::from_raw(mo_y + newy),
+                level,
+            ) {
+                slide_stairstep(slab, handle, level);
+                return;
+            }
+        }
+
+        // Continue along the wall: compute the remainder.
+        best_frac = FRACUNIT - (state.best_frac - 0x800 + 0x800);
+        if best_frac > FRACUNIT {
+            best_frac = FRACUNIT;
+        }
+        if best_frac <= 0 {
+            return;
+        }
+
+        let mut tmxmove = fixed_mul(momx, best_frac);
+        let mut tmymove = fixed_mul(momy, best_frac);
+
+        if let Some(bl) = state.best_line {
+            let (sx, sy) = slab
+                .get(handle)
+                .map(|mo| (mo.x.raw(), mo.y.raw()))
+                .unwrap_or((mo_x, mo_y));
+            p_hit_slide_line(level, bl, sx, sy, &mut tmxmove, &mut tmymove);
+        }
+
+        if let Some(mo) = slab.get_mut(handle) {
+            mo.momx = Fixed16_16::from_raw(tmxmove);
+            mo.momy = Fixed16_16::from_raw(tmymove);
+        }
+
+        let (cx, cy) = slab
+            .get(handle)
+            .map(|mo| (mo.x.raw(), mo.y.raw()))
+            .unwrap_or((mo_x, mo_y));
+        if p_try_move_commit(
+            slab,
+            handle,
+            Fixed16_16::from_raw(cx + tmxmove),
+            Fixed16_16::from_raw(cy + tmymove),
+            level,
+        ) {
+            return;
+        }
+        // else retry (loop again)
+    }
+}
+
+/// Vanilla `stairstep` fallback inside `P_SlideMove`.
+fn slide_stairstep(slab: &mut MobjSlab, handle: MobjHandle, level: &Level) {
+    let Some((mo_x, mo_y, momx, momy)) = slab
+        .get(handle)
+        .map(|mo| (mo.x, mo.y, mo.momx, mo.momy))
+    else {
+        return;
+    };
+    if !p_try_move_commit(slab, handle, mo_x, mo_y + momy, level) {
+        p_try_move_commit(slab, handle, mo_x + momx, mo_y, level);
+    }
+}
+
 /// Compute the Doom-shaped support floor under an actor at `(x, y)`.
 ///
 /// This uses the actor's full bounding box rather than just the center point,

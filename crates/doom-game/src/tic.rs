@@ -548,32 +548,70 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         }
     }
 
-    // 4. Compute proposed position, then collision-test (needs shared borrow).
+    // 4. P_XYMovement: clamp momentum to MAXMOVE, then step-and-collide.
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
     let old_x = mo.x;
     let old_y = mo.y;
-    let new_x = mo.x + mo.momx;
-    let new_y = mo.y + mo.momy;
-    let mut moved = match level.as_deref() {
-        Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
-        None => true,
-    };
-    let mut final_x = new_x;
-    let mut final_y = new_y;
 
-    if !moved {
-        if let Some(lv) = level.as_deref() {
-            let (sx, sy) =
-                crate::movement::p_slide_move(&gs.mobjslab, handle, old_x, old_y, new_x, new_y, lv);
-            if sx != old_x || sy != old_y {
-                moved = true;
-                final_x = sx;
-                final_y = sy;
+    {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+        mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
+        mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
+    }
+
+    // Vanilla P_XYMovement move-stepping: split moves whose magnitude exceeds
+    // MAXMOVE/2 into halves (P_TryMove per step), sliding along walls on a
+    // blocked step. With no level (unit tests) apply the momentum directly.
+    match level.as_deref() {
+        Some(lv) => {
+            let (mut xmove, mut ymove) = {
+                let mo = gs.mobjslab.get(handle).expect("player exists");
+                (mo.momx.raw(), mo.momy.raw())
+            };
+            let half = (MAXMOVE.raw()) / 2;
+            loop {
+                let (ptryx, ptryy);
+                // Vanilla checks only the positive overflow bound here.
+                if xmove > half || ymove > half {
+                    let mo = gs.mobjslab.get(handle).expect("player exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove / 2);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove / 2);
+                    xmove >>= 1;
+                    ymove >>= 1;
+                } else {
+                    let mo = gs.mobjslab.get(handle).expect("player exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove);
+                    xmove = 0;
+                    ymove = 0;
+                }
+
+                if !crate::movement::p_try_move_commit(&mut gs.mobjslab, handle, ptryx, ptryy, lv) {
+                    // Blocked: player slides along the wall.
+                    crate::movement::p_slide_move_vanilla(&mut gs.mobjslab, handle, lv);
+                }
+
+                if xmove == 0 && ymove == 0 {
+                    break;
+                }
+            }
+        }
+        None => {
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.x += mo.momx;
+                mo.y += mo.momy;
             }
         }
     }
+
+    let (final_x, final_y) = {
+        let mo = gs.mobjslab.get(handle).expect("player exists");
+        (mo.x, mo.y)
+    };
 
     // Floor height under the (new) position, needed both for vanilla's
     // "no friction while airborne" rule and for P_ZMovement below.
@@ -581,17 +619,13 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         crate::movement::support_state_at(&gs.mobjslab, handle, final_x, final_y, lv)
     });
 
-    // 5. Apply position, then friction (P_XYMovement) + clamp.
+    // 5. Friction (P_XYMovement) + clamp. Momentum is already the post-slide
+    //    velocity (P_SlideMove updated it); do NOT recompute it from the net
+    //    displacement, which would discard the tangential slide component.
     {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
             return;
         };
-        if moved {
-            mo.x = final_x;
-            mo.y = final_y;
-            mo.momx = final_x - old_x;
-            mo.momy = final_y - old_y;
-        }
 
         // Vanilla P_XYMovement applies friction only when the actor is resting
         // on the floor (`mo->z <= mo->floorz`); an airborne actor keeps its full
@@ -646,7 +680,7 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         }
     }
 
-    if moved && (final_x != old_x || final_y != old_y) {
+    if final_x != old_x || final_y != old_y {
         if let Some(lv) = level {
             crate::linedef_dispatch::check_cross_lines(
                 gs,
@@ -2086,6 +2120,8 @@ mod tests {
         mo.x = Fixed16_16::from_int(96);
         mo.y = Fixed16_16::ZERO;
         mo.z = Fixed16_16::from_int(64);
+        // Vanilla P_XYMovement clamps momentum to MAXMOVE (30) before moving,
+        // so this -40 request advances only -30 units this tic (96 -> 66).
         mo.momx = Fixed16_16::from_int(-40);
 
         tick_player(&mut gs, TicCmd::default(), Some(&mut level));
@@ -2094,7 +2130,7 @@ mod tests {
             .mobjslab
             .get(gs.player.handle)
             .expect("player should exist");
-        assert_eq!(mo.x, Fixed16_16::from_int(56));
+        assert_eq!(mo.x, Fixed16_16::from_int(66));
         assert_eq!(
             mo.z,
             Fixed16_16::from_int(64),
@@ -2131,9 +2167,10 @@ mod tests {
             .mobjslab
             .get(gs.player.handle)
             .expect("player should exist");
+        // Tic 1 clamps -40 -> -30 (96 -> 66); tic 2 moves -4 (66 -> 62).
         assert_eq!(
             mo.x,
-            Fixed16_16::from_int(52),
+            Fixed16_16::from_int(62),
             "player should continue descending instead of getting stuck on the stair edge"
         );
     }

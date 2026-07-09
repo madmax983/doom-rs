@@ -17,6 +17,7 @@ pub mod cheats;
 pub mod combat;
 pub mod dehacked;
 pub mod face;
+pub mod geom;
 pub mod intermission;
 pub mod linedef_dispatch;
 pub mod menu;
@@ -43,6 +44,7 @@ pub mod state;
 pub mod states;
 /// Level statistics tracking (kills, items, secrets, etc).
 pub mod stats;
+mod tantoangle;
 #[cfg(feature = "style_meter")]
 pub mod style;
 pub mod switch;
