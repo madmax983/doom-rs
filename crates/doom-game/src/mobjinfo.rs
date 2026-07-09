@@ -10,6 +10,7 @@
 use crate::mobj::{StateNum, flags};
 use crate::states::ids;
 use doom_types::Fixed16_16;
+use doom_types::mobj_kind::MobjKind;
 
 // ---------------------------------------------------------------------------
 // MobjInfo struct
@@ -62,6 +63,35 @@ const fn fixed(n: i32) -> Fixed16_16 {
 
 const fn sn(n: u16) -> StateNum {
     StateNum(n)
+}
+
+/// Vanilla `info->reactiontime` for a spawned actor (`info.c`).
+///
+/// Every monster spawns with `reactiontime = 8`, which delays its first attack
+/// (A_Chase decrements it, and P_CheckMeleeRange/P_CheckMissileRange bail while
+/// it is nonzero). Non-monster actors do not use it. This must be applied at
+/// spawn for demo sync, since it gates the first monster-attack RNG draws.
+pub const fn reactiontime(kind: MobjKind) -> i32 {
+    match kind {
+        MobjKind::Trooper
+        | MobjKind::Sergeant
+        | MobjKind::Imp
+        | MobjKind::Demon
+        | MobjKind::Spectre
+        | MobjKind::LostSoul
+        | MobjKind::Cacodemon
+        | MobjKind::BaronOfHell
+        | MobjKind::HellKnight
+        | MobjKind::Arachnotron
+        | MobjKind::PainElemental
+        | MobjKind::Revenant
+        | MobjKind::Mancubus
+        | MobjKind::ArchVile
+        | MobjKind::SpiderMastermind
+        | MobjKind::Cyberdemon
+        | MobjKind::WolfSS => 8,
+        _ => 0,
+    }
 }
 
 /// Combined flags for standard ground monsters.

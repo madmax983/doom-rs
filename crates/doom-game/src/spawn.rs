@@ -106,6 +106,8 @@ pub(crate) fn apply_mobjinfo_defaults(mo: &mut Mobj) {
     mo.radius = info.radius;
     mo.height = info.height;
     mo.flags = info.flags;
+    // Vanilla P_SpawnMobj: `mobj->reactiontime = info->reactiontime;`
+    mo.reactiontime = crate::mobjinfo::reactiontime(mo.kind);
 
     // Set initial state and tics from the spawn state.
     mo.state = info.spawn_state;
