@@ -169,6 +169,15 @@ pub fn p_spawn_missile(
         (mo.x, mo.y, mo.z)
     };
 
+    // P_SpawnMobj (p_mobj.c:547) draws `mobj->lastlook = P_Random() % MAXPLAYERS`
+    // for EVERY spawned mobj, including missiles. This is on the playsim
+    // `prndindex` stream, so it must fire here (before the later
+    // P_CheckMissileSpawn draw) to keep the shared RNG ordinal aligned with
+    // vanilla — otherwise every monster missile drops two draws relative to the
+    // oracle (P_SpawnMobj + P_CheckMissileSpawn), drifting the whole stream from
+    // the first monster fireball onward.
+    let _lastlook = (gs.p_random() as u32) % 4;
+
     // Spawn position: source center, chest height.
     let spawn_z = sz + Fixed16_16(s_height.0 / 2);
 
@@ -208,7 +217,21 @@ pub fn p_spawn_missile(
     proj.momz = momz;
     proj.target = source; // who fired it, for kill credit
 
-    Some(gs.mobjslab.alloc(proj))
+    let handle = gs.mobjslab.alloc(proj);
+
+    // P_CheckMissileSpawn (p_mobj.c): `th->tics -= P_Random()&3; if (th->tics <
+    // 1) th->tics = 1;`. Randomizes the missile's initial animation phase; the
+    // draw advances the shared RNG ordinal exactly as the oracle's
+    // `P_CheckMissileSpawn` entry does.
+    let r = (gs.p_random() & 3) as i16;
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.tics -= r;
+        if mo.tics < 1 {
+            mo.tics = 1;
+        }
+    }
+
+    Some(handle)
 }
 
 // ---------------------------------------------------------------------------
@@ -530,7 +553,45 @@ mod tests {
 
         assert_eq!(info.spawn_state, StateNum(ids::S_TBALL1));
         assert_eq!(proj.state, info.spawn_state);
-        assert_eq!(proj.tics, STATES[info.spawn_state.0 as usize].tics);
+        // Vanilla `P_CheckMissileSpawn` (p_mobj.c) randomizes the initial
+        // animation phase: `th->tics -= P_Random()&3; if (th->tics < 1) th->tics
+        // = 1;`. So the spawned missile's tics is the spawnstate tics reduced by
+        // 0..3, clamped to a minimum of 1 — never the raw spawnstate value plus
+        // anything, and always at least 1.
+        let base = STATES[info.spawn_state.0 as usize].tics;
+        assert!(
+            proj.tics >= 1 && proj.tics <= base,
+            "missile tics {} must be in [1, {base}] after P_CheckMissileSpawn's -= P_Random()&3",
+            proj.tics
+        );
+        assert!(
+            proj.tics >= (base - 3).max(1),
+            "missile tics {} must be at most 3 below the spawnstate tics {base}",
+            proj.tics
+        );
+    }
+
+    /// Demo-sync regression: vanilla `P_SpawnMissile` draws exactly two playsim
+    /// `P_Random`s — `P_SpawnMobj`'s `lastlook = P_Random()%MAXPLAYERS` and
+    /// `P_CheckMissileSpawn`'s `tics -= P_Random()&3`. Both advance the shared
+    /// `prndindex` ordinal, so a monster fireball must consume two RNG bytes or
+    /// the whole monster-AI stream drifts from the first fireball onward (this
+    /// was the DEMO3/E1M7 lt168 divergence). The target here is not MF_SHADOW,
+    /// so the fuzzy-spread P_SubRandom is NOT drawn.
+    #[test]
+    fn spawn_missile_consumes_two_rng_bytes() {
+        let mut gs = make_game_state();
+        let source = gs.player.handle;
+        let target = spawn_target(&mut gs, 100, 0, 60);
+
+        let before = gs.rng.index();
+        let _ = p_spawn_missile(&mut gs, source, target, MobjKind::ImpFireball)
+            .expect("value must exist in test");
+        assert_eq!(
+            (gs.rng.index().wrapping_sub(before)) & 255,
+            2,
+            "P_SpawnMissile must draw exactly 2 P_Random (lastlook + P_CheckMissileSpawn)"
+        );
     }
 
     #[test]
