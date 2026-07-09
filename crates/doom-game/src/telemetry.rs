@@ -70,20 +70,22 @@ impl SessionTelemetry {
         let mut event_features = Vec::new();
 
         for ev in &self.events {
-            if ev.kind == TelemetryKind::Position {
-                path_coords.push(format!("[{}, {}]", ev.x, ev.y));
-            } else {
-                let kind_str = match &ev.kind {
-                    TelemetryKind::ItemPickup(_) => "ItemPickup",
-                    TelemetryKind::MonsterKill(_) => "MonsterKill",
-                    TelemetryKind::DamageTaken(_) => "DamageTaken",
-                    TelemetryKind::Position => unreachable!(),
-                };
+            match &ev.kind {
+                TelemetryKind::Position => {
+                    path_coords.push(format!("[{}, {}]", ev.x, ev.y));
+                }
+                _ => {
+                    let kind_str = match &ev.kind {
+                        TelemetryKind::ItemPickup(_) => "ItemPickup",
+                        TelemetryKind::MonsterKill(_) => "MonsterKill",
+                        TelemetryKind::DamageTaken(_) => "DamageTaken",
+                        _ => "Unknown", // Fallback replacing unreachable!()
+                    };
 
-                let desc = format!("{}", ev.kind);
+                    let desc = format!("{}", ev.kind);
 
-                let feat = format!(
-                    r#"    {{
+                    let feat = format!(
+                        r#"    {{
       "type": "Feature",
       "geometry": {{
         "type": "Point",
@@ -95,9 +97,10 @@ impl SessionTelemetry {
         "description": "{}"
       }}
     }}"#,
-                    ev.x, ev.y, ev.tic, kind_str, desc
-                );
-                event_features.push(feat);
+                        ev.x, ev.y, ev.tic, kind_str, desc
+                    );
+                    event_features.push(feat);
+                }
             }
         }
 
