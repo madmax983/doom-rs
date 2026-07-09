@@ -592,7 +592,7 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
         // preserved movedir makes the direction search skip the wrong candidate
         // and drift the monster off the vanilla path.
         let spechit = match level {
-            Some(lv) => crate::movement::monster_move_spechit(&gs.mobjslab, handle, new_x, new_y, lv),
+            Some(lv) => crate::movement::move_spechit(&gs.mobjslab, handle, new_x, new_y, lv),
             None => Vec::new(),
         };
         if spechit.is_empty() {
