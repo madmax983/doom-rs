@@ -16,6 +16,7 @@ doom-map      = { workspace = true }
 doom-game     = { workspace = true }
 doom-renderer = { workspace = true }
 doom-tui      = { workspace = true }
+doom-present  = { workspace = true, optional = true }
 doom-audio    = { workspace = true }
 doom-net      = { workspace = true }
 doom-demo     = { workspace = true }
@@ -34,5 +35,7 @@ tempfile = "3.10"
 [features]
 loom = ["dep:loom", "doom-audio/loom"]
 sound_ripples = []
+# Compile in the native windowed presenter (`--present window`).
+window = ["dep:doom-present"]
 style_meter = ["doom-game/style_meter", "doom-tui/style_meter"]
 telemetry = ["doom-game/telemetry"]
