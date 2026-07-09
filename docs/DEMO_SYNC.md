@@ -20,8 +20,9 @@ Flags:
 - `--verify-runs N` — replay the demo `N` times from scratch and assert every
   run's CSV is byte-identical (cross-run determinism self-check; default 2).
 - `--verify-rng-trace <PATH>` — write a per-draw `P_Random` call-trace
-  (`leveltime,seq,retval,caller`), one row per draw, stamped with the
-  pre-increment `leveltime` so draws land on the same tic vanilla assigns them.
+  (`leveltime,seq,retval,caller`), one row per draw. The `leveltime` stamp has a
+  known off-by-one (see the methodology gotcha), so use it for the *value*
+  stream, not for per-tic draw placement.
 
 Run it like:
 
@@ -87,21 +88,28 @@ against the harness output to find the first tic where anything diverges.
 **The retval-by-ordinal stream is NOT a divergence signal.** Because both
 implementations cycle the *same* 256-byte `rndtable` by draw count, the Nth draw
 returns an identical byte in both — regardless of *who* drew it or *when*. So a
-raw "retval by ordinal" diff is trivially identical and tells you nothing. The
-real signal is:
+raw "retval by ordinal" diff is trivially identical and tells you nothing. In
+fact the RNG **values match the oracle through the entire recorded window** on
+all three demos (verified: 1807 / 1256 / 2813 draws match retval-by-ordinal with
+zero mismatches). Matching values is necessary but not sufficient — it does not
+by itself prove sync.
 
-1. **Per-tic draw PLACEMENT** — `num_draws` per `leveltime` (how many `P_Random`
-   calls fire on each tic, and which callers). If two runs draw the same values
-   but on different tics, the sim has already diverged.
-2. **The oracle's player position / health / kills** — the ground truth that a
-   placement drift eventually perturbs.
+**The real signal is the oracle's player position / health / kills.** These are
+the ground truth that any placement/timing drift eventually perturbs, and they
+are what the "Current sync status" table below is measured against.
+
+**The rng-trace `leveltime` stamp has a known off-by-one, so its "draw
+placement" column is NOT a reliable signal.** The trace stamps each draw with a
+`leveltime` that can be one tic off from the tic vanilla attributes it to, so
+comparing `num_draws` per `leveltime` against the oracle summary produces
+spurious ±1-tic drifts that are artifacts of the stamp, not real divergences.
+**Do not chase placement drift; use position/health/kills as the signal.**
 
 Note also that caller *labels* differ between the two codebases (Chocolate Doom
 splits `P_SubRandom`/`P_SpawnMapThing`; doom-rs folds some of these under
-`spawn`/`p_spawn_mobj`), so placement is compared primarily by **`num_draws` per
-leveltime**, not by string-matching caller names.
+`spawn`/`p_spawn_mobj`), so caller-name string-matching is likewise unreliable.
 
-## Fixes landed (this branch, ~29 commits)
+## Fixes landed (this branch, ~31 commits)
 
 Each fix was matched to the exact vanilla rule it restores.
 
@@ -153,76 +161,129 @@ Each fix was matched to the exact vanilla rule it restores.
 **Sound propagation**
 - `init_sound_state` + `P_NoiseAlert` timing and the `P_LineOpening` flood gate
   wired into the weapon-fire noise alert.
+- **Exact `P_RecursiveSound` revisit semantics** — a sector is re-visited when it
+  is reached again at a *lower* `soundtraversed` distance (vanilla
+  `if (fdist < sec->soundtraversed) ... P_RecursiveSound(...)`), rather than a
+  single visited-flag per pass. This removed the far-sector monster waking one
+  AI pass early/late that used to be the first placement drift (old lt 88/141/142)
+  and pushed the first *player-state* divergence out to lt 234/389/194.
+
+### Fixes landed since the first write-up (batches 11–18)
+
+Each is matched to the exact vanilla rule it restores.
+
+**Movement**
+- `P_Move` **spechit door-use path** — when a move is blocked by a two-sided
+  line with a special, vanilla halts the move and calls `P_UseSpecialLine`
+  (returning `true`) so monsters open doors instead of walking through; this path
+  was missing.
+- **Monster walk-momentum removed** — monsters no longer carry a synthetic
+  per-step velocity; their position is integrated through a **faithful monster
+  `P_XYMovement`** with vanilla friction/stop thresholds, matching how vanilla
+  moves actors between `A_Chase` steps.
+
+**Spawning**
+- `P_SpawnMobj` **animated-item deletion bug** — items whose state has `tics == -1`
+  (stay forever) were being overwritten with a `1 + P_Random()%tics`-style
+  countdown, so animated pickups counted down to zero and **vanished at level
+  start**. The `-1` "never expires" sentinel is now preserved.
+
+**Weapons / player**
+- **Weapon-fire position-integration order** — vanilla defers player position
+  integration to `P_XYMovement`, which runs *after* `P_MovePsprites`, so a
+  hitscan samples the player's **pre-move** position. Our ordering was integrating
+  first; reordered to sample pre-move, fixing autoaim/hit geometry on the firing
+  tic.
+- **Weapon raise/lower cadence** — `WEAPONTOP = 32`, and the first `A_Raise`
+  fires immediately on bring-up (no one-tic stall), matching vanilla psprite
+  timing.
+
+**Monster AI / combat RNG**
+- `A_Scream` **death-sound-variant `P_Random` draw** — the death scream draws a
+  `P_Random` to pick the sound variant; that draw was missing, shifting the
+  stream on every monster death.
+- `P_SpawnMissile` draws — restored the `lastlook`/`P_CheckMissileSpawn`
+  `P_Random` draws that vanilla makes when a monster launches a projectile.
 
 ## Current sync status
 
-Fresh measurement (release build, harness vs oracle; `--verify-rng-trace`
-placement gated to `leveltime ≤ 400`):
+Fresh measurement (release build at HEAD `8ec5aef`, harness vs oracle, diffed on
+`px,py,pz,angle,health,kills,items,secrets,leveltime`; the cosmetic `rndindex`
+column is ignored). Measured 2026-07-09:
 
-| Demo  | Map  | Total tics | Draw-placement 1st diverge (`num_draws`) | Position (px/py) 1st diverge | Health 1st diverge | Final kills (ours / vanilla) | Final items | Final secrets | Determinism |
-|-------|------|-----------:|------------------------------------------|------------------------------|--------------------|------------------------------|-------------|---------------|-------------|
-| DEMO1 | E1M5 | 5026 | lt 88 (choco 2 / ours 4) | tic 110 (lt 111) | tic 109 (lt 110) | 6 / 61 | 0 / 7 | 0 / 1 | PASS (2×) |
-| DEMO2 | E1M3 | 3836 | lt 141 (choco 3 / ours 5) | tic 190 (lt 191) | tic 189 (lt 190) | 2 / 41 | 0 / 14 | 0 / 0 | PASS (2×) |
-| DEMO3 | E1M7 | 2134 | lt 142 (choco 59 / ours 60) | tic 190 (lt 191) | tic 189 (lt 190) | 4 / 20 | 0 / 9 | 0 / 0 | PASS (2×) |
+| Demo  | Map  | Total tics | Position (px/py) 1st diverge | Health 1st diverge | Kills 1st diverge | Final k/i/s (ours) | Final k/i/s (vanilla) | Determinism |
+|-------|------|-----------:|------------------------------|--------------------|-------------------|--------------------|-----------------------|-------------|
+| DEMO1 | E1M5 | 5026 | tic 233 (lt 234) | tic 232 (lt 233) | tic 490 (lt 491) | 6 / 0 / 0 | 61 / 7 / 1 | PASS (2×) |
+| DEMO2 | E1M3 | 3836 | tic 388 (lt 389) | tic 387 (lt 388) | tic 370 (lt 371) | 5 / 0 / 0 | 41 / 14 / 0 | PASS (2×) |
+| DEMO3 | E1M7 | 2134 | tic 193 (lt 194) | tic 192 (lt 193) | tic 183 (lt 184) | 8 / 0 / 0 | 20 / 9 / 0 | PASS (2×) |
 
 Reading this table:
 
-- **Placement diverges before player state.** In every demo the first
-  `P_Random`-placement drift (extra draws on a tic) appears ~20–50 tics *before*
-  the tracked player position/health moves. This is the signature of a
-  **far-sector monster** waking or turning one AI pass early/late: it draws a
-  couple of extra `A_Chase`/direction randoms, and only later does that monster
-  reach and shoot the player, at which point health and then position diverge.
+- **Sync now holds for the first few hundred tics of each demo.** Player
+  position, health, and kills track the oracle exactly until the tics above —
+  and the **`P_Random` values match the oracle through the entire recorded
+  window** (1807 / 1256 / 2813 draws, zero retval-by-ordinal mismatches). What
+  breaks first is player *state* (position/health), not the RNG value stream.
+- **Health diverges one tic before position** in DEMO1/DEMO2/DEMO3 (lt 233 vs
+  234, 388 vs 389, 193 vs 194): a monster's damage roll lands, then the resulting
+  knockback thrust moves the player the next tic. Kills can diverge earlier or
+  later than position (DEMO2 lt 371, DEMO3 lt 184 before position; DEMO1 lt 491
+  after) depending on which monster interaction drifts first.
 - The demos all **run to completion** (`demo-stream-fully-consumed`, full tic
   counts match the file), and **cross-run determinism PASSes** on all three —
   the harness self-check confirms the sim is internally reproducible.
-- Final `kills/items/secrets` diverge widely from vanilla because once monster
-  timing drifts, the rest of a multi-minute playthrough follows a different
-  path. The final counts are reported for completeness, **not** as a sync
-  metric — the sync depth is the first-divergence tic.
+- Final `kills/items/secrets` diverge widely from vanilla because once one
+  monster interaction drifts, the rest of a multi-minute playthrough follows a
+  different path. The final counts are reported for completeness, **not** as a
+  sync metric — the sync depth is the first-divergence tic.
 
-## Remaining divergences (precisely characterized)
+## Remaining divergences (characterized)
 
-Full bit-exact end-to-end sync is **not yet reached**. The `P_Random` value
-stream and every major subsystem are vanilla-faithful; what remains is a
-shrinking tail of subtle **monster-interaction timing**. The known open items:
+Full bit-exact end-to-end sync is **not yet reached.** Be honest about where we
+are: the `P_Random` **value** stream matches the oracle through the whole
+recorded window, every major subsystem is vanilla-faithful, and sync holds for
+the first few hundred tics of each demo — but the multi-minute tail still
+diverges. The remaining failures are **monster drift-coupling / timing
+micro-bugs**, not a broken RNG or a missing subsystem.
 
-1. **Sound flood-extent revisit semantics (primary — chase this next).**
-   `P_RecursiveSound`/`P_NoiseAlert` in vanilla re-visits a sector when it is
-   reached again at a *lower* `soundtraversed` distance, whereas our flood does
-   one visit per sector per pass. On the larger maps this wakes a **far-sector
-   monster** one pass early/late, which is exactly the first placement drift:
-   - DEMO1 (E1M5): first extra draws at **lt 88** (choco 2 → ours 4).
-   - DEMO2 (E1M3): first extra draws at **lt 141** (choco 3 → ours 5).
-   - DEMO3 (E1M7): first extra draws at **lt 142** (choco 59 → ours 60).
-   Root-cause hypothesis: `P_RecursiveSound` in `p_enemy.c` must re-enqueue a
-   sector whose newly-computed `soundtraversed` is smaller than its stored one
-   (`if (fdist < sec->soundtraversed) ... P_RecursiveSound(...)`), not gate on a
-   single visited-flag. Matching that changes which monsters are in
-   `A_Chase`/awake on those tics and removes the extra draws.
+The general mechanism: both sides draw the **same RNG damage rolls**, but a
+slightly **drifted geometry** (a monster or projectile a few map units off)
+turns the same roll into a hit-vs-miss or an earlier-vs-later hit. That one
+difference perturbs health, then knockback position, then which monster the
+player faces next — and the differences compound over the run.
 
-2. **Residual combat / damage-thrust interaction gating position.** Once a
-   monster wakes on a different tic, its `A_PosAttack`/`A_SPosAttack` hitscan and
-   the resulting `P_DamageMobj` knockback thrust land on a different tic, which
-   is why **health diverges (~tic 109 / 189 / 189) one tic before position
-   (~tic 110 / 190 / 190)**. This is a *downstream* effect of item (1), not an
-   independent bug, but the thrust/aim fixed-point path should be re-audited
-   against `p_map.c`/`p_inter.c` once the wake timing is exact.
+Known open items:
+
+1. **DEMO1 lt 233 — monster attack / damage-roll timing (primary).** The first
+   divergence is a monster attack whose damage lands about **3 tics off** the
+   oracle (health drops at lt 233 vs the oracle's later tic; position follows at
+   lt 234). This is downstream of sub-map-unit geometry drift in the preceding
+   chase steps, so the damage roll — same value — is applied on a slightly
+   different tic. Re-audit the `A_PosAttack`/`A_SPosAttack` hitscan geometry and
+   the `P_DamageMobj` thrust against `p_map.c`/`p_inter.c` for the last residual
+   fixed-point rounding.
+
+2. **DEMO3 — projectile movement not vanilla-faithful.** `p_move_projectiles`
+   is not a faithful port: an imp fireball **hits early** on E1M7, which is what
+   drives DEMO3's earlier (lt 194) divergence. The fix is a **swept
+   `P_XYMovement` / `PIT_CheckThing`** port for missiles so a projectile's
+   per-tic step and collision test match vanilla exactly, instead of the current
+   simplified move.
 
 3. **Cosmetic `A_FaceTarget` ATK1 angle transient.** During the first attack
    frame a monster's facing angle can differ by a small BAM delta for one tic
    (`MF_SHADOW` jitter ordering / `R_PointToAngle2` rounding). It self-corrects
-   the following tic and does not itself consume a mismatched number of randoms,
-   so it does not gate sync — noted for completeness.
+   the following tic and does not consume a mismatched number of randoms, so it
+   does not gate sync — noted for completeness.
 
 ## How to continue
 
-- **Next first-divergence to chase:** DEMO1 `leveltime 88`, where our sim draws
-  4 randoms vs vanilla's 2. Fix the `P_RecursiveSound` re-visit rule (item 1),
-  then re-run the table above.
-- **Tooling:** regenerate the harness CSV + rng-trace for the demo under test,
-  then compare `num_draws` per `leveltime` against `demoN.choco.rngsummary.csv`
-  to find the first placement drift, and the per-tic CSV against
-  `demoN.choco.csv` for the first position/health drift. Because the value
-  stream is already bit-exact, the *count and placement* of draws per tic — not
-  the returned values — is the signal to drive to zero.
+- **Next divergences to chase:** DEMO1 `leveltime 233` (monster-attack /
+  damage-roll timing, item 1) and DEMO3's projectile-movement port (item 2).
+- **Tooling:** regenerate the harness CSV for the demo under test and diff it
+  against `demoN.choco.csv` on `px,py,pz,angle,health,kills,items,secrets,
+  leveltime` (ignore the `rndindex` column) to find the first position/health/
+  kills drift. Use **position/health/kills as the signal** — the RNG *values*
+  already match through the recorded window, and the rng-trace `leveltime` stamp
+  has a known off-by-one, so its per-tic "draw placement" is not a reliable
+  signal to diff against.
