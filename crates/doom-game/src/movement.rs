@@ -864,6 +864,135 @@ fn try_move_with_blocker(
     (true, None)
 }
 
+/// Faithful port of the `spechit` accumulation performed by vanilla
+/// `P_CheckPosition`'s line pass (`PIT_CheckLine`, `p_map.c`).
+///
+/// Returns the ordered list of special linedefs the actor's bounding box at
+/// `(new_x, new_y)` crosses, exactly as vanilla builds the global `spechit[]`
+/// array: it walks the blockmap cells the box overlaps in `bx`-outer / `by`-inner
+/// order (never expanded by `MAXRADIUS` — that expansion is only for the *thing*
+/// pass), processing each linedef at most once (vanilla `validcount`), and for
+/// each line that the box actually straddles it:
+///  - stops the whole scan on the first hard blocker — a one-sided line, or (for
+///    non-missiles) an `ML_BLOCKING` line, or an `ML_BLOCKMONSTERS` line when the
+///    mover is a monster — because vanilla `PIT_CheckLine` returns `false` there,
+///    freezing `spechit` at whatever it had accumulated so far;
+///  - otherwise (a two-sided passable line) appends it to the list when it has a
+///    special, regardless of the opening height (the fit/step/dropoff rejection
+///    is deferred to `P_TryMove` and never gates `spechit`).
+///
+/// This is what `P_Move` consults via `numspechit` to decide whether a blocked
+/// monster halts (`movedir = DI_NODIR`) and tries the crossed lines as doors.
+/// Unlike the movement bool (`try_move_with_blocker`), which early-returns at the
+/// first blocker, this must see every special line crossed *before* the blocker,
+/// so it is computed separately.
+#[must_use]
+pub fn monster_move_spechit(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    new_x: Fixed16_16,
+    new_y: Fixed16_16,
+    level: &Level,
+) -> Vec<usize> {
+    let (radius, mo_flags) = match slab.get(handle) {
+        Some(mo) => (mo.radius, mo.flags),
+        None => return Vec::new(),
+    };
+
+    let mut spechit: Vec<usize> = Vec::new();
+
+    if mo_flags & flags::MF_NOCLIP != 0 {
+        return spechit;
+    }
+    let is_missile = mo_flags & flags::MF_MISSILE != 0;
+    // `P_Move` is only ever called for non-player monsters, so the vanilla
+    // `!tmthing->player` guard on `ML_BLOCKMONSTERS` is always satisfied here.
+    let blocks_monsters = mo_flags & flags::MF_COUNTKILL != 0;
+
+    let left = new_x - radius;
+    let right = new_x + radius;
+    let bottom = new_y - radius;
+    let top = new_y + radius;
+
+    let bm = &level.blockmap;
+    let x_origin = bm.x_origin as i32;
+    let y_origin = bm.y_origin as i32;
+    let x_count = bm.x_count as i32;
+    let y_count = bm.y_count as i32;
+
+    let to_block = |world: Fixed16_16, origin: i32, count: i32| -> usize {
+        let cell = (world.to_int() - origin) / BLOCK_SIZE;
+        cell.max(0).min(count - 1) as usize
+    };
+
+    let col_lo = to_block(left, x_origin, x_count);
+    let col_hi = to_block(right, x_origin, x_count);
+    let row_lo = to_block(bottom, y_origin, y_count);
+    let row_hi = to_block(top, y_origin, y_count);
+
+    // Vanilla `validcount`: each linedef is examined once across the whole scan.
+    let mut seen: Vec<usize> = Vec::new();
+
+    // Vanilla iterates `for (bx...) for (by...)` — column-major.
+    for col in col_lo..=col_hi {
+        for row in row_lo..=row_hi {
+            for ld_idx in bm.block_linedefs(col, row) {
+                let ld_idx = ld_idx as usize;
+                if seen.contains(&ld_idx) {
+                    continue;
+                }
+                seen.push(ld_idx);
+
+                let Some(ld) = level.linedefs.get(ld_idx) else {
+                    continue;
+                };
+
+                let v1 = &level.vertexes[ld.from_vertex as usize];
+                let v2 = &level.vertexes[ld.to_vertex as usize];
+                let lx1 = Fixed16_16::from_int(v1.x as i32);
+                let ly1 = Fixed16_16::from_int(v1.y as i32);
+                let lx2 = Fixed16_16::from_int(v2.x as i32);
+                let ly2 = Fixed16_16::from_int(v2.y as i32);
+
+                // Line bbox rejection (vanilla PIT_CheckLine first test).
+                let lx_min = lx1.min(lx2);
+                let lx_max = lx1.max(lx2);
+                let ly_min = ly1.min(ly2);
+                let ly_max = ly1.max(ly2);
+                if right <= lx_min || left >= lx_max || top <= ly_min || bottom >= ly_max {
+                    continue;
+                }
+
+                // P_BoxOnLineSide != -1 → the box does not straddle the line.
+                if !bbox_straddles_line(left, bottom, right, top, lx1, ly1, lx2, ly2) {
+                    continue;
+                }
+
+                // A line has been hit.
+                if !ld.is_two_sided() {
+                    return spechit; // one-sided → PIT_CheckLine returns false
+                }
+                if !is_missile {
+                    if ld.flags & doom_map::lumps::FLAG_BLOCKING != 0 {
+                        return spechit; // explicitly blocking everything
+                    }
+                    if blocks_monsters && ld.flags & doom_map::lumps::FLAG_BLOCKMONSTERS != 0 {
+                        return spechit; // block monsters only
+                    }
+                }
+
+                // Two-sided passable line: opening heights are irrelevant to
+                // spechit; only the special membership matters.
+                if ld.special != 0 {
+                    spechit.push(ld_idx);
+                }
+            }
+        }
+    }
+
+    spechit
+}
+
 // ---------------------------------------------------------------------------
 // Helper: does the actor bounding box straddle the linedef?
 // ---------------------------------------------------------------------------
