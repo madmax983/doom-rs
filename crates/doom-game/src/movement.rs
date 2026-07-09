@@ -849,26 +849,66 @@ fn bbox_straddles_line(
     x2: Fixed16_16,
     y2: Fixed16_16,
 ) -> bool {
-    let dx = (x2 - x1).to_int() as i64;
-    let dy = (y2 - y1).to_int() as i64;
+    p_box_on_line_side(left, bottom, right, top, x1, y1, x2, y2) == -1
+}
 
-    // Choose the two "extreme" corners based on which quadrant the line goes.
-    // Same-sign quadrant (NE or SW): use (left, top) and (right, bottom).
-    // Opposite-sign quadrant (NW or SE): use (right, top) and (left, bottom).
-    let (px1, py1, px2, py2) = if dx.signum() == dy.signum() {
-        (left, top, right, bottom)
+/// Faithful port of Doom's `P_BoxOnLineSide` (`p_maputl.c`), operating on the
+/// raw 16.16 fixed-point coordinates of the bbox and the linedef.
+///
+/// Returns `-1` if the box straddles the line (the two extreme corners lie on
+/// opposite sides), otherwise the common side (`0` = front, `1` = back). The
+/// slope-type dispatch and the `P_PointOnLineSide` calls match vanilla exactly,
+/// including operating on the full fractional coordinates rather than truncated
+/// integers — the fractional bits are decisive for corner-tangent cases.
+fn p_box_on_line_side(
+    left: Fixed16_16,
+    bottom: Fixed16_16,
+    right: Fixed16_16,
+    top: Fixed16_16,
+    x1: Fixed16_16,
+    y1: Fixed16_16,
+    x2: Fixed16_16,
+    y2: Fixed16_16,
+) -> i32 {
+    use crate::geom::p_point_on_line_side;
+
+    let (left, bottom, right, top) = (left.raw(), bottom.raw(), right.raw(), top.raw());
+    let (v1x, v1y) = (x1.raw(), y1.raw());
+    let ldx = x2.raw().wrapping_sub(v1x);
+    let ldy = y2.raw().wrapping_sub(v1y);
+
+    let (mut p1, mut p2);
+    if ldx == 0 {
+        // ST_VERTICAL
+        p1 = (right < v1x) as i32;
+        p2 = (left < v1x) as i32;
+        if ldy < 0 {
+            p1 ^= 1;
+            p2 ^= 1;
+        }
+    } else if ldy == 0 {
+        // ST_HORIZONTAL
+        p1 = (top > v1y) as i32;
+        p2 = (bottom > v1y) as i32;
+        if ldx < 0 {
+            p1 ^= 1;
+            p2 ^= 1;
+        }
+    } else if (ldx > 0) == (ldy > 0) {
+        // ST_POSITIVE (FixedDiv(dy, dx) > 0)
+        p1 = p_point_on_line_side(left, top, v1x, v1y, ldx, ldy);
+        p2 = p_point_on_line_side(right, bottom, v1x, v1y, ldx, ldy);
     } else {
-        (right, top, left, bottom)
-    };
+        // ST_NEGATIVE
+        p1 = p_point_on_line_side(right, top, v1x, v1y, ldx, ldy);
+        p2 = p_point_on_line_side(left, bottom, v1x, v1y, ldx, ldy);
+    }
 
-    // Cross products: (x2-x1)*(py-y1) - (y2-y1)*(px-x1)
-    let y1i = y1.to_int() as i64;
-    let x1i = x1.to_int() as i64;
-    let c1 = dx * (py1.to_int() as i64 - y1i) - dy * (px1.to_int() as i64 - x1i);
-    let c2 = dx * (py2.to_int() as i64 - y1i) - dy * (px2.to_int() as i64 - x1i);
-
-    // Different signs (one positive, one negative) means the box straddles.
-    (c1 ^ c2) < 0
+    if p1 == p2 {
+        p1
+    } else {
+        -1
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1339,6 +1379,32 @@ mod tests {
     #[test]
     fn max_step_height_is_24_units() {
         assert_eq!(MAX_STEP_HEIGHT.to_int(), 24);
+    }
+
+    #[test]
+    fn bbox_straddles_positive_slope_corner_tangent() {
+        // Regression for the DEMO1/E1M5 wall-slide clip (leveltime 62): a
+        // one-sided ST_POSITIVE wall from (-416,-112)->(-320,-96) with the
+        // player (radius 16) at fixed (-25353890, -8245162). The player's
+        // top-left bbox corner lands essentially tangent to the line; vanilla
+        // `P_BoxOnLineSide` returns -1 (straddles → blocked) thanks to the
+        // fractional coordinate bits, so this move must be rejected. The old
+        // integer-truncating implementation wrongly reported no straddle and
+        // let the player slip ~3.46 units into the wall.
+        let radius = Fixed16_16::from_int(16);
+        let px = Fixed16_16::from_raw(-25353890);
+        let py = Fixed16_16::from_raw(-8245162);
+        let straddles = bbox_straddles_line(
+            px - radius,
+            py - radius,
+            px + radius,
+            py + radius,
+            Fixed16_16::from_int(-416),
+            Fixed16_16::from_int(-112),
+            Fixed16_16::from_int(-320),
+            Fixed16_16::from_int(-96),
+        );
+        assert!(straddles, "corner-tangent positive-slope wall must straddle");
     }
 
     #[test]
