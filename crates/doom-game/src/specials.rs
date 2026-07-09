@@ -35,8 +35,14 @@ pub const USE_RANGE: i32 = 64;
 /// Door open/close speed in map units per tic (Doom standard: 2 units/tic).
 const DOOR_SPEED: i16 = 2;
 
-/// Tics a door stays open before auto-closing (3.5 seconds at 35 Hz ≈ 120 tics).
-const DOOR_WAIT: i32 = 120;
+/// Tics a door stays open before auto-closing.
+///
+/// Vanilla `p_spec.h`: `#define VDOORWAIT 150` — used for every normal and
+/// blazing door (`door->topwait = VDOORWAIT`). A shorter value closes doors
+/// early, which can prematurely break a monster's line-of-sight through the
+/// doorway and desync demos (e.g. DEMO1/E1M5: an ambush trooper failed to wake
+/// at lt285 because the doorway had already shut).
+const DOOR_WAIT: i32 = 150;
 
 /// Door speed for blazing (fast) doors in map units per tic.
 const BLAZING_DOOR_SPEED: i16 = 8;
