@@ -146,6 +146,9 @@ pub enum Action {
     Light1 = 53,
     /// `A_Light2`: set the player's weapon flash light bonus to level 2.
     Light2 = 54,
+    /// `A_Explode`: radius (splash) damage dealt by an exploding rocket at its
+    /// death state. Vanilla `A_Explode(mo)` = `P_RadiusAttack(mo, mo->target, 128)`.
+    Explode = 55,
 }
 
 use doom_types::{Bam, Fixed16_16};
@@ -259,6 +262,7 @@ pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level
             Action::BrainDie => a_brain_die(gs),
             Action::BrainScream => a_brain_scream(gs, handle),
             Action::BrainExplode => a_brain_explode(gs, handle),
+            Action::Explode => a_explode(gs, handle, level),
             _ => {}
         }
     }
@@ -2260,6 +2264,14 @@ fn a_brain_explode(gs: &mut GameState, handle: MobjHandle) {
     exp.momz = Fixed16_16::from_int(gs.p_random() as i32 / 64);
     exp.tics = gs.p_random() as i16 & 7;
     gs.mobjslab.alloc(exp);
+}
+
+/// Port of vanilla `A_Explode` (`p_enemy.c`): the rocket's death state deals
+/// 128 splash damage in a 128-unit radius, credited to whoever fired it
+/// (`P_RadiusAttack(thingy, thingy->target, 128)`). Reached via
+/// `P_ExplodeMissile` -> `P_SetMobjState(deathstate)` when a rocket detonates.
+fn a_explode(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    crate::combat::p_radius_attack(gs, handle, 128, Fixed16_16::from_int(128), level);
 }
 
 // ---------------------------------------------------------------------------

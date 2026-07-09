@@ -1,18 +1,18 @@
-//! Projectile spawning, movement, and collision.
+//! Projectile spawning.
 //!
-//! Port of Doom's projectile logic from `p_mobj.c` and `p_map.c`:
-//! - `P_SpawnMissile` — spawn a projectile from source aimed at dest.
+//! Port of Doom's projectile spawn logic from `p_mobj.c`:
+//! - `P_SpawnMissile` — spawn a projectile from source aimed at dest, with the
+//!   exact fixed-point aim (`FixedMul(speed, finecosine/finesine)`) and the
+//!   `P_CheckMissileSpawn` half-momentum nudge.
 //! - `P_SpawnPlayerMissile` — spawn a projectile in the player's facing direction.
-//! - Projectile movement — advance by momentum, explode on wall/actor hit.
 //!
-//! # Collision model
-//! Simple O(n^2) distance check for actor-vs-projectile.  Blockmap-based
-//! optimization is a future batch.
+//! Projectile MOVEMENT and COLLISION live in `tic.rs`: a missile is advanced by
+//! its momentum every tic inside `P_MobjThinker` (`p_xy_movement_missile` +
+//! `PIT_CheckThing` + `p_explode_missile`, then `p_z_movement_missile`), exactly
+//! as vanilla does — not by a separate projectile pass.
 
-use doom_map::Level;
 use doom_types::{Bam, Fixed16_16};
 
-use crate::combat;
 use crate::mobj::{Mobj, MobjHandle, flags};
 use crate::state::GameState;
 use doom_types::mobj_kind::MobjKind;
@@ -119,22 +119,6 @@ pub fn projectile_info(kind: MobjKind) -> Option<ProjectileInfo> {
 }
 
 // ---------------------------------------------------------------------------
-// Angle calculation helper
-// ---------------------------------------------------------------------------
-
-/// Compute the BAM angle from `(dx, dy)` displacement using f32 atan2.
-///
-/// This is the only float usage in the projectile path and is used solely
-/// for aiming direction — game state remains deterministic via fixed-point.
-fn angle_from_delta(dx: Fixed16_16, dy: Fixed16_16) -> Bam {
-    let dx_f = dx.to_int() as f32;
-    let dy_f = dy.to_int() as f32;
-    let angle_rad = dy_f.atan2(dx_f);
-    // Convert radians to BAM: full circle = 2*pi = u32::MAX + 1
-    Bam((angle_rad / std::f32::consts::TAU * (u32::MAX as f64 + 1.0) as f32) as u32)
-}
-
-// ---------------------------------------------------------------------------
 // p_spawn_missile — spawn a projectile from source aimed at dest
 // ---------------------------------------------------------------------------
 
@@ -157,10 +141,10 @@ pub fn p_spawn_missile(
 ) -> Option<MobjHandle> {
     let info = projectile_info(kind)?;
 
-    // Extract source position and dimensions.
-    let (sx, sy, sz, s_height) = {
+    // Extract source position.
+    let (sx, sy, sz) = {
         let mo = gs.mobjslab.get(source)?;
-        (mo.x, mo.y, mo.z, mo.height)
+        (mo.x, mo.y, mo.z)
     };
 
     // Extract dest position.
@@ -178,31 +162,29 @@ pub fn p_spawn_missile(
     // the first monster fireball onward.
     let _lastlook = (gs.p_random() as u32) % 4;
 
-    // Spawn position: source center, chest height.
-    let spawn_z = sz + Fixed16_16(s_height.0 / 2);
+    // Spawn position (vanilla `P_SpawnMissile`): `source->z + 4*8*FRACUNIT`
+    // (a fixed 32 units above the shooter's feet), NOT the shooter's mid-height.
+    let spawn_z = sz + Fixed16_16::from_int(32);
 
-    // Compute direction and angle toward dest.
-    let delta_x = dx - sx;
-    let delta_y = dy - sy;
-    let angle = angle_from_delta(delta_x, delta_y);
+    // Aim exactly as vanilla does, in fixed-point: the BAM angle from source to
+    // dest, then `momx/momy = FixedMul(speed, finecosine/finesine[angle])`.
+    // Using the fixed-point trig tables (not f32 with an integer-truncated
+    // magnitude) is essential for demo sync — a quantized momentum drifts the
+    // projectile off vanilla's path and makes it strike its target several tics
+    // early or late. The target is never MF_SHADOW here, so no `P_SubRandom`
+    // fuzz draw is taken.
+    let an = crate::geom::r_point_to_angle2(sx.raw(), sy.raw(), dx.raw(), dy.raw());
+    let angle = Bam(an);
+    let speed_raw = info.speed.raw();
+    let momx = Fixed16_16::from_raw(crate::geom::fixed_mul(speed_raw, crate::geom::fine_cosine(an)));
+    let momy = Fixed16_16::from_raw(crate::geom::fixed_mul(speed_raw, crate::geom::fine_sine(an)));
 
-    // Compute momentum directly from displacement to avoid trig-table dependency.
-    // Use f32 for the normalization (this is aim-direction only, not game state).
-    let dx_f = delta_x.to_int() as f32;
-    let dy_f = delta_y.to_int() as f32;
-    let dist_f = (dx_f * dx_f + dy_f * dy_f).sqrt().max(1.0);
-    let speed_f = info.speed.to_int() as f32;
-    let momx = Fixed16_16::from_int((dx_f / dist_f * speed_f) as i32);
-    let momy = Fixed16_16::from_int((dy_f / dist_f * speed_f) as i32);
-
-    // Vertical aim: approximate (dest.z - spawn_z) / distance * speed.
-    let delta_z = dz - spawn_z;
-    let flat_dist_int = dist_f as i32;
-    let momz = if flat_dist_int > 0 {
-        Fixed16_16::from_int(delta_z.to_int() * info.speed.to_int() / flat_dist_int)
-    } else {
-        Fixed16_16::ZERO
-    };
+    // Vertical aim (vanilla): `dist = P_AproxDistance(dx,dy) / speed; if (dist<1)
+    // dist=1; momz = (dest->z - source->z) / dist`. Note this uses the shooter's
+    // feet (`sz`), not the spawn z.
+    let dist = crate::geom::p_aprox_distance((dx - sx).raw(), (dy - sy).raw());
+    let dist_tics = (dist / speed_raw).max(1);
+    let momz = Fixed16_16::from_raw((dz - sz).raw() / dist_tics);
 
     // Build the projectile Mobj.
     let mut proj = Mobj::new(kind, sx, sy, angle);
@@ -229,6 +211,19 @@ pub fn p_spawn_missile(
         if mo.tics < 1 {
             mo.tics = 1;
         }
+        // P_CheckMissileSpawn (p_mobj.c) also nudges the missile forward by HALF
+        // its momentum ("move a little forward so an angle can be computed if it
+        // immediately explodes"). This half-step is essential for demo sync: on
+        // the spawn tic vanilla applies this nudge AND then the thinker's full
+        // `P_XYMovement` step, so a monster-fired missile is 1.5 steps along its
+        // path by the end of its spawn tic — without the nudge every projectile
+        // trails vanilla by exactly half a step for its whole flight, striking
+        // its target a step off. Vanilla additionally `P_TryMove`s here and
+        // explodes on a blocked nudge; that point-blank collision is instead
+        // resolved by the missile's first thinker step this same tic.
+        mo.x += Fixed16_16::from_raw(momx.raw() >> 1);
+        mo.y += Fixed16_16::from_raw(momy.raw() >> 1);
+        mo.z += Fixed16_16::from_raw(momz.raw() >> 1);
     }
 
     Some(handle)
@@ -276,131 +271,14 @@ pub fn p_spawn_player_missile(
     Some(gs.mobjslab.alloc(proj))
 }
 
-// ---------------------------------------------------------------------------
-// p_move_projectiles — advance all projectiles one tic
-// ---------------------------------------------------------------------------
-
-/// Advance all MF_MISSILE actors by their momentum.  Called once per tic.
-///
-/// For each projectile:
-/// 1. Compute new position from momentum.
-/// 2. Check wall collision via `p_try_move` (if level available).
-/// 3. Check actor collision (O(n^2) distance check).
-/// 4. On hit: apply damage, remove projectile.  Rockets also do radius attack.
-/// 5. Otherwise: update position.
-pub fn p_move_projectiles(gs: &mut GameState, level: Option<&Level>) {
-    // ⚡ Bolt: Iterate over the MobjSlab by index to avoid a per-frame `Vec`
-    // heap allocation that would otherwise collect all missile handles.
-    let initial_slot_count = gs.mobjslab.slot_count();
-    let initial_generation = gs.mobjslab.next_generation();
-
-    for i in 0..initial_slot_count {
-        let Some(missile_handle) = gs.mobjslab.handle_at(i) else {
-            continue;
-        };
-        if missile_handle.generation >= initial_generation {
-            continue;
-        }
-
-        // Ensure this actor is actually a missile.
-        if !gs
-            .mobjslab
-            .get(missile_handle)
-            .map(|m| m.flags & flags::MF_MISSILE != 0)
-            .unwrap_or(false)
-        {
-            continue;
-        }
-        // Re-read missile data (it may have been freed by an earlier iteration).
-        let Some(m) = gs.mobjslab.get(missile_handle) else {
-            continue;
-        };
-        let (mx, my, mz, momx, momy, momz, m_radius, m_kind, m_source) = (
-            m.x, m.y, m.z, m.momx, m.momy, m.momz, m.radius, m.kind, m.target,
-        );
-
-        let new_x = mx + momx;
-        let new_y = my + momy;
-        let new_z = mz + momz;
-
-        // --- Wall collision ---
-        let wall_ok = match level {
-            Some(lv) => crate::movement::p_try_move(&gs.mobjslab, missile_handle, new_x, new_y, lv),
-            None => true, // no level = no wall collision (unit tests)
-        };
-
-        if !wall_ok {
-            // Hit a wall.  Rockets do splash damage on explosion.
-            if m_kind == MobjKind::Rocket {
-                combat::p_radius_attack(
-                    gs,
-                    missile_handle,
-                    128, // rocket splash damage
-                    Fixed16_16::from_int(128),
-                    level,
-                );
-            }
-            gs.mobjslab.free(missile_handle);
-            continue;
-        }
-
-        // --- Actor collision (O(n^2) distance check) ---
-        let mut hit_target: Option<MobjHandle> = None;
-
-        for target_h in gs.mobjslab.iter_handles() {
-            // Skip self and the source actor.
-            if target_h == missile_handle || target_h == m_source {
-                continue;
-            }
-            let Some(t) = gs.mobjslab.get(target_h) else {
-                continue;
-            };
-            let (tx, ty, t_radius, t_alive, t_shootable) = (
-                t.x,
-                t.y,
-                t.radius,
-                t.health > 0,
-                t.flags & flags::MF_SHOOTABLE != 0,
-            );
-            if !t_alive || !t_shootable {
-                continue;
-            }
-
-            // Bounding-box overlap check: |dx| < sum of radii && |dy| < sum of radii.
-            let combined_radius = m_radius + t_radius;
-            let dx = (new_x - tx).abs();
-            let dy = (new_y - ty).abs();
-            if dx < combined_radius && dy < combined_radius {
-                hit_target = Some(target_h);
-                break;
-            }
-        }
-
-        if let Some(target_h) = hit_target {
-            // Compute damage: base_damage * random(1..=8) using the RNG.
-            let base_damage = projectile_info(m_kind).map(|pi| pi.damage).unwrap_or(1);
-            let rng_val = (gs.rng.next_byte() % 8) as i32 + 1;
-            let damage = base_damage * rng_val;
-
-            combat::damage_mobj(gs, target_h, m_source, damage);
-
-            // Rockets also do splash damage on actor hit.
-            if m_kind == MobjKind::Rocket {
-                combat::p_radius_attack(gs, missile_handle, 128, Fixed16_16::from_int(128), level);
-            }
-
-            gs.mobjslab.free(missile_handle);
-            continue;
-        }
-
-        // --- No collision: update position ---
-        if let Some(m) = gs.mobjslab.get_mut(missile_handle) {
-            m.x = new_x;
-            m.y = new_y;
-            m.z = new_z;
-        }
-    }
-}
+// Missile MOVEMENT and COLLISION are no longer handled here. Vanilla advances
+// each missile inside `P_MobjThinker` (swept `P_XYMovement` + `PIT_CheckThing`
+// + `P_ExplodeMissile`, then `P_ZMovement`), so doom-rs drives missiles from
+// `tick_mobj` in `tic.rs` alongside every other actor — see
+// `p_xy_movement_missile` / `p_z_movement_missile` / `p_explode_missile` there.
+// The old custom `p_move_projectiles` stepper (a single unswept momentum add
+// with a z-less AABB actor test) was retired: it moved missiles a second time
+// per tic and struck targets several tics off vanilla.
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -689,187 +567,111 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // p_move_projectiles tests
+    // p_spawn_missile momentum (vanilla fixed-point) regression tests
     // -----------------------------------------------------------------------
 
+    /// Demo-sync regression: vanilla `P_SpawnMissile` aims with the fixed-point
+    /// trig tables — `momx/momy = FixedMul(speed, finecosine/finesine[angle])`
+    /// — so the momentum magnitude equals the projectile's speed. The old f32
+    /// path truncated each component to a whole map unit, quantizing the aim and
+    /// shrinking the magnitude (e.g. speed 10 -> (-4,8), |v|≈8.9), which drifted
+    /// the projectile off vanilla's path and made it strike its target several
+    /// tics early or late.
     #[test]
-    fn p_move_projectiles_advances_position() {
+    fn spawn_missile_momentum_is_full_speed_fixed_point() {
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
         let mut gs = make_game_state();
-        // Manually create a projectile with known momentum.
-        let mut proj = Mobj::new(
-            MobjKind::Rocket,
-            Fixed16_16::from_int(50),
-            Fixed16_16::ZERO,
-            Bam::ZERO,
-        );
-        proj.momx = Fixed16_16::from_int(10);
-        proj.momy = Fixed16_16::ZERO;
-        proj.momz = Fixed16_16::ZERO;
-        proj.flags = flags::MF_MISSILE | flags::MF_NOGRAVITY | flags::MF_NOBLOCKMAP;
-        proj.health = 1000;
-        proj.radius = Fixed16_16::from_int(11);
-        proj.height = Fixed16_16::from_int(8);
-        proj.target = gs.player.handle;
-        let proj_h = gs.mobjslab.alloc(proj);
+        let source = gs.player.handle;
+        // Target off-axis so both momentum components are non-trivial.
+        let target = spawn_target(&mut gs, 300, 700, 60);
 
-        // Move projectiles (no level = no wall collision).
-        p_move_projectiles(&mut gs, None);
-
+        let proj_h = p_spawn_missile(&mut gs, source, target, MobjKind::ImpFireball)
+            .expect("value must exist in test");
         let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
-        assert_eq!(
-            proj.x,
-            Fixed16_16::from_int(60),
-            "x must advance by momx=10"
-        );
-    }
 
-    #[test]
-    fn p_move_projectiles_hits_actor() {
-        let mut gs = make_game_state();
-        // Spawn target at (30, 0) with 60 hp.
-        let target_h = spawn_target(&mut gs, 30, 0, 60);
-
-        // Spawn projectile at (10, 0) moving east at 20 units/tic.
-        // After one tic it will be at (30, 0) — right on top of the target.
-        let mut proj = Mobj::new(
-            MobjKind::ImpFireball,
-            Fixed16_16::from_int(10),
-            Fixed16_16::ZERO,
-            Bam::ZERO,
-        );
-        proj.momx = Fixed16_16::from_int(20);
-        proj.momy = Fixed16_16::ZERO;
-        proj.momz = Fixed16_16::ZERO;
-        proj.flags = flags::MF_MISSILE | flags::MF_NOGRAVITY | flags::MF_NOBLOCKMAP;
-        proj.health = 1000;
-        proj.radius = Fixed16_16::from_int(6);
-        proj.height = Fixed16_16::from_int(8);
-        // Set source to player so it doesn't hit the player.
-        proj.target = gs.player.handle;
-        let proj_h = gs.mobjslab.alloc(proj);
-
-        p_move_projectiles(&mut gs, None);
-
-        // Target should have taken damage.
-        let target = gs.mobjslab.get(target_h).expect("value must exist in test");
+        // |momentum| must equal the imp fireball's speed (10 units/tic) within
+        // fixed-point trig rounding — never the integer-truncated magnitude
+        // (~8.9) the f32 path produced. Measure in RAW fixed-point (the whole
+        // point of the fix is that the fractional bits are preserved).
+        let mx = proj.momx.raw() as i64;
+        let my = proj.momy.raw() as i64;
+        let mag = ((mx * mx + my * my) as f64).sqrt();
+        let speed_raw = Fixed16_16::from_int(10).raw() as f64; // 655360
         assert!(
-            target.health < 60,
-            "target health {} must decrease from projectile hit",
-            target.health
+            (mag - speed_raw).abs() < speed_raw * 0.01,
+            "|momentum| = {mag} must be ~{speed_raw} (speed 10), got momx={mx} momy={my}"
         );
-
-        // Projectile should be removed.
+        // At least one component must carry a fractional part (proof the aim is
+        // no longer quantized to whole units).
         assert!(
-            gs.mobjslab.get(proj_h).is_none(),
-            "projectile must be freed after hitting actor"
+            proj.momx.raw() % 65536 != 0 || proj.momy.raw() % 65536 != 0,
+            "vanilla fixed-point aim must produce fractional momentum, got \
+             momx={:#x} momy={:#x}",
+            proj.momx.raw(),
+            proj.momy.raw()
         );
     }
 
+    /// Demo-sync regression: vanilla `P_CheckMissileSpawn` nudges a freshly
+    /// spawned missile forward by HALF its momentum (`x += momx>>1`) so it has a
+    /// valid position/angle if it explodes immediately. Without this half-step
+    /// every projectile trails vanilla by exactly half a step for its whole
+    /// flight. Spawn position must therefore equal the shooter origin plus the
+    /// half-momentum nudge (spawn z = source.z + 32, per vanilla).
     #[test]
-    fn p_move_projectiles_does_not_hit_source() {
+    fn spawn_missile_applies_checkmissilespawn_half_step_nudge() {
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
         let mut gs = make_game_state();
-        // Spawn projectile at same position as player, moving east.
-        let player_h = gs.player.handle;
-        let mut proj = Mobj::new(
-            MobjKind::ImpFireball,
-            Fixed16_16::ZERO,
-            Fixed16_16::ZERO,
-            Bam::ZERO,
-        );
-        proj.momx = Fixed16_16::from_int(5);
-        proj.momy = Fixed16_16::ZERO;
-        proj.momz = Fixed16_16::ZERO;
-        proj.flags = flags::MF_MISSILE | flags::MF_NOGRAVITY | flags::MF_NOBLOCKMAP;
-        proj.health = 1000;
-        proj.radius = Fixed16_16::from_int(6);
-        proj.height = Fixed16_16::from_int(8);
-        proj.target = player_h; // source = player
-        let proj_h = gs.mobjslab.alloc(proj);
+        let source = gs.player.handle;
+        let (sx, sy, sz) = {
+            let mo = gs.mobjslab.get(source).expect("source exists");
+            (mo.x, mo.y, mo.z)
+        };
+        let target = spawn_target(&mut gs, 300, 700, 60);
 
-        p_move_projectiles(&mut gs, None);
+        let proj_h = p_spawn_missile(&mut gs, source, target, MobjKind::ImpFireball)
+            .expect("value must exist in test");
+        let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
 
-        // Player should not be damaged (projectile skips source).
-        let player = gs.mobjslab.get(player_h).expect("value must exist in test");
+        // The spawn origin is the shooter position plus the half-momentum nudge
+        // (`P_CheckMissileSpawn`), derived from the missile's own momentum.
+        let expected_x = sx + Fixed16_16::from_raw(proj.momx.raw() >> 1);
+        let expected_y = sy + Fixed16_16::from_raw(proj.momy.raw() >> 1);
+        let expected_z = sz + Fixed16_16::from_int(32) + Fixed16_16::from_raw(proj.momz.raw() >> 1);
+        assert_eq!(proj.x, expected_x, "spawn x must include the half-momentum nudge");
+        assert_eq!(proj.y, expected_y, "spawn y must include the half-momentum nudge");
         assert_eq!(
-            player.health, 100,
-            "source must not be hit by own projectile"
-        );
-
-        // Projectile should still be alive (no target to collide with).
-        assert!(
-            gs.mobjslab.get(proj_h).is_some(),
-            "projectile must survive when no valid collision target"
+            proj.z, expected_z,
+            "spawn z must be source.z + 32 plus the half-momz nudge"
         );
     }
 
     #[test]
-    fn p_move_projectiles_skips_non_missiles() {
+    fn spawn_missile_z_is_thirtytwo_above_source_before_nudge() {
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
         let mut gs = make_game_state();
-        // Spawn a regular (non-missile) actor with momentum.
-        let mut mo = Mobj::new(
-            MobjKind::Imp,
-            Fixed16_16::from_int(50),
-            Fixed16_16::ZERO,
-            Bam::ZERO,
-        );
-        mo.momx = Fixed16_16::from_int(10);
-        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE;
-        mo.health = 60;
-        let imp_h = gs.mobjslab.alloc(mo);
-
-        p_move_projectiles(&mut gs, None);
-
-        // Non-missile actors must not be moved by p_move_projectiles.
-        let imp = gs.mobjslab.get(imp_h).expect("value must exist in test");
-        assert_eq!(
-            imp.x,
-            Fixed16_16::from_int(50),
-            "non-missile actors must not be moved"
-        );
+        let source = gs.player.handle;
+        // Aim horizontally (target at same z) so momz == 0 and there is no z nudge.
+        let target = spawn_target(&mut gs, 500, 0, 60);
+        let proj_h = p_spawn_missile(&mut gs, source, target, MobjKind::Rocket)
+            .expect("value must exist in test");
+        let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
+        // Source (player) z=0; vanilla spawn z = source.z + 4*8*FRACUNIT = 32.
+        assert_eq!(proj.momz, Fixed16_16::ZERO, "level shot has no vertical momentum");
+        assert_eq!(proj.z, Fixed16_16::from_int(32), "spawn z must be source.z + 32");
     }
 
-    #[test]
-    fn multiple_projectiles_move_independently() {
-        let mut gs = make_game_state();
+    // -----------------------------------------------------------------------
+    // Removed: the old `p_move_projectiles` movement tests. Missile movement is
+    // now covered by `tic.rs` (`missile_*` tests), which exercise the vanilla
+    // `P_XYMovement`/`PIT_CheckThing`/`P_ExplodeMissile` path.
+    // -----------------------------------------------------------------------
 
-        // Projectile 1: moving east.
-        let mut p1 = Mobj::new(
-            MobjKind::PlasmaBall,
-            Fixed16_16::from_int(0),
-            Fixed16_16::ZERO,
-            Bam::ZERO,
-        );
-        p1.momx = Fixed16_16::from_int(25);
-        p1.flags = flags::MF_MISSILE | flags::MF_NOGRAVITY | flags::MF_NOBLOCKMAP;
-        p1.health = 1000;
-        p1.radius = Fixed16_16::from_int(13);
-        p1.height = Fixed16_16::from_int(8);
-        p1.target = gs.player.handle;
-        let h1 = gs.mobjslab.alloc(p1);
-
-        // Projectile 2: moving north (positive Y).
-        let mut p2 = Mobj::new(
-            MobjKind::ImpFireball,
-            Fixed16_16::ZERO,
-            Fixed16_16::from_int(0),
-            Bam::ZERO,
-        );
-        p2.momy = Fixed16_16::from_int(10);
-        p2.flags = flags::MF_MISSILE | flags::MF_NOGRAVITY | flags::MF_NOBLOCKMAP;
-        p2.health = 1000;
-        p2.radius = Fixed16_16::from_int(6);
-        p2.height = Fixed16_16::from_int(8);
-        p2.target = gs.player.handle;
-        let h2 = gs.mobjslab.alloc(p2);
-
-        p_move_projectiles(&mut gs, None);
-
-        let m1 = gs.mobjslab.get(h1).expect("value must exist in test");
-        assert_eq!(m1.x, Fixed16_16::from_int(25));
-        assert_eq!(m1.y, Fixed16_16::ZERO);
-
-        let m2 = gs.mobjslab.get(h2).expect("value must exist in test");
-        assert_eq!(m2.x, Fixed16_16::ZERO);
-        assert_eq!(m2.y, Fixed16_16::from_int(10));
-    }
 }

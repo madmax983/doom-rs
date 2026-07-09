@@ -36,6 +36,7 @@ const LOAD_SHOTGUN2: u8 = crate::actions::Action::LoadShotgun2 as u8;
 const LOOK: u8 = crate::actions::Action::Look as u8;
 const LOWER: u8 = crate::actions::Action::Lower as u8;
 const NONE: u8 = crate::actions::Action::NoAction as u8;
+const EXPLODE: u8 = crate::actions::Action::Explode as u8;
 const OPEN_SHOTGUN2: u8 = crate::actions::Action::OpenShotgun2 as u8;
 const PAIN_ATTACK: u8 = crate::actions::Action::PainAttack as u8;
 const POS_ATTACK: u8 = crate::actions::Action::PosAttack as u8;
@@ -775,7 +776,7 @@ pub static STATES: &[MobjStateEntry] = &[
     // Rocket (MISL) -- fly
     st!(SPR_MISL, FB, 1, NONE, ids::S_ROCKET), // 71
     // Rocket -- death
-    st!(SPR_MISL, 1 | FB, 8, NONE, ids::S_EXPLODE2), // 72
+    st!(SPR_MISL, 1 | FB, 8, EXPLODE, ids::S_EXPLODE2), // 72
     st!(SPR_MISL, 2 | FB, 6, NONE, ids::S_EXPLODE3), // 73
     st!(SPR_MISL, 3 | FB, 4, NONE, ids::S_NULL),     // 74
     // Plasma ball (PLSS) -- fly

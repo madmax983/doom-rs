@@ -709,8 +709,8 @@ pub fn tick_psprites(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
 ///
 /// # Projectile weapons
 /// Rocket Launcher, Plasma Rifle, and BFG 9000 spawn projectile actors via
-/// `p_spawn_player_missile`.  Projectile collision is handled by
-/// `p_move_projectiles` during the tick loop.
+/// `p_spawn_player_missile`.  Projectile movement and collision are handled per
+/// missile inside `tick_mobj` (vanilla `P_MobjThinker`) during the tick loop.
 ///
 /// # Hitscan weapons
 /// Fires `pellets` separate rays via `p_line_attack`.  Each pellet's angle is

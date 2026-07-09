@@ -92,7 +92,7 @@ pub use pickups::{
 };
 pub use player::PlayerState;
 pub use projectile::{
-    ProjectileInfo, p_move_projectiles, p_spawn_missile, p_spawn_player_missile, projectile_info,
+    ProjectileInfo, p_spawn_missile, p_spawn_player_missile, projectile_info,
 };
 pub use random::{DoomRng, RNG_TABLE};
 pub use random::{RngTraceEntry, rng_trace_enable, rng_trace_set_leveltime, rng_trace_take};
