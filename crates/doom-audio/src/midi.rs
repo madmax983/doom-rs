@@ -436,7 +436,7 @@ impl MidiPlayer {
             *s = 0.0;
         }
 
-        let sample_count_end = self.sample_count + n_samples as u64;
+        let sample_count_end = self.sample_count.saturating_add(n_samples as u64);
 
         // Process all events that are due before sample_count_end.
         // `next_event_tick` is an ever-increasing absolute tick counter that
@@ -514,7 +514,7 @@ impl MidiPlayer {
                     self.process_event(&event_clone);
                     self.event_cursor += 1;
                     if let Some(d) = delta_next {
-                        self.next_event_tick += d;
+                        self.next_event_tick = self.next_event_tick.saturating_add(d);
                     }
                     // If there is no next event, next iteration will hit the
                     // Restart arm.
@@ -531,15 +531,22 @@ impl MidiPlayer {
         if sample_rate == OPL_RATE {
             self.opl.synthesize(buf, sample_rate);
         } else if n_samples > 0 {
-            let step = OPL_RATE as f64 / sample_rate as f64;
+            let step = OPL_RATE as f64 / (sample_rate.max(1) as f64);
             let start_pos = self.resample_frac;
-            let last_pos = start_pos + step * (n_samples.saturating_sub(1) as f64);
 
-            let max_interp_idx = last_pos.floor() as usize + 1;
-            let consumed_idx = (start_pos + step * n_samples as f64).floor() as usize;
-            let max_needed = max_interp_idx.max(consumed_idx);
+            // To prevent massive memory allocations leading to OOM or capacity overflow
+            // when fuzzing with large n_samples, we clamp max_needed to a safe maximum.
+            // OPL synthesis realistically never needs to generate billions of samples per tick.
+            let max_safe_samples = 44100 * 2; // 2 seconds of audio buffer
+            let n_samples_clamped = n_samples.min(max_safe_samples);
 
-            let mut src = vec![0.0f32; max_needed + 1];
+            let last_pos = start_pos + step * (n_samples_clamped.saturating_sub(1) as f64);
+
+            let max_interp_idx = (last_pos.floor() as usize).saturating_add(1);
+            let consumed_idx = (start_pos + step * n_samples_clamped as f64).floor() as usize;
+            let max_needed = max_interp_idx.max(consumed_idx).min(max_safe_samples);
+
+            let mut src = vec![0.0f32; max_needed.saturating_add(1)];
             src[0] = if self.resample_initialized {
                 self.resample_prev
             } else {
@@ -552,7 +559,7 @@ impl MidiPlayer {
 
             for (i, out) in buf.iter_mut().enumerate() {
                 let pos = start_pos + step * i as f64;
-                let idx = pos.floor() as usize;
+                let idx = (pos.floor() as usize).min(src.len().saturating_sub(2));
                 let frac = (pos - idx as f64) as f32;
                 let a = src[idx];
                 let b = src[idx + 1];
@@ -560,7 +567,7 @@ impl MidiPlayer {
             }
 
             let end_pos = start_pos + step * n_samples as f64;
-            let drop = end_pos.floor() as usize;
+            let drop = (end_pos.floor() as usize).min(src.len().saturating_sub(1));
             self.resample_frac = end_pos - drop as f64;
             self.resample_prev = src[drop];
         }
@@ -842,6 +849,35 @@ mod tests {
             player.current_score.is_some(),
             "current_score must be Some after load_score"
         );
+    }
+
+    #[test]
+    fn midi_player_resists_havoc() {
+        let mut player = MidiPlayer::new();
+        let score = MusScore {
+            header: MusHeader {
+                score_length: 0,
+                score_start: 0,
+                primary_channels: 1,
+                secondary_channels: 0,
+                instrument_count: 0,
+            },
+            instruments: vec![],
+            events: vec![
+                (
+                    u32::MAX,
+                    MusEvent::PlayNote {
+                        channel: 0,
+                        note: 60,
+                        volume: Some(127),
+                    },
+                ),
+                (u32::MAX, MusEvent::ScoreEnd),
+            ],
+        };
+        player.load_score(score);
+        let mut buf = vec![0.0f32; 100];
+        player.advance_samples(usize::MAX, 0, &mut buf);
     }
 
     #[test]
