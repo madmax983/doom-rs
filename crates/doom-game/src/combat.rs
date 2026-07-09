@@ -573,7 +573,9 @@ pub fn p_radius_attack(
         }
 
         let dist_i = dist_f as i32;
-        let actual = (damage * (radius_int - dist_i) / radius_int).max(1);
+        let actual = (((damage as i64 * (radius_int - dist_i) as i64) / radius_int as i64)
+            .clamp(i32::MIN as i64, i32::MAX as i64) as i32)
+            .max(1);
         damage_mobj(gs, handle, source, actual);
     }
 }
@@ -1813,5 +1815,17 @@ mod tests {
             health < 20,
             "trooper with clear LOS should take splash damage, health={health}"
         );
+    }
+
+    #[test]
+    fn havoc_test_radius_attack_overflow_fix() {
+        let mut gs = make_game_state();
+        let player_handle = gs.player.handle;
+
+        let damage = i32::MAX;
+        let radius = Fixed16_16::from_int(100);
+
+        // This should not panic
+        p_radius_attack(&mut gs, player_handle, damage, radius, None);
     }
 }
