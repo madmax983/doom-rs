@@ -157,11 +157,24 @@ static WEAPON_INFO: [WeaponInfo; 9] = [
 /// animations travel `WEAPON_BOTTOM - WEAPON_TOP = 96` units at 6 units/tic
 /// (16 tics), exactly as in vanilla `A_Raise`/`A_Lower`.  Using 0 here made the
 /// travel 128 units (~22 tics), delaying every weapon switch by ~13 tics.
-pub const WEAPON_TOP: i32 = 32;
-/// Fully-lowered psprite Y offset.
-pub const WEAPON_BOTTOM: i32 = 128;
-const RAISE_SPEED: i32 = 6;
-const LOWER_SPEED: i32 = 6;
+///
+/// Stored in 16.16 fixed point (vanilla `WEAPONTOP = 32*FRACUNIT`).  The
+/// weapon psprite `sy` is fixed point so that the fractional bob offset left by
+/// `A_WeaponReady` survives into the following lower/raise, reproducing
+/// vanilla's exact per-tic fire cadence (an integer `sy` pinned at 32 loses the
+/// sub-pixel bob and lowers one tic too slowly).
+pub const WEAPON_TOP: i32 = 32 << 16;
+/// Fully-lowered psprite Y offset (vanilla `WEAPONBOTTOM = 128*FRACUNIT`).
+pub const WEAPON_BOTTOM: i32 = 128 << 16;
+/// Vanilla `RAISESPEED = FRACUNIT*6`.
+const RAISE_SPEED: i32 = 6 << 16;
+/// Vanilla `LOWERSPEED = FRACUNIT*6`.
+const LOWER_SPEED: i32 = 6 << 16;
+/// `FINEMASK` = `FINEANGLES - 1` (8191); masks a fine-angle index.
+const FINEMASK: u32 = 8191;
+/// Shift from a fine-angle index to BAM (`ANGLETOFINESHIFT` = 19), so a raw
+/// `finesine`/`finecosine` table index can reuse the BAM-indexed trig helpers.
+const FINE_TO_BAM_SHIFT: u32 = 19;
 
 #[derive(Clone, Copy)]
 struct WeaponPspriteInfo {
@@ -435,21 +448,54 @@ fn a_weapon_ready(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
     let attack_held = cmd.buttons & bt::BT_ATTACK != 0;
     if !attack_held {
         gs.player.refire = 0;
+        a_weapon_ready_bob(gs);
         return;
     }
 
     let may_fire =
         !gs.player.attack_down || crate::weapon_fire::weapon_allows_hold_fire(gs.player.weapon);
     if !may_fire {
+        a_weapon_ready_bob(gs);
         return;
     }
 
-    gs.player.refire = if gs.player.attack_down {
-        gs.player.refire.saturating_add(1)
-    } else {
-        0
-    };
+    // Vanilla `A_WeaponReady` fires without touching `refire`: the first shot of
+    // a burst therefore runs with `refire == 0` (accurate — `A_FirePistol`/
+    // `A_FireCGun` pass `!refire` to `P_GunShot`).  The counter is advanced only
+    // by `A_ReFire` on the refire state.  Incrementing here made every first
+    // shot inaccurate, drawing two extra `P_SubRandom` bytes and shifting the
+    // per-tic RNG stream off vanilla.
     p_fire_weapon(gs, cmd, level);
+}
+
+/// Weapon-sway tail of vanilla `A_WeaponReady` (`p_pspr.c`):
+///
+/// ```c
+/// angle = (128*leveltime)&FINEMASK;
+/// psp->sx = FRACUNIT + FixedMul(player->bob, finecosine[angle]);
+/// angle &= FINEANGLES/2-1;
+/// psp->sy = WEAPONTOP + FixedMul(player->bob, finesine[angle]);
+/// ```
+///
+/// Only `sy` is load-bearing for demo sync: the resting `sy` (WEAPONTOP plus a
+/// fractional bob offset) is frozen through the fire states and carried into
+/// the next lower/raise, where it sets the exact tic the weapon reaches the
+/// bottom/top — and thus the tic the next shot fires. `sx` is horizontal-only
+/// cosmetic sway; the renderer applies its own horizontal bob and reads `sx` in
+/// integer-pixel units, so it is left untouched here to avoid disturbing the
+/// view calibration (it has no playsim effect).
+fn a_weapon_ready_bob(gs: &mut GameState) {
+    let bob = gs.player.bob;
+    // angle = (128 * leveltime) & FINEMASK — a raw fine-angle index (0..8191).
+    let angle = 128u32.wrapping_mul(gs.stats.level_time) & FINEMASK;
+    // sy uses finesine[angle & (FINEANGLES/2-1)] (always the positive half, so
+    // the weapon only ever sways *down* from WEAPONTOP).
+    let sy_angle = angle & (FINEMASK >> 1);
+    let sy_off = crate::geom::fixed_mul(
+        bob,
+        crate::geom::fine_sine(sy_angle << FINE_TO_BAM_SHIFT),
+    );
+    gs.player.psprites[psprite_slots::WEAPON].sy = WEAPON_TOP + sy_off;
 }
 
 /// Port of `P_FireWeapon` (`p_pspr.c`): puts the weapon into its attack state
@@ -1512,6 +1558,81 @@ mod tests {
             gs.player.pending_weapon,
             Some(WeaponType::Pistol),
             "running the super shotgun dry should stage the next usable weapon"
+        );
+    }
+
+    /// Regression (demo sync): the first shot of a burst held *across* the
+    /// weapon raise must fire with `refire == 0` (accurate), exactly as vanilla
+    /// `A_WeaponReady` — which never touches `refire`.  A previous version
+    /// incremented `refire` whenever `attack_down` was already latched (the
+    /// button held continuously through the raise), so the first `A_FirePistol`
+    /// saw `refire == 1`, fired inaccurately, and drew two extra `P_SubRandom`
+    /// bytes — shifting the per-tic RNG stream off the DEMO1 oracle.
+    #[test]
+    fn first_shot_of_held_burst_across_raise_keeps_refire_zero() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::Pistol;
+        gs.player.weapons[WeaponType::Pistol as usize] = true;
+        setup_psprites(&mut gs.player); // weapon starts raising from the bottom
+
+        let attack = cmd_with_buttons(bt::BT_ATTACK);
+        let mut fired = false;
+        // Hold the trigger through the entire raise; `attack_down` latches true
+        // during the raise so the ready tic that finally fires has it set.
+        for _ in 0..40 {
+            tick_psprites(&mut gs, attack, None);
+            if gs.player.psprites[psprite_slots::WEAPON].state == StateNum(ids::S_PISTOL1) {
+                // Just left the ready state into the fire windup; `A_ReFire`
+                // (on S_PISTOL4) has not run yet, so this is the pristine value
+                // the first `A_FirePistol` will observe.
+                assert_eq!(
+                    gs.player.refire, 0,
+                    "first held shot must fire with refire==0 (accurate), like vanilla A_WeaponReady"
+                );
+                fired = true;
+                break;
+            }
+        }
+        assert!(fired, "held pistol should fire from ready after raising");
+    }
+
+    /// Regression (demo sync): vanilla `A_WeaponReady` sways the weapon psprite
+    /// each ready tic via `psp->sy = WEAPONTOP + FixedMul(player->bob, finesine[..])`.
+    /// The resting `sy` (a fractional offset above WEAPONTOP) is frozen through
+    /// the fire states and carried into the next lower/raise, where it sets the
+    /// exact tic the weapon reaches the bottom — and thus the fire cadence.
+    /// Omitting the bob pinned `sy` at WEAPONTOP and lowered one tic too slowly.
+    #[test]
+    fn weapon_ready_applies_movement_bob_to_resting_sy() {
+        doom_types::Bam::init_trig_tables();
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::Pistol;
+        gs.player.weapons[WeaponType::Pistol as usize] = true;
+        ready_player_psprites(&mut gs);
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            StateNum(ids::S_PISTOL_READY),
+            "precondition: weapon is at the ready state"
+        );
+
+        // Zero movement bob: the weapon rests exactly at WEAPONTOP.
+        gs.player.bob = 0;
+        gs.stats.level_time = 1;
+        tick_psprites(&mut gs, TicCmd::default(), None);
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].sy,
+            WEAPON_TOP,
+            "with zero bob the ready weapon must rest exactly at WEAPONTOP"
+        );
+
+        // Full movement bob at a positive-finesine tic: the weapon sways down,
+        // so the resting sy sits strictly below WEAPONTOP (larger fixed-point y).
+        gs.player.bob = 0x0010_0000; // MAXBOB
+        gs.stats.level_time = 1; // angle = (128*1)&8191 = 128, finesine[128] > 0
+        tick_psprites(&mut gs, TicCmd::default(), None);
+        assert!(
+            gs.player.psprites[psprite_slots::WEAPON].sy > WEAPON_TOP,
+            "movement bob must sway the resting weapon below WEAPONTOP (sy > WEAPON_TOP)"
         );
     }
 }

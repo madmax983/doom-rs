@@ -757,6 +757,30 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         }
     }
 
+    // Vanilla `P_CalcHeight` (called from `P_PlayerThink` immediately after
+    // `P_MovePlayer`, before `P_MovePsprites`): recompute `player->bob` from the
+    // post-thrust, pre-friction, pre-clamp momentum. `A_WeaponReady` reads this
+    // to sway the weapon psprite; the resting `sy` it leaves behind sets the
+    // exact lower/raise tic count and therefore the fire cadence. Vanilla uses
+    // the momentum here — before `P_XYMovement`'s MAXMOVE clamp and friction —
+    // so it must be sampled at this point, matching that ordering.
+    {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        let momx = mo.momx.raw();
+        let momy = mo.momy.raw();
+        // MAXBOB = 0x100000 (16 pixels).
+        const MAXBOB: i32 = 0x0010_0000;
+        let mut bob = crate::geom::fixed_mul(momx, momx)
+            .wrapping_add(crate::geom::fixed_mul(momy, momy));
+        bob >>= 2;
+        if bob > MAXBOB {
+            bob = MAXBOB;
+        }
+        gs.player.bob = bob;
+    }
+
     // 4. P_XYMovement: clamp momentum to MAXMOVE, then step-and-collide.
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
