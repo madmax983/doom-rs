@@ -140,6 +140,28 @@ fn p_intercept_vector(v2: &Divline, v1: &Divline) -> i32 {
 /// Returns immediately if `target` does not have `MF_SHOOTABLE` or is
 /// already dead.
 pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle, damage: i32) {
+    // Hitscan / melee / self-inflicted callers use a single actor as both the
+    // damage inflictor (knockback origin) and the source (kill credit /
+    // retaliation target), matching vanilla where those callers pass the same
+    // pointer for both `inflictor` and `source`.
+    damage_mobj_source(gs, target, inflictor, inflictor, damage);
+}
+
+/// Port of vanilla `P_DamageMobj(target, inflictor, source, damage)` with the
+/// `inflictor` (the projectile/impact that determines knockback direction) and
+/// `source` (the actor credited with the kill and retaliated against) kept
+/// distinct. `PIT_CheckThing`'s missile branch calls this with
+/// `inflictor = missile`, `source = missile->target` (the shooter), so the
+/// victim is knocked back away from the *missile* (its impact point) while the
+/// *shooter* gets kill credit and becomes the victim's new AI target — exactly
+/// as vanilla does.
+pub fn damage_mobj_source(
+    gs: &mut GameState,
+    target: MobjHandle,
+    inflictor: MobjHandle,
+    source: MobjHandle,
+    damage: i32,
+) {
     // Guard: must exist, be shootable, and be alive.
     {
         let Some(mo) = gs.mobjslab.get(target) else {
@@ -191,8 +213,10 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             }
         }
 
+        // Vanilla gates the "no knockback" case on the *source* wielding a
+        // chainsaw (`!source->player || readyweapon != wp_chainsaw`).
         let source_is_chainsaw =
-            inflictor == gs.player.handle && gs.player.weapon == WeaponType::Chainsaw;
+            source == gs.player.handle && gs.player.weapon == WeaponType::Chainsaw;
 
         if inflictor != MobjHandle::NULL
             && tgt_flags & flags::MF_NOCLIP == 0
@@ -270,7 +294,7 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         damage
     };
 
-    let retaliation = if target != gs.player.handle && inflictor != MobjHandle::NULL {
+    let retaliation = if target != gs.player.handle && source != MobjHandle::NULL {
         gs.mobjslab.get(target).map(|mo| {
             let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
 
@@ -281,14 +305,16 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         None
     };
 
-    // Apply damage + inflictor.
+    // Apply damage. Vanilla makes the victim retaliate against the *source*
+    // (the shooter) — not the inflictor — so a monster shot by a player's
+    // rocket chases the player, never the (about-to-be-removed) rocket.
     let new_health = {
         let Some(mo) = gs.mobjslab.get_mut(target) else {
             return;
         };
         mo.health = mo.health.saturating_sub(effective_damage).max(0);
-        if inflictor != MobjHandle::NULL {
-            mo.target = inflictor;
+        if source != MobjHandle::NULL {
+            mo.target = source;
             if target != gs.player.handle {
                 // Vanilla P_DamageMobj: threshold = BASETHRESHOLD (100).
                 mo.threshold = 100;
@@ -380,12 +406,12 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             .map(|mo| (mo.x, mo.y))
             .unwrap_or_default();
         #[cfg(feature = "style_meter")]
-        if inflictor == gs.player.handle {
+        if source == gs.player.handle {
             gs.style.register_kill(gs.tic_num);
         }
 
         #[cfg(feature = "telemetry")]
-        if inflictor == gs.player.handle {
+        if source == gs.player.handle {
             let name = format!("{:?}", kind);
             gs.telemetry.record(
                 gs.tic_num,
