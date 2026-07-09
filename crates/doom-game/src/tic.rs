@@ -171,6 +171,25 @@ fn tick_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> T
         }
     }
 
+    // --- Phase 1b: Monster / thing momentum integration (vanilla P_XYMovement) ---
+    // In `P_MobjThinker` (p_mobj.c), ANY mobj carrying momentum runs
+    // `P_XYMovement` BEFORE its state machine (the AI) advances. Missiles are
+    // moved separately by `p_move_projectiles` and the player by
+    // `p_move_player`; this covers monsters and anything holding residual
+    // thrust momentum (from `P_DamageMobj`) or a Lost Soul skull-fly charge.
+    // Vanilla `P_Move` does NOT create walk momentum, so an idle monster has
+    // zero momentum here and this is a cheap no-op; a shot monster's thrust
+    // momentum is integrated into position and decayed by friction each tic,
+    // matching vanilla's per-tic drift exactly.
+    {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return TickMobjResult::Remove;
+        };
+        if mo.flags & flags::MF_MISSILE == 0 {
+            p_xy_movement_mobj(gs, handle, level);
+        }
+    }
+
     // --- Phase 2: State machine countdown ---
     let cur_state = {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
@@ -721,6 +740,151 @@ fn p_thrust(mo: &mut crate::mobj::Mobj, angle: Bam, move_units: i8) {
 }
 
 // ---------------------------------------------------------------------------
+// P_XYMovement — non-player mobj momentum integration
+// ---------------------------------------------------------------------------
+
+/// Port of vanilla `P_XYMovement` (`p_mobj.c`) for NON-PLAYER, NON-MISSILE
+/// mobjs — monsters and any thing carrying momentum.
+///
+/// The player runs its own inline copy in `p_move_player` (which additionally
+/// wall-slides and gates the STOPSPEED zeroing on player input); missiles are
+/// advanced by `p_move_projectiles`. This handles the remaining actors: it
+/// integrates `momx/momy` into position (with `P_TryMove` collision, zeroing
+/// momentum on a blocked step exactly as vanilla does for non-player,
+/// non-missile things) and then applies STOPSPEED zeroing / `FRICTION` decay.
+///
+/// Crucially, `P_Move` never creates walk momentum, so a monster only reaches
+/// the friction path here when it holds residual thrust momentum (set by
+/// `P_DamageMobj`) or a Lost Soul skull-fly charge — reproducing vanilla's
+/// per-tic drift-and-decay of a shot monster.
+fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let (momx0, momy0, flags0) = {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        (mo.momx, mo.momy, mo.flags)
+    };
+
+    // Vanilla: with no momentum, only MF_SKULLFLY does anything — the skull
+    // slammed into something, so drop the flag and return to its spawn state.
+    if momx0 == Fixed16_16::ZERO && momy0 == Fixed16_16::ZERO {
+        if flags0 & flags::MF_SKULLFLY != 0 {
+            let spawn_state = {
+                let mo = gs.mobjslab.get(handle).expect("mobj exists");
+                crate::mobjinfo::MOBJINFO[mo.kind as usize].spawn_state
+            };
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.flags &= !flags::MF_SKULLFLY;
+                mo.momx = Fixed16_16::ZERO;
+                mo.momy = Fixed16_16::ZERO;
+                mo.momz = Fixed16_16::ZERO;
+            }
+            p_set_mobj_state(gs, handle, spawn_state, level);
+        }
+        return;
+    }
+
+    // Clamp momentum to MAXMOVE.
+    {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+        mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
+        mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
+    }
+
+    // Step-and-move loop (splits steps larger than MAXMOVE/2, as vanilla does).
+    match level {
+        Some(lv) => {
+            let (mut xmove, mut ymove) = {
+                let mo = gs.mobjslab.get(handle).expect("mobj exists");
+                (mo.momx.raw(), mo.momy.raw())
+            };
+            let half = MAXMOVE.raw() / 2;
+            loop {
+                let (ptryx, ptryy);
+                if xmove > half || ymove > half {
+                    let mo = gs.mobjslab.get(handle).expect("mobj exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove / 2);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove / 2);
+                    xmove >>= 1;
+                    ymove >>= 1;
+                } else {
+                    let mo = gs.mobjslab.get(handle).expect("mobj exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove);
+                    xmove = 0;
+                    ymove = 0;
+                }
+
+                if !crate::movement::p_try_move_commit(&mut gs.mobjslab, handle, ptryx, ptryy, lv) {
+                    // Vanilla: a non-player, non-missile blocked move stops dead
+                    // (`mo->momx = mo->momy = 0`). Missiles never reach here.
+                    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                        mo.momx = Fixed16_16::ZERO;
+                        mo.momy = Fixed16_16::ZERO;
+                    }
+                }
+
+                if xmove == 0 && ymove == 0 {
+                    break;
+                }
+            }
+        }
+        None => {
+            // No level (unit tests): integrate momentum directly.
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.x += mo.momx;
+                mo.y += mo.momy;
+            }
+        }
+    }
+
+    // Friction / STOPSPEED. Missiles and skull-fly charges never get friction.
+    let (flags1, mz) = {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        (mo.flags, mo.z)
+    };
+    if flags1 & (flags::MF_MISSILE | flags::MF_SKULLFLY) != 0 {
+        return;
+    }
+
+    // No friction while airborne (`mo->z > mo->floorz`). With no level we fall
+    // back to the always-friction path (matching the unit-test convention).
+    if let Some(lv) = level {
+        let (x, y) = {
+            let mo = gs.mobjslab.get(handle).expect("mobj exists");
+            (mo.x, mo.y)
+        };
+        if let Some((floorz, _)) = crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
+            && mz > floorz
+        {
+            return;
+        }
+    }
+
+    // STOPSPEED zeroing / FRICTION decay. For a non-player thing the vanilla
+    // player-input clause is vacuously satisfied, so sub-STOPSPEED momentum
+    // snaps to zero and everything else is multiplied by FRICTION (0xE800).
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        let stopspeed = Fixed16_16(0x1000);
+        let below_stop = mo.momx > -stopspeed
+            && mo.momx < stopspeed
+            && mo.momy > -stopspeed
+            && mo.momy < stopspeed;
+        if below_stop {
+            mo.momx = Fixed16_16::ZERO;
+            mo.momy = Fixed16_16::ZERO;
+        } else {
+            mo.momx = mo.momx.fixed_mul(FRICTION);
+            mo.momy = mo.momy.fixed_mul(FRICTION);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -806,6 +970,64 @@ mod tests {
         mo.tics = 5;
         mo.health = 1;
         mo
+    }
+
+    // =======================================================================
+    // Tests: monster momentum (vanilla P_XYMovement)
+    // =======================================================================
+
+    #[test]
+    fn walking_monster_gains_no_momentum_but_thrust_decays_by_friction() {
+        // Regression for the vanilla demo-sync bug: `P_Move` used to inject the
+        // walk step as momentum. Vanilla `P_Move` never does — a monster's
+        // momentum comes only from thrust and is decayed each tic by
+        // `P_XYMovement`'s FRICTION (0xE800). Here we give a trooper explicit
+        // thrust momentum (as `P_DamageMobj` would) and tick it; its position
+        // must advance by that momentum and the momentum must scale by FRICTION.
+        let mut gs = make_game_state();
+        let mut mo = make_trooper(StateNum(ids::S_POSS_STND), 100);
+        // Above STOPSPEED (0x1000) so friction multiplies rather than zeroing.
+        let momx = Fixed16_16::from_raw(0x30000); // 3.0 units/tic
+        let momy = Fixed16_16::from_raw(-0x18000); // -1.5 units/tic
+        mo.momx = momx;
+        mo.momy = momy;
+        let (x0, y0) = (mo.x, mo.y);
+        let handle = gs.mobjslab.alloc(mo);
+
+        let _ = tick_mobj(&mut gs, handle, None);
+
+        let mo = gs.mobjslab.get(handle).expect("trooper exists");
+        // Position advanced by the pre-friction momentum (integration).
+        assert_eq!(mo.x, x0 + momx, "x should advance by momx");
+        assert_eq!(mo.y, y0 + momy, "y should advance by momy");
+        // Momentum decayed by FRICTION exactly.
+        assert_eq!(
+            mo.momx,
+            momx.fixed_mul(FRICTION),
+            "momx must decay by FRICTION"
+        );
+        assert_eq!(
+            mo.momy,
+            momy.fixed_mul(FRICTION),
+            "momy must decay by FRICTION"
+        );
+    }
+
+    #[test]
+    fn sub_stopspeed_monster_momentum_snaps_to_zero() {
+        // Vanilla P_XYMovement snaps a resting thing's sub-STOPSPEED momentum to
+        // zero (the player-input clause is vacuous for a monster).
+        let mut gs = make_game_state();
+        let mut mo = make_trooper(StateNum(ids::S_POSS_STND), 100);
+        mo.momx = Fixed16_16::from_raw(0x800); // below STOPSPEED (0x1000)
+        mo.momy = Fixed16_16::from_raw(-0x800);
+        let handle = gs.mobjslab.alloc(mo);
+
+        let _ = tick_mobj(&mut gs, handle, None);
+
+        let mo = gs.mobjslab.get(handle).expect("trooper exists");
+        assert_eq!(mo.momx, Fixed16_16::ZERO, "sub-STOPSPEED momx snaps to 0");
+        assert_eq!(mo.momy, Fixed16_16::ZERO, "sub-STOPSPEED momy snaps to 0");
     }
 
     // =======================================================================
@@ -1679,26 +1901,31 @@ mod tests {
     }
 
     #[test]
-    fn non_missile_does_not_advance_position() {
+    fn non_missile_advances_by_momentum() {
+        // Vanilla `P_MobjThinker` runs `P_XYMovement` for ANY mobj carrying
+        // momentum, integrating it into position before the state machine. A
+        // monster holding thrust momentum therefore advances each tic (and the
+        // momentum then decays by friction).
         let mut gs = make_game_state();
-        let mut trooper = make_trooper(StateNum(ids::S_POSS_STND), 1);
-        trooper.momx = Fixed16_16::from_int(5);
-        trooper.momy = Fixed16_16::from_int(3);
+        let mut trooper = make_trooper(StateNum(ids::S_POSS_STND), 100);
+        let momx = Fixed16_16::from_int(5);
+        let momy = Fixed16_16::from_int(3);
+        trooper.momx = momx;
+        trooper.momy = momy;
         let handle = gs.mobjslab.alloc(trooper);
 
         tick_mobj(&mut gs, handle, None);
 
         let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
-        // Non-missile actors don't get position updates from tick_mobj.
         assert_eq!(
             mo.x,
-            Fixed16_16::from_int(5000),
-            "non-missile x should not change"
+            Fixed16_16::from_int(5000) + momx,
+            "non-missile x should advance by momx"
         );
         assert_eq!(
             mo.y,
-            Fixed16_16::from_int(5000),
-            "non-missile y should not change"
+            Fixed16_16::from_int(5000) + momy,
+            "non-missile y should advance by momy"
         );
     }
 

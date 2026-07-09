@@ -518,8 +518,14 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
             mo.x = new_x;
             mo.y = new_y;
-            mo.momx = step_x;
-            mo.momy = step_y;
+            // Vanilla `P_Move` (`p_enemy.c`) moves the actor purely by position
+            // through `P_TryMove` and NEVER assigns `momx/momy`. A monster's
+            // momentum is set only by explicit sources (damage thrust in
+            // `P_DamageMobj`, skull-fly charge, etc.) and is integrated + decayed
+            // by `P_XYMovement` each tic. Injecting the walk step as momentum here
+            // would double-count it (once as this positional step, again when
+            // `P_XYMovement` integrates it next tic) and destroy any residual
+            // thrust momentum, drifting monsters out of vanilla sync.
         }
         if let Some(lv) = level
             && let Some((support_floor, subsector)) =
@@ -3039,20 +3045,37 @@ mod tests {
     }
 
     #[test]
-    fn p_move_updates_momentum() {
+    fn p_move_creates_no_walk_momentum() {
+        // Vanilla `P_Move` (`p_enemy.c`) moves the actor purely by position via
+        // `P_TryMove` and NEVER touches `momx/momy`. A walking monster must have
+        // zero momentum; momentum only ever comes from explicit sources such as
+        // damage thrust (`P_DamageMobj`) or a skull-fly charge.
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        gs.mobjslab
-            .get_mut(trooper)
-            .expect("item must exist in tests")
-            .movedir = DI_EAST;
+        {
+            let mo = gs.mobjslab.get_mut(trooper).expect("item must exist in tests");
+            mo.movedir = DI_EAST;
+            mo.momx = Fixed16_16::ZERO;
+            mo.momy = Fixed16_16::ZERO;
+        }
 
-        p_move(&mut gs, trooper, None);
+        let moved = p_move(&mut gs, trooper, None);
 
+        assert!(moved, "p_move should succeed without level");
         let mo = gs.mobjslab.get(trooper).expect("item must exist in tests");
         assert!(
-            mo.momx > Fixed16_16::ZERO,
-            "momentum x should be positive for east movement"
+            mo.x > Fixed16_16::from_int(100),
+            "trooper should have moved east by position"
+        );
+        assert_eq!(
+            mo.momx,
+            Fixed16_16::ZERO,
+            "walking must not create momentum (vanilla P_Move never sets momx)"
+        );
+        assert_eq!(
+            mo.momy,
+            Fixed16_16::ZERO,
+            "walking must not create momentum (vanilla P_Move never sets momy)"
         );
     }
 
