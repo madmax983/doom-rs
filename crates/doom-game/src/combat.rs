@@ -9,6 +9,7 @@
 //! intercept processing without map geometry.
 
 use doom_map::Level;
+use doom_types::weapons::WeaponType;
 use doom_types::{Bam, FIXED_ONE, Fixed16_16};
 
 use crate::mobj::{MobjHandle, StateNum, flags};
@@ -185,6 +186,83 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         }
         if mo.health <= 0 {
             return;
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // P_DamageMobj knockback thrust (p_inter.c:816-843).
+    //
+    //   if (inflictor && !(target->flags & MF_NOCLIP)
+    //       && (!source || !source->player
+    //           || source->player->readyweapon != wp_chainsaw)) {
+    //       ang = R_PointToAngle2(inflictor->x, inflictor->y, target->x, target->y);
+    //       thrust = damage*(FRACUNIT>>3)*100/target->info->mass;
+    //       if (damage < 40 && damage > target->health
+    //           && target->z - inflictor->z > 64*FRACUNIT && (P_Random()&1)) {
+    //           ang += ANG180; thrust *= 4;
+    //       }
+    //       ang >>= ANGLETOFINESHIFT;
+    //       target->momx += FixedMul(thrust, finecosine[ang]);
+    //       target->momy += FixedMul(thrust, finesine[ang]);
+    //   }
+    //
+    // `inflictor` is both inflictor and source for all our hitscan/melee/
+    // projectile callers.  The MF_SKULLFLY momentum-clear (p_inter.c:805) is
+    // also applied here, matching vanilla order (before the thrust).
+    {
+        let (tgt_x, tgt_y, tgt_z, tgt_flags, tgt_mass, tgt_health) = {
+            let Some(mo) = gs.mobjslab.get(target) else {
+                return;
+            };
+            let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
+            (mo.x, mo.y, mo.z, mo.flags, info.mass, mo.health)
+        };
+
+        // Lost soul (MF_SKULLFLY) loses its charge momentum when hurt.
+        if tgt_flags & flags::MF_SKULLFLY != 0 {
+            if let Some(mo) = gs.mobjslab.get_mut(target) {
+                mo.momx = Fixed16_16::ZERO;
+                mo.momy = Fixed16_16::ZERO;
+                mo.momz = Fixed16_16::ZERO;
+            }
+        }
+
+        let source_is_chainsaw =
+            inflictor == gs.player.handle && gs.player.weapon == WeaponType::Chainsaw;
+
+        if inflictor != MobjHandle::NULL
+            && tgt_flags & flags::MF_NOCLIP == 0
+            && !source_is_chainsaw
+        {
+            if let Some(inf) = gs.mobjslab.get(inflictor) {
+                let (ix, iy, iz) = (inf.x, inf.y, inf.z);
+                let mut ang =
+                    crate::geom::r_point_to_angle2(ix.raw(), iy.raw(), tgt_x.raw(), tgt_y.raw());
+                // thrust = damage*(FRACUNIT>>3)*100/mass, all 32-bit integer math.
+                let mut thrust = damage
+                    .wrapping_mul(FIXED_ONE.raw() >> 3)
+                    .wrapping_mul(100)
+                    / tgt_mass.max(1);
+
+                // "make fall forwards sometimes" — the only RNG draw in the
+                // thrust path, gated by the first three conditions (C `&&`).
+                if damage < 40
+                    && damage > tgt_health
+                    && (tgt_z.raw().wrapping_sub(iz.raw())) > (64 << 16)
+                    && (gs.p_random() & 1) != 0
+                {
+                    ang = ang.wrapping_add(0x8000_0000); // ANG180
+                    thrust = thrust.wrapping_mul(4);
+                }
+
+                let fine = Bam(ang);
+                let dmx = Fixed16_16(thrust).fixed_mul(fine.cos());
+                let dmy = Fixed16_16(thrust).fixed_mul(fine.sin());
+                if let Some(mo) = gs.mobjslab.get_mut(target) {
+                    mo.momx += dmx;
+                    mo.momy += dmy;
+                }
+            }
         }
     }
 
@@ -711,6 +789,45 @@ mod tests {
                 .health,
             15
         );
+    }
+
+    #[test]
+    fn damage_applies_knockback_thrust_along_inflictor_axis() {
+        // Vanilla P_DamageMobj: thrust = damage*(FRACUNIT>>3)*100/mass along the
+        // angle from inflictor to target.  Inflictor east of nothing / target to
+        // the +x side => positive momx, zero momy.
+        unsafe {
+            Bam::init_trig_tables();
+        }
+        let mut gs = make_game_state();
+        let player = gs.player.handle; // at origin, acts as inflictor
+        let trooper = spawn_trooper(&mut gs, 100, 0); // due east of inflictor
+        gs.rng.set_index(3);
+
+        damage_mobj(&mut gs, trooper, player, 5);
+
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
+        // thrust = 5*8192*100/100 = 40960; FixedMul(40960, finecosine[0]) ~= 40959.
+        assert!(
+            mo.momx.raw() > 1000,
+            "thrust should push the target away from the inflictor (+x), got {}",
+            mo.momx.raw()
+        );
+        assert!(
+            mo.momy.raw().abs() < mo.momx.raw() / 100,
+            "thrust is essentially axis-aligned east, got momy={}",
+            mo.momy.raw()
+        );
+    }
+
+    #[test]
+    fn damage_with_null_inflictor_applies_no_thrust() {
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 100, 0);
+        damage_mobj(&mut gs, trooper, MobjHandle::NULL, 5);
+        let mo = gs.mobjslab.get(trooper).expect("value must exist in test");
+        assert_eq!(mo.momx.raw(), 0);
+        assert_eq!(mo.momy.raw(), 0);
     }
 
     #[test]
