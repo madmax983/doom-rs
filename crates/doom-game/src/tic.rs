@@ -953,6 +953,34 @@ fn p_thrust(mo: &mut crate::mobj::Mobj, angle: Bam, move_units: i8) {
 // P_XYMovement — non-player mobj momentum integration
 // ---------------------------------------------------------------------------
 
+/// Vanilla `P_XYMovement` MF_CORPSE friction clause (`p_mobj.c`).
+///
+/// A corpse that is still sliding with some momentum (`|momx| > FRACUNIT/4` or
+/// `|momy| > FRACUNIT/4`) and is "halfway off a step" — its bbox-support floor
+/// (`mo->floorz`) differs from its center-point sector floor
+/// (`mo->subsector->sector->floorheight`) — must NOT have friction applied that
+/// tic ("do not stop sliding"). Returns `true` when friction should be skipped.
+///
+/// Getting this wrong makes a shot corpse decelerate one tic too early, leaving
+/// it a couple of map units short of its vanilla resting position — enough to
+/// flip a razor-thin `PIT_CheckThing` overlap and stall a passing player (the
+/// DEMO3/E1M7 leveltime-409 one-tic `py` stall this pins).
+fn corpse_skips_friction(
+    mo_flags: u32,
+    momx: Fixed16_16,
+    momy: Fixed16_16,
+    support_floor: Fixed16_16,
+    center_floor: Fixed16_16,
+) -> bool {
+    if mo_flags & flags::MF_CORPSE == 0 {
+        return false;
+    }
+    let quarter = Fixed16_16(0x4000); // FRACUNIT/4
+    let has_momentum =
+        momx > quarter || momx < -quarter || momy > quarter || momy < -quarter;
+    has_momentum && support_floor != center_floor
+}
+
 /// Port of vanilla `P_XYMovement` (`p_mobj.c`) for NON-PLAYER, NON-MISSILE
 /// mobjs — monsters and any thing carrying momentum.
 ///
@@ -1064,14 +1092,29 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
     // No friction while airborne (`mo->z > mo->floorz`). With no level we fall
     // back to the always-friction path (matching the unit-test convention).
     if let Some(lv) = level {
-        let (x, y) = {
+        let (x, y, momx, momy) = {
             let mo = gs.mobjslab.get(handle).expect("mobj exists");
-            (mo.x, mo.y)
+            (mo.x, mo.y, mo.momx, mo.momy)
         };
-        if let Some((floorz, _)) = crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
-            && mz > floorz
+        if let Some((floorz, _)) =
+            crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
         {
-            return;
+            if mz > floorz {
+                return;
+            }
+
+            // Vanilla `P_XYMovement` MF_CORPSE clause: a corpse that is still
+            // sliding with some momentum (|mom| > FRACUNIT/4) and is halfway
+            // off a step — `mo->floorz != mo->subsector->sector->floorheight`,
+            // i.e. the bbox-support floor differs from the center-point sector
+            // floor — skips friction entirely this tic ("do not stop sliding").
+            let center_floor = lv
+                .floor_at(x.to_int(), y.to_int())
+                .map(|f| Fixed16_16::from_int(f as i32))
+                .unwrap_or(floorz);
+            if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
+                return;
+            }
         }
     }
 
@@ -3250,6 +3293,59 @@ mod tests {
             mo.x,
             Fixed16_16::from_int(62),
             "player should continue descending instead of getting stuck on the stair edge"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // MF_CORPSE step-slide friction exception (vanilla P_XYMovement)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn corpse_on_step_with_momentum_skips_friction() {
+        // Regression for the DEMO3/E1M7 leveltime-409 one-tic `py` stall: a
+        // shot corpse sliding while "halfway off a step" (support floor differs
+        // from the center-point sector floor) keeps its momentum this tic.
+        let sliding = Fixed16_16::from_int(1); // > FRACUNIT/4
+        let support = Fixed16_16::from_int(64);
+        let center = Fixed16_16::from_int(0);
+        assert!(
+            corpse_skips_friction(flags::MF_CORPSE, Fixed16_16::ZERO, -sliding, support, center),
+            "corpse straddling a step with momentum must skip friction"
+        );
+    }
+
+    #[test]
+    fn corpse_flat_floor_still_gets_friction() {
+        // Same corpse fully over one sector (support == center) decelerates.
+        let sliding = Fixed16_16::from_int(1);
+        let floor = Fixed16_16::from_int(64);
+        assert!(
+            !corpse_skips_friction(flags::MF_CORPSE, Fixed16_16::ZERO, -sliding, floor, floor),
+            "corpse on flat floor must not skip friction"
+        );
+    }
+
+    #[test]
+    fn corpse_below_quarter_unit_gets_friction() {
+        // |mom| <= FRACUNIT/4 never triggers the exception, even on a step.
+        let slow = Fixed16_16(0x4000); // exactly FRACUNIT/4 (not > FRACUNIT/4)
+        let support = Fixed16_16::from_int(64);
+        let center = Fixed16_16::from_int(0);
+        assert!(
+            !corpse_skips_friction(flags::MF_CORPSE, slow, slow, support, center),
+            "sub-quarter-unit momentum must not skip friction"
+        );
+    }
+
+    #[test]
+    fn non_corpse_on_step_gets_friction() {
+        // A live actor (no MF_CORPSE) on a step is unaffected by the clause.
+        let sliding = Fixed16_16::from_int(1);
+        let support = Fixed16_16::from_int(64);
+        let center = Fixed16_16::from_int(0);
+        assert!(
+            !corpse_skips_friction(0, Fixed16_16::ZERO, -sliding, support, center),
+            "non-corpse must not skip friction"
         );
     }
 
