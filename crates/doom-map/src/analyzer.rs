@@ -72,7 +72,10 @@ impl<'a> MapAnalyzer<'a> {
         for &node in self.graph.adjacency_list.keys() {
             if !visited.contains(&node) {
                 // Iterative DFS to avoid stack overflow on deep graphs.
-                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+                let Some(neighbors) = self.graph.adjacency_list.get(&node) else {
+                    continue;
+                };
+                let mut stack = vec![(node, neighbors.iter())];
 
                 visited.insert(node);
                 time += 1;
@@ -97,15 +100,16 @@ impl<'a> MapAnalyzer<'a> {
                             low_time.insert(v, time);
 
                             stack.push((u, neighbors_iter));
-                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            if let Some(v_neighbors) = self.graph.adjacency_list.get(&v) {
+                                stack.push((v, v_neighbors.iter()));
+                            }
                             pushed_child = true;
                             break;
                         } else if parent.get(&u) != Some(&v) {
                             let (low_u, disc_v) =
                                 (low_time.get(&u).copied(), discovery_time.get(&v).copied());
                             if let (Some(low_u), Some(disc_v)) = (low_u, disc_v) {
-                                let new_low = low_u.min(disc_v);
-                                low_time.insert(u, new_low);
+                                low_time.insert(u, low_u.min(disc_v));
                             }
                         }
                     }
@@ -120,14 +124,12 @@ impl<'a> MapAnalyzer<'a> {
                             );
                             if let (Some(low_u), Some(low_p), Some(disc_p)) = (low_u, low_p, disc_p)
                             {
-                                let new_low = low_p.min(low_u);
-                                low_time.insert(p, new_low);
-
+                                low_time.insert(p, low_p.min(low_u));
                                 if low_u >= disc_p && parent.contains_key(&p) {
                                     articulation_points.insert(p);
                                 }
                             }
-                        } else if *children_map.get(&u).unwrap_or(&0) > 1 {
+                        } else if children_map.get(&u).copied().unwrap_or(0) > 1 {
                             articulation_points.insert(u);
                         }
                     }
