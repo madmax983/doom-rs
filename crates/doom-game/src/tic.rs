@@ -280,9 +280,26 @@ fn actors_by_generation(slab: &crate::mobj::MobjSlab) -> Vec<MobjHandle> {
 }
 
 pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
-    // Only process mobjs that existed at the start of the tic.
+    // Process every actor that existed at the start of the tic, then the
+    // this-tic-spawned missiles, all in creation (generation) order.
     let initial_generation = gs.mobjslab.next_generation();
+    tick_existing_mobjs_in_gen_range(gs, level, 0, initial_generation, initial_generation);
+    tick_same_tic_missiles(gs, level, initial_generation);
+}
 
+/// Tick every actor that existed at tic start (`generation < initial_generation`)
+/// whose `generation` falls in `[gen_lo, gen_hi)`, in ascending generation order.
+///
+/// Splitting the tic-start actors by generation lets `tick_world` interleave the
+/// sector-light pass at the vanilla thinker-list position (after setup monsters,
+/// before gameplay-spawned actors). `[0, initial_generation)` ticks them all.
+fn tick_existing_mobjs_in_gen_range(
+    gs: &mut GameState,
+    level: Option<&Level>,
+    gen_lo: u32,
+    gen_hi: u32,
+    initial_generation: u32,
+) {
     let player_handle = gs.player.handle;
     let is_nightmare = gs.skill == crate::spawn::Skill::Nightmare;
 
@@ -291,7 +308,12 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
     let tick_order: Vec<MobjHandle> = actors_by_generation(&gs.mobjslab)
         .into_iter()
         // Only actors that existed at tic start; skip the player (tick_player).
-        .filter(|h| h.generation < initial_generation && *h != player_handle)
+        .filter(|h| {
+            h.generation < initial_generation
+                && h.generation >= gen_lo
+                && h.generation < gen_hi
+                && *h != player_handle
+        })
         .collect();
 
     for handle in tick_order {
@@ -327,7 +349,10 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
             gs.mobjslab.free(handle);
         }
     }
+}
 
+fn tick_same_tic_missiles(gs: &mut GameState, level: Option<&Level>, initial_generation: u32) {
+    let player_handle = gs.player.handle;
     // --- Same-tic missile spawn step (vanilla P_RunThinkers ordering) ---
     // Vanilla appends a newly spawned thinker to the END of the list, so a
     // missile a monster launches from its `A_*Attack` (fired DURING the loop
@@ -386,20 +411,64 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
 ///
 /// This does NOT process player input — call `tick_player` before this.
 pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
-    // 1. Advance all actor state machines.
-    tick_all_mobjs(gs, level.as_deref());
+    let initial_generation = gs.mobjslab.next_generation();
 
-    // 2-6. Sector movers (doors, ceilings, floors, lifts, platforms).
-    if let Some(lv) = level.as_deref_mut() {
-        crate::specials::tick_doors(gs, lv);
-        crate::specials::tick_ceilings(gs, lv);
-        crate::specials::tick_floors(gs, lv);
-        crate::specials::tick_lifts(gs, lv);
-        crate::specials::tick_platforms(gs, lv);
+    // Vanilla's single thinker list runs in creation order:
+    //   [setup map things]  [setup sector specials]  [gameplay spawns]
+    // Sector-light thinkers (which draw P_Random) were created during
+    // P_SpawnSpecials — after every map monster but before any actor spawned
+    // during play. When the setup boundary has been frozen we reproduce that
+    // ordering: tick setup monsters, then the sector-light pass, then
+    // gameplay-spawned actors. Otherwise fall back to the legacy "all mobjs,
+    // then lights" order (unit tests and callers that never freeze it).
+    let boundary = gs.thinker_setup_boundary;
+    if boundary != u32::MAX {
+        // 1a. Setup-era actors (created by P_SetupLevel).
+        tick_existing_mobjs_in_gen_range(gs, level.as_deref(), 0, boundary, initial_generation);
 
-        // 7. Light effects.
-        crate::specials::tick_lights(gs, lv);
-        crate::specials::tick_sector_lights(gs, lv);
+        // 1b. Setup-time sector-light thinkers tick here, at their vanilla
+        //     thinker-list position (before any gameplay-spawned actor).
+        if let Some(lv) = level.as_deref_mut() {
+            crate::specials::tick_lights(gs, lv);
+            crate::specials::tick_sector_lights(gs, lv);
+        }
+
+        // 1c. Gameplay-era actors (missiles, etc.) and this-tic-spawned
+        //     missiles, all after the setup-time lights.
+        tick_existing_mobjs_in_gen_range(
+            gs,
+            level.as_deref(),
+            boundary,
+            initial_generation,
+            initial_generation,
+        );
+        tick_same_tic_missiles(gs, level.as_deref(), initial_generation);
+
+        // 2-6. Sector movers (doors, ceilings, floors, lifts, platforms).
+        //      RNG-neutral; kept after the actor passes as before.
+        if let Some(lv) = level.as_deref_mut() {
+            crate::specials::tick_doors(gs, lv);
+            crate::specials::tick_ceilings(gs, lv);
+            crate::specials::tick_floors(gs, lv);
+            crate::specials::tick_lifts(gs, lv);
+            crate::specials::tick_platforms(gs, lv);
+        }
+    } else {
+        // 1. Advance all actor state machines.
+        tick_all_mobjs(gs, level.as_deref());
+
+        // 2-6. Sector movers (doors, ceilings, floors, lifts, platforms).
+        if let Some(lv) = level.as_deref_mut() {
+            crate::specials::tick_doors(gs, lv);
+            crate::specials::tick_ceilings(gs, lv);
+            crate::specials::tick_floors(gs, lv);
+            crate::specials::tick_lifts(gs, lv);
+            crate::specials::tick_platforms(gs, lv);
+
+            // 7. Light effects.
+            crate::specials::tick_lights(gs, lv);
+            crate::specials::tick_sector_lights(gs, lv);
+        }
     }
 
     // 8. Scrolling walls (no level mutation needed).
@@ -1826,6 +1895,60 @@ mod tests {
         let bi = order.iter().position(|&h| h == b).unwrap();
         let ci = order.iter().position(|&h| h == c).unwrap();
         assert!(bi < ci, "`b` (older) must tick before `c` (newer)");
+    }
+
+    #[test]
+    fn tick_world_interleaved_light_pass_matches_legacy_when_no_gameplay_actors() {
+        use crate::movers::{LightThinkerKind, SectorLightEffect};
+
+        // A pending LightFlash that fires (draws P_Random) on the next tic.
+        fn pending_light() -> SectorLightEffect {
+            SectorLightEffect {
+                sector_index: 0,
+                kind: LightThinkerKind::LightFlash,
+                count: 1, // `--count == 0` this tic -> toggles and draws
+                max_light: 200,
+                min_light: 100,
+                max_time: 64,
+                min_time: 7,
+                dark_time: 0,
+                bright_time: 0,
+                glow_dir: 0,
+            }
+        }
+
+        // Legacy path (boundary unset): light pass runs after the mobj pass.
+        let mut legacy = make_game_state();
+        let mut lv_legacy = make_secret_level(0);
+        legacy.movers.sector_lights.push(pending_light());
+        assert_eq!(legacy.thinker_setup_boundary, u32::MAX);
+        let idx_before = legacy.rng.index();
+        tick_world(&mut legacy, Some(&mut lv_legacy));
+        let legacy_light = lv_legacy.sectors[0].light_level;
+        let legacy_draws = legacy.rng.index().wrapping_sub(idx_before);
+
+        // Interleaved path (boundary frozen): the sector-light pass moves to the
+        // vanilla thinker-list position. With no gameplay-spawned actors present
+        // it must still tick the light exactly once, identically to legacy.
+        let mut interleaved = make_game_state();
+        let mut lv_inter = make_secret_level(0);
+        interleaved.movers.sector_lights.push(pending_light());
+        interleaved.freeze_thinker_setup_boundary();
+        assert_ne!(interleaved.thinker_setup_boundary, u32::MAX);
+        let idx_before = interleaved.rng.index();
+        tick_world(&mut interleaved, Some(&mut lv_inter));
+        let inter_light = lv_inter.sectors[0].light_level;
+        let inter_draws = interleaved.rng.index().wrapping_sub(idx_before);
+
+        assert_eq!(
+            legacy_draws, inter_draws,
+            "interleaved light pass must draw the same P_Random count as legacy"
+        );
+        assert_eq!(
+            legacy_light, inter_light,
+            "interleaved light pass must produce the same light level as legacy"
+        );
+        assert!(inter_draws >= 1, "the pending LightFlash must draw this tic");
     }
 
     #[test]

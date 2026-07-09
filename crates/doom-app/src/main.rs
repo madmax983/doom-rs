@@ -425,6 +425,9 @@ impl DoomGame {
 
         // Initialize dynamic sector lighting (blinking, strobe, fireflicker).
         init_sector_lights(&mut gs, &level);
+        // Freeze the setup/gameplay actor-generation boundary (vanilla thinker
+        // order for the sector-light pass; see `GameState::tick_world`).
+        gs.freeze_thinker_setup_boundary();
 
         // Capture initial player health for pain-flash delta detection.
         let initial_health = gs.player.health();
@@ -578,6 +581,7 @@ impl DoomGame {
                 init_scrolling_walls(&mut self.gs, &self.level);
                 init_conveyors(&mut self.gs, &self.level);
                 init_sector_lights(&mut self.gs, &self.level);
+                self.gs.freeze_thinker_setup_boundary();
                 self.player_view_height = PLAYER_HEIGHT;
                 self.prev_health = self.gs.player.health();
                 self.skill = sk;
@@ -706,6 +710,7 @@ impl DoomGame {
         init_scrolling_walls(&mut gs, &level);
         init_conveyors(&mut gs, &level);
         init_sector_lights(&mut gs, &level);
+        gs.freeze_thinker_setup_boundary();
 
         self.gs = gs;
         self.level = level;
@@ -2290,6 +2295,12 @@ fn verify_replay_once(
     init_scrolling_walls(&mut gs, &level);
     init_conveyors(&mut gs, &level);
     init_sector_lights(&mut gs, &level);
+
+    // Freeze the setup/gameplay actor-generation boundary now that all map
+    // things and sector specials exist. `tick_world` uses it to run the
+    // sector-light thinker pass at vanilla's creation-order position (after
+    // setup monsters, before gameplay-spawned actors).
+    gs.freeze_thinker_setup_boundary();
 
     let mut player = DemoPlayer::from_lmp(demo_bytes)
         .ok_or_else(|| anyhow::anyhow!("Failed to parse demo LMP data"))?;

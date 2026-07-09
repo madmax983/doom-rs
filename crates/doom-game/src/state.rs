@@ -101,6 +101,20 @@ pub struct GameState {
     /// Current skill level (affects Nightmare respawning).
     pub skill: Skill,
 
+    /// Actor `generation` boundary separating level-setup actors from
+    /// gameplay-spawned ones. Every actor created during `P_SetupLevel`
+    /// (map things) has `generation < thinker_setup_boundary`; missiles, puffs,
+    /// dropped items, etc. spawned during play have `generation >=` it.
+    ///
+    /// Vanilla's single thinker list is created in the order
+    /// `[map things] [sector specials] [gameplay spawns]`, so sector-light
+    /// thinkers (which draw `P_Random`) tick AFTER the setup monsters but
+    /// BEFORE any gameplay-spawned actor. `tick_world` uses this boundary to
+    /// place the sector-light pass at that point. Defaults to `u32::MAX`, which
+    /// preserves the legacy "all mobjs, then lights" order for unit tests and
+    /// any caller that never freezes the boundary.
+    pub thinker_setup_boundary: u32,
+
     // --- Boss Brain (Icon of Sin) ---
     /// Set `true` once the Boss Brain's see state fires; cubes only
     /// start spawning after this flag is set.
@@ -137,6 +151,7 @@ impl GameState {
             exit_request: None,
             seen_lines: Vec::new(),
             skill: Skill::Medium,
+            thinker_setup_boundary: u32::MAX,
             brain_awake: false,
             brain_targets: Vec::new(),
             brain_target_index: 0,
@@ -145,6 +160,15 @@ impl GameState {
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
         }
+    }
+
+    /// Freeze the setup/gameplay actor-generation boundary at the current
+    /// point. Call once after all level-setup actors (map things) and sector
+    /// specials have been created and before the first tic, so `tick_world` can
+    /// order the sector-light thinker pass like vanilla's unified thinker list
+    /// (setup monsters, then setup-time lights, then gameplay spawns).
+    pub fn freeze_thinker_setup_boundary(&mut self) {
+        self.thinker_setup_boundary = self.mobjslab.next_generation();
     }
 
     /// Mirror `PlayerState::health()` onto the live player mobj.
