@@ -248,7 +248,8 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         if inflictor != MobjHandle::NULL {
             mo.target = inflictor;
             if target != gs.player.handle {
-                mo.threshold = 60;
+                // Vanilla P_DamageMobj: threshold = BASETHRESHOLD (100).
+                mo.threshold = 100;
                 mo.flags |= flags::MF_JUSTHIT;
                 if let Some(see_state) = retaliation.flatten() {
                     mo.state = see_state;
@@ -276,6 +277,17 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
         if death_sn != StateNum::NULL {
             crate::tic::p_set_mobj_state(gs, target, death_sn, None);
         }
+        // Vanilla P_KillMobj: `target->tics -= P_Random()&3; if(tics<1)tics=1;`
+        // desynchronizes death animations. One P_Random draw per kill.
+        {
+            let r = (gs.p_random() & 3) as i16;
+            if let Some(mo) = gs.mobjslab.get_mut(target) {
+                mo.tics -= r;
+                if mo.tics < 1 {
+                    mo.tics = 1;
+                }
+            }
+        }
         let (sx, sy) = gs
             .mobjslab
             .get(target)
@@ -301,25 +313,30 @@ pub fn damage_mobj(gs: &mut GameState, target: MobjHandle, inflictor: MobjHandle
             .push(crate::state::SoundRequest::MonsterDie(kind, target, sx, sy));
     } else {
         // -------------------------------------------------------------------
-        // Pain transition — probabilistic via p_random()
+        // Pain transition. Vanilla: `if ((P_Random() < info->painchance) &&
+        // !(target->flags & MF_SKULLFLY)) { ... P_SetMobjState(painstate); }`.
+        // C evaluates P_Random() as the left operand of `&&`, so the draw is
+        // UNCONDITIONAL for every non-lethal hit (even painchance==0 or an
+        // absent painstate) — only whether the pain state is entered is gated.
         // -------------------------------------------------------------------
-        let (pain_sn, pain_chance): (StateNum, u8) = {
+        let (pain_sn, pain_chance, skullfly): (StateNum, u8, bool) = {
             let Some(mo) = gs.mobjslab.get(target) else {
                 return;
             };
             let info = &crate::mobjinfo::MOBJINFO[mo.kind as usize];
-            (info.pain_state, info.pain_chance)
+            (
+                info.pain_state,
+                info.pain_chance,
+                mo.flags & flags::MF_SKULLFLY != 0,
+            )
         };
-        if pain_sn != StateNum::NULL && pain_chance > 0 {
-            // Doom's original check: `if (P_Random() < info->painchance)`
-            let roll = gs.p_random();
-            if roll < pain_chance {
-                if let Some(entry) = crate::states::STATES.get(pain_sn.0 as usize) {
-                    let new_tics = entry.tics;
-                    if let Some(mo) = gs.mobjslab.get_mut(target) {
-                        mo.state = pain_sn;
-                        mo.tics = new_tics;
-                    }
+        let roll = gs.p_random();
+        if roll < pain_chance && !skullfly && pain_sn != StateNum::NULL {
+            if let Some(entry) = crate::states::STATES.get(pain_sn.0 as usize) {
+                let new_tics = entry.tics;
+                if let Some(mo) = gs.mobjslab.get_mut(target) {
+                    mo.state = pain_sn;
+                    mo.tics = new_tics;
                 }
             }
         }
@@ -717,8 +734,8 @@ mod tests {
             "monster should retaliate against the attacker"
         );
         assert_eq!(
-            mo.threshold, 60,
-            "monster should enter alert threshold after being hit"
+            mo.threshold, 100,
+            "monster should enter BASETHRESHOLD alert after being hit"
         );
         assert_ne!(
             mo.flags & flags::MF_JUSTHIT,
