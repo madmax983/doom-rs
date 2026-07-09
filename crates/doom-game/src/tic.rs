@@ -558,8 +558,31 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
     p_move_player(gs, cmd, level.as_deref_mut());
 
     // Pickup check: scan MF_SPECIAL actors.
+    //
+    // Vanilla collects items in `P_TouchSpecialThing`, called from
+    // `PIT_CheckThing` during `P_XYMovement` — i.e. AFTER this tic's XY move
+    // reaches its destination, but BEFORE `P_ZMovement` integrates the player's
+    // z. `P_TouchSpecialThing`'s opening Z-reach gate therefore samples the
+    // player's START-of-tic z (`toucher->z`), not the post-`P_ZMovement` z.
+    // doom-rs integrates z inline in `p_move_player`, so restore the pre-move z
+    // (keeping the post-move x,y that the AABB overlap uses) for the pickup scan,
+    // then put the real post-move z back. Without this, a player descending
+    // stairs onto a low item reaches Z-reach one tic early (DEMO3/E1M7 health
+    // bonus at z=24 collected at leveltime 530, matching vanilla, not 529).
     if !gs.player.is_dead() {
+        let restore_z = pre_move_pos.and_then(|(_, _, pre_z, _)| {
+            gs.mobjslab.get_mut(gs.player.handle).map(|mo| {
+                let post_z = mo.z;
+                mo.z = pre_z;
+                post_z
+            })
+        });
         crate::pickups::p_check_pickups(gs);
+        if let Some(post_z) = restore_z
+            && let Some(mo) = gs.mobjslab.get_mut(gs.player.handle)
+        {
+            mo.z = post_z;
+        }
     }
 
     // BT_USE: activate linedef ahead of player on the leading edge only.
@@ -794,11 +817,9 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
     }
 
     // 4. P_XYMovement: clamp momentum to MAXMOVE, then step-and-collide.
-    let Some(mo) = gs.mobjslab.get(handle) else {
+    if gs.mobjslab.get(handle).is_none() {
         return;
     };
-    let old_x = mo.x;
-    let old_y = mo.y;
 
     {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
@@ -807,6 +828,11 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
         mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
     }
+
+    // Walkover line-crossings accumulated across this tic's P_TryMove steps, in
+    // vanilla `while(numspechit--)` dispatch order. Dispatched after the move
+    // (below), where the level can be borrowed mutably.
+    let mut player_crossings: Vec<usize> = Vec::new();
 
     // Vanilla P_XYMovement move-stepping: split moves whose magnitude exceeds
     // MAXMOVE/2 into halves (P_TryMove per step), sliding along walls on a
@@ -835,9 +861,26 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
                     ymove = 0;
                 }
 
-                if !crate::movement::p_try_move_commit(&mut gs.mobjslab, handle, ptryx, ptryy, lv) {
+                // Vanilla `P_TryMove` fires `P_CrossSpecialLine` for every special
+                // line the box straddled whose *infinite-line* side the centre
+                // crossed on this step (see `record_player_crossings`); the
+                // split-move halves and each `P_SlideMove` sub-step accumulate
+                // their crossings in vanilla order for dispatch below.
+                if !crate::movement::p_try_move_commit_tracked(
+                    &mut gs.mobjslab,
+                    handle,
+                    ptryx,
+                    ptryy,
+                    lv,
+                    &mut player_crossings,
+                ) {
                     // Blocked: player slides along the wall.
-                    crate::movement::p_slide_move_vanilla(&mut gs.mobjslab, handle, lv);
+                    crate::movement::p_slide_move_vanilla(
+                        &mut gs.mobjslab,
+                        handle,
+                        lv,
+                        &mut player_crossings,
+                    );
                 }
 
                 if xmove == 0 && ymove == 0 {
@@ -925,18 +968,15 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         }
     }
 
-    if final_x != old_x || final_y != old_y {
-        if let Some(lv) = level {
-            crate::linedef_dispatch::check_cross_lines(
-                gs,
-                lv,
-                handle,
-                old_x.to_int(),
-                old_y.to_int(),
-                final_x.to_int(),
-                final_y.to_int(),
-            );
-        }
+    // Fire the walkover crossings accumulated during the move (vanilla
+    // `P_CrossSpecialLine`, in `while(numspechit--)` order). Detection is the
+    // exact vanilla box-straddle + `P_PointOnLineSide` centre side-change test
+    // (see `record_player_crossings`), not the old truncated-integer segment
+    // intersection.
+    if !player_crossings.is_empty()
+        && let Some(lv) = level
+    {
+        crate::linedef_dispatch::dispatch_player_crossings(gs, lv, handle, &player_crossings);
     }
 }
 
