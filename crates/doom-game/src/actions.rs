@@ -188,6 +188,7 @@ fn get_alive_target(gs: &GameState, handle: MobjHandle) -> Option<MobjHandle> {
 }
 
 /// Helper to get a valid, alive target along with the monster's current position.
+#[cfg(test)]
 fn get_alive_target_with_pos(
     gs: &GameState,
     handle: MobjHandle,
@@ -231,7 +232,7 @@ pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level
             Action::PosAttack => a_pos_attack(gs, handle, level),
             Action::SposAttack => a_spos_attack(gs, handle, level),
             Action::TrooAttack => a_troo_attack(gs, handle, level),
-            Action::SargAttack => a_sarg_attack(gs, handle),
+            Action::SargAttack => a_sarg_attack(gs, handle, level),
             Action::Fall => a_fall(gs, handle),
             Action::HeadAttack => a_head_attack(gs, handle),
             Action::BruisAttack => a_bruis_attack(gs, handle),
@@ -1234,7 +1235,8 @@ fn a_scream(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Fires a single hitscan bolt at the current target.
 fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    // Check target exists and is alive.
+    let _rng_ctx = crate::random::rng_ctx("A_PosAttack");
+    // Vanilla: `if (!actor->target) return;`
     let Some(_target) = get_alive_target(gs, handle) else {
         return;
     };
@@ -1244,9 +1246,12 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let angle = mo.angle;
+    let base_angle = mo.angle.0;
 
-    let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
+    // Vanilla A_PosAttack: `angle += P_SubRandom()<<20; damage = (P_Random()%5+1)*3;`
+    // (P_AimLineAttack for the vertical slope draws no RNG.)
+    let angle = Bam(base_angle.wrapping_add((gs.p_subrandom() << 20) as u32));
+    let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
     let mut intercepts = smallvec::SmallVec::new();
     crate::combat::p_line_attack(
         gs,
@@ -1277,6 +1282,7 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 ///
 /// Fires 3 hitscan pellets with a small angular spread centered on the target.
 fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let _rng_ctx = crate::random::rng_ctx("A_SPosAttack");
     let Some(_target) = get_alive_target(gs, handle) else {
         return;
     };
@@ -1285,16 +1291,15 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let angle = mo.angle;
+    let bangle = mo.angle.0;
 
-    let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
-    // Spread: ~11.25° per step in 32-bit BAM space.
-    let spread = Bam(0x0800_0000u32);
+    // Vanilla A_SPosAttack: 3 pellets, each `angle = bangle + (P_SubRandom()<<20);
+    // damage = (P_Random()%5+1)*3;` (P_AimLineAttack draws no RNG).
     let mut intercepts = smallvec::SmallVec::new();
-    for i in 0u32..3 {
-        // offsets: -spread, 0, +spread
-        let offset = Bam(spread.0.wrapping_mul(i).wrapping_sub(spread.0));
-        let shot_angle = Bam(angle.0.wrapping_add(offset.0));
+    for _ in 0..3 {
+        let shot_angle = Bam(bangle.wrapping_add((gs.p_subrandom() << 20) as u32));
+        let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
+        intercepts.clear();
         crate::combat::p_line_attack(
             gs,
             handle,
@@ -1325,22 +1330,17 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
 ///
 /// Uses melee if the target is within `MELEERANGE`, otherwise spawns an
 /// `ImpFireball` projectile aimed at the target.
-fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>) {
-    let Some((target, mo_x, mo_y)) = get_alive_target_with_pos(gs, handle) else {
+fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let _rng_ctx = crate::random::rng_ctx("A_TroopAttack");
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
     };
 
     a_face_target(gs, handle);
 
-    let Some(t) = gs.mobjslab.get(target) else {
-        return;
-    };
-    let (tx, ty) = (t.x, t.y);
-
-    let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
-
-    if dist <= crate::combat::MELEERANGE.to_int() {
-        let damage = ((gs.tic_num % 8) + 1) as i32 * 3;
+    // Vanilla A_TroopAttack: melee if P_CheckMeleeRange, else launch a missile.
+    if p_check_melee_range(gs, handle, level) {
+        let damage = (i32::from(gs.p_random()) % 8 + 1) * 3;
         crate::combat::damage_mobj(gs, target, handle, damage);
     } else {
         crate::projectile::p_spawn_missile(gs, handle, target, MobjKind::ImpFireball);
@@ -1364,30 +1364,30 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, _level: Option<&Level>)
 /// Port of `A_SargAttack` from Doom's `p_enemy.c`.
 ///
 /// Deals melee damage only if the target is within `MELEERANGE`.
-fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle) {
-    let Some((target, mo_x, mo_y)) = get_alive_target_with_pos(gs, handle) else {
+fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let _rng_ctx = crate::random::rng_ctx("A_SargAttack");
+    let Some(target) = get_alive_target(gs, handle) else {
         return;
     };
 
-    let Some(t) = gs.mobjslab.get(target) else {
+    // Vanilla A_SargAttack: A_FaceTarget first, then (v1.5+) require melee range
+    // — returning without drawing when out of range — before the damage draw.
+    a_face_target(gs, handle);
+    if !p_check_melee_range(gs, handle, level) {
         return;
-    };
-    let (tx, ty) = (t.x, t.y);
+    }
 
-    let dist = (tx - mo_x).to_int().abs() + (ty - mo_y).to_int().abs();
-    if dist <= crate::combat::MELEERANGE.to_int() {
-        let damage = ((gs.tic_num % 3) + 1) as i32 * 4;
-        crate::combat::damage_mobj(gs, target, handle, damage);
-        if let Some(mo) = gs.mobjslab.get(handle) {
-            gs.sound
-                .sound_queue
-                .push(crate::state::SoundRequest::MonsterAttack(
-                    MobjKind::Demon,
-                    handle,
-                    mo.x,
-                    mo.y,
-                ));
-        }
+    let damage = (i32::from(gs.p_random()) % 10 + 1) * 4;
+    crate::combat::damage_mobj(gs, target, handle, damage);
+    if let Some(mo) = gs.mobjslab.get(handle) {
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::MonsterAttack(
+                MobjKind::Demon,
+                handle,
+                mo.x,
+                mo.y,
+            ));
     }
 }
 
