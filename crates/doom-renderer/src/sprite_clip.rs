@@ -1,3 +1,5 @@
+//! Internal data structures for maintaining 1D clipping bounds when drawing sprites.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.

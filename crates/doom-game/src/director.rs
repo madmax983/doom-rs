@@ -1,3 +1,5 @@
+//! The AI Director for dynamically controlling game pacing based on player health.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,6 +16,27 @@ impl AiDirector {
         Self
     }
 
+    /// Evaluates the player's state and determines the next action.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_game::director::{AiDirector, DirectorAction};
+    /// use doom_game::PlayerState;
+    /// use doom_game::mobj::MobjHandle;
+    /// use doom_types::limits::MAX_HEALTH;
+    ///
+    /// let mut director = AiDirector::new();
+    /// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
+    ///
+    /// // High health spawns ambushes
+    /// player.set_health_capped(100, MAX_HEALTH);
+    /// assert_eq!(director.tick(&player), DirectorAction::SpawnAmbush);
+    ///
+    /// // Low health spawns relief
+    /// player.set_health_capped(20, MAX_HEALTH);
+    /// assert_eq!(director.tick(&player), DirectorAction::SpawnRelief);
+    /// ```
     pub fn tick(&mut self, player: &PlayerState) -> DirectorAction {
         let health = player.health();
 

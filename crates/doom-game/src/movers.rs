@@ -1,3 +1,5 @@
+//! Structural components for animated sector parts like doors, platforms, and crushers.
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.

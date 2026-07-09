@@ -1,3 +1,5 @@
+//! Sound propagation mechanisms and event queues for decoupling audio from simulation.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;
