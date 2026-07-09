@@ -2567,16 +2567,27 @@ fn run_doom(args: Args) -> Result<()> {
                             }
                             path_str.push_str(&s.to_string());
                         }
+
+                        let mut table = comfy_table::Table::new();
+                        table
+                            .load_preset(comfy_table::presets::UTF8_FULL)
+                            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
                         if is_tty {
-                            println!(
-                                "{} {} {}",
-                                "🗺️ ".green(),
-                                "Path found:".green().bold(),
-                                path_str.cyan()
-                            );
+                            table.set_header(vec![
+                                comfy_table::Cell::new("🗺️  Path found")
+                                    .fg(comfy_table::Color::Green)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new(path_str).fg(comfy_table::Color::Cyan),
+                            ]);
                         } else {
-                            println!("Path found: {}", path_str);
+                            table.set_header(vec![comfy_table::Cell::new("Path found")]);
+                            table.add_row(vec![comfy_table::Cell::new(path_str)]);
                         }
+                        println!("\n{}", table);
                     }
                 } else {
                     if args.json {
@@ -2585,20 +2596,28 @@ fn run_doom(args: Args) -> Result<()> {
                         let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
                         println!("{json_data}");
                     } else {
+                        let mut table = comfy_table::Table::new();
+                        table
+                            .load_preset(comfy_table::presets::UTF8_FULL)
+                            .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                            .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+                        let msg =
+                            format!("No path found between sector {} and sector {}", start, end);
                         if is_tty {
-                            println!(
-                                "{} {}",
-                                "❌".yellow(),
-                                format!(
-                                    "No path found between sector {} and sector {}",
-                                    start, end
-                                )
-                                .yellow()
-                                .bold()
-                            );
+                            table.set_header(vec![
+                                comfy_table::Cell::new("❌ Pathfinding Failed")
+                                    .fg(comfy_table::Color::Yellow)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new(msg).fg(comfy_table::Color::Yellow),
+                            ]);
                         } else {
-                            println!("No path found between sector {} and sector {}", start, end);
+                            table.set_header(vec![comfy_table::Cell::new("Pathfinding Failed")]);
+                            table.add_row(vec![comfy_table::Cell::new(msg)]);
                         }
+                        println!("\n{}", table);
                     }
                 }
             } else {
@@ -3105,29 +3124,49 @@ fn main() {
             let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
+            let mut causes = err.chain().skip(1).peekable();
+            let mut reason_str = String::new();
+            if causes.peek().is_some() {
+                for (i, cause) in causes.enumerate() {
+                    if i > 0 {
+                        reason_str.push('\n');
+                    }
+                    reason_str.push_str(&cause.to_string());
+                }
+            }
+
+            let mut table = comfy_table::Table::new();
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
             if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-                eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
-
-                let mut causes = err.chain().skip(1).peekable();
-                if causes.peek().is_some() {
-                    eprintln!("\n↳ {}:", "Reason".red().bold());
-                    for cause in causes {
-                        eprintln!("    {}", cause);
-                    }
+                table.set_header(vec![
+                    comfy_table::Cell::new("❌ Engine Failure")
+                        .fg(comfy_table::Color::Red)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                ]);
+                table.add_row(vec![
+                    comfy_table::Cell::new(err.to_string()).fg(comfy_table::Color::Red),
+                ]);
+                if !reason_str.is_empty() {
+                    table.add_row(vec![
+                        comfy_table::Cell::new(format!("↳ Reason:\n{}", reason_str))
+                            .fg(comfy_table::Color::DarkRed),
+                    ]);
                 }
-                eprintln!();
+                eprintln!("\n{}", table);
             } else {
-                eprintln!("❌ Engine Failure: {}", err);
-
-                let mut causes = err.chain().skip(1).peekable();
-                if causes.peek().is_some() {
-                    eprintln!("↳ Reason:");
-                    for cause in causes {
-                        eprintln!("    {}", cause);
-                    }
+                table.set_header(vec![comfy_table::Cell::new("❌ Engine Failure")]);
+                table.add_row(vec![comfy_table::Cell::new(err.to_string())]);
+                if !reason_str.is_empty() {
+                    table.add_row(vec![comfy_table::Cell::new(format!(
+                        "↳ Reason:\n{}",
+                        reason_str
+                    ))]);
                 }
-                eprintln!();
+                eprintln!("\n{}", table);
             }
         }
         std::process::exit(1);

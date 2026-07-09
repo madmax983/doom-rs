@@ -39,9 +39,9 @@ pub struct Bam(pub u32);
 /// 2048 entries covering 90°, fine-shifted angle = `bam >> 19` (2048 steps per 90°).
 const FINE_TABLE_SIZE: usize = 8192; // 2048 * 4 quadrants
 
-
 /// Lookup table populated at runtime.
-static SINE_TABLE: once_cell::sync::OnceCell<[Fixed16_16; FINE_TABLE_SIZE]> = once_cell::sync::OnceCell::new();
+static SINE_TABLE: once_cell::sync::OnceCell<[Fixed16_16; FINE_TABLE_SIZE]> =
+    once_cell::sync::OnceCell::new();
 
 /// Shift to convert a `Bam` to a fine-angle index (0..8191).
 pub const BAM_TO_FINE_SHIFT: u32 = 32 - 13; // >> 19 gives index in 0..8191
