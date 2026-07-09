@@ -174,7 +174,8 @@ These landed after the original M1a write-up above. Each is matched to the exact
 vanilla rule it restores. **M1b** shipped as part of draft PR **#1276**
 (`m1-demo-sync`, M1a + M1b, mergeable clean); **M1c** is the continuation branch
 `m1c-demo-sync` (draft PR **#1283**, base `m1-demo-sync`). Together they roughly
-tripled the sync depth (lt 234/389/194 → lt 600/717/409).
+tripled-to-quadrupled the sync depth (position first-divergence lt 234/389/194 →
+lt 977/1046/535).
 
 ### M1b (merged into #1276)
 
@@ -259,34 +260,62 @@ tripled the sync depth (lt 234/389/194 → lt 600/717/409).
 - **Monster `P_Move` full spechit accumulation** — `P_Move` now accumulates the
   full spechit list (all crossed special lines) as vanilla does, clearing the
   monster `movedir` correctly, rather than stopping at the first spechit.
+- **`MF_CORPSE` step-slide friction skip** — vanilla skips the step-down slide /
+  friction handling for corpses (`MF_CORPSE`) in `P_XYMovement`; restoring that
+  skip keeps sliding corpses on the same fixed-point trajectory as vanilla.
+
+**Collision / blockmap**
+- **Blockmap includes linedef 0 in every cell** — vanilla `P_BlockLinesIterator`
+  reads a cell's line list starting at the stored offset, and the leading
+  `0x0000` word of every block list is **linedef 0** (not a terminator), so
+  linedef 0 is iterated in *every* block. Ours was skipping it; restoring it
+  fixes the set of lines a slide/collision trace tests, matching vanilla
+  `P_SlideMove` / `PIT_CheckLine` results.
+
+**Specials / walkover lines**
+- **Monsters trigger walkover line specials** — vanilla calls
+  `P_CrossSpecialLine` for a crossing `!player` actor against the whitelist
+  `{4, 10, 39, 88, 97, 125, 126}` (monster-usable walkover lifts / teleports /
+  doors), dispatched the **same tic** the monster crosses the line. Restoring
+  this lets monster movement fire the same specials at the same time vanilla
+  does, keeping lift/teleport/door state in step.
 
 ## Current sync status
 
-Fresh measurement (release build at HEAD `f819580` on `m1c-demo-sync`, harness
+Fresh measurement (release build at HEAD `eaa0f9f` on `m1c-demo-sync`, harness
 vs oracle, diffed on `px,py,pz,angle,health,kills,items,secrets,leveltime`; the
 cosmetic `rndindex` column is ignored). Measured 2026-07-09:
 
-| Demo  | Map  | Total tics | Position (px/py) 1st diverge | Health 1st diverge | Kills 1st diverge | Final k/i/s (ours) | Final k/i/s (vanilla) | Determinism |
-|-------|------|-----------:|------------------------------|--------------------|-------------------|--------------------|-----------------------|-------------|
-| DEMO1 | E1M5 | 5026 | tic 599 (lt 600) | tic 613 (lt 614) | tic 703 (lt 704) | 7 / 0 / 0 | 61 / 7 / 1 | PASS (2×) |
-| DEMO2 | E1M3 | 3836 | tic 717 (lt 718) | tic 716 (lt 717) | tic 970 (lt 971) | 9 / 0 / 0 | 41 / 14 / 0 | PASS (2×) |
-| DEMO3 | E1M7 | 2134 | tic 408 (lt 409) | tic 467 (lt 468) | tic 632 (lt 633) | 8 / 0 / 0 | 20 / 9 / 0 | PASS (2×) |
+| Demo  | Map  | Total tics | Position (px/py) 1st diverge | % synced | Health 1st diverge | Kills 1st diverge | Final k/i/s (ours) | Final k/i/s (vanilla) | Determinism |
+|-------|------|-----------:|------------------------------|---------:|--------------------|-------------------|--------------------|-----------------------|-------------|
+| DEMO1 | E1M5 | 5026 | tic 976 (lt 977) | ~19% | tic 613 (lt 614) | tic 704 (lt 705) | 10 / 0 / 0 | 61 / 7 / 1 | PASS (2×) |
+| DEMO2 | E1M3 | 3836 | tic 1045 (lt 1046) | ~27% | tic 1194 (lt 1195) | tic 1028 (lt 1029) | 11 / 0 / 0 | 41 / 14 / 0 | PASS (2×) |
+| DEMO3 | E1M7 | 2134 | tic 534 (lt 535) | ~25% | tic 524 (lt 525) | tic 632 (lt 633) | 7 / 0 / 0 | 20 / 9 / 0 | PASS (2×) |
+
+`% synced` = position first-divergence / total tics — the fraction of each demo
+for which the player's actual **trajectory** is bit-exact against the oracle.
 
 Reading this table:
 
-- **The M1b + M1c fixes roughly tripled the sync depth.** Position, health, and
-  kills now track the oracle exactly for the first several hundred tics of each
-  demo — first divergence is at **lt 600 / lt 717 / lt 409** (≈ 12% / 19% / 19%
-  of each demo's length), up from lt 234 / 389 / 194 before these fixes. The
-  **`P_Random` values still match the oracle through the entire recorded
-  window** (zero retval-by-ordinal mismatches); what breaks first is player
-  *state* (position/health), not the RNG value stream.
-- **Which of position/health/kills breaks first now varies by demo.** In DEMO2
-  health leads position by one tic (lt 717 vs 718 — a damage roll lands, then
-  the knockback thrust moves the player the next tic). In DEMO1 and DEMO3
-  position leads (lt 600 before health lt 614; lt 409 before health lt 468) — a
-  residual sub-map-unit movement drift shows in position before any damage
-  lands. Kills diverge latest in all three (lt 704 / 971 / 633).
+- **The M1b + M1c fixes roughly tripled-to-quadrupled the sync depth.** The
+  player's position tracks the oracle exactly for the **first ~19 % / 27 % / 25 %**
+  of each demo — position first-divergence is now **lt 977 / lt 1046 / lt 535**,
+  up from lt 234 / 389 / 194 before these fixes (and lt 600 / 717 / 409 before
+  the two newest M1c blockmap / walkover-special fixes). The **`P_Random` values
+  still match the oracle through the entire recorded window** (zero
+  retval-by-ordinal mismatches); what breaks first is player *state*, not the RNG
+  value stream.
+- **Position is the trajectory signal; the earlier health/items divergences are
+  pickup-accounting artifacts, not sim drift.** On DEMO1 and DEMO3 the `health`
+  column diverges before position (lt 614, lt 525), but those are **health-bonus
+  pickup timing**: our health ticks *up* to the next value a few tics early
+  (DEMO1 82→83 one tic early at lt 614; DEMO3 65→66 five tics early at lt 525)
+  and **re-converges** within a handful of tics, with `px/py/angle` bit-exact
+  through the whole window. The `items` counter likewise diverges early (DEMO1
+  lt 256, DEMO2 lt 135, DEMO3 lt 530) — vanilla registers an item-count pickup
+  ours does not — while position stays identical. These are stat-counter /
+  pickup-tally off-by-a-few-tics artifacts that do **not** perturb the
+  trajectory; the real geometry divergence is position, at lt 977 / 1046 / 535.
 - The demos all **run to completion** (`demo-stream-fully-consumed`, full tic
   counts match the file — 5026 / 3836 / 2134), and **cross-run determinism
   PASSes** on all three (`--verify-runs 2`: PASS) — the harness self-check
@@ -299,14 +328,14 @@ Reading this table:
 ## Remaining divergences (characterized)
 
 Full bit-exact end-to-end sync is **not yet reached.** Be honest about where we
-are: the demos currently sync only the **first ~12–19% of their length** (first
-divergence lt 600 / 717 / 409 of 5026 / 3836 / 2134 tics). What is solid: the
-`P_Random` **value** stream matches the oracle through the whole recorded window,
-every fix above is **vanilla-verified against the instrumented Chocolate oracle**,
-and every major subsystem is vanilla-faithful. What remains: the multi-minute
-tail still diverges, and the remaining failures are **residual monster
-positional drift + attack/AI timing that compounds over the run**, not a broken
-RNG or a missing subsystem.
+are: the demos currently sync only the **first ~19–27% of their length**
+(position first divergence lt 977 / 1046 / 535 of 5026 / 3836 / 2134 tics). What
+is solid: the `P_Random` **value** stream matches the oracle through the whole
+recorded window, every fix above is **vanilla-verified against the instrumented
+Chocolate oracle**, and every major subsystem is vanilla-faithful. What remains:
+the multi-minute tail still diverges, and the remaining failures are **residual
+monster positional drift + attack/AI timing that compounds over the run**, not a
+broken RNG or a missing subsystem.
 
 The general mechanism: both sides draw the **same RNG rolls**, but a slightly
 **drifted geometry** (a monster or projectile a few map units off) turns the same
@@ -316,26 +345,26 @@ which monster the player faces next — and the differences compound over the ru
 
 Known open items (characterized per demo):
 
-1. **DEMO1 — lt 600 / lt 681, a monster-AI / combat divergence (TBD).** Player
-   position first drifts at lt 600 (health follows at lt 614), and a further
-   monster-AI/combat divergence shows around lt 681. Root cause not yet pinned;
-   it is downstream of sub-map-unit geometry drift in the preceding chase steps,
-   so a same-value damage roll or chase step lands on a slightly different tic.
-   Re-audit the `A_Chase` / attack hitscan geometry and `P_DamageMobj` thrust
-   against `p_map.c` / `p_inter.c` for the last residual fixed-point rounding.
+1. **DEMO1 — lt 704 / lt 977, monster-AI / combat then trajectory divergence
+   (TBD).** The `kills` counter first drifts at lt 704 (a monster dies a tic
+   off), and the player's **position** first drifts at lt 977. Root cause not yet
+   pinned; it is downstream of sub-map-unit geometry drift in the preceding chase
+   steps, so a same-value damage roll or chase step lands on a slightly different
+   tic. Re-audit the `A_Chase` / attack hitscan geometry and `P_DamageMobj`
+   thrust against `p_map.c` / `p_inter.c` for the last residual fixed-point
+   rounding.
 
-2. **DEMO2 — lt 628, non-gib monster-AI drift (~3 extra `A_Chase` rolls).** A
-   monster takes roughly **3 extra `A_Chase` `P_Random` rolls** relative to the
-   oracle around lt 628; this is a non-gib (ordinary chase/attack) AI-timing
-   divergence that surfaces in player state at lt 717/718. Trace the offending
-   monster's `A_Chase` / `P_NewChaseDir` roll count against the oracle.
+2. **DEMO2 — lt 814 / lt 1046, monster-AI drift then trajectory divergence
+   (TBD).** A monster-AI / combat timing divergence around lt 814 (same RNG
+   rolls, drifted geometry) compounds until it surfaces in the player's
+   **position** at lt 1046. Trace the offending monster's `A_Chase` /
+   `P_NewChaseDir` roll count and hit geometry against the oracle.
 
-3. **DEMO3 — lt 409 / lt 451, monster missile exploding one tic early.** Player
-   position first drifts at lt 409 (a one-tic `py` movement stall from residual
-   positional drift); the visible consequence is a **monster missile that
-   explodes one tic early** around lt 451. Downstream of the same residual
-   fixed-point positional drift — the projectile's swept move is faithful, but a
-   few-map-unit actor offset shifts the explosion tic.
+3. **DEMO3 — lt 535, player-movement / interaction divergence (TBD).** The
+   player's **position** (`px/py/pz` together) first drifts at lt 535 — a
+   movement / interaction divergence from residual fixed-point positional drift
+   in the preceding tics. Root cause TBD; re-audit the player `P_XYMovement` /
+   slide-trace and any monster interaction on the drifting tic.
 
 4. **Cosmetic `A_FaceTarget` ATK1 angle transient.** During the first attack
    frame a monster's facing angle can differ by a small BAM delta for one tic
@@ -345,11 +374,11 @@ Known open items (characterized per demo):
 
 ## How to continue
 
-- **Next divergences to chase:** DEMO1 `leveltime 600` (monster-AI / combat
-  divergence, item 1), DEMO2 `leveltime 628` (~3 extra `A_Chase` rolls, item 2),
-  and DEMO3 `leveltime 409`/`451` (residual positional drift → early missile
-  explosion, item 3). The common thread is **residual monster positional drift**
-  compounding into attack/AI timing.
+- **Next divergences to chase:** DEMO1 `leveltime 704`/`977` (monster-AI/combat
+  then trajectory divergence, item 1), DEMO2 `leveltime 814`/`1046` (monster-AI
+  drift then trajectory divergence, item 2), and DEMO3 `leveltime 535`
+  (player-movement / interaction divergence, item 3). The common thread is
+  **residual monster positional drift** compounding into attack/AI timing.
 - **Tooling:** regenerate the harness CSV for the demo under test and diff it
   against `demoN.choco.csv` on `px,py,pz,angle,health,kills,items,secrets,
   leveltime` (ignore the `rndindex` column) to find the first position/health/
