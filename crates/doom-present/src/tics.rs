@@ -3,7 +3,7 @@
 //! `abrash`'s `run_windowed` drives `update`/`render` at a variable (per-redraw)
 //! rate, but Doom's simulation must advance at a fixed 35 Hz. This mirrors
 //! doom-tui's `drain_ready_tics` accumulator, reusing the same
-//! [`TIC_DURATION`](doom_tui::TIC_DURATION) constant so the two hosts stay in
+//! [`TIC_DURATION`] constant so the two hosts stay in
 //! lockstep. The struct holds no game state, so its arithmetic is unit-testable
 //! without a window.
 
@@ -18,6 +18,16 @@ pub struct TicAccumulator {
 
 impl TicAccumulator {
     /// Create an empty accumulator.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_present::tics::TicAccumulator;
+    /// use std::time::Duration;
+    ///
+    /// let acc = TicAccumulator::new();
+    /// assert_eq!(acc.remainder(), Duration::ZERO);
+    /// ```
     #[must_use]
     pub const fn new() -> Self {
         Self {
@@ -29,6 +39,24 @@ impl TicAccumulator {
     ///
     /// The sub-tic remainder carries over to the next call, exactly matching
     /// doom-tui's `while accumulator >= TIC_DURATION { accumulator -= TIC_DURATION }`.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_present::tics::TicAccumulator;
+    /// use doom_tui::TIC_DURATION;
+    /// use std::time::Duration;
+    ///
+    /// let mut acc = TicAccumulator::new();
+    ///
+    /// // Adding 1.5 tics yields 1 tic and carries over 0.5 tics.
+    /// let elapsed = TIC_DURATION + (TIC_DURATION / 2);
+    /// assert_eq!(acc.advance(elapsed), 1);
+    /// assert_eq!(acc.remainder(), TIC_DURATION / 2);
+    ///
+    /// // Adding another 0.5 tics completes the second tic.
+    /// assert_eq!(acc.advance(TIC_DURATION / 2), 1);
+    /// ```
     pub fn advance(&mut self, dt: Duration) -> u32 {
         self.remainder += dt;
         let mut tics = 0u32;
@@ -41,12 +69,39 @@ impl TicAccumulator {
 
     /// Convenience wrapper for the `f32` seconds delta that abrash's
     /// `WindowContext::dt_seconds` provides.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_present::tics::TicAccumulator;
+    /// use doom_tui::TIC_RATE_HZ;
+    ///
+    /// let mut acc = TicAccumulator::new();
+    ///
+    /// // Advancing exactly 1 second yields 35 tics.
+    /// assert_eq!(acc.advance_secs(1.0), TIC_RATE_HZ);
+    ///
+    /// // Negative time deltas are clamped to zero.
+    /// assert_eq!(acc.advance_secs(-1.5), 0);
+    /// ```
     pub fn advance_secs(&mut self, dt_seconds: f32) -> u32 {
         let clamped = dt_seconds.max(0.0);
         self.advance(Duration::from_secs_f32(clamped))
     }
 
     /// The current sub-tic carry (time not yet consumed as a tic).
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_present::tics::TicAccumulator;
+    /// use doom_tui::TIC_DURATION;
+    /// use std::time::Duration;
+    ///
+    /// let mut acc = TicAccumulator::new();
+    /// acc.advance(TIC_DURATION + Duration::from_millis(5));
+    /// assert_eq!(acc.remainder(), Duration::from_millis(5));
+    /// ```
     #[must_use]
     pub const fn remainder(&self) -> Duration {
         self.remainder
