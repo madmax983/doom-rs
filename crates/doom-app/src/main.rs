@@ -4266,10 +4266,14 @@ mod tests {
             game.tick(TicInput::default());
         }
 
-        game.tick(TicInput {
-            buttons: doom_types::bt::BT_ATTACK,
-            ..TicInput::default()
-        });
+        // Vanilla A_FirePistol runs on PISTOL2 (4 tics into the fire animation)
+        // and is what starts the muzzle-flash overlay.
+        for _ in 0..5 {
+            game.tick(TicInput {
+                buttons: doom_types::bt::BT_ATTACK,
+                ..TicInput::default()
+            });
+        }
 
         assert!(
             game.weapon_anim.current.flash_active,

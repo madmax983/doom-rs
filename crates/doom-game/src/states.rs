@@ -17,6 +17,7 @@ const CHASE: u8 = crate::actions::Action::Chase as u8;
 const CHECK_RELOAD: u8 = crate::actions::Action::CheckReload as u8;
 const CLOSE_SHOTGUN2: u8 = crate::actions::Action::CloseShotgun2 as u8;
 const CPOS_ATTACK: u8 = crate::actions::Action::CposAttack as u8;
+const FACE_TARGET: u8 = crate::actions::Action::FaceTarget as u8;
 const FALL: u8 = crate::actions::Action::Fall as u8;
 const FAT_ATTACK1: u8 = crate::actions::Action::FatAttack1 as u8;
 const FIRE: u8 = crate::actions::Action::Fire as u8;
@@ -621,8 +622,21 @@ pub mod ids {
     pub const S_PLAY_ATK2: u16 = 368;
     pub const S_LIGHTDONE: u16 = 369;
 
+    // -----------------------------------------------------------------------
+    // Vanilla-parity states appended for demo-sync timing (370..375)
+    // -----------------------------------------------------------------------
+    /// Pistol refire state (vanilla `S_PISTOL4`).
+    pub const S_PISTOL4: u16 = 370;
+    /// Shotgun pump-animation states (vanilla `S_SGUN6..9`).
+    pub const S_SGUN6: u16 = 371;
+    pub const S_SGUN7: u16 = 372;
+    pub const S_SGUN8: u16 = 373;
+    pub const S_SGUN9: u16 = 374;
+    /// Demon 6th death frame (vanilla `S_SARG_DIE6`).
+    pub const S_SARG_DIE6: u16 = 375;
+
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 370;
+    pub const STATES_COUNT: usize = 376;
 }
 
 // ---------------------------------------------------------------------------
@@ -686,54 +700,56 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SPID, 1, 3, CHASE, ids::S_SPID_RUN1),
     // === Death and pain states (25..48) ===
     // Trooper — death starts at WAD frame H(7), pain at G(6)
-    st!(SPR_POSS, 7, 8, SCREAM, ids::S_POSS_DIE2), // 25: die1
-    st!(SPR_POSS, 8, 8, FALL, ids::S_POSS_DIE3),   // 26: die2 → die3
-    st!(SPR_POSS, 6, 6, NONE, ids::S_POSS_RUN1),   // 27: pain (frame G)
-    // Sergeant — same layout as Trooper
-    st!(SPR_SPOS, 7, 8, SCREAM, ids::S_SPOS_DIE2), // 28: die1
-    st!(SPR_SPOS, 8, 8, FALL, ids::S_SPOS_DIE3),   // 29: die2 → die3
-    st!(SPR_SPOS, 6, 6, NONE, ids::S_SPOS_RUN1),   // 30: pain
-    // Imp — death at I(8), pain at H(7)
-    st!(SPR_TROO, 8, 8, SCREAM, ids::S_TROO_DIE2), // 31: die1
-    st!(SPR_TROO, 9, 8, FALL, ids::S_TROO_DIE3),   // 32: die2 → die3
-    st!(SPR_TROO, 7, 6, NONE, ids::S_TROO_RUN1),   // 33: pain (frame H)
-    // Demon — death at H(7), pain at G(6)
-    st!(SPR_SARG, 7, 8, SCREAM, ids::S_SARG_DIE2), // 34: die1
-    st!(SPR_SARG, 8, 4, FALL, ids::S_SARG_DIE3),   // 35: die2 → die3
-    st!(SPR_SARG, 6, 6, NONE, ids::S_SARG_RUN1),   // 36: pain
+    // vanilla POSS die: 7/5/-, 8/5/Scream, 9/5/Fall, 10/5/-, 11/-1
+    st!(SPR_POSS, 7, 5, NONE, ids::S_POSS_DIE2),   // 25: die1
+    st!(SPR_POSS, 8, 5, SCREAM, ids::S_POSS_DIE3), // 26: die2 (A_Scream)
+    st!(SPR_POSS, 6, 6, NONE, ids::S_POSS_RUN1),   // 27: pain (6 = vanilla 3+3)
+    // Sergeant — vanilla SPOS die: 7/5/-, 8/5/Scream, 9/5/Fall, 10/5/-, 11/-1
+    st!(SPR_SPOS, 7, 5, NONE, ids::S_SPOS_DIE2),   // 28: die1
+    st!(SPR_SPOS, 8, 5, SCREAM, ids::S_SPOS_DIE3), // 29: die2 (A_Scream)
+    st!(SPR_SPOS, 6, 6, NONE, ids::S_SPOS_RUN1),   // 30: pain (6 = vanilla 3+3)
+    // Imp — vanilla TROO die: 8/8/-, 9/8/Scream, 10/6/-, 11/6/Fall, 12/-1
+    st!(SPR_TROO, 8, 8, NONE, ids::S_TROO_DIE2),   // 31: die1
+    st!(SPR_TROO, 9, 8, SCREAM, ids::S_TROO_DIE3), // 32: die2 (A_Scream)
+    st!(SPR_TROO, 7, 4, NONE, ids::S_TROO_RUN1),   // 33: pain (4 = vanilla 2+2)
+    // Demon — vanilla SARG die: 8/8/-, 9/8/Scream, 10/4/-, 11/4/Fall, 12/4/-, 13/-1
+    st!(SPR_SARG, 8, 8, NONE, ids::S_SARG_DIE2),   // 34: die1
+    st!(SPR_SARG, 9, 8, SCREAM, ids::S_SARG_DIE3), // 35: die2 (A_Scream)
+    st!(SPR_SARG, 7, 4, NONE, ids::S_SARG_RUN1),   // 36: pain (4 = vanilla 2+2)
     // Cacodemon — death at E(4), pain at D(3)
     st!(SPR_HEAD, 4, 8, SCREAM, ids::S_HEAD_DIE2), // 37: die1
     st!(SPR_HEAD, 5, 8, FALL, ids::S_HEAD_DIE3),   // 38: die2 → die3
-    st!(SPR_HEAD, 3, 6, NONE, ids::S_HEAD_RUN1),   // 39: pain (frame D)
+    st!(SPR_HEAD, 3, 12, NONE, ids::S_HEAD_RUN1),  // 39: pain (12 = vanilla 3+3+6)
     // Baron of Hell — same layout as Trooper/Sergeant
     st!(SPR_BOSS, 7, 8, SCREAM, ids::S_BOSS_DIE2), // 40: die1
     st!(SPR_BOSS, 8, 8, FALL, ids::S_BOSS_DIE3),   // 41: die2 → die3
-    st!(SPR_BOSS, 6, 6, NONE, ids::S_BOSS_RUN1),   // 42: pain
+    st!(SPR_BOSS, 6, 4, NONE, ids::S_BOSS_RUN1),   // 42: pain (4 = vanilla 2+2)
     // Cyberdemon — same layout
     st!(SPR_CYBR, 7, 8, SCREAM, ids::S_CYBER_DIE2), // 43: die1
     st!(SPR_CYBR, 8, 8, FALL, ids::S_CYBER_DIE3),   // 44: die2 → die3
-    st!(SPR_CYBR, 6, 6, NONE, ids::S_CYBER_RUN1),   // 45: pain
+    st!(SPR_CYBR, 6, 10, NONE, ids::S_CYBER_RUN1),  // 45: pain (10 = vanilla single)
     // Spider Mastermind — same layout
     st!(SPR_SPID, 7, 8, SCREAM, ids::S_SPID_DIE2), // 46: die1
     st!(SPR_SPID, 8, 8, FALL, ids::S_SPID_DIE3),   // 47: die2 → die3
     st!(SPR_SPID, 6, 6, NONE, ids::S_SPID_RUN1),   // 48: pain
     // === Attack states (49..60) ===
     // Trooper
-    st!(SPR_POSS, 4, 4, NONE, ids::S_POSS_ATK2), // 49: E
-    st!(SPR_POSS, 5, 4, POS_ATTACK, ids::S_POSS_ATK3), // 50: F
-    st!(SPR_POSS, 4, 4, NONE, ids::S_POSS_RUN1), // 51: E
-    // Sergeant
-    st!(SPR_SPOS, 4, 4, NONE, ids::S_SPOS_ATK2), // 52: E
-    st!(SPR_SPOS, 5, 4, SPOS_ATTACK, ids::S_SPOS_ATK3), // 53: F
-    st!(SPR_SPOS, 4, 4, NONE, ids::S_SPOS_RUN1), // 54: E
-    // Imp
-    st!(SPR_TROO, 4, 4, NONE, ids::S_TROO_ATK2), // 55: E
-    st!(SPR_TROO, 5, 4, TROO_ATTACK, ids::S_TROO_ATK3), // 56: F
-    st!(SPR_TROO, 6, 4, NONE, ids::S_TROO_RUN1), // 57: G
-    // Demon
-    st!(SPR_SARG, 4, 4, NONE, ids::S_SARG_ATK2), // 58: E
-    st!(SPR_SARG, 5, 4, SARG_ATTACK, ids::S_SARG_ATK3), // 59: F
-    st!(SPR_SARG, 6, 4, NONE, ids::S_SARG_RUN1), // 60: G
+    // vanilla POSS atk: 4/10/FaceTarget, 5/8/PosAttack, 4/8/-
+    st!(SPR_POSS, 4, 10, FACE_TARGET, ids::S_POSS_ATK2), // 49
+    st!(SPR_POSS, 5, 8, POS_ATTACK, ids::S_POSS_ATK3),   // 50
+    st!(SPR_POSS, 4, 8, NONE, ids::S_POSS_RUN1),         // 51
+    // vanilla SPOS atk: 4/10/FaceTarget, 5/10/SPosAttack, 4/10/-
+    st!(SPR_SPOS, 4, 10, FACE_TARGET, ids::S_SPOS_ATK2), // 52
+    st!(SPR_SPOS, 5, 10, SPOS_ATTACK, ids::S_SPOS_ATK3), // 53
+    st!(SPR_SPOS, 4, 10, NONE, ids::S_SPOS_RUN1),        // 54
+    // vanilla TROO atk: 4/8/FaceTarget, 5/8/FaceTarget, 6/6/TroopAttack
+    st!(SPR_TROO, 4, 8, FACE_TARGET, ids::S_TROO_ATK2),  // 55
+    st!(SPR_TROO, 5, 8, FACE_TARGET, ids::S_TROO_ATK3),  // 56
+    st!(SPR_TROO, 6, 6, TROO_ATTACK, ids::S_TROO_RUN1),  // 57
+    // vanilla SARG atk: 4/8/FaceTarget, 5/8/FaceTarget, 6/8/SargAttack
+    st!(SPR_SARG, 4, 8, FACE_TARGET, ids::S_SARG_ATK2),  // 58
+    st!(SPR_SARG, 5, 8, FACE_TARGET, ids::S_SARG_ATK3),  // 59
+    st!(SPR_SARG, 6, 8, SARG_ATTACK, ids::S_SARG_RUN1),  // 60
     // ===================================================================
     // Projectile states (61..103)
     // ===================================================================
@@ -943,7 +959,7 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_BOS2, 2, 4, NONE, ids::S_BOS2_ATK2),  // 229
     st!(SPR_BOS2, 3, 4, BRUIS_ATTACK, ids::S_BOS2_ATK3), // 230
     st!(SPR_BOS2, 2, 4, NONE, ids::S_BOS2_RUN1),  // 231
-    st!(SPR_BOS2, 6, 6, NONE, ids::S_BOS2_RUN1),  // 232: pain
+    st!(SPR_BOS2, 6, 4, NONE, ids::S_BOS2_RUN1),  // 232: pain (4 = vanilla 2+2)
     st!(SPR_BOS2, 7, 8, SCREAM, ids::S_BOS2_DIE2), // 233: die1
     st!(SPR_BOS2, 8, 8, FALL, ids::S_BOS2_DIE3),  // 234: die2 → die3
     // ===================================================================
@@ -962,19 +978,22 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_PISG, 0, 1, RAISE, ids::S_PISTOL_UP), // 242: up
     st!(SPR_PISG, 0, 1, LOWER, ids::S_PISTOL_DOWN), // 243: down
     st!(SPR_PISG, 0, 1, WEAPON_READY, ids::S_PISTOL_READY), // 244: ready
-    st!(SPR_PISG, 1, 4, FIRE_PISTOL, ids::S_PISTOL2), // 245: fire1
-    st!(SPR_PISG, 2, 6, NONE, ids::S_PISTOL3),    // 246: fire2
-    st!(SPR_PISG, 1, 4, REFIRE, ids::S_PISTOL_READY), // 247: fire3
+    // vanilla pistol fire: PISTOL1 0/4/-, PISTOL2 1/6/FirePistol, PISTOL3 2/4/-, PISTOL4 1/5/ReFire
+    st!(SPR_PISG, 0, 4, NONE, ids::S_PISTOL2),        // 245: fire1 (A_FirePistol on fire2)
+    st!(SPR_PISG, 1, 6, FIRE_PISTOL, ids::S_PISTOL3), // 246: fire2
+    st!(SPR_PISG, 2, 4, NONE, ids::S_PISTOL4),        // 247: fire3
     st!(SPR_PISG, 3 | FB, 7, LIGHT1, ids::S_PISTOL_FLASH2), // 248: flash1
     st!(SPR_PISG, 4 | FB, 7, NONE, ids::S_LIGHTDONE), // 249: flash2
     // --- Shotgun (SHTG) 250..258 ---
     st!(SPR_SHTG, 0, 1, RAISE, ids::S_SGUN_UP), // 250: up
     st!(SPR_SHTG, 0, 1, LOWER, ids::S_SGUN_DOWN), // 251: down
     st!(SPR_SHTG, 0, 1, WEAPON_READY, ids::S_SGUN_READY), // 252: ready
-    st!(SPR_SHTG, 1, 3, FIRE_SHOTGUN, ids::S_SGUN2), // 253: fire1
-    st!(SPR_SHTG, 2, 7, NONE, ids::S_SGUN3),    // 254: fire2
-    st!(SPR_SHTG, 3, 5, NONE, ids::S_SGUN4),    // 255: fire3
-    st!(SPR_SHTG, 2, 5, REFIRE, ids::S_SGUN5),  // 256: fire4
+    // vanilla shotgun fire: SGUN1 0/3/-, SGUN2 0/7/FireShotgun, SGUN3 1/5/-, SGUN4 2/5/-,
+    // SGUN5 3/4/-, SGUN6 2/5/-, SGUN7 1/5/-, SGUN8 0/3/-, SGUN9 0/7/ReFire
+    st!(SPR_SHTG, 0, 3, NONE, ids::S_SGUN2),         // 253: fire1
+    st!(SPR_SHTG, 0, 7, FIRE_SHOTGUN, ids::S_SGUN3), // 254: fire2 (A_FireShotgun)
+    st!(SPR_SHTG, 1, 5, NONE, ids::S_SGUN4),         // 255: fire3
+    st!(SPR_SHTG, 2, 5, NONE, ids::S_SGUN5),         // 256: fire4
     st!(SPR_SHTG, 4 | FB, 4, LIGHT1, ids::S_SGUN_FLASH2), // 257: flash1
     st!(SPR_SHTG, 5 | FB, 3, LIGHT2, ids::S_LIGHTDONE), // 258: flash2
     // --- SSG (SHT2) 259..270 ---
@@ -1004,7 +1023,7 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_ROCK, 0, 1, WEAPON_READY, ids::S_MISSILE_READY), // 280: ready
     st!(SPR_ROCK, 1, 8, GUN_FLASH, ids::S_MISSILE2), // 281: fire1
     st!(SPR_ROCK, 2, 12, FIRE_MISSILE, ids::S_MISSILE3), // 282: fire2
-    st!(SPR_ROCK, 1, 0, NONE, ids::S_MISSILE_READY), // 283: fire3
+    st!(SPR_ROCK, 1, 0, REFIRE, ids::S_MISSILE_READY), // 283: fire3 (vanilla A_ReFire)
     st!(SPR_ROCK, 3 | FB, 3, LIGHT1, ids::S_MISSILE_FLASH2), // 284: flash1
     st!(SPR_ROCK, 4 | FB, 4, LIGHT2, ids::S_LIGHTDONE), // 285: flash2
     // --- Plasma gun (PLSG) 286..290 ---
@@ -1048,22 +1067,22 @@ pub static STATES: &[MobjStateEntry] = &[
     // ===================================================================
     // Extended death frames for original 8 monsters (315..338)
     // ===================================================================
-    // Trooper DIE3-5 (frames I/J/K = 9/10/11)
-    st!(SPR_POSS, 9, 6, NONE, ids::S_POSS_DIE4),  // 315
-    st!(SPR_POSS, 10, 6, NONE, ids::S_POSS_DIE5), // 316
+    // Trooper DIE3-5: vanilla 9/5/Fall, 10/5/-, 11/-1
+    st!(SPR_POSS, 9, 5, FALL, ids::S_POSS_DIE4),  // 315
+    st!(SPR_POSS, 10, 5, NONE, ids::S_POSS_DIE5), // 316
     st!(SPR_POSS, 11, -1, NONE, ids::S_NULL),     // 317
-    // Sergeant DIE3-5 (same frame layout as Trooper)
-    st!(SPR_SPOS, 9, 6, NONE, ids::S_SPOS_DIE4),  // 318
-    st!(SPR_SPOS, 10, 6, NONE, ids::S_SPOS_DIE5), // 319
+    // Sergeant DIE3-5: vanilla 9/5/Fall, 10/5/-, 11/-1
+    st!(SPR_SPOS, 9, 5, FALL, ids::S_SPOS_DIE4),  // 318
+    st!(SPR_SPOS, 10, 5, NONE, ids::S_SPOS_DIE5), // 319
     st!(SPR_SPOS, 11, -1, NONE, ids::S_NULL),     // 320
-    // Imp DIE3-5 (frames K/L/M = 10/11/12)
+    // Imp DIE3-5: vanilla 10/6/-, 11/6/Fall, 12/-1
     st!(SPR_TROO, 10, 6, NONE, ids::S_TROO_DIE4), // 321
-    st!(SPR_TROO, 11, 6, NONE, ids::S_TROO_DIE5), // 322
+    st!(SPR_TROO, 11, 6, FALL, ids::S_TROO_DIE5), // 322
     st!(SPR_TROO, 12, -1, NONE, ids::S_NULL),     // 323
-    // Demon DIE3-5 (frames J/K/L = 9/10/11)
-    st!(SPR_SARG, 9, 4, NONE, ids::S_SARG_DIE4),  // 324
-    st!(SPR_SARG, 10, 4, NONE, ids::S_SARG_DIE5), // 325
-    st!(SPR_SARG, 11, -1, NONE, ids::S_NULL),     // 326
+    // Demon DIE3-6: vanilla 10/4/-, 11/4/Fall, 12/4/-, 13/-1
+    st!(SPR_SARG, 10, 4, NONE, ids::S_SARG_DIE4), // 324
+    st!(SPR_SARG, 11, 4, FALL, ids::S_SARG_DIE5), // 325
+    st!(SPR_SARG, 12, 4, NONE, ids::S_SARG_DIE6), // 326
     // Cacodemon DIE3-5 (frames G/H/I = 6/7/8)
     st!(SPR_HEAD, 6, 8, NONE, ids::S_HEAD_DIE4), // 327
     st!(SPR_HEAD, 7, 8, NONE, ids::S_HEAD_DIE5), // 328
@@ -1107,7 +1126,7 @@ pub static STATES: &[MobjStateEntry] = &[
     // Additional psprite parity states (356..365)
     // ===================================================================
     st!(SPR_PUNG, 0, 5, REFIRE, ids::S_PUNCH_READY), // 356: punch5
-    st!(SPR_SHTG, 0, 1, WEAPON_READY, ids::S_SGUN_READY), // 357: sgun5
+    st!(SPR_SHTG, 3, 4, NONE, ids::S_SGUN6), // 357: fire5 (vanilla SGUN5)
     st!(SPR_CHGG, 0, 0, REFIRE, ids::S_CHAIN_READY), // 358: chain3
     st!(SPR_CHGG, FB, 4, NONE, ids::S_LIGHTDONE),    // 359: chain flash3
     st!(SPR_SHT2, 0, 5, REFIRE, ids::S_DSGUN9),      // 360: dsgun8
@@ -1123,6 +1142,15 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_PLAY, 3, -1, NONE, ids::S_PLAY_ATK1), // 367: player attack1
     st!(SPR_PLAY, 4, -1, NONE, ids::S_PLAY_ATK2), // 368: player attack2
     st!(SPR_NONE, 0, 0, LIGHT0, ids::S_NULL), // 369: lightdone
+    // ===================================================================
+    // Vanilla-parity states appended for demo-sync timing (370..375)
+    // ===================================================================
+    st!(SPR_PISG, 1, 5, REFIRE, ids::S_PISTOL_READY), // 370: S_PISTOL4 (A_ReFire)
+    st!(SPR_SHTG, 2, 5, NONE, ids::S_SGUN7),          // 371: S_SGUN6
+    st!(SPR_SHTG, 1, 5, NONE, ids::S_SGUN8),          // 372: S_SGUN7
+    st!(SPR_SHTG, 0, 3, NONE, ids::S_SGUN9),          // 373: S_SGUN8
+    st!(SPR_SHTG, 0, 7, REFIRE, ids::S_SGUN_READY),   // 374: S_SGUN9 (A_ReFire)
+    st!(SPR_SARG, 13, -1, NONE, ids::S_NULL),         // 375: S_SARG_DIE6
 ];
 
 // ---------------------------------------------------------------------------
@@ -1209,26 +1237,30 @@ mod tests {
 
     #[test]
     fn monster_pain_states_return_to_chase() {
+        // (pain_state, next_state, vanilla collapsed pain-duration tics, name)
         let cases = [
-            (ids::S_POSS_PAIN, ids::S_POSS_RUN1, "trooper"),
-            (ids::S_SPOS_PAIN, ids::S_SPOS_RUN1, "sergeant"),
-            (ids::S_TROO_PAIN, ids::S_TROO_RUN1, "imp"),
-            (ids::S_SARG_PAIN, ids::S_SARG_RUN1, "demon"),
-            (ids::S_HEAD_PAIN, ids::S_HEAD_RUN1, "cacodemon"),
-            (ids::S_BOSS_PAIN, ids::S_BOSS_RUN1, "baron"),
-            (ids::S_CYBER_PAIN, ids::S_CYBER_RUN1, "cyberdemon"),
-            (ids::S_SPID_PAIN, ids::S_SPID_RUN1, "spider mastermind"),
-            (ids::S_BOS2_PAIN, ids::S_BOS2_RUN1, "hell knight"),
+            (ids::S_POSS_PAIN, ids::S_POSS_RUN1, 6, "trooper"),
+            (ids::S_SPOS_PAIN, ids::S_SPOS_RUN1, 6, "sergeant"),
+            (ids::S_TROO_PAIN, ids::S_TROO_RUN1, 4, "imp"),
+            (ids::S_SARG_PAIN, ids::S_SARG_RUN1, 4, "demon"),
+            (ids::S_HEAD_PAIN, ids::S_HEAD_RUN1, 12, "cacodemon"),
+            (ids::S_BOSS_PAIN, ids::S_BOSS_RUN1, 4, "baron"),
+            (ids::S_CYBER_PAIN, ids::S_CYBER_RUN1, 10, "cyberdemon"),
+            (ids::S_SPID_PAIN, ids::S_SPID_RUN1, 6, "spider mastermind"),
+            (ids::S_BOS2_PAIN, ids::S_BOS2_RUN1, 4, "hell knight"),
         ];
 
-        for (pain_state, next_state, name) in cases {
+        for (pain_state, next_state, tics, name) in cases {
             let pain = &STATES[pain_state as usize];
             assert_eq!(
                 pain.next_state,
                 StateNum(next_state),
                 "{name} pain state must resume chasing, not idle"
             );
-            assert_eq!(pain.tics, 6, "{name} pain state tics changed unexpectedly");
+            assert_eq!(
+                pain.tics, tics,
+                "{name} pain-state total tics must match vanilla info.c"
+            );
         }
     }
 
@@ -1249,7 +1281,8 @@ mod tests {
     }
 
     #[test]
-    fn attack_atk2_fires_correct_action() {
+    fn attack_actions_fire_on_vanilla_state() {
+        // Vanilla info.c: hitscan zombies fire on ATK2; imp/demon fire on ATK3.
         assert_eq!(
             STATES[ids::S_POSS_ATK2 as usize].action,
             crate::actions::Action::PosAttack as u8
@@ -1259,13 +1292,76 @@ mod tests {
             crate::actions::Action::SposAttack as u8
         );
         assert_eq!(
-            STATES[ids::S_TROO_ATK2 as usize].action,
+            STATES[ids::S_TROO_ATK3 as usize].action,
             crate::actions::Action::TrooAttack as u8
         );
         assert_eq!(
-            STATES[ids::S_SARG_ATK2 as usize].action,
+            STATES[ids::S_SARG_ATK3 as usize].action,
             crate::actions::Action::SargAttack as u8
         );
+    }
+
+    /// Regression guard: state tics / action placement that gate RNG-draw
+    /// timing must match vanilla `info.c` exactly (demo sync).
+    #[test]
+    fn demo_actor_timing_matches_info_c() {
+        use crate::actions::Action;
+        let fall = Action::Fall as u8;
+        let scream = Action::Scream as u8;
+        let refire = Action::Refire as u8;
+        // Attack-sequence tics (ATK1/ATK2/ATK3).
+        assert_eq!(
+            [
+                STATES[ids::S_POSS_ATK1 as usize].tics,
+                STATES[ids::S_POSS_ATK2 as usize].tics,
+                STATES[ids::S_POSS_ATK3 as usize].tics
+            ],
+            [10, 8, 8]
+        );
+        assert_eq!(
+            [
+                STATES[ids::S_SPOS_ATK1 as usize].tics,
+                STATES[ids::S_SPOS_ATK2 as usize].tics,
+                STATES[ids::S_SPOS_ATK3 as usize].tics
+            ],
+            [10, 10, 10]
+        );
+        assert_eq!(
+            [
+                STATES[ids::S_TROO_ATK1 as usize].tics,
+                STATES[ids::S_TROO_ATK2 as usize].tics,
+                STATES[ids::S_TROO_ATK3 as usize].tics
+            ],
+            [8, 8, 6]
+        );
+        assert_eq!(
+            [
+                STATES[ids::S_SARG_ATK1 as usize].tics,
+                STATES[ids::S_SARG_ATK2 as usize].tics,
+                STATES[ids::S_SARG_ATK3 as usize].tics
+            ],
+            [8, 8, 8]
+        );
+        // A_Fall must fire on the vanilla death frame (governs corpse solidity).
+        assert_eq!(STATES[ids::S_POSS_DIE3 as usize].action, fall);
+        assert_eq!(STATES[ids::S_SPOS_DIE3 as usize].action, fall);
+        assert_eq!(STATES[ids::S_TROO_DIE4 as usize].action, fall);
+        assert_eq!(STATES[ids::S_SARG_DIE4 as usize].action, fall);
+        assert_eq!(STATES[ids::S_POSS_DIE2 as usize].action, scream);
+        // Player pistol: A_FirePistol on PISTOL2 (t=4), A_ReFire on PISTOL4.
+        assert_eq!(STATES[ids::S_PISTOL1 as usize].tics, 4);
+        assert_eq!(
+            STATES[ids::S_PISTOL2 as usize].action,
+            Action::FirePistol as u8
+        );
+        assert_eq!(STATES[ids::S_PISTOL4 as usize].action, refire);
+        // Player shotgun: A_FireShotgun on SGUN2 (t=3), A_ReFire on SGUN9.
+        assert_eq!(STATES[ids::S_SGUN1 as usize].tics, 3);
+        assert_eq!(
+            STATES[ids::S_SGUN2 as usize].action,
+            Action::FireShotgun as u8
+        );
+        assert_eq!(STATES[ids::S_SGUN9 as usize].action, refire);
     }
 
     #[test]
@@ -1712,8 +1808,14 @@ mod tests {
 
     #[test]
     fn pistol_fire_returns_to_ready() {
-        let last = &STATES[ids::S_PISTOL3 as usize];
-        assert_eq!(last.next_state, StateNum(ids::S_PISTOL_READY));
+        assert_eq!(
+            STATES[ids::S_PISTOL3 as usize].next_state,
+            StateNum(ids::S_PISTOL4)
+        );
+        assert_eq!(
+            STATES[ids::S_PISTOL4 as usize].next_state,
+            StateNum(ids::S_PISTOL_READY)
+        );
     }
 
     #[test]
@@ -1861,7 +1963,7 @@ mod tests {
             crate::actions::Action::Refire as u8
         );
         assert_eq!(
-            STATES[ids::S_SGUN4 as usize].action,
+            STATES[ids::S_SGUN9 as usize].action,
             crate::actions::Action::Refire as u8
         );
         assert_eq!(
@@ -2160,14 +2262,23 @@ mod tests {
                 StateNum(d5),
                 "{name} DIE4→DIE5"
             );
+            // Walk the remaining chain (the Demon has a 6th frame) until the
+            // terminal `-1` frame, which must hand off to S_NULL.
+            let mut cur = d5;
+            for _ in 0..4 {
+                if STATES[cur as usize].tics == -1 {
+                    break;
+                }
+                cur = STATES[cur as usize].next_state.0;
+            }
             assert_eq!(
-                STATES[d5 as usize].tics, -1,
-                "{name} DIE5 must hold forever"
+                STATES[cur as usize].tics, -1,
+                "{name} death chain must reach a hold-forever frame"
             );
             assert_eq!(
-                STATES[d5 as usize].next_state,
+                STATES[cur as usize].next_state,
                 StateNum(ids::S_NULL),
-                "{name} DIE5→S_NULL"
+                "{name} final death frame → S_NULL"
             );
         }
     }

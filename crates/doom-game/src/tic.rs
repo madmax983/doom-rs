@@ -861,7 +861,7 @@ mod tests {
 
         let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE1));
-        assert_eq!(mo.tics, 8, "POSS_DIE1 has 8 tics");
+        assert_eq!(mo.tics, 5, "POSS_DIE1 has 5 tics (vanilla)");
     }
 
     #[test]
@@ -942,7 +942,7 @@ mod tests {
     #[test]
     fn tick_mobj_chain_through_die1_to_die2() {
         let mut gs = make_game_state();
-        // S_POSS_DIE1: 8 tics, next = S_POSS_DIE2
+        // S_POSS_DIE1: 5 tics (vanilla), next = S_POSS_DIE2
         let trooper = make_trooper(StateNum(ids::S_POSS_DIE1), 1);
         let handle = gs.mobjslab.alloc(trooper);
 
@@ -951,7 +951,7 @@ mod tests {
 
         let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE2));
-        assert_eq!(mo.tics, 8, "DIE2 runs for 8 tics before DIE3");
+        assert_eq!(mo.tics, 5, "DIE2 runs for 5 tics before DIE3");
     }
 
     #[test]
@@ -1189,14 +1189,18 @@ mod tests {
         gs.rng.set_index(16);
         gs.player.attack_down = false;
 
-        tick_player(
-            &mut gs,
-            TicCmd {
-                buttons: bt::BT_ATTACK,
-                ..Default::default()
-            },
-            None,
-        );
+        // Vanilla A_FirePistol is on PISTOL2, so the shot lands 4 tics into the
+        // fire animation (fifth tick_player call).
+        for _ in 0..5 {
+            tick_player(
+                &mut gs,
+                TicCmd {
+                    buttons: bt::BT_ATTACK,
+                    ..Default::default()
+                },
+                None,
+            );
+        }
 
         assert!(
             gs.mobjslab
@@ -1260,10 +1264,16 @@ mod tests {
             ..Default::default()
         };
 
-        tick_player(&mut gs, cmd, None);
+        // Vanilla pistol: A_FirePistol is on PISTOL2, so the first shot lands
+        // 4 tics into the fire animation.
+        for _ in 0..5 {
+            tick_player(&mut gs, cmd, None);
+        }
         assert_eq!(gs.player.ammo(AmmoType::Bullets as usize), 49);
 
-        for _ in 0..9 {
+        // The vanilla fire cycle is 14 tics (PISTOL1..PISTOL3 before A_ReFire),
+        // so the next shot is not until tic 18.
+        for _ in 0..13 {
             tick_player(&mut gs, cmd, None);
         }
         assert_eq!(
@@ -1276,7 +1286,7 @@ mod tests {
         assert_eq!(
             gs.player.ammo(AmmoType::Bullets as usize),
             48,
-            "held pistol should refire on the same tic the ready state is re-entered"
+            "held pistol should refire once the vanilla 14-tic cycle completes"
         );
     }
 
@@ -1292,10 +1302,16 @@ mod tests {
             ..Default::default()
         };
 
-        tick_player(&mut gs, cmd, None);
+        // Vanilla shotgun: A_FireShotgun is on SGUN2, so the first shot lands
+        // 3 tics into the fire animation.
+        for _ in 0..4 {
+            tick_player(&mut gs, cmd, None);
+        }
         assert_eq!(gs.player.ammo(AmmoType::Shells as usize), 3);
 
-        for _ in 0..14 {
+        // Vanilla shotgun fire cycle is 37 tics (SGUN1..SGUN8 before A_ReFire),
+        // so the next shot is not until tic 40.
+        for _ in 0..36 {
             tick_player(&mut gs, cmd, None);
         }
         assert_eq!(
@@ -1308,12 +1324,12 @@ mod tests {
         assert_eq!(
             gs.player.ammo(AmmoType::Shells as usize),
             2,
-            "held shotgun should refire on the same tic the ready state is re-entered"
+            "held shotgun should refire once the vanilla 37-tic cycle completes"
         );
     }
 
     #[test]
-    fn rocket_launcher_has_a_windup_and_still_requires_release_to_refire() {
+    fn rocket_launcher_has_a_windup_and_auto_refires_when_held() {
         let mut gs = make_game_state();
         gs.player.weapons[WeaponType::RocketLauncher as usize] = true;
         gs.player.weapon = WeaponType::RocketLauncher;
@@ -1354,14 +1370,16 @@ mod tests {
             "the launcher should spawn a rocket when the fire state begins"
         );
 
-        for _ in 0..(crate::weapon_fire::weapon_refire_tics(WeaponType::RocketLauncher) + 5) {
+        // Vanilla `S_MISSILE3` carries A_ReFire, so a held launcher auto-refires
+        // once the ~20-tic fire cycle completes (next rocket near tic 28).
+        for _ in 0..20 {
             tick_player(&mut gs, cmd, None);
         }
 
         assert_eq!(
             gs.player.ammo(AmmoType::Rockets as usize),
-            2,
-            "held rocket launcher should require a release before the next shot"
+            1,
+            "held rocket launcher auto-refires via A_ReFire once its cycle completes"
         );
     }
 
@@ -1575,7 +1593,7 @@ mod tests {
 
         let mo = gs.mobjslab.get(handle).expect("trooper mobj should exist");
         assert_eq!(mo.state, StateNum(ids::S_POSS_DIE2));
-        assert_eq!(mo.tics, 8, "DIE2 runs for 8 tics before chaining to DIE3");
+        assert_eq!(mo.tics, 5, "DIE2 runs for 5 tics before chaining to DIE3");
     }
 
     // =======================================================================

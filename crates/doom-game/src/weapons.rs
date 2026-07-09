@@ -1046,10 +1046,21 @@ mod tests {
             crate::mobj::StateNum(ids::S_PISTOL1),
             "attack from ready should enter the pistol firing sequence"
         );
+
+        // Vanilla A_FirePistol is on PISTOL2 (4 tics later); it starts the
+        // muzzle-flash psprite when it runs.
+        for _ in 0..4 {
+            tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+        }
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            crate::mobj::StateNum(ids::S_PISTOL2),
+            "the fire action runs on PISTOL2"
+        );
         assert_eq!(
             gs.player.psprites[psprite_slots::FLASH].state,
             crate::mobj::StateNum(ids::S_PISTOL_FLASH1),
-            "attack should also start the muzzle-flash psprite"
+            "A_FirePistol should start the muzzle-flash psprite"
         );
     }
 
@@ -1058,7 +1069,11 @@ mod tests {
         let mut gs = make_game_state();
         ready_player_psprites(&mut gs);
 
-        tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+        // Fire, then advance to PISTOL2 where vanilla A_FirePistol runs and
+        // starts the muzzle flash (A_Light1 sets extra_light).
+        for _ in 0..5 {
+            tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
+        }
 
         let player_mobj = gs
             .mobjslab

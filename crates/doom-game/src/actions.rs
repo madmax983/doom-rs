@@ -3291,34 +3291,31 @@ mod tests {
         );
     }
 
-    /// Verify that each original monster's first death frame carries Action::Scream as u8
-    /// and second death frame carries Action::Fall as u8 — matching the vanilla state table.
+    /// Verify the demo-critical E1 monsters carry A_Scream and A_Fall on the
+    /// exact vanilla death frames from `info.c` (A_Scream on DIE2; A_Fall on
+    /// DIE3 for the hitscan zombies, DIE4 for the imp/demon).
     #[test]
-    fn die1_and_die2_actions_correct_for_all_original_monsters() {
+    fn scream_and_fall_actions_on_vanilla_death_frames() {
         use crate::states::STATES;
         use crate::states::ids;
 
+        // (scream_state, fall_state, name)
         let cases: &[(u16, u16, &str)] = &[
-            (ids::S_POSS_DIE1, ids::S_POSS_DIE2, "Trooper"),
-            (ids::S_SPOS_DIE1, ids::S_SPOS_DIE2, "Sergeant"),
-            (ids::S_TROO_DIE1, ids::S_TROO_DIE2, "Imp"),
-            (ids::S_SARG_DIE1, ids::S_SARG_DIE2, "Demon"),
-            (ids::S_HEAD_DIE1, ids::S_HEAD_DIE2, "Cacodemon"),
-            (ids::S_BOSS_DIE1, ids::S_BOSS_DIE2, "Baron"),
-            (ids::S_CYBER_DIE1, ids::S_CYBER_DIE2, "Cyberdemon"),
-            (ids::S_SPID_DIE1, ids::S_SPID_DIE2, "Spider"),
-            (ids::S_BOS2_DIE1, ids::S_BOS2_DIE2, "HellKnight"),
+            (ids::S_POSS_DIE2, ids::S_POSS_DIE3, "Trooper"),
+            (ids::S_SPOS_DIE2, ids::S_SPOS_DIE3, "Sergeant"),
+            (ids::S_TROO_DIE2, ids::S_TROO_DIE4, "Imp"),
+            (ids::S_SARG_DIE2, ids::S_SARG_DIE4, "Demon"),
         ];
-        for &(die1, die2, name) in cases {
+        for &(scream, fall, name) in cases {
             assert_eq!(
-                STATES[die1 as usize].action,
+                STATES[scream as usize].action,
                 Action::Scream as u8,
-                "{name} DIE1 must have Action::Scream as u8"
+                "{name} A_Scream must fire on the vanilla death frame"
             );
             assert_eq!(
-                STATES[die2 as usize].action,
+                STATES[fall as usize].action,
                 Action::Fall as u8,
-                "{name} DIE2 must have Action::Fall as u8"
+                "{name} A_Fall must fire on the vanilla death frame"
             );
         }
     }

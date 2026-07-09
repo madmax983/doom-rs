@@ -1608,11 +1608,13 @@ mod tests {
         );
     }
 
-    /// Regression: damage_mobj kills via p_set_mobj_state, which fires the entry
-    /// action (A_Scream).  If we ever revert to direct state assignment A_Scream
-    /// will silently stop firing and MF_SCREAMED will not be set.
+    /// Regression: death runs through p_set_mobj_state, which fires each
+    /// frame's entry action.  In vanilla `info.c` A_Scream is on DIE2 (not the
+    /// death-entry frame DIE1), so it fires once the state machine advances a
+    /// frame — not immediately on the killing blow.
     #[test]
     fn lethal_damage_fires_a_scream_via_p_set_mobj_state() {
+        use crate::states::ids;
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
 
@@ -1628,6 +1630,23 @@ mod tests {
 
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 20);
 
+        // Enters death at DIE1 (no action in vanilla); scream not yet fired.
+        assert_eq!(
+            gs.mobjslab
+                .get(trooper)
+                .expect("value must exist in test")
+                .state,
+            crate::mobj::StateNum(ids::S_POSS_DIE1),
+            "lethal damage must enter the death sequence at DIE1"
+        );
+
+        // Advancing one death frame (to DIE2) fires A_Scream via the entry action.
+        crate::tic::p_set_mobj_state(
+            &mut gs,
+            trooper,
+            crate::mobj::StateNum(ids::S_POSS_DIE2),
+            None,
+        );
         assert_ne!(
             gs.mobjslab
                 .get(trooper)
@@ -1635,7 +1654,7 @@ mod tests {
                 .flags
                 & crate::mobj::flags::MF_SCREAMED,
             0,
-            "lethal damage must set MF_SCREAMED (A_Scream fired by p_set_mobj_state)"
+            "A_Scream on DIE2 must set MF_SCREAMED (fired by p_set_mobj_state)"
         );
     }
 
