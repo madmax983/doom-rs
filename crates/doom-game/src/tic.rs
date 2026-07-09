@@ -259,29 +259,42 @@ fn tick_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> T
 ///
 /// The player mobj is skipped (its state machine is managed separately
 /// by `tick_player`).
+/// Snapshot every live actor handle ordered by ascending `generation`.
+///
+/// Vanilla `P_RunThinkers` walks the thinker list in INSERTION (creation)
+/// order — `P_AddThinker` appends each new thinker to the tail. Our slab's
+/// monotonic `generation` counter reproduces that order exactly: an actor's
+/// generation is its global creation index. Iterating by raw slot index
+/// instead would tick actors in free-list-reuse order, so a missile that
+/// occupies a recycled low slot would think BEFORE the monsters it was created
+/// after — shifting which `P_Random` byte its damage roll consumes (e.g. an imp
+/// fireball rolling a different `(P_Random()%8+1)*3`) and desyncing from vanilla
+/// even though the total per-tic draw count matches.
+fn actors_by_generation(slab: &crate::mobj::MobjSlab) -> Vec<MobjHandle> {
+    let mut handles: Vec<MobjHandle> = (0..slab.slot_count())
+        .filter_map(|i| slab.handle_at(i))
+        .collect();
+    // Generations are globally unique, so the ordering is total and stable.
+    handles.sort_unstable_by_key(|h| h.generation);
+    handles
+}
+
 pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
-    // Collect iteration boundaries to avoid borrow conflicts and guarantee determinism.
-    // We only process mobjs that existed at the start of the tic.
-    let initial_slot_count = gs.mobjslab.slot_count();
+    // Only process mobjs that existed at the start of the tic.
     let initial_generation = gs.mobjslab.next_generation();
 
     let player_handle = gs.player.handle;
     let is_nightmare = gs.skill == crate::spawn::Skill::Nightmare;
 
-    for i in 0..initial_slot_count {
-        let Some(handle) = gs.mobjslab.handle_at(i) else {
-            continue;
-        };
-        // Skip mobjs spawned during this iteration.
-        if handle.generation >= initial_generation {
-            continue;
-        }
+    // Snapshot the tic-start actors and tick them in creation (generation)
+    // order to match vanilla thinker order (see `actors_by_generation`).
+    let tick_order: Vec<MobjHandle> = actors_by_generation(&gs.mobjslab)
+        .into_iter()
+        // Only actors that existed at tic start; skip the player (tick_player).
+        .filter(|h| h.generation < initial_generation && *h != player_handle)
+        .collect();
 
-        // Skip the player mobj — it's handled by tick_player.
-        if handle == player_handle {
-            continue;
-        }
-
+    for handle in tick_order {
         // Skip freed mobjs (may have been removed by an earlier iteration).
         if gs.mobjslab.get(handle).is_none() {
             continue;
@@ -327,14 +340,14 @@ pub fn tick_all_mobjs(gs: &mut GameState, level: Option<&Level>) {
     // Player-fired missiles are spawned in `tick_player` (before this function)
     // so they already have `generation < initial_generation` and moved above;
     // missiles never spawn further missiles, so one follow-up pass is exact.
-    let after_slot_count = gs.mobjslab.slot_count();
-    for i in 0..after_slot_count {
-        let Some(handle) = gs.mobjslab.handle_at(i) else {
-            continue;
-        };
-        if handle.generation < initial_generation || handle == player_handle {
-            continue; // existed at tic start (already ticked) or is the player
-        }
+    // Tick this-tic-spawned missiles in generation (creation) order too, so a
+    // monster that fires several missiles in one tic advances them in the same
+    // order vanilla's tail-appended thinker list would.
+    let missile_order: Vec<MobjHandle> = actors_by_generation(&gs.mobjslab)
+        .into_iter()
+        .filter(|h| h.generation >= initial_generation && *h != player_handle)
+        .collect();
+    for handle in missile_order {
         let is_missile = gs
             .mobjslab
             .get(handle)
@@ -1778,6 +1791,41 @@ mod tests {
             mo.tics, 5,
             "player mobj should not be ticked by tick_all_mobjs"
         );
+    }
+
+    #[test]
+    fn actors_by_generation_orders_by_creation_not_slot() {
+        // Reproduce the free-list slot-reuse that desyncs missile-vs-monster
+        // thinker order from vanilla: after a low slot is recycled by a
+        // later-created actor, iteration MUST still be in creation
+        // (generation) order — the actor in the recycled low slot ticks LAST.
+        let mut gs = make_game_state();
+        let a = gs.mobjslab.alloc(make_trooper(StateNum(ids::S_POSS_STND), 5));
+        let b = gs.mobjslab.alloc(make_trooper(StateNum(ids::S_POSS_STND), 5));
+        // Free `a` (its low slot enters the free list) then allocate `c`, which
+        // reuses `a`'s slot but carries a higher generation than `b`.
+        gs.mobjslab.free(a);
+        let c = gs.mobjslab.alloc(make_missile(1, 0, 0));
+
+        assert!(
+            c.index < b.index,
+            "test precondition: `c` must reuse the lower recycled slot"
+        );
+        assert!(
+            c.generation > b.generation,
+            "test precondition: `c` is created after `b`"
+        );
+
+        let order = actors_by_generation(&gs.mobjslab);
+        // Player (gen 1) first, then b, then c — creation order, not slot order.
+        assert_eq!(
+            order.last().copied(),
+            Some(c),
+            "recycled-slot actor `c` must tick last (highest generation)"
+        );
+        let bi = order.iter().position(|&h| h == b).unwrap();
+        let ci = order.iter().position(|&h| h == c).unwrap();
+        assert!(bi < ci, "`b` (older) must tick before `c` (newer)");
     }
 
     #[test]
