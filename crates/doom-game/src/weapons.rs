@@ -150,8 +150,14 @@ static WEAPON_INFO: [WeaponInfo; 9] = [
     },
 ];
 
-/// Normal fully-raised psprite Y offset.
-pub const WEAPON_TOP: i32 = 0;
+/// Normal fully-raised (resting) psprite Y offset.
+///
+/// Vanilla `WEAPONTOP = 32*FRACUNIT` (`p_pspr.c`): the weapon rests 32 units
+/// down, not at 0.  This is load-bearing for demo sync — the raise/lower
+/// animations travel `WEAPON_BOTTOM - WEAPON_TOP = 96` units at 6 units/tic
+/// (16 tics), exactly as in vanilla `A_Raise`/`A_Lower`.  Using 0 here made the
+/// travel 128 units (~22 tics), delaying every weapon switch by ~13 tics.
+pub const WEAPON_TOP: i32 = 32;
 /// Fully-lowered psprite Y offset.
 pub const WEAPON_BOTTOM: i32 = 128;
 const RAISE_SPEED: i32 = 6;
@@ -298,7 +304,14 @@ fn bring_up_weapon(player: &mut PlayerState) {
     let info = weapon_psprite_info(weapon);
     player.weapon = weapon;
     player.psprites[psprite_slots::WEAPON].sx = 0;
-    player.psprites[psprite_slots::WEAPON].sy = WEAPON_BOTTOM;
+    // Vanilla `P_BringUpWeapon` sets sy = WEAPONBOTTOM and then immediately runs
+    // the up-state's action (A_Raise) via `P_SetPsprite`, which decrements sy by
+    // one RAISESPEED step on this very tic.  `init_psprite_state` does not run
+    // the action, so replicate that first step here — otherwise the raise takes
+    // one extra tic, delaying every weapon bring-up (and thus the first shot
+    // after a weapon switch) by a tic.  The step never reaches WEAPONTOP
+    // (128-6 > 32), so no ready transition happens this tic, exactly as vanilla.
+    player.psprites[psprite_slots::WEAPON].sy = WEAPON_BOTTOM - RAISE_SPEED;
     init_psprite_state(player, psprite_slots::WEAPON, info.up);
 }
 
@@ -1018,7 +1031,90 @@ mod tests {
             crate::mobj::StateNum(ids::S_PISTOL_UP),
             "setup must begin by raising the ready weapon from the bottom"
         );
-        assert_eq!(weapon.sy, WEAPON_BOTTOM, "weapon should start lowered");
+        // Vanilla `P_BringUpWeapon` sets sy = WEAPONBOTTOM and immediately runs
+        // A_Raise once (via P_SetPsprite), so the very first tic already steps
+        // the weapon up by one RAISESPEED.
+        assert_eq!(
+            weapon.sy,
+            WEAPON_BOTTOM - RAISE_SPEED,
+            "weapon should start lowered, minus the immediate first A_Raise step"
+        );
+    }
+
+    /// Pin the shotgun psprite fire chain tics/nextstate to vanilla `info.c`
+    /// (`S_SGUN1..S_SGUN9`).  A wrong tic value anywhere in the pump/refire loop
+    /// desyncs the shotgun cadence from vanilla demos.
+    #[test]
+    fn shotgun_fire_chain_tics_match_infoc() {
+        // (state, tics, next_state) per chocolate-doom info.c:
+        //   S_SGUN1 0/3 -> S_SGUN2, S_SGUN2 0/7 (A_FireShotgun) -> S_SGUN3,
+        //   S_SGUN3 1/5 -> S_SGUN4, S_SGUN4 2/5 -> S_SGUN5, S_SGUN5 3/4 -> S_SGUN6,
+        //   S_SGUN6 2/5 -> S_SGUN7, S_SGUN7 1/5 -> S_SGUN8, S_SGUN8 0/3 -> S_SGUN9,
+        //   S_SGUN9 0/7 (A_ReFire) -> S_SGUN (ready).
+        let expected: [(u16, i16, u16); 9] = [
+            (ids::S_SGUN1, 3, ids::S_SGUN2),
+            (ids::S_SGUN2, 7, ids::S_SGUN3),
+            (ids::S_SGUN3, 5, ids::S_SGUN4),
+            (ids::S_SGUN4, 5, ids::S_SGUN5),
+            (ids::S_SGUN5, 4, ids::S_SGUN6),
+            (ids::S_SGUN6, 5, ids::S_SGUN7),
+            (ids::S_SGUN7, 5, ids::S_SGUN8),
+            (ids::S_SGUN8, 3, ids::S_SGUN9),
+            (ids::S_SGUN9, 7, ids::S_SGUN_READY),
+        ];
+        for (state, tics, next) in expected {
+            let entry = &STATES[state as usize];
+            assert_eq!(entry.tics, tics, "state {state} tics must match info.c");
+            assert_eq!(
+                entry.next_state,
+                crate::mobj::StateNum(next),
+                "state {state} nextstate must match info.c"
+            );
+        }
+        // The full fire+pump+refire loop must sum to vanilla's 44 tics.
+        let total: i32 = expected.iter().map(|(_, t, _)| *t as i32).sum();
+        assert_eq!(total, 44, "shotgun fire cycle must be 44 tics (vanilla)");
+    }
+
+    /// A held-attack shotgun must re-fire directly via `A_ReFire` on `S_SGUN9`
+    /// (consuming a second shell 44 tics after the first shot) instead of
+    /// dropping back through the ready state, which would add the ready->fire
+    /// latency to every shot.
+    #[test]
+    fn held_shotgun_refires_after_vanilla_cycle() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::Shotgun;
+        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_ammo(AmmoType::Shells as usize, 8);
+        ready_player_psprites(&mut gs);
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            StateNum(ids::S_SGUN_READY),
+            "shotgun should be at ready after raising"
+        );
+
+        let attack = cmd_with_buttons(bt::BT_ATTACK);
+        let before = gs.player.ammo(AmmoType::Shells as usize);
+
+        // First shot: A_FireShotgun runs on S_SGUN2, 3 tics after leaving ready.
+        for _ in 0..4 {
+            tick_psprites(&mut gs, attack, None);
+        }
+        assert_eq!(
+            gs.player.ammo(AmmoType::Shells as usize),
+            before - 1,
+            "first shell must be consumed as the fire state begins"
+        );
+
+        // Hold through the pump/refire loop; A_ReFire on S_SGUN9 must fire again.
+        for _ in 0..44 {
+            tick_psprites(&mut gs, attack, None);
+        }
+        assert_eq!(
+            gs.player.ammo(AmmoType::Shells as usize),
+            before - 2,
+            "held attack must re-fire via A_ReFire, consuming a second shell"
+        );
     }
 
     #[test]

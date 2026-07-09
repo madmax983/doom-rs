@@ -759,16 +759,22 @@ impl DoomGame {
         self.weapon_anim.current.flash_tics = flash_psprite.tics.max(0) as u32;
         self.weapon_anim.current.full_bright = self.weapon_anim.current.flash_active
             || psprite_state_is_fullbright(weapon_psprite.state);
-        self.weapon_anim.raise_offset = weapon_psprite.sy;
+        // Gameplay psprite `sy` rests at `WEAPON_TOP` (32, matching vanilla
+        // `WEAPONTOP`), but the renderer's `raise_offset` baseline is 0 = fully
+        // raised.  Subtract the gameplay resting offset so a rested weapon draws
+        // at the same on-screen position as before (raise_offset 0), preserving
+        // the existing view calibration.
+        let raise_offset = weapon_psprite.sy - doom_game::weapons::WEAPON_TOP;
+        self.weapon_anim.raise_offset = raise_offset;
 
         let transition = psprite_transition(self.gs.player.weapon, weapon_psprite.state);
 
         if transition != WeaponTransition::None {
             self.weapon_anim.current.transition = transition;
         } else if let Some(previous_offset) = previous_offset {
-            if weapon_psprite.sy < previous_offset {
+            if raise_offset < previous_offset {
                 self.weapon_anim.current.transition = WeaponTransition::Raising;
-            } else if weapon_psprite.sy > previous_offset {
+            } else if raise_offset > previous_offset {
                 self.weapon_anim.current.transition = WeaponTransition::Lowering;
             } else {
                 self.weapon_anim.current.transition = WeaponTransition::None;
