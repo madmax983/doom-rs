@@ -629,6 +629,8 @@ impl Reject {
 ///
 /// let blockmap = Blockmap::parse_lump(&data).unwrap();
 /// let mut it = blockmap.block_linedefs(0, 0);
+/// // Vanilla treats the leading 0 word as linedef 0 (present in every cell).
+/// assert_eq!(it.next(), Some(0));
 /// assert_eq!(it.next(), None);
 /// ```
 #[derive(Clone, Debug)]
@@ -698,14 +700,16 @@ impl Blockmap {
             None => data.len(), // out of bounds, start at EOF
         };
 
-        // Block lists start with 0x0000 and are terminated by 0xFFFF.
-        // Skip the leading 0x0000 sentinel if present.
-        if pos + 1 < data.len() {
-            let first = u16::from_le_bytes([data[pos], data[pos + 1]]);
-            if first == 0x0000 {
-                pos += 2;
-            }
-        }
+        // Vanilla `P_BlockLinesIterator` reads the block list starting at
+        // `blockmaplump + offset` with no adjustment, iterating linedef indices
+        // until the 0xFFFF terminator (`for (list = blockmaplump+offset;
+        // *list != -1; list++)`, p_maputl.c).  The standard Doom BLOCKMAP format
+        // places a 0 word at the start of every block list, so vanilla treats
+        // that leading word as *linedef 0* and processes linedef 0 in every
+        // cell.  We must NOT skip it: omitting linedef 0 causes blockmap-driven
+        // traces (e.g. P_SlideMove's PTR_SlideTraverse, which side-tests the
+        // infinite line and has no bbox guard) to miss line 0 and slide along a
+        // different wall than vanilla, desyncing demos.
 
         std::iter::from_fn(move || {
             if pos + 1 >= data.len() {
@@ -891,6 +895,36 @@ mod tests {
         assert_eq!(things.len(), 1);
         assert_eq!(things[0].x, 100);
         assert_eq!(things[0].y, 200);
+    }
+
+    /// Regression: vanilla `P_BlockLinesIterator` reads the block list directly
+    /// from `blockmaplump + offset` and treats the leading 0 word (present in
+    /// every standard Doom BLOCKMAP block list) as *linedef 0*. Every cell must
+    /// therefore yield linedef 0 first. Skipping it (as we used to) makes
+    /// blockmap traces such as `P_SlideMove` miss line 0 and desync demos.
+    #[test]
+    fn block_linedefs_includes_leading_linedef_zero() {
+        // 2 blocks. Block 0 list: [0, 0xFFFF]. Block 1 list: [0, 7, 0xFFFF].
+        // header(8) + offsets(2*2=4) => list data starts at word index 6.
+        // Block0 list at word 6 (bytes 12), Block1 list at word 8 (bytes 16).
+        let mut data = vec![0u8; 8 + 4 + 2 * 2 + 3 * 2];
+        data[4..6].copy_from_slice(&2u16.to_le_bytes()); // columns = 2
+        data[6..8].copy_from_slice(&1u16.to_le_bytes()); // rows = 1
+        data[8..10].copy_from_slice(&6u16.to_le_bytes()); // block0 offset (words)
+        data[10..12].copy_from_slice(&8u16.to_le_bytes()); // block1 offset (words)
+        // block0 list @ bytes 12: 0x0000, 0xFFFF
+        data[12..14].copy_from_slice(&0x0000u16.to_le_bytes());
+        data[14..16].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        // block1 list @ bytes 16: 0x0000, 7, 0xFFFF
+        data[16..18].copy_from_slice(&0x0000u16.to_le_bytes());
+        data[18..20].copy_from_slice(&7u16.to_le_bytes());
+        data[20..22].copy_from_slice(&0xFFFFu16.to_le_bytes());
+
+        let bm = Blockmap::parse_lump(&data).expect("blockmap parse");
+        // Cell (0,0): linedef 0 only (the leading word), NOT skipped.
+        assert_eq!(bm.block_linedefs(0, 0).collect::<Vec<_>>(), vec![0]);
+        // Cell (1,0): leading linedef 0 followed by the genuine member 7.
+        assert_eq!(bm.block_linedefs(1, 0).collect::<Vec<_>>(), vec![0, 7]);
     }
 
     #[test]
