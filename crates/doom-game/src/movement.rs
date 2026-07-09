@@ -829,6 +829,26 @@ fn try_move_with_blocker(
                     );
                 }
 
+                // Head hits the ceiling: the actor must lower itself to fit.
+                // Vanilla `P_TryMove`: `if (tmceilingz - thing->z < thing->height)
+                // return false;`. Without this a player descending stairs toward a
+                // low-ceiling doorway (DEMO3/E1M7 leveltime 534: ceiling 72, z 19,
+                // 72 - 19 = 53 < 56) walks through instead of being blocked until it
+                // has dropped low enough. The slide path already gates on this
+                // (`slide_traverse`); the straight move must too.
+                if open_ceil - mo_z < height {
+                    return (
+                        false,
+                        Some(BlockingLine {
+                            linedef_idx: ld_idx as usize,
+                            x1: lx1,
+                            y1: ly1,
+                            x2: lx2,
+                            y2: ly2,
+                        }),
+                    );
+                }
+
                 // Step too high to climb.
                 if open_floor - step_base_z > MAX_STEP_HEIGHT {
                     return (
@@ -1275,6 +1295,46 @@ mod tests {
             reject,
             blockmap,
         }
+    }
+
+    /// Two flat-floored sectors sharing a two-sided line at x=64. The back
+    /// sector (1) has a parametrized (low) ceiling; the front sector (0) is tall.
+    fn make_two_sided_low_ceiling_level(back_ceil: i16) -> doom_map::Level {
+        let mut level = make_two_sided_step_level(0, 0);
+        level.sectors[1].ceil_height = back_ceil;
+        level
+    }
+
+    #[test]
+    fn try_move_blocked_when_head_hits_low_ceiling() {
+        // Vanilla P_TryMove: `if (tmceilingz - thing->z < thing->height) return
+        // false;`. Back ceiling 72, player height 56: a player at z=24 (72-24=48
+        // < 56) must be blocked until it lowers itself. Regression for DEMO3/E1M7
+        // leveltime 534.
+        let level = make_two_sided_low_ceiling_level(72);
+        let (mut slab, handle) = make_player_slab();
+        slab.get_mut(handle).expect("player").z = Fixed16_16::from_int(24);
+        let new_x = Fixed16_16::from_int(70); // crosses the x=64 line into sector 1
+        let new_y = Fixed16_16::from_int(64);
+        assert!(
+            !p_try_move(&slab, handle, new_x, new_y, &level),
+            "head at z+height=80 must not fit under a 72 ceiling"
+        );
+    }
+
+    #[test]
+    fn try_move_allowed_when_low_enough_for_ceiling() {
+        // Same geometry, but the player has descended to z=16 (72-16=56, not
+        // < 56): it now fits and the move succeeds.
+        let level = make_two_sided_low_ceiling_level(72);
+        let (mut slab, handle) = make_player_slab();
+        slab.get_mut(handle).expect("player").z = Fixed16_16::from_int(16);
+        let new_x = Fixed16_16::from_int(70);
+        let new_y = Fixed16_16::from_int(64);
+        assert!(
+            p_try_move(&slab, handle, new_x, new_y, &level),
+            "head at z+height=72 fits exactly under a 72 ceiling"
+        );
     }
 
     fn make_partition_step_level(right_floor: i16, left_floor: i16) -> doom_map::Level {
