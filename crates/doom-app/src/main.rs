@@ -1626,12 +1626,13 @@ impl DoomApp for DoomGame {
 ///   - Row 70:     "> input_" prompt line (green)
 fn draw_console_overlay(fb: &mut Framebuffer, console: &console::Console) {
     const FB_W: usize = 320;
-    const PANEL_H: usize = 80; // console panel height in pixels
+    const PANEL_H: usize = 84; // console panel height in pixels
     const CHAR_H: usize = 7; // 6px glyph + 1px gap
-    const COLOR_HEADER: u8 = 231; // yellow — "--- CONSOLE ---"
+    const COLOR_HEADER: u8 = 112; // green — "[ SYSTEM CONSOLE ]"
     const COLOR_MSG: u8 = 200; // light — message lines
-    const COLOR_PROMPT: u8 = 112; // green-ish — "> input_"
+    const COLOR_PROMPT: u8 = 231; // yellow-ish — "> input_"
     const COLOR_BG: u8 = 4; // dark blue-gray panel
+    const COLOR_BORDER: u8 = 104; // dark gray border
 
     // Darken the top PANEL_H rows to form the console background.
     for y in 0..PANEL_H {
@@ -1644,8 +1645,23 @@ fn draw_console_overlay(fb: &mut Framebuffer, console: &console::Console) {
         }
     }
 
-    // Draw "--- CONSOLE ---" header at the top.
-    draw_mini_string(fb, 2, "--- CONSOLE ---", COLOR_HEADER);
+    // Draw horizontal bottom border
+    let bottom_y = PANEL_H - 1;
+    let row_start = bottom_y * FB_W;
+    let row_end = row_start + FB_W;
+    if row_end <= fb.data.len() {
+        fb.data[row_start..row_end].fill(COLOR_BORDER);
+    }
+
+    // Draw "[ SYSTEM CONSOLE ]" header at the top.
+    let header_text = "[ SYSTEM CONSOLE ]";
+    let header_width = header_text.len() * 5;
+    let header_x = if header_width < FB_W {
+        (FB_W - header_width) / 2
+    } else {
+        0
+    };
+    draw_mini_string_ex(fb, header_x, 2, header_text, COLOR_HEADER);
 
     // Draw recent messages (up to 8), newest first.
     // Iterating directly avoids a `.collect::<Vec<_>>()` allocation per frame.
@@ -1657,20 +1673,21 @@ fn draw_console_overlay(fb: &mut Framebuffer, console: &console::Console) {
         .map(|s| s.as_str())
         .enumerate()
     {
-        let y = 10 + i * CHAR_H;
-        if y + CHAR_H > PANEL_H {
+        let y = 14 + i * CHAR_H;
+        if y + CHAR_H > PANEL_H - 12 {
             break;
         }
         draw_mini_string(fb, y, msg, COLOR_MSG);
     }
 
     // Draw "> input_" prompt at the bottom of the panel.
-    let prompt_y = PANEL_H.saturating_sub(CHAR_H + 2);
+    let prompt_y = PANEL_H.saturating_sub(CHAR_H + 3);
     // ⚡ Bolt Optimization:
     // Avoids an unnecessary `format!` string allocation per frame by
     // chaining iterators and drawing the characters directly.
-    draw_mini_string_chained(
+    draw_mini_string_chained_ex(
         fb,
+        2,
         prompt_y,
         "> ".chars()
             .chain(console.input.chars())
@@ -1679,8 +1696,9 @@ fn draw_console_overlay(fb: &mut Framebuffer, console: &console::Console) {
     );
 }
 
-fn draw_mini_string_chained(
+fn draw_mini_string_chained_ex(
     fb: &mut Framebuffer,
+    x: usize,
     y: usize,
     chars: impl Iterator<Item = char>,
     color: u8,
@@ -1691,7 +1709,7 @@ fn draw_mini_string_chained(
 
     for (ci, ch) in chars.enumerate() {
         let glyph = mini_glyph(ch);
-        let cx = 2 + ci * CHAR_W;
+        let cx = x + ci * CHAR_W;
         for (row, &bits) in glyph.iter().enumerate().take(GLYPH_ROWS) {
             let sy = y + row;
             if sy >= 200 {
@@ -1713,7 +1731,14 @@ fn draw_mini_string_chained(
 ///
 /// Characters that overflow the 320-pixel width are clipped.
 fn draw_mini_string(fb: &mut Framebuffer, y: usize, text: &str, color: u8) {
-    draw_mini_string_chained(fb, y, text.chars(), color);
+    draw_mini_string_chained_ex(fb, 2, y, text.chars(), color);
+}
+
+/// Draw a string using the mini 4x6 glyph font at `(x, y)`.
+///
+/// Characters that overflow the 320-pixel width are clipped.
+fn draw_mini_string_ex(fb: &mut Framebuffer, x: usize, y: usize, text: &str, color: u8) {
+    draw_mini_string_chained_ex(fb, x, y, text.chars(), color);
 }
 
 // ---------------------------------------------------------------------------
