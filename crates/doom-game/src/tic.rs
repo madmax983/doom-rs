@@ -383,6 +383,27 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
         crate::specials::p_player_in_special_sector(gs, lv);
     }
 
+    // Capture the player's position BEFORE this tic's movement is integrated.
+    //
+    // Vanilla `P_MovePlayer` only sets the player's momentum (`P_Thrust`); the
+    // position itself is integrated later in `P_XYMovement`, which runs in
+    // `P_RunThinkers` — AFTER `P_MovePsprites`. doom-rs instead integrates the
+    // player's position inline here in `p_move_player`. So when the weapon
+    // psprite action functions run (`A_FirePistol` etc., in `tick_psprites`
+    // below), vanilla samples the player origin from the END of the PREVIOUS
+    // tic (this tic's angle is already applied, but the position is not yet
+    // integrated), whereas a naive doom-rs would sample this tic's post-move
+    // position — one movement step ahead. That one-tic-late origin skews every
+    // hitscan's `P_LineAttack` / knockback `R_PointToAngle2(player, target)`.
+    //
+    // Preserve vanilla timing by running `tick_psprites` against the pre-move
+    // position (with this tic's freshly-applied angle) and restoring the real
+    // post-move position afterward. See the `tick_psprites` call below.
+    let pre_move_pos = gs
+        .mobjslab
+        .get(gs.player.handle)
+        .map(|mo| (mo.x, mo.y, mo.z, mo.subsector));
+
     // Movement + attack (immutable level borrow).
     p_move_player(gs, cmd, level.as_deref_mut());
 
@@ -413,7 +434,34 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
         }
     }
 
+    // Weapon psprites (vanilla `P_MovePsprites`). Vanilla runs this against the
+    // player's pre-integration position (see `pre_move_pos` above), so restore
+    // that position for the duration of the psprite tick — keeping this tic's
+    // already-applied angle and momentum — then put the real post-move position
+    // back so `tick_world` and the per-tic snapshot observe the current origin.
+    let post_move_pos = gs
+        .mobjslab
+        .get(gs.player.handle)
+        .map(|mo| (mo.x, mo.y, mo.z, mo.subsector));
+    if let Some((x, y, z, subsector)) = pre_move_pos
+        && let Some(mo) = gs.mobjslab.get_mut(gs.player.handle)
+    {
+        mo.x = x;
+        mo.y = y;
+        mo.z = z;
+        mo.subsector = subsector;
+    }
+
     crate::weapons::tick_psprites(gs, cmd, level.as_deref());
+
+    if let Some((x, y, z, subsector)) = post_move_pos
+        && let Some(mo) = gs.mobjslab.get_mut(gs.player.handle)
+    {
+        mo.x = x;
+        mo.y = y;
+        mo.z = z;
+        mo.subsector = subsector;
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1431,6 +1479,92 @@ mod tests {
                 .health
                 < 20,
             "first pistol shot through tick_player should be accurate"
+        );
+    }
+
+    #[test]
+    fn weapon_fire_samples_pre_move_player_position() {
+        // Regression: the weapon action functions (`A_FirePistol` etc.) must
+        // sample the player origin vanilla samples. In vanilla `P_MovePlayer`
+        // only sets momentum; the position is integrated later in
+        // `P_XYMovement` (during `P_RunThinkers`), which runs AFTER
+        // `P_MovePsprites`. So the hitscan fires from the pre-integration
+        // position (this tic's angle, the previous tic's position). doom-rs
+        // integrates the player position inline in `p_move_player`, so
+        // `tick_player` must restore the pre-move position for the psprite tick.
+        //
+        // Here the player moves +y perpendicular to its +x aim. A shot from the
+        // pre-move position (y=0) hits a trooper on the x-axis; a shot from the
+        // post-move position (y=30, one MAXMOVE step north) would sail 30 units
+        // over the 16-unit-radius trooper and miss.
+        //
+        // SAFETY: trig tables are process-global and internally guarded.
+        unsafe {
+            doom_types::Bam::init_trig_tables();
+        }
+
+        let mut gs = make_game_state();
+
+        // Trooper straddling the x-axis, 512 units east of the player.
+        let mut trooper = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(512),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        trooper.health = 20;
+        trooper.radius = Fixed16_16::from_int(16);
+        trooper.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        let trooper_handle = gs.mobjslab.alloc(trooper);
+        gs.rng.set_index(16);
+
+        // Give the player northward momentum (clamped to MAXMOVE = 30) and force
+        // the pistol into the frame just before `A_FirePistol` fires, so the shot
+        // resolves on this single `tick_player` call.
+        {
+            let mo = gs
+                .mobjslab
+                .get_mut(gs.player.handle)
+                .expect("player must exist");
+            mo.momy = Fixed16_16::from_int(40);
+        }
+        gs.player.psprites[crate::player::psprite_slots::WEAPON] = crate::player::PspriteState {
+            state: StateNum(ids::S_PISTOL1),
+            tics: 1,
+            sx: 0,
+            sy: 0,
+        };
+
+        tick_player(
+            &mut gs,
+            TicCmd {
+                buttons: bt::BT_ATTACK,
+                ..Default::default()
+            },
+            None,
+        );
+
+        // The fire sampled the pre-move (y=0) origin, so the trooper is hit.
+        assert!(
+            gs.mobjslab
+                .get(trooper_handle)
+                .expect("trooper must exist")
+                .health
+                < 20,
+            "weapon fire must sample the pre-move player position (vanilla \
+             P_MovePsprites runs before player position integration)"
+        );
+
+        // The player mobj still ends the tic at its real post-move position: the
+        // pre-move restore is only in effect for the psprite tick.
+        let mo = gs
+            .mobjslab
+            .get(gs.player.handle)
+            .expect("player must exist");
+        assert_eq!(
+            mo.y,
+            Fixed16_16::from_int(30),
+            "player must end the tic at the integrated post-move position"
         );
     }
 
