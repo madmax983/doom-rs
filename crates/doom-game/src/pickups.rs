@@ -283,6 +283,10 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
         return false;
     };
     let kind = mo.kind;
+    // Vanilla `P_TouchSpecialThing` passes `special->flags & MF_DROPPED` to
+    // `P_GiveWeapon`: a weapon dropped by a slain monster yields one clip of
+    // ammo instead of the two a spawned weapon gives (see `give_weapon`).
+    let dropped = mo.flags & flags::MF_DROPPED != 0;
 
     let picked_up = match kind {
         // ---- Health ----
@@ -361,36 +365,42 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             WeaponType::Shotgun,
             AmmoType::Shells as usize,
             8,
+            dropped,
         ),
         MobjKind::SuperShotgun => give_weapon(
             &mut gs.player,
             WeaponType::SuperShotgun,
             AmmoType::Shells as usize,
             8,
+            dropped,
         ),
         MobjKind::Chaingun => give_weapon(
             &mut gs.player,
             WeaponType::Chaingun,
             AmmoType::Bullets as usize,
             20,
+            dropped,
         ),
         MobjKind::RocketLauncher => give_weapon(
             &mut gs.player,
             WeaponType::RocketLauncher,
             AmmoType::Rockets as usize,
             2,
+            dropped,
         ),
         MobjKind::PlasmaRifle => give_weapon(
             &mut gs.player,
             WeaponType::PlasmaRifle,
             AmmoType::Cells as usize,
             40,
+            dropped,
         ),
         MobjKind::BfgPickup => give_weapon(
             &mut gs.player,
             WeaponType::Bfg,
             AmmoType::Cells as usize,
             40,
+            dropped,
         ),
         MobjKind::Chainsaw => {
             let had = gs.player.weapons[WeaponType::Chainsaw as usize];
@@ -515,10 +525,15 @@ fn give_weapon(
     weapon: WeaponType,
     ammo_type: usize,
     ammo_amount: u32,
+    dropped: bool,
 ) -> bool {
     let had_weapon = player.weapons[weapon as usize];
     player.weapons[weapon as usize] = true;
-    player.give_ammo(ammo_type, ammo_amount);
+    // Vanilla `P_GiveWeapon`: a spawned weapon gives two clips of ammo, a
+    // dropped one (from a slain monster) gives a single clip. `ammo_amount` is
+    // the two-clip amount, so a dropped pickup gives exactly half.
+    let amount = if dropped { ammo_amount / 2 } else { ammo_amount };
+    player.give_ammo(ammo_type, amount);
     if !had_weapon {
         player.pending_weapon = Some(weapon);
     }
