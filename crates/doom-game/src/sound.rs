@@ -42,6 +42,8 @@ pub const ML_SOUNDBLOCK: u16 = 0x0040;
 pub fn init_sound_state(gs: &mut GameState, num_sectors: usize) {
     gs.sound.sound_targets.clear();
     gs.sound.sound_targets.resize(num_sectors, None);
+    gs.sound.sound_valid.clear();
+    gs.sound.sound_valid.resize(num_sectors, 0);
     gs.sound.sound_traversed.clear();
     gs.sound.sound_traversed.resize(num_sectors, 0);
     gs.sound.sound_gen = 0;
@@ -143,47 +145,57 @@ pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emit
         }
     };
 
-    // Increment generation counter to mark a new flood fill pass.
+    // Increment the global `validcount` to mark a new flood-fill pass.
     gs.sound.sound_gen = gs.sound.sound_gen.wrapping_add(1);
-    // If generation wrapped to 0, reset all traversed counters so the
-    // comparison `traversed[s] >= gen` works correctly.
+    // If `validcount` wrapped to 0, reset every per-sector stamp so the
+    // `sound_valid[s] == sound_gen` comparison cannot spuriously match a stale
+    // stamp left over from a previous pass.
     if gs.sound.sound_gen == 0 {
-        gs.sound.sound_traversed.fill(0);
+        gs.sound.sound_valid.fill(0);
         gs.sound.sound_gen = 1;
     }
 
-    let new_gen = gs.sound.sound_gen;
+    let validcount = gs.sound.sound_gen;
 
-    // Start flood fill from the emitter's sector with one soundblock crossing
-    // available. Crossing a second `ML_SOUNDBLOCK` stops propagation.
-    recursive_sound(gs, level, emitter_sector, 1, target, new_gen);
+    // Start the flood fill from the emitter's sector at block depth 0 (vanilla
+    // `P_RecursiveSound(sec, 0)`).
+    recursive_sound(gs, level, emitter_sector, 0, target, validcount);
 }
 
 /// Recursive flood fill: propagate sound into `sector_idx` and its neighbors.
 ///
-/// `sound_blocks_remaining` tracks how many `ML_SOUNDBLOCK` linedefs sound
-/// can still pass through (starts at 1, decremented by each soundblock line).
+/// Faithful port of vanilla `P_RecursiveSound`.  `soundblocks` is the number of
+/// `ML_SOUNDBLOCK` lines already crossed to reach `sector_idx` (0 or 1).  A
+/// sector is (re)processed whenever it has not yet been stamped this pass, OR it
+/// was stamped at a strictly-greater block depth (`soundtraversed > soundblocks
+/// + 1`) — the latter lets sound that arrives via a shallower path continue
+/// propagating deeper than an earlier, more-blocked visit allowed.
 fn recursive_sound(
     gs: &mut GameState,
     level: &Level,
     sector_idx: usize,
-    sound_blocks_remaining: i32,
+    soundblocks: i32,
     target: MobjHandle,
-    new_gen: u32,
+    validcount: u32,
 ) {
     // Bounds check.
     if sector_idx >= gs.sound.sound_traversed.len() {
         return;
     }
 
-    // Already visited this generation with at least as much budget?
-    // The generation check prevents revisiting in the same pass.
-    if gs.sound.sound_traversed[sector_idx] >= new_gen {
+    // Vanilla revisit guard:
+    //   if (sec->validcount == validcount && sec->soundtraversed <= soundblocks+1)
+    //       return;
+    // Already flooded this pass at an equal-or-shallower block depth: stop.
+    if gs.sound.sound_valid[sector_idx] == validcount
+        && gs.sound.sound_traversed[sector_idx] <= soundblocks + 1
+    {
         return;
     }
 
-    // Mark as visited and set the sound target.
-    gs.sound.sound_traversed[sector_idx] = new_gen;
+    // Stamp this sector: validcount, soundtraversed = soundblocks + 1, target.
+    gs.sound.sound_valid[sector_idx] = validcount;
+    gs.sound.sound_traversed[sector_idx] = soundblocks + 1;
     gs.sound.sound_targets[sector_idx] = Some(target);
 
     // Propagate through two-sided linedefs bounding this sector.
@@ -215,20 +227,28 @@ fn recursive_sound(
 
         // Vanilla P_RecursiveSound: `P_LineOpening(check); if (openrange <= 0)
         // continue;` — sound does not pass through a closed door (or any
-        // zero-height opening).  Without this the flood fill leaks through
-        // every closed door and floods the entire level at once.
+        // zero-height opening).  Same `openrange` (open_top - open_bottom) as
+        // the movement `P_LineOpening`.  Without this the flood fill leaks
+        // through every closed door and floods the entire level at once.
         if let Some((open_bottom, open_top)) = crate::trace::line_opening(level, ld) {
             if open_top - open_bottom <= 0 {
                 continue;
             }
         }
 
-        // Calculate sound block cost for this linedef.
-        let blocks = if ld.flags & ML_SOUNDBLOCK != 0 { 1 } else { 0 };
-        let remaining = sound_blocks_remaining - blocks;
-
-        if remaining >= 0 {
-            recursive_sound(gs, level, other_sector, remaining, target, new_gen);
+        // Vanilla ML_SOUNDBLOCK handling:
+        //   if (check->flags & ML_SOUNDBLOCK) {
+        //       if (!soundblocks) P_RecursiveSound(other, 1);
+        //   } else
+        //       P_RecursiveSound(other, soundblocks);
+        // A first soundblock line bumps the depth to 1; a second (soundblocks
+        // already 1) stops that branch entirely.
+        if ld.flags & ML_SOUNDBLOCK != 0 {
+            if soundblocks == 0 {
+                recursive_sound(gs, level, other_sector, 1, target, validcount);
+            }
+        } else {
+            recursive_sound(gs, level, other_sector, soundblocks, target, validcount);
         }
     }
 }
@@ -464,10 +484,12 @@ mod tests {
         let mut gs = GameState::new("TEST");
         init_sound_state(&mut gs, 5);
         assert_eq!(gs.sound.sound_targets.len(), 5);
+        assert_eq!(gs.sound.sound_valid.len(), 5);
         assert_eq!(gs.sound.sound_traversed.len(), 5);
         assert_eq!(gs.sound.sound_gen, 0);
         for i in 0..5 {
             assert!(gs.sound.sound_targets[i].is_none());
+            assert_eq!(gs.sound.sound_valid[i], 0);
             assert_eq!(gs.sound.sound_traversed[i], 0);
         }
     }
@@ -656,6 +678,72 @@ mod tests {
         }
         // Generation counter should show only one alert.
         assert_eq!(gs.sound.sound_gen, 1);
+    }
+
+    #[test]
+    fn revisit_at_lower_block_depth_propagates_deeper() {
+        // Vanilla `P_RecursiveSound` re-enters a sector when it is reached at a
+        // strictly-lower block depth, which lets sound continue past a
+        // ML_SOUNDBLOCK line that an earlier, more-blocked visit could not.
+        //
+        // Topology (connection/linedef order matters — the SB path to sector 1
+        // is explored before the open path so the naive one-visit flood would
+        // stamp sector 1 at depth 1 and never reach sector 3):
+        //   0 --[SB]----> 1
+        //   0 --[open]--> 2 --[open]--> 1 --[SB]--> 3
+        //
+        // Reaching sector 1 via the open 0->2->1 path crosses zero soundblock
+        // lines, so 1->[SB]->3 crosses exactly one and sector 3 must wake.
+        let level = make_test_level(
+            4,
+            &[
+                (0, 1, ML_SOUNDBLOCK), // linedef 1: SB path 0->1 (explored first)
+                (0, 2, 0),             // linedef 2: open 0->2
+                (2, 1, 0),             // linedef 3: open 2->1
+                (1, 3, ML_SOUNDBLOCK), // linedef 4: SB 1->3
+            ],
+        );
+        let mut gs = make_game_state_with_sound(4);
+        let player = gs.player.handle;
+
+        p_noise_alert(&mut gs, &level, player, player);
+
+        assert_eq!(get_sound_target(&gs, 0), Some(player));
+        assert_eq!(get_sound_target(&gs, 1), Some(player));
+        assert_eq!(get_sound_target(&gs, 2), Some(player));
+        assert_eq!(
+            get_sound_target(&gs, 3),
+            Some(player),
+            "sound reaching sector 1 via the open path must re-enter it at the \
+             lower block depth and cross the final soundblock line into sector 3"
+        );
+        // Sector 1 must end stamped at the shallow depth (soundtraversed = 0+1).
+        assert_eq!(
+            gs.sound.sound_traversed[1], 1,
+            "sector 1's final soundtraversed must reflect the shallower (open) path"
+        );
+        // Sector 3 was reached across exactly one soundblock line: depth 1 + 1.
+        assert_eq!(gs.sound.sound_traversed[3], 2);
+    }
+
+    #[test]
+    fn soundblock_single_block_rule_records_depth() {
+        // A single ML_SOUNDBLOCK line bumps soundblocks 0 -> 1 (soundtraversed
+        // 1 -> 2); a second one on the same branch stops propagation, so the
+        // stamped depth never exceeds 2.
+        let level = make_test_level(3, &[(0, 1, ML_SOUNDBLOCK), (1, 2, ML_SOUNDBLOCK)]);
+        let mut gs = make_game_state_with_sound(3);
+        let player = gs.player.handle;
+
+        p_noise_alert(&mut gs, &level, player, player);
+
+        assert_eq!(gs.sound.sound_traversed[0], 1, "emitter sector: soundblocks 0 -> depth 1");
+        assert_eq!(gs.sound.sound_traversed[1], 2, "one soundblock crossed: depth 2");
+        assert_eq!(
+            get_sound_target(&gs, 2),
+            None,
+            "second consecutive soundblock stops the branch (if(!soundblocks))"
+        );
     }
 
     #[test]
