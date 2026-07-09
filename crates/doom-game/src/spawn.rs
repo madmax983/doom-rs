@@ -298,8 +298,19 @@ pub fn spawn_level_things(
         apply_mobjinfo_defaults(&mut mo);
         sync_mobj_to_level(level, &mut mo);
 
-        // Apply the vanilla tic-randomization result to the simulated mobj.
-        if let Some(t) = randomized_tics {
+        // Apply the vanilla tic-randomization result to the simulated mobj, but
+        // ONLY for mobjs whose spawnstate we actually model (monsters, barrels).
+        // Pickups use the placeholder `ITEM` mobjinfo whose spawn_state is
+        // `S_NULL` (tics = -1, an infinite hold): in vanilla these items loop a
+        // bright bobbing animation forever and never disappear until collected.
+        // If we overwrote their infinite tics with the positive randomized count,
+        // the state machine would count down and transition `S_NULL -> S_NULL`,
+        // removing the item a few tics after level start (e.g. the E1M5 green
+        // armor vanished before the player reached it). The `P_Random` draw above
+        // is still consumed unconditionally, preserving demo RNG-stream parity.
+        if let Some(t) = randomized_tics
+            && mo.state != crate::mobj::StateNum::NULL
+        {
             mo.tics = t;
         }
 
@@ -924,6 +935,58 @@ mod tests {
             .expect("trooper should spawn");
 
         assert_eq!(trooper.z, Fixed16_16::from_int(-32));
+    }
+
+    #[test]
+    fn spawned_animated_item_persists_and_is_not_removed() {
+        // Regression: animated pickups (e.g. green armor, doomednum 2018) use
+        // the placeholder ITEM mobjinfo whose spawn_state is S_NULL (infinite
+        // tics, -1). Vanilla P_SpawnMapThing randomizes the initial animation
+        // phase, but the item loops its bright bobbing animation forever and
+        // never disappears until collected. A prior bug applied the positive
+        // randomized tics to the simulated item, so its state machine counted
+        // down and transitioned S_NULL -> S_NULL, deleting the item a few tics
+        // after level start. On E1M5 (DEMO1) this deleted the green armor before
+        // the player reached it, so the player took the full 3-damage shotgun
+        // pellet at lt109 instead of the armor-absorbed 2, diverging from the
+        // vanilla demo (health 97 vs 98 at leveltime 110).
+        let level = make_test_level_with_things(vec![Thing {
+            x: 0,
+            y: 0,
+            angle: 0,
+            kind: 2018, // Green armor: vanilla spawnstate S_ARM1 has 6 tics.
+            flags: 7,
+        }]);
+        let mut gs = GameState::new("E1M1");
+        spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
+
+        let find_armor = |gs: &GameState| {
+            gs.mobjslab.iter_handles().find(|&h| {
+                gs.mobjslab
+                    .get(h)
+                    .is_some_and(|m| m.kind == MobjKind::GreenArmor)
+            })
+        };
+
+        let handle = find_armor(&gs).expect("green armor should spawn");
+        let armor = gs.mobjslab.get(handle).expect("value must exist in test");
+        // Invariant: the item keeps its infinite tics so its state machine never
+        // counts down to a removing S_NULL transition.
+        assert_eq!(armor.tics, -1, "animated pickup must retain infinite tics");
+        assert_ne!(
+            armor.flags & flags::MF_SPECIAL,
+            0,
+            "pickup must remain MF_SPECIAL so it can be collected"
+        );
+
+        // Tick well past the 1..=6 tic window the bug used to remove it in.
+        for _ in 0..20 {
+            crate::tic::tick_all_mobjs(&mut gs, Some(&level));
+        }
+        assert!(
+            find_armor(&gs).is_some(),
+            "animated item must persist and not be removed by state countdown"
+        );
     }
 
     #[test]
