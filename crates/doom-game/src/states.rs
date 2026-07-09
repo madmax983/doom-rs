@@ -46,6 +46,7 @@ const REFIRE: u8 = crate::actions::Action::Refire as u8;
 const SARG_ATTACK: u8 = crate::actions::Action::SargAttack as u8;
 const SAW: u8 = crate::actions::Action::Saw as u8;
 const SCREAM: u8 = crate::actions::Action::Scream as u8;
+const XSCREAM: u8 = crate::actions::Action::XScream as u8;
 const SKEL_MISSILE: u8 = crate::actions::Action::SkelMissile as u8;
 const SKULL_ATTACK: u8 = crate::actions::Action::SkullAttack as u8;
 const SPOS_ATTACK: u8 = crate::actions::Action::SposAttack as u8;
@@ -650,8 +651,42 @@ pub mod ids {
     pub const S_BEXP4: u16 = 381;
     pub const S_BEXP5: u16 = 382;
 
+    /// Over-kill (gib / xdeath) chains, appended so existing state IDs are
+    /// unchanged.  Entered from `P_KillMobj` when `health < -spawnhealth` and
+    /// the actor has an `xdeath_state` (vanilla `info.c` `xdeathstate`).  The
+    /// `A_XScream` on the second frame plays `sfx_slop` and draws no `P_Random`.
+    // Trooper (MT_POSSESSED) — S_POSS_XDIE1..9 (9 frames).
+    pub const S_POSS_XDIE1: u16 = 383;
+    pub const S_POSS_XDIE2: u16 = 384;
+    pub const S_POSS_XDIE3: u16 = 385;
+    pub const S_POSS_XDIE4: u16 = 386;
+    pub const S_POSS_XDIE5: u16 = 387;
+    pub const S_POSS_XDIE6: u16 = 388;
+    pub const S_POSS_XDIE7: u16 = 389;
+    pub const S_POSS_XDIE8: u16 = 390;
+    pub const S_POSS_XDIE9: u16 = 391;
+    // Sergeant (MT_SHOTGUY) — S_SPOS_XDIE1..9 (9 frames).
+    pub const S_SPOS_XDIE1: u16 = 392;
+    pub const S_SPOS_XDIE2: u16 = 393;
+    pub const S_SPOS_XDIE3: u16 = 394;
+    pub const S_SPOS_XDIE4: u16 = 395;
+    pub const S_SPOS_XDIE5: u16 = 396;
+    pub const S_SPOS_XDIE6: u16 = 397;
+    pub const S_SPOS_XDIE7: u16 = 398;
+    pub const S_SPOS_XDIE8: u16 = 399;
+    pub const S_SPOS_XDIE9: u16 = 400;
+    // Imp (MT_TROOP) — S_TROO_XDIE1..8 (8 frames).
+    pub const S_TROO_XDIE1: u16 = 401;
+    pub const S_TROO_XDIE2: u16 = 402;
+    pub const S_TROO_XDIE3: u16 = 403;
+    pub const S_TROO_XDIE4: u16 = 404;
+    pub const S_TROO_XDIE5: u16 = 405;
+    pub const S_TROO_XDIE6: u16 = 406;
+    pub const S_TROO_XDIE7: u16 = 407;
+    pub const S_TROO_XDIE8: u16 = 408;
+
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 383;
+    pub const STATES_COUNT: usize = 409;
 }
 
 // ---------------------------------------------------------------------------
@@ -1177,6 +1212,41 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_BEXP, 2 | FB, 5, NONE, ids::S_BEXP4),      // 380: S_BEXP3
     st!(SPR_BEXP, 3 | FB, 10, EXPLODE, ids::S_BEXP5),  // 381: S_BEXP4 (A_Explode)
     st!(SPR_BEXP, 4 | FB, 10, NONE, ids::S_NULL),      // 382: S_BEXP5
+    // ===================================================================
+    // Over-kill (gib / xdeath) chains, appended for demo-sync fidelity.
+    // Vanilla-literal frames/tics/next/action from info.c.  A_XScream plays
+    // sfx_slop and draws no P_Random (unlike A_Scream on the normal death
+    // chain), so an over-killed monster advances the RNG one draw less.
+    // ===================================================================
+    // --- Trooper gib (vanilla S_POSS_XDIE1..9, SPR_POSS frames 12..20) ---
+    st!(SPR_POSS, 12, 5, NONE, ids::S_POSS_XDIE2),    // 383: S_POSS_XDIE1
+    st!(SPR_POSS, 13, 5, XSCREAM, ids::S_POSS_XDIE3), // 384: S_POSS_XDIE2 (A_XScream)
+    st!(SPR_POSS, 14, 5, FALL, ids::S_POSS_XDIE4),    // 385: S_POSS_XDIE3 (A_Fall)
+    st!(SPR_POSS, 15, 5, NONE, ids::S_POSS_XDIE5),    // 386: S_POSS_XDIE4
+    st!(SPR_POSS, 16, 5, NONE, ids::S_POSS_XDIE6),    // 387: S_POSS_XDIE5
+    st!(SPR_POSS, 17, 5, NONE, ids::S_POSS_XDIE7),    // 388: S_POSS_XDIE6
+    st!(SPR_POSS, 18, 5, NONE, ids::S_POSS_XDIE8),    // 389: S_POSS_XDIE7
+    st!(SPR_POSS, 19, 5, NONE, ids::S_POSS_XDIE9),    // 390: S_POSS_XDIE8
+    st!(SPR_POSS, 20, -1, NONE, ids::S_NULL),         // 391: S_POSS_XDIE9
+    // --- Sergeant gib (vanilla S_SPOS_XDIE1..9, SPR_SPOS frames 12..20) ---
+    st!(SPR_SPOS, 12, 5, NONE, ids::S_SPOS_XDIE2),    // 392: S_SPOS_XDIE1
+    st!(SPR_SPOS, 13, 5, XSCREAM, ids::S_SPOS_XDIE3), // 393: S_SPOS_XDIE2 (A_XScream)
+    st!(SPR_SPOS, 14, 5, FALL, ids::S_SPOS_XDIE4),    // 394: S_SPOS_XDIE3 (A_Fall)
+    st!(SPR_SPOS, 15, 5, NONE, ids::S_SPOS_XDIE5),    // 395: S_SPOS_XDIE4
+    st!(SPR_SPOS, 16, 5, NONE, ids::S_SPOS_XDIE6),    // 396: S_SPOS_XDIE5
+    st!(SPR_SPOS, 17, 5, NONE, ids::S_SPOS_XDIE7),    // 397: S_SPOS_XDIE6
+    st!(SPR_SPOS, 18, 5, NONE, ids::S_SPOS_XDIE8),    // 398: S_SPOS_XDIE7
+    st!(SPR_SPOS, 19, 5, NONE, ids::S_SPOS_XDIE9),    // 399: S_SPOS_XDIE8
+    st!(SPR_SPOS, 20, -1, NONE, ids::S_NULL),         // 400: S_SPOS_XDIE9
+    // --- Imp gib (vanilla S_TROO_XDIE1..8, SPR_TROO frames 13..20) ---
+    st!(SPR_TROO, 13, 5, NONE, ids::S_TROO_XDIE2),    // 401: S_TROO_XDIE1
+    st!(SPR_TROO, 14, 5, XSCREAM, ids::S_TROO_XDIE3), // 402: S_TROO_XDIE2 (A_XScream)
+    st!(SPR_TROO, 15, 5, NONE, ids::S_TROO_XDIE4),    // 403: S_TROO_XDIE3
+    st!(SPR_TROO, 16, 5, FALL, ids::S_TROO_XDIE5),    // 404: S_TROO_XDIE4 (A_Fall)
+    st!(SPR_TROO, 17, 5, NONE, ids::S_TROO_XDIE6),    // 405: S_TROO_XDIE5
+    st!(SPR_TROO, 18, 5, NONE, ids::S_TROO_XDIE7),    // 406: S_TROO_XDIE6
+    st!(SPR_TROO, 19, 5, NONE, ids::S_TROO_XDIE8),    // 407: S_TROO_XDIE7
+    st!(SPR_TROO, 20, -1, NONE, ids::S_NULL),         // 408: S_TROO_XDIE8
 ];
 
 // ---------------------------------------------------------------------------

@@ -149,6 +149,13 @@ pub enum Action {
     /// `A_Explode`: radius (splash) damage dealt by an exploding rocket at its
     /// death state. Vanilla `A_Explode(mo)` = `P_RadiusAttack(mo, mo->target, 128)`.
     Explode = 55,
+    /// `A_XScream`: over-kill (gib) death scream. Vanilla `A_XScream(actor)` =
+    /// `S_StartSound(actor, sfx_slop)` — plays the gib sound and draws NO
+    /// `P_Random` (unlike `A_Scream`, which rolls for multi-variant death
+    /// sounds). Demo-sync critical: an over-killed monster runs its
+    /// `xdeathstate` chain (this action) instead of the normal `deathstate`
+    /// chain, so it must not advance the shared RNG stream.
+    XScream = 56,
 }
 
 use doom_types::{Bam, Fixed16_16};
@@ -251,6 +258,7 @@ pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level
             Action::SpidAttack => a_spid_attack(gs, handle, level),
             Action::PainAttack => a_pain_attack(gs, handle),
             Action::Scream => a_scream(gs, handle),
+            Action::XScream => a_xscream(gs, handle),
             Action::VileChase => a_vile_chase(gs, handle, level),
             Action::VileStart => a_vile_start(gs, handle),
             Action::VileTarget => a_vile_target(gs, handle),
@@ -1297,6 +1305,31 @@ fn a_scream(gs: &mut GameState, handle: MobjHandle) {
         let _ = gs.p_random() % variants;
     }
 
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.flags |= crate::mobj::flags::MF_SCREAMED;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A_XScream (over-kill / gib death sound)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_XScream` from Doom's `p_enemy.c`:
+///
+/// ```c
+/// void A_XScream (mobj_t* actor) { S_StartSound (actor, sfx_slop); }
+/// ```
+///
+/// Fires on the second frame of a monster's `xdeathstate` (gib) chain when the
+/// actor was over-killed (`health < -spawnhealth`). Unlike `A_Scream`, it plays
+/// a single fixed sound (`sfx_slop`) and draws NO `P_Random` — so the gib death
+/// path advances the shared RNG stream one draw *less* than the normal death
+/// path. Omitting this branch (running the normal `A_Scream` instead) drifts the
+/// whole RNG stream from the first over-kill onward. We mark `MF_SCREAMED` for
+/// parity with `a_scream` so the app-layer sound trigger fires exactly once.
+fn a_xscream(gs: &mut GameState, handle: MobjHandle) {
+    let _rng_ctx = crate::random::rng_ctx("A_XScream");
+    // No P_Random draw — vanilla only calls S_StartSound(actor, sfx_slop).
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.flags |= crate::mobj::flags::MF_SCREAMED;
     }
