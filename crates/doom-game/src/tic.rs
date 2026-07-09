@@ -558,8 +558,31 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
     p_move_player(gs, cmd, level.as_deref_mut());
 
     // Pickup check: scan MF_SPECIAL actors.
+    //
+    // Vanilla collects items in `P_TouchSpecialThing`, called from
+    // `PIT_CheckThing` during `P_XYMovement` — i.e. AFTER this tic's XY move
+    // reaches its destination, but BEFORE `P_ZMovement` integrates the player's
+    // z. `P_TouchSpecialThing`'s opening Z-reach gate therefore samples the
+    // player's START-of-tic z (`toucher->z`), not the post-`P_ZMovement` z.
+    // doom-rs integrates z inline in `p_move_player`, so restore the pre-move z
+    // (keeping the post-move x,y that the AABB overlap uses) for the pickup scan,
+    // then put the real post-move z back. Without this, a player descending
+    // stairs onto a low item reaches Z-reach one tic early (DEMO3/E1M7 health
+    // bonus at z=24 collected at leveltime 530, matching vanilla, not 529).
     if !gs.player.is_dead() {
+        let restore_z = pre_move_pos.and_then(|(_, _, pre_z, _)| {
+            gs.mobjslab.get_mut(gs.player.handle).map(|mo| {
+                let post_z = mo.z;
+                mo.z = pre_z;
+                post_z
+            })
+        });
         crate::pickups::p_check_pickups(gs);
+        if let Some(post_z) = restore_z
+            && let Some(mo) = gs.mobjslab.get_mut(gs.player.handle)
+        {
+            mo.z = post_z;
+        }
     }
 
     // BT_USE: activate linedef ahead of player on the leading edge only.
