@@ -11,10 +11,10 @@ doom-renderer = { workspace = true }
 doom-tui      = { workspace = true }
 
 # abrash provides the winit window host + softbuffer software presenter.
-# Path dependency to the local checkout so this builds green in-container.
-# (A git dependency — { git = "https://github.com/madmax983/abrash" } — is more
-# portable; swap it in once the repo is reachable from the build environment.)
-abrash = { path = "../../../abrash", default-features = false, features = ["backend-winit"] }
+# Pinned git dependency (portable: no sibling checkout required). The rev is the
+# abrash commit this presenter was written and tested against; bump it
+# deliberately when adopting upstream abrash changes.
+abrash = { git = "https://github.com/madmax983/abrash", rev = "c19530b7ba3808c5e9f980fecffaff43c1abee4b", default-features = false, features = ["backend-winit"] }
 
 # winit/softbuffer versions are pinned to match abrash's (0.29.15 / 0.4.8) so the
 # dependency graph resolves to a single version of each and avoids duplicate-crate
