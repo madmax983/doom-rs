@@ -626,6 +626,60 @@ fn clamp_i128_to_i32(v: i128) -> i32 {
     v.clamp(i32::MIN as i128, i32::MAX as i128) as i32
 }
 
+/// Vanilla `P_CheckPosition`'s thing pass (`P_BlockThingsIterator` /
+/// `PIT_CheckThing`), reduced to the solid-clip subset relevant to a walking
+/// monster: does the destination bounding box overlap a **solid** thing?
+///
+/// Vanilla checks things BEFORE lines and returns `false` from
+/// `P_CheckPosition` on the first solid overlap — so when a thing blocks, the
+/// line pass never runs and `numspechit` stays 0. Both `try_move_with_blocker`
+/// (does the move succeed?) and `monster_move_spechit` (which lines did the
+/// blocked box cross?) must apply this same thing-first ordering, or a monster
+/// blocked by another monster would spuriously accumulate `spechit` from a
+/// special line beyond it and (via `P_Move`) clear its `movedir`, corrupting the
+/// `olddir`/`turnaround` seed of the ensuing `P_NewChaseDir`.
+///
+/// Missiles and charging lost souls (`MF_SKULLFLY`) take damage-dealing
+/// `PIT_CheckThing` branches handled elsewhere (the missile path in `tic.rs`,
+/// `missile_check_things`), so the walk thing-block does not apply to them.
+fn move_blocked_by_solid_thing(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    radius: Fixed16_16,
+    mo_flags: u32,
+    new_x: Fixed16_16,
+    new_y: Fixed16_16,
+) -> bool {
+    if mo_flags & (flags::MF_MISSILE | flags::MF_SKULLFLY) != 0 {
+        return false;
+    }
+    for other in slab.iter_handles() {
+        if other == handle {
+            continue;
+        }
+        let Some(t) = slab.get(other) else {
+            continue;
+        };
+        // Vanilla gate: only SOLID / SPECIAL / SHOOTABLE things are considered.
+        if t.flags & (flags::MF_SOLID | flags::MF_SPECIAL | flags::MF_SHOOTABLE) == 0 {
+            continue;
+        }
+        let blockdist = (t.radius + radius).raw();
+        if (t.x.raw() - new_x.raw()).abs() >= blockdist
+            || (t.y.raw() - new_y.raw()).abs() >= blockdist
+        {
+            // Bounding boxes don't overlap — no contact.
+            continue;
+        }
+        // `PIT_CheckThing` returns `!(thing->flags & MF_SOLID)`: a solid thing
+        // blocks the move; non-solid specials/shootables do not.
+        if t.flags & flags::MF_SOLID != 0 {
+            return true;
+        }
+    }
+    false
+}
+
 fn try_move_with_blocker(
     slab: &MobjSlab,
     handle: MobjHandle,
@@ -646,36 +700,8 @@ fn try_move_with_blocker(
     // --- PIT_CheckThing (solid mobj-mobj clipping) ---
     // Vanilla `P_CheckPosition` iterates nearby things (`P_BlockThingsIterator`,
     // `PIT_CheckThing`) BEFORE lines: a move into any SOLID thing is blocked.
-    // We port the solid-blocking subset; the moving thing being a missile or a
-    // charging lost soul (MF_SKULLFLY) takes damage-dealing branches handled
-    // elsewhere (the missile path in `tic.rs`, `missile_check_things`), so we
-    // skip the thing pass for those.
-    if mo_flags & (flags::MF_MISSILE | flags::MF_SKULLFLY) == 0 {
-        for other in slab.iter_handles() {
-            if other == handle {
-                continue;
-            }
-            let Some(t) = slab.get(other) else {
-                continue;
-            };
-            // Vanilla gate: only SOLID / SPECIAL / SHOOTABLE things are considered.
-            if t.flags & (flags::MF_SOLID | flags::MF_SPECIAL | flags::MF_SHOOTABLE) == 0 {
-                continue;
-            }
-            let blockdist = (t.radius + radius).raw();
-            if (t.x.raw() - new_x.raw()).abs() >= blockdist
-                || (t.y.raw() - new_y.raw()).abs() >= blockdist
-            {
-                // Bounding boxes don't overlap — no contact.
-                continue;
-            }
-            // `PIT_CheckThing` returns `!(thing->flags & MF_SOLID)`: a solid
-            // thing blocks the move; non-solid specials/shootables do not.
-            // (Item pickup and missile/skull damage are handled on other paths.)
-            if t.flags & flags::MF_SOLID != 0 {
-                return (false, None);
-            }
-        }
+    if move_blocked_by_solid_thing(slab, handle, radius, mo_flags, new_x, new_y) {
+        return (false, None);
     }
 
     let current_floor = level
@@ -924,6 +950,19 @@ pub fn monster_move_spechit(
     if mo_flags & flags::MF_NOCLIP != 0 {
         return spechit;
     }
+
+    // Vanilla `P_CheckPosition` checks THINGS before LINES: if a solid thing
+    // blocks the destination box, `P_CheckPosition` returns false before the
+    // line pass runs, so `numspechit` stays 0. Replicate that ordering — without
+    // it a monster blocked by another monster spuriously collects a special line
+    // beyond the blocker, and `P_Move` clears its `movedir`, corrupting the
+    // `olddir`/`turnaround` seed handed to `P_NewChaseDir` (DEMO3/E1M7: an imp
+    // at lt611 picked its move-away direction instead of vanilla's, shifting its
+    // chase step and desyncing the demo).
+    if move_blocked_by_solid_thing(slab, handle, radius, mo_flags, new_x, new_y) {
+        return spechit;
+    }
+
     let is_missile = mo_flags & flags::MF_MISSILE != 0;
     // `P_Move` is only ever called for non-player monsters, so the vanilla
     // `!tmthing->player` guard on `ML_BLOCKMONSTERS` is always satisfied here.
@@ -1519,6 +1558,54 @@ mod tests {
         mo.z = Fixed16_16::from_int(z);
         let handle = slab.alloc(mo);
         (slab, handle)
+    }
+
+    #[test]
+    fn monster_spechit_thing_block_suppresses_special_line() {
+        // Vanilla `P_CheckPosition` checks THINGS before LINES. When a solid
+        // thing blocks the destination box, `P_CheckPosition` returns false
+        // before the line pass runs, so `numspechit` stays 0. This mirrors the
+        // DEMO3/E1M7 lt611 imp: it was blocked by another imp to its south, yet
+        // our `spechit` pass reported a special line beyond the blocker, causing
+        // `P_Move` to clear `movedir` and corrupt the `P_NewChaseDir` seed.
+        //
+        // Geometry: a two-sided *special* line at x=64. An imp (radius 20) at
+        // (50,64) moving to (60,64) has a destination box spanning x∈[40,80],
+        // which straddles the x=64 line — so absent a blocker the spechit pass
+        // must return that one special line.
+        let mut level = make_two_sided_step_level(0, 0);
+        level.linedefs[0].special = 88; // WR lift — any nonzero special line
+
+        let (mut slab, mover) = make_monster_slab(50, 64, 0);
+        let new_x = Fixed16_16::from_int(60);
+        let new_y = Fixed16_16::from_int(64);
+
+        // Baseline: no other thing → the straddled special line is collected.
+        let sh = monster_move_spechit(&slab, mover, new_x, new_y, &level);
+        assert_eq!(
+            sh,
+            vec![0usize],
+            "box straddling a two-sided special line must collect it"
+        );
+
+        // Add a solid thing overlapping the destination box (thing-first block).
+        let mut blocker = Mobj::new(
+            MobjKind::Imp,
+            new_x,
+            new_y,
+            Bam::ZERO,
+        );
+        blocker.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        blocker.radius = Fixed16_16::from_int(20);
+        blocker.height = Fixed16_16::from_int(56);
+        slab.alloc(blocker);
+
+        let sh_blocked = monster_move_spechit(&slab, mover, new_x, new_y, &level);
+        assert!(
+            sh_blocked.is_empty(),
+            "a solid thing blocking the destination must suppress the line pass \
+             (vanilla numspechit == 0), got {sh_blocked:?}"
+        );
     }
 
     #[test]
