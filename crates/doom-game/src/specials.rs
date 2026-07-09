@@ -21,8 +21,8 @@ use doom_types::{FIXED_ONE, Fixed16_16};
 use crate::mobj::MobjHandle;
 use crate::state::{
     CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
-    GameState, LiftMover, LiftStatus, LightEffectType, LightSpecial, MoveDirection,
-    PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
+    GameState, LiftMover, LiftStatus, LightEffectType, LightSpecial, LightThinkerKind,
+    MoveDirection, PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
 };
 
 // ---------------------------------------------------------------------------
@@ -46,6 +46,16 @@ const BLINK_FAST_PERIOD: i32 = 15;
 
 /// Period for slow blinking lights (tics).
 const BLINK_SLOW_PERIOD: i32 = 35;
+
+// Vanilla light thinker constants (chocolate-doom `p_spec.h`).
+/// Strobe bright phase length (`STROBEBRIGHT`).
+const STROBE_BRIGHT: i32 = 5;
+/// Strobe fast dark phase length (`FASTDARK`).
+const STROBE_FASTDARK: i32 = 15;
+/// Strobe slow dark phase length (`SLOWDARK`).
+const STROBE_SLOWDARK: i32 = 35;
+/// Glow light step per tic (`GLOWSPEED`).
+const GLOW_SPEED: i16 = 8;
 
 // Sector damage constants (legacy per tic)
 const LEGACY_DAMAGE_HELLSLIME: i32 = 10;
@@ -301,48 +311,152 @@ pub fn ev_teleport(gs: &mut GameState, level: &Level, tag: u16, mobj_handle: Mob
 // init_sector_lights / tick_sector_lights
 // ---------------------------------------------------------------------------
 
-/// Scan all sectors and create `SectorLightEffect` entries for extended
-/// light-related sector specials.
+/// Scan all sectors and spawn the vanilla light thinkers, mirroring the light
+/// cases of chocolate-doom `P_SpawnSpecials` (`p_spec.c`).
 ///
-/// Handles sector specials 1, 2, 3, 8, 12, 13, and 17.
+/// Sectors are visited in index order and the exact `P_Random` draws are
+/// consumed as vanilla does:
+/// - special 1  → `P_SpawnLightFlash`  : `count = (P_Random() & 64) + 1` (1 draw)
+/// - special 2/3/4 → `P_SpawnStrobeFlash(_, _, 0)` : `count = (P_Random() & 7) + 1` (1 draw)
+/// - special 12/13 → `P_SpawnStrobeFlash(_, _, 1)` : `count = 1` (no draw)
+/// - special 8  → `P_SpawnGlowingLight` (no draw)
+/// - special 17 → `P_SpawnFireFlicker`  : `count = 4` (no draw)
+///
 /// Call this once after loading a level, before the first tic.
 pub fn init_sector_lights(gs: &mut GameState, level: &Level) {
-    for (i, sector) in level.sectors.iter().enumerate() {
-        let Some(effect_type) = LightEffectType::from_repr(sector.special) else {
-            continue;
-        };
-
-        let min_light = match effect_type {
-            LightEffectType::BlinkRandom => 0,
-            LightEffectType::Blink05s => 0,
-            LightEffectType::Blink1s => 35,
-            LightEffectType::Oscillate => sector.light_level / 2,
-            LightEffectType::BlinkSync05s => 0,
-            LightEffectType::BlinkSync1s => 35,
-            LightEffectType::FireFlicker => sector.light_level.saturating_sub(16).max(0),
-        };
-
-        let timer = match effect_type {
-            LightEffectType::BlinkRandom => BLINK_SLOW_PERIOD as u32,
-            LightEffectType::Blink05s => BLINK_FAST_PERIOD as u32,
-            LightEffectType::Blink1s => BLINK_SLOW_PERIOD as u32,
-            LightEffectType::Oscillate => 1,
-            LightEffectType::BlinkSync05s => BLINK_FAST_PERIOD as u32,
-            LightEffectType::BlinkSync1s => BLINK_SLOW_PERIOD as u32,
-            LightEffectType::FireFlicker => 4,
-        };
-
-        gs.movers.sector_lights.push(SectorLightEffect {
-            sector_index: i,
-            effect_type,
-            base_light: sector.light_level,
-            min_light,
-            timer,
-        });
+    for i in 0..level.sectors.len() {
+        let special = level.sectors[i].special;
+        let light = level.sectors[i].light_level;
+        match special {
+            // FLICKERING LIGHTS — P_SpawnLightFlash.
+            1 => {
+                let min_light = find_min_surrounding_light(level, i, light);
+                let count = ((gs.p_random() as i32) & 64) + 1;
+                gs.movers.sector_lights.push(SectorLightEffect {
+                    sector_index: i,
+                    kind: LightThinkerKind::LightFlash,
+                    count,
+                    max_light: light,
+                    min_light,
+                    max_time: 64,
+                    min_time: 7,
+                    dark_time: 0,
+                    bright_time: 0,
+                    glow_dir: 0,
+                });
+            }
+            // STROBE FAST / SLOW / FAST-DEATHSLIME — non-sync.
+            2 => spawn_strobe_flash(gs, level, i, STROBE_FASTDARK, false),
+            3 => spawn_strobe_flash(gs, level, i, STROBE_SLOWDARK, false),
+            4 => spawn_strobe_flash(gs, level, i, STROBE_FASTDARK, false),
+            // GLOWING LIGHT — P_SpawnGlowingLight (no RNG).
+            8 => {
+                let min_light = find_min_surrounding_light(level, i, light);
+                gs.movers.sector_lights.push(SectorLightEffect {
+                    sector_index: i,
+                    kind: LightThinkerKind::Glow,
+                    count: 1,
+                    max_light: light,
+                    min_light,
+                    max_time: 0,
+                    min_time: 0,
+                    dark_time: 0,
+                    bright_time: 0,
+                    glow_dir: -1,
+                });
+            }
+            // SYNC STROBE SLOW / FAST — inSync (no RNG).
+            12 => spawn_strobe_flash(gs, level, i, STROBE_SLOWDARK, true),
+            13 => spawn_strobe_flash(gs, level, i, STROBE_FASTDARK, true),
+            // FIRE FLICKER — P_SpawnFireFlicker (no RNG at spawn).
+            17 => {
+                let min_light = find_min_surrounding_light(level, i, light) + 16;
+                gs.movers.sector_lights.push(SectorLightEffect {
+                    sector_index: i,
+                    kind: LightThinkerKind::FireFlicker,
+                    count: 4,
+                    max_light: light,
+                    min_light,
+                    max_time: 0,
+                    min_time: 0,
+                    dark_time: 0,
+                    bright_time: 0,
+                    glow_dir: 0,
+                });
+            }
+            _ => {}
+        }
     }
 }
 
-/// Advance all extended sector light effects by one tic.
+/// Spawn a `T_StrobeFlash` thinker, mirroring vanilla `P_SpawnStrobeFlash`.
+///
+/// `dark_time` is `FASTDARK` (15) or `SLOWDARK` (35).  A non-`in_sync` strobe
+/// draws one `P_Random` (`count = (P_Random() & 7) + 1`); an in-sync strobe
+/// uses `count = 1` and draws nothing.
+fn spawn_strobe_flash(gs: &mut GameState, level: &Level, i: usize, dark_time: i32, in_sync: bool) {
+    let light = level.sectors[i].light_level;
+    let mut min_light = find_min_surrounding_light(level, i, light);
+    if min_light == light {
+        min_light = 0;
+    }
+    let count = if in_sync {
+        1
+    } else {
+        ((gs.p_random() as i32) & 7) + 1
+    };
+    gs.movers.sector_lights.push(SectorLightEffect {
+        sector_index: i,
+        kind: LightThinkerKind::Strobe,
+        count,
+        max_light: light,
+        min_light,
+        max_time: 0,
+        min_time: 0,
+        dark_time,
+        bright_time: STROBE_BRIGHT,
+        glow_dir: 0,
+    });
+}
+
+/// Port of vanilla `P_FindMinSurroundingLight` (`p_spec.c`): the minimum light
+/// level among sectors sharing a two-sided linedef with sector `i`, starting
+/// from `max`.
+fn find_min_surrounding_light(level: &Level, i: usize, max: i16) -> i16 {
+    let mut min = max;
+    for ld in &level.linedefs {
+        // Only two-sided lines connect adjacent sectors (vanilla getNextSector).
+        if ld.left_sidedef == doom_map::SIDEDEF_NONE {
+            continue;
+        }
+        let front = level
+            .sidedefs
+            .get(ld.right_sidedef as usize)
+            .map(|sd| sd.sector as usize);
+        let back = level
+            .sidedefs
+            .get(ld.left_sidedef as usize)
+            .map(|sd| sd.sector as usize);
+        let other = if front == Some(i) {
+            back
+        } else if back == Some(i) {
+            front
+        } else {
+            continue;
+        };
+        if let Some(oi) = other
+            && let Some(os) = level.sectors.get(oi)
+            && os.light_level < min
+        {
+            min = os.light_level;
+        }
+    }
+    min
+}
+
+/// Advance all vanilla sector light thinkers by one tic, mirroring
+/// `T_LightFlash` / `T_StrobeFlash` / `T_FireFlicker` / `T_Glow` (`p_lights.c`),
+/// consuming `P_Random` exactly where vanilla does.
 ///
 /// Call this once per tic from `tick()`.
 pub fn tick_sector_lights(gs: &mut GameState, level: &mut Level) {
@@ -351,65 +465,61 @@ pub fn tick_sector_lights(gs: &mut GameState, level: &mut Level) {
             continue;
         }
 
-        effect.timer = effect.timer.saturating_sub(1);
-        if effect.timer > 0 {
+        // Vanilla: `if (--count) return;`
+        effect.count -= 1;
+        if effect.count != 0 {
             continue;
         }
 
         let sector = &mut level.sectors[effect.sector_index];
 
-        match effect.effect_type {
-            LightEffectType::BlinkRandom => {
-                // Toggle between base and dark at random-ish intervals.
-                if sector.light_level == effect.base_light {
+        match effect.kind {
+            LightThinkerKind::LightFlash => {
+                // T_LightFlash.
+                if sector.light_level == effect.max_light {
                     sector.light_level = effect.min_light;
-                    // Use a simple deterministic variation for the next period.
-                    effect.timer = (BLINK_SLOW_PERIOD as u32)
-                        .wrapping_add(effect.sector_index as u32 * 7)
-                        % 40
-                        + 10;
+                    effect.count = ((gs.rng.next_byte() as i32) & effect.min_time) + 1;
                 } else {
-                    sector.light_level = effect.base_light;
-                    effect.timer = BLINK_SLOW_PERIOD as u32;
+                    sector.light_level = effect.max_light;
+                    effect.count = ((gs.rng.next_byte() as i32) & effect.max_time) + 1;
                 }
             }
-            LightEffectType::Blink05s | LightEffectType::BlinkSync05s => {
-                if sector.light_level == effect.base_light {
+            LightThinkerKind::Strobe => {
+                // T_StrobeFlash — no RNG.
+                if sector.light_level == effect.min_light {
+                    sector.light_level = effect.max_light;
+                    effect.count = effect.bright_time;
+                } else {
+                    sector.light_level = effect.min_light;
+                    effect.count = effect.dark_time;
+                }
+            }
+            LightThinkerKind::FireFlicker => {
+                // T_FireFlicker.
+                let amount = ((gs.rng.next_byte() as i32) & 3) * 16;
+                if (sector.light_level as i32) - amount < effect.min_light as i32 {
                     sector.light_level = effect.min_light;
                 } else {
-                    sector.light_level = effect.base_light;
+                    sector.light_level = (effect.max_light as i32 - amount) as i16;
                 }
-                effect.timer = BLINK_FAST_PERIOD as u32;
+                effect.count = 4;
             }
-            LightEffectType::Blink1s | LightEffectType::BlinkSync1s => {
-                if sector.light_level == effect.base_light {
-                    sector.light_level = effect.min_light;
+            LightThinkerKind::Glow => {
+                // T_Glow — runs every tic, no RNG.
+                if effect.glow_dir < 0 {
+                    sector.light_level -= GLOW_SPEED;
+                    if sector.light_level <= effect.min_light {
+                        sector.light_level += GLOW_SPEED;
+                        effect.glow_dir = 1;
+                    }
                 } else {
-                    sector.light_level = effect.base_light;
+                    sector.light_level += GLOW_SPEED;
+                    if sector.light_level >= effect.max_light {
+                        sector.light_level -= GLOW_SPEED;
+                        effect.glow_dir = -1;
+                    }
                 }
-                effect.timer = BLINK_SLOW_PERIOD as u32;
-            }
-            LightEffectType::Oscillate => {
-                // Smooth oscillation: ramp light up and down.
-                let range = effect.base_light - effect.min_light;
-                if range <= 0 {
-                    effect.timer = 1;
-                    continue;
-                }
-                // Use level_time to create a smooth oscillation.
-                let phase = (gs.stats.level_time % (range as u32 * 2)) as i16;
-                sector.light_level = if phase < range {
-                    effect.min_light + phase
-                } else {
-                    effect.base_light - (phase - range)
-                };
-                effect.timer = 1;
-            }
-            LightEffectType::FireFlicker => {
-                // Random light variation within a small range.
-                let variation = (gs.rng.next_byte() & 3) as i16;
-                sector.light_level = (effect.base_light - variation * 4).max(effect.min_light);
-                effect.timer = 4;
+                effect.count = 1;
             }
         }
     }
@@ -5856,19 +5966,22 @@ mod tests {
         assert_eq!(
             gs.movers.sector_lights.len(),
             3,
-            "init_sector_lights must create effects for specials 1, 2, 3"
+            "init_sector_lights must create thinkers for specials 1, 2, 3"
         );
         assert_eq!(
-            gs.movers.sector_lights[0].effect_type,
-            crate::state::LightEffectType::BlinkRandom
+            gs.movers.sector_lights[0].kind,
+            crate::state::LightThinkerKind::LightFlash,
+            "special 1 spawns a T_LightFlash thinker"
         );
         assert_eq!(
-            gs.movers.sector_lights[1].effect_type,
-            crate::state::LightEffectType::Blink05s
+            gs.movers.sector_lights[1].kind,
+            crate::state::LightThinkerKind::Strobe,
+            "special 2 spawns a T_StrobeFlash thinker"
         );
         assert_eq!(
-            gs.movers.sector_lights[2].effect_type,
-            crate::state::LightEffectType::Blink1s
+            gs.movers.sector_lights[2].kind,
+            crate::state::LightThinkerKind::Strobe,
+            "special 3 spawns a T_StrobeFlash thinker"
         );
     }
 
@@ -5923,20 +6036,25 @@ mod tests {
 
     #[test]
     fn sector_light_effect_clone_works() {
-        use crate::state::{LightEffectType, SectorLightEffect};
+        use crate::state::{LightThinkerKind, SectorLightEffect};
         let effect = SectorLightEffect {
             sector_index: 0,
-            effect_type: LightEffectType::Oscillate,
-            base_light: 200,
+            kind: LightThinkerKind::LightFlash,
+            count: 10,
+            max_light: 200,
             min_light: 100,
-            timer: 10,
+            max_time: 64,
+            min_time: 7,
+            dark_time: 0,
+            bright_time: 0,
+            glow_dir: 0,
         };
         let cloned = effect.clone();
         assert_eq!(cloned.sector_index, 0);
-        assert_eq!(cloned.effect_type, LightEffectType::Oscillate);
-        assert_eq!(cloned.base_light, 200);
+        assert_eq!(cloned.kind, LightThinkerKind::LightFlash);
+        assert_eq!(cloned.max_light, 200);
         assert_eq!(cloned.min_light, 100);
-        assert_eq!(cloned.timer, 10);
+        assert_eq!(cloned.count, 10);
     }
 
     // -----------------------------------------------------------------------
@@ -6030,14 +6148,19 @@ mod tests {
 
     #[test]
     fn game_state_clone_includes_sector_lights() {
-        use crate::state::{LightEffectType, SectorLightEffect};
+        use crate::state::{LightThinkerKind, SectorLightEffect};
         let mut gs = GameState::new("TEST");
         gs.movers.sector_lights.push(SectorLightEffect {
             sector_index: 0,
-            effect_type: LightEffectType::Blink05s,
-            base_light: 200,
+            kind: LightThinkerKind::Strobe,
+            count: 15,
+            max_light: 200,
             min_light: 0,
-            timer: 15,
+            max_time: 0,
+            min_time: 0,
+            dark_time: 15,
+            bright_time: 5,
+            glow_dir: 0,
         });
 
         let gs2 = gs.clone();
@@ -6046,7 +6169,7 @@ mod tests {
             1,
             "clone must include sector_lights"
         );
-        assert_eq!(gs2.movers.sector_lights[0].base_light, 200);
+        assert_eq!(gs2.movers.sector_lights[0].max_light, 200);
     }
 
     // -----------------------------------------------------------------------
@@ -6094,12 +6217,14 @@ mod tests {
 
         assert_eq!(gs.movers.sector_lights.len(), 2);
         assert_eq!(
-            gs.movers.sector_lights[0].effect_type,
-            crate::state::LightEffectType::Oscillate
+            gs.movers.sector_lights[0].kind,
+            crate::state::LightThinkerKind::Glow,
+            "special 8 spawns a T_Glow thinker"
         );
         assert_eq!(
-            gs.movers.sector_lights[1].effect_type,
-            crate::state::LightEffectType::FireFlicker
+            gs.movers.sector_lights[1].kind,
+            crate::state::LightThinkerKind::FireFlicker,
+            "special 17 spawns a T_FireFlicker thinker"
         );
     }
 
