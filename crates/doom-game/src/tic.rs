@@ -351,6 +351,19 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
         return;
     }
 
+    // Sector specials — vanilla `P_PlayerThink` runs `P_PlayerInSpecialSector`
+    // BEFORE the player mobj's position/z is integrated for this tic (position
+    // integration happens later in `P_MobjThinker`, after `P_PlayerThink`).
+    // In doom-rs `p_move_player` integrates the player's z inline, so the check
+    // must run FIRST — sampling the position/z left over from the previous tic,
+    // exactly as vanilla does. Sampling after `p_move_player` would see the z
+    // one tic early (e.g. reaching a nukage floor mid-descent) and apply
+    // spurious floor damage vanilla does not. `leveltime` is unchanged by this
+    // ordering (it is incremented later, in `tick_world`).
+    if let Some(lv) = level.as_deref_mut() {
+        crate::specials::p_player_in_special_sector(gs, lv);
+    }
+
     // Movement + attack (immutable level borrow).
     p_move_player(gs, cmd, level.as_deref_mut());
 
@@ -382,15 +395,6 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
     }
 
     crate::weapons::tick_psprites(gs, cmd, level.as_deref());
-
-    // Sector specials — vanilla P_PlayerInSpecialSector: floor damage, secret
-    // discovery, and super-damage exit for the single sector the player's
-    // origin is actually in (not every sector sharing the player's floor z).
-    if !gs.player.is_dead() {
-        if let Some(lv) = level.as_deref_mut() {
-            crate::specials::p_player_in_special_sector(gs, lv);
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

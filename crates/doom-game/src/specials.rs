@@ -6363,6 +6363,57 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
+    // Tests: p_player_in_special_sector (vanilla harness path)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn special_sector_damages_when_on_floor_on_period() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let mut level = make_damage_level(0, 7); // nukage: 5 damage
+
+        gs.stats.level_time = 32; // 32 & 0x1f == 0 -> damaging period
+        p_player_in_special_sector(&mut gs, &mut level);
+
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
+        assert_eq!(
+            mo.health, 95,
+            "nukage (special 7) must deal 5 damage when the player rests on the floor"
+        );
+    }
+
+    /// Regression for the DEMO1 tic-32 spurious-damage bug: vanilla's
+    /// `P_PlayerInSpecialSector` runs at the start of `P_PlayerThink`, BEFORE the
+    /// player mobj's z is integrated for the tic, so a player still descending a
+    /// stair onto a nukage floor has `z != floorheight` and is NOT damaged that
+    /// tic — even on a damaging period. `p_player_in_special_sector` reproduces
+    /// this with its "falling, not all the way down yet" early return; combined
+    /// with the tick_player ordering (check before `p_move_player`), it prevents
+    /// applying floor damage one tic early.
+    #[test]
+    fn special_sector_no_damage_while_still_descending() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        // Player is above the nukage floor (mid-descent): z(8) != floorheight(0).
+        gs.mobjslab
+            .get_mut(handle)
+            .expect("value must exist in test")
+            .z = Fixed16_16::from_int(8);
+        let mut level = make_damage_level(0, 7);
+
+        gs.stats.level_time = 32; // damaging period, but player not on floor yet
+        p_player_in_special_sector(&mut gs, &mut level);
+
+        let mo = gs.mobjslab.get(handle).expect("value must exist in test");
+        assert_eq!(
+            mo.health, 100,
+            "no floor damage while the player is still above the sector floor"
+        );
+    }
+
+    // -----------------------------------------------------------------------
     // Helpers for stairs/donut/platform tests
     // -----------------------------------------------------------------------
 
