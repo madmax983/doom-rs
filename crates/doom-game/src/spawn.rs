@@ -48,12 +48,6 @@ impl Skill {
 // Thing flag bits (from the WAD THINGS lump)
 // ---------------------------------------------------------------------------
 
-/// Thing appears on skill 1 & 2 (Baby / Easy).
-const MTF_EASY: u16 = 0x0001;
-/// Thing appears on skill 3 (Medium / Hurt Me Plenty).
-const MTF_MEDIUM: u16 = 0x0002;
-/// Thing appears on skill 4 & 5 (Hard / Nightmare).
-const MTF_HARD: u16 = 0x0004;
 /// Monster is deaf / ambush — won't react to sound, only sight.
 const MTF_AMBUSH: u16 = 0x0008;
 /// Thing only appears in multiplayer (deathmatch / coop).
@@ -62,6 +56,10 @@ const MTF_MULTIPLAYER: u16 = 0x0010;
 // ---------------------------------------------------------------------------
 // Angle conversion
 // ---------------------------------------------------------------------------
+
+/// Maximum simultaneous players (vanilla `MAXPLAYERS`).  Used for the
+/// `mobj->lastlook = P_Random() % MAXPLAYERS` draw in P_SpawnMobj.
+const MAXPLAYERS: u8 = 4;
 
 /// BAM units per degree: 2^32 / 360.
 const BAM_PER_DEGREE: u32 = (0x1_0000_0000u64 / 360) as u32;
@@ -138,26 +136,6 @@ fn sync_mobj_to_level(level: &Level, mo: &mut Mobj) {
 }
 
 // ---------------------------------------------------------------------------
-// Skill filtering
-// ---------------------------------------------------------------------------
-
-/// Returns `true` if the thing should be spawned at the given skill level.
-fn should_spawn_for_skill(thing_flags: u16, skill: Skill) -> bool {
-    let skill_bits = thing_flags & (MTF_EASY | MTF_MEDIUM | MTF_HARD);
-
-    // If no skill bits are set at all, spawn it anyway (some WADs do this).
-    if skill_bits == 0 {
-        return true;
-    }
-
-    match skill {
-        Skill::Baby | Skill::Easy => skill_bits & MTF_EASY != 0,
-        Skill::Medium => skill_bits & MTF_MEDIUM != 0,
-        Skill::Hard | Skill::Nightmare => skill_bits & MTF_HARD != 0,
-    }
-}
-
-// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -185,49 +163,108 @@ pub fn spawn_level_things(
 ) -> Option<MobjHandle> {
     let mut player_handle: Option<MobjHandle> = None;
 
+    // Vanilla P_SpawnMapThing skill bit (p_mobj.c): sk_baby->1, sk_nightmare->4,
+    // otherwise 1 << (gameskill-1).  A thing spawns only if `options & bit`.
+    let skill_bit: u16 = match skill {
+        Skill::Baby | Skill::Easy => 1,
+        Skill::Medium => 2,
+        Skill::Hard | Skill::Nightmare => 4,
+    };
+
+    // Iterate the THINGS lump in file order, mirroring vanilla P_SpawnMapThing
+    // call order so the P_Random consumption matches vanilla draw-for-draw.
     for thing in &level.things {
-        // --- Skill filter ---
-        if !should_spawn_for_skill(thing.flags, skill) {
+        let ttype = thing.kind; // DoomEd number.
+
+        // --- Deathmatch start (type 11): counted, never spawns (no RNG). ---
+        if ttype == 11 {
             continue;
         }
 
-        // --- Multiplayer filter ---
+        // --- "player -1 start" / invalid (vanilla: type <= 0). ---
+        if ttype == 0 {
+            continue;
+        }
+
+        // --- Player starts (types 1..=4), handled BEFORE skill/MP filters. ---
+        if ttype <= 4 {
+            // In single player only player 1 is in-game, so only a type-1 start
+            // spawns a mobj (drawing one P_Random for lastlook).  Coop starts
+            // (2..=4) reserve a respawn spot but spawn nothing here.
+            if ttype == 1 && game_mode != GameMode::Deathmatch {
+                let angle = spawn_angle_to_bam(thing.angle);
+                let x = Fixed16_16::from_int(thing.x as i32);
+                let y = Fixed16_16::from_int(thing.y as i32);
+                // P_SpawnMobj (p_mobj.c:547): mobj->lastlook = P_Random() % MAXPLAYERS.
+                let _lastlook = (gs.p_random() as u32) % (MAXPLAYERS as u32);
+                let mut mo = Mobj::new(MobjKind::Player, x, y, angle);
+                apply_mobjinfo_defaults(&mut mo);
+                sync_mobj_to_level(level, &mut mo);
+                let handle = gs.mobjslab.alloc(mo);
+                gs.player = PlayerState::pistol_start(handle);
+                crate::weapons::setup_psprites(&mut gs.player);
+                player_handle = Some(handle);
+            }
+            continue;
+        }
+
+        // --- Multiplayer-only filter (vanilla: !netgame && options & 16). ---
         if thing.flags & MTF_MULTIPLAYER != 0 && game_mode != GameMode::Deathmatch {
             continue;
         }
 
-        // --- Map DoomEd type to MobjKind ---
-        let kind = match doomed_type_to_kind(thing.kind) {
-            Some(k) => k,
-            None => continue, // Unknown thing type -- skip
+        // --- Skill-bit filter (vanilla: if !(options & bit) return). ---
+        if thing.flags & skill_bit == 0 {
+            continue;
+        }
+
+        // --- Look up the placeable DoomEd type. ---
+        // Vanilla scans mobjinfo[] for a matching doomednum (I_Error if none).
+        // `spawn_thing_tics` returns that type's spawnstate tic count, which
+        // drives the tic-randomization draw.  We consume the spawn RNG for
+        // EVERY placeable type so the stream matches vanilla, and build a
+        // fully-simulated Mobj for the subset of types we model (monsters,
+        // items, barrels); other placeable types (static/animated decorations)
+        // currently only consume their RNG draws.
+        let Some(spawnstate_tics) = spawn_thing_tics(ttype) else {
+            // Not a placeable vanilla type (vanilla would I_Error). Skip.
+            continue;
         };
 
-        // --- Angle conversion ---
-        // Spawn angles use vanilla's exact ANG45 * (deg/45) formula so that
-        // cardinal/ordinal spawn angles are bit-exact for demo sync.
         let angle = spawn_angle_to_bam(thing.angle);
         let x = Fixed16_16::from_int(thing.x as i32);
         let y = Fixed16_16::from_int(thing.y as i32);
 
-        // --- Player start ---
-        if kind == MobjKind::Player {
-            let mut mo = Mobj::new(kind, x, y, angle);
-            apply_mobjinfo_defaults(&mut mo);
-            sync_mobj_to_level(level, &mut mo);
-            let handle = gs.mobjslab.alloc(mo);
-            gs.player = PlayerState::pistol_start(handle);
-            crate::weapons::setup_psprites(&mut gs.player);
-            player_handle = Some(handle);
+        // P_SpawnMobj (p_mobj.c:547): mobj->lastlook = P_Random() % MAXPLAYERS.
+        let _lastlook = (gs.p_random() as u32) % (MAXPLAYERS as u32);
+
+        // P_SpawnMapThing (p_mobj.c:851): after P_SpawnMobj,
+        //   if (mobj->tics > 0)
+        //       mobj->tics = 1 + (P_Random() % mobj->tics);
+        // Randomizes the initial animation phase. One draw when tics > 0.
+        let randomized_tics: Option<i16> = if spawnstate_tics > 0 {
+            Some((1 + (gs.p_random() as i32 % spawnstate_tics as i32)) as i16)
+        } else {
+            None
+        };
+
+        // Build a simulated Mobj for the types we model.  Decorations we don't
+        // model have already consumed their RNG draws above.
+        let Some(kind) = doomed_type_to_kind(ttype) else {
             continue;
+        };
+        if kind == MobjKind::Player {
+            continue; // unreachable for ttype > 4, but guard defensively.
         }
 
-        // --- Non-player things (monsters, items, decorations) ---
         let mut mo = Mobj::new(kind, x, y, angle);
         apply_mobjinfo_defaults(&mut mo);
-        // Vanilla P_SpawnMapThing/P_SpawnMobj set mobj->tics = st->tics
-        // directly and do NOT consume any P_Random byte at spawn time.
-        // (apply_mobjinfo_defaults already set mo.tics = spawnstate.tics.)
         sync_mobj_to_level(level, &mut mo);
+
+        // Apply the vanilla tic-randomization result to the simulated mobj.
+        if let Some(t) = randomized_tics {
+            mo.tics = t;
+        }
 
         // Apply ambush flag from thing flags (deaf monsters).
         if thing.flags & MTF_AMBUSH != 0 {
@@ -238,7 +275,7 @@ pub fn spawn_level_things(
         mo.spawn_x = x;
         mo.spawn_y = y;
         mo.spawn_angle = angle;
-        mo.spawn_type = thing.kind;
+        mo.spawn_type = ttype;
 
         let handle = gs.mobjslab.alloc(mo);
 
@@ -254,6 +291,143 @@ pub fn spawn_level_things(
     }
 
     player_handle
+}
+
+/// Spawnstate tic count for every placeable vanilla DoomEd thing type.
+///
+/// Returns `Some(tics)` — the `tics` field of the type's spawnstate in vanilla
+/// `states[]` — for any placeable `doomednum`, or `None` for a number that has
+/// no `mobjinfo` entry (which vanilla treats as a fatal `I_Error`).
+///
+/// This drives the P_SpawnMapThing tic-randomization draw:
+/// `if (mobj->tics > 0) mobj->tics = 1 + (P_Random() % mobj->tics)`.  The table
+/// is generated from chocolate-doom `src/doom/info.c` (mobjinfo doomednum +
+/// spawnstate, resolved through states[]).  Player/coop/deathmatch starts
+/// (types 1..=4, 11) are intentionally absent — vanilla handles them before the
+/// mobjinfo lookup.
+fn spawn_thing_tics(doomednum: u16) -> Option<i16> {
+    let tics: i16 = match doomednum {
+        5 => 10,     // S_BKEY
+        6 => 10,     // S_YKEY
+        7 => 10,     // S_SPID_STND
+        8 => -1,     // S_BPAK
+        9 => 10,     // S_SPOS_STND
+        10 => -1,    // S_PLAY_XDIE9
+        12 => -1,    // S_PLAY_XDIE9
+        13 => 10,    // S_RKEY
+        14 => -1,    // S_NULL (teleport landing)
+        15 => -1,    // S_PLAY_DIE7
+        16 => 10,    // S_CYBER_STND
+        17 => -1,    // S_CELP
+        18 => -1,    // S_POSS_DIE5
+        19 => -1,    // S_SPOS_DIE5
+        20 => -1,    // S_TROO_DIE5
+        21 => -1,    // S_SARG_DIE6
+        22 => -1,    // S_HEAD_DIE6
+        23 => 6,     // S_SKULL_DIE6
+        24 => -1,    // S_GIBS
+        25 => -1,    // S_DEADSTICK
+        26 => 6,     // S_LIVESTICK
+        27 => -1,    // S_HEADONASTICK
+        28 => -1,    // S_HEADSONSTICK
+        29 => 6,     // S_HEADCANDLES
+        30 => -1,    // S_TALLGRNCOL
+        31 => -1,    // S_SHRTGRNCOL
+        32 => -1,    // S_TALLREDCOL
+        33 => -1,    // S_SHRTREDCOL
+        34 => -1,    // S_CANDLESTIK
+        35 => -1,    // S_CANDELABRA
+        36 => 14,    // S_HEARTCOL
+        37 => -1,    // S_SKULLCOL
+        38 => 10,    // S_RSKULL
+        39 => 10,    // S_YSKULL
+        40 => 10,    // S_BSKULL
+        41 => 6,     // S_EVILEYE
+        42 => 6,     // S_FLOATSKULL
+        43 => -1,    // S_TORCHTREE
+        44 => 4,     // S_BLUETORCH
+        45 => 4,     // S_GREENTORCH
+        46 => 4,     // S_REDTORCH
+        47 => -1,    // S_STALAGTITE
+        48 => -1,    // S_TECHPILLAR
+        49 => 10,    // S_BLOODYTWITCH
+        50 => -1,    // S_MEAT2
+        51 => -1,    // S_MEAT3
+        52 => -1,    // S_MEAT4
+        53 => -1,    // S_MEAT5
+        54 => -1,    // S_BIGTREE
+        55 => 4,     // S_BTORCHSHRT
+        56 => 4,     // S_GTORCHSHRT
+        57 => 4,     // S_RTORCHSHRT
+        58 => 10,    // S_SARG_STND
+        59 => -1,    // S_MEAT2
+        60 => -1,    // S_MEAT4
+        61 => -1,    // S_MEAT3
+        62 => -1,    // S_MEAT5
+        63 => 10,    // S_BLOODYTWITCH
+        64 => 10,    // S_VILE_STND
+        65 => 10,    // S_CPOS_STND
+        66 => 10,    // S_SKEL_STND
+        67 => 15,    // S_FATT_STND
+        68 => 10,    // S_BSPI_STND
+        69 => 10,    // S_BOS2_STND
+        70 => 4,     // S_BBAR1
+        71 => 10,    // S_PAIN_STND
+        72 => -1,    // S_KEENSTND
+        73 => -1,    // S_HANGNOGUTS
+        74 => -1,    // S_HANGBNOBRAIN
+        75 => -1,    // S_HANGTLOOKDN
+        76 => -1,    // S_HANGTSKULL
+        77 => -1,    // S_HANGTLOOKUP
+        78 => -1,    // S_HANGTNOBRAIN
+        79 => -1,    // S_COLONGIBS
+        80 => -1,    // S_SMALLPOOL
+        81 => -1,    // S_BRAINSTEM
+        82 => -1,    // S_SHOT2
+        83 => 6,     // S_MEGA
+        84 => 10,    // S_SSWV_STND
+        85 => 4,     // S_TECHLAMP
+        86 => 4,     // S_TECH2LAMP
+        87 => -1,    // S_NULL (spawn spot)
+        88 => -1,    // S_BRAIN
+        89 => 10,    // S_BRAINEYE
+        2001 => -1,  // S_SHOT
+        2002 => -1,  // S_MGUN
+        2003 => -1,  // S_LAUN
+        2004 => -1,  // S_PLAS
+        2005 => -1,  // S_CSAW
+        2006 => -1,  // S_BFUG
+        2007 => -1,  // S_CLIP
+        2008 => -1,  // S_SHEL
+        2010 => -1,  // S_ROCK
+        2011 => -1,  // S_STIM
+        2012 => -1,  // S_MEDI
+        2013 => 6,   // S_SOUL
+        2014 => 6,   // S_BON1
+        2015 => 6,   // S_BON2
+        2018 => 6,   // S_ARM1
+        2019 => 6,   // S_ARM2
+        2022 => 6,   // S_PINV
+        2023 => -1,  // S_PSTR
+        2024 => 6,   // S_PINS
+        2025 => -1,  // S_SUIT
+        2026 => 6,   // S_PMAP
+        2028 => -1,  // S_COLU
+        2035 => 6,   // S_BAR1
+        2045 => 6,   // S_PVIS
+        2046 => -1,  // S_BROK
+        2047 => -1,  // S_CELL
+        2048 => -1,  // S_AMMO
+        2049 => -1,  // S_SBOX
+        3001 => 10,  // S_TROO_STND
+        3002 => 10,  // S_SARG_STND
+        3003 => 10,  // S_BOSS_STND
+        3004 => 10,  // S_POSS_STND
+        3005 => 10,  // S_HEAD_STND
+        3006 => 10,  // S_SKULL_STND
+        _ => return None,
+    };
+    Some(tics)
 }
 
 // ---------------------------------------------------------------------------
@@ -772,9 +946,12 @@ mod tests {
     }
 
     #[test]
-    fn spawn_nonplayer_uses_spawnstate_tics_and_consumes_no_rng() {
-        // Vanilla P_SpawnMobj sets mobj->tics = st->tics directly and does NOT
-        // call P_Random at spawn time (critical for demo sync).
+    fn spawn_nonplayer_randomizes_tics_and_advances_rng() {
+        // Vanilla P_SpawnMobj draws `lastlook = P_Random() % MAXPLAYERS` for
+        // every spawned mobj, then P_SpawnMapThing does
+        // `if (mobj->tics > 0) mobj->tics = 1 + (P_Random() % mobj->tics)`.
+        // For a Trooper (spawnstate tics = 10) that is two draws total, and the
+        // resulting tics must equal 1 + (draw % 10) in [1, 10].
         let level = make_test_level_with_things(vec![Thing {
             x: 64,
             y: 0,
@@ -783,19 +960,15 @@ mod tests {
             flags: 7,
         }]);
 
-        // Expected spawn tics = the Trooper's spawnstate tics (no randomization).
-        let mut reference = Mobj::new(
-            MobjKind::Trooper,
-            Fixed16_16::from_int(0),
-            Fixed16_16::from_int(0),
-            Bam::ZERO,
-        );
-        apply_mobjinfo_defaults(&mut reference);
-        let expected_tics = reference.tics;
-
         let mut gs = GameState::new("E1M1");
         gs.rng.set_index(3);
         let index_before = gs.rng.index();
+
+        // Predict the exact vanilla draws: lastlook then tics-randomization.
+        let mut predictor = GameState::new("E1M1");
+        predictor.rng.set_index(3);
+        let _lastlook = (predictor.p_random() as u32) % 4;
+        let expected_tics = (1 + (predictor.p_random() as i32 % 10)) as i16;
 
         spawn_level_things(&mut gs, &level, Skill::Medium, GameMode::SinglePlayer);
         let trooper = gs
@@ -806,12 +979,16 @@ mod tests {
 
         assert_eq!(
             trooper.tics, expected_tics,
-            "spawn tics must equal spawnstate tics (no randomization)"
+            "spawn tics must be the vanilla-randomized 1 + (P_Random() % spawnstate_tics)"
+        );
+        assert!(
+            (1..=10).contains(&trooper.tics),
+            "randomized tics must be in [1, spawnstate_tics]"
         );
         assert_eq!(
             gs.rng.index(),
-            index_before,
-            "spawn must not consume any RNG bytes"
+            (index_before + 2) & 255,
+            "spawn must consume exactly two RNG bytes (lastlook + tic randomization)"
         );
     }
 
@@ -923,8 +1100,10 @@ mod tests {
     }
 
     #[test]
-    fn spawn_when_no_skill_bits_set() {
-        // Some WADs have things with flags & 7 == 0; they should spawn anyway.
+    fn spawn_skips_thing_with_no_skill_bit() {
+        // Vanilla P_SpawnMapThing spawns a thing only when `options & bit` is
+        // set for the active skill.  A thing with no skill bits (flags & 7 == 0)
+        // fails that test at every skill and is NOT spawned.
         let level = make_test_level_with_things(vec![Thing {
             x: 0,
             y: 0,
@@ -944,7 +1123,10 @@ mod tests {
                     .unwrap_or(false)
             })
             .count();
-        assert_eq!(count, 1, "Things with no skill bits should spawn anyway");
+        assert_eq!(
+            count, 0,
+            "Things with no skill bit for the active skill must not spawn (vanilla)"
+        );
     }
 
     // ===================================================================
@@ -1375,66 +1557,70 @@ mod tests {
     }
 
     // ===================================================================
-    // Skill filter unit tests
+    // Skill filter behavior (vanilla `options & bit`)
     // ===================================================================
 
     #[test]
-    fn should_spawn_for_skill_easy_bit() {
-        assert!(should_spawn_for_skill(1, Skill::Baby));
-        assert!(should_spawn_for_skill(1, Skill::Easy));
-        assert!(!should_spawn_for_skill(1, Skill::Medium));
-        assert!(!should_spawn_for_skill(1, Skill::Hard));
-        assert!(!should_spawn_for_skill(1, Skill::Nightmare));
-    }
-
-    #[test]
-    fn should_spawn_for_skill_medium_bit() {
-        assert!(!should_spawn_for_skill(2, Skill::Baby));
-        assert!(!should_spawn_for_skill(2, Skill::Easy));
-        assert!(should_spawn_for_skill(2, Skill::Medium));
-        assert!(!should_spawn_for_skill(2, Skill::Hard));
-        assert!(!should_spawn_for_skill(2, Skill::Nightmare));
-    }
-
-    #[test]
-    fn should_spawn_for_skill_hard_bit() {
-        assert!(!should_spawn_for_skill(4, Skill::Baby));
-        assert!(!should_spawn_for_skill(4, Skill::Easy));
-        assert!(!should_spawn_for_skill(4, Skill::Medium));
-        assert!(should_spawn_for_skill(4, Skill::Hard));
-        assert!(should_spawn_for_skill(4, Skill::Nightmare));
-    }
-
-    #[test]
-    fn should_spawn_for_skill_all_bits() {
-        for skill in [
-            Skill::Baby,
-            Skill::Easy,
-            Skill::Medium,
-            Skill::Hard,
-            Skill::Nightmare,
-        ] {
-            assert!(
-                should_spawn_for_skill(7, skill),
-                "flags=7 should spawn at all skills"
+    fn spawn_skill_bit_filter_matches_vanilla() {
+        // Vanilla bit: baby/easy -> 1, medium -> 2, hard/nightmare -> 4.
+        // A thing spawns iff `options & bit`.
+        let cases = [
+            (1u16, Skill::Easy, true),
+            (1u16, Skill::Medium, false),
+            (1u16, Skill::Hard, false),
+            (2u16, Skill::Easy, false),
+            (2u16, Skill::Medium, true),
+            (2u16, Skill::Hard, false),
+            (4u16, Skill::Easy, false),
+            (4u16, Skill::Medium, false),
+            (4u16, Skill::Hard, true),
+            (7u16, Skill::Easy, true),
+            (7u16, Skill::Medium, true),
+            (7u16, Skill::Hard, true),
+            (0u16, Skill::Medium, false),
+        ];
+        for (flags, skill, should_spawn) in cases {
+            let level = make_test_level_with_things(vec![Thing {
+                x: 0,
+                y: 0,
+                angle: 0,
+                kind: 3004,
+                flags,
+            }]);
+            let mut gs = GameState::new("TEST");
+            spawn_level_things(&mut gs, &level, skill, GameMode::SinglePlayer);
+            let count = gs
+                .mobjslab
+                .iter_handles()
+                .filter(|&h| {
+                    gs.mobjslab
+                        .get(h)
+                        .map(|m| m.kind == MobjKind::Trooper)
+                        .unwrap_or(false)
+                })
+                .count();
+            assert_eq!(
+                count,
+                usize::from(should_spawn),
+                "flags={flags:#x} skill={skill:?} expected spawn={should_spawn}"
             );
         }
     }
 
     #[test]
-    fn should_spawn_for_skill_zero_bits() {
-        for skill in [
-            Skill::Baby,
-            Skill::Easy,
-            Skill::Medium,
-            Skill::Hard,
-            Skill::Nightmare,
-        ] {
-            assert!(
-                should_spawn_for_skill(0, skill),
-                "flags=0 should spawn at all skills (WAD compat)"
-            );
-        }
+    fn spawn_thing_tics_matches_vanilla_table() {
+        // Spot-check the generated doomednum -> spawnstate-tics table against
+        // vanilla info.c values.
+        assert_eq!(spawn_thing_tics(3004), Some(10)); // Trooper S_POSS_STND
+        assert_eq!(spawn_thing_tics(3001), Some(10)); // Imp S_TROO_STND
+        assert_eq!(spawn_thing_tics(2035), Some(6)); // Barrel S_BAR1
+        assert_eq!(spawn_thing_tics(2001), Some(-1)); // Shotgun (static)
+        assert_eq!(spawn_thing_tics(2014), Some(6)); // HealthBonus S_BON1
+        assert_eq!(spawn_thing_tics(48), Some(-1)); // Tech pillar (static decoration)
+        assert_eq!(spawn_thing_tics(9999), None); // not placeable
+        // Player/coop/deathmatch starts are handled before the mobjinfo lookup.
+        assert_eq!(spawn_thing_tics(1), None);
+        assert_eq!(spawn_thing_tics(11), None);
     }
 
     // ===================================================================
