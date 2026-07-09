@@ -6,7 +6,7 @@
 
 use doom_types::Fixed16_16;
 
-use crate::mobj::MobjSlab;
+use crate::mobj::{MobjHandle, MobjSlab};
 use crate::player::PlayerState;
 use crate::spawn::Skill;
 
@@ -129,6 +129,14 @@ pub struct GameState {
     #[cfg(feature = "telemetry")]
     /// Tracks spatial player path data over the session.
     pub telemetry: crate::telemetry::SessionTelemetry,
+    /// Walkover special lines crossed by monsters during this tic's actor pass,
+    /// as `(linedef_index, activator)` in crossing order.
+    ///
+    /// Vanilla `P_TryMove` fires `P_CrossSpecialLine` inline during a monster's
+    /// move, but our AI tick borrows the level immutably, so these are recorded
+    /// here and dispatched right after the actor pass (before the sector movers
+    /// run) — the same tic, matching vanilla's appended-thinker timing.
+    pub pending_monster_crossings: Vec<(usize, MobjHandle)>,
 }
 
 impl GameState {
@@ -159,6 +167,7 @@ impl GameState {
             style: crate::style::StyleMeter::new(),
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
+            pending_monster_crossings: Vec::new(),
         }
     }
 

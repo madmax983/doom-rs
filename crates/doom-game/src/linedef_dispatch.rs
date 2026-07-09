@@ -1214,6 +1214,141 @@ fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
 /// For each linedef with a walk-trigger special (W1 or WR), checks if the
 /// movement segment crosses the linedef. If so, dispatches the linedef
 /// action.
+/// Whether a non-player actor (monster) may activate `special` by walking over
+/// it, matching the `!thing->player` whitelist in vanilla `P_CrossSpecialLine`
+/// (`p_spec.c`): teleports, a raise-door, and lower-wait-raise lifts.
+pub fn monster_can_cross_special(special: u16) -> bool {
+    matches!(
+        special,
+        4    // W1 Door raise
+        | 10 // W1 Plat down-wait-up-stay
+        | 39 // W1 Teleport
+        | 88 // WR Plat down-wait-up-stay
+        | 97 // WR Teleport
+        | 125 // W1 Teleport (monsters only)
+        | 126 // WR Teleport (monsters only)
+    )
+}
+
+/// Record the monster-crossable special lines whose side a monster's centre
+/// crossed while stepping from `(old_x, old_y)` to `(new_x, new_y)`, in
+/// farthest-hit-first order (matching vanilla `P_TryMove`'s reverse `spechit`
+/// walk). They are dispatched later, in `dispatch_pending_monster_crossings`,
+/// once the level can be borrowed mutably.
+///
+/// This is the monster (`!thing->player`) counterpart to `check_cross_lines`:
+/// only the vanilla monster whitelist (`monster_can_cross_special`) is eligible,
+/// so a monster can activate a lift / teleport / raise-door line it walks over
+/// but never the player-only walk triggers.
+pub fn queue_monster_crossings(
+    gs: &mut GameState,
+    level: &Level,
+    actor: MobjHandle,
+    old_x: i32,
+    old_y: i32,
+    new_x: i32,
+    new_y: i32,
+) {
+    let mut hits: smallvec::SmallVec<[(i64, i64, usize); 4]> = level
+        .linedefs
+        .iter()
+        .enumerate()
+        .filter_map(|(i, ld)| {
+            if ld.special == 0 || !monster_can_cross_special(ld.special) {
+                return None;
+            }
+            let v1 = &level.vertexes[ld.from_vertex as usize];
+            let v2 = &level.vertexes[ld.to_vertex as usize];
+            segment_intersection_frac(
+                old_x, old_y, new_x, new_y, v1.x as i32, v1.y as i32, v2.x as i32, v2.y as i32,
+            )
+            .map(|(num, denom)| (num, denom, i))
+        })
+        .collect();
+
+    if hits.is_empty() {
+        return;
+    }
+
+    // Nearest-first along the path; vanilla walks `spechit` in reverse (farthest
+    // contacted first), so push farthest first.
+    hits.sort_by(|a, b| {
+        let lhs = i128::from(a.0) * i128::from(b.1);
+        let rhs = i128::from(b.0) * i128::from(a.1);
+        lhs.cmp(&rhs)
+    });
+    for (_, _, ld_idx) in hits.into_iter().rev() {
+        gs.pending_monster_crossings.push((ld_idx, actor));
+    }
+}
+
+/// Dispatch every monster line-crossing recorded this tic by
+/// `queue_monster_crossings`, then clear the queue. Call once per tic after the
+/// actor pass and before the sector movers run, so an activated lift takes its
+/// first step on the same tic (vanilla appends the plat thinker to the running
+/// thinker list).
+pub fn dispatch_pending_monster_crossings(gs: &mut GameState, level: &mut Level) {
+    if gs.pending_monster_crossings.is_empty() {
+        return;
+    }
+    let pending = std::mem::take(&mut gs.pending_monster_crossings);
+    for (ld_idx, actor) in pending {
+        let special = match level.linedefs.get(ld_idx) {
+            Some(ld) => ld.special,
+            None => continue,
+        };
+        let Some(trigger) = classify_trigger(special) else {
+            continue;
+        };
+        dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
+    }
+}
+
+/// Dispatch the walkover line-crossings accumulated by the player's move this
+/// tic (vanilla `P_TryMove`'s `P_CrossSpecialLine` calls).
+///
+/// `crossed` holds `linedef` indices already in vanilla `while(numspechit--)`
+/// order (see [`crate::movement::p_try_move_commit_tracked`]): each is a special
+/// line the moving box straddled whose centre changed the line's infinite-side.
+/// Only the walk-trigger specials do anything on a cross — `P_CrossSpecialLine`
+/// has no case for the others — so non-walk specials in the list are skipped,
+/// exactly as vanilla's `switch (line->special)` falls through.
+pub fn dispatch_player_crossings(
+    gs: &mut GameState,
+    level: &mut Level,
+    actor: MobjHandle,
+    crossed: &[usize],
+) {
+    for &ld_idx in crossed {
+        let special = match level.linedefs.get(ld_idx) {
+            Some(ld) => ld.special,
+            None => continue,
+        };
+        if special == 0 {
+            continue;
+        }
+        match classify_trigger(special) {
+            Some(trigger @ (TriggerType::WalkOnce | TriggerType::WalkRepeat)) => {
+                dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Detect and dispatch the walk-trigger lines an actor centre crosses stepping
+/// from `(old_x, old_y)` to `(new_x, new_y)`, using the exact vanilla
+/// `P_TryMove` rule: a special line fires iff the actor's destination bounding
+/// box straddles it (`P_BoxOnLineSide == -1`, the `spechit` gate) **and** the
+/// centre's *infinite-line* side (`P_PointOnLineSide`) differs between the old
+/// and new position. Crossed lines are dispatched in reverse encounter order,
+/// mirroring vanilla's `while (numspechit--)` walk.
+///
+/// This is the single-step, all-linedefs form used by unit tests; the live
+/// player path accumulates crossings per `P_TryMove` step through
+/// [`crate::movement::p_try_move_commit_tracked`] /
+/// [`dispatch_player_crossings`], which walks the blockmap-ordered `spechit`.
+/// Both share the same box-straddle + centre-side-change detection.
 pub fn check_cross_lines(
     gs: &mut GameState,
     level: &mut Level,
@@ -1223,56 +1358,64 @@ pub fn check_cross_lines(
     new_x: i32,
     new_y: i32,
 ) {
-    // Vanilla P_TryMove stores special hits as lines are encountered during
-    // movement validation, then processes them in reverse order once the move
-    // is accepted. We do not have the original spechit array here, so we use
-    // crossed-line distance along the movement path as the closest deterministic
-    // approximation and dispatch the farthest hit first.
-    // Eliminates dynamic heap allocation on this hot path by replacing `Vec` with `SmallVec`.
-    // `check_cross_lines` is called multiple times per tic during actor and player movement.
-    // Allocating a new `Vec` each time generates excessive memory churn. Since actors rarely
-    // cross more than a few walk lines in a single tic, `SmallVec<[T; 8]>` keeps the
-    // data on the stack entirely in almost all cases.
-    let mut walk_lines: smallvec::SmallVec<[(i64, i64, usize, u16); 8]> = level
-        .linedefs
-        .iter()
-        .enumerate()
-        .filter_map(|(i, ld)| {
-            if ld.special == 0 {
-                return None;
-            }
-            match classify_trigger(ld.special) {
-                Some(TriggerType::WalkOnce) | Some(TriggerType::WalkRepeat) => {
-                    let v1 = &level.vertexes[ld.from_vertex as usize];
-                    let v2 = &level.vertexes[ld.to_vertex as usize];
-                    segment_intersection_frac(
-                        old_x,
-                        old_y,
-                        new_x,
-                        new_y,
-                        v1.x as i32,
-                        v1.y as i32,
-                        v2.x as i32,
-                        v2.y as i32,
-                    )
-                    .map(|(num, denom)| (num, denom, i, ld.special))
-                }
-                _ => None,
-            }
-        })
-        .collect();
+    use doom_types::Fixed16_16;
 
-    walk_lines.sort_by(|a, b| {
-        let lhs = i128::from(a.0) * i128::from(b.1);
-        let rhs = i128::from(b.0) * i128::from(a.1);
-        lhs.cmp(&rhs)
-    });
+    let radius = gs
+        .mobjslab
+        .get(actor)
+        .map(|mo| mo.radius)
+        .unwrap_or(Fixed16_16::from_int(16));
 
-    for (_, _, ld_idx, special) in walk_lines.into_iter().rev() {
-        let trigger =
-            classify_trigger(special).expect("special was pre-filtered to be a valid walk trigger");
-        dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
+    let nx = Fixed16_16::from_int(new_x);
+    let ny = Fixed16_16::from_int(new_y);
+    let left = nx - radius;
+    let right = nx + radius;
+    let bottom = ny - radius;
+    let top = ny + radius;
+
+    let ox = Fixed16_16::from_int(old_x);
+    let oy = Fixed16_16::from_int(old_y);
+
+    let mut crossed: smallvec::SmallVec<[usize; 8]> = smallvec::SmallVec::new();
+    for (i, ld) in level.linedefs.iter().enumerate() {
+        if ld.special == 0 {
+            continue;
+        }
+        let v1 = &level.vertexes[ld.from_vertex as usize];
+        let v2 = &level.vertexes[ld.to_vertex as usize];
+        let lx1 = Fixed16_16::from_int(v1.x as i32);
+        let ly1 = Fixed16_16::from_int(v1.y as i32);
+        let lx2 = Fixed16_16::from_int(v2.x as i32);
+        let ly2 = Fixed16_16::from_int(v2.y as i32);
+
+        // Line bbox rejection (vanilla PIT_CheckLine first test).
+        let lx_min = lx1.min(lx2);
+        let lx_max = lx1.max(lx2);
+        let ly_min = ly1.min(ly2);
+        let ly_max = ly1.max(ly2);
+        if right <= lx_min || left >= lx_max || top <= ly_min || bottom >= ly_max {
+            continue;
+        }
+        // spechit gate: destination box must straddle the infinite line.
+        if crate::movement::p_box_on_line_side(left, bottom, right, top, lx1, ly1, lx2, ly2) != -1 {
+            continue;
+        }
+        // Centre must change the line's infinite-side (vanilla side != oldside).
+        let g_v1x = (v1.x as i32) << 16;
+        let g_v1y = (v1.y as i32) << 16;
+        let g_dx = ((v2.x as i32) << 16) - g_v1x;
+        let g_dy = ((v2.y as i32) << 16) - g_v1y;
+        let side = crate::geom::p_point_on_line_side(nx.raw(), ny.raw(), g_v1x, g_v1y, g_dx, g_dy);
+        let oldside =
+            crate::geom::p_point_on_line_side(ox.raw(), oy.raw(), g_v1x, g_v1y, g_dx, g_dy);
+        if side != oldside {
+            crossed.push(i);
+        }
     }
+
+    // Vanilla walks `spechit` in reverse (`while (numspechit--)`).
+    crossed.reverse();
+    dispatch_player_crossings(gs, level, actor, &crossed);
 }
 
 fn segment_intersection_frac(
@@ -1988,6 +2131,88 @@ mod tests {
     // -----------------------------------------------------------------------
 
     #[test]
+    fn monster_can_cross_special_matches_vanilla_whitelist() {
+        // Vanilla `P_CrossSpecialLine` `!thing->player` whitelist.
+        for s in [4u16, 10, 39, 88, 97, 125, 126] {
+            assert!(
+                monster_can_cross_special(s),
+                "special {s} must be monster-crossable"
+            );
+        }
+        // Player-only walk triggers must never fire for a monster.
+        for s in [2u16, 52, 62, 98, 11, 72, 109] {
+            assert!(
+                !monster_can_cross_special(s),
+                "special {s} must NOT be monster-crossable"
+            );
+        }
+    }
+
+    #[test]
+    fn monster_crossing_lift_line_queues_then_activates() {
+        // Regression (DEMO2/E1M3, leveltime 628): a walking monster must
+        // activate a type-88 (WR lift) line it steps across, exactly as vanilla
+        // `P_TryMove`/`P_CrossSpecialLine` do for `thing` that is not a player.
+        let (mut gs, _player) = make_gs_with_player();
+        let mut level = make_test_level_with_tag(4);
+        level.linedefs[0].special = 88; // WR plat down-wait-up-stay, tag 4.
+
+        let monster = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(-5),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let mhandle = gs.mobjslab.alloc(monster);
+
+        queue_monster_crossings(&mut gs, &level, mhandle, -5, 0, 5, 0);
+        assert_eq!(
+            gs.pending_monster_crossings.len(),
+            1,
+            "monster crossing a type-88 lift line should be queued"
+        );
+
+        dispatch_pending_monster_crossings(&mut gs, &mut level);
+        assert!(
+            gs.pending_monster_crossings.is_empty(),
+            "queue must be drained after dispatch"
+        );
+        assert_eq!(
+            gs.movers.lifts.len(),
+            1,
+            "the crossed type-88 line must activate a lift on the tagged sector"
+        );
+    }
+
+    #[test]
+    fn monster_does_not_trigger_player_only_walk_line() {
+        // A monster crossing a player-only walk special (W1 exit) must do
+        // nothing — vanilla gates these behind `thing->player`.
+        let (mut gs, _player) = make_gs_with_player();
+        let mut level = make_test_level_with_tag(0);
+        level.linedefs[0].special = 52; // W1 exit — player-only.
+
+        let monster = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(-5),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let mhandle = gs.mobjslab.alloc(monster);
+
+        queue_monster_crossings(&mut gs, &level, mhandle, -5, 0, 5, 0);
+        assert!(
+            gs.pending_monster_crossings.is_empty(),
+            "monster must not queue a player-only walk trigger"
+        );
+        dispatch_pending_monster_crossings(&mut gs, &mut level);
+        assert_eq!(
+            gs.exit_request, None,
+            "monster crossing a W1 exit must not exit the level"
+        );
+    }
+
+    #[test]
     fn cross_w1_line_triggers_action() {
         let (mut gs, handle) = make_gs_with_player();
         let mut level = make_test_level_with_tag(0);
@@ -2094,11 +2319,15 @@ mod tests {
                     sector: 1,
                 },
             ],
+            // Two special lines close enough that a single destination box
+            // (player radius 16) straddles BOTH and the centre crosses both in
+            // one `P_TryMove` step — the vanilla `spechit` accumulates both and
+            // walks them in reverse (`while (numspechit--)`).
             vertexes: vec![
-                doom_map::Vertex { x: 0, y: -10 },
-                doom_map::Vertex { x: 0, y: 10 },
-                doom_map::Vertex { x: 64, y: -10 },
-                doom_map::Vertex { x: 64, y: 10 },
+                doom_map::Vertex { x: -2, y: -10 },
+                doom_map::Vertex { x: -2, y: 10 },
+                doom_map::Vertex { x: 2, y: -10 },
+                doom_map::Vertex { x: 2, y: 10 },
             ],
             segs: vec![],
             ssectors: vec![],
@@ -2127,12 +2356,46 @@ mod tests {
             blockmap: make_minimal_blockmap(),
         };
 
-        check_cross_lines(&mut gs, &mut level, handle, -5, 0, 80, 0);
+        // Cross from left (x=-5) to right (x=5) of both lines in one step.
+        check_cross_lines(&mut gs, &mut level, handle, -5, 0, 5, 0);
 
+        // spechit = [line0 (secret), line1 (normal)] in encounter order; walked
+        // in reverse fires line1 (normal) first, then line0 (secret) LAST, so
+        // the secret exit wins — reverse crossing order, not raw lump order.
         assert_eq!(
             gs.exit_request,
             Some(ExitRequest::Secret),
             "crossed walk specials should resolve in reverse crossing order, not raw lump order"
+        );
+    }
+
+    #[test]
+    fn cross_lines_fires_on_box_straddle_and_centre_side_change() {
+        // Vanilla `P_TryMove` gate: a walk special fires iff the destination box
+        // straddles the line (`P_BoxOnLineSide == -1`) AND the centre's
+        // infinite-line side changes (`side != oldside`). Pin both halves.
+        let (mut gs, handle) = make_gs_with_player();
+
+        // (a) Box straddles the x=0 line and the centre crosses it → fires.
+        let mut level = make_test_level_with_tag(0);
+        level.linedefs[0].special = 52; // W1 exit.
+        check_cross_lines(&mut gs, &mut level, handle, -5, 0, 5, 0);
+        assert_eq!(
+            gs.exit_request,
+            Some(ExitRequest::Normal),
+            "box straddles the line and the centre changes side → crossing fires"
+        );
+
+        // (b) Box straddles the x=0 line (radius 16 reaches across it) but the
+        //     centre stays on one side (no side change) → must NOT fire, even
+        //     though the old segment-intersection heuristic would also skip it.
+        let (mut gs2, handle2) = make_gs_with_player();
+        let mut level2 = make_test_level_with_tag(0);
+        level2.linedefs[0].special = 52;
+        check_cross_lines(&mut gs2, &mut level2, handle2, -5, 0, -3, 0);
+        assert_eq!(
+            gs2.exit_request, None,
+            "box straddles the line but the centre never changes side → no crossing"
         );
     }
 

@@ -226,7 +226,11 @@ pub fn p_check_pickups(gs: &mut GameState) {
     let Some(mo) = gs.mobjslab.get(gs.player.handle) else {
         return;
     };
-    let (px, py, pradius) = (mo.x.to_int(), mo.y.to_int(), mo.radius.to_int());
+    // Vanilla `PIT_CheckThing` compares in full fixed-point (`fixed_t`); it does
+    // NOT truncate to whole map units. Truncating loses the sub-unit fraction and
+    // shifts a boundary pickup by one tic (e.g. DEMO1 health bonus: true dy=35.11
+    // < 36 collects, but truncated dy=36 misses). Keep the raw fixed values.
+    let (px, py, pradius) = (mo.x, mo.y, mo.radius);
 
     // Collect all MF_SPECIAL actor handles (to avoid borrow conflicts).
     // Avoid intermediate `Vec` allocation by iterating directly over generations.
@@ -259,9 +263,11 @@ pub fn p_check_pickups(gs: &mut GameState) {
         let Some(mo) = gs.mobjslab.get(handle) else {
             continue;
         };
-        let (ix, iy, item_radius) = (mo.x.to_int(), mo.y.to_int(), mo.radius.to_int());
+        let (ix, iy, item_radius) = (mo.x, mo.y, mo.radius);
 
-        // AABB overlap: combined-radius square check.
+        // AABB overlap: combined-radius square check, in fixed-point to match
+        // vanilla `PIT_CheckThing` (`abs(thing->x - tmx) < thing->radius +
+        // tmthing->radius`).
         let combined_radius = pradius + item_radius;
         let dx = (px - ix).abs();
         let dy = (py - iy).abs();
@@ -283,6 +289,26 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
         return false;
     };
     let kind = mo.kind;
+    let special_z = mo.z;
+    // Vanilla `P_TouchSpecialThing` passes `special->flags & MF_DROPPED` to
+    // `P_GiveWeapon`: a weapon dropped by a slain monster yields one clip of
+    // ammo instead of the two a spawned weapon gives (see `give_weapon`).
+    let dropped = mo.flags & flags::MF_DROPPED != 0;
+
+    // Vanilla `P_TouchSpecialThing` begins with a Z-reach gate:
+    //   delta = special->z - toucher->z;
+    //   if (delta > toucher->height || delta < -8*FRACUNIT) return; // out of reach
+    // Items well above the toucher, or more than 8 units below its feet, are
+    // "out of reach" and cannot be collected. On descending stairs the player
+    // reaches a low item only once it is within this window, so the pickup tic
+    // matches vanilla (e.g. DEMO3/E1M7 health bonus at z=24 collected at
+    // leveltime 530, not earlier).
+    if let Some(toucher) = gs.mobjslab.get(gs.player.handle) {
+        let delta = special_z - toucher.z;
+        if delta > toucher.height || delta < doom_types::Fixed16_16::from_int(-8) {
+            return false;
+        }
+    }
 
     let picked_up = match kind {
         // ---- Health ----
@@ -361,36 +387,42 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             WeaponType::Shotgun,
             AmmoType::Shells as usize,
             8,
+            dropped,
         ),
         MobjKind::SuperShotgun => give_weapon(
             &mut gs.player,
             WeaponType::SuperShotgun,
             AmmoType::Shells as usize,
             8,
+            dropped,
         ),
         MobjKind::Chaingun => give_weapon(
             &mut gs.player,
             WeaponType::Chaingun,
             AmmoType::Bullets as usize,
             20,
+            dropped,
         ),
         MobjKind::RocketLauncher => give_weapon(
             &mut gs.player,
             WeaponType::RocketLauncher,
             AmmoType::Rockets as usize,
             2,
+            dropped,
         ),
         MobjKind::PlasmaRifle => give_weapon(
             &mut gs.player,
             WeaponType::PlasmaRifle,
             AmmoType::Cells as usize,
             40,
+            dropped,
         ),
         MobjKind::BfgPickup => give_weapon(
             &mut gs.player,
             WeaponType::Bfg,
             AmmoType::Cells as usize,
             40,
+            dropped,
         ),
         MobjKind::Chainsaw => {
             let had = gs.player.weapons[WeaponType::Chainsaw as usize];
@@ -482,10 +514,13 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
     };
 
     // Increment item count for items with MF_COUNTITEM flag.
+    // Vanilla `P_TouchSpecialThing` does `player->itemcount++` for MF_COUNTITEM
+    // pickups, so the collected total lives on the player (matching `kill_count`
+    // and `secret_count`, and what the intermission / verify log read).
     if picked_up {
         if let Some(mo) = gs.mobjslab.get(item_handle) {
             if mo.flags & flags::MF_COUNTITEM != 0 {
-                gs.stats.item_count += 1;
+                gs.player.item_count += 1;
             }
             #[cfg(feature = "telemetry")]
             {
@@ -515,10 +550,15 @@ fn give_weapon(
     weapon: WeaponType,
     ammo_type: usize,
     ammo_amount: u32,
+    dropped: bool,
 ) -> bool {
     let had_weapon = player.weapons[weapon as usize];
     player.weapons[weapon as usize] = true;
-    player.give_ammo(ammo_type, ammo_amount);
+    // Vanilla `P_GiveWeapon`: a spawned weapon gives two clips of ammo, a
+    // dropped one (from a slain monster) gives a single clip. `ammo_amount` is
+    // the two-clip amount, so a dropped pickup gives exactly half.
+    let amount = if dropped { ammo_amount / 2 } else { ammo_amount };
+    player.give_ammo(ammo_type, amount);
     if !had_weapon {
         player.pending_weapon = Some(weapon);
     }
@@ -1059,6 +1099,105 @@ mod tests {
         let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
         p_check_pickups(&mut gs);
         assert!(gs.mobjslab.get(item).is_none(), "item should be removed");
+        assert_eq!(gs.player.health(), 51);
+    }
+
+    // =======================================================================
+    // Z-reach gate (vanilla P_TouchSpecialThing opening check) + item counting
+    // =======================================================================
+
+    #[test]
+    fn pickup_z_gate_rejects_item_far_below() {
+        // Vanilla: delta = special->z - toucher->z;
+        //          if (delta < -8*FRACUNIT) return; // out of reach
+        // A bonus more than 8 units below the player's feet is unreachable.
+        // (DEMO3/E1M7 root: descending stairs onto a low health bonus.)
+        let mut gs = make_game_state();
+        gs.player.apply_damage(50);
+        let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
+        gs.mobjslab
+            .get_mut(item)
+            .expect("item exists")
+            .z = Fixed16_16::from_int(-16); // delta = -16 < -8
+        assert!(
+            !p_touch_special_thing(&mut gs, item),
+            "item 16u below the player is out of Z-reach"
+        );
+        assert_eq!(gs.player.health(), 50, "no heal while out of reach");
+    }
+
+    #[test]
+    fn pickup_z_gate_rejects_item_far_above() {
+        // Vanilla: if (delta > toucher->height) return; // out of reach
+        let mut gs = make_game_state();
+        gs.player.apply_damage(50);
+        let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
+        gs.mobjslab
+            .get_mut(item)
+            .expect("item exists")
+            .z = Fixed16_16::from_int(57); // delta = 57 > height 56
+        assert!(
+            !p_touch_special_thing(&mut gs, item),
+            "item above the player's head is out of Z-reach"
+        );
+        assert_eq!(gs.player.health(), 50);
+    }
+
+    #[test]
+    fn pickup_z_gate_accepts_item_at_reach_boundary() {
+        // delta == -8*FRACUNIT is still in reach (test is strictly `< -8`).
+        let mut gs = make_game_state();
+        gs.player.apply_damage(50);
+        let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
+        gs.mobjslab
+            .get_mut(item)
+            .expect("item exists")
+            .z = Fixed16_16::from_int(-8); // delta = -8, not < -8
+        assert!(
+            p_touch_special_thing(&mut gs, item),
+            "item exactly 8u below is still reachable"
+        );
+        assert_eq!(gs.player.health(), 51);
+    }
+
+    #[test]
+    fn countitem_pickup_increments_player_item_count() {
+        // Vanilla `player->itemcount++` for MF_COUNTITEM pickups -- the collected
+        // total lives on the player (what the intermission / verify log read).
+        let mut gs = make_game_state();
+        gs.player.apply_damage(50);
+        assert_eq!(gs.player.item_count, 0);
+        let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
+        gs.mobjslab
+            .get_mut(item)
+            .expect("item exists")
+            .flags |= flags::MF_COUNTITEM;
+        assert!(p_touch_special_thing(&mut gs, item));
+        assert_eq!(
+            gs.player.item_count, 1,
+            "MF_COUNTITEM pickup must increment player.item_count"
+        );
+    }
+
+    #[test]
+    fn pickup_aabb_compares_in_fixed_point() {
+        // Combined radius = player 16 + item 20 = 36. With the player nudged half
+        // a unit, the true fixed-point dy to an item at y=36 is 35.5 (< 36, so it
+        // collects). Truncating both to whole units gives dy = 36, which fails the
+        // strict `< 36` test and would miss the pickup one tic early
+        // (DEMO1/DEMO2 boundary health bonuses).
+        let mut gs = make_game_state();
+        gs.player.apply_damage(50);
+        gs.mobjslab
+            .get_mut(gs.player.handle)
+            .expect("player exists")
+            .y = Fixed16_16::from_raw(1 << 15); // 0.5 units
+        let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 36);
+        p_check_pickups(&mut gs);
+        assert!(
+            gs.mobjslab.get(item).is_none(),
+            "fixed-point dy = 35.5 < 36 must collect (not truncate to 36)"
+        );
         assert_eq!(gs.player.health(), 51);
     }
 

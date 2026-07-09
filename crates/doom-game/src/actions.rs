@@ -149,6 +149,13 @@ pub enum Action {
     /// `A_Explode`: radius (splash) damage dealt by an exploding rocket at its
     /// death state. Vanilla `A_Explode(mo)` = `P_RadiusAttack(mo, mo->target, 128)`.
     Explode = 55,
+    /// `A_XScream`: over-kill (gib) death scream. Vanilla `A_XScream(actor)` =
+    /// `S_StartSound(actor, sfx_slop)` — plays the gib sound and draws NO
+    /// `P_Random` (unlike `A_Scream`, which rolls for multi-variant death
+    /// sounds). Demo-sync critical: an over-killed monster runs its
+    /// `xdeathstate` chain (this action) instead of the normal `deathstate`
+    /// chain, so it must not advance the shared RNG stream.
+    XScream = 56,
 }
 
 use doom_types::{Bam, Fixed16_16};
@@ -251,6 +258,7 @@ pub fn dispatch_action(gs: &mut GameState, handle: MobjHandle, action: u8, level
             Action::SpidAttack => a_spid_attack(gs, handle, level),
             Action::PainAttack => a_pain_attack(gs, handle),
             Action::Scream => a_scream(gs, handle),
+            Action::XScream => a_xscream(gs, handle),
             Action::VileChase => a_vile_chase(gs, handle, level),
             Action::VileStart => a_vile_start(gs, handle),
             Action::VileTarget => a_vile_target(gs, handle),
@@ -513,9 +521,9 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
     let new_x = mo_x + step_x;
     let new_y = mo_y + step_y;
 
-    let (can_move, blocking_linedef) = match level {
-        Some(lv) => crate::movement::p_try_move_blocker(&gs.mobjslab, handle, new_x, new_y, lv),
-        None => (true, None),
+    let can_move = match level {
+        Some(lv) => crate::movement::p_try_move(&gs.mobjslab, handle, new_x, new_y, lv),
+        None => true,
     };
 
     if can_move {
@@ -541,43 +549,70 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
                 mo.subsector = subsector as u32;
             }
         }
+        // Vanilla `P_TryMove` (`p_map.c`): after a successful move it walks the
+        // `spechit` list and fires `P_CrossSpecialLine` for every special line
+        // whose side the actor's centre crossed — for monsters as well as the
+        // player (a monster is `thing`, not `thing->player`). We cannot mutate
+        // the level here (the AI tick borrows it immutably), so record the
+        // monster-crossable lines the step crossed and dispatch them right after
+        // the actor pass, before the sector movers run — the same tic, so an
+        // activated lift still takes its first step this tic (vanilla appends the
+        // plat thinker to the running list). Without this a monster silently
+        // walks over lift/teleport/raise-door trigger lines it should activate
+        // (DEMO2/E1M3 desync at leveltime 628: a zombie crossing a type-88 lift
+        // line lowers the platform, letting the player's gunfire flood the
+        // sector beyond and wake a monster on the correct tic).
+        if let Some(lv) = level {
+            crate::linedef_dispatch::queue_monster_crossings(
+                gs,
+                lv,
+                handle,
+                mo_x.to_int(),
+                mo_y.to_int(),
+                new_x.to_int(),
+                new_y.to_int(),
+            );
+        }
         true
     } else {
         // Movement failed. Port of vanilla `P_Move`'s spechit path
         // (`p_enemy.c`): after `P_TryMove` fails, if the blocked move contacted
-        // any special two-sided line (`numspechit > 0`), the monster stops
+        // any special line (`numspechit > 0`), the monster stops
         // (`actor->movedir = DI_NODIR`) and tries to use each contacted line as
-        // a door (`P_UseSpecialLine`), returning whether any opened (`good`).
-        // If no special line was contacted, `P_Move` returns false and the
-        // caller (`A_Chase`) picks a new chase direction.
+        // a door (`P_UseSpecialLine`) in reverse order (`while (numspechit--)`),
+        // returning whether any opened (`good`). If no special line was
+        // contacted, `P_Move` returns false and the caller (`A_Chase`) picks a
+        // new chase direction with the *original* movedir intact.
         //
-        // `numspechit` only ever counts *two-sided* special lines: vanilla
-        // `PIT_CheckLine` rejects one-sided lines (`return false`) before the
-        // `if (ld->special)` spechit-add, so one-sided special lines are never
-        // enqueued. We approximate the spechit set with the single blocking
-        // linedef, which for a shut door is that door line itself.
-        let special_blocker = level.and_then(|lv| {
-            blocking_linedef
-                .and_then(|i| lv.linedefs.get(i).map(|ld| (i, ld)))
-                .filter(|(_, ld)| {
-                    ld.is_two_sided()
-                        && ld.special != 0
-                        && ld.flags & doom_map::lumps::FLAG_SECRET == 0
-                })
-                .map(|(i, _)| i)
-        });
-        if let Some(ld_idx) = special_blocker {
-            // numspechit > 0: monster halts and attempts the door.
-            let good = level
-                .map(|lv| monster_use_special_line(gs, lv, ld_idx))
-                .unwrap_or(false);
-            if let Some(mo) = gs.mobjslab.get_mut(handle) {
-                mo.movedir = DI_NODIR;
-            }
-            good
-        } else {
-            false
+        // Vanilla accumulates `spechit` during the whole `P_CheckPosition` line
+        // pass — it includes every special line the box crosses *before* the
+        // hard blocker that stops the move, not merely the single reported
+        // blocking line. Getting this exact is load-bearing: `movedir` is the
+        // `olddir`/`turnaround` seed for `P_NewChaseDir`, so an incorrectly
+        // preserved movedir makes the direction search skip the wrong candidate
+        // and drift the monster off the vanilla path.
+        let spechit = match level {
+            Some(lv) => crate::movement::move_spechit(&gs.mobjslab, handle, new_x, new_y, lv),
+            None => Vec::new(),
+        };
+        if spechit.is_empty() {
+            // numspechit == 0: movedir is left untouched.
+            return false;
         }
+        // numspechit > 0: monster halts and attempts each crossed special line
+        // as a door, most-recently-contacted first (vanilla `while (numspechit--)`).
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.movedir = DI_NODIR;
+        }
+        let mut good = false;
+        if let Some(lv) = level {
+            for &ld_idx in spechit.iter().rev() {
+                if monster_use_special_line(gs, lv, ld_idx) {
+                    good = true;
+                }
+            }
+        }
+        good
     }
 }
 
@@ -1297,6 +1332,31 @@ fn a_scream(gs: &mut GameState, handle: MobjHandle) {
         let _ = gs.p_random() % variants;
     }
 
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.flags |= crate::mobj::flags::MF_SCREAMED;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// A_XScream (over-kill / gib death sound)
+// ---------------------------------------------------------------------------
+
+/// Port of `A_XScream` from Doom's `p_enemy.c`:
+///
+/// ```c
+/// void A_XScream (mobj_t* actor) { S_StartSound (actor, sfx_slop); }
+/// ```
+///
+/// Fires on the second frame of a monster's `xdeathstate` (gib) chain when the
+/// actor was over-killed (`health < -spawnhealth`). Unlike `A_Scream`, it plays
+/// a single fixed sound (`sfx_slop`) and draws NO `P_Random` — so the gib death
+/// path advances the shared RNG stream one draw *less* than the normal death
+/// path. Omitting this branch (running the normal `A_Scream` instead) drifts the
+/// whole RNG stream from the first over-kill onward. We mark `MF_SCREAMED` for
+/// parity with `a_scream` so the app-layer sound trigger fires exactly once.
+fn a_xscream(gs: &mut GameState, handle: MobjHandle) {
+    let _rng_ctx = crate::random::rng_ctx("A_XScream");
+    // No P_Random draw — vanilla only calls S_StartSound(actor, sfx_slop).
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.flags |= crate::mobj::flags::MF_SCREAMED;
     }
@@ -3346,6 +3406,130 @@ mod tests {
         assert_eq!(
             gs.movers.active_doors[0].sector, 1,
             "monster should open the actual blocking door"
+        );
+    }
+
+    #[test]
+    fn p_move_spechit_crossed_before_wall_clears_movedir() {
+        // Regression for the DEMO3 lt382 monster-chase drift. Vanilla builds
+        // `spechit` during the whole `P_CheckPosition` line pass, so a special
+        // line the box *crosses* still counts (`numspechit > 0`) even when the
+        // move is ultimately blocked by a *different*, non-special line. When
+        // that happens `P_Move` must still clear `movedir` to `DI_NODIR`.
+        //
+        // Geometry (eastward step, radius 20, speed 8 -> dest bbox x∈[92,132]):
+        //   line 0: two-sided passable special=2 (W1, not monster-usable) at x=100
+        //   line 1: one-sided wall at x=128 that actually blocks the step
+        // The old code reported only the single blocking line (the wall, which
+        // is non-special) and left `movedir` untouched; vanilla clears it.
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 104, 0);
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .movedir = DI_EAST;
+
+        let reject = doom_map::Reject::parse_lump(&[0u8], 1).expect("item must exist in tests");
+        // 1×1 blockmap whose single block lists both linedefs (0 then 1).
+        let mut bm_data = vec![0u8; 18];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes()); // x_count
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes()); // y_count
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes()); // offset[0] = word 5
+        bm_data[10..12].copy_from_slice(&0x0000u16.to_le_bytes()); // sentinel
+        bm_data[12..14].copy_from_slice(&0u16.to_le_bytes()); // linedef 0
+        bm_data[14..16].copy_from_slice(&1u16.to_le_bytes()); // linedef 1
+        bm_data[16..18].copy_from_slice(&0xFFFFu16.to_le_bytes()); // terminator
+        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).expect("item must exist in tests");
+
+        let open_sector = doom_map::Sector {
+            floor_height: 0,
+            ceil_height: 128,
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: 0,
+        };
+        let level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![
+                // Two-sided passable special line the step crosses first.
+                doom_map::Linedef {
+                    from_vertex: 0,
+                    to_vertex: 1,
+                    flags: 0x0004, // ML_TWOSIDED
+                    special: 2,    // W1 Door Open Stay — NOT a monster-usable door
+                    tag: 0,
+                    right_sidedef: 0,
+                    left_sidedef: 1,
+                },
+                // One-sided wall that blocks the step.
+                doom_map::Linedef {
+                    from_vertex: 2,
+                    to_vertex: 3,
+                    flags: 0x0001, // ML_BLOCKING (also one-sided via SIDEDEF_NONE)
+                    special: 0,
+                    tag: 0,
+                    right_sidedef: 2,
+                    left_sidedef: doom_map::lumps::SIDEDEF_NONE,
+                },
+            ],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 100, y: -32 },
+                doom_map::Vertex { x: 100, y: 32 },
+                doom_map::Vertex { x: 128, y: -32 },
+                doom_map::Vertex { x: 128, y: 32 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![open_sector.clone(), open_sector],
+            reject,
+            blockmap,
+        };
+
+        let moved = p_move(&mut gs, trooper, Some(&level));
+
+        assert!(!moved, "the wall blocks the step and no door opens");
+        assert_eq!(
+            gs.mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .movedir,
+            DI_NODIR,
+            "crossing a special line (numspechit>0) clears movedir even when a \
+             separate non-special line is the actual blocker"
+        );
+        assert!(
+            gs.movers.active_doors.is_empty(),
+            "special 2 (W1) is not a monster-usable door, so nothing opens"
         );
     }
 

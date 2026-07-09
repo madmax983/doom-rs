@@ -444,6 +444,13 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
         );
         tick_same_tic_missiles(gs, level.as_deref(), initial_generation);
 
+        // 1d. Walkover specials monsters crossed during the actor pass (vanilla
+        //     `P_CrossSpecialLine`), dispatched before the sector movers so an
+        //     activated lift steps on the same tic.
+        if let Some(lv) = level.as_deref_mut() {
+            crate::linedef_dispatch::dispatch_pending_monster_crossings(gs, lv);
+        }
+
         // 2-6. Sector movers (doors, ceilings, floors, lifts, platforms).
         //      RNG-neutral; kept after the actor passes as before.
         if let Some(lv) = level.as_deref_mut() {
@@ -456,6 +463,11 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
     } else {
         // 1. Advance all actor state machines.
         tick_all_mobjs(gs, level.as_deref());
+
+        // 1d. Walkover specials monsters crossed during the actor pass.
+        if let Some(lv) = level.as_deref_mut() {
+            crate::linedef_dispatch::dispatch_pending_monster_crossings(gs, lv);
+        }
 
         // 2-6. Sector movers (doors, ceilings, floors, lifts, platforms).
         if let Some(lv) = level.as_deref_mut() {
@@ -546,8 +558,31 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
     p_move_player(gs, cmd, level.as_deref_mut());
 
     // Pickup check: scan MF_SPECIAL actors.
+    //
+    // Vanilla collects items in `P_TouchSpecialThing`, called from
+    // `PIT_CheckThing` during `P_XYMovement` — i.e. AFTER this tic's XY move
+    // reaches its destination, but BEFORE `P_ZMovement` integrates the player's
+    // z. `P_TouchSpecialThing`'s opening Z-reach gate therefore samples the
+    // player's START-of-tic z (`toucher->z`), not the post-`P_ZMovement` z.
+    // doom-rs integrates z inline in `p_move_player`, so restore the pre-move z
+    // (keeping the post-move x,y that the AABB overlap uses) for the pickup scan,
+    // then put the real post-move z back. Without this, a player descending
+    // stairs onto a low item reaches Z-reach one tic early (DEMO3/E1M7 health
+    // bonus at z=24 collected at leveltime 530, matching vanilla, not 529).
     if !gs.player.is_dead() {
+        let restore_z = pre_move_pos.and_then(|(_, _, pre_z, _)| {
+            gs.mobjslab.get_mut(gs.player.handle).map(|mo| {
+                let post_z = mo.z;
+                mo.z = pre_z;
+                post_z
+            })
+        });
         crate::pickups::p_check_pickups(gs);
+        if let Some(post_z) = restore_z
+            && let Some(mo) = gs.mobjslab.get_mut(gs.player.handle)
+        {
+            mo.z = post_z;
+        }
     }
 
     // BT_USE: activate linedef ahead of player on the leading edge only.
@@ -757,12 +792,34 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         }
     }
 
+    // Vanilla `P_CalcHeight` (called from `P_PlayerThink` immediately after
+    // `P_MovePlayer`, before `P_MovePsprites`): recompute `player->bob` from the
+    // post-thrust, pre-friction, pre-clamp momentum. `A_WeaponReady` reads this
+    // to sway the weapon psprite; the resting `sy` it leaves behind sets the
+    // exact lower/raise tic count and therefore the fire cadence. Vanilla uses
+    // the momentum here — before `P_XYMovement`'s MAXMOVE clamp and friction —
+    // so it must be sampled at this point, matching that ordering.
+    {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        let momx = mo.momx.raw();
+        let momy = mo.momy.raw();
+        // MAXBOB = 0x100000 (16 pixels).
+        const MAXBOB: i32 = 0x0010_0000;
+        let mut bob = crate::geom::fixed_mul(momx, momx)
+            .wrapping_add(crate::geom::fixed_mul(momy, momy));
+        bob >>= 2;
+        if bob > MAXBOB {
+            bob = MAXBOB;
+        }
+        gs.player.bob = bob;
+    }
+
     // 4. P_XYMovement: clamp momentum to MAXMOVE, then step-and-collide.
-    let Some(mo) = gs.mobjslab.get(handle) else {
+    if gs.mobjslab.get(handle).is_none() {
         return;
     };
-    let old_x = mo.x;
-    let old_y = mo.y;
 
     {
         let Some(mo) = gs.mobjslab.get_mut(handle) else {
@@ -771,6 +828,11 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
         mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
     }
+
+    // Walkover line-crossings accumulated across this tic's P_TryMove steps, in
+    // vanilla `while(numspechit--)` dispatch order. Dispatched after the move
+    // (below), where the level can be borrowed mutably.
+    let mut player_crossings: Vec<usize> = Vec::new();
 
     // Vanilla P_XYMovement move-stepping: split moves whose magnitude exceeds
     // MAXMOVE/2 into halves (P_TryMove per step), sliding along walls on a
@@ -799,9 +861,26 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
                     ymove = 0;
                 }
 
-                if !crate::movement::p_try_move_commit(&mut gs.mobjslab, handle, ptryx, ptryy, lv) {
+                // Vanilla `P_TryMove` fires `P_CrossSpecialLine` for every special
+                // line the box straddled whose *infinite-line* side the centre
+                // crossed on this step (see `record_player_crossings`); the
+                // split-move halves and each `P_SlideMove` sub-step accumulate
+                // their crossings in vanilla order for dispatch below.
+                if !crate::movement::p_try_move_commit_tracked(
+                    &mut gs.mobjslab,
+                    handle,
+                    ptryx,
+                    ptryy,
+                    lv,
+                    &mut player_crossings,
+                ) {
                     // Blocked: player slides along the wall.
-                    crate::movement::p_slide_move_vanilla(&mut gs.mobjslab, handle, lv);
+                    crate::movement::p_slide_move_vanilla(
+                        &mut gs.mobjslab,
+                        handle,
+                        lv,
+                        &mut player_crossings,
+                    );
                 }
 
                 if xmove == 0 && ymove == 0 {
@@ -889,18 +968,15 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         }
     }
 
-    if final_x != old_x || final_y != old_y {
-        if let Some(lv) = level {
-            crate::linedef_dispatch::check_cross_lines(
-                gs,
-                lv,
-                handle,
-                old_x.to_int(),
-                old_y.to_int(),
-                final_x.to_int(),
-                final_y.to_int(),
-            );
-        }
+    // Fire the walkover crossings accumulated during the move (vanilla
+    // `P_CrossSpecialLine`, in `while(numspechit--)` order). Detection is the
+    // exact vanilla box-straddle + `P_PointOnLineSide` centre side-change test
+    // (see `record_player_crossings`), not the old truncated-integer segment
+    // intersection.
+    if !player_crossings.is_empty()
+        && let Some(lv) = level
+    {
+        crate::linedef_dispatch::dispatch_player_crossings(gs, lv, handle, &player_crossings);
     }
 }
 
@@ -928,6 +1004,34 @@ fn p_thrust(mo: &mut crate::mobj::Mobj, angle: Bam, move_units: i8) {
 // ---------------------------------------------------------------------------
 // P_XYMovement — non-player mobj momentum integration
 // ---------------------------------------------------------------------------
+
+/// Vanilla `P_XYMovement` MF_CORPSE friction clause (`p_mobj.c`).
+///
+/// A corpse that is still sliding with some momentum (`|momx| > FRACUNIT/4` or
+/// `|momy| > FRACUNIT/4`) and is "halfway off a step" — its bbox-support floor
+/// (`mo->floorz`) differs from its center-point sector floor
+/// (`mo->subsector->sector->floorheight`) — must NOT have friction applied that
+/// tic ("do not stop sliding"). Returns `true` when friction should be skipped.
+///
+/// Getting this wrong makes a shot corpse decelerate one tic too early, leaving
+/// it a couple of map units short of its vanilla resting position — enough to
+/// flip a razor-thin `PIT_CheckThing` overlap and stall a passing player (the
+/// DEMO3/E1M7 leveltime-409 one-tic `py` stall this pins).
+fn corpse_skips_friction(
+    mo_flags: u32,
+    momx: Fixed16_16,
+    momy: Fixed16_16,
+    support_floor: Fixed16_16,
+    center_floor: Fixed16_16,
+) -> bool {
+    if mo_flags & flags::MF_CORPSE == 0 {
+        return false;
+    }
+    let quarter = Fixed16_16(0x4000); // FRACUNIT/4
+    let has_momentum =
+        momx > quarter || momx < -quarter || momy > quarter || momy < -quarter;
+    has_momentum && support_floor != center_floor
+}
 
 /// Port of vanilla `P_XYMovement` (`p_mobj.c`) for NON-PLAYER, NON-MISSILE
 /// mobjs — monsters and any thing carrying momentum.
@@ -1040,14 +1144,29 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
     // No friction while airborne (`mo->z > mo->floorz`). With no level we fall
     // back to the always-friction path (matching the unit-test convention).
     if let Some(lv) = level {
-        let (x, y) = {
+        let (x, y, momx, momy) = {
             let mo = gs.mobjslab.get(handle).expect("mobj exists");
-            (mo.x, mo.y)
+            (mo.x, mo.y, mo.momx, mo.momy)
         };
-        if let Some((floorz, _)) = crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
-            && mz > floorz
+        if let Some((floorz, _)) =
+            crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
         {
-            return;
+            if mz > floorz {
+                return;
+            }
+
+            // Vanilla `P_XYMovement` MF_CORPSE clause: a corpse that is still
+            // sliding with some momentum (|mom| > FRACUNIT/4) and is halfway
+            // off a step — `mo->floorz != mo->subsector->sector->floorheight`,
+            // i.e. the bbox-support floor differs from the center-point sector
+            // floor — skips friction entirely this tic ("do not stop sliding").
+            let center_floor = lv
+                .floor_at(x.to_int(), y.to_int())
+                .map(|f| Fixed16_16::from_int(f as i32))
+                .unwrap_or(floorz);
+            if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
+                return;
+            }
         }
     }
 
@@ -3226,6 +3345,59 @@ mod tests {
             mo.x,
             Fixed16_16::from_int(62),
             "player should continue descending instead of getting stuck on the stair edge"
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // MF_CORPSE step-slide friction exception (vanilla P_XYMovement)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn corpse_on_step_with_momentum_skips_friction() {
+        // Regression for the DEMO3/E1M7 leveltime-409 one-tic `py` stall: a
+        // shot corpse sliding while "halfway off a step" (support floor differs
+        // from the center-point sector floor) keeps its momentum this tic.
+        let sliding = Fixed16_16::from_int(1); // > FRACUNIT/4
+        let support = Fixed16_16::from_int(64);
+        let center = Fixed16_16::from_int(0);
+        assert!(
+            corpse_skips_friction(flags::MF_CORPSE, Fixed16_16::ZERO, -sliding, support, center),
+            "corpse straddling a step with momentum must skip friction"
+        );
+    }
+
+    #[test]
+    fn corpse_flat_floor_still_gets_friction() {
+        // Same corpse fully over one sector (support == center) decelerates.
+        let sliding = Fixed16_16::from_int(1);
+        let floor = Fixed16_16::from_int(64);
+        assert!(
+            !corpse_skips_friction(flags::MF_CORPSE, Fixed16_16::ZERO, -sliding, floor, floor),
+            "corpse on flat floor must not skip friction"
+        );
+    }
+
+    #[test]
+    fn corpse_below_quarter_unit_gets_friction() {
+        // |mom| <= FRACUNIT/4 never triggers the exception, even on a step.
+        let slow = Fixed16_16(0x4000); // exactly FRACUNIT/4 (not > FRACUNIT/4)
+        let support = Fixed16_16::from_int(64);
+        let center = Fixed16_16::from_int(0);
+        assert!(
+            !corpse_skips_friction(flags::MF_CORPSE, slow, slow, support, center),
+            "sub-quarter-unit momentum must not skip friction"
+        );
+    }
+
+    #[test]
+    fn non_corpse_on_step_gets_friction() {
+        // A live actor (no MF_CORPSE) on a step is unaffected by the clause.
+        let sliding = Fixed16_16::from_int(1);
+        let support = Fixed16_16::from_int(64);
+        let center = Fixed16_16::from_int(0);
+        assert!(
+            !corpse_skips_friction(0, Fixed16_16::ZERO, -sliding, support, center),
+            "non-corpse must not skip friction"
         );
     }
 

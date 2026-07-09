@@ -157,12 +157,44 @@ pub fn p_try_move_commit(
     y: Fixed16_16,
     level: &Level,
 ) -> bool {
+    p_try_move_commit_inner(slab, handle, x, y, level, None)
+}
+
+/// Like [`p_try_move_commit`], but on a successful move also appends the
+/// walkover line-crossings (vanilla `P_TryMove`'s `spechit` walk) to `sink`.
+///
+/// Used by the player move path so every committed `P_TryMove` step — the
+/// split-move halves and each `P_SlideMove` sub-step — records its crossings
+/// exactly where vanilla would fire `P_CrossSpecialLine`, in vanilla order.
+pub fn p_try_move_commit_tracked(
+    slab: &mut MobjSlab,
+    handle: MobjHandle,
+    x: Fixed16_16,
+    y: Fixed16_16,
+    level: &Level,
+    sink: &mut Vec<usize>,
+) -> bool {
+    p_try_move_commit_inner(slab, handle, x, y, level, Some(sink))
+}
+
+fn p_try_move_commit_inner(
+    slab: &mut MobjSlab,
+    handle: MobjHandle,
+    x: Fixed16_16,
+    y: Fixed16_16,
+    level: &Level,
+    sink: Option<&mut Vec<usize>>,
+) -> bool {
     if !p_try_move(slab, handle, x, y, level) {
         return false;
     }
+    let old = slab.get(handle).map(|mo| (mo.x, mo.y));
     if let Some(mo) = slab.get_mut(handle) {
         mo.x = x;
         mo.y = y;
+    }
+    if let (Some(sink), Some((old_x, old_y))) = (sink, old) {
+        record_player_crossings(slab, handle, old_x, old_y, x, y, level, sink);
     }
     true
 }
@@ -417,7 +449,12 @@ fn p_hit_slide_line(
 /// Vanilla `P_SlideMove` (`p_map.c`): the blocked `momx/momy` move is retried
 /// as a slide along the first wall hit. Mutates the actor's position and
 /// momentum in place (via [`p_try_move_commit`]).
-pub fn p_slide_move_vanilla(slab: &mut MobjSlab, handle: MobjHandle, level: &Level) {
+pub fn p_slide_move_vanilla(
+    slab: &mut MobjSlab,
+    handle: MobjHandle,
+    level: &Level,
+    sink: &mut Vec<usize>,
+) {
     use crate::geom::fixed_mul;
 
     let mut scratch: Vec<(i32, usize)> = Vec::new();
@@ -426,7 +463,7 @@ pub fn p_slide_move_vanilla(slab: &mut MobjSlab, handle: MobjHandle, level: &Lev
     loop {
         hitcount += 1;
         if hitcount == 3 {
-            slide_stairstep(slab, handle, level);
+            slide_stairstep(slab, handle, level, sink);
             return;
         }
 
@@ -460,7 +497,7 @@ pub fn p_slide_move_vanilla(slab: &mut MobjSlab, handle: MobjHandle, level: &Lev
 
         // Move up to the wall.
         if state.best_frac == FRACUNIT + 1 {
-            slide_stairstep(slab, handle, level);
+            slide_stairstep(slab, handle, level, sink);
             return;
         }
 
@@ -469,14 +506,15 @@ pub fn p_slide_move_vanilla(slab: &mut MobjSlab, handle: MobjHandle, level: &Lev
         if best_frac > 0 {
             let newx = fixed_mul(momx, best_frac);
             let newy = fixed_mul(momy, best_frac);
-            if !p_try_move_commit(
+            if !p_try_move_commit_tracked(
                 slab,
                 handle,
                 Fixed16_16::from_raw(mo_x + newx),
                 Fixed16_16::from_raw(mo_y + newy),
                 level,
+                sink,
             ) {
-                slide_stairstep(slab, handle, level);
+                slide_stairstep(slab, handle, level, sink);
                 return;
             }
         }
@@ -510,12 +548,13 @@ pub fn p_slide_move_vanilla(slab: &mut MobjSlab, handle: MobjHandle, level: &Lev
             .get(handle)
             .map(|mo| (mo.x.raw(), mo.y.raw()))
             .unwrap_or((mo_x, mo_y));
-        if p_try_move_commit(
+        if p_try_move_commit_tracked(
             slab,
             handle,
             Fixed16_16::from_raw(cx + tmxmove),
             Fixed16_16::from_raw(cy + tmymove),
             level,
+            sink,
         ) {
             return;
         }
@@ -524,15 +563,20 @@ pub fn p_slide_move_vanilla(slab: &mut MobjSlab, handle: MobjHandle, level: &Lev
 }
 
 /// Vanilla `stairstep` fallback inside `P_SlideMove`.
-fn slide_stairstep(slab: &mut MobjSlab, handle: MobjHandle, level: &Level) {
+fn slide_stairstep(
+    slab: &mut MobjSlab,
+    handle: MobjHandle,
+    level: &Level,
+    sink: &mut Vec<usize>,
+) {
     let Some((mo_x, mo_y, momx, momy)) = slab
         .get(handle)
         .map(|mo| (mo.x, mo.y, mo.momx, mo.momy))
     else {
         return;
     };
-    if !p_try_move_commit(slab, handle, mo_x, mo_y + momy, level) {
-        p_try_move_commit(slab, handle, mo_x + momx, mo_y, level);
+    if !p_try_move_commit_tracked(slab, handle, mo_x, mo_y + momy, level, sink) {
+        p_try_move_commit_tracked(slab, handle, mo_x + momx, mo_y, level, sink);
     }
 }
 
@@ -626,6 +670,60 @@ fn clamp_i128_to_i32(v: i128) -> i32 {
     v.clamp(i32::MIN as i128, i32::MAX as i128) as i32
 }
 
+/// Vanilla `P_CheckPosition`'s thing pass (`P_BlockThingsIterator` /
+/// `PIT_CheckThing`), reduced to the solid-clip subset relevant to a walking
+/// monster: does the destination bounding box overlap a **solid** thing?
+///
+/// Vanilla checks things BEFORE lines and returns `false` from
+/// `P_CheckPosition` on the first solid overlap — so when a thing blocks, the
+/// line pass never runs and `numspechit` stays 0. Both `try_move_with_blocker`
+/// (does the move succeed?) and `move_spechit` (which lines did the
+/// blocked box cross?) must apply this same thing-first ordering, or a monster
+/// blocked by another monster would spuriously accumulate `spechit` from a
+/// special line beyond it and (via `P_Move`) clear its `movedir`, corrupting the
+/// `olddir`/`turnaround` seed of the ensuing `P_NewChaseDir`.
+///
+/// Missiles and charging lost souls (`MF_SKULLFLY`) take damage-dealing
+/// `PIT_CheckThing` branches handled elsewhere (the missile path in `tic.rs`,
+/// `missile_check_things`), so the walk thing-block does not apply to them.
+fn move_blocked_by_solid_thing(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    radius: Fixed16_16,
+    mo_flags: u32,
+    new_x: Fixed16_16,
+    new_y: Fixed16_16,
+) -> bool {
+    if mo_flags & (flags::MF_MISSILE | flags::MF_SKULLFLY) != 0 {
+        return false;
+    }
+    for other in slab.iter_handles() {
+        if other == handle {
+            continue;
+        }
+        let Some(t) = slab.get(other) else {
+            continue;
+        };
+        // Vanilla gate: only SOLID / SPECIAL / SHOOTABLE things are considered.
+        if t.flags & (flags::MF_SOLID | flags::MF_SPECIAL | flags::MF_SHOOTABLE) == 0 {
+            continue;
+        }
+        let blockdist = (t.radius + radius).raw();
+        if (t.x.raw() - new_x.raw()).abs() >= blockdist
+            || (t.y.raw() - new_y.raw()).abs() >= blockdist
+        {
+            // Bounding boxes don't overlap — no contact.
+            continue;
+        }
+        // `PIT_CheckThing` returns `!(thing->flags & MF_SOLID)`: a solid thing
+        // blocks the move; non-solid specials/shootables do not.
+        if t.flags & flags::MF_SOLID != 0 {
+            return true;
+        }
+    }
+    false
+}
+
 fn try_move_with_blocker(
     slab: &MobjSlab,
     handle: MobjHandle,
@@ -646,36 +744,8 @@ fn try_move_with_blocker(
     // --- PIT_CheckThing (solid mobj-mobj clipping) ---
     // Vanilla `P_CheckPosition` iterates nearby things (`P_BlockThingsIterator`,
     // `PIT_CheckThing`) BEFORE lines: a move into any SOLID thing is blocked.
-    // We port the solid-blocking subset; the moving thing being a missile or a
-    // charging lost soul (MF_SKULLFLY) takes damage-dealing branches handled
-    // elsewhere (the missile path in `tic.rs`, `missile_check_things`), so we
-    // skip the thing pass for those.
-    if mo_flags & (flags::MF_MISSILE | flags::MF_SKULLFLY) == 0 {
-        for other in slab.iter_handles() {
-            if other == handle {
-                continue;
-            }
-            let Some(t) = slab.get(other) else {
-                continue;
-            };
-            // Vanilla gate: only SOLID / SPECIAL / SHOOTABLE things are considered.
-            if t.flags & (flags::MF_SOLID | flags::MF_SPECIAL | flags::MF_SHOOTABLE) == 0 {
-                continue;
-            }
-            let blockdist = (t.radius + radius).raw();
-            if (t.x.raw() - new_x.raw()).abs() >= blockdist
-                || (t.y.raw() - new_y.raw()).abs() >= blockdist
-            {
-                // Bounding boxes don't overlap — no contact.
-                continue;
-            }
-            // `PIT_CheckThing` returns `!(thing->flags & MF_SOLID)`: a solid
-            // thing blocks the move; non-solid specials/shootables do not.
-            // (Item pickup and missile/skull damage are handled on other paths.)
-            if t.flags & flags::MF_SOLID != 0 {
-                return (false, None);
-            }
-        }
+    if move_blocked_by_solid_thing(slab, handle, radius, mo_flags, new_x, new_y) {
+        return (false, None);
     }
 
     let current_floor = level
@@ -829,6 +899,26 @@ fn try_move_with_blocker(
                     );
                 }
 
+                // Head hits the ceiling: the actor must lower itself to fit.
+                // Vanilla `P_TryMove`: `if (tmceilingz - thing->z < thing->height)
+                // return false;`. Without this a player descending stairs toward a
+                // low-ceiling doorway (DEMO3/E1M7 leveltime 534: ceiling 72, z 19,
+                // 72 - 19 = 53 < 56) walks through instead of being blocked until it
+                // has dropped low enough. The slide path already gates on this
+                // (`slide_traverse`); the straight move must too.
+                if open_ceil - mo_z < height {
+                    return (
+                        false,
+                        Some(BlockingLine {
+                            linedef_idx: ld_idx as usize,
+                            x1: lx1,
+                            y1: ly1,
+                            x2: lx2,
+                            y2: ly2,
+                        }),
+                    );
+                }
+
                 // Step too high to climb.
                 if open_floor - step_base_z > MAX_STEP_HEIGHT {
                     return (
@@ -864,6 +954,203 @@ fn try_move_with_blocker(
     (true, None)
 }
 
+/// Faithful port of the `spechit` accumulation performed by vanilla
+/// `P_CheckPosition`'s line pass (`PIT_CheckLine`, `p_map.c`).
+///
+/// Returns the ordered list of special linedefs the actor's bounding box at
+/// `(new_x, new_y)` crosses, exactly as vanilla builds the global `spechit[]`
+/// array: it walks the blockmap cells the box overlaps in `bx`-outer / `by`-inner
+/// order (never expanded by `MAXRADIUS` — that expansion is only for the *thing*
+/// pass), processing each linedef at most once (vanilla `validcount`), and for
+/// each line that the box actually straddles it:
+///  - stops the whole scan on the first hard blocker — a one-sided line, or (for
+///    non-missiles) an `ML_BLOCKING` line, or an `ML_BLOCKMONSTERS` line when the
+///    mover is a monster — because vanilla `PIT_CheckLine` returns `false` there,
+///    freezing `spechit` at whatever it had accumulated so far;
+///  - otherwise (a two-sided passable line) appends it to the list when it has a
+///    special, regardless of the opening height (the fit/step/dropoff rejection
+///    is deferred to `P_TryMove` and never gates `spechit`).
+///
+/// This is what `P_Move` consults via `numspechit` to decide whether a blocked
+/// monster halts (`movedir = DI_NODIR`) and tries the crossed lines as doors,
+/// and what `P_TryMove` walks (via [`record_player_crossings`]) after a
+/// successful player/monster step to fire `P_CrossSpecialLine`. Unlike the
+/// movement bool (`try_move_with_blocker`), which early-returns at the first
+/// blocker, this must see every special line crossed *before* the blocker, so it
+/// is computed separately.
+///
+/// The vanilla `!tmthing->player` guard on `ML_BLOCKMONSTERS` is expressed here
+/// via `MF_COUNTKILL` (players and non-monster things carry no `MF_COUNTKILL`),
+/// so this same routine serves the player, monster and missile spechit passes.
+#[must_use]
+pub fn move_spechit(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    new_x: Fixed16_16,
+    new_y: Fixed16_16,
+    level: &Level,
+) -> Vec<usize> {
+    let (radius, mo_flags) = match slab.get(handle) {
+        Some(mo) => (mo.radius, mo.flags),
+        None => return Vec::new(),
+    };
+
+    let mut spechit: Vec<usize> = Vec::new();
+
+    if mo_flags & flags::MF_NOCLIP != 0 {
+        return spechit;
+    }
+
+    // Vanilla `P_CheckPosition` checks THINGS before LINES: if a solid thing
+    // blocks the destination box, `P_CheckPosition` returns false before the
+    // line pass runs, so `numspechit` stays 0. Replicate that ordering — without
+    // it a monster blocked by another monster spuriously collects a special line
+    // beyond the blocker, and `P_Move` clears its `movedir`, corrupting the
+    // `olddir`/`turnaround` seed handed to `P_NewChaseDir` (DEMO3/E1M7: an imp
+    // at lt611 picked its move-away direction instead of vanilla's, shifting its
+    // chase step and desyncing the demo).
+    if move_blocked_by_solid_thing(slab, handle, radius, mo_flags, new_x, new_y) {
+        return spechit;
+    }
+
+    let is_missile = mo_flags & flags::MF_MISSILE != 0;
+    // `P_Move` is only ever called for non-player monsters, so the vanilla
+    // `!tmthing->player` guard on `ML_BLOCKMONSTERS` is always satisfied here.
+    let blocks_monsters = mo_flags & flags::MF_COUNTKILL != 0;
+
+    let left = new_x - radius;
+    let right = new_x + radius;
+    let bottom = new_y - radius;
+    let top = new_y + radius;
+
+    let bm = &level.blockmap;
+    let x_origin = bm.x_origin as i32;
+    let y_origin = bm.y_origin as i32;
+    let x_count = bm.x_count as i32;
+    let y_count = bm.y_count as i32;
+
+    let to_block = |world: Fixed16_16, origin: i32, count: i32| -> usize {
+        let cell = (world.to_int() - origin) / BLOCK_SIZE;
+        cell.max(0).min(count - 1) as usize
+    };
+
+    let col_lo = to_block(left, x_origin, x_count);
+    let col_hi = to_block(right, x_origin, x_count);
+    let row_lo = to_block(bottom, y_origin, y_count);
+    let row_hi = to_block(top, y_origin, y_count);
+
+    // Vanilla `validcount`: each linedef is examined once across the whole scan.
+    let mut seen: Vec<usize> = Vec::new();
+
+    // Vanilla iterates `for (bx...) for (by...)` — column-major.
+    for col in col_lo..=col_hi {
+        for row in row_lo..=row_hi {
+            for ld_idx in bm.block_linedefs(col, row) {
+                let ld_idx = ld_idx as usize;
+                if seen.contains(&ld_idx) {
+                    continue;
+                }
+                seen.push(ld_idx);
+
+                let Some(ld) = level.linedefs.get(ld_idx) else {
+                    continue;
+                };
+
+                let v1 = &level.vertexes[ld.from_vertex as usize];
+                let v2 = &level.vertexes[ld.to_vertex as usize];
+                let lx1 = Fixed16_16::from_int(v1.x as i32);
+                let ly1 = Fixed16_16::from_int(v1.y as i32);
+                let lx2 = Fixed16_16::from_int(v2.x as i32);
+                let ly2 = Fixed16_16::from_int(v2.y as i32);
+
+                // Line bbox rejection (vanilla PIT_CheckLine first test).
+                let lx_min = lx1.min(lx2);
+                let lx_max = lx1.max(lx2);
+                let ly_min = ly1.min(ly2);
+                let ly_max = ly1.max(ly2);
+                if right <= lx_min || left >= lx_max || top <= ly_min || bottom >= ly_max {
+                    continue;
+                }
+
+                // P_BoxOnLineSide != -1 → the box does not straddle the line.
+                if !bbox_straddles_line(left, bottom, right, top, lx1, ly1, lx2, ly2) {
+                    continue;
+                }
+
+                // A line has been hit.
+                if !ld.is_two_sided() {
+                    return spechit; // one-sided → PIT_CheckLine returns false
+                }
+                if !is_missile {
+                    if ld.flags & doom_map::lumps::FLAG_BLOCKING != 0 {
+                        return spechit; // explicitly blocking everything
+                    }
+                    if blocks_monsters && ld.flags & doom_map::lumps::FLAG_BLOCKMONSTERS != 0 {
+                        return spechit; // block monsters only
+                    }
+                }
+
+                // Two-sided passable line: opening heights are irrelevant to
+                // spechit; only the special membership matters.
+                if ld.special != 0 {
+                    spechit.push(ld_idx);
+                }
+            }
+        }
+    }
+
+    spechit
+}
+
+/// Vanilla `P_TryMove`'s post-move `spechit` walk (`p_map.c`), for the player.
+///
+/// After a successful move vanilla runs:
+/// ```c
+/// while (numspechit--) {
+///     ld = spechit[numspechit];
+///     side = P_PointOnLineSide (thing->x, thing->y, ld);
+///     oldside = P_PointOnLineSide (oldx, oldy, ld);
+///     if (side != oldside)
+///         if (ld->special)
+///             P_CrossSpecialLine (ld-lines, oldside, thing);
+/// }
+/// ```
+/// i.e. for every special line the destination box straddled (the [`move_spechit`]
+/// list), in reverse accumulation order, fire the crossing iff the centre's
+/// **infinite-line** side changed between the old and new position. `spechit`
+/// already holds only special lines, so `ld->special` is implied.
+///
+/// `sink` receives the `linedef` indices to cross, in the vanilla
+/// `while(numspechit--)` reverse order; the caller dispatches them. The exact
+/// fixed-point [`p_point_on_line_side`](crate::geom::p_point_on_line_side) is used
+/// on the raw 16.16 centre coordinates, matching vanilla `P_PointOnLineSide`
+/// (never the truncated-integer segment intersection the old detection used).
+fn record_player_crossings(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    old_x: Fixed16_16,
+    old_y: Fixed16_16,
+    new_x: Fixed16_16,
+    new_y: Fixed16_16,
+    level: &Level,
+    sink: &mut Vec<usize>,
+) {
+    use crate::geom::p_point_on_line_side;
+
+    let spechit = move_spechit(slab, handle, new_x, new_y, level);
+    for &ld_idx in spechit.iter().rev() {
+        let Some(ld) = level.linedefs.get(ld_idx) else {
+            continue;
+        };
+        let g = line_geom(level, ld);
+        let side = p_point_on_line_side(new_x.raw(), new_y.raw(), g.v1x, g.v1y, g.dx, g.dy);
+        let oldside = p_point_on_line_side(old_x.raw(), old_y.raw(), g.v1x, g.v1y, g.dx, g.dy);
+        if side != oldside {
+            sink.push(ld_idx);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Helper: does the actor bounding box straddle the linedef?
 // ---------------------------------------------------------------------------
@@ -895,7 +1182,7 @@ fn bbox_straddles_line(
 /// slope-type dispatch and the `P_PointOnLineSide` calls match vanilla exactly,
 /// including operating on the full fractional coordinates rather than truncated
 /// integers — the fractional bits are decisive for corner-tangent cases.
-fn p_box_on_line_side(
+pub(crate) fn p_box_on_line_side(
     left: Fixed16_16,
     bottom: Fixed16_16,
     right: Fixed16_16,
@@ -1148,6 +1435,46 @@ mod tests {
         }
     }
 
+    /// Two flat-floored sectors sharing a two-sided line at x=64. The back
+    /// sector (1) has a parametrized (low) ceiling; the front sector (0) is tall.
+    fn make_two_sided_low_ceiling_level(back_ceil: i16) -> doom_map::Level {
+        let mut level = make_two_sided_step_level(0, 0);
+        level.sectors[1].ceil_height = back_ceil;
+        level
+    }
+
+    #[test]
+    fn try_move_blocked_when_head_hits_low_ceiling() {
+        // Vanilla P_TryMove: `if (tmceilingz - thing->z < thing->height) return
+        // false;`. Back ceiling 72, player height 56: a player at z=24 (72-24=48
+        // < 56) must be blocked until it lowers itself. Regression for DEMO3/E1M7
+        // leveltime 534.
+        let level = make_two_sided_low_ceiling_level(72);
+        let (mut slab, handle) = make_player_slab();
+        slab.get_mut(handle).expect("player").z = Fixed16_16::from_int(24);
+        let new_x = Fixed16_16::from_int(70); // crosses the x=64 line into sector 1
+        let new_y = Fixed16_16::from_int(64);
+        assert!(
+            !p_try_move(&slab, handle, new_x, new_y, &level),
+            "head at z+height=80 must not fit under a 72 ceiling"
+        );
+    }
+
+    #[test]
+    fn try_move_allowed_when_low_enough_for_ceiling() {
+        // Same geometry, but the player has descended to z=16 (72-16=56, not
+        // < 56): it now fits and the move succeeds.
+        let level = make_two_sided_low_ceiling_level(72);
+        let (mut slab, handle) = make_player_slab();
+        slab.get_mut(handle).expect("player").z = Fixed16_16::from_int(16);
+        let new_x = Fixed16_16::from_int(70);
+        let new_y = Fixed16_16::from_int(64);
+        assert!(
+            p_try_move(&slab, handle, new_x, new_y, &level),
+            "head at z+height=72 fits exactly under a 72 ceiling"
+        );
+    }
+
     fn make_partition_step_level(right_floor: i16, left_floor: i16) -> doom_map::Level {
         use doom_map::{
             Blockmap, FLAG_TWO_SIDED, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex,
@@ -1330,6 +1657,54 @@ mod tests {
         mo.z = Fixed16_16::from_int(z);
         let handle = slab.alloc(mo);
         (slab, handle)
+    }
+
+    #[test]
+    fn monster_spechit_thing_block_suppresses_special_line() {
+        // Vanilla `P_CheckPosition` checks THINGS before LINES. When a solid
+        // thing blocks the destination box, `P_CheckPosition` returns false
+        // before the line pass runs, so `numspechit` stays 0. This mirrors the
+        // DEMO3/E1M7 lt611 imp: it was blocked by another imp to its south, yet
+        // our `spechit` pass reported a special line beyond the blocker, causing
+        // `P_Move` to clear `movedir` and corrupt the `P_NewChaseDir` seed.
+        //
+        // Geometry: a two-sided *special* line at x=64. An imp (radius 20) at
+        // (50,64) moving to (60,64) has a destination box spanning x∈[40,80],
+        // which straddles the x=64 line — so absent a blocker the spechit pass
+        // must return that one special line.
+        let mut level = make_two_sided_step_level(0, 0);
+        level.linedefs[0].special = 88; // WR lift — any nonzero special line
+
+        let (mut slab, mover) = make_monster_slab(50, 64, 0);
+        let new_x = Fixed16_16::from_int(60);
+        let new_y = Fixed16_16::from_int(64);
+
+        // Baseline: no other thing → the straddled special line is collected.
+        let sh = move_spechit(&slab, mover, new_x, new_y, &level);
+        assert_eq!(
+            sh,
+            vec![0usize],
+            "box straddling a two-sided special line must collect it"
+        );
+
+        // Add a solid thing overlapping the destination box (thing-first block).
+        let mut blocker = Mobj::new(
+            MobjKind::Imp,
+            new_x,
+            new_y,
+            Bam::ZERO,
+        );
+        blocker.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        blocker.radius = Fixed16_16::from_int(20);
+        blocker.height = Fixed16_16::from_int(56);
+        slab.alloc(blocker);
+
+        let sh_blocked = move_spechit(&slab, mover, new_x, new_y, &level);
+        assert!(
+            sh_blocked.is_empty(),
+            "a solid thing blocking the destination must suppress the line pass \
+             (vanilla numspechit == 0), got {sh_blocked:?}"
+        );
     }
 
     #[test]

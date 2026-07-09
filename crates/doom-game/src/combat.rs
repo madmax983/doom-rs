@@ -298,11 +298,17 @@ pub fn damage_mobj_source(
     // *surviving* victim gets the pain roll, `reactiontime = 0`, and the
     // retaliation re-target (handled in the `else` branch below), exactly as
     // `P_DamageMobj` orders them.
+    // Vanilla `target->health -= damage;` (p_inter.c:914). Health is NOT clamped
+    // to 0 here — an over-kill drives it negative, and `P_KillMobj` compares
+    // `target->health < -target->info->spawnhealth` to choose the gib (xdeath)
+    // chain over the normal death chain. The player's *displayed* health is a
+    // separate field (`PlayerState`, clamped in `apply_damage`); this is the
+    // actor mobj's own health.
     let new_health = {
         let Some(mo) = gs.mobjslab.get_mut(target) else {
             return;
         };
-        mo.health = mo.health.saturating_sub(effective_damage).max(0);
+        mo.health = mo.health.saturating_sub(effective_damage);
         mo.health
     };
 
@@ -343,7 +349,21 @@ pub fn damage_mobj_source(
             gs.player.kill_count += 1;
         }
 
-        let death_sn = crate::mobjinfo::MOBJINFO[kind as usize].death_state;
+        // Over-kill (gib) path (p_inter.c:726-732):
+        //   if (target->health < -target->info->spawnhealth
+        //       && target->info->xdeathstate)
+        //       P_SetMobjState(target, target->info->xdeathstate);
+        //   else
+        //       P_SetMobjState(target, target->info->deathstate);
+        // The xdeath chain runs A_XScream (sfx_slop, NO P_Random) instead of
+        // A_Scream, so a gibbed monster advances the RNG one draw less than a
+        // normally-killed one.
+        let info = &crate::mobjinfo::MOBJINFO[kind as usize];
+        let death_sn = if new_health < -info.spawn_health && info.xdeath_state != StateNum::NULL {
+            info.xdeath_state
+        } else {
+            info.death_state
+        };
         if death_sn != StateNum::NULL {
             crate::tic::p_set_mobj_state(gs, target, death_sn, None);
         }
@@ -1564,15 +1584,17 @@ mod tests {
     fn damage_kills_at_zero() {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
-        // Deal more damage than the trooper has health — should clamp to 0.
+        // Deal more damage than the trooper has health. Vanilla P_DamageMobj does
+        // `target->health -= damage;` with NO clamp, so health goes negative and,
+        // being below -spawnhealth, this is an over-kill (gib) death.
         damage_mobj(&mut gs, trooper, MobjHandle::NULL, 9999);
         assert_eq!(
             gs.mobjslab
                 .get(trooper)
                 .expect("value must exist in test")
                 .health,
-            0,
-            "health must clamp to 0, not go negative"
+            20 - 9999,
+            "vanilla health goes negative (unclamped), enabling the gib path"
         );
     }
 
@@ -1603,14 +1625,16 @@ mod tests {
         let mut gs = make_game_state();
         let target = spawn_trooper(&mut gs, 128, 0);
         let inflictor = MobjHandle::NULL;
-        // Test with massive damage
+        // Massive damage must not panic: the health subtraction saturates rather
+        // than overflowing i32. Vanilla leaves the result negative (no clamp),
+        // so the actor is dead (over-killed) but health is not forced to 0.
         damage_mobj(&mut gs, target, inflictor, i32::MAX);
         let health = gs
             .mobjslab
             .get(target)
             .expect("value must exist in test")
             .health;
-        assert_eq!(health, 0);
+        assert!(health < 0, "over-kill leaves health negative, got {health}");
     }
 
     #[test]

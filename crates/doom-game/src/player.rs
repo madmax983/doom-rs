@@ -133,6 +133,12 @@ pub struct PlayerState {
     pub attack_cooldown: u8,
     /// Consecutive refire count while the attack button is held.
     pub refire: u8,
+    /// Vanilla `player_t::bob` — movement bobbing amplitude in 16.16 fixed
+    /// point, `(momx² + momy²) >> 2` clamped to `MAXBOB`, recomputed each tic
+    /// from the post-thrust momentum (`P_CalcHeight`).  Drives the weapon
+    /// psprite sway in `A_WeaponReady`, which in turn sets the resting `sy`
+    /// carried into the next lower/raise and thus the exact fire cadence.
+    pub bob: i32,
     /// Vanilla `player_t::extralight` weapon-flash bonus (0..=2).
     pub extra_light: u8,
     /// Was use held last tic (prevents continuous use on key hold).
@@ -195,6 +201,7 @@ impl PlayerState {
             attack_down: false,
             attack_cooldown: 0,
             refire: 0,
+            bob: 0,
             extra_light: 0,
             use_down: false,
             powers: [0; NUM_POWERS],
