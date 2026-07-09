@@ -1214,6 +1214,96 @@ fn sectors_by_tag(level: &Level, tag: u16) -> Vec<usize> {
 /// For each linedef with a walk-trigger special (W1 or WR), checks if the
 /// movement segment crosses the linedef. If so, dispatches the linedef
 /// action.
+/// Whether a non-player actor (monster) may activate `special` by walking over
+/// it, matching the `!thing->player` whitelist in vanilla `P_CrossSpecialLine`
+/// (`p_spec.c`): teleports, a raise-door, and lower-wait-raise lifts.
+pub fn monster_can_cross_special(special: u16) -> bool {
+    matches!(
+        special,
+        4    // W1 Door raise
+        | 10 // W1 Plat down-wait-up-stay
+        | 39 // W1 Teleport
+        | 88 // WR Plat down-wait-up-stay
+        | 97 // WR Teleport
+        | 125 // W1 Teleport (monsters only)
+        | 126 // WR Teleport (monsters only)
+    )
+}
+
+/// Record the monster-crossable special lines whose side a monster's centre
+/// crossed while stepping from `(old_x, old_y)` to `(new_x, new_y)`, in
+/// farthest-hit-first order (matching vanilla `P_TryMove`'s reverse `spechit`
+/// walk). They are dispatched later, in `dispatch_pending_monster_crossings`,
+/// once the level can be borrowed mutably.
+///
+/// This is the monster (`!thing->player`) counterpart to `check_cross_lines`:
+/// only the vanilla monster whitelist (`monster_can_cross_special`) is eligible,
+/// so a monster can activate a lift / teleport / raise-door line it walks over
+/// but never the player-only walk triggers.
+pub fn queue_monster_crossings(
+    gs: &mut GameState,
+    level: &Level,
+    actor: MobjHandle,
+    old_x: i32,
+    old_y: i32,
+    new_x: i32,
+    new_y: i32,
+) {
+    let mut hits: smallvec::SmallVec<[(i64, i64, usize); 4]> = level
+        .linedefs
+        .iter()
+        .enumerate()
+        .filter_map(|(i, ld)| {
+            if ld.special == 0 || !monster_can_cross_special(ld.special) {
+                return None;
+            }
+            let v1 = &level.vertexes[ld.from_vertex as usize];
+            let v2 = &level.vertexes[ld.to_vertex as usize];
+            segment_intersection_frac(
+                old_x, old_y, new_x, new_y, v1.x as i32, v1.y as i32, v2.x as i32, v2.y as i32,
+            )
+            .map(|(num, denom)| (num, denom, i))
+        })
+        .collect();
+
+    if hits.is_empty() {
+        return;
+    }
+
+    // Nearest-first along the path; vanilla walks `spechit` in reverse (farthest
+    // contacted first), so push farthest first.
+    hits.sort_by(|a, b| {
+        let lhs = i128::from(a.0) * i128::from(b.1);
+        let rhs = i128::from(b.0) * i128::from(a.1);
+        lhs.cmp(&rhs)
+    });
+    for (_, _, ld_idx) in hits.into_iter().rev() {
+        gs.pending_monster_crossings.push((ld_idx, actor));
+    }
+}
+
+/// Dispatch every monster line-crossing recorded this tic by
+/// `queue_monster_crossings`, then clear the queue. Call once per tic after the
+/// actor pass and before the sector movers run, so an activated lift takes its
+/// first step on the same tic (vanilla appends the plat thinker to the running
+/// thinker list).
+pub fn dispatch_pending_monster_crossings(gs: &mut GameState, level: &mut Level) {
+    if gs.pending_monster_crossings.is_empty() {
+        return;
+    }
+    let pending = std::mem::take(&mut gs.pending_monster_crossings);
+    for (ld_idx, actor) in pending {
+        let special = match level.linedefs.get(ld_idx) {
+            Some(ld) => ld.special,
+            None => continue,
+        };
+        let Some(trigger) = classify_trigger(special) else {
+            continue;
+        };
+        dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
+    }
+}
+
 pub fn check_cross_lines(
     gs: &mut GameState,
     level: &mut Level,
@@ -1986,6 +2076,88 @@ mod tests {
     // -----------------------------------------------------------------------
     // Tests: check_cross_lines
     // -----------------------------------------------------------------------
+
+    #[test]
+    fn monster_can_cross_special_matches_vanilla_whitelist() {
+        // Vanilla `P_CrossSpecialLine` `!thing->player` whitelist.
+        for s in [4u16, 10, 39, 88, 97, 125, 126] {
+            assert!(
+                monster_can_cross_special(s),
+                "special {s} must be monster-crossable"
+            );
+        }
+        // Player-only walk triggers must never fire for a monster.
+        for s in [2u16, 52, 62, 98, 11, 72, 109] {
+            assert!(
+                !monster_can_cross_special(s),
+                "special {s} must NOT be monster-crossable"
+            );
+        }
+    }
+
+    #[test]
+    fn monster_crossing_lift_line_queues_then_activates() {
+        // Regression (DEMO2/E1M3, leveltime 628): a walking monster must
+        // activate a type-88 (WR lift) line it steps across, exactly as vanilla
+        // `P_TryMove`/`P_CrossSpecialLine` do for `thing` that is not a player.
+        let (mut gs, _player) = make_gs_with_player();
+        let mut level = make_test_level_with_tag(4);
+        level.linedefs[0].special = 88; // WR plat down-wait-up-stay, tag 4.
+
+        let monster = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(-5),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let mhandle = gs.mobjslab.alloc(monster);
+
+        queue_monster_crossings(&mut gs, &level, mhandle, -5, 0, 5, 0);
+        assert_eq!(
+            gs.pending_monster_crossings.len(),
+            1,
+            "monster crossing a type-88 lift line should be queued"
+        );
+
+        dispatch_pending_monster_crossings(&mut gs, &mut level);
+        assert!(
+            gs.pending_monster_crossings.is_empty(),
+            "queue must be drained after dispatch"
+        );
+        assert_eq!(
+            gs.movers.lifts.len(),
+            1,
+            "the crossed type-88 line must activate a lift on the tagged sector"
+        );
+    }
+
+    #[test]
+    fn monster_does_not_trigger_player_only_walk_line() {
+        // A monster crossing a player-only walk special (W1 exit) must do
+        // nothing — vanilla gates these behind `thing->player`.
+        let (mut gs, _player) = make_gs_with_player();
+        let mut level = make_test_level_with_tag(0);
+        level.linedefs[0].special = 52; // W1 exit — player-only.
+
+        let monster = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(-5),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        let mhandle = gs.mobjslab.alloc(monster);
+
+        queue_monster_crossings(&mut gs, &level, mhandle, -5, 0, 5, 0);
+        assert!(
+            gs.pending_monster_crossings.is_empty(),
+            "monster must not queue a player-only walk trigger"
+        );
+        dispatch_pending_monster_crossings(&mut gs, &mut level);
+        assert_eq!(
+            gs.exit_request, None,
+            "monster crossing a W1 exit must not exit the level"
+        );
+    }
 
     #[test]
     fn cross_w1_line_triggers_action() {

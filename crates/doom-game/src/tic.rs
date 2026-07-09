@@ -444,6 +444,13 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
         );
         tick_same_tic_missiles(gs, level.as_deref(), initial_generation);
 
+        // 1d. Walkover specials monsters crossed during the actor pass (vanilla
+        //     `P_CrossSpecialLine`), dispatched before the sector movers so an
+        //     activated lift steps on the same tic.
+        if let Some(lv) = level.as_deref_mut() {
+            crate::linedef_dispatch::dispatch_pending_monster_crossings(gs, lv);
+        }
+
         // 2-6. Sector movers (doors, ceilings, floors, lifts, platforms).
         //      RNG-neutral; kept after the actor passes as before.
         if let Some(lv) = level.as_deref_mut() {
@@ -456,6 +463,11 @@ pub fn tick_world(gs: &mut GameState, mut level: Option<&mut Level>) {
     } else {
         // 1. Advance all actor state machines.
         tick_all_mobjs(gs, level.as_deref());
+
+        // 1d. Walkover specials monsters crossed during the actor pass.
+        if let Some(lv) = level.as_deref_mut() {
+            crate::linedef_dispatch::dispatch_pending_monster_crossings(gs, lv);
+        }
 
         // 2-6. Sector movers (doors, ceilings, floors, lifts, platforms).
         if let Some(lv) = level.as_deref_mut() {

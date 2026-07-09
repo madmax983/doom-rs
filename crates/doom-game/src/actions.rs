@@ -549,6 +549,30 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
                 mo.subsector = subsector as u32;
             }
         }
+        // Vanilla `P_TryMove` (`p_map.c`): after a successful move it walks the
+        // `spechit` list and fires `P_CrossSpecialLine` for every special line
+        // whose side the actor's centre crossed — for monsters as well as the
+        // player (a monster is `thing`, not `thing->player`). We cannot mutate
+        // the level here (the AI tick borrows it immutably), so record the
+        // monster-crossable lines the step crossed and dispatch them right after
+        // the actor pass, before the sector movers run — the same tic, so an
+        // activated lift still takes its first step this tic (vanilla appends the
+        // plat thinker to the running list). Without this a monster silently
+        // walks over lift/teleport/raise-door trigger lines it should activate
+        // (DEMO2/E1M3 desync at leveltime 628: a zombie crossing a type-88 lift
+        // line lowers the platform, letting the player's gunfire flood the
+        // sector beyond and wake a monster on the correct tic).
+        if let Some(lv) = level {
+            crate::linedef_dispatch::queue_monster_crossings(
+                gs,
+                lv,
+                handle,
+                mo_x.to_int(),
+                mo_y.to_int(),
+                new_x.to_int(),
+                new_y.to_int(),
+            );
+        }
         true
     } else {
         // Movement failed. Port of vanilla `P_Move`'s spechit path
