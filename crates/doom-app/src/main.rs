@@ -3887,7 +3887,7 @@ mod tests {
     #[test]
     fn doom_game_new_syncs_weapon_anim_to_player_weapon() {
         let mut gs = make_game_state();
-        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_weapon(WeaponType::Shotgun);
         gs.player.weapon = WeaponType::Shotgun;
         let game = DoomGame::new(
             gs,
@@ -3952,7 +3952,7 @@ mod tests {
     #[test]
     fn weapon_switch_lowers_then_raises_new_weapon() {
         let mut game = make_doom_game();
-        game.gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        game.gs.player.give_weapon(WeaponType::Shotgun);
         for _ in 0..24 {
             game.tick(TicInput::default());
         }

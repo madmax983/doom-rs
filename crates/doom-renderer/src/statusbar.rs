@@ -126,7 +126,13 @@ impl StatusBarData {
             ],
             max_ammo: player.max_ammo,
             ready_weapon: weapon_idx,
-            weapons: player.weapons,
+            weapons: std::array::from_fn(|i| {
+                if let Some(w) = doom_types::weapons::WeaponType::from_repr(i as u8) {
+                    player.has_weapon(w)
+                } else {
+                    false
+                }
+            }),
             keys: player.keys,
             face_index: 0,
         }
@@ -1576,7 +1582,14 @@ mod tests {
         assert_eq!(data.health, player.health());
         assert_eq!(data.armor, player.armor());
         assert_eq!(data.keys, player.keys);
-        assert_eq!(data.weapons, player.weapons);
+        let expected_weapons = std::array::from_fn(|i| {
+            if let Some(w) = doom_types::weapons::WeaponType::from_repr(i as u8) {
+                player.has_weapon(w)
+            } else {
+                false
+            }
+        });
+        assert_eq!(data.weapons, expected_weapons);
     }
 
     // --- Bonus: draw_char renders a letter ---

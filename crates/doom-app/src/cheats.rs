@@ -155,8 +155,10 @@ pub(crate) fn apply_cheat(gs: &mut GameState, cheat_name: &str) -> &'static str 
         "IDKFA" => {
             // Full weapons, keys, max ammo, and 200% armor.
             gs.player.give_armor(200, 2);
-            for slot in gs.player.weapons.iter_mut() {
-                *slot = true;
+            for i in 0..doom_types::limits::NUM_WEAPONS {
+                if let Some(w) = doom_types::weapons::WeaponType::from_repr(i as u8) {
+                    gs.player.give_weapon(w);
+                }
             }
             for (ammo_idx, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
                 gs.player.give_ammo(ammo_idx, max_ammo);
@@ -167,8 +169,10 @@ pub(crate) fn apply_cheat(gs: &mut GameState, cheat_name: &str) -> &'static str 
         "IDFA" => {
             // Full ammo and armor, no keys.
             gs.player.give_armor(200, 2);
-            for slot in gs.player.weapons.iter_mut() {
-                *slot = true;
+            for i in 0..doom_types::limits::NUM_WEAPONS {
+                if let Some(w) = doom_types::weapons::WeaponType::from_repr(i as u8) {
+                    gs.player.give_weapon(w);
+                }
             }
             for (ammo_idx, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
                 gs.player.give_ammo(ammo_idx, max_ammo);
@@ -321,10 +325,11 @@ mod tests {
     fn apply_cheat_idkfa_gives_all_weapons() {
         let mut gs = make_test_gs();
         apply_cheat(&mut gs, "IDKFA");
-        assert!(
-            gs.player.weapons.iter().all(|&w| w),
-            "IDKFA must set all weapon slots"
-        );
+        for i in 0..doom_types::limits::NUM_WEAPONS {
+            if let Some(w) = doom_types::weapons::WeaponType::from_repr(i as u8) {
+                assert!(gs.player.has_weapon(w), "IDKFA must set all weapon slots");
+            }
+        }
     }
 
     #[test]

@@ -406,7 +406,7 @@ fn apply_pending_weapon_change(gs: &mut GameState, cmd: TicCmd) {
     }
     let weapon_num = ((cmd.buttons & bt::BT_WEAPONMASK) >> 3) as usize;
     if let Some(weapon) = WeaponType::from_num(weapon_num)
-        && gs.player.weapons[weapon as usize]
+        && gs.player.has_weapon(weapon)
         && weapon != gs.player.weapon
     {
         gs.player.pending_weapon = Some(weapon);
@@ -1088,7 +1088,7 @@ mod tests {
     fn fist_attack_uses_player_attack_state_without_extra_light_and_ready_resets_both() {
         let mut gs = make_game_state();
         gs.player.weapon = WeaponType::Fist;
-        gs.player.weapons[WeaponType::Fist as usize] = true;
+        gs.player.give_weapon(WeaponType::Fist);
         ready_player_psprites(&mut gs);
 
         tick_psprites(&mut gs, cmd_with_buttons(bt::BT_ATTACK), None);
@@ -1134,7 +1134,7 @@ mod tests {
     #[test]
     fn tick_psprites_weapon_change_lowers_then_raises_new_weapon() {
         let mut gs = make_game_state();
-        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_weapon(WeaponType::Shotgun);
         gs.player.give_ammo(AmmoType::Shells as usize, 4);
         setup_psprites(&mut gs.player);
         for _ in 0..24 {
@@ -1179,7 +1179,7 @@ mod tests {
         }
 
         gs.player.weapon = WeaponType::Shotgun;
-        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_weapon(WeaponType::Shotgun);
         gs.player.give_ammo(AmmoType::Shells as usize, 4);
 
         tick_psprites(&mut gs, TicCmd::default(), None);
@@ -1195,7 +1195,7 @@ mod tests {
     fn plasma_attack_starts_flash_psprite() {
         let mut gs = make_game_state();
         gs.player.weapon = WeaponType::PlasmaRifle;
-        gs.player.weapons[WeaponType::PlasmaRifle as usize] = true;
+        gs.player.give_weapon(WeaponType::PlasmaRifle);
         gs.player.give_ammo(AmmoType::Cells as usize, 50);
         ready_player_psprites(&mut gs);
 
@@ -1230,7 +1230,7 @@ mod tests {
     fn held_plasma_fires_a_second_shot_six_tics_later() {
         let mut gs = make_game_state();
         gs.player.weapon = WeaponType::PlasmaRifle;
-        gs.player.weapons[WeaponType::PlasmaRifle as usize] = true;
+        gs.player.give_weapon(WeaponType::PlasmaRifle);
         gs.player.give_ammo(AmmoType::Cells as usize, 50);
         ready_player_psprites(&mut gs);
 
@@ -1259,7 +1259,7 @@ mod tests {
     fn chaingun_attack_cycle_fires_a_second_shot_before_returning_ready() {
         let mut gs = make_game_state();
         gs.player.weapon = WeaponType::Chaingun;
-        gs.player.weapons[WeaponType::Chaingun as usize] = true;
+        gs.player.give_weapon(WeaponType::Chaingun);
         gs.player.give_ammo(AmmoType::Bullets as usize, 50);
         ready_player_psprites(&mut gs);
 
@@ -1287,7 +1287,7 @@ mod tests {
     fn bfg_attack_delays_projectile_and_ammo_until_the_second_attack_state() {
         let mut gs = make_game_state();
         gs.player.weapon = WeaponType::Bfg;
-        gs.player.weapons[WeaponType::Bfg as usize] = true;
+        gs.player.give_weapon(WeaponType::Bfg);
         gs.player.give_ammo(AmmoType::Cells as usize, 200);
         ready_player_psprites(&mut gs);
 
@@ -1337,7 +1337,7 @@ mod tests {
     fn super_shotgun_reload_sequence_queues_open_load_and_close_sounds() {
         let mut gs = make_game_state();
         gs.player.weapon = WeaponType::SuperShotgun;
-        gs.player.weapons[WeaponType::SuperShotgun as usize] = true;
+        gs.player.give_weapon(WeaponType::SuperShotgun);
         gs.player.give_ammo(AmmoType::Shells as usize, 4);
         ready_player_psprites(&mut gs);
 
@@ -1383,7 +1383,7 @@ mod tests {
     fn super_shotgun_empty_after_firing_lowers_at_reload_check() {
         let mut gs = make_game_state();
         gs.player.weapon = WeaponType::SuperShotgun;
-        gs.player.weapons[WeaponType::SuperShotgun as usize] = true;
+        gs.player.give_weapon(WeaponType::SuperShotgun);
         gs.player.give_ammo(AmmoType::Shells as usize, 2);
         ready_player_psprites(&mut gs);
 

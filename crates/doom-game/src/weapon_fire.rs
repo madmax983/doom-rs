@@ -180,7 +180,7 @@ pub fn select_next_weapon(gs: &GameState) -> Option<WeaponType> {
     ];
 
     for &w in &PRIORITY {
-        if !gs.player.weapons[w as usize] {
+        if !gs.player.has_weapon(w) {
             continue;
         }
         if has_ammo(gs, w) {
@@ -536,10 +536,14 @@ mod tests {
         gs.mobjslab.alloc(target)
     }
 
+    use doom_types::limits::NUM_WEAPONS;
+
     /// Give the player all weapons and max ammo for testing.
     fn give_all_weapons_and_ammo(gs: &mut GameState) {
-        for i in 0..9 {
-            gs.player.weapons[i] = true;
+        for i in 0..NUM_WEAPONS {
+            if let Some(w_type) = WeaponType::from_repr(i as u8) {
+                gs.player.give_weapon(w_type);
+            }
         }
         gs.player.give_ammo(AmmoType::Bullets as usize, 200);
         gs.player.give_ammo(AmmoType::Shells as usize, 50);

@@ -299,11 +299,16 @@ pub fn apply_cheat(gs: &mut GameState, code: CheatCode) -> bool {
     }
 }
 
+use doom_types::limits::NUM_WEAPONS;
+use doom_types::weapons::WeaponType;
+
 /// Give the player all weapons and set all ammo to maximum.
 fn give_all_weapons_and_ammo(gs: &mut GameState) {
     // All weapons.
-    for slot in gs.player.weapons.iter_mut() {
-        *slot = true;
+    for i in 0..NUM_WEAPONS {
+        if let Some(w) = WeaponType::from_repr(i as u8) {
+            gs.player.give_weapon(w);
+        }
     }
     // Max ammo.
     for (i, max_ammo) in MAX_AMMO.iter().copied().enumerate() {
@@ -541,8 +546,9 @@ mod tests {
         let mut gs = GameState::new("E1M1");
         apply_cheat(&mut gs, CheatCode::AllWeaponsAmmoKeys);
         for i in 0..NUM_WEAPONS {
+            let w = doom_types::weapons::WeaponType::from_repr(i as u8).unwrap();
             assert!(
-                gs.player.weapons[i],
+                gs.player.has_weapon(w),
                 "weapon slot {} should be true after IDKFA",
                 i
             );
@@ -575,8 +581,9 @@ mod tests {
         let mut gs = GameState::new("E1M1");
         apply_cheat(&mut gs, CheatCode::AllWeaponsAmmo);
         for i in 0..NUM_WEAPONS {
+            let w = doom_types::weapons::WeaponType::from_repr(i as u8).unwrap();
             assert!(
-                gs.player.weapons[i],
+                gs.player.has_weapon(w),
                 "weapon slot {} should be true after IDFA",
                 i
             );

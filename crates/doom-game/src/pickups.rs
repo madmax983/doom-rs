@@ -393,8 +393,8 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             40,
         ),
         MobjKind::Chainsaw => {
-            let had = gs.player.weapons[WeaponType::Chainsaw as usize];
-            gs.player.weapons[WeaponType::Chainsaw as usize] = true;
+            let had = gs.player.has_weapon(WeaponType::Chainsaw);
+            gs.player.give_weapon(WeaponType::Chainsaw);
             if !had {
                 gs.player.pending_weapon = Some(WeaponType::Chainsaw);
             }
@@ -434,7 +434,7 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
                 gs.set_player_health_capped(100, 200);
             }
             gs.player.powers[powers::PW_STRENGTH] = STRENGTH_TICS;
-            gs.player.weapons[WeaponType::Fist as usize] = true;
+            gs.player.give_weapon(WeaponType::Fist);
             gs.player.pending_weapon = Some(WeaponType::Fist);
             true
         }
@@ -516,8 +516,8 @@ fn give_weapon(
     ammo_type: usize,
     ammo_amount: u32,
 ) -> bool {
-    let had_weapon = player.weapons[weapon as usize];
-    player.weapons[weapon as usize] = true;
+    let had_weapon = player.has_weapon(weapon);
+    player.give_weapon(weapon);
     player.give_ammo(ammo_type, ammo_amount);
     if !had_weapon {
         player.pending_weapon = Some(weapon);
@@ -806,11 +806,11 @@ mod tests {
     #[test]
     fn pickup_weapon_gives_weapon_and_ammo() {
         let mut gs = make_game_state();
-        assert!(!gs.player.weapons[WeaponType::Shotgun as usize]);
+        assert!(!gs.player.has_weapon(WeaponType::Shotgun));
         let shells_before = gs.player.ammo(AmmoType::Shells as usize);
         let item = spawn_item(&mut gs, MobjKind::Shotgun, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert!(gs.player.weapons[WeaponType::Shotgun as usize]);
+        assert!(gs.player.has_weapon(WeaponType::Shotgun));
         assert_eq!(gs.player.ammo(AmmoType::Shells as usize), shells_before + 8);
         assert_eq!(gs.player.weapon, WeaponType::Pistol);
         assert_eq!(gs.player.pending_weapon, Some(WeaponType::Shotgun));
@@ -819,7 +819,7 @@ mod tests {
     #[test]
     fn pickup_weapon_already_owned_still_gives_ammo() {
         let mut gs = make_game_state();
-        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_weapon(WeaponType::Shotgun);
         gs.player.weapon = WeaponType::Pistol;
         let shells_before = gs.player.ammo(AmmoType::Shells as usize);
         let item = spawn_item(&mut gs, MobjKind::Shotgun, 0, 0);
@@ -832,12 +832,12 @@ mod tests {
     #[test]
     fn pickup_shotgun_grants_weapon_and_shells() {
         let mut gs = make_game_state();
-        assert!(!gs.player.weapons[WeaponType::Shotgun as usize]);
+        assert!(!gs.player.has_weapon(WeaponType::Shotgun));
         let shells_before = gs.player.ammo(AmmoType::Shells as usize);
         spawn_item(&mut gs, MobjKind::Shotgun, 0, 0);
         p_check_pickups(&mut gs);
         assert!(
-            gs.player.weapons[WeaponType::Shotgun as usize],
+            gs.player.has_weapon(WeaponType::Shotgun),
             "Should have shotgun after pickup"
         );
         assert!(
@@ -851,7 +851,7 @@ mod tests {
         let mut gs = make_game_state();
         let item = spawn_item(&mut gs, MobjKind::Chainsaw, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
-        assert!(gs.player.weapons[WeaponType::Chainsaw as usize]);
+        assert!(gs.player.has_weapon(WeaponType::Chainsaw));
         assert_eq!(gs.player.weapon, WeaponType::Pistol);
         assert_eq!(gs.player.pending_weapon, Some(WeaponType::Chainsaw));
     }
@@ -923,7 +923,7 @@ mod tests {
         let item = spawn_item(&mut gs, MobjKind::Berserk, 0, 0);
         assert!(p_touch_special_thing(&mut gs, item));
         assert_eq!(gs.player.health(), 100);
-        assert!(gs.player.weapons[WeaponType::Fist as usize]);
+        assert!(gs.player.has_weapon(WeaponType::Fist));
         assert_eq!(gs.player.weapon, WeaponType::Pistol);
         assert_eq!(gs.player.pending_weapon, Some(WeaponType::Fist));
         assert!(gs.player.powers[powers::PW_STRENGTH] > 0);

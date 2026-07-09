@@ -118,7 +118,7 @@ pub struct PlayerState {
 
     // --- Weapons ---
     /// `true` for each weapon slot the player currently owns.
-    pub weapons: [bool; NUM_WEAPONS],
+    weapons: [bool; NUM_WEAPONS],
     /// Active weapon.
     pub weapon: WeaponType,
     /// Weapon to switch to next tic (if `Some`).
@@ -299,6 +299,32 @@ impl PlayerState {
     #[inline]
     pub fn give_key(&mut self, key_bit: u8) {
         self.keys |= key_bit;
+    }
+
+    // -----------------------------------------------------------------------
+    // Weapons
+    // -----------------------------------------------------------------------
+
+    /// Returns true if the player owns the given weapon.
+    #[inline]
+    pub fn has_weapon(&self, weapon: WeaponType) -> bool {
+        self.weapons.get(weapon as usize).copied().unwrap_or(false)
+    }
+
+    /// Gives the player the given weapon.
+    #[inline]
+    pub fn give_weapon(&mut self, weapon: WeaponType) {
+        if let Some(w) = self.weapons.get_mut(weapon as usize) {
+            *w = true;
+        }
+    }
+
+    /// Takes the given weapon away from the player.
+    #[inline]
+    pub fn take_weapon(&mut self, weapon: WeaponType) {
+        if let Some(w) = self.weapons.get_mut(weapon as usize) {
+            *w = false;
+        }
     }
 
     // -----------------------------------------------------------------------

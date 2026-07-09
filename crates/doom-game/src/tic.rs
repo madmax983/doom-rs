@@ -1162,7 +1162,7 @@ mod tests {
     #[test]
     fn held_shotgun_refires_when_the_attack_chain_reenters_ready() {
         let mut gs = make_game_state();
-        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_weapon(WeaponType::Shotgun);
         gs.player.weapon = WeaponType::Shotgun;
         gs.player.give_ammo(AmmoType::Shells as usize, 4);
         ready_player_psprites(&mut gs);
@@ -1194,7 +1194,7 @@ mod tests {
     #[test]
     fn rocket_launcher_has_a_windup_and_still_requires_release_to_refire() {
         let mut gs = make_game_state();
-        gs.player.weapons[WeaponType::RocketLauncher as usize] = true;
+        gs.player.give_weapon(WeaponType::RocketLauncher);
         gs.player.weapon = WeaponType::RocketLauncher;
         gs.player.give_ammo(AmmoType::Rockets as usize, 3);
         ready_player_psprites(&mut gs);
@@ -1248,7 +1248,7 @@ mod tests {
     fn tick_player_weapon_change() {
         use doom_types::weapons::WeaponType;
         let mut gs = make_game_state();
-        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_weapon(WeaponType::Shotgun);
 
         let cmd = TicCmd {
             buttons: bt::BT_CHANGE | (2u8 << 3),
@@ -1268,7 +1268,7 @@ mod tests {
     fn tick_player_no_change_unowned_weapon() {
         use doom_types::weapons::WeaponType;
         let mut gs = make_game_state();
-        gs.player.weapons[WeaponType::Shotgun as usize] = false;
+        gs.player.take_weapon(WeaponType::Shotgun);
         let original = gs.player.weapon;
 
         let cmd = TicCmd {
@@ -1664,7 +1664,7 @@ mod tests {
         use doom_types::weapons::WeaponType;
         let mut gs = make_game_state();
         // Give player the shotgun.
-        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        gs.player.give_weapon(WeaponType::Shotgun);
         gs.player.give_ammo(AmmoType::Shells as usize, 4);
         // BT_CHANGE | (weapon_num=2 << 3) = 0x04 | 0x10 = 0x14
         let cmd = TicCmd {
@@ -1697,7 +1697,7 @@ mod tests {
         use doom_types::weapons::WeaponType;
         let mut gs = make_game_state();
         // Confirm player does NOT have the shotgun.
-        gs.player.weapons[WeaponType::Shotgun as usize] = false;
+        gs.player.take_weapon(WeaponType::Shotgun);
         let original_weapon = gs.player.weapon;
 
         // Attempt to switch to shotgun (weapon_num=2).

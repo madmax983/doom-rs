@@ -451,7 +451,11 @@ fn write_player_state(w: &mut WriteCursor, p: &PlayerState) {
         w.write_u32(max_ammo);
     }
     for i in 0..NUM_WEAPONS {
-        w.write_bool(p.weapons[i]);
+        if let Some(w_type) = WeaponType::from_repr(i as u8) {
+            w.write_bool(p.has_weapon(w_type));
+        } else {
+            w.write_bool(false);
+        }
     }
     write_weapon_type(w, p.weapon);
     // pending_weapon: Option<WeaponType>
@@ -567,7 +571,16 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
         ps.give_ammo(i, amount);
     }
 
-    ps.weapons = weapons;
+    // Take away all weapons then give back only the ones saved
+    for (w, &has_w) in weapons.iter().enumerate() {
+        if let Some(w_type) = WeaponType::from_repr(w as u8) {
+            ps.take_weapon(w_type);
+            if has_w {
+                ps.give_weapon(w_type);
+            }
+        }
+    }
+
     ps.weapon = weapon;
     ps.pending_weapon = pending_weapon;
     ps.refire = refire;
@@ -1501,15 +1514,15 @@ mod tests {
     #[test]
     fn roundtrip_player_weapons() {
         let mut gs = test_game_state();
-        gs.player.weapons[WeaponType::Shotgun as usize] = true;
-        gs.player.weapons[WeaponType::Chaingun as usize] = true;
+        gs.player.give_weapon(WeaponType::Shotgun);
+        gs.player.give_weapon(WeaponType::Chaingun);
         let data = save_game(&gs, &test_level_name(), 2, "weapons test");
         let loaded = load_game(&data).expect("load must succeed");
-        assert!(loaded.state.player.weapons[WeaponType::Fist as usize]);
-        assert!(loaded.state.player.weapons[WeaponType::Pistol as usize]);
-        assert!(loaded.state.player.weapons[WeaponType::Shotgun as usize]);
-        assert!(loaded.state.player.weapons[WeaponType::Chaingun as usize]);
-        assert!(!loaded.state.player.weapons[WeaponType::RocketLauncher as usize]);
+        assert!(loaded.state.player.has_weapon(WeaponType::Fist));
+        assert!(loaded.state.player.has_weapon(WeaponType::Pistol));
+        assert!(loaded.state.player.has_weapon(WeaponType::Shotgun));
+        assert!(loaded.state.player.has_weapon(WeaponType::Chaingun));
+        assert!(!loaded.state.player.has_weapon(WeaponType::RocketLauncher));
     }
 
     // --- Test 12: Roundtrip preserves level_time ---
