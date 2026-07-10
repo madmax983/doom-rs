@@ -288,6 +288,37 @@ pub fn spawn_level_things(
         // Build a simulated Mobj for the types we model.  Decorations we don't
         // model have already consumed their RNG draws above.
         let Some(kind) = doomed_type_to_kind(ttype) else {
+            // Unmodeled placeable type. If it is a vanilla SOLID decoration
+            // (tech pillars, torches, hanging bodies, …), it still occupies
+            // space: vanilla `P_CheckPosition` blocks any monster/player/missile
+            // that would overlap it. We were silently dropping these, so a
+            // monster whose vanilla chase step is blocked by a pillar instead
+            // walked straight through — flipping its `A_Chase` into the
+            // `P_NewChaseDir`/`P_TryWalk` branch (extra P_Random draws) one tic
+            // apart from vanilla and desyncing the demo (DEMO3/E1M7 lt970: an
+            // imp at (640,-160) walked through the MT_MISC48 techno-pillar the
+            // vanilla imp was blocked by). Spawn the collision-only body so the
+            // clip test matches. These decorations are inert (static `S_NULL`
+            // hold, no thinker RNG), so this adds no draws to the stream.
+            if let Some((radius_units, height_units, spawn_ceiling)) =
+                solid_decoration_dims(ttype)
+            {
+                let mut deco = Mobj::new(MobjKind::Column, x, y, angle);
+                apply_mobjinfo_defaults(&mut deco);
+                deco.radius = Fixed16_16::from_int(radius_units);
+                deco.height = Fixed16_16::from_int(height_units);
+                deco.flags = if spawn_ceiling {
+                    flags::MF_SOLID | flags::MF_SPAWNCEILING | flags::MF_NOGRAVITY
+                } else {
+                    flags::MF_SOLID
+                };
+                sync_mobj_to_level(level, &mut deco);
+                deco.spawn_x = x;
+                deco.spawn_y = y;
+                deco.spawn_angle = angle;
+                deco.spawn_type = ttype;
+                gs.mobjslab.alloc(deco);
+            }
             continue;
         };
         if kind == MobjKind::Player {
@@ -339,6 +370,42 @@ pub fn spawn_level_things(
     }
 
     player_handle
+}
+
+/// Collision dimensions of every placeable vanilla `MF_SOLID` decoration we do
+/// not otherwise model (tech pillars, torches, stalagmites, gutted/hanging
+/// bodies, …). Returns `Some((radius, height, spawn_ceiling))` in map units, or
+/// `None` for a `doomednum` that is not one of these (a modeled type, a
+/// non-solid decoration, or a non-placeable number).
+///
+/// Values are transcribed from chocolate-doom `src/doom/info.c`: every
+/// `mobjinfo` entry with a non-negative `doomednum` and `MF_SOLID` set that is
+/// not a monster (`MF_COUNTKILL`), the barrel, Keen, the boss brain, or one of
+/// the items/lamps already mapped by `doomed_type_to_kind`. All have
+/// `radius = 16`; the ceiling-hung bodies carry `MF_SPAWNCEILING|MF_NOGRAVITY`.
+fn solid_decoration_dims(doomednum: u16) -> Option<(i32, i32, bool)> {
+    // (radius, height, spawn_ceiling)
+    let dims = match doomednum {
+        // Floor-standing solid props (MF_SOLID), radius 16, height 16.
+        25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 35 | 36 | 37 | 41 | 42 | 43 | 44 | 45
+        | 46 | 47 | 48 | 55 | 56 | 57 | 70 | 2028 => (16, 16, false),
+        // Large brown tree (MT_MISC76): radius 32, height 16.
+        54 => (32, 16, false),
+        // Ceiling-hung bodies (MF_SOLID|MF_SPAWNCEILING|MF_NOGRAVITY), radius 16.
+        49 => (16, 68, true),  // MT_MISC51
+        50 => (16, 84, true),  // MT_MISC52
+        51 => (16, 84, true),  // MT_MISC53
+        52 => (16, 68, true),  // MT_MISC54
+        53 => (16, 52, true),  // MT_MISC55
+        73 => (16, 88, true),  // MT_MISC78
+        74 => (16, 88, true),  // MT_MISC79
+        75 => (16, 64, true),  // MT_MISC80
+        76 => (16, 64, true),  // MT_MISC81
+        77 => (16, 64, true),  // MT_MISC82
+        78 => (16, 64, true),  // MT_MISC83
+        _ => return None,
+    };
+    Some(dims)
 }
 
 /// Spawnstate tic count for every placeable vanilla DoomEd thing type.
@@ -1721,6 +1788,25 @@ mod tests {
         // Player/coop/deathmatch starts are handled before the mobjinfo lookup.
         assert_eq!(spawn_thing_tics(1), None);
         assert_eq!(spawn_thing_tics(11), None);
+    }
+
+    #[test]
+    fn solid_decoration_dims_matches_vanilla_table() {
+        // Regression: these MF_SOLID decorations must be spawned as collision
+        // bodies so monsters/players/missiles clip them exactly as vanilla does.
+        // Dropping them let a chasing imp walk through a techno-pillar in
+        // DEMO3/E1M7 (lt970), flipping A_Chase into the P_NewChaseDir branch a
+        // tic apart from vanilla and desyncing the demo. Values from info.c.
+        assert_eq!(solid_decoration_dims(48), Some((16, 16, false))); // MT_MISC48 techno pillar
+        assert_eq!(solid_decoration_dims(30), Some((16, 16, false))); // MT_MISC32 tall green pillar
+        assert_eq!(solid_decoration_dims(54), Some((32, 16, false))); // MT_MISC76 large brown tree (radius 32)
+        assert_eq!(solid_decoration_dims(49), Some((16, 68, true))); // MT_MISC51 hanging body (ceiling)
+        assert_eq!(solid_decoration_dims(73), Some((16, 88, true))); // MT_MISC78 hanging body (ceiling)
+        // Modeled / non-solid / non-placeable types must NOT be handled here.
+        assert_eq!(solid_decoration_dims(3001), None); // imp (monster, modeled)
+        assert_eq!(solid_decoration_dims(2035), None); // barrel (modeled)
+        assert_eq!(solid_decoration_dims(2014), None); // health bonus (item, non-solid)
+        assert_eq!(solid_decoration_dims(9999), None); // not placeable
     }
 
     // ===================================================================
