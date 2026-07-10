@@ -1095,14 +1095,30 @@ pub fn ev_floor_lower_to_lowest(gs: &mut GameState, level: &Level, tag: u16, spe
 }
 
 /// Lower floor to highest adjacent floor on all sectors matching `tag`.
-pub fn ev_floor_lower_to_highest(gs: &mut GameState, level: &Level, tag: u16, speed: i16) {
-    for (idx, target) in level
+///
+/// When `turbo` is set this is vanilla `turboLower` (line types 36/70/71/98):
+/// the floor moves at 4x speed and its destination is the highest surrounding
+/// floor **plus 8 units** (vanilla `floordestheight += 8*FRACUNIT` when the
+/// destination differs from the sector's current floor height). The non-turbo
+/// `lowerFloor` (types 19/45/83/102) lowers exactly to the highest surrounding
+/// floor with no offset.
+pub fn ev_floor_lower_to_highest(
+    gs: &mut GameState,
+    level: &Level,
+    tag: u16,
+    speed: i16,
+    turbo: bool,
+) {
+    for (idx, mut target) in level
         .sectors
         .iter()
         .enumerate()
         .filter(|(_, s)| s.tag == tag)
         .map(|(i, _)| (i, highest_adjacent_floor(level, i)))
     {
+        if turbo && target != level.sectors[idx].floor_height {
+            target += 8;
+        }
         activate_floor_lower_single_typed(
             gs,
             level,
@@ -3517,7 +3533,7 @@ fn activate_floors(
         // Type 19: W1 Lower floor to highest adjacent floor.
         19 => {
             let tag = level.linedefs[linedef_idx].tag;
-            ev_floor_lower_to_highest(gs, level, tag, 1);
+            ev_floor_lower_to_highest(gs, level, tag, 1, false);
         }
 
         // Type 23: S1 Lower floor to lowest adjacent floor.
@@ -3560,7 +3576,7 @@ fn activate_floors(
         // Type 45: SR Lower floor to highest adjacent floor.
         45 => {
             let tag = level.linedefs[linedef_idx].tag;
-            ev_floor_lower_to_highest(gs, level, tag, 1);
+            ev_floor_lower_to_highest(gs, level, tag, 1, false);
         }
 
         // Type 60: SR Lower floor to lowest adjacent floor.
@@ -3635,7 +3651,7 @@ fn activate_floors(
         // Type 83: WR Lower floor to highest adjacent floor.
         83 => {
             let tag = level.linedefs[linedef_idx].tag;
-            ev_floor_lower_to_highest(gs, level, tag, 1);
+            ev_floor_lower_to_highest(gs, level, tag, 1, false);
         }
 
         // Type 84: WR Lower floor to lowest adjacent + change.
@@ -3666,7 +3682,7 @@ fn activate_floors(
         // Type 102: S1 Lower floor to highest adjacent floor.
         102 => {
             let tag = level.linedefs[linedef_idx].tag;
-            ev_floor_lower_to_highest(gs, level, tag, 1);
+            ev_floor_lower_to_highest(gs, level, tag, 1, false);
         }
         _ => {}
     }
@@ -9971,7 +9987,7 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=48.
         let level = make_multi_sector_level([10, 64, 48], [128, 128, 128], [0, 1, 0], 0, 0);
-        ev_floor_lower_to_highest(&mut gs, &level, 1, 1);
+        ev_floor_lower_to_highest(&mut gs, &level, 1, 1, false);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
             gs.movers.active_floors[0].target_height, 48,
@@ -9981,6 +9997,26 @@ mod tests {
             gs.movers.active_floors[0].floor_type,
             FloorType::LowerToHighest
         );
+    }
+
+    #[test]
+    fn ev_floor_turbo_lower_targets_highest_adjacent_plus_8() {
+        // Vanilla `turboLower` (line types 36/70/71/98) lowers to the highest
+        // surrounding floor **plus 8 units** at 4x speed. Regression for the
+        // DEMO3 E1M7 sector-117 divergence where the missing +8 made our floor
+        // (and the player riding it) sit 8 units too low. Ref chocolate-doom
+        // p_floor.c EV_DoFloor case turboLower: `floordestheight += 8*FRACUNIT`
+        // when the destination differs from the sector's current floor height.
+        let mut gs = GameState::new("TEST");
+        // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=48.
+        let level = make_multi_sector_level([10, 64, 48], [128, 128, 128], [0, 1, 0], 0, 0);
+        ev_floor_lower_to_highest(&mut gs, &level, 1, 4, true);
+        assert_eq!(gs.movers.active_floors.len(), 1);
+        assert_eq!(
+            gs.movers.active_floors[0].target_height, 56,
+            "turbo lower dest = highest adjacent (48) + 8"
+        );
+        assert_eq!(gs.movers.active_floors[0].speed, 4, "turbo lower is 4x speed");
     }
 
     #[test]

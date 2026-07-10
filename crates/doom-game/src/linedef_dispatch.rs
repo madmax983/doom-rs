@@ -667,11 +667,11 @@ fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefE
             true
         }
         FloorLowerToHighest => {
-            crate::specials::ev_floor_lower_to_highest(gs, level, tag, 1);
+            crate::specials::ev_floor_lower_to_highest(gs, level, tag, 1, false);
             true
         }
         FloorLowerToHighestMinus8 => {
-            crate::specials::ev_floor_lower_to_highest(gs, level, tag, 4);
+            crate::specials::ev_floor_lower_to_highest(gs, level, tag, 4, true);
             true
         }
         FloorLowerAndChange => {
