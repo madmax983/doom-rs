@@ -1230,55 +1230,64 @@ pub fn monster_can_cross_special(special: u16) -> bool {
     )
 }
 
-/// Record the monster-crossable special lines whose side a monster's centre
-/// crossed while stepping from `(old_x, old_y)` to `(new_x, new_y)`, in
-/// farthest-hit-first order (matching vanilla `P_TryMove`'s reverse `spechit`
-/// walk). They are dispatched later, in `dispatch_pending_monster_crossings`,
-/// once the level can be borrowed mutably.
+/// Record the monster-crossable special lines a monster's centre crossed while
+/// stepping from `(old_x, old_y)` to `(new_x, new_y)`, in vanilla
+/// `while(numspechit--)` reverse `spechit` order. They are dispatched later, in
+/// `dispatch_pending_monster_crossings`, once the level can be borrowed mutably.
 ///
-/// This is the monster (`!thing->player`) counterpart to `check_cross_lines`:
-/// only the vanilla monster whitelist (`monster_can_cross_special`) is eligible,
-/// so a monster can activate a lift / teleport / raise-door line it walks over
-/// but never the player-only walk triggers.
+/// This is the monster (`!thing->player`) counterpart to `check_cross_lines`,
+/// and applies the **exact** vanilla `P_TryMove` crossing rule (`p_map.c`): the
+/// destination bounding box must straddle the line (it is in `spechit`) **and**
+/// the centre's *infinite-line* side (`P_PointOnLineSide`) must change between
+/// the old and new position — the same test the player path
+/// ([`crate::movement::record_player_crossings`]) uses. Only the vanilla monster
+/// whitelist (`monster_can_cross_special`) is eligible, mirroring
+/// `P_CrossSpecialLine`'s `!thing->player` guard, so a monster can activate a
+/// lift / teleport / raise-door line it walks over but never the player-only
+/// walk triggers.
+///
+/// Coordinates are the full 16.16 fixed-point positions (`Fixed16_16`), never
+/// truncated integers: the fractional bits are decisive for the box-straddle and
+/// side tests. The earlier implementation used a truncated-integer *centre-path
+/// crosses the finite line segment* intersection, which both lost the fractional
+/// position and fired on a different geometric condition than vanilla. That
+/// produced spurious crossings — e.g. DEMO2/E1M3 leveltime 807: a zombieman
+/// stepping toward the sector-168 lift triggered line 181's WR down-wait-up-stay
+/// plat (special 88) four tics too early, lowering the lift ahead of vanilla so
+/// that at leveltime 815 the same zombieman's `P_Move` saw a >24-unit dropoff,
+/// failed, and drew two extra `P_NewChaseDir` randoms vanilla never draws.
 pub fn queue_monster_crossings(
     gs: &mut GameState,
     level: &Level,
     actor: MobjHandle,
-    old_x: i32,
-    old_y: i32,
-    new_x: i32,
-    new_y: i32,
+    old_x: doom_types::Fixed16_16,
+    old_y: doom_types::Fixed16_16,
+    new_x: doom_types::Fixed16_16,
+    new_y: doom_types::Fixed16_16,
 ) {
-    let mut hits: smallvec::SmallVec<[(i64, i64, usize); 4]> = level
-        .linedefs
-        .iter()
-        .enumerate()
-        .filter_map(|(i, ld)| {
-            if ld.special == 0 || !monster_can_cross_special(ld.special) {
-                return None;
-            }
-            let v1 = &level.vertexes[ld.from_vertex as usize];
-            let v2 = &level.vertexes[ld.to_vertex as usize];
-            segment_intersection_frac(
-                old_x, old_y, new_x, new_y, v1.x as i32, v1.y as i32, v2.x as i32, v2.y as i32,
-            )
-            .map(|(num, denom)| (num, denom, i))
-        })
-        .collect();
-
-    if hits.is_empty() {
-        return;
-    }
-
-    // Nearest-first along the path; vanilla walks `spechit` in reverse (farthest
-    // contacted first), so push farthest first.
-    hits.sort_by(|a, b| {
-        let lhs = i128::from(a.0) * i128::from(b.1);
-        let rhs = i128::from(b.0) * i128::from(a.1);
-        lhs.cmp(&rhs)
-    });
-    for (_, _, ld_idx) in hits.into_iter().rev() {
-        gs.pending_monster_crossings.push((ld_idx, actor));
+    // Vanilla accumulates `spechit` for every special line the destination box
+    // straddles (stopping at the first hard blocker), then fires the crossing
+    // for each in reverse whose centre changed infinite-line side.
+    let spechit = crate::movement::move_spechit(&gs.mobjslab, actor, new_x, new_y, level);
+    for &ld_idx in spechit.iter().rev() {
+        let Some(ld) = level.linedefs.get(ld_idx) else {
+            continue;
+        };
+        if !monster_can_cross_special(ld.special) {
+            continue;
+        }
+        let v1 = &level.vertexes[ld.from_vertex as usize];
+        let v2 = &level.vertexes[ld.to_vertex as usize];
+        let v1x = (v1.x as i32) << 16;
+        let v1y = (v1.y as i32) << 16;
+        let dx = ((v2.x as i32) << 16) - v1x;
+        let dy = ((v2.y as i32) << 16) - v1y;
+        let side = crate::geom::p_point_on_line_side(new_x.raw(), new_y.raw(), v1x, v1y, dx, dy);
+        let oldside =
+            crate::geom::p_point_on_line_side(old_x.raw(), old_y.raw(), v1x, v1y, dx, dy);
+        if side != oldside {
+            gs.pending_monster_crossings.push((ld_idx, actor));
+        }
     }
 }
 
@@ -1418,6 +1427,7 @@ pub fn check_cross_lines(
     dispatch_player_crossings(gs, level, actor, &crossed);
 }
 
+#[cfg(test)]
 fn segment_intersection_frac(
     ax: i32,
     ay: i32,
@@ -2165,7 +2175,15 @@ mod tests {
         );
         let mhandle = gs.mobjslab.alloc(monster);
 
-        queue_monster_crossings(&mut gs, &level, mhandle, -5, 0, 5, 0);
+        queue_monster_crossings(
+            &mut gs,
+            &level,
+            mhandle,
+            Fixed16_16::from_int(-5),
+            Fixed16_16::ZERO,
+            Fixed16_16::from_int(5),
+            Fixed16_16::ZERO,
+        );
         assert_eq!(
             gs.pending_monster_crossings.len(),
             1,
@@ -2200,7 +2218,15 @@ mod tests {
         );
         let mhandle = gs.mobjslab.alloc(monster);
 
-        queue_monster_crossings(&mut gs, &level, mhandle, -5, 0, 5, 0);
+        queue_monster_crossings(
+            &mut gs,
+            &level,
+            mhandle,
+            Fixed16_16::from_int(-5),
+            Fixed16_16::ZERO,
+            Fixed16_16::from_int(5),
+            Fixed16_16::ZERO,
+        );
         assert!(
             gs.pending_monster_crossings.is_empty(),
             "monster must not queue a player-only walk trigger"
