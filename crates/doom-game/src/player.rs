@@ -328,16 +328,56 @@ impl PlayerState {
     ///
     /// Returns `true` if ammo was actually added (player was not already at max).
     pub fn give_ammo(&mut self, ammo_type: usize, amount: u32) -> bool {
-        if let Some(cur) = self.ammo.get_mut(ammo_type) {
-            let max = self.max_ammo.get(ammo_type).copied().unwrap_or(0);
-            if *cur >= max {
-                return false;
-            }
-            *cur = (*cur + amount).min(max);
-            true
-        } else {
-            false
+        let Some(cur) = self.ammo.get_mut(ammo_type) else {
+            return false;
+        };
+        let max = self.max_ammo.get(ammo_type).copied().unwrap_or(0);
+        if *cur >= max {
+            return false;
         }
+        let oldammo = *cur;
+        *cur = (*cur + amount).min(max);
+
+        // Vanilla `P_GiveAmmo` (p_inter.c): if the player was down to zero of
+        // this ammo, auto-switch to the best weapon that uses it (unless they
+        // deliberately lowered a still-usable weapon). Preferences are fixed.
+        if oldammo == 0 {
+            let owns = |w: WeaponType| self.weapons[w as usize];
+            let rw = self.weapon;
+            // `ammo_type` maps onto our `AmmoType` discriminants.
+            match ammo_type {
+                x if x == AmmoType::Bullets as usize => {
+                    if rw == WeaponType::Fist {
+                        self.pending_weapon = Some(if owns(WeaponType::Chaingun) {
+                            WeaponType::Chaingun
+                        } else {
+                            WeaponType::Pistol
+                        });
+                    }
+                }
+                x if x == AmmoType::Shells as usize => {
+                    if (rw == WeaponType::Fist || rw == WeaponType::Pistol)
+                        && owns(WeaponType::Shotgun)
+                    {
+                        self.pending_weapon = Some(WeaponType::Shotgun);
+                    }
+                }
+                x if x == AmmoType::Cells as usize => {
+                    if (rw == WeaponType::Fist || rw == WeaponType::Pistol)
+                        && owns(WeaponType::PlasmaRifle)
+                    {
+                        self.pending_weapon = Some(WeaponType::PlasmaRifle);
+                    }
+                }
+                x if x == AmmoType::Rockets as usize => {
+                    if rw == WeaponType::Fist && owns(WeaponType::RocketLauncher) {
+                        self.pending_weapon = Some(WeaponType::RocketLauncher);
+                    }
+                }
+                _ => {}
+            }
+        }
+        true
     }
 
     /// Consume `amount` units of ammo; returns `false` (no-op) if insufficient.
@@ -697,6 +737,38 @@ mod tests {
     fn rocket_launcher_needs_rockets() {
         let p = PlayerState::pistol_start(MobjHandle::NULL);
         assert!(!p.has_ammo_for(WeaponType::RocketLauncher));
+    }
+
+    #[test]
+    fn give_ammo_from_zero_auto_switches_weapon() {
+        // Vanilla P_GiveAmmo: picking up ammo while at zero of that type and
+        // holding a lesser weapon auto-switches to the best weapon using it.
+        // This drives DEMO1 sync (shells picked up on the pistol at ~lt700
+        // must switch back to the owned shotgun before the lt704 fire).
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        p.weapons[WeaponType::Shotgun as usize] = true;
+        p.weapon = WeaponType::Pistol;
+        p.ammo[AmmoType::Shells as usize] = 0;
+        p.pending_weapon = None;
+        assert!(p.give_ammo(AmmoType::Shells as usize, 4));
+        assert_eq!(p.pending_weapon, Some(WeaponType::Shotgun));
+
+        // Non-zero old ammo must NOT switch (player lowered on purpose).
+        let mut p2 = PlayerState::pistol_start(MobjHandle::NULL);
+        p2.weapons[WeaponType::Shotgun as usize] = true;
+        p2.weapon = WeaponType::Pistol;
+        p2.ammo[AmmoType::Shells as usize] = 1;
+        p2.pending_weapon = None;
+        assert!(p2.give_ammo(AmmoType::Shells as usize, 4));
+        assert_eq!(p2.pending_weapon, None);
+
+        // Not owning the shotgun means no switch even from zero.
+        let mut p3 = PlayerState::pistol_start(MobjHandle::NULL);
+        p3.weapon = WeaponType::Pistol;
+        p3.ammo[AmmoType::Shells as usize] = 0;
+        p3.pending_weapon = None;
+        assert!(p3.give_ammo(AmmoType::Shells as usize, 4));
+        assert_eq!(p3.pending_weapon, None);
     }
 
     #[test]
