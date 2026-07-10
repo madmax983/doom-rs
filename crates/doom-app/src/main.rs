@@ -3501,21 +3501,39 @@ fn main() {
             let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
-            if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-                eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
+            let mut table = comfy_table::Table::new();
+            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
 
-                let mut causes = err.chain().skip(1).peekable();
-                if causes.peek().is_some() {
-                    eprintln!("\n↳ {}:", "Reason".red().bold());
-                    for cause in causes {
-                        eprintln!("    {}", cause);
-                    }
+            let mut causes_str = String::new();
+            let mut causes = err.chain().skip(1).peekable();
+            if causes.peek().is_some() {
+                for cause in causes {
+                    causes_str.push_str(&format!("• {}\n", cause));
                 }
-                eprintln!();
+            }
+
+            if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+                table.set_header(vec![
+                    comfy_table::Cell::new("❌ Engine Failure")
+                        .fg(comfy_table::Color::Red)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                ]);
+                table.add_row(vec![
+                    comfy_table::Cell::new(err.to_string()),
+                ]);
+
+                if !causes_str.is_empty() {
+                    table.add_row(vec![
+                        comfy_table::Cell::new(causes_str.trim_end()).fg(comfy_table::Color::Yellow),
+                    ]);
+                }
+                eprintln!("\n{table}\n");
             } else {
                 eprintln!("❌ Engine Failure: {}", err);
-
                 let mut causes = err.chain().skip(1).peekable();
                 if causes.peek().is_some() {
                     eprintln!("↳ Reason:");
