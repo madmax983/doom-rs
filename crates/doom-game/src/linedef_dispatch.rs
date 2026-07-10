@@ -1260,7 +1260,14 @@ pub fn queue_monster_crossings(
             let v1 = &level.vertexes[ld.from_vertex as usize];
             let v2 = &level.vertexes[ld.to_vertex as usize];
             segment_intersection_frac(
-                old_x, old_y, new_x, new_y, v1.x as i32, v1.y as i32, v2.x as i32, v2.y as i32,
+                old_x,
+                old_y,
+                new_x,
+                new_y,
+                v1.x as i32,
+                v1.y as i32,
+                v2.x as i32,
+                v2.y as i32,
             )
             .map(|(num, denom)| (num, denom, i))
         })

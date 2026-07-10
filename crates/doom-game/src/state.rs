@@ -129,6 +129,9 @@ pub struct GameState {
     #[cfg(feature = "telemetry")]
     /// Tracks spatial player path data over the session.
     pub telemetry: crate::telemetry::SessionTelemetry,
+    #[cfg(feature = "nemesis")]
+    /// Tracks the designated Nemesis target.
+    pub nemesis: crate::nemesis::NemesisSystem,
     /// Walkover special lines crossed by monsters during this tic's actor pass,
     /// as `(linedef_index, activator)` in crossing order.
     ///
@@ -167,6 +170,8 @@ impl GameState {
             style: crate::style::StyleMeter::new(),
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
+            #[cfg(feature = "nemesis")]
+            nemesis: crate::nemesis::NemesisSystem::new(),
             pending_monster_crossings: Vec::new(),
         }
     }
