@@ -272,6 +272,9 @@ pub fn damage_mobj_source(
         }
         gs.player.apply_damage(dmg);
         gs.player.damage_count = (gs.player.damage_count + dmg.max(0) as u32).min(100);
+        // Vanilla `P_DamageMobj`: `player->attacker = source;` — remembered so
+        // `P_DeathThink` can rotate the corpse's view angle toward its killer.
+        gs.player.attacker = source;
 
         #[cfg(feature = "telemetry")]
         {
@@ -347,6 +350,18 @@ pub fn damage_mobj_source(
         // environment (p_inter.c:691-704).
         if was_countkill {
             gs.player.kill_count += 1;
+        }
+
+        // Player-death block (p_inter.c:705-724): the corpse becomes non-solid
+        // so monsters walk over it (and its slide is unobstructed), and its
+        // `playerstate` flips to PST_DEAD — tracked here by health <= 0, which
+        // routes `tick_player` into the P_DeathThink corpse path. `P_DropWeapon`
+        // only lowers the weapon psprite (no RNG, not observable in the demo
+        // snapshot), so it is intentionally omitted.
+        if target == gs.player.handle
+            && let Some(mo) = gs.mobjslab.get_mut(target)
+        {
+            mo.flags &= !flags::MF_SOLID;
         }
 
         // Over-kill (gib) path (p_inter.c:726-732):
