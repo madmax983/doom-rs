@@ -1,0 +1,6 @@
+1. We will use `replace_with_git_merge_diff` to update `move_spechit` in `crates/doom-game/src/movement.rs` to return `smallvec::SmallVec<[usize; 8]>` and use `SmallVec` for `spechit` and `seen`.
+2. We will use `replace_with_git_merge_diff` to update `p_try_move_commit_tracked`, `p_try_move_commit_inner`, `record_player_crossings`, `p_slide_move_vanilla`, and `slide_stairstep` in `crates/doom-game/src/movement.rs` to take `sink: &mut smallvec::SmallVec<[usize; 8]>` or `Option<&mut smallvec::SmallVec<[usize; 8]>>`.
+3. We will use `replace_with_git_merge_diff` to update `crates/doom-game/src/tic.rs` to use `SmallVec` for `player_crossings`.
+4. We will use `replace_with_git_merge_diff` to update `crates/doom-game/src/actions.rs` to handle `SmallVec` returned from `move_spechit`.
+5. We will append a Bolt journal entry.
+6. Pre-commit step and submit.
