@@ -21,6 +21,9 @@ pub mod obj;
 pub mod svg;
 pub mod udmf;
 
+#[cfg(feature = "chokepoints")]
+pub mod tactics;
+
 pub use ascii::export_map_to_ascii;
 pub use bsp::{BspChild, BspError, BspTree};
 pub use geojson::export_map_to_geojson;

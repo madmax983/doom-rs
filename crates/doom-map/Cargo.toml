@@ -3,6 +3,9 @@ name    = "doom-map"
 version.workspace = true
 edition.workspace = true
 
+[features]
+chokepoints = []
+
 [dependencies]
 doom-types = { workspace = true }
 doom-wad   = { workspace = true }
