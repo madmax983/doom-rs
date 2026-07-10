@@ -218,19 +218,15 @@ pub fn damage_mobj_source(
         let source_is_chainsaw =
             source == gs.player.handle && gs.player.weapon == WeaponType::Chainsaw;
 
-        if inflictor != MobjHandle::NULL
-            && tgt_flags & flags::MF_NOCLIP == 0
-            && !source_is_chainsaw
+        if inflictor != MobjHandle::NULL && tgt_flags & flags::MF_NOCLIP == 0 && !source_is_chainsaw
         {
             if let Some(inf) = gs.mobjslab.get(inflictor) {
                 let (ix, iy, iz) = (inf.x, inf.y, inf.z);
                 let mut ang =
                     crate::geom::r_point_to_angle2(ix.raw(), iy.raw(), tgt_x.raw(), tgt_y.raw());
                 // thrust = damage*(FRACUNIT>>3)*100/mass, all 32-bit integer math.
-                let mut thrust = damage
-                    .wrapping_mul(FIXED_ONE.raw() >> 3)
-                    .wrapping_mul(100)
-                    / tgt_mass.max(1);
+                let mut thrust =
+                    damage.wrapping_mul(FIXED_ONE.raw() >> 3).wrapping_mul(100) / tgt_mass.max(1);
 
                 // "make fall forwards sometimes" — the only RNG draw in the
                 // thrust path, gated by the first three conditions (C `&&`).
@@ -533,7 +529,12 @@ fn line_open(level: &Level, ld: &doom_map::Linedef) -> Option<LineOpen> {
             .sidedefs
             .get(ld.left_sidedef as usize)
             .and_then(|sd| level.sectors.get(sd.sector as usize))
-            .map(|s| (i32::from(s.floor_height) << 16, i32::from(s.ceil_height) << 16))
+            .map(|s| {
+                (
+                    i32::from(s.floor_height) << 16,
+                    i32::from(s.ceil_height) << 16,
+                )
+            })
     } else {
         None
     };
@@ -752,10 +753,7 @@ fn p_path_traverse(
 
     for _ in 0..64 {
         if mapx >= 0 && mapx < bmapwidth && mapy >= 0 && mapy < bmapheight {
-            for ld_idx in level
-                .blockmap
-                .block_linedefs(mapx as usize, mapy as usize)
-            {
+            for ld_idx in level.blockmap.block_linedefs(mapx as usize, mapy as usize) {
                 let ld_idx = ld_idx as usize;
                 if ld_idx >= level.linedefs.len() || tested_lines.contains(&ld_idx) {
                     continue;
@@ -806,7 +804,14 @@ fn p_path_traverse(
 // ---------------------------------------------------------------------------
 
 /// Port of `P_SpawnPuff` (`p_mobj.c:881`).  `attackrange` is raw fixed.
-fn p_spawn_puff(gs: &mut GameState, level: Option<&Level>, x: i32, y: i32, z: i32, attackrange: i32) {
+fn p_spawn_puff(
+    gs: &mut GameState,
+    level: Option<&Level>,
+    x: i32,
+    y: i32,
+    z: i32,
+    attackrange: i32,
+) {
     let z = z.wrapping_add(gs.p_subrandom() << 10);
     let h = crate::spawn::p_spawn_mobj(
         gs,
@@ -854,7 +859,7 @@ fn p_spawn_blood(gs: &mut GameState, level: Option<&Level>, x: i32, y: i32, z: i
             mo.tics = 1;
         }
     }
-    if damage <= 12 && damage >= 9 {
+    if (9..=12).contains(&damage) {
         set_mobj_state_raw(gs, h, ids::S_BLOOD2);
     } else if damage < 9 {
         set_mobj_state_raw(gs, h, ids::S_BLOOD3);
@@ -962,8 +967,12 @@ pub fn p_aim_line_attack(
                     continue;
                 }
                 let dist = fixed_mul_raw(attackrange, ic.frac);
-                let mut thingtopslope =
-                    fixed_div_raw(th.z.raw().wrapping_add(th.height.raw()).wrapping_sub(shootz), dist);
+                let mut thingtopslope = fixed_div_raw(
+                    th.z.raw()
+                        .wrapping_add(th.height.raw())
+                        .wrapping_sub(shootz),
+                    dist,
+                );
                 if thingtopslope < bottomslope {
                     continue; // over
                 }
@@ -1003,7 +1012,11 @@ pub fn p_line_attack(
 ) -> Option<MobjHandle> {
     let (t1x, t1y, shootz) = {
         let mo = gs.mobjslab.get(source)?;
-        (mo.x.raw(), mo.y.raw(), hitscan_shootz(mo.z.raw(), mo.height.raw()))
+        (
+            mo.x.raw(),
+            mo.y.raw(),
+            hitscan_shootz(mo.z.raw(), mo.height.raw()),
+        )
     };
     let dist_i = distance.to_int();
     let x2 = t1x.wrapping_add(dist_i.wrapping_mul(angle.cos().raw()));
@@ -1014,7 +1027,11 @@ pub fn p_line_attack(
     let mut intercepts = smallvec::SmallVec::new();
     let trace = p_path_traverse(gs, level, source, t1x, t1y, x2, y2, &mut intercepts);
 
-    for ic in intercepts.iter().copied().collect::<smallvec::SmallVec<[HitscanIntercept; 24]>>() {
+    for ic in intercepts
+        .iter()
+        .copied()
+        .collect::<smallvec::SmallVec<[HitscanIntercept; 24]>>()
+    {
         match ic.kind {
             HitscanInterceptKind::Line(ld_idx) => {
                 // PTR_ShootTraverse — line case.
@@ -1066,7 +1083,8 @@ pub fn p_line_attack(
                 let frac = ic.frac.wrapping_sub(fixed_div_raw(4 << 16, attackrange));
                 let x = trace.x.wrapping_add(fixed_mul_raw(trace.dx, frac));
                 let y = trace.y.wrapping_add(fixed_mul_raw(trace.dy, frac));
-                let z = shootz.wrapping_add(fixed_mul_raw(aimslope, fixed_mul_raw(frac, attackrange)));
+                let z =
+                    shootz.wrapping_add(fixed_mul_raw(aimslope, fixed_mul_raw(frac, attackrange)));
 
                 // Don't shoot the sky.
                 let front_sec = lvl
@@ -1079,15 +1097,15 @@ pub fn p_line_attack(
                     if z > (i32::from(front.ceil_height) << 16) {
                         return None;
                     }
-                    let back_sky = (ld.left_sidedef != doom_map::SIDEDEF_NONE)
-                        .then(|| {
-                            lvl.sidedefs
-                                .get(ld.left_sidedef as usize)
-                                .and_then(|sd| lvl.sectors.get(sd.sector as usize))
-                                .map(|s| is_sky_flat(&s.ceil_flat))
-                                .unwrap_or(false)
-                        })
-                        .unwrap_or(false);
+                    let back_sky = if ld.left_sidedef != doom_map::SIDEDEF_NONE {
+                        lvl.sidedefs
+                            .get(ld.left_sidedef as usize)
+                            .and_then(|sd| lvl.sectors.get(sd.sector as usize))
+                            .map(|s| is_sky_flat(&s.ceil_flat))
+                            .unwrap_or(false)
+                    } else {
+                        false
+                    };
                     if back_sky {
                         return None;
                     }
@@ -1107,8 +1125,7 @@ pub fn p_line_attack(
                     (th.z.raw(), th.height.raw(), th.flags)
                 };
                 let dist = fixed_mul_raw(attackrange, ic.frac);
-                let thingtopslope =
-                    fixed_div_raw(thz.wrapping_add(thh).wrapping_sub(shootz), dist);
+                let thingtopslope = fixed_div_raw(thz.wrapping_add(thh).wrapping_sub(shootz), dist);
                 if thingtopslope < aimslope {
                     continue; // over
                 }
@@ -1121,7 +1138,8 @@ pub fn p_line_attack(
                 let frac = ic.frac.wrapping_sub(fixed_div_raw(10 << 16, attackrange));
                 let x = trace.x.wrapping_add(fixed_mul_raw(trace.dx, frac));
                 let y = trace.y.wrapping_add(fixed_mul_raw(trace.dy, frac));
-                let z = shootz.wrapping_add(fixed_mul_raw(aimslope, fixed_mul_raw(frac, attackrange)));
+                let z =
+                    shootz.wrapping_add(fixed_mul_raw(aimslope, fixed_mul_raw(frac, attackrange)));
 
                 if thflags & flags::MF_NOBLOOD != 0 {
                     p_spawn_puff(gs, level, x, y, z, attackrange);
@@ -1837,7 +1855,10 @@ mod tests {
         // Kill the trooper first.  A real corpse (P_KillMobj) also clears
         // MF_SHOOTABLE, which is what the shoot-traverse checks.
         {
-            let mo = gs.mobjslab.get_mut(trooper).expect("value must exist in test");
+            let mo = gs
+                .mobjslab
+                .get_mut(trooper)
+                .expect("value must exist in test");
             mo.health = 0;
             mo.flags &= !flags::MF_SHOOTABLE;
         }
@@ -2548,7 +2569,10 @@ mod tests {
             .get(trooper)
             .expect("value must exist in test")
             .health;
-        assert_eq!(health, 20, "max-axis dist 120 >= bombdamage 100 → no damage");
+        assert_eq!(
+            health, 20,
+            "max-axis dist 120 >= bombdamage 100 → no damage"
+        );
     }
 
     #[test]
@@ -2661,7 +2685,9 @@ mod tests {
     /// it. Nodes are empty, so sector resolution falls back to the actors'
     /// subsector (0 -> sector 0) and the reject check fires.
     fn make_reject_blocked_level() -> doom_map::Level {
-        use doom_map::{Blockmap, Linedef, Reject, SIDEDEF_NONE, Sector, Seg, Sidedef, Ssector, Vertex};
+        use doom_map::{
+            Blockmap, Linedef, Reject, SIDEDEF_NONE, Sector, Seg, Sidedef, Ssector, Vertex,
+        };
 
         let verts = vec![Vertex { x: 0, y: 0 }, Vertex { x: 128, y: 0 }];
         let sds = vec![Sidedef {

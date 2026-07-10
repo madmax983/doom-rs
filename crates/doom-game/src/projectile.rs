@@ -176,8 +176,14 @@ pub fn p_spawn_missile(
     let an = crate::geom::r_point_to_angle2(sx.raw(), sy.raw(), dx.raw(), dy.raw());
     let angle = Bam(an);
     let speed_raw = info.speed.raw();
-    let momx = Fixed16_16::from_raw(crate::geom::fixed_mul(speed_raw, crate::geom::fine_cosine(an)));
-    let momy = Fixed16_16::from_raw(crate::geom::fixed_mul(speed_raw, crate::geom::fine_sine(an)));
+    let momx = Fixed16_16::from_raw(crate::geom::fixed_mul(
+        speed_raw,
+        crate::geom::fine_cosine(an),
+    ));
+    let momy = Fixed16_16::from_raw(crate::geom::fixed_mul(
+        speed_raw,
+        crate::geom::fine_sine(an),
+    ));
 
     // Vertical aim (vanilla): `dist = P_AproxDistance(dx,dy) / speed; if (dist<1)
     // dist=1; momz = (dest->z - source->z) / dist`. Note this uses the shooter's
@@ -579,10 +585,7 @@ mod tests {
     /// tics early or late.
     #[test]
     fn spawn_missile_momentum_is_full_speed_fixed_point() {
-        // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
         let mut gs = make_game_state();
         let source = gs.player.handle;
         // Target off-axis so both momentum components are non-trivial.
@@ -623,9 +626,7 @@ mod tests {
     /// half-momentum nudge (spawn z = source.z + 32, per vanilla).
     #[test]
     fn spawn_missile_applies_checkmissilespawn_half_step_nudge() {
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
         let mut gs = make_game_state();
         let source = gs.player.handle;
         let (sx, sy, sz) = {
@@ -643,8 +644,14 @@ mod tests {
         let expected_x = sx + Fixed16_16::from_raw(proj.momx.raw() >> 1);
         let expected_y = sy + Fixed16_16::from_raw(proj.momy.raw() >> 1);
         let expected_z = sz + Fixed16_16::from_int(32) + Fixed16_16::from_raw(proj.momz.raw() >> 1);
-        assert_eq!(proj.x, expected_x, "spawn x must include the half-momentum nudge");
-        assert_eq!(proj.y, expected_y, "spawn y must include the half-momentum nudge");
+        assert_eq!(
+            proj.x, expected_x,
+            "spawn x must include the half-momentum nudge"
+        );
+        assert_eq!(
+            proj.y, expected_y,
+            "spawn y must include the half-momentum nudge"
+        );
         assert_eq!(
             proj.z, expected_z,
             "spawn z must be source.z + 32 plus the half-momz nudge"
@@ -653,9 +660,7 @@ mod tests {
 
     #[test]
     fn spawn_missile_z_is_thirtytwo_above_source_before_nudge() {
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
         let mut gs = make_game_state();
         let source = gs.player.handle;
         // Aim horizontally (target at same z) so momz == 0 and there is no z nudge.
@@ -664,8 +669,16 @@ mod tests {
             .expect("value must exist in test");
         let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
         // Source (player) z=0; vanilla spawn z = source.z + 4*8*FRACUNIT = 32.
-        assert_eq!(proj.momz, Fixed16_16::ZERO, "level shot has no vertical momentum");
-        assert_eq!(proj.z, Fixed16_16::from_int(32), "spawn z must be source.z + 32");
+        assert_eq!(
+            proj.momz,
+            Fixed16_16::ZERO,
+            "level shot has no vertical momentum"
+        );
+        assert_eq!(
+            proj.z,
+            Fixed16_16::from_int(32),
+            "spawn z must be source.z + 32"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -673,5 +686,4 @@ mod tests {
     // now covered by `tic.rs` (`missile_*` tests), which exercise the vanilla
     // `P_XYMovement`/`PIT_CheckThing`/`P_ExplodeMissile` path.
     // -----------------------------------------------------------------------
-
 }
