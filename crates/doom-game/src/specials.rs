@@ -626,6 +626,97 @@ pub fn tick_sector_lights(gs: &mut GameState, level: &mut Level) {
 }
 
 // ---------------------------------------------------------------------------
+// P_ChangeSector / P_ThingHeightClip (vanilla p_map.c)
+// ---------------------------------------------------------------------------
+
+/// Vanilla `P_ThingHeightClip` "onfloor" snapshot: the handles of things that
+/// are resting on the floor of `sector_idx` *before* its floor plane moves.
+///
+/// In chocolate-doom a thing is "on the floor" when `thing->z == thing->floorz`,
+/// where `floorz` is the support height computed by `P_CheckPosition`
+/// (`tmfloorz` — the highest floor under the thing's bounding box).  A rider is
+/// dragged by *this* sector only when that support height is the sector's
+/// current floor, so we pre-filter cheaply on `z == old_floor` and then confirm
+/// with [`crate::movement::support_state_at`] that the thing is genuinely
+/// resting on its support (not merely passing through that height).
+///
+/// This matches vanilla's blockbox iteration in effect: a rider standing over
+/// the sector edge (origin in an adjacent, lower sector but bounding box on the
+/// lift) is included, because its support floor comes from the moving sector via
+/// the shared two-sided line.
+fn capture_onfloor_things(gs: &GameState, level: &Level, sector_idx: usize) -> Vec<MobjHandle> {
+    let old_floor = level.sectors[sector_idx].floor_height;
+    let mut resting = Vec::new();
+    for handle in gs.mobjslab.iter_handles() {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            continue;
+        };
+        // Cheap pre-filter: only things sitting exactly at the sector's current
+        // floor height can be riding it.
+        if mo.z.to_int() != old_floor as i32 {
+            continue;
+        }
+        // Confirm genuinely onfloor: support floorz (pre-move) equals z.
+        let Some((floorz, _)) =
+            crate::movement::support_state_at(&gs.mobjslab, handle, mo.x, mo.y, level)
+        else {
+            continue;
+        };
+        if floorz == mo.z {
+            resting.push(handle);
+        }
+    }
+    resting
+}
+
+/// Move `sector_idx`'s floor to `new_floor`, dragging riders (vanilla
+/// `T_MovePlane` -> `P_ChangeSector` -> `P_ThingHeightClip`).
+///
+/// A thing standing on the floor before the move (`onfloor`, i.e.
+/// `z == floorz`) rides the plane: after the height changes its `z` is snapped
+/// to the recomputed support floor.  This is the mechanism by which a lowering
+/// lift/plat pulls the player's `z` down within the same tic — without it the
+/// player is left hovering above the new floor and is (incorrectly) treated as
+/// airborne on the following tic, diverging friction/thrust and the demo.
+///
+/// Only the `onfloor` branch of `P_ThingHeightClip` is ported here (rider drag);
+/// the floating-thing ceiling clamp and crush damage are left to the existing
+/// crusher path.
+fn move_floor_height_clip(
+    gs: &mut GameState,
+    level: &mut Level,
+    sector_idx: usize,
+    new_floor: i16,
+) {
+    let old_floor = level.sectors[sector_idx].floor_height;
+    if new_floor == old_floor {
+        return;
+    }
+
+    // onfloor = (thing->z == thing->floorz), sampled at the PRE-move height.
+    let resting = capture_onfloor_things(gs, level, sector_idx);
+
+    // T_MovePlane: commit the new plane height.
+    level.sectors[sector_idx].floor_height = new_floor;
+
+    // P_ThingHeightClip (onfloor branch): riders follow the floor to its new
+    // support height, recomputed against the moved sector.
+    for handle in resting {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            continue;
+        };
+        let (x, y) = (mo.x, mo.y);
+        if let Some((floorz, _)) =
+            crate::movement::support_state_at(&gs.mobjslab, handle, x, y, level)
+        {
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.z = floorz;
+            }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // tick_doors
 // ---------------------------------------------------------------------------
 
@@ -680,24 +771,24 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
         let wait_tics = door.wait_tics;
 
         if sector_idx < level.sectors.len() {
-            let sector = &mut level.sectors[sector_idx];
-            let height = if is_ceiling {
-                &mut sector.ceil_height
+            let cur = if is_ceiling {
+                level.sectors[sector_idx].ceil_height
             } else {
-                &mut sector.floor_height
+                level.sectors[sector_idx].floor_height
             };
-            *height += speed;
+            let raw = cur + speed;
+            let reached = if speed > 0 { raw >= target } else { raw <= target };
+            let new_h = if reached { target } else { raw };
 
-            let reached = if speed > 0 {
-                *height >= target
+            if is_ceiling {
+                level.sectors[sector_idx].ceil_height = new_h;
             } else {
-                *height <= target
-            };
+                // Floor door: drag riders with the plane (P_ChangeSector).
+                move_floor_height_clip(gs, level, sector_idx, new_h);
+            }
+            door.current_height = new_h;
 
             if reached {
-                *height = target;
-                door.current_height = target;
-
                 if speed > 0 && wait_tics > 0 {
                     door.countdown = wait_tics;
                     return true;
@@ -711,12 +802,6 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
 
                 return false;
             }
-            let new_h = if is_ceiling {
-                level.sectors[sector_idx].ceil_height
-            } else {
-                level.sectors[sector_idx].floor_height
-            };
-            door.current_height = new_h;
         }
 
         true
@@ -1574,7 +1659,11 @@ pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed:
 /// // tick_platforms(&mut gs, &mut level);
 /// ```
 pub fn tick_platforms(gs: &mut GameState, level: &mut Level) {
-    for plat in &mut gs.movers.active_platforms {
+    // Take the platform list out so the per-platform clip pass can borrow the
+    // whole `GameState` (rider drag needs `&mut gs.mobjslab`).
+    let mut platforms = std::mem::take(&mut gs.movers.active_platforms);
+
+    for plat in &mut platforms {
         let sector_idx = plat.sector_index;
         if sector_idx >= level.sectors.len() {
             continue;
@@ -1594,25 +1683,27 @@ pub fn tick_platforms(gs: &mut GameState, level: &mut Level) {
                 }
             }
             PlatformStatus::Down => {
-                level.sectors[sector_idx].floor_height -= plat.speed;
-                let floor = level.sectors[sector_idx].floor_height;
-                if floor <= plat.low_height {
-                    level.sectors[sector_idx].floor_height = plat.low_height;
+                let new_floor =
+                    (level.sectors[sector_idx].floor_height - plat.speed).max(plat.low_height);
+                move_floor_height_clip(gs, level, sector_idx, new_floor);
+                if new_floor <= plat.low_height {
                     plat.status = PlatformStatus::Waiting;
                     plat.wait_remaining = plat.wait_tics;
                 }
             }
             PlatformStatus::Up => {
-                level.sectors[sector_idx].floor_height += plat.speed;
-                let floor = level.sectors[sector_idx].floor_height;
-                if floor >= plat.high_height {
-                    level.sectors[sector_idx].floor_height = plat.high_height;
+                let new_floor =
+                    (level.sectors[sector_idx].floor_height + plat.speed).min(plat.high_height);
+                move_floor_height_clip(gs, level, sector_idx, new_floor);
+                if new_floor >= plat.high_height {
                     plat.status = PlatformStatus::Waiting;
                     plat.wait_remaining = plat.wait_tics;
                 }
             }
         }
     }
+
+    gs.movers.active_platforms = platforms;
 }
 
 // ---------------------------------------------------------------------------
@@ -1775,11 +1866,10 @@ pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
 
         match direction {
             MoveDirection::Down => {
-                level.sectors[sector_idx].floor_height -= speed;
-                let floor = level.sectors[sector_idx].floor_height;
+                let new_floor = (level.sectors[sector_idx].floor_height - speed).max(target);
+                move_floor_height_clip(gs, level, sector_idx, new_floor);
 
-                if floor <= target {
-                    level.sectors[sector_idx].floor_height = target;
+                if new_floor <= target {
                     if wait_tics > 0 {
                         // Enter wait phase (e.g., lift at bottom).
                         floor_mover.waiting = true;
@@ -1791,29 +1881,28 @@ pub fn tick_floors(gs: &mut GameState, level: &mut Level) {
                 }
             }
             MoveDirection::Up => {
-                level.sectors[sector_idx].floor_height += speed;
-                let floor = level.sectors[sector_idx].floor_height;
+                // Pre-clamp height, matching vanilla's crush check against the
+                // uncapped `floor += speed` value.
+                let raw = level.sectors[sector_idx].floor_height + speed;
+                let new_floor = raw.min(target);
 
                 // Crush damage when raising into something.
                 if crush == crate::state::CrushBehavior::Crush && crush_dmg > 0 {
                     let ceil = level.sectors[sector_idx].ceil_height;
-                    if floor >= ceil - 8 {
+                    if raw >= ceil - 8 {
                         let player_handle = gs.player.handle;
                         if let Some(pmo) = gs.mobjslab.get_mut(player_handle) {
-                            if pmo.z.to_int() >= (floor - 8) as i32 {
+                            if pmo.z.to_int() >= (raw - 8) as i32 {
                                 gs.damage_player(crush_dmg);
                             }
                         }
                     }
                 }
 
-                if floor >= target {
-                    level.sectors[sector_idx].floor_height = target;
-                    if wait_tics > 0 && floor_mover.return_height != target {
-                        // Returning phase complete — remove.
-                        return false;
-                    }
-                    // One-shot raiser: remove.
+                move_floor_height_clip(gs, level, sector_idx, new_floor);
+
+                if raw >= target {
+                    // Returning phase complete or one-shot raiser — remove.
                     return false;
                 }
             }
@@ -2133,9 +2222,9 @@ pub fn tick_lifts(gs: &mut GameState, level: &mut Level) {
             LiftStatus::Lowering => {
                 let speed = lift.speed;
                 let low = lift.low_height;
-                level.sectors[sector_idx].floor_height -= speed;
-                if level.sectors[sector_idx].floor_height <= low {
-                    level.sectors[sector_idx].floor_height = low;
+                let new_floor = (level.sectors[sector_idx].floor_height - speed).max(low);
+                move_floor_height_clip(gs, level, sector_idx, new_floor);
+                if new_floor <= low {
                     lift.status = LiftStatus::Waiting;
                     lift.wait_remaining = lift.wait_tics;
                 }
@@ -2149,9 +2238,9 @@ pub fn tick_lifts(gs: &mut GameState, level: &mut Level) {
             LiftStatus::Raising => {
                 let speed = lift.speed;
                 let high = lift.high_height;
-                level.sectors[sector_idx].floor_height += speed;
-                if level.sectors[sector_idx].floor_height >= high {
-                    level.sectors[sector_idx].floor_height = high;
+                let new_floor = (level.sectors[sector_idx].floor_height + speed).min(high);
+                move_floor_height_clip(gs, level, sector_idx, new_floor);
+                if new_floor >= high {
                     lift.status = LiftStatus::Done;
                 }
             }
@@ -10270,6 +10359,237 @@ mod tests {
         assert_eq!(
             gs.movers.active_floors[0].floor_type,
             FloorType::LowerToNearest
+        );
+    }
+
+    // -----------------------------------------------------------------------
+    // Tests: P_ChangeSector / P_ThingHeightClip (rider drag)
+    // -----------------------------------------------------------------------
+
+    /// Two-sector BSP level split by a vertical two-sided line at x=64.
+    /// Sector 0 (right, x>64) has floor `right_floor`; sector 1 (left, x<64) is
+    /// the "lift" with floor `left_floor`.  Includes BSP nodes + a blockmap so
+    /// `support_state_at` resolves real floor heights (not the fallback).
+    fn make_lift_bsp_level(right_floor: i16, left_floor: i16) -> doom_map::Level {
+        use doom_map::{
+            Blockmap, FLAG_TWO_SIDED, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex,
+        };
+        const NODE_SUBSECTOR_BIT: u16 = 0x8000;
+
+        let vertexes = vec![
+            Vertex { x: 64, y: -128 },
+            Vertex { x: 64, y: 128 },
+            Vertex { x: 0, y: -128 },
+            Vertex { x: 0, y: 128 },
+        ];
+        let linedefs = vec![
+            Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: FLAG_TWO_SIDED,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+            Linedef {
+                from_vertex: 2,
+                to_vertex: 3,
+                flags: FLAG_TWO_SIDED,
+                special: 0,
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            },
+        ];
+        let sidedefs = vec![
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 0,
+            },
+            Sidedef {
+                x_offset: 0,
+                y_offset: 0,
+                upper_texture: *b"UPPER\0\0\0",
+                lower_texture: *b"LOWER\0\0\0",
+                middle_texture: *b"-\0\0\0\0\0\0\0",
+                sector: 1,
+            },
+        ];
+        let sectors = vec![
+            Sector {
+                floor_height: right_floor,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+            Sector {
+                floor_height: left_floor,
+                ceil_height: 128,
+                floor_flat: *b"FLAT1\0\0\0",
+                ceil_flat: *b"FLAT2\0\0\0",
+                light_level: 192,
+                special: 0,
+                tag: 0,
+            },
+        ];
+        let segs = vec![
+            Seg {
+                from_vertex: 0,
+                to_vertex: 1,
+                angle: 0,
+                linedef: 0,
+                direction: 0,
+                offset: 0,
+            },
+            Seg {
+                from_vertex: 3,
+                to_vertex: 2,
+                angle: 0,
+                linedef: 1,
+                direction: 1,
+                offset: 0,
+            },
+        ];
+        let ssectors = vec![
+            Ssector {
+                seg_count: 1,
+                first_seg: 0,
+            },
+            Ssector {
+                seg_count: 1,
+                first_seg: 1,
+            },
+        ];
+        let nodes = vec![doom_map::Node {
+            x: 64,
+            y: 0,
+            dx: 0,
+            dy: 1,
+            right_bbox: doom_map::NodeBBox {
+                ymax: 128,
+                ymin: -128,
+                xmin: 64,
+                xmax: 256,
+            },
+            left_bbox: doom_map::NodeBBox {
+                ymax: 128,
+                ymin: -128,
+                xmin: -128,
+                xmax: 64,
+            },
+            right_child: NODE_SUBSECTOR_BIT,
+            left_child: NODE_SUBSECTOR_BIT | 1,
+        }];
+
+        // Blockmap: 2 columns x 1 row, 128-unit blocks, origin (0,0). Both the
+        // x=64 line (col 0) and the x=0 line (col 0) live in the left block.
+        let mut bm_data = Vec::new();
+        bm_data.extend_from_slice(&0i16.to_le_bytes()); // x origin
+        bm_data.extend_from_slice(&0i16.to_le_bytes()); // y origin
+        bm_data.extend_from_slice(&2u16.to_le_bytes()); // columns
+        bm_data.extend_from_slice(&1u16.to_le_bytes()); // rows
+        let data_start = 4u16 + 2;
+        bm_data.extend_from_slice(&data_start.to_le_bytes()); // offset for block 0
+        bm_data.extend_from_slice(&(data_start + 4).to_le_bytes()); // offset for block 1
+        // Block 0: linedefs 0 and 1.
+        bm_data.extend_from_slice(&0u16.to_le_bytes());
+        bm_data.extend_from_slice(&0u16.to_le_bytes());
+        bm_data.extend_from_slice(&1u16.to_le_bytes());
+        bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        // Block 1: empty.
+        bm_data.extend_from_slice(&0u16.to_le_bytes());
+        bm_data.extend_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = Blockmap::parse_lump(&bm_data).expect("blockmap must parse");
+        let reject = Reject::parse_lump(&[0u8; 1], 2).expect("reject must parse");
+
+        doom_map::Level {
+            name: "LIFT".to_string(),
+            things: vec![],
+            linedefs,
+            sidedefs,
+            vertexes,
+            segs,
+            ssectors,
+            nodes,
+            sectors,
+            reject,
+            blockmap,
+        }
+    }
+
+    fn add_thing(gs: &mut GameState, x: i32, y: i32, z: i32) -> MobjHandle {
+        let mut mo = Mobj::new(
+            MobjKind::Imp,
+            Fixed16_16::from_int(x),
+            Fixed16_16::from_int(y),
+            Bam::ZERO,
+        );
+        mo.health = 60;
+        mo.flags = crate::mobj::flags::MF_SOLID | crate::mobj::flags::MF_SHOOTABLE;
+        mo.radius = Fixed16_16::from_int(16);
+        mo.height = Fixed16_16::from_int(56);
+        mo.z = Fixed16_16::from_int(z);
+        gs.mobjslab.alloc(mo)
+    }
+
+    #[test]
+    fn change_sector_drags_rider_down_when_floor_lowers() {
+        let mut gs = GameState::new("TEST");
+        // Lift = sector 1 (left) at floor 64; sector 0 (right) at floor 0.
+        let mut level = make_lift_bsp_level(0, 64);
+
+        // A thing standing in the lift sector (origin left of x=64) at z=64.
+        let rider = add_thing(&mut gs, 32, 0, 64);
+        // A thing whose origin is in the LOW sector but whose bbox overlaps the
+        // lift across the x=64 line, so its support floor is the lift (z=64) —
+        // the DEMO3/E1M7 case where the player's origin is in the adjacent
+        // sector but it rides the lift edge.
+        let edge_rider = add_thing(&mut gs, 72, 0, 64);
+        // A floating thing above the floor (not onfloor) must NOT be dragged.
+        let floater = add_thing(&mut gs, 32, 96, 100);
+
+        // Lower the lift 64 -> 40 (a plat/lift step).
+        move_floor_height_clip(&mut gs, &mut level, 1, 40);
+
+        assert_eq!(
+            gs.mobjslab.get(rider).unwrap().z,
+            Fixed16_16::from_int(40),
+            "rider standing on the lift must be dragged down to the new floor"
+        );
+        assert_eq!(
+            gs.mobjslab.get(edge_rider).unwrap().z,
+            Fixed16_16::from_int(40),
+            "edge rider (bbox over the lift) must be dragged down too"
+        );
+        assert_eq!(
+            gs.mobjslab.get(floater).unwrap().z,
+            Fixed16_16::from_int(100),
+            "a floating thing (z != floorz) must not be dragged"
+        );
+    }
+
+    #[test]
+    fn change_sector_raises_rider_when_floor_rises() {
+        let mut gs = GameState::new("TEST");
+        // Lift = sector 1 (left) at floor 32; sector 0 (right) at floor 0.
+        let mut level = make_lift_bsp_level(0, 32);
+        let rider = add_thing(&mut gs, 32, 0, 32);
+
+        // Raise the lift 32 -> 56.
+        move_floor_height_clip(&mut gs, &mut level, 1, 56);
+
+        assert_eq!(
+            gs.mobjslab.get(rider).unwrap().z,
+            Fixed16_16::from_int(56),
+            "rider on a rising lift must be carried up to the new floor"
         );
     }
 }
