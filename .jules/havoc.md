@@ -11,3 +11,6 @@
 **Blockmap OOB Silent Corruption**
 **Learning:** Using `.unwrap_or(0)` on missing offsets in blockmap causes silent fallback to the file header instead of gracefully failing.
 **Action:** Replace missing offset fallbacks with explicitly starting iteration at the end of the file or returning empty.
+**Audio Mutex Deadlock Analysis**
+**Learning:** Evaluated `loom` feature for synchronization primitive correctness in `doom-audio`. The use of standard Mutex inside the audio callback is generally a risk (priority inversion), but safe from deadlocks as verified by `loom` since locks are not acquired sequentially.
+**Action:** When validating thread-safe state wrappers, attach `loom` harnesses to assert no deadlock interleavings exist.

@@ -1003,7 +1003,7 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
 /// Order matches vanilla: the angle rotation (in `P_PlayerThink` →
 /// `P_DeathThink`) uses the start-of-tic player/attacker positions, and runs
 /// BEFORE the corpse slide (`P_XYMovement`, in `P_RunThinkers`).
-fn p_death_think(gs: &mut GameState, mut level: Option<&mut Level>) {
+fn p_death_think(gs: &mut GameState, level: Option<&mut Level>) {
     // ANG5 = ANG90 / 18 (p_user.c). Rotate the view angle toward the attacker.
     const ANG5: u32 = ANG90.0 / 18;
     const ANG180: u32 = 0x8000_0000;
@@ -1143,11 +1143,7 @@ fn p_death_think(gs: &mut GameState, mut level: Option<&mut Level>) {
                         .floor_at(final_x.to_int(), final_y.to_int())
                         .map(|f| Fixed16_16::from_int(f as i32))
                         .unwrap_or(floorz);
-                    if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
-                        false
-                    } else {
-                        true
-                    }
+                    !corpse_skips_friction(flags1, momx, momy, floorz, center_floor)
                 }
             }
             None => true,
@@ -1172,7 +1168,7 @@ fn p_death_think(gs: &mut GameState, mut level: Option<&mut Level>) {
     // Dispatch any walkover line crossings the corpse straddled (vanilla
     // `P_CrossSpecialLine` still fires for a player corpse).
     if !player_crossings.is_empty()
-        && let Some(lv) = level.as_deref_mut()
+        && let Some(lv) = level
     {
         crate::linedef_dispatch::dispatch_player_crossings(gs, lv, handle, &player_crossings);
     }
