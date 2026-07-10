@@ -618,7 +618,23 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
 
 /// Port of vanilla `P_UseSpecialLine` restricted to the monster (`!thing->player`)
 /// path (`p_switch.c`): a monster can only activate manual door specials
-/// `1, 32, 33, 34` and never a secret line. Returns whether the line was used.
+/// `1, 32, 33, 34` and never a secret line. Returns whether the line was "used".
+///
+/// Vanilla `P_UseSpecialLine` gates a non-player mover to the switch
+/// `{1, 32, 33, 34}` (else `return false`), then falls into the "do something"
+/// switch which calls `EV_VerticalDoor` for all four and finally `return true`.
+/// `EV_VerticalDoor` actually opens only the *unlocked* manual door (type 1);
+/// the locked variants (32 = blue, 33 = red, 34 = yellow) bail out immediately
+/// for a mover with no `player` and leave the door shut — but `P_UseSpecialLine`
+/// still reports the line as used (returns `true`).
+///
+/// That return value is load-bearing for `P_Move`: when a monster's step is
+/// blocked and it contacts one of these specials, `good` becomes `true`, so
+/// `P_Move` returns `true` and `A_Chase` does NOT pick a new chase direction
+/// (no `P_NewChaseDir`/`P_TryWalk` draws). Returning `false` here — as an
+/// "activation failed" result would — makes the monster repath a tic vanilla
+/// does not, injecting extra `P_Random` draws (DEMO3/E1M7 leveltime 1240: an
+/// imp blocked by the closed yellow-locked door on ld904 must NOT repath).
 fn monster_use_special_line(gs: &mut GameState, level: &Level, ld_idx: usize) -> bool {
     let Some(ld) = level.linedefs.get(ld_idx) else {
         return false;
@@ -627,7 +643,15 @@ fn monster_use_special_line(gs: &mut GameState, level: &Level, ld_idx: usize) ->
         return false;
     }
     match ld.special {
-        1 | 32 | 33 | 34 => crate::specials::monster_activate_door_linedef(gs, level, ld_idx),
+        1 | 32 | 33 | 34 => {
+            // Only the unlocked manual door (type 1) opens for a monster;
+            // `EV_VerticalDoor` returns early for the locked 32/33/34. In every
+            // case the line counts as used, exactly like vanilla's `return true`.
+            if ld.special == 1 {
+                crate::specials::monster_activate_door_linedef(gs, level, ld_idx);
+            }
+            true
+        }
         _ => false,
     }
 }
@@ -3406,6 +3430,117 @@ mod tests {
         assert_eq!(
             gs.movers.active_doors[0].sector, 1,
             "monster should open the actual blocking door"
+        );
+    }
+
+    #[test]
+    fn p_move_locked_door_not_opened_but_counts_as_used() {
+        // Regression for DEMO3/E1M7 leveltime 1240: an imp's chase step is blocked
+        // by a shut *yellow-locked* manual door (special 34). Vanilla
+        // `P_UseSpecialLine` gates a non-player mover to `{1, 32, 33, 34}` and
+        // returns true for all four; `EV_VerticalDoor` bails for the locked
+        // variants (no `player`), so the door stays shut — but the line still
+        // counts as used, so `P_Move` returns true and `A_Chase` does NOT repath
+        // (no extra `P_Random` draws). Using special 34 here (was: monster
+        // repathed because our helper reported the failed activation as false).
+        let mut gs = make_game_state();
+        let trooper = spawn_trooper(&mut gs, 104, 0);
+        gs.mobjslab
+            .get_mut(trooper)
+            .expect("item must exist in tests")
+            .movedir = DI_EAST;
+
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).expect("item must exist in tests");
+        let mut bm_data = vec![0u8; 22];
+        bm_data[4..6].copy_from_slice(&2u16.to_le_bytes());
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        bm_data[8..10].copy_from_slice(&6u16.to_le_bytes());
+        bm_data[10..12].copy_from_slice(&8u16.to_le_bytes());
+        bm_data[12..14].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[14..16].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        bm_data[16..18].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[18..20].copy_from_slice(&0u16.to_le_bytes());
+        bm_data[20..22].copy_from_slice(&0xFFFFu16.to_le_bytes());
+        let blockmap = doom_map::Blockmap::parse_lump(&bm_data).expect("item must exist in tests");
+
+        let level = doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004,
+                special: 34, // yellow-locked manual door
+                tag: 0,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            }],
+            sidedefs: vec![
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 0,
+                },
+                doom_map::Sidedef {
+                    x_offset: 0,
+                    y_offset: 0,
+                    upper_texture: [0; 8],
+                    lower_texture: [0; 8],
+                    middle_texture: [0; 8],
+                    sector: 1,
+                },
+            ],
+            vertexes: vec![
+                doom_map::Vertex { x: 128, y: -32 },
+                doom_map::Vertex { x: 128, y: 32 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 128,
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+                doom_map::Sector {
+                    floor_height: 0,
+                    ceil_height: 0, // shut
+                    floor_flat: *b"FLAT1\0\0\0",
+                    ceil_flat: *b"FLAT2\0\0\0",
+                    light_level: 192,
+                    special: 0,
+                    tag: 0,
+                },
+            ],
+            reject,
+            blockmap,
+        };
+
+        let moved = p_move(&mut gs, trooper, Some(&level));
+
+        assert!(
+            moved,
+            "a monster blocked by a locked door still reports the line as used (P_Move returns true), so it does not repath"
+        );
+        assert!(
+            gs.movers.active_doors.is_empty(),
+            "a monster cannot open a locked door (32/33/34) — no door mover is created"
+        );
+        assert_eq!(
+            gs.mobjslab
+                .get(trooper)
+                .expect("item must exist in tests")
+                .movedir,
+            DI_NODIR,
+            "a monster halted by a special door has its movedir cleared to DI_NODIR"
         );
     }
 

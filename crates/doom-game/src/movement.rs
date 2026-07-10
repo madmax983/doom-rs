@@ -820,34 +820,45 @@ fn try_move_with_blocker(
                     );
                 }
 
-                // --- Two-sided: ML_BLOCKING always blocks, ML_BLOCKMONSTERS blocks monsters ---
-                if ld.flags & doom_map::lumps::FLAG_BLOCKING != 0 {
-                    return (
-                        false,
-                        Some(BlockingLine {
-                            linedef_idx: ld_idx as usize,
-                            x1: lx1,
-                            y1: ly1,
-                            x2: lx2,
-                            y2: ly2,
-                        }),
-                    );
-                }
-                let is_monster = slab
-                    .get(handle)
-                    .map(|mo| mo.flags & flags::MF_COUNTKILL != 0)
-                    .unwrap_or(false);
-                if ld.flags & doom_map::lumps::FLAG_BLOCKMONSTERS != 0 && is_monster {
-                    return (
-                        false,
-                        Some(BlockingLine {
-                            linedef_idx: ld_idx as usize,
-                            x1: lx1,
-                            y1: ly1,
-                            x2: lx2,
-                            y2: ly2,
-                        }),
-                    );
+                // --- Two-sided: ML_BLOCKING / ML_BLOCKMONSTERS ---
+                // Vanilla `PIT_CheckLine` gates both on `!(tmthing->flags &
+                // MF_MISSILE)`: missiles pass through impassable and
+                // block-monsters lines (they explode on geometry/openings, not
+                // on these flags). Applying ML_BLOCKING to a missile made an
+                // ImpFireball explode one tic early against an impassable
+                // two-sided line (DEMO3/E1M7 lt1411 line 338), reordering its
+                // P_ExplodeMissile RNG draw ahead of a trooper's A_PosAttack and
+                // corrupting that shot's angle spread.
+                let is_missile = mo_flags & flags::MF_MISSILE != 0;
+                if !is_missile {
+                    if ld.flags & doom_map::lumps::FLAG_BLOCKING != 0 {
+                        return (
+                            false,
+                            Some(BlockingLine {
+                                linedef_idx: ld_idx as usize,
+                                x1: lx1,
+                                y1: ly1,
+                                x2: lx2,
+                                y2: ly2,
+                            }),
+                        );
+                    }
+                    let is_monster = slab
+                        .get(handle)
+                        .map(|mo| mo.flags & flags::MF_COUNTKILL != 0)
+                        .unwrap_or(false);
+                    if ld.flags & doom_map::lumps::FLAG_BLOCKMONSTERS != 0 && is_monster {
+                        return (
+                            false,
+                            Some(BlockingLine {
+                                linedef_idx: ld_idx as usize,
+                                x1: lx1,
+                                y1: ly1,
+                                x2: lx2,
+                                y2: ly2,
+                            }),
+                        );
+                    }
                 }
 
                 // --- Two-sided: check opening ---
@@ -1472,6 +1483,50 @@ mod tests {
         assert!(
             p_try_move(&slab, handle, new_x, new_y, &level),
             "head at z+height=72 fits exactly under a 72 ceiling"
+        );
+    }
+
+    /// Vanilla `PIT_CheckLine` gates the `ML_BLOCKING`/`ML_BLOCKMONSTERS`
+    /// checks on `!(tmthing->flags & MF_MISSILE)`: a missile flies THROUGH an
+    /// impassable two-sided line (it only explodes on geometry/openings), while
+    /// a non-missile actor is stopped by it. Regression for DEMO3/E1M7 lt1411:
+    /// an ImpFireball wrongly exploded one tic early against impassable line
+    /// 338, reordering its P_ExplodeMissile RNG draw ahead of a trooper's
+    /// A_PosAttack and corrupting that shot's angle spread (player never took
+    /// the hit, position diverged at lt1414).
+    #[test]
+    fn missile_passes_through_impassable_two_sided_line() {
+        use doom_map::lumps::FLAG_BLOCKING;
+        // Flat floors/ceilings, no opening obstruction — the ONLY thing that
+        // could block is the ML_BLOCKING flag on the shared two-sided line.
+        let mut level = make_two_sided_step_level(0, 0);
+        level.linedefs[0].flags |= FLAG_BLOCKING;
+
+        let new_x = Fixed16_16::from_int(70); // crosses the x=64 line into sector 1
+        let new_y = Fixed16_16::from_int(64);
+
+        // A monster (non-missile) is stopped by the impassable line.
+        let (mut slab, handle) = make_player_slab();
+        if let Some(mo) = slab.get_mut(handle) {
+            mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+            mo.height = Fixed16_16::from_int(56);
+        }
+        assert!(
+            !p_try_move(&slab, handle, new_x, new_y, &level),
+            "a non-missile actor must be blocked by an ML_BLOCKING line"
+        );
+
+        // A missile passes through the same impassable line.
+        let (mut mslab, mhandle) = make_player_slab();
+        if let Some(mo) = mslab.get_mut(mhandle) {
+            mo.flags = flags::MF_MISSILE | flags::MF_NOGRAVITY | flags::MF_DROPOFF;
+            mo.radius = Fixed16_16::from_int(6);
+            mo.height = Fixed16_16::from_int(8);
+            mo.z = Fixed16_16::from_int(32);
+        }
+        assert!(
+            p_try_move(&mslab, mhandle, new_x, new_y, &level),
+            "a missile (MF_MISSILE) must pass through an ML_BLOCKING two-sided line"
         );
     }
 
