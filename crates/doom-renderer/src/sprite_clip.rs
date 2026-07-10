@@ -1,3 +1,9 @@
+//! Sprite occlusion history management.
+//!
+//! This module provides a stack-allocated history for tracking portal clips,
+//! ensuring sprite columns are rendered correctly when partially obscured by
+//! geometry, without the overhead of dynamic heap allocations.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
@@ -15,6 +21,7 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new, empty clipping history.
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {
@@ -26,6 +33,10 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Records a new clipping step in the history.
+    ///
+    /// If the internal array capacity is reached, new clips are silently ignored
+    /// to avoid heap allocations.
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +46,8 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Retrieves the most recent clipping step, to determine if current pixels
+    /// are occluded by the portal we just traversed.
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +56,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Streams portal depths to slice tall sprites during masked rendering.
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }
