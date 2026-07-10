@@ -183,17 +183,29 @@ use doom_types::mobj_kind::MobjKind;
 /// Called by `GameState::advance_mobj_state` each time an actor enters a
 /// new state.
 ///
-/// Helper to get a valid, alive target for a monster.
-/// Returns the target handle if it exists and is not dead.
-fn get_alive_target(gs: &GameState, handle: MobjHandle) -> Option<MobjHandle> {
+/// Helper to get a monster's current target for an attack action.
+///
+/// Vanilla's attack actions (`A_PosAttack`, `A_SPosAttack`, `A_TroopAttack`,
+/// `A_VileAttack`, …) all gate on `if (!actor->target) return;` — they fire at
+/// a target that merely *exists*, EVEN IF IT IS DEAD. A monster that is mid
+/// attack-sequence when its target dies still completes the shot (aiming/
+/// spreading/damage-rolling exactly as if alive); `P_DamageMobj` then no-ops on
+/// the dead victim, but the RNG has already advanced and stray pellets can hit
+/// (and kill) a live bystander. Re-acquisition of a fresh target happens later,
+/// in `A_Chase`, not here. Filtering dead targets out here (the old behaviour)
+/// silently dropped that shot — desyncing the RNG stream and, in DEMO3/E1M7,
+/// dropping the end-game infight kill (a Sergeant shooting the just-killed
+/// player put a pellet through the Sergeant that had killed him).
+///
+/// Returns the target handle if it exists (non-NULL and still allocated).
+fn get_existing_target(gs: &GameState, handle: MobjHandle) -> Option<MobjHandle> {
     let mo = gs.mobjslab.get(handle)?;
     if mo.target == MobjHandle::NULL {
         return None;
     }
-    let target_mo = gs.mobjslab.get(mo.target)?;
-    if target_mo.is_dead() {
-        return None;
-    }
+    // Existence check only (the target may be a corpse); a stale/freed handle
+    // is treated like a NULL target.
+    gs.mobjslab.get(mo.target)?;
     Some(mo.target)
 }
 
@@ -1396,7 +1408,7 @@ fn a_xscream(gs: &mut GameState, handle: MobjHandle) {
 fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let _rng_ctx = crate::random::rng_ctx("A_PosAttack");
     // Vanilla: `if (!actor->target) return;`
-    let Some(_target) = get_alive_target(gs, handle) else {
+    let Some(_target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1443,7 +1455,7 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 /// Fires 3 hitscan pellets with a small angular spread centered on the target.
 fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let _rng_ctx = crate::random::rng_ctx("A_SPosAttack");
-    let Some(_target) = get_alive_target(gs, handle) else {
+    let Some(_target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1492,7 +1504,7 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
 /// `ImpFireball` projectile aimed at the target.
 fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let _rng_ctx = crate::random::rng_ctx("A_TroopAttack");
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1526,7 +1538,7 @@ fn a_troo_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
 /// Deals melee damage only if the target is within `MELEERANGE`.
 fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     let _rng_ctx = crate::random::rng_ctx("A_SargAttack");
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1559,7 +1571,7 @@ fn a_sarg_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
 ///
 /// Faces the target, then spawns a `CacoFireball` projectile.
 fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1585,7 +1597,7 @@ fn a_head_attack(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Faces the target, then spawns a `BaronBall` projectile.
 fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1614,7 +1626,7 @@ fn a_bruis_attack(gs: &mut GameState, handle: MobjHandle) {
 /// Fires a single hitscan bolt at the current target with angle spread.
 /// Same behavior as the Zombieman's `A_PosAttack`.
 fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    let Some(_target) = get_alive_target(gs, handle) else {
+    let Some(_target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1660,7 +1672,7 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
 ///
 /// Faces the target, then spawns a `Rocket` projectile aimed at the target.
 fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1686,7 +1698,7 @@ fn a_cyber_attack(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Faces the target, then spawns a `Tracer` (homing) projectile.
 fn a_skel_missile(gs: &mut GameState, handle: MobjHandle) {
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1722,7 +1734,7 @@ const FATSPREAD: u32 = 0x0400_0000;
 ///
 /// Helper shared by `a_fat_attack1`, `a_fat_attack2`, `a_fat_attack3`.
 fn fat_shoot(gs: &mut GameState, handle: MobjHandle, angle_offset: u32) {
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1753,7 +1765,7 @@ fn fat_shoot(gs: &mut GameState, handle: MobjHandle, angle_offset: u32) {
 /// Mancubus spread fire #1: face target, then fire two `FatShot` projectiles
 /// at +FATSPREAD and 0.
 fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
-    let Some(_target) = get_alive_target(gs, handle) else {
+    let Some(_target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1777,7 +1789,7 @@ fn a_fat_attack1(gs: &mut GameState, handle: MobjHandle) {
 /// Mancubus spread fire #2: face target, then fire two `FatShot` projectiles
 /// at −FATSPREAD and 0.
 fn a_fat_attack2(gs: &mut GameState, handle: MobjHandle) {
-    let Some(_target) = get_alive_target(gs, handle) else {
+    let Some(_target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1791,7 +1803,7 @@ fn a_fat_attack2(gs: &mut GameState, handle: MobjHandle) {
 /// Mancubus spread fire #3: face target, then fire two `FatShot` projectiles
 /// at +FATSPREAD/2 and −FATSPREAD/2.
 fn a_fat_attack3(gs: &mut GameState, handle: MobjHandle) {
-    let Some(_target) = get_alive_target(gs, handle) else {
+    let Some(_target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1811,7 +1823,7 @@ const SKULLSPEED: i32 = 20;
 ///
 /// Sets `MF_SKULLFLY` and computes momentum toward the target at `SKULLSPEED`.
 fn a_skull_attack(gs: &mut GameState, handle: MobjHandle) {
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1854,7 +1866,7 @@ fn a_skull_attack(gs: &mut GameState, handle: MobjHandle) {
 ///
 /// Faces the target, then spawns an `ArachPlaz` projectile.
 fn a_bspi_attack(gs: &mut GameState, handle: MobjHandle) {
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1871,7 +1883,7 @@ fn a_bspi_attack(gs: &mut GameState, handle: MobjHandle) {
 /// Fires a single hitscan bolt with angle spread, identical to the
 /// Chaingunner attack pattern.
 fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
-    let Some(_target) = get_alive_target(gs, handle) else {
+    let Some(_target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -1911,7 +1923,7 @@ const LOST_SOUL_MAX: usize = 21;
 /// Faces the target, then spawns a `LostSoul` if the current count of Lost
 /// Souls in the level is below `LOST_SOUL_MAX` (21).
 fn a_pain_attack(gs: &mut GameState, handle: MobjHandle) {
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
 
@@ -2083,7 +2095,7 @@ fn a_vile_start(gs: &mut GameState, handle: MobjHandle) {
 /// Spawns a VileFire actor at the target's position, sets the fire's
 /// `target` to the Vile (owner) and `tracer` to the target (tracking).
 fn a_vile_target(gs: &mut GameState, handle: MobjHandle) {
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
     a_face_target(gs, handle);
@@ -2112,7 +2124,7 @@ fn a_vile_target(gs: &mut GameState, handle: MobjHandle) {
 /// Deals 20 direct damage + 70 blast damage to the target and applies
 /// an upward thrust of 15 map units (momz).
 fn a_vile_attack(gs: &mut GameState, handle: MobjHandle) {
-    let Some(target) = get_alive_target(gs, handle) else {
+    let Some(target) = get_existing_target(gs, handle) else {
         return;
     };
     a_face_target(gs, handle);
@@ -4876,10 +4888,14 @@ mod tests {
         dispatch_action(&mut gs, h, Action::PainAttack as u8, None);
     }
 
+    /// Vanilla attack actions gate on `if (!actor->target) return;`, NOT on the
+    /// target being alive — a monster mid attack-sequence when its target dies
+    /// still completes the shot. `A_CyberAttack` therefore spawns its rocket at
+    /// a dead (but still-present) target.
     #[test]
-    fn all_attacks_noop_with_dead_target() {
+    fn attacks_fire_at_existing_dead_target() {
         let mut gs = make_game_state();
-        // Kill the player.
+        // Kill the player (target still exists as a corpse).
         gs.mobjslab
             .get_mut(gs.player.handle)
             .expect("item must exist in tests")
@@ -4889,11 +4905,11 @@ mod tests {
 
         let slab_len_before = gs.mobjslab.len();
         dispatch_action(&mut gs, h, Action::CyberAttack as u8, None);
-        // Cyberdemon should NOT spawn a rocket when target is dead.
+        // Cyberdemon STILL spawns a rocket at the dead-but-present target.
         assert_eq!(
             gs.mobjslab.len(),
-            slab_len_before,
-            "must not spawn projectile when target is dead"
+            slab_len_before + 1,
+            "must still spawn projectile at an existing (dead) target, as vanilla does"
         );
     }
 
@@ -5508,8 +5524,10 @@ mod tests {
         dispatch_action(&mut gs, h, Action::VileAttack as u8, None);
     }
 
+    /// `A_VileTarget` gates on `if (!actor->target) return;` — it spawns its
+    /// fire at an existing target even if that target is dead (vanilla).
     #[test]
-    fn vile_actions_noop_with_dead_target() {
+    fn vile_target_spawns_fire_at_existing_dead_target() {
         let mut gs = make_game_state();
         gs.mobjslab
             .get_mut(gs.player.handle)
@@ -5521,8 +5539,8 @@ mod tests {
         dispatch_action(&mut gs, vile, Action::VileTarget as u8, None);
         assert_eq!(
             gs.mobjslab.len(),
-            count_before,
-            "must not spawn fire when target is dead"
+            count_before + 1,
+            "must still spawn fire at an existing (dead) target, as vanilla does"
         );
     }
 
@@ -5548,7 +5566,7 @@ mod tests {
     }
 
     #[test]
-    fn get_alive_target_returns_none_no_target() {
+    fn get_existing_target_returns_none_no_target() {
         let mut gs = make_game_state();
         let mo = Mobj::new(
             MobjKind::Imp,
@@ -5557,26 +5575,31 @@ mod tests {
             Bam::ZERO,
         );
         let handle = gs.mobjslab.alloc(mo);
-        assert_eq!(get_alive_target(&gs, handle), None);
+        assert_eq!(get_existing_target(&gs, handle), None);
     }
 
+    /// Regression: vanilla attack actions gate on `if (!actor->target)` — a
+    /// target that merely EXISTS (even a corpse) is still returned, so the
+    /// monster completes its shot. Filtering dead targets here dropped the
+    /// end-game infight kill in DEMO3/E1M7.
     #[test]
-    fn get_alive_target_returns_none_dead_target() {
+    fn get_existing_target_returns_target_even_when_dead() {
         let mut gs = make_game_state();
         gs.mobjslab
             .get_mut(gs.player.handle)
             .expect("item must exist in tests")
             .health = 0;
+        let target_h = gs.player.handle;
         let imp = spawn_monster_targeting_player(&mut gs, MobjKind::Imp, 100, 100, 100);
-        assert_eq!(get_alive_target(&gs, imp), None);
+        assert_eq!(get_existing_target(&gs, imp), Some(target_h));
     }
 
     #[test]
-    fn get_alive_target_returns_target() {
+    fn get_existing_target_returns_target() {
         let mut gs = make_game_state();
         let target_h = gs.player.handle;
         let imp = spawn_monster_targeting_player(&mut gs, MobjKind::Imp, 100, 100, 100);
-        assert_eq!(get_alive_target(&gs, imp), Some(target_h));
+        assert_eq!(get_existing_target(&gs, imp), Some(target_h));
     }
 
     #[test]

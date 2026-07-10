@@ -517,6 +517,7 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
         gs.player.attack_down = false;
         gs.player.extra_light = 0;
         gs.player.use_down = false;
+        p_death_think(gs, level.as_deref_mut());
         return;
     }
 
@@ -975,6 +976,203 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
     // intersection.
     if !player_crossings.is_empty()
         && let Some(lv) = level
+    {
+        crate::linedef_dispatch::dispatch_player_crossings(gs, lv, handle, &player_crossings);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// P_DeathThink — port of Doom's p_user.c: P_DeathThink
+// ---------------------------------------------------------------------------
+
+/// Port of Doom's `P_DeathThink` (the parts observable in a demo): rotate the
+/// dead player's view angle toward its killer by `ANG5` per tic, then slide the
+/// corpse under its residual momentum + friction.
+///
+/// In vanilla the player mobj is an ordinary thinker, so `P_MobjThinker` runs
+/// `P_XYMovement` on the corpse every tic (sliding it under the death-blow
+/// thrust `P_DamageMobj` applied, decaying by friction). doom-rs skips the
+/// player in the thinker loop and integrates its physics inline in
+/// `p_move_player`; that path is bypassed once the player is dead, so the
+/// corpse slide must be driven here instead — otherwise the corpse freezes in
+/// place, its view angle never turns toward the killer, and any monster that
+/// reads the (stuck) player position aims/moves differently, desyncing the
+/// end-of-demo RNG stream (DEMO3/E1M7: the player dies at leveltime 2079, and
+/// the frozen corpse cost a monster kill at 2084).
+///
+/// Order matches vanilla: the angle rotation (in `P_PlayerThink` →
+/// `P_DeathThink`) uses the start-of-tic player/attacker positions, and runs
+/// BEFORE the corpse slide (`P_XYMovement`, in `P_RunThinkers`).
+fn p_death_think(gs: &mut GameState, mut level: Option<&mut Level>) {
+    // ANG5 = ANG90 / 18 (p_user.c). Rotate the view angle toward the attacker.
+    const ANG5: u32 = ANG90.0 / 18;
+    const ANG180: u32 = 0x8000_0000;
+
+    let handle = gs.player.handle;
+    let attacker = gs.player.attacker;
+    if attacker != MobjHandle::NULL && attacker != handle {
+        let player_pos = gs
+            .mobjslab
+            .get(handle)
+            .map(|mo| (mo.x.raw(), mo.y.raw(), mo.angle.0));
+        let attacker_pos = gs.mobjslab.get(attacker).map(|mo| (mo.x.raw(), mo.y.raw()));
+        if let (Some((px, py, cur_ang)), Some((ax, ay))) = (player_pos, attacker_pos) {
+            let target_ang = crate::geom::r_point_to_angle2(px, py, ax, ay);
+            let delta = target_ang.wrapping_sub(cur_ang);
+            let new_ang = if delta < ANG5 || delta > 0u32.wrapping_sub(ANG5) {
+                // Looking at killer (within ANG5): snap exactly onto it.
+                target_ang
+            } else if delta < ANG180 {
+                cur_ang.wrapping_add(ANG5)
+            } else {
+                cur_ang.wrapping_sub(ANG5)
+            };
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.angle = Bam(new_ang);
+            }
+        }
+    }
+
+    // Corpse slide — vanilla `P_XYMovement` for the player mobj. This is NOT the
+    // generic non-player `p_xy_movement_mobj`: on a blocked step vanilla checks
+    // `if (mo->player) P_SlideMove(mo)` — the player flag, NOT aliveness — so a
+    // dead player's corpse still slides ALONG walls (and along a solid monster
+    // standing in its path), preserving the tangential momentum, whereas a
+    // monster corpse would stop dead (`momx = momy = 0`). Getting this wrong
+    // froze the corpse against an obstacle one tic in, and the resulting stuck
+    // player position desynced a monster's approach and cost the lt2084 kill.
+    //
+    // No input thrust/turn is applied (vanilla runs `P_DeathThink`, never
+    // `P_MovePlayer`, for a dead player), and the STOPSPEED zeroing is therefore
+    // unconditional. The MF_CORPSE "don't stop sliding halfway off a step"
+    // clause is honoured, matching the non-player corpse path.
+    let (momx0, momy0) = {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        (mo.momx, mo.momy)
+    };
+    if momx0 == Fixed16_16::ZERO && momy0 == Fixed16_16::ZERO {
+        return;
+    }
+
+    // Clamp momentum to MAXMOVE.
+    {
+        let Some(mo) = gs.mobjslab.get_mut(handle) else {
+            return;
+        };
+        mo.momx = mo.momx.clamp(-MAXMOVE, MAXMOVE);
+        mo.momy = mo.momy.clamp(-MAXMOVE, MAXMOVE);
+    }
+
+    let mut player_crossings: Vec<usize> = Vec::new();
+    match level.as_deref() {
+        Some(lv) => {
+            let (mut xmove, mut ymove) = {
+                let mo = gs.mobjslab.get(handle).expect("player corpse exists");
+                (mo.momx.raw(), mo.momy.raw())
+            };
+            let half = MAXMOVE.raw() / 2;
+            loop {
+                let (ptryx, ptryy);
+                if xmove > half || ymove > half {
+                    let mo = gs.mobjslab.get(handle).expect("player corpse exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove / 2);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove / 2);
+                    xmove >>= 1;
+                    ymove >>= 1;
+                } else {
+                    let mo = gs.mobjslab.get(handle).expect("player corpse exists");
+                    ptryx = mo.x + Fixed16_16::from_raw(xmove);
+                    ptryy = mo.y + Fixed16_16::from_raw(ymove);
+                    xmove = 0;
+                    ymove = 0;
+                }
+
+                if !crate::movement::p_try_move_commit_tracked(
+                    &mut gs.mobjslab,
+                    handle,
+                    ptryx,
+                    ptryy,
+                    lv,
+                    &mut player_crossings,
+                ) {
+                    // Player corpse: slide along the blocking wall/thing.
+                    crate::movement::p_slide_move_vanilla(
+                        &mut gs.mobjslab,
+                        handle,
+                        lv,
+                        &mut player_crossings,
+                    );
+                }
+
+                if xmove == 0 && ymove == 0 {
+                    break;
+                }
+            }
+        }
+        None => {
+            if let Some(mo) = gs.mobjslab.get_mut(handle) {
+                mo.x += mo.momx;
+                mo.y += mo.momy;
+            }
+        }
+    }
+
+    // Friction (P_XYMovement). No friction while airborne; the MF_CORPSE clause
+    // keeps a fast-sliding corpse moving when halfway off a step; otherwise
+    // STOPSPEED zeroing (unconditional — a dead player has no input) or FRICTION.
+    let (final_x, final_y, flags1, mz) = {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        (mo.x, mo.y, mo.flags, mo.z)
+    };
+    let on_ground = match level.as_deref() {
+        Some(lv) => match crate::movement::support_state_at(&gs.mobjslab, handle, final_x, final_y, lv)
+        {
+            Some((floorz, _)) => {
+                if mz > floorz {
+                    false
+                } else {
+                    let (momx, momy) = {
+                        let mo = gs.mobjslab.get(handle).expect("player corpse exists");
+                        (mo.momx, mo.momy)
+                    };
+                    let center_floor = lv
+                        .floor_at(final_x.to_int(), final_y.to_int())
+                        .map(|f| Fixed16_16::from_int(f as i32))
+                        .unwrap_or(floorz);
+                    if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
+                        false
+                    } else {
+                        true
+                    }
+                }
+            }
+            None => true,
+        },
+        None => true,
+    };
+    if on_ground && let Some(mo) = gs.mobjslab.get_mut(handle) {
+        let stopspeed = Fixed16_16(0x1000);
+        let below_stop = mo.momx > -stopspeed
+            && mo.momx < stopspeed
+            && mo.momy > -stopspeed
+            && mo.momy < stopspeed;
+        if below_stop {
+            mo.momx = Fixed16_16::ZERO;
+            mo.momy = Fixed16_16::ZERO;
+        } else {
+            mo.momx = mo.momx.fixed_mul(FRICTION);
+            mo.momy = mo.momy.fixed_mul(FRICTION);
+        }
+    }
+
+    // Dispatch any walkover line crossings the corpse straddled (vanilla
+    // `P_CrossSpecialLine` still fires for a player corpse).
+    if !player_crossings.is_empty()
+        && let Some(lv) = level.as_deref_mut()
     {
         crate::linedef_dispatch::dispatch_player_crossings(gs, lv, handle, &player_crossings);
     }

@@ -126,6 +126,11 @@ pub struct PlayerState {
     /// Weapon and flash psprite slots (vanilla `ps_weapon`, `ps_flash`).
     pub psprites: [PspriteState; NUM_PSPRITES],
 
+    /// Vanilla `player_t::attacker` — the mobj that last damaged this player.
+    /// Set in `P_DamageMobj`; read by `P_DeathThink` to rotate the corpse's
+    /// view angle toward its killer. `MobjHandle::NULL` when unset.
+    pub attacker: MobjHandle,
+
     // --- Input debounce ---
     /// Was attack held last tic (for auto-fire).
     pub attack_down: bool,
@@ -198,6 +203,7 @@ impl PlayerState {
             weapon: WeaponType::Pistol,
             pending_weapon: None,
             psprites: [PspriteState::default(); NUM_PSPRITES],
+            attacker: MobjHandle::NULL,
             attack_down: false,
             attack_cooldown: 0,
             refire: 0,
