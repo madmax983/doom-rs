@@ -2277,8 +2277,7 @@ struct VerifyRun {
 }
 
 /// Header line shared byte-for-byte with the reference oracle.
-const VERIFY_CSV_HEADER: &str =
-    "i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime";
+const VERIFY_CSV_HEADER: &str = "i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime";
 
 /// Build a fresh level for `warp_str`, spawn things from the demo header, and
 /// replay the demo, emitting one CSV row per applied ticcmd.
@@ -2293,9 +2292,8 @@ fn verify_replay_once(
         doom_game::rng_trace_enable();
     }
     // A fresh, mutable level per run: gs.tick mutates sector heights, etc.
-    let mut level = Level::from_wad_stack(wad_stack, warp_str).with_context(|| {
-        format!("Could not load map '{warp_str}' for demo verification.")
-    })?;
+    let mut level = Level::from_wad_stack(wad_stack, warp_str)
+        .with_context(|| format!("Could not load map '{warp_str}' for demo verification."))?;
 
     // Fresh game state: RNG index starts at 0. No title/menu code runs, so the
     // only RNG advancement before the first tic comes from monster-spawn tic
@@ -2369,19 +2367,26 @@ fn verify_replay_once(
     };
 
     // Capture final player-0 state for the console summary.
-    let (final_px_raw, final_py_raw, final_pz_raw, final_px_int, final_py_int, final_pz_int, final_angle) =
-        match gs.mobjslab.get(gs.player.handle) {
-            Some(mo) => (
-                mo.x.raw(),
-                mo.y.raw(),
-                mo.z.raw(),
-                mo.x.to_int(),
-                mo.y.to_int(),
-                mo.z.to_int(),
-                mo.angle.raw(),
-            ),
-            None => (0, 0, 0, 0, 0, 0, 0),
-        };
+    let (
+        final_px_raw,
+        final_py_raw,
+        final_pz_raw,
+        final_px_int,
+        final_py_int,
+        final_pz_int,
+        final_angle,
+    ) = match gs.mobjslab.get(gs.player.handle) {
+        Some(mo) => (
+            mo.x.raw(),
+            mo.y.raw(),
+            mo.z.raw(),
+            mo.x.to_int(),
+            mo.y.to_int(),
+            mo.z.to_int(),
+            mo.angle.raw(),
+        ),
+        None => (0, 0, 0, 0, 0, 0, 0),
+    };
 
     Ok(VerifyRun {
         csv,
@@ -2427,7 +2432,10 @@ fn verify_warp_from_header(wad_stack: &WadStack, header: &doom_demo::LmpHeader) 
     }
     // Fall back to the Doom 1 form even if it did not load, so the caller
     // surfaces a clear load error.
-    candidates.into_iter().next().unwrap_or_else(|| "E1M1".to_owned())
+    candidates
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| "E1M1".to_owned())
 }
 
 /// Resolve demo bytes from `source`: a filesystem path if it exists, otherwise
@@ -2435,8 +2443,8 @@ fn verify_warp_from_header(wad_stack: &WadStack, header: &doom_demo::LmpHeader) 
 fn verify_resolve_demo_bytes(wad_stack: &WadStack, source: &str) -> Result<(Vec<u8>, String)> {
     let path = std::path::Path::new(source);
     if path.is_file() {
-        let bytes = std::fs::read(path)
-            .with_context(|| format!("Failed to read demo file '{source}'"))?;
+        let bytes =
+            std::fs::read(path).with_context(|| format!("Failed to read demo file '{source}'"))?;
         return Ok((bytes, format!("file:{source}")));
     }
     match wad_stack.lump_data(source) {
@@ -2462,7 +2470,11 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
         // Only trace the first run to avoid backtrace overhead on the rest.
         let trace = args.verify_rng_trace.is_some() && run_idx == 0;
         results.push(verify_replay_once(
-            wad_stack, &warp_str, &header, &demo_bytes, trace,
+            wad_stack,
+            &warp_str,
+            &header,
+            &demo_bytes,
+            trace,
         )?);
     }
 
@@ -2515,10 +2527,7 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
 
     // --- Console summary ---
     let r0 = &results[0];
-    let flags_set = header.deathmatch != 0
-        || header.respawn
-        || header.fast
-        || header.nomonsters;
+    let flags_set = header.deathmatch != 0 || header.respawn || header.fast || header.nomonsters;
 
     println!("=== doom-rs demo verification ===");
     println!("demo source       : {source_label}");

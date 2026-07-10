@@ -807,8 +807,8 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
         let momy = mo.momy.raw();
         // MAXBOB = 0x100000 (16 pixels).
         const MAXBOB: i32 = 0x0010_0000;
-        let mut bob = crate::geom::fixed_mul(momx, momx)
-            .wrapping_add(crate::geom::fixed_mul(momy, momy));
+        let mut bob =
+            crate::geom::fixed_mul(momx, momx).wrapping_add(crate::geom::fixed_mul(momy, momy));
         bob >>= 2;
         if bob > MAXBOB {
             bob = MAXBOB;
@@ -1028,8 +1028,7 @@ fn corpse_skips_friction(
         return false;
     }
     let quarter = Fixed16_16(0x4000); // FRACUNIT/4
-    let has_momentum =
-        momx > quarter || momx < -quarter || momy > quarter || momy < -quarter;
+    let has_momentum = momx > quarter || momx < -quarter || momy > quarter || momy < -quarter;
     has_momentum && support_floor != center_floor
 }
 
@@ -1148,8 +1147,7 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
             let mo = gs.mobjslab.get(handle).expect("mobj exists");
             (mo.x, mo.y, mo.momx, mo.momy)
         };
-        if let Some((floorz, _)) =
-            crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
+        if let Some((floorz, _)) = crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
         {
             if mz > floorz {
                 return;
@@ -1369,8 +1367,7 @@ fn missile_check_things(
         if t.flags & (flags::MF_SOLID | flags::MF_SPECIAL | flags::MF_SHOOTABLE) == 0 {
             continue;
         }
-        let (tx, ty, tz, t_height, t_flags, t_kind) =
-            (t.x, t.y, t.z, t.height, t.flags, t.kind);
+        let (tx, ty, tz, t_height, t_flags, t_kind) = (t.x, t.y, t.z, t.height, t.flags, t.kind);
 
         // blockdist = thing->radius + tmthing->radius; reject if bbox misses.
         let blockdist = (t.radius + m_radius).raw();
@@ -1553,8 +1550,16 @@ mod tests {
         let _ = tick_mobj(&mut gs, handle, None);
 
         let mo = gs.mobjslab.get(handle).expect("missile exists");
-        assert_eq!(mo.x, Fixed16_16::from_int(7), "x advances by momx exactly once");
-        assert_eq!(mo.y, Fixed16_16::from_int(-4), "y advances by momy exactly once");
+        assert_eq!(
+            mo.x,
+            Fixed16_16::from_int(7),
+            "x advances by momx exactly once"
+        );
+        assert_eq!(
+            mo.y,
+            Fixed16_16::from_int(-4),
+            "y advances by momy exactly once"
+        );
     }
 
     /// Regression pinning `P_ExplodeMissile`: switch the missile to its death
@@ -1589,12 +1594,20 @@ mod tests {
 
         let mo = gs.mobjslab.get(handle).expect("exploding missile exists");
         assert_eq!(mo.state, death_state, "missile enters its death state");
-        assert_eq!(mo.flags & flags::MF_MISSILE, 0, "MF_MISSILE must be cleared");
+        assert_eq!(
+            mo.flags & flags::MF_MISSILE,
+            0,
+            "MF_MISSILE must be cleared"
+        );
         assert_eq!(mo.momx, Fixed16_16::ZERO);
         assert_eq!(mo.momy, Fixed16_16::ZERO);
         assert_eq!(mo.momz, Fixed16_16::ZERO);
         let base = crate::states::STATES[death_state.0 as usize].tics;
-        assert!(mo.tics >= 1 && mo.tics <= base, "tics {} in [1,{base}]", mo.tics);
+        assert!(
+            mo.tics >= 1 && mo.tics <= base,
+            "tics {} in [1,{base}]",
+            mo.tics
+        );
     }
 
     /// Regression pinning the `PIT_CheckThing` missile branch: a missile
@@ -1620,12 +1633,7 @@ mod tests {
         proj.target = gs.player.handle;
         let missile = gs.mobjslab.alloc(proj);
 
-        let mut victim = Mobj::new(
-            MobjKind::Imp,
-            Fixed16_16::ZERO,
-            Fixed16_16::ZERO,
-            Bam::ZERO,
-        );
+        let mut victim = Mobj::new(MobjKind::Imp, Fixed16_16::ZERO, Fixed16_16::ZERO, Bam::ZERO);
         victim.health = 60;
         victim.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
         victim.radius = Fixed16_16::from_int(20);
@@ -1634,7 +1642,10 @@ mod tests {
 
         let before = gs.rng.index();
         let blocked = !missile_check_things(&mut gs, missile, Fixed16_16::ZERO, Fixed16_16::ZERO);
-        assert!(blocked, "overlapping a shootable must block the step (explode)");
+        assert!(
+            blocked,
+            "overlapping a shootable must block the step (explode)"
+        );
         assert!(
             (gs.rng.index().wrapping_sub(before)) & 255 >= 1,
             "the (P_Random()%8+1) damage draw must advance the RNG"
@@ -1676,9 +1687,16 @@ mod tests {
         let before = gs.rng.index();
         let passed = missile_check_things(&mut gs, missile, px, py);
         assert!(passed, "missile must pass through its own shooter");
-        assert_eq!(gs.rng.index(), before, "no RNG draw when skipping the shooter");
+        assert_eq!(
+            gs.rng.index(),
+            before,
+            "no RNG draw when skipping the shooter"
+        );
         let shooter = gs.mobjslab.get(shooter_h).expect("shooter exists");
-        assert_eq!(shooter.health, 60, "shooter takes no damage from its own missile");
+        assert_eq!(
+            shooter.health, 60,
+            "shooter takes no damage from its own missile"
+        );
     }
 
     // =======================================================================
@@ -1988,8 +2006,12 @@ mod tests {
         // later-created actor, iteration MUST still be in creation
         // (generation) order — the actor in the recycled low slot ticks LAST.
         let mut gs = make_game_state();
-        let a = gs.mobjslab.alloc(make_trooper(StateNum(ids::S_POSS_STND), 5));
-        let b = gs.mobjslab.alloc(make_trooper(StateNum(ids::S_POSS_STND), 5));
+        let a = gs
+            .mobjslab
+            .alloc(make_trooper(StateNum(ids::S_POSS_STND), 5));
+        let b = gs
+            .mobjslab
+            .alloc(make_trooper(StateNum(ids::S_POSS_STND), 5));
         // Free `a` (its low slot enters the free list) then allocate `c`, which
         // reuses `a`'s slot but carries a higher generation than `b`.
         gs.mobjslab.free(a);
@@ -2067,7 +2089,10 @@ mod tests {
             legacy_light, inter_light,
             "interleaved light pass must produce the same light level as legacy"
         );
-        assert!(inter_draws >= 1, "the pending LightFlash must draw this tic");
+        assert!(
+            inter_draws >= 1,
+            "the pending LightFlash must draw this tic"
+        );
     }
 
     #[test]
@@ -2622,9 +2647,15 @@ mod tests {
 
         // Two ticks: still in RUN1.
         tick_mobj(&mut gs, handle, None);
-        assert_eq!(gs.mobjslab.get(handle).unwrap().state, StateNum(ids::S_TROO_RUN1));
+        assert_eq!(
+            gs.mobjslab.get(handle).unwrap().state,
+            StateNum(ids::S_TROO_RUN1)
+        );
         tick_mobj(&mut gs, handle, None);
-        assert_eq!(gs.mobjslab.get(handle).unwrap().state, StateNum(ids::S_TROO_RUN1));
+        assert_eq!(
+            gs.mobjslab.get(handle).unwrap().state,
+            StateNum(ids::S_TROO_RUN1)
+        );
 
         // Third tick: advances to RUN2 (cadence = 3, not 4).
         tick_mobj(&mut gs, handle, None);
@@ -3361,7 +3392,13 @@ mod tests {
         let support = Fixed16_16::from_int(64);
         let center = Fixed16_16::from_int(0);
         assert!(
-            corpse_skips_friction(flags::MF_CORPSE, Fixed16_16::ZERO, -sliding, support, center),
+            corpse_skips_friction(
+                flags::MF_CORPSE,
+                Fixed16_16::ZERO,
+                -sliding,
+                support,
+                center
+            ),
             "corpse straddling a step with momentum must skip friction"
         );
     }
