@@ -10,11 +10,16 @@
 //! - `check_cross_lines()` — detect walk-trigger lines crossed during movement.
 
 use doom_map::Level;
-use doom_types::Fixed16_16;
+use doom_types::{Fixed16_16, FIXED_ONE};
 
 use crate::mobj::MobjHandle;
 use crate::state::{ExitRequest, GameState, LockedDoorColor, SoundRequest};
 use crate::switch::KeyType;
+
+/// Raise-and-change plats move at half a map unit per tic (vanilla
+/// `PLATSPEED/2 = FRACUNIT/2`), unlike ordinary floor movers which step a
+/// whole unit per tic.
+const PLAT_HALF_SPEED: Fixed16_16 = Fixed16_16::from_raw(FIXED_ONE.raw() / 2);
 
 // ---------------------------------------------------------------------------
 // Trigger types
@@ -133,10 +138,17 @@ pub enum LinedefEffect {
     FloorRaiseToNearest,
     /// Raise floor by 24 units.
     FloorRaiseBy24,
-    /// Raise floor by 32 units.
-    FloorRaiseBy32,
     /// Raise floor by shortest lower texture height.
     FloorRaiseByShortestLowerTexture,
+    /// Plat: raise to next higher floor and change texture (vanilla
+    /// `raiseToNearestAndChange`, moves at half a unit per tic).
+    PlatRaiseToNearestAndChange,
+    /// Plat: raise by 24 and change texture (vanilla `raiseAndChange`,
+    /// half a unit per tic).
+    PlatRaiseAndChange24,
+    /// Plat: raise by 32 and change texture (vanilla `raiseAndChange`,
+    /// half a unit per tic).
+    PlatRaiseAndChange32,
     /// Floor crush and raise.
     FloorCrushAndRaise,
     /// Lower floor and change flat/type.
@@ -220,11 +232,15 @@ pub fn linedef_effect(special: u16) -> Option<LinedefEffect> {
 
         // Floors
         5 | 24 | 64 | 91 | 101 => Some(FloorRaiseToLowestCeiling),
-        18 | 20 | 22 | 47 | 68 | 69 | 95 => Some(FloorRaiseToNearest),
-        // 14/66: raise 24+change, 67: raise 32+change, 92: raise 24
-        14 | 66 | 92 => Some(FloorRaiseBy24),
-        67 => Some(FloorRaiseBy32),
-        15 | 58 | 59 | 93 => Some(FloorRaiseBy24),
+        // 18/69 are whole-speed floor raisers (EV_DoFloor raiseFloorToNearest);
+        // 20/22/47/68/95 are half-speed plats (EV_DoPlat raiseToNearestAndChange).
+        18 | 69 => Some(FloorRaiseToNearest),
+        20 | 22 | 47 | 68 | 95 => Some(PlatRaiseToNearestAndChange),
+        // 92/58/59/93 are whole-speed floors (EV_DoFloor raiseFloor24AndChange);
+        // 14/15/66 raise-24 and 67 raise-32 are half-speed plats (EV_DoPlat raiseAndChange).
+        58 | 59 | 92 | 93 => Some(FloorRaiseBy24),
+        14 | 15 | 66 => Some(PlatRaiseAndChange24),
+        67 => Some(PlatRaiseAndChange32),
         30 | 96 => Some(FloorRaiseByShortestLowerTexture),
         56 | 65 | 94 => Some(FloorCrushAndRaise),
         23 | 38 | 60 | 82 => Some(FloorLowerToLowest),
@@ -358,7 +374,9 @@ fn dispatch_effect(
         FloorRaiseToLowestCeiling
         | FloorRaiseToNearest
         | FloorRaiseBy24
-        | FloorRaiseBy32
+        | PlatRaiseToNearestAndChange
+        | PlatRaiseAndChange24
+        | PlatRaiseAndChange32
         | FloorRaiseByShortestLowerTexture
         | FloorCrushAndRaise
         | FloorLowerToLowest
@@ -645,8 +663,18 @@ fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefE
             crate::specials::ev_floor_raise_24(gs, level, tag, Fixed16_16::from_int(1));
             true
         }
-        FloorRaiseBy32 => {
-            crate::specials::ev_floor_raise_32(gs, level, tag, Fixed16_16::from_int(1));
+        // Raise-and-change plats move at FRACUNIT/2 = half a unit per tic in
+        // vanilla (PLATSPEED/2, p_plats.c raiseToNearestAndChange / raiseAndChange).
+        PlatRaiseToNearestAndChange => {
+            crate::specials::ev_floor_raise_to_nearest(gs, level, tag, PLAT_HALF_SPEED);
+            true
+        }
+        PlatRaiseAndChange24 => {
+            crate::specials::ev_floor_raise_24(gs, level, tag, PLAT_HALF_SPEED);
+            true
+        }
+        PlatRaiseAndChange32 => {
+            crate::specials::ev_floor_raise_32(gs, level, tag, PLAT_HALF_SPEED);
             true
         }
         FloorRaiseByShortestLowerTexture => {
@@ -1804,6 +1832,49 @@ mod tests {
     #[test]
     fn effect_type_23_is_floor_lower_to_lowest() {
         assert_eq!(linedef_effect(23), Some(LinedefEffect::FloorLowerToLowest));
+    }
+
+    #[test]
+    fn effect_raise_and_change_plats_are_classified_separately() {
+        // Vanilla EV_DoPlat(raiseToNearestAndChange) — these move at
+        // PLATSPEED/2 (half a unit per tic), distinct from the whole-speed
+        // floor raisers (18/69).
+        for &special in &[20, 22, 47, 68, 95] {
+            assert_eq!(
+                linedef_effect(special),
+                Some(LinedefEffect::PlatRaiseToNearestAndChange),
+                "special {special} is a raiseToNearestAndChange plat",
+            );
+        }
+        // Whole-speed floor raisers stay on the floor effect.
+        for &special in &[18, 69] {
+            assert_eq!(
+                linedef_effect(special),
+                Some(LinedefEffect::FloorRaiseToNearest),
+                "special {special} is a whole-speed raiseFloorToNearest",
+            );
+        }
+        // Vanilla EV_DoPlat(raiseAndChange, 24/32) — also half a unit per tic.
+        for &special in &[14, 15, 66] {
+            assert_eq!(
+                linedef_effect(special),
+                Some(LinedefEffect::PlatRaiseAndChange24),
+                "special {special} is a raiseAndChange-24 plat",
+            );
+        }
+        assert_eq!(
+            linedef_effect(67),
+            Some(LinedefEffect::PlatRaiseAndChange32),
+            "special 67 is a raiseAndChange-32 plat",
+        );
+        // Whole-speed raiseFloor24AndChange floors stay on the floor effect.
+        for &special in &[58, 59, 92, 93] {
+            assert_eq!(
+                linedef_effect(special),
+                Some(LinedefEffect::FloorRaiseBy24),
+                "special {special} is a whole-speed raiseFloor24AndChange",
+            );
+        }
     }
 
     // -----------------------------------------------------------------------

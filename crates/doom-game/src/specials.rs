@@ -10440,6 +10440,50 @@ mod tests {
     }
 
     #[test]
+    fn raise_and_change_plats_spawn_at_half_unit_speed() {
+        use crate::linedef_dispatch::{classify_trigger, dispatch_linedef};
+        use doom_types::{Fixed16_16, FIXED_ONE};
+        let half = Fixed16_16::from_raw(FIXED_ONE.raw() / 2);
+
+        // Drives the live `dispatch_linedef` path (P_UseLines / walkover), not
+        // the legacy `activate_linedef` test dispatcher. `from_side = 0` so the
+        // switch-gate is bypassed.
+        let fire = |floors: [i16; 3], special: u16| {
+            let mut gs = GameState::new("TEST");
+            let mut level = make_multi_sector_level(floors, [128, 128, 128], [0, 1, 0], special, 1);
+            let actor = gs.player.handle;
+            let trigger = classify_trigger(special).expect("special has a trigger");
+            dispatch_linedef(&mut gs, &mut level, 0, special, trigger, actor, 0);
+            let m = &gs.movers.active_floors[0];
+            (m.speed, m.target_height)
+        };
+
+        // Type 47: raiseToNearestAndChange plat -> half-unit speed, next-highest
+        // target (sector 1 floor 0, adjacent 10) = 10.
+        let (speed, target) = fire([10, 0, 32], 47);
+        assert_eq!(speed, half, "type 47 raiseToNearestAndChange moves at FRACUNIT/2");
+        assert_eq!(target, doom_types::Fixed16_16::from_int(10));
+
+        // Type 67: raiseAndChange +32 plat -> half-unit speed, target floor+32.
+        let (speed, target) = fire([0, 20, 0], 67);
+        assert_eq!(speed, half, "type 67 raiseAndChange moves at FRACUNIT/2");
+        assert_eq!(target, doom_types::Fixed16_16::from_int(52), "20 + 32 = 52");
+
+        // Type 66: raiseAndChange +24 plat -> half-unit speed, target floor+24.
+        let (speed, target) = fire([0, 10, 0], 66);
+        assert_eq!(speed, half, "type 66 raiseAndChange moves at FRACUNIT/2");
+        assert_eq!(target, doom_types::Fixed16_16::from_int(34), "10 + 24 = 34");
+
+        // Type 58: whole-speed raiseFloor24AndChange floor keeps FRACUNIT speed.
+        let (speed, _) = fire([0, 10, 0], 58);
+        assert_eq!(speed, FIXED_ONE, "type 58 raiseFloor24AndChange stays at a whole unit per tic");
+
+        // Type 18: whole-speed raiseFloorToNearest keeps FRACUNIT speed.
+        let (speed, _) = fire([10, 0, 32], 18);
+        assert_eq!(speed, FIXED_ONE, "type 18 raiseFloorToNearest stays at a whole unit per tic");
+    }
+
+    #[test]
     fn line_type_102_dispatches_lower_to_highest() {
         let mut gs = GameState::new("TEST");
         let mut level = make_multi_sector_level([10, 64, 40], [128, 128, 128], [0, 1, 0], 102, 1);
