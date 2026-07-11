@@ -1283,8 +1283,7 @@ pub fn queue_monster_crossings(
         let dx = ((v2.x as i32) << 16) - v1x;
         let dy = ((v2.y as i32) << 16) - v1y;
         let side = crate::geom::p_point_on_line_side(new_x.raw(), new_y.raw(), v1x, v1y, dx, dy);
-        let oldside =
-            crate::geom::p_point_on_line_side(old_x.raw(), old_y.raw(), v1x, v1y, dx, dy);
+        let oldside = crate::geom::p_point_on_line_side(old_x.raw(), old_y.raw(), v1x, v1y, dx, dy);
         if side != oldside {
             gs.pending_monster_crossings.push((ld_idx, actor));
         }
@@ -1336,11 +1335,10 @@ pub fn dispatch_player_crossings(
         if special == 0 {
             continue;
         }
-        match classify_trigger(special) {
-            Some(trigger @ (TriggerType::WalkOnce | TriggerType::WalkRepeat)) => {
-                dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
-            }
-            _ => {}
+        if let Some(trigger @ (TriggerType::WalkOnce | TriggerType::WalkRepeat)) =
+            classify_trigger(special)
+        {
+            dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
         }
     }
 }
