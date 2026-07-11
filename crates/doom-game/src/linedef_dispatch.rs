@@ -1240,7 +1240,7 @@ pub fn monster_can_cross_special(special: u16) -> bool {
 /// destination bounding box must straddle the line (it is in `spechit`) **and**
 /// the centre's *infinite-line* side (`P_PointOnLineSide`) must change between
 /// the old and new position — the same test the player path
-/// ([`crate::movement::record_player_crossings`]) uses. Only the vanilla monster
+/// (`` `crate::movement::record_player_crossings` ``) uses. Only the vanilla monster
 /// whitelist (`monster_can_cross_special`) is eligible, mirroring
 /// `P_CrossSpecialLine`'s `!thing->player` guard, so a monster can activate a
 /// lift / teleport / raise-door line it walks over but never the player-only
@@ -1283,8 +1283,7 @@ pub fn queue_monster_crossings(
         let dx = ((v2.x as i32) << 16) - v1x;
         let dy = ((v2.y as i32) << 16) - v1y;
         let side = crate::geom::p_point_on_line_side(new_x.raw(), new_y.raw(), v1x, v1y, dx, dy);
-        let oldside =
-            crate::geom::p_point_on_line_side(old_x.raw(), old_y.raw(), v1x, v1y, dx, dy);
+        let oldside = crate::geom::p_point_on_line_side(old_x.raw(), old_y.raw(), v1x, v1y, dx, dy);
         if side != oldside {
             gs.pending_monster_crossings.push((ld_idx, actor));
         }
