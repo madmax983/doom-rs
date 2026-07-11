@@ -3501,18 +3501,34 @@ fn main() {
             let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());
             println!("{json_data}");
         } else {
-            use crossterm::style::Stylize;
             if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-                eprintln!("\n❌ {}: {}", "Engine Failure".red().bold(), err);
+                let mut table = comfy_table::Table::new();
+                table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+                table
+                    .load_preset(comfy_table::presets::UTF8_FULL)
+                    .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                    .set_content_arrangement(comfy_table::ContentArrangement::DynamicFullWidth);
+
+                table.set_header(vec![
+                    comfy_table::Cell::new("❌ Engine Failure")
+                        .fg(comfy_table::Color::Red)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new(err.to_string())
+                        .fg(comfy_table::Color::Yellow),
+                ]);
 
                 let mut causes = err.chain().skip(1).peekable();
                 if causes.peek().is_some() {
-                    eprintln!("\n↳ {}:", "Reason".red().bold());
+                    let mut i = 1;
                     for cause in causes {
-                        eprintln!("    {}", cause);
+                        table.add_row(vec![
+                            comfy_table::Cell::new(format!("↳ Reason {i}")).fg(comfy_table::Color::Red),
+                            comfy_table::Cell::new(cause.to_string()),
+                        ]);
+                        i += 1;
                     }
                 }
-                eprintln!();
+                eprintln!("\n{}\n", table);
             } else {
                 eprintln!("❌ Engine Failure: {}", err);
 
