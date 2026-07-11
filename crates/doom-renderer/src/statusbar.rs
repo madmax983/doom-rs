@@ -1060,8 +1060,8 @@ pub fn draw_stnum(
                 "STTNUM7", "STTNUM8", "STTNUM9",
             ][digit as usize];
             if let Some(patch) = cache.get(name, wad) {
-                let p = patch.clone();
-                fb.draw_patch_vanilla(x, y, &p);
+                // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+                fb.draw_patch_vanilla(x, y, patch);
             }
         }
     }
@@ -1107,8 +1107,8 @@ pub fn draw_stysnum(
                 "STYSNUM7", "STYSNUM8", "STYSNUM9",
             ][digit as usize];
             if let Some(patch) = cache.get(name, wad) {
-                let p = patch.clone();
-                fb.draw_patch_vanilla(x, y, &p);
+                // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+                fb.draw_patch_vanilla(x, y, patch);
             }
         }
     }
@@ -1150,15 +1150,15 @@ pub fn draw_status_bar_wad(
     // 3. Health — right edge x=90, y=171, 3 digits + percent. (ST_HEALTHX=90)
     draw_stnum(fb, cache, wad, 90, AMY, data.health, 3);
     if let Some(pct) = cache.get("STTPRCNT", wad) {
-        let p = pct.clone();
-        fb.draw_patch_vanilla(90, AMY, &p);
+        // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+        fb.draw_patch_vanilla(90, AMY, pct);
     }
 
     // 4. Arms box — background at (104,168), weapon numbers in 3×2 grid.
     //    ST_ARMSBGX=104, ST_ARMSX=111, ST_ARMSXSPACE=12, ST_ARMSYSPACE=10
     if let Some(arms) = cache.get("STARMS", wad) {
-        let p = arms.clone();
-        fb.draw_patch_vanilla(104, BAR, &p);
+        // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+        fb.draw_patch_vanilla(104, BAR, arms);
     }
     let arm_xs = [111i32, 123, 135, 111, 123, 135];
     let arm_ys = [172i32, 172, 172, 182, 182, 182];
@@ -1171,8 +1171,8 @@ pub fn draw_status_bar_wad(
                 "STGNUM7", "STGNUM8", "STGNUM9",
             ][weapon_num];
             if let Some(patch) = cache.get(name, wad) {
-                let p = patch.clone();
-                fb.draw_patch_vanilla(arm_xs[slot], arm_ys[slot], &p);
+                // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+                fb.draw_patch_vanilla(arm_xs[slot], arm_ys[slot], patch);
             }
         }
     }
@@ -1180,15 +1180,15 @@ pub fn draw_status_bar_wad(
     // 5. Face mugshot — ST_FACEX=143, ST_FACEY=168.
     let face_name = face_patch_name(face.kind);
     if let Some(patch) = cache.get(face_name, wad) {
-        let p = patch.clone();
-        fb.draw_patch_vanilla(143, BAR, &p);
+        // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+        fb.draw_patch_vanilla(143, BAR, patch);
     }
 
     // 6. Armor — right edge x=221, y=171, 3 digits + percent. (ST_ARMORX=221)
     draw_stnum(fb, cache, wad, 221, AMY, data.armor, 3);
     if let Some(pct) = cache.get("STTPRCNT", wad) {
-        let p = pct.clone();
-        fb.draw_patch_vanilla(221, AMY, &p);
+        // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+        fb.draw_patch_vanilla(221, AMY, pct);
     }
 
     // 7. Keys — x=239, y=171/181/191. (ST_KEY0-2Y = 171,181,191)
@@ -1209,8 +1209,8 @@ pub fn draw_status_bar_wad(
                     "STKEYS0", "STKEYS1", "STKEYS2", "STKEYS3", "STKEYS4", "STKEYS5",
                 ][*idx];
                 if let Some(patch) = cache.get(name, wad) {
-                    let p = patch.clone();
-                    fb.draw_patch_vanilla(239, *ky, &p);
+                    // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+                    fb.draw_patch_vanilla(239, *ky, patch);
                 }
                 slot_used[slot] = true;
             }

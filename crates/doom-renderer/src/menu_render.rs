@@ -314,8 +314,8 @@ pub fn draw_menu_wad(
 
     // Title patch.
     if let Some(patch) = cache.get(layout.title_patch, wad) {
-        let p = patch.clone();
-        fb.draw_patch_vanilla(layout.title_x, layout.title_y, &p);
+        // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+        fb.draw_patch_vanilla(layout.title_x, layout.title_y, patch);
     }
 
     let items = menu.items();
@@ -342,8 +342,8 @@ pub fn draw_menu_wad(
                 if let Some(&patch_name) = layout.item_patches.get(i) {
                     if let Some(&y) = layout.item_ys.get(i) {
                         if let Some(patch) = cache.get(patch_name, wad) {
-                            let p = patch.clone();
-                            fb.draw_patch_vanilla(layout.items_x, y, &p);
+                            // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+                            fb.draw_patch_vanilla(layout.items_x, y, patch);
                         }
                     }
                 }
@@ -363,8 +363,8 @@ pub fn draw_menu_wad(
         .copied()
         .unwrap_or(layout.item_ys.first().copied().unwrap_or(60));
     if let Some(patch) = cache.get(skull_name, wad) {
-        let p = patch.clone();
-        fb.draw_patch_vanilla(layout.items_x - 32, cursor_y, &p);
+        // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+        fb.draw_patch_vanilla(layout.items_x - 32, cursor_y, patch);
     }
 }
 
@@ -416,8 +416,8 @@ pub fn draw_overlay_patch(
     y: i32,
 ) -> bool {
     if let Some(patch) = cache.get(name, wad) {
-        let p = patch.clone();
-        fb.draw_patch_centered(y, &p);
+        // ⚡ Bolt Optimization: Avoids cloning the PatchImage to eliminate per-frame allocations.
+        fb.draw_patch_centered(y, patch);
         true
     } else {
         false
