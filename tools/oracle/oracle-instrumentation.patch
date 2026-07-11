@@ -1,0 +1,72 @@
+diff --git a/src/doom/p_tick.c b/src/doom/p_tick.c
+index 5a93b80..df643cf 100644
+--- a/src/doom/p_tick.c
++++ b/src/doom/p_tick.c
+@@ -23,6 +23,12 @@
+ 
+ #include "doomstat.h"
+ 
++// --- demo-sync oracle instrumentation (doom-rs parity) ---
++#include <stdio.h>
++#include <stdlib.h>
++extern int prndindex;   // P_Random index (m_random.c)
++// -----------------------------------------------------------
++
+ 
+ int	leveltime;
+ 
+@@ -149,5 +155,53 @@ void P_Ticker (void)
+     P_RespawnSpecials ();
+ 
+     // for par times
+-    leveltime++;	
++    leveltime++;
++
++    // --- demo-sync oracle instrumentation ---
++    // Emit one CSV row per tic, sampled at the SAME point doom-rs samples
++    // (after the full tic: player think + thinkers + specials, post
++    // leveltime++). Columns match doom-rs exactly:
++    //   i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime
++    // i is the 0-based tic index (== leveltime-1, one P_Ticker call per tic).
++    // rndindex holds prndindex (the P_Random stream) to match doom-rs's
++    // single unified RNG, whose index() == prndindex.
++    {
++        static FILE *choco_csv = NULL;
++        static int   choco_open_tried = 0;
++        if (!choco_open_tried)
++        {
++            const char *path = getenv("CHOCO_CSV");
++            choco_open_tried = 1;
++            if (path != NULL)
++            {
++                choco_csv = fopen(path, "w");
++                if (choco_csv != NULL)
++                    fprintf(choco_csv,
++                        "i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime\n");
++            }
++        }
++        if (choco_csv != NULL)
++        {
++            player_t *pl = &players[consoleplayer];
++            mobj_t   *mo = pl->mo;
++            if (mo != NULL)
++            {
++                fprintf(choco_csv,
++                    "%d,%d,%d,%d,%d,%u,%d,%d,%d,%d,%d\n",
++                    leveltime - 1,          /* i (0-based tic index)      */
++                    prndindex,              /* rndindex (P_Random stream) */
++                    (int)mo->x,             /* px (raw fixed_t)           */
++                    (int)mo->y,             /* py                         */
++                    (int)mo->z,             /* pz                         */
++                    (unsigned)mo->angle,    /* angle (raw angle_t)        */
++                    pl->health,             /* health                     */
++                    pl->killcount,          /* kills                      */
++                    pl->itemcount,          /* items                      */
++                    pl->secretcount,        /* secrets                    */
++                    leveltime);             /* leveltime (post-increment) */
++                fflush(choco_csv);
++            }
++        }
++    }
++    // --- end instrumentation ---
+ }

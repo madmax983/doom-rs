@@ -576,13 +576,7 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
         // sector beyond and wake a monster on the correct tic).
         if let Some(lv) = level {
             crate::linedef_dispatch::queue_monster_crossings(
-                gs,
-                lv,
-                handle,
-                mo_x.to_int(),
-                mo_y.to_int(),
-                new_x.to_int(),
-                new_y.to_int(),
+                gs, lv, handle, mo_x, mo_y, new_x, new_y,
             );
         }
         true
