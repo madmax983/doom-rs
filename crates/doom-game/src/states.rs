@@ -751,21 +751,21 @@ pub static STATES: &[MobjStateEntry] = &[
     // === Death and pain states (25..48) ===
     // Trooper — death starts at WAD frame H(7), pain at G(6)
     // vanilla POSS die: 7/5/-, 8/5/Scream, 9/5/Fall, 10/5/-, 11/-1
-    st!(SPR_POSS, 7, 5, NONE, ids::S_POSS_DIE2),   // 25: die1
+    st!(SPR_POSS, 7, 5, NONE, ids::S_POSS_DIE2), // 25: die1
     st!(SPR_POSS, 8, 5, SCREAM, ids::S_POSS_DIE3), // 26: die2 (A_Scream)
-    st!(SPR_POSS, 6, 6, NONE, ids::S_POSS_RUN1),   // 27: pain (6 = vanilla 3+3)
+    st!(SPR_POSS, 6, 6, NONE, ids::S_POSS_RUN1), // 27: pain (6 = vanilla 3+3)
     // Sergeant — vanilla SPOS die: 7/5/-, 8/5/Scream, 9/5/Fall, 10/5/-, 11/-1
-    st!(SPR_SPOS, 7, 5, NONE, ids::S_SPOS_DIE2),   // 28: die1
+    st!(SPR_SPOS, 7, 5, NONE, ids::S_SPOS_DIE2), // 28: die1
     st!(SPR_SPOS, 8, 5, SCREAM, ids::S_SPOS_DIE3), // 29: die2 (A_Scream)
-    st!(SPR_SPOS, 6, 6, NONE, ids::S_SPOS_RUN1),   // 30: pain (6 = vanilla 3+3)
+    st!(SPR_SPOS, 6, 6, NONE, ids::S_SPOS_RUN1), // 30: pain (6 = vanilla 3+3)
     // Imp — vanilla TROO die: 8/8/-, 9/8/Scream, 10/6/-, 11/6/Fall, 12/-1
-    st!(SPR_TROO, 8, 8, NONE, ids::S_TROO_DIE2),   // 31: die1
+    st!(SPR_TROO, 8, 8, NONE, ids::S_TROO_DIE2), // 31: die1
     st!(SPR_TROO, 9, 8, SCREAM, ids::S_TROO_DIE3), // 32: die2 (A_Scream)
-    st!(SPR_TROO, 7, 4, NONE, ids::S_TROO_RUN1),   // 33: pain (4 = vanilla 2+2)
+    st!(SPR_TROO, 7, 4, NONE, ids::S_TROO_RUN1), // 33: pain (4 = vanilla 2+2)
     // Demon — vanilla SARG die: 8/8/-, 9/8/Scream, 10/4/-, 11/4/Fall, 12/4/-, 13/-1
-    st!(SPR_SARG, 8, 8, NONE, ids::S_SARG_DIE2),   // 34: die1
+    st!(SPR_SARG, 8, 8, NONE, ids::S_SARG_DIE2), // 34: die1
     st!(SPR_SARG, 9, 8, SCREAM, ids::S_SARG_DIE3), // 35: die2 (A_Scream)
-    st!(SPR_SARG, 7, 4, NONE, ids::S_SARG_RUN1),   // 36: pain (4 = vanilla 2+2)
+    st!(SPR_SARG, 7, 4, NONE, ids::S_SARG_RUN1), // 36: pain (4 = vanilla 2+2)
     // Cacodemon — death at E(4), pain at D(3)
     st!(SPR_HEAD, 4, 8, SCREAM, ids::S_HEAD_DIE2), // 37: die1
     st!(SPR_HEAD, 5, 8, FALL, ids::S_HEAD_DIE3),   // 38: die2 → die3
@@ -793,13 +793,13 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SPOS, 5, 10, SPOS_ATTACK, ids::S_SPOS_ATK3), // 53
     st!(SPR_SPOS, 4, 10, NONE, ids::S_SPOS_RUN1),        // 54
     // vanilla TROO atk: 4/8/FaceTarget, 5/8/FaceTarget, 6/6/TroopAttack
-    st!(SPR_TROO, 4, 8, FACE_TARGET, ids::S_TROO_ATK2),  // 55
-    st!(SPR_TROO, 5, 8, FACE_TARGET, ids::S_TROO_ATK3),  // 56
-    st!(SPR_TROO, 6, 6, TROO_ATTACK, ids::S_TROO_RUN1),  // 57
+    st!(SPR_TROO, 4, 8, FACE_TARGET, ids::S_TROO_ATK2), // 55
+    st!(SPR_TROO, 5, 8, FACE_TARGET, ids::S_TROO_ATK3), // 56
+    st!(SPR_TROO, 6, 6, TROO_ATTACK, ids::S_TROO_RUN1), // 57
     // vanilla SARG atk: 4/8/FaceTarget, 5/8/FaceTarget, 6/8/SargAttack
-    st!(SPR_SARG, 4, 8, FACE_TARGET, ids::S_SARG_ATK2),  // 58
-    st!(SPR_SARG, 5, 8, FACE_TARGET, ids::S_SARG_ATK3),  // 59
-    st!(SPR_SARG, 6, 8, SARG_ATTACK, ids::S_SARG_RUN1),  // 60
+    st!(SPR_SARG, 4, 8, FACE_TARGET, ids::S_SARG_ATK2), // 58
+    st!(SPR_SARG, 5, 8, FACE_TARGET, ids::S_SARG_ATK3), // 59
+    st!(SPR_SARG, 6, 8, SARG_ATTACK, ids::S_SARG_RUN1), // 60
     // ===================================================================
     // Projectile states (61..103)
     // ===================================================================
@@ -821,8 +821,8 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_MISL, FB, 1, NONE, ids::S_ROCKET), // 71
     // Rocket -- death
     st!(SPR_MISL, 1 | FB, 8, EXPLODE, ids::S_EXPLODE2), // 72
-    st!(SPR_MISL, 2 | FB, 6, NONE, ids::S_EXPLODE3), // 73
-    st!(SPR_MISL, 3 | FB, 4, NONE, ids::S_NULL),     // 74
+    st!(SPR_MISL, 2 | FB, 6, NONE, ids::S_EXPLODE3),    // 73
+    st!(SPR_MISL, 3 | FB, 4, NONE, ids::S_NULL),        // 74
     // Plasma ball (PLSS) -- fly
     st!(SPR_PLSS, FB, 6, NONE, ids::S_PLASBALL2), // 75
     st!(SPR_PLSS, 1 | FB, 6, NONE, ids::S_PLASBALL1), // 76
@@ -1029,9 +1029,9 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_PISG, 0, 1, LOWER, ids::S_PISTOL_DOWN), // 243: down
     st!(SPR_PISG, 0, 1, WEAPON_READY, ids::S_PISTOL_READY), // 244: ready
     // vanilla pistol fire: PISTOL1 0/4/-, PISTOL2 1/6/FirePistol, PISTOL3 2/4/-, PISTOL4 1/5/ReFire
-    st!(SPR_PISG, 0, 4, NONE, ids::S_PISTOL2),        // 245: fire1 (A_FirePistol on fire2)
+    st!(SPR_PISG, 0, 4, NONE, ids::S_PISTOL2), // 245: fire1 (A_FirePistol on fire2)
     st!(SPR_PISG, 1, 6, FIRE_PISTOL, ids::S_PISTOL3), // 246: fire2
-    st!(SPR_PISG, 2, 4, NONE, ids::S_PISTOL4),        // 247: fire3
+    st!(SPR_PISG, 2, 4, NONE, ids::S_PISTOL4), // 247: fire3
     st!(SPR_PISG, 3 | FB, 7, LIGHT1, ids::S_PISTOL_FLASH2), // 248: flash1
     st!(SPR_PISG, 4 | FB, 7, NONE, ids::S_LIGHTDONE), // 249: flash2
     // --- Shotgun (SHTG) 250..258 ---
@@ -1040,10 +1040,10 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SHTG, 0, 1, WEAPON_READY, ids::S_SGUN_READY), // 252: ready
     // vanilla shotgun fire: SGUN1 0/3/-, SGUN2 0/7/FireShotgun, SGUN3 1/5/-, SGUN4 2/5/-,
     // SGUN5 3/4/-, SGUN6 2/5/-, SGUN7 1/5/-, SGUN8 0/3/-, SGUN9 0/7/ReFire
-    st!(SPR_SHTG, 0, 3, NONE, ids::S_SGUN2),         // 253: fire1
+    st!(SPR_SHTG, 0, 3, NONE, ids::S_SGUN2), // 253: fire1
     st!(SPR_SHTG, 0, 7, FIRE_SHOTGUN, ids::S_SGUN3), // 254: fire2 (A_FireShotgun)
-    st!(SPR_SHTG, 1, 5, NONE, ids::S_SGUN4),         // 255: fire3
-    st!(SPR_SHTG, 2, 5, NONE, ids::S_SGUN5),         // 256: fire4
+    st!(SPR_SHTG, 1, 5, NONE, ids::S_SGUN4), // 255: fire3
+    st!(SPR_SHTG, 2, 5, NONE, ids::S_SGUN5), // 256: fire4
     st!(SPR_SHTG, 4 | FB, 4, LIGHT1, ids::S_SGUN_FLASH2), // 257: flash1
     st!(SPR_SHTG, 5 | FB, 3, LIGHT2, ids::S_LIGHTDONE), // 258: flash2
     // --- SSG (SHT2) 259..270 ---
@@ -1176,7 +1176,7 @@ pub static STATES: &[MobjStateEntry] = &[
     // Additional psprite parity states (356..365)
     // ===================================================================
     st!(SPR_PUNG, 0, 5, REFIRE, ids::S_PUNCH_READY), // 356: punch5
-    st!(SPR_SHTG, 3, 4, NONE, ids::S_SGUN6), // 357: fire5 (vanilla SGUN5)
+    st!(SPR_SHTG, 3, 4, NONE, ids::S_SGUN6),         // 357: fire5 (vanilla SGUN5)
     st!(SPR_CHGG, 0, 0, REFIRE, ids::S_CHAIN_READY), // 358: chain3
     st!(SPR_CHGG, FB, 4, NONE, ids::S_LIGHTDONE),    // 359: chain flash3
     st!(SPR_SHT2, 0, 5, REFIRE, ids::S_DSGUN9),      // 360: dsgun8
@@ -1202,16 +1202,16 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_SHTG, 0, 7, REFIRE, ids::S_SGUN_READY),   // 374: S_SGUN9 (A_ReFire)
     st!(SPR_SARG, 13, -1, NONE, ids::S_NULL),         // 375: S_SARG_DIE6
     // --- Exploding barrel idle loop (vanilla S_BAR1/S_BAR2, 6 tics each) ---
-    st!(SPR_BAR1, 0, 6, NONE, ids::S_BAR2),           // 376: S_BAR1
-    st!(SPR_BAR1, 1, 6, NONE, ids::S_BAR1),           // 377: S_BAR2
+    st!(SPR_BAR1, 0, 6, NONE, ids::S_BAR2), // 376: S_BAR1
+    st!(SPR_BAR1, 1, 6, NONE, ids::S_BAR1), // 377: S_BAR2
     // --- Exploding-barrel death animation (vanilla S_BEXP..S_BEXP5). Frames
     //     are fullbright (vanilla frame|FF_FULLBRIGHT). A_Explode fires on entry
     //     to S_BEXP4, dealing 128-radius splash damage. ---
-    st!(SPR_BEXP, FB, 5, NONE, ids::S_BEXP2),          // 378: S_BEXP
-    st!(SPR_BEXP, 1 | FB, 5, SCREAM, ids::S_BEXP3),    // 379: S_BEXP2 (A_Scream)
-    st!(SPR_BEXP, 2 | FB, 5, NONE, ids::S_BEXP4),      // 380: S_BEXP3
-    st!(SPR_BEXP, 3 | FB, 10, EXPLODE, ids::S_BEXP5),  // 381: S_BEXP4 (A_Explode)
-    st!(SPR_BEXP, 4 | FB, 10, NONE, ids::S_NULL),      // 382: S_BEXP5
+    st!(SPR_BEXP, FB, 5, NONE, ids::S_BEXP2), // 378: S_BEXP
+    st!(SPR_BEXP, 1 | FB, 5, SCREAM, ids::S_BEXP3), // 379: S_BEXP2 (A_Scream)
+    st!(SPR_BEXP, 2 | FB, 5, NONE, ids::S_BEXP4), // 380: S_BEXP3
+    st!(SPR_BEXP, 3 | FB, 10, EXPLODE, ids::S_BEXP5), // 381: S_BEXP4 (A_Explode)
+    st!(SPR_BEXP, 4 | FB, 10, NONE, ids::S_NULL), // 382: S_BEXP5
     // ===================================================================
     // Over-kill (gib / xdeath) chains, appended for demo-sync fidelity.
     // Vanilla-literal frames/tics/next/action from info.c.  A_XScream plays
@@ -1219,34 +1219,34 @@ pub static STATES: &[MobjStateEntry] = &[
     // chain), so an over-killed monster advances the RNG one draw less.
     // ===================================================================
     // --- Trooper gib (vanilla S_POSS_XDIE1..9, SPR_POSS frames 12..20) ---
-    st!(SPR_POSS, 12, 5, NONE, ids::S_POSS_XDIE2),    // 383: S_POSS_XDIE1
+    st!(SPR_POSS, 12, 5, NONE, ids::S_POSS_XDIE2), // 383: S_POSS_XDIE1
     st!(SPR_POSS, 13, 5, XSCREAM, ids::S_POSS_XDIE3), // 384: S_POSS_XDIE2 (A_XScream)
-    st!(SPR_POSS, 14, 5, FALL, ids::S_POSS_XDIE4),    // 385: S_POSS_XDIE3 (A_Fall)
-    st!(SPR_POSS, 15, 5, NONE, ids::S_POSS_XDIE5),    // 386: S_POSS_XDIE4
-    st!(SPR_POSS, 16, 5, NONE, ids::S_POSS_XDIE6),    // 387: S_POSS_XDIE5
-    st!(SPR_POSS, 17, 5, NONE, ids::S_POSS_XDIE7),    // 388: S_POSS_XDIE6
-    st!(SPR_POSS, 18, 5, NONE, ids::S_POSS_XDIE8),    // 389: S_POSS_XDIE7
-    st!(SPR_POSS, 19, 5, NONE, ids::S_POSS_XDIE9),    // 390: S_POSS_XDIE8
-    st!(SPR_POSS, 20, -1, NONE, ids::S_NULL),         // 391: S_POSS_XDIE9
+    st!(SPR_POSS, 14, 5, FALL, ids::S_POSS_XDIE4), // 385: S_POSS_XDIE3 (A_Fall)
+    st!(SPR_POSS, 15, 5, NONE, ids::S_POSS_XDIE5), // 386: S_POSS_XDIE4
+    st!(SPR_POSS, 16, 5, NONE, ids::S_POSS_XDIE6), // 387: S_POSS_XDIE5
+    st!(SPR_POSS, 17, 5, NONE, ids::S_POSS_XDIE7), // 388: S_POSS_XDIE6
+    st!(SPR_POSS, 18, 5, NONE, ids::S_POSS_XDIE8), // 389: S_POSS_XDIE7
+    st!(SPR_POSS, 19, 5, NONE, ids::S_POSS_XDIE9), // 390: S_POSS_XDIE8
+    st!(SPR_POSS, 20, -1, NONE, ids::S_NULL),      // 391: S_POSS_XDIE9
     // --- Sergeant gib (vanilla S_SPOS_XDIE1..9, SPR_SPOS frames 12..20) ---
-    st!(SPR_SPOS, 12, 5, NONE, ids::S_SPOS_XDIE2),    // 392: S_SPOS_XDIE1
+    st!(SPR_SPOS, 12, 5, NONE, ids::S_SPOS_XDIE2), // 392: S_SPOS_XDIE1
     st!(SPR_SPOS, 13, 5, XSCREAM, ids::S_SPOS_XDIE3), // 393: S_SPOS_XDIE2 (A_XScream)
-    st!(SPR_SPOS, 14, 5, FALL, ids::S_SPOS_XDIE4),    // 394: S_SPOS_XDIE3 (A_Fall)
-    st!(SPR_SPOS, 15, 5, NONE, ids::S_SPOS_XDIE5),    // 395: S_SPOS_XDIE4
-    st!(SPR_SPOS, 16, 5, NONE, ids::S_SPOS_XDIE6),    // 396: S_SPOS_XDIE5
-    st!(SPR_SPOS, 17, 5, NONE, ids::S_SPOS_XDIE7),    // 397: S_SPOS_XDIE6
-    st!(SPR_SPOS, 18, 5, NONE, ids::S_SPOS_XDIE8),    // 398: S_SPOS_XDIE7
-    st!(SPR_SPOS, 19, 5, NONE, ids::S_SPOS_XDIE9),    // 399: S_SPOS_XDIE8
-    st!(SPR_SPOS, 20, -1, NONE, ids::S_NULL),         // 400: S_SPOS_XDIE9
+    st!(SPR_SPOS, 14, 5, FALL, ids::S_SPOS_XDIE4), // 394: S_SPOS_XDIE3 (A_Fall)
+    st!(SPR_SPOS, 15, 5, NONE, ids::S_SPOS_XDIE5), // 395: S_SPOS_XDIE4
+    st!(SPR_SPOS, 16, 5, NONE, ids::S_SPOS_XDIE6), // 396: S_SPOS_XDIE5
+    st!(SPR_SPOS, 17, 5, NONE, ids::S_SPOS_XDIE7), // 397: S_SPOS_XDIE6
+    st!(SPR_SPOS, 18, 5, NONE, ids::S_SPOS_XDIE8), // 398: S_SPOS_XDIE7
+    st!(SPR_SPOS, 19, 5, NONE, ids::S_SPOS_XDIE9), // 399: S_SPOS_XDIE8
+    st!(SPR_SPOS, 20, -1, NONE, ids::S_NULL),      // 400: S_SPOS_XDIE9
     // --- Imp gib (vanilla S_TROO_XDIE1..8, SPR_TROO frames 13..20) ---
-    st!(SPR_TROO, 13, 5, NONE, ids::S_TROO_XDIE2),    // 401: S_TROO_XDIE1
+    st!(SPR_TROO, 13, 5, NONE, ids::S_TROO_XDIE2), // 401: S_TROO_XDIE1
     st!(SPR_TROO, 14, 5, XSCREAM, ids::S_TROO_XDIE3), // 402: S_TROO_XDIE2 (A_XScream)
-    st!(SPR_TROO, 15, 5, NONE, ids::S_TROO_XDIE4),    // 403: S_TROO_XDIE3
-    st!(SPR_TROO, 16, 5, FALL, ids::S_TROO_XDIE5),    // 404: S_TROO_XDIE4 (A_Fall)
-    st!(SPR_TROO, 17, 5, NONE, ids::S_TROO_XDIE6),    // 405: S_TROO_XDIE5
-    st!(SPR_TROO, 18, 5, NONE, ids::S_TROO_XDIE7),    // 406: S_TROO_XDIE6
-    st!(SPR_TROO, 19, 5, NONE, ids::S_TROO_XDIE8),    // 407: S_TROO_XDIE7
-    st!(SPR_TROO, 20, -1, NONE, ids::S_NULL),         // 408: S_TROO_XDIE8
+    st!(SPR_TROO, 15, 5, NONE, ids::S_TROO_XDIE4), // 403: S_TROO_XDIE3
+    st!(SPR_TROO, 16, 5, FALL, ids::S_TROO_XDIE5), // 404: S_TROO_XDIE4 (A_Fall)
+    st!(SPR_TROO, 17, 5, NONE, ids::S_TROO_XDIE6), // 405: S_TROO_XDIE5
+    st!(SPR_TROO, 18, 5, NONE, ids::S_TROO_XDIE7), // 406: S_TROO_XDIE6
+    st!(SPR_TROO, 19, 5, NONE, ids::S_TROO_XDIE8), // 407: S_TROO_XDIE7
+    st!(SPR_TROO, 20, -1, NONE, ids::S_NULL),      // 408: S_TROO_XDIE8
 ];
 
 // ---------------------------------------------------------------------------
