@@ -1051,7 +1051,7 @@ pub fn move_spechit(
     let row_hi = to_block(top, y_origin, y_count);
 
     // Vanilla `validcount`: each linedef is examined once across the whole scan.
-    let mut seen: Vec<usize> = Vec::new();
+    let mut seen: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
 
     // Vanilla iterates `for (bx...) for (by...)` — column-major.
     for col in col_lo..=col_hi {
