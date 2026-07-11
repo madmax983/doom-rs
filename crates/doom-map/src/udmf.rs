@@ -181,7 +181,7 @@ pub struct UdmfLevelData {
 /// ```
 /// use doom_map::udmf::{UdmfMap, UdmfError};
 ///
-/// let err = UdmfMap::parse(b"namespace").unwrap_err();
+/// let err = UdmfMap::parse(b"namespace").expect_err("should fail on invalid syntax");
 /// assert!(matches!(err, UdmfError::ParseFailed { .. }));
 /// ```
 #[derive(Debug, thiserror::Error)]
@@ -1076,7 +1076,8 @@ mod tests {
 
     #[test]
     fn parse_rejects_non_string_namespace() {
-        let err = UdmfMap::parse(b"namespace = 123;").unwrap_err();
+        let err = UdmfMap::parse(b"namespace = 123;")
+            .expect_err("should fail when namespace is not a string");
         assert!(
             matches!(err, UdmfError::ParseFailed { message, .. } if message == "namespace must be a quoted string")
         );
@@ -1084,13 +1085,15 @@ mod tests {
 
     #[test]
     fn parse_rejects_missing_namespace() {
-        let err = UdmfMap::parse(b"vertex { x = 0; }").unwrap_err();
+        let err = UdmfMap::parse(b"vertex { x = 0; }")
+            .expect_err("should fail when namespace is missing");
         assert!(matches!(err, UdmfError::MissingNamespace));
     }
 
     #[test]
     fn parse_rejects_bare_identifier_at_root() {
-        let err = UdmfMap::parse(b"namespace").unwrap_err();
+        let err =
+            UdmfMap::parse(b"namespace").expect_err("should fail when identifier is bare at root");
         assert!(
             matches!(err, UdmfError::ParseFailed { message, .. } if message == "expected '=' or '{' after identifier")
         );
@@ -1099,7 +1102,7 @@ mod tests {
     #[test]
     fn parse_bare_true_false_values() {
         let map = UdmfMap::parse(b"namespace = \"doom\"; vertex { is_cool = true; bad = false; }")
-            .expect("value must exist in test");
+            .expect("should successfully parse valid boolean fields");
         assert!(matches!(
             map.blocks[0].fields[0].value,
             UdmfValue::Bool(true)
@@ -1112,7 +1115,8 @@ mod tests {
 
     #[test]
     fn parse_rejects_bare_identifier_value() {
-        let err = UdmfMap::parse(b"namespace = \"doom\"; vertex { x = foo; }").unwrap_err();
+        let err = UdmfMap::parse(b"namespace = \"doom\"; vertex { x = foo; }")
+            .expect_err("should fail when value is a bare identifier");
         assert!(
             matches!(err, UdmfError::ParseFailed { message, .. } if message == "unexpected bare identifier 'foo'")
         );
@@ -1120,7 +1124,8 @@ mod tests {
 
     #[test]
     fn parse_rejects_invalid_value_start() {
-        let err = UdmfMap::parse(b"namespace = \"doom\"; vertex { x = @; }").unwrap_err();
+        let err = UdmfMap::parse(b"namespace = \"doom\"; vertex { x = @; }")
+            .expect_err("should fail on invalid value character");
         assert!(
             matches!(err, UdmfError::ParseFailed { message, .. } if message == "expected value")
         );
@@ -1128,7 +1133,8 @@ mod tests {
 
     #[test]
     fn parse_rejects_unterminated_string_literal() {
-        let err = UdmfMap::parse(b"namespace = \"doom").unwrap_err();
+        let err = UdmfMap::parse(b"namespace = \"doom")
+            .expect_err("should fail on unterminated string literal");
         assert!(
             matches!(err, UdmfError::ParseFailed { message, .. } if message == "unterminated string literal")
         );
@@ -1136,7 +1142,8 @@ mod tests {
 
     #[test]
     fn parse_rejects_unterminated_string_escape() {
-        let err = UdmfMap::parse(b"namespace = \"doom\\").unwrap_err();
+        let err = UdmfMap::parse(b"namespace = \"doom\\")
+            .expect_err("should fail on unterminated string escape");
         assert!(
             matches!(err, UdmfError::ParseFailed { message, .. } if message == "unterminated string escape")
         );
@@ -1150,7 +1157,7 @@ mod tests {
             vertex { x = 0; y = 64; }
             "#,
         )
-        .expect("parse");
+        .expect("should successfully parse valid smoke textmap");
 
         assert_eq!(map.namespace, "doom");
         assert_eq!(map.blocks.len(), 1);
@@ -1165,7 +1172,7 @@ mod tests {
             vertex { x = 1.5; y = 0; }
             "#,
         )
-        .expect("parse");
+        .expect("should successfully parse valid map with float");
 
         assert!(matches!(
             map.into_level_data(),
@@ -1185,7 +1192,7 @@ mod tests {
             vertex { x = 0; y = 0; }
             "#,
         )
-        .expect("parse");
+        .expect("should successfully parse zdoom namespace map");
 
         assert!(matches!(
             map.into_level_data(),

@@ -777,7 +777,11 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
                 level.sectors[sector_idx].floor_height
             };
             let raw = cur + speed;
-            let reached = if speed > 0 { raw >= target } else { raw <= target };
+            let reached = if speed > 0 {
+                raw >= target
+            } else {
+                raw <= target
+            };
             let new_h = if reached { target } else { raw };
 
             if is_ceiling {
@@ -10016,7 +10020,10 @@ mod tests {
             gs.movers.active_floors[0].target_height, 56,
             "turbo lower dest = highest adjacent (48) + 8"
         );
-        assert_eq!(gs.movers.active_floors[0].speed, 4, "turbo lower is 4x speed");
+        assert_eq!(
+            gs.movers.active_floors[0].speed, 4,
+            "turbo lower is 4x speed"
+        );
     }
 
     #[test]

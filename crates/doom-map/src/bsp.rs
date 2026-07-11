@@ -419,6 +419,29 @@ mod tests {
     }
 
     #[test]
+    fn point_in_subsector_empty_tree_returns_only_subsector() {
+        let nodes = vec![];
+        let ssectors = vec![make_ssector(0, 1)];
+        let tree = BspTree::validate(&nodes, &ssectors, 1)
+            .expect("empty tree with 1 ssector should validate");
+
+        let ss = tree
+            .point_in_subsector(0, 0)
+            .expect("should return the only subsector");
+        assert_eq!(ss.first_seg, 0);
+    }
+
+    #[test]
+    fn max_depth_empty_tree_returns_zero() {
+        let nodes = vec![];
+        let ssectors = vec![make_ssector(0, 1)];
+        let tree = BspTree::validate(&nodes, &ssectors, 1)
+            .expect("empty tree with 1 ssector should validate");
+
+        assert_eq!(tree.max_depth(), 0);
+    }
+
+    #[test]
     fn point_in_subsector_right_side() {
         // Partition line: x=0, y=0, dx=0, dy=1 (vertical line at x=0).
         // Point (10, 5) is on the right/front side -> child 0.
@@ -429,10 +452,11 @@ mod tests {
         node.dy = 1;
         let nodes = vec![node];
         let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
-        let tree = BspTree::validate(&nodes, &ssectors, 2).expect("value must exist in test");
+        let tree = BspTree::validate(&nodes, &ssectors, 2)
+            .expect("valid tree should be successfully validated");
         let ss = tree
             .point_in_subsector(10, 5)
-            .expect("value must exist in test");
+            .expect("point should fall within a valid subsector");
         assert_eq!(ss.first_seg, 0); // right subsector
     }
 
@@ -446,11 +470,12 @@ mod tests {
         node.dy = 1;
         let nodes = vec![node];
         let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
-        let tree = BspTree::validate(&nodes, &ssectors, 2).expect("value must exist in test");
+        let tree = BspTree::validate(&nodes, &ssectors, 2)
+            .expect("valid tree should be successfully validated");
 
         let ss = tree
             .point_in_subsector(0, 5)
-            .expect("value must exist in test");
+            .expect("point should fall within a valid subsector");
         assert_eq!(
             ss.first_seg, 1,
             "point on partition line should follow Doom's side tie-break"
@@ -467,11 +492,12 @@ mod tests {
         node.dy = 0;
         let nodes = vec![node];
         let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
-        let tree = BspTree::validate(&nodes, &ssectors, 2).expect("value must exist in test");
+        let tree = BspTree::validate(&nodes, &ssectors, 2)
+            .expect("valid tree should be successfully validated");
 
         let ss = tree
             .point_in_subsector(5, 0)
-            .expect("value must exist in test");
+            .expect("point should fall within a valid subsector");
         assert_eq!(
             ss.first_seg, 0,
             "point on partition line should follow Doom's side tie-break"
