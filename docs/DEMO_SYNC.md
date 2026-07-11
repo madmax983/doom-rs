@@ -284,16 +284,17 @@ lt 977/1046/535).
 
 ## Current sync status
 
-Fresh measurement on **this branch** (`m2a-demo2-sync` = trunk `0cf9e69` + the M2a
-fix `1b26c6a`), release build, harness vs oracle, diffed on
+Fresh measurement on **this branch** (`m3a-fixedpoint-heights`, measurement commit
+`639f13a` — the M3a–M3e fixed-point sector-height / plane-mover work stacked on
+the M2b RNG baseline), release build, harness vs oracle, diffed on
 `px,py,pz,angle,health,kills,items,secrets,leveltime`; the cosmetic `rndindex`
 column is compared separately (the oracle emits `prndindex`, so it is a valid
-RNG-consumption signal here — see the oracle README). Measured 2026-07-10:
+RNG-consumption signal here — see the oracle README). Measured 2026-07-11:
 
 | Demo  | Map  | Total tics | First divergence (field @ tic / lt) | % synced | Determinism |
 |-------|------|-----------:|-------------------------------------|---------:|-------------|
-| DEMO1 | E1M5 | 5026 | health @ tic 1408 (lt 1409) | ~28% | PASS (2×) |
-| DEMO2 | E1M3 | 3836 | pz @ tic 1962 (lt 1963); rndindex/painchance @ tic 1920 | ~51% | PASS (2×) |
+| DEMO1 | E1M5 | 5026 | secrets @ tic 1457 (health @ tic 1685) | ~29% | PASS (2×) |
+| DEMO2 | E1M3 | 3836 | none — bit-exact end-to-end (all significant fields) | 100% | PASS (2×) |
 | DEMO3 | E1M7 | 2134 | none — all outcome fields bit-exact end-to-end (residual transient pz only) | ~100% | PASS (2×) |
 
 `% synced` = first-divergence tic / total tics — the fraction of each demo the
@@ -301,17 +302,19 @@ sim is bit-exact against the oracle before the first outcome-field divergence.
 
 Reading this table:
 
-- **DEMO1 — first divergence is `health` at tic 1408 (lt 1409).** At that tic
-  doom-rs draws **1 FEWER** `P_Random` (89→88) and health is one lower (86 vs 85):
-  a combat/damage RNG-consumption divergence. Trajectory (`px/py`) holds farther,
-  to tic 1652. This is well past the prior m1c snapshot (position lt 977).
-- **DEMO2 — after the M2a monster-crossing fix, first divergence is `pz` at
-  tic 1962 (lt 1963), ~51%.** The immediate next tractable signal is an
-  `rndindex`/painchance mismatch at **tic 1920** where doom-rs draws **1 FEWER**
-  `P_Random` (a painchance roll in `P_DamageMobj` that vanilla makes and doom-rs
-  does not); position (`px/py`) holds to tic 2000. The M2a fix pushed this out
-  from the prior pre-M2a divergence at tic 814 (which drew 2 EXTRA randoms) and
-  the m1c snapshot at position lt 1046.
+- **DEMO1 — first divergence is `secrets` at tic 1457, `health` at tic 1685.**
+  This is an incidental improvement over the prior `health` @ tic 1408 snapshot —
+  the M2b RNG work (damaging-floor painchance + `A_Chase` facing) moved the
+  first-diverging field out — but the demo still diverges mid-run and remains a
+  future target. It is not a regression from the M3 refactor.
+- **DEMO2 — bit-exact end-to-end, no significant-field divergence across all 3836
+  tics.** After the M3a/M3b fixed-point sector-height + half-speed plane-mover
+  work, `rndindex, px, py, pz, angle, health, kills, items, secrets` all match the
+  oracle for the full demo. This closes the prior `pz` @ tic 1962 (~51%) frontier:
+  giving sector floor/ceiling heights and plane movers a true fixed-point (16.16)
+  representation let lifts move at vanilla's **FRACUNIT/2** half-unit-per-tic
+  speed, which was exactly the `pz` divergence source (an integer-unit height
+  could not represent the half-step). The M3c–M3e vanilla-parity fixes ride along.
 - **DEMO3 — bit-exact end-to-end on every outcome field.** `rndindex, px, py,
   angle, health, kills, items, secrets` all match the oracle for the full 2134
   tics. The **only** residual is a transient, self-correcting **`pz` +4-unit
@@ -319,8 +322,9 @@ Reading this table:
   2134 tics, in bursts (first at tic 735), and the final rows are byte-identical.
   This is the known-accepted residual (see item 3 below), not a sync-gating drift.
 - The **`P_Random` value stream still matches the oracle** through the recorded
-  window (zero retval-by-ordinal mismatches); what breaks first on DEMO1/DEMO2 is
-  a single missing/extra draw and player *state*, not the RNG value stream.
+  window (zero retval-by-ordinal mismatches); what breaks first on DEMO1 is a
+  single missing/extra draw and player *state*, not the RNG value stream (DEMO2 no
+  longer breaks at all).
 - The demos all **run to completion** (`demo-stream-fully-consumed`, full tic
   counts match the file — 5026 / 3836 / 2134), and **cross-run determinism
   PASSes** on all three (`--verify-runs 2`: PASS) — the harness self-check
@@ -336,17 +340,17 @@ column/sampling-point spec, and diffing with `diff_csv.py` / `perfield.py`).
 
 ## Remaining divergences (characterized)
 
-Full bit-exact end-to-end sync is **not yet reached** on DEMO1/DEMO2 (DEMO3 is
-bit-exact end-to-end on all outcome fields). Be honest about where we are: DEMO1
-syncs to tic 1408 (~28%) and DEMO2 to tic 1962 (~51%) of their length (first
-divergence lt 1409 / 1963 of 5026 / 3836 tics), and DEMO3 has only a transient
-lift-ride `pz` residual. What is solid: the `P_Random` **value** stream matches
-the oracle through the whole recorded window, every fix above is
-**vanilla-verified against the instrumented Chocolate oracle** (reproducible via
-`tools/oracle/`), and every major subsystem is vanilla-faithful. What remains:
-the multi-minute tail of DEMO1/DEMO2 still diverges, and the remaining failures
-are **residual monster positional drift + attack/AI timing that compounds over
-the run**, not a broken RNG or a missing subsystem.
+**DEMO2 is now bit-exact end-to-end** on every significant field (all 3836 tics),
+joining DEMO3 (bit-exact on all outcome fields). Full bit-exact end-to-end sync is
+**not yet reached on DEMO1**. Be honest about where we are: DEMO1 syncs to tic
+1457 (~29%) of its length (first divergence `secrets` @ tic 1457, `health` @ tic
+1685 of 5026 tics), and DEMO3 has only a transient lift-ride `pz` residual. What is
+solid: the `P_Random` **value** stream matches the oracle through the whole
+recorded window, every fix above is **vanilla-verified against the instrumented
+Chocolate oracle** (reproducible via `tools/oracle/`), and every major subsystem is
+vanilla-faithful. What remains: the multi-minute tail of DEMO1 still diverges, and
+the remaining failures are **residual monster positional drift + attack/AI timing
+that compounds over the run**, not a broken RNG or a missing subsystem.
 
 The general mechanism: both sides draw the **same RNG rolls**, but a slightly
 **drifted geometry** (a monster or projectile a few map units off) turns the same
@@ -356,24 +360,22 @@ which monster the player faces next — and the differences compound over the ru
 
 Known open items (characterized per demo):
 
-1. **DEMO1 — tic 1408 (lt 1409), combat/damage RNG-consumption divergence
-   (TBD).** At tic 1408 doom-rs draws **1 FEWER** `P_Random` (89→88) and `health`
-   is one lower (86 vs 85); trajectory (`px/py`) holds to tic 1652. Root cause not
-   yet pinned; it is downstream of sub-map-unit geometry drift in the preceding
-   chase steps, so a same-value damage roll or chase step lands on a slightly
-   different tic. Re-audit the `A_Chase` / attack hitscan geometry and
-   `P_DamageMobj` thrust against `p_map.c` / `p_inter.c` for the last residual
-   fixed-point rounding.
+1. **DEMO1 — tic 1457 (`secrets`) / tic 1685 (`health`), combat/damage
+   RNG-consumption divergence (TBD).** The first-diverging field is now `secrets`
+   at tic 1457, with `health` following at tic 1685 — moved out from the prior
+   `health` @ tic 1408 snapshot by the M2b RNG work. Root cause not yet pinned; it
+   is downstream of sub-map-unit geometry drift in the preceding chase steps, so a
+   same-value damage roll or chase step lands on a slightly different tic. Re-audit
+   the `A_Chase` / attack hitscan geometry and `P_DamageMobj` thrust against
+   `p_map.c` / `p_inter.c` for the last residual fixed-point rounding.
 
-2. **DEMO2 — tic 1962 (lt 1963), post-M2a combat-timing tail (TBD).** After the
-   M2a monster box-straddle crossing fix, the first divergence is `pz` at tic 1962
-   (~51%); the immediate next tractable signal is an `rndindex`/painchance
-   mismatch at **tic 1920** where doom-rs draws **1 FEWER** `P_Random` (a
-   painchance roll in `P_DamageMobj` that vanilla makes on a fireball hit resolving
-   one tic differently). This is compounding projectile/combat-interaction timing
-   drift (same RNG values, a hit resolving a tic off from residual sub-map-unit
-   trajectory drift) — it does not map to a single clean vanilla rule and needs
-   tic-by-tic fixed-point forensics of the fireball + target trajectory.
+2. **DEMO2 — resolved (M3a/M3b).** Previously the first divergence was `pz` at
+   tic 1962 (~51%), a lift/platform ride where doom-rs stored sector heights and
+   plane-mover speeds as integer units and could not represent vanilla's
+   FRACUNIT/2 half-unit-per-tic plat movement. The M3a fixed-point (16.16)
+   sector-height + plane-mover refactor and the M3b `raiseToNearestAndChange` /
+   `raiseAndChange` half-speed plats closed it: DEMO2 is now bit-exact end-to-end
+   on all significant fields for the full 3836 tics.
 
 3. **DEMO3 — transient lift-ride `pz` residual (known-accepted).** All outcome
    fields (`rndindex, px, py, angle, health, kills, items, secrets`) are bit-exact
@@ -392,12 +394,12 @@ Known open items (characterized per demo):
 
 ## How to continue
 
-- **Next divergences to chase:** DEMO1 `tic 1408` / `lt 1409` (combat/damage
-  RNG-consumption, item 1) and DEMO2 `tic 1920` / `1962` (painchance/combat-timing
-  tail, item 2). DEMO3 is bit-exact on outcome fields; its only open residual is
-  the transient lift-ride `pz` offset (item 3), accepted as-is. The common thread
-  on DEMO1/DEMO2 is **residual monster positional drift** compounding into
-  attack/AI timing.
+- **Next divergences to chase:** DEMO1 `tic 1457` (`secrets`) / `tic 1685`
+  (`health`) — combat/damage RNG-consumption, item 1. DEMO2 is now bit-exact
+  end-to-end (item 2, resolved by M3a/M3b). DEMO3 is bit-exact on outcome fields;
+  its only open residual is the transient lift-ride `pz` offset (item 3), accepted
+  as-is. The common thread on DEMO1 is **residual monster positional drift**
+  compounding into attack/AI timing.
 - **Tooling:** regenerate the harness CSV for the demo under test and diff it
   against `demoN.choco.csv` on `px,py,pz,angle,health,kills,items,secrets,
   leveltime` (ignore the `rndindex` column) to find the first position/health/
