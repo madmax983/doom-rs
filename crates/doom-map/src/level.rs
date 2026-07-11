@@ -518,6 +518,27 @@ impl Level {
             .position(|candidate| core::ptr::eq(candidate, ssector))
     }
 
+    /// Fixed-point exact sector lookup: the sector containing raw `fixed_t`
+    /// world point `(x, y)`.
+    ///
+    /// Unlike [`sector_index_at`], which truncates the position to integer map
+    /// units before the BSP walk, this uses vanilla's fixed-point
+    /// `R_PointInSubsector`, so a position near a partition line resolves to the
+    /// same subsector vanilla caches in `mo->subsector`. Required for parity in
+    /// `P_PlayerInSpecialSector` (secret / damaging-floor crossings).
+    ///
+    /// [`sector_index_at`]: Self::sector_index_at
+    #[must_use]
+    pub fn sector_index_at_fixed(&self, x: i32, y: i32) -> Option<usize> {
+        let bsp = BspTree::validate(&self.nodes, &self.ssectors, self.segs.len()).ok()?;
+        let ssector = bsp.point_in_subsector_fixed(x, y)?;
+        let subsector_idx = self
+            .ssectors
+            .iter()
+            .position(|candidate| core::ptr::eq(candidate, ssector))?;
+        self.subsector_sector_index(subsector_idx)
+    }
+
     /// Print a one-line geometry summary (used by the Phase 3 CLI gate).
     ///
     /// ## Examples

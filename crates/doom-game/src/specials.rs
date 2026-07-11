@@ -234,16 +234,19 @@ pub fn p_player_in_special_sector(gs: &mut GameState, level: &mut Level) {
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let (px, py, pz) = (mo.x.to_int(), mo.y.to_int(), mo.z.to_int());
-
-    // sector = player->mo->subsector->sector. Use the BSP point lookup; fall
-    // back to the first sector whose floor the player rests on for the minimal
-    // BSP-less levels used by unit tests.
-    let sector_idx = level.sector_index_at(px, py).or_else(|| {
+    // Vanilla resolves `sector = player->mo->subsector->sector`, where the
+    // subsector was cached by `R_PointInSubsector` in full fixed-point at the
+    // player's last move. Truncating the position to integer map units before
+    // the BSP walk (`sector_index_at`) can put a position near a partition line
+    // on the wrong side (e.g. `1136.0 - 1/65536` truncates to `1135`), crediting
+    // a secret one tic early. Use the fixed-point lookup to match vanilla.
+    let (rx, ry, rz) = (mo.x.raw(), mo.y.raw(), mo.z.raw());
+    let sector_idx = level.sector_index_at_fixed(rx, ry).or_else(|| {
+        // BSP-less fallback for the minimal levels used by unit tests.
         level
             .sectors
             .iter()
-            .position(|s| pz == s.floor_height.to_int())
+            .position(|s| rz == s.floor_height.raw())
     });
     let Some(sector_idx) = sector_idx else {
         return;
@@ -254,8 +257,9 @@ pub fn p_player_in_special_sector(gs: &mut GameState, level: &mut Level) {
         return;
     }
 
-    // Falling, not all the way down yet?
-    if pz != level.sectors[sector_idx].floor_height.to_int() {
+    // Falling, not all the way down yet? (`player->mo->z != sector->floorheight`,
+    // compared in raw fixed-point exactly as vanilla does.)
+    if rz != level.sectors[sector_idx].floor_height.raw() {
         return;
     }
 
