@@ -14,6 +14,7 @@
 //!   within the same alert, and to avoid clearing the traversal array each time.
 
 use doom_map::Level;
+use doom_types::Fixed16_16;
 
 use crate::mobj::MobjHandle;
 use crate::mobj::flags::MF_AMBUSH;
@@ -231,7 +232,7 @@ fn recursive_sound(
         // the movement `P_LineOpening`.  Without this the flood fill leaks
         // through every closed door and floods the entire level at once.
         if let Some((open_bottom, open_top)) = crate::trace::line_opening(level, ld) {
-            if open_top - open_bottom <= 0 {
+            if open_top - open_bottom <= Fixed16_16::ZERO {
                 continue;
             }
         }
@@ -322,8 +323,8 @@ mod tests {
     fn make_test_level(n_sectors: usize, connections: &[(usize, usize, u16)]) -> Level {
         let sectors: Vec<Sector> = (0..n_sectors)
             .map(|_| Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -845,8 +846,8 @@ mod tests {
         let n_sectors = 2;
         let sectors: Vec<Sector> = (0..n_sectors)
             .map(|_| Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,

@@ -250,8 +250,8 @@ mod tests {
             sector: 0,
         }];
         let sectors = vec![Sector {
-            floor_height: 0,
-            ceil_height: 128,
+            floor_height: doom_types::Fixed16_16::from_int(0),
+            ceil_height: doom_types::Fixed16_16::from_int(128),
             floor_flat: *b"FLAT1\0\0\0",
             ceil_flat: *b"FLAT2\0\0\0",
             light_level: 192,
@@ -381,8 +381,8 @@ mod tests {
         ];
         let sectors = vec![
             Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -390,8 +390,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: back_floor_height,
-                ceil_height: back_ceil_height,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(back_floor_height)),
+                ceil_height: doom_types::Fixed16_16::from_int(i32::from(back_ceil_height)),
                 floor_flat: *b"FLAT3\0\0\0",
                 ceil_flat: *b"FLAT4\0\0\0",
                 light_level: 160,

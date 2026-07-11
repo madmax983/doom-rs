@@ -1,3 +1,5 @@
+use doom_types::Fixed16_16;
+
 /// An animated door or floor/ceiling mover.
 ///
 /// Added to `GameState::active_doors` when a door linedef is activated.
@@ -7,11 +9,11 @@ pub struct DoorMover {
     /// Index into `level.sectors`.
     pub sector: usize,
     /// Target ceiling height (doors) or floor height (floors).
-    pub target_height: i16,
+    pub target_height: Fixed16_16,
     /// Current ceiling/floor height (updated each tic — mirrors the sector value).
-    pub current_height: i16,
+    pub current_height: Fixed16_16,
     /// Speed in map units per tic (positive = opening/rising, negative = closing/lowering).
-    pub speed: i16,
+    pub speed: Fixed16_16,
     /// `true` = this mover operates on ceiling height, `false` = floor height.
     pub is_ceiling: bool,
     /// Tics to wait at top/bottom before reversing (0 = no wait, no reverse).
@@ -19,7 +21,7 @@ pub struct DoorMover {
     /// Countdown until the door starts closing again (−1 = permanent open/close).
     pub countdown: i32,
     /// For close-wait-open doors: ceiling height to reopen to (0 = not applicable).
-    pub reopen_height: i16,
+    pub reopen_height: Fixed16_16,
     /// For close-wait-open doors: tics remaining before reopening (−1 = not applicable).
     pub reopen_countdown: i32,
 }
@@ -66,13 +68,13 @@ pub struct CeilingMover {
     /// Index into `level.sectors`.
     pub sector_index: usize,
     /// Original ceiling height (return position).
-    pub top_height: i16,
+    pub top_height: Fixed16_16,
     /// Lowest point the ceiling descends to (usually 8 units above floor).
-    pub bottom_height: i16,
+    pub bottom_height: Fixed16_16,
     /// Movement speed in map units per tic (typically 1 for slow, 2 for fast).
-    pub speed: i16,
+    pub speed: Fixed16_16,
     /// Normal (un-slowed) speed, remembered for resume after crush slow-down.
-    pub normal_speed: i16,
+    pub normal_speed: Fixed16_16,
     /// Damage per tic when crushing an actor (typically 10).
     pub crush_damage: i32,
     /// Current movement direction.
@@ -140,9 +142,9 @@ pub struct FloorMover {
     /// Index into `level.sectors`.
     pub sector_index: usize,
     /// Destination floor height.
-    pub target_height: i16,
+    pub target_height: Fixed16_16,
     /// Movement speed in map units per tic (typically 1-4).
-    pub speed: i16,
+    pub speed: Fixed16_16,
     /// Current movement direction.
     pub direction: MoveDirection,
     /// Tics to wait at destination before returning.
@@ -150,7 +152,7 @@ pub struct FloorMover {
     /// `>0` = wait then reverse.
     pub wait_tics: i32,
     /// Height to return to after waiting (original floor height for lifts).
-    pub return_height: i16,
+    pub return_height: Fixed16_16,
     /// Currently in the wait phase.
     pub waiting: bool,
     /// Tics remaining in the wait phase.
@@ -189,11 +191,11 @@ pub struct PerpetualPlatform {
     /// Index into `level.sectors`.
     pub sector_index: usize,
     /// Lowest floor height (lowest adjacent floor).
-    pub low_height: i16,
+    pub low_height: Fixed16_16,
     /// Highest floor height (original sector floor height).
-    pub high_height: i16,
+    pub high_height: Fixed16_16,
     /// Movement speed in map units per tic.
-    pub speed: i16,
+    pub speed: Fixed16_16,
     /// Tics to wait at each stop before reversing.
     pub wait_tics: i32,
     /// Tics remaining in the current wait phase.
@@ -231,11 +233,11 @@ pub struct LiftMover {
     /// Index into `level.sectors`.
     pub sector_index: usize,
     /// Lowest adjacent floor height (destination when lowering).
-    pub low_height: i16,
+    pub low_height: Fixed16_16,
     /// Original floor height before lowering (destination when raising).
-    pub high_height: i16,
+    pub high_height: Fixed16_16,
     /// Movement speed in map units per tic.
-    pub speed: i16,
+    pub speed: Fixed16_16,
     /// Tics to wait at bottom before raising (typically 105 = 3 seconds).
     pub wait_tics: i32,
     /// Countdown remaining in the wait phase.

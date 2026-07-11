@@ -715,8 +715,8 @@ mod tests {
         // Ensure at least one sector for reject table sizing.
         let final_sectors = if sectors.is_empty() {
             vec![Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1359,8 +1359,8 @@ mod tests {
             // Ensure at least one sector for reject table sizing.
             let final_sectors = if sectors.is_empty() {
                 vec![Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -1594,8 +1594,8 @@ mod tests {
         fn t16_line_color_two_sided_same_height() {
             let sectors = vec![
                 Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -1603,8 +1603,8 @@ mod tests {
                     tag: 0,
                 },
                 Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -1636,8 +1636,8 @@ mod tests {
         fn t17_line_color_two_sided_height_change() {
             let sectors = vec![
                 Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -1645,8 +1645,8 @@ mod tests {
                     tag: 0,
                 },
                 Sector {
-                    floor_height: 24,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(24),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -1678,8 +1678,8 @@ mod tests {
         fn t18_line_color_secret_overrides_two_sided() {
             let sectors = vec![
                 Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -1687,8 +1687,8 @@ mod tests {
                     tag: 0,
                 },
                 Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,

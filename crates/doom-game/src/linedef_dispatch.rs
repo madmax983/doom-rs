@@ -10,10 +10,16 @@
 //! - `check_cross_lines()` — detect walk-trigger lines crossed during movement.
 
 use doom_map::Level;
+use doom_types::{Fixed16_16, FIXED_ONE};
 
 use crate::mobj::MobjHandle;
 use crate::state::{ExitRequest, GameState, LockedDoorColor, SoundRequest};
 use crate::switch::KeyType;
+
+/// Raise-and-change plats move at half a map unit per tic (vanilla
+/// `PLATSPEED/2 = FRACUNIT/2`), unlike ordinary floor movers which step a
+/// whole unit per tic.
+const PLAT_HALF_SPEED: Fixed16_16 = Fixed16_16::from_raw(FIXED_ONE.raw() / 2);
 
 // ---------------------------------------------------------------------------
 // Trigger types
@@ -132,10 +138,17 @@ pub enum LinedefEffect {
     FloorRaiseToNearest,
     /// Raise floor by 24 units.
     FloorRaiseBy24,
-    /// Raise floor by 32 units.
-    FloorRaiseBy32,
     /// Raise floor by shortest lower texture height.
     FloorRaiseByShortestLowerTexture,
+    /// Plat: raise to next higher floor and change texture (vanilla
+    /// `raiseToNearestAndChange`, moves at half a unit per tic).
+    PlatRaiseToNearestAndChange,
+    /// Plat: raise by 24 and change texture (vanilla `raiseAndChange`,
+    /// half a unit per tic).
+    PlatRaiseAndChange24,
+    /// Plat: raise by 32 and change texture (vanilla `raiseAndChange`,
+    /// half a unit per tic).
+    PlatRaiseAndChange32,
     /// Floor crush and raise.
     FloorCrushAndRaise,
     /// Lower floor and change flat/type.
@@ -219,11 +232,15 @@ pub fn linedef_effect(special: u16) -> Option<LinedefEffect> {
 
         // Floors
         5 | 24 | 64 | 91 | 101 => Some(FloorRaiseToLowestCeiling),
-        18 | 20 | 22 | 47 | 68 | 69 | 95 => Some(FloorRaiseToNearest),
-        // 14/66: raise 24+change, 67: raise 32+change, 92: raise 24
-        14 | 66 | 92 => Some(FloorRaiseBy24),
-        67 => Some(FloorRaiseBy32),
-        15 | 58 | 59 | 93 => Some(FloorRaiseBy24),
+        // 18/69 are whole-speed floor raisers (EV_DoFloor raiseFloorToNearest);
+        // 20/22/47/68/95 are half-speed plats (EV_DoPlat raiseToNearestAndChange).
+        18 | 69 => Some(FloorRaiseToNearest),
+        20 | 22 | 47 | 68 | 95 => Some(PlatRaiseToNearestAndChange),
+        // 92/58/59/93 are whole-speed floors (EV_DoFloor raiseFloor24AndChange);
+        // 14/15/66 raise-24 and 67 raise-32 are half-speed plats (EV_DoPlat raiseAndChange).
+        58 | 59 | 92 | 93 => Some(FloorRaiseBy24),
+        14 | 15 | 66 => Some(PlatRaiseAndChange24),
+        67 => Some(PlatRaiseAndChange32),
         30 | 96 => Some(FloorRaiseByShortestLowerTexture),
         56 | 65 | 94 => Some(FloorCrushAndRaise),
         23 | 38 | 60 | 82 => Some(FloorLowerToLowest),
@@ -357,7 +374,9 @@ fn dispatch_effect(
         FloorRaiseToLowestCeiling
         | FloorRaiseToNearest
         | FloorRaiseBy24
-        | FloorRaiseBy32
+        | PlatRaiseToNearestAndChange
+        | PlatRaiseAndChange24
+        | PlatRaiseAndChange32
         | FloorRaiseByShortestLowerTexture
         | FloorCrushAndRaise
         | FloorLowerToLowest
@@ -623,7 +642,7 @@ fn dispatch_locked_doors(
     }
 }
 
-fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefEffect) -> bool {
+fn dispatch_floors(gs: &mut GameState, level: &mut Level, tag: u16, effect: LinedefEffect) -> bool {
     use LinedefEffect::*;
     match effect {
         FloorRaiseToLowestCeiling => {
@@ -631,25 +650,58 @@ fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefE
                 gs,
                 level,
                 tag,
-                1,
+                Fixed16_16::from_int(1),
                 crate::state::CrushBehavior::NoCrush,
             );
             true
         }
         FloorRaiseToNearest => {
-            crate::specials::ev_floor_raise_to_nearest(gs, level, tag, 1);
+            crate::specials::ev_floor_raise_to_nearest(gs, level, tag, Fixed16_16::from_int(1));
             true
         }
         FloorRaiseBy24 => {
-            crate::specials::ev_floor_raise_24(gs, level, tag, 1);
+            crate::specials::ev_floor_raise_24(gs, level, tag, Fixed16_16::from_int(1));
             true
         }
-        FloorRaiseBy32 => {
-            crate::specials::ev_floor_raise_32(gs, level, tag, 1);
+        // Raise-and-change plats move at FRACUNIT/2 = half a unit per tic in
+        // vanilla (PLATSPEED/2, p_plats.c raiseToNearestAndChange / raiseAndChange).
+        PlatRaiseToNearestAndChange => {
+            // Vanilla EV_DoPlat(raiseToNearestAndChange) clears the damaging
+            // special of every sector it newly activates ("NO MORE DAMAGE, IF
+            // APPLICABLE" — p_plats.c: `sec->special = 0`). Snapshot the already
+            // active sectors, spawn the plats, then zero the special of any
+            // sector that newly gained a mover.
+            let before: Vec<usize> = gs
+                .movers
+                .active_floors
+                .iter()
+                .map(|f| f.sector_index)
+                .collect();
+            crate::specials::ev_floor_raise_to_nearest(gs, level, tag, PLAT_HALF_SPEED);
+            let newly: Vec<usize> = gs
+                .movers
+                .active_floors
+                .iter()
+                .map(|f| f.sector_index)
+                .filter(|idx| !before.contains(idx))
+                .collect();
+            for idx in newly {
+                if let Some(sector) = level.sectors.get_mut(idx) {
+                    sector.special = 0;
+                }
+            }
+            true
+        }
+        PlatRaiseAndChange24 => {
+            crate::specials::ev_floor_raise_24(gs, level, tag, PLAT_HALF_SPEED);
+            true
+        }
+        PlatRaiseAndChange32 => {
+            crate::specials::ev_floor_raise_32(gs, level, tag, PLAT_HALF_SPEED);
             true
         }
         FloorRaiseByShortestLowerTexture => {
-            crate::specials::ev_floor_raise_by_texture(gs, level, tag, 1);
+            crate::specials::ev_floor_raise_by_texture(gs, level, tag, Fixed16_16::from_int(1));
             true
         }
         FloorCrushAndRaise => {
@@ -657,25 +709,25 @@ fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefE
                 gs,
                 level,
                 tag,
-                1,
+                Fixed16_16::from_int(1),
                 crate::state::CrushBehavior::Crush,
             );
             true
         }
         FloorLowerToLowest => {
-            crate::specials::ev_floor_lower_to_lowest(gs, level, tag, 1);
+            crate::specials::ev_floor_lower_to_lowest(gs, level, tag, Fixed16_16::from_int(1));
             true
         }
         FloorLowerToHighest => {
-            crate::specials::ev_floor_lower_to_highest(gs, level, tag, 1, false);
+            crate::specials::ev_floor_lower_to_highest(gs, level, tag, Fixed16_16::from_int(1), false);
             true
         }
         FloorLowerToHighestMinus8 => {
-            crate::specials::ev_floor_lower_to_highest(gs, level, tag, 4, true);
+            crate::specials::ev_floor_lower_to_highest(gs, level, tag, Fixed16_16::from_int(4), true);
             true
         }
         FloorLowerAndChange => {
-            crate::specials::ev_floor_lower_to_lowest(gs, level, tag, 1);
+            crate::specials::ev_floor_lower_to_lowest(gs, level, tag, Fixed16_16::from_int(1));
             true
         }
         _ => false,
@@ -686,11 +738,11 @@ fn dispatch_ceilings(gs: &mut GameState, level: &Level, tag: u16, effect: Linede
     use LinedefEffect::*;
     match effect {
         CeilingLowerToFloor => {
-            crate::specials::ev_ceiling_lower_to_floor(gs, level, tag, 2);
+            crate::specials::ev_ceiling_lower_to_floor(gs, level, tag, Fixed16_16::from_int(2));
             true
         }
         CeilingLowerTo8AboveFloor => {
-            crate::specials::ev_ceiling_lower_and_crush(gs, level, tag, 2);
+            crate::specials::ev_ceiling_lower_and_crush(gs, level, tag, Fixed16_16::from_int(2));
             true
         }
         CeilingRaiseToHighest => {
@@ -698,7 +750,7 @@ fn dispatch_ceilings(gs: &mut GameState, level: &Level, tag: u16, effect: Linede
             true
         }
         CeilingCrushAndRaise => {
-            crate::specials::ev_ceiling_crush_and_raise(gs, level, tag, 1);
+            crate::specials::ev_ceiling_crush_and_raise(gs, level, tag, Fixed16_16::from_int(1));
             true
         }
         CeilingCrushStop => {
@@ -706,11 +758,11 @@ fn dispatch_ceilings(gs: &mut GameState, level: &Level, tag: u16, effect: Linede
             true
         }
         CeilingFastCrush => {
-            crate::specials::ev_ceiling_crush_raise_fast(gs, level, tag, 2);
+            crate::specials::ev_ceiling_crush_raise_fast(gs, level, tag, Fixed16_16::from_int(2));
             true
         }
         CeilingSilentCrush => {
-            crate::specials::ev_ceiling_crush_and_raise(gs, level, tag, 2);
+            crate::specials::ev_ceiling_crush_and_raise(gs, level, tag, Fixed16_16::from_int(2));
             true
         }
         _ => false,
@@ -721,15 +773,15 @@ fn dispatch_lifts(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefEf
     use LinedefEffect::*;
     match effect {
         LiftLowerWaitRaise => {
-            crate::specials::ev_do_lift(gs, level, tag, 4, 105);
+            crate::specials::ev_do_lift(gs, level, tag, Fixed16_16::from_int(4), 105);
             true
         }
         LiftBlazeDown => {
-            crate::specials::ev_do_lift(gs, level, tag, 8, 105);
+            crate::specials::ev_do_lift(gs, level, tag, Fixed16_16::from_int(8), 105);
             true
         }
         PerpetualLiftStart => {
-            crate::specials::ev_perpetual_platform(gs, level, tag, 1);
+            crate::specials::ev_perpetual_platform(gs, level, tag, Fixed16_16::from_int(1));
             true
         }
         PerpetualLiftStop => {
@@ -942,9 +994,9 @@ fn close_door_by_tag_or_back(
 // ---------------------------------------------------------------------------
 
 /// Door speed in map units per tic.
-const DOOR_SPEED: i16 = 2;
+const DOOR_SPEED: Fixed16_16 = Fixed16_16::from_int(2);
 /// Blazing door speed.
-const BLAZING_DOOR_SPEED: i16 = 8;
+const BLAZING_DOOR_SPEED: Fixed16_16 = Fixed16_16::from_int(8);
 /// Door wait time (tics).
 const DOOR_WAIT: i32 = 120;
 
@@ -953,7 +1005,7 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavi
         return;
     };
     let sector = s;
-    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
+    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
     if gs
         .movers
         .active_doors
@@ -974,7 +1026,7 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavi
             -1
         },
         countdown: -1,
-        reopen_height: 0,
+        reopen_height: Fixed16_16::from_int(0),
         reopen_countdown: -1,
     });
 }
@@ -1001,7 +1053,7 @@ fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
         is_ceiling: true,
         wait_tics: -1,
         countdown: -1,
-        reopen_height: 0,
+        reopen_height: Fixed16_16::from_int(0),
         reopen_countdown: -1,
     });
 }
@@ -1020,7 +1072,7 @@ fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) 
     {
         return;
     }
-    let reopen_h = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
+    let reopen_h = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
     gs.movers.active_doors.push(crate::state::DoorMover {
         sector: sector_idx,
         target_height: sector.floor_height,
@@ -1044,7 +1096,7 @@ fn open_blazing_door_helper(
         return;
     };
     let sector = s;
-    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - 4;
+    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
     if gs
         .movers
         .active_doors
@@ -1065,7 +1117,7 @@ fn open_blazing_door_helper(
             -1
         },
         countdown: -1,
-        reopen_height: 0,
+        reopen_height: Fixed16_16::from_int(0),
         reopen_countdown: -1,
     });
 }
@@ -1092,7 +1144,7 @@ fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usiz
         is_ceiling: true,
         wait_tics: -1,
         countdown: -1,
-        reopen_height: 0,
+        reopen_height: Fixed16_16::from_int(0),
         reopen_countdown: -1,
     });
 }
@@ -1536,8 +1588,8 @@ mod tests {
         let reject = doom_map::Reject::parse_lump(&[0u8], 2).expect("value must exist in test");
         let sectors = vec![
             doom_map::Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1545,8 +1597,8 @@ mod tests {
                 tag: 0,
             },
             doom_map::Sector {
-                floor_height: 0,
-                ceil_height: 0,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(0),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1803,6 +1855,49 @@ mod tests {
     #[test]
     fn effect_type_23_is_floor_lower_to_lowest() {
         assert_eq!(linedef_effect(23), Some(LinedefEffect::FloorLowerToLowest));
+    }
+
+    #[test]
+    fn effect_raise_and_change_plats_are_classified_separately() {
+        // Vanilla EV_DoPlat(raiseToNearestAndChange) — these move at
+        // PLATSPEED/2 (half a unit per tic), distinct from the whole-speed
+        // floor raisers (18/69).
+        for &special in &[20, 22, 47, 68, 95] {
+            assert_eq!(
+                linedef_effect(special),
+                Some(LinedefEffect::PlatRaiseToNearestAndChange),
+                "special {special} is a raiseToNearestAndChange plat",
+            );
+        }
+        // Whole-speed floor raisers stay on the floor effect.
+        for &special in &[18, 69] {
+            assert_eq!(
+                linedef_effect(special),
+                Some(LinedefEffect::FloorRaiseToNearest),
+                "special {special} is a whole-speed raiseFloorToNearest",
+            );
+        }
+        // Vanilla EV_DoPlat(raiseAndChange, 24/32) — also half a unit per tic.
+        for &special in &[14, 15, 66] {
+            assert_eq!(
+                linedef_effect(special),
+                Some(LinedefEffect::PlatRaiseAndChange24),
+                "special {special} is a raiseAndChange-24 plat",
+            );
+        }
+        assert_eq!(
+            linedef_effect(67),
+            Some(LinedefEffect::PlatRaiseAndChange32),
+            "special 67 is a raiseAndChange-32 plat",
+        );
+        // Whole-speed raiseFloor24AndChange floors stay on the floor effect.
+        for &special in &[58, 59, 92, 93] {
+            assert_eq!(
+                linedef_effect(special),
+                Some(LinedefEffect::FloorRaiseBy24),
+                "special {special} is a whole-speed raiseFloor24AndChange",
+            );
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -2360,8 +2455,8 @@ mod tests {
             nodes: vec![],
             sectors: vec![
                 doom_map::Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -2369,8 +2464,8 @@ mod tests {
                     tag: 0,
                 },
                 doom_map::Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,

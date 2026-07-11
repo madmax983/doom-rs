@@ -25,6 +25,7 @@ use crate::lumps::{
     Thing, Vertex,
 };
 use crate::udmf::{UdmfError, UdmfMap};
+use doom_types::Fixed16_16;
 use doom_wad::{MapLumpGroup, WadFile, WadStack};
 use thiserror::Error;
 
@@ -497,12 +498,12 @@ impl Level {
         self.subsector_sector_index(subsector_idx)
     }
 
-    /// Return the floor height (in map units) at world point `(x, y)`.
+    /// Return the floor height (fixed-point map units) at world point `(x, y)`.
     ///
     /// Uses BSP traversal to find the subsector.  Returns `None` if the
     /// level geometry is incomplete.
     #[must_use]
-    pub fn floor_at(&self, x: i32, y: i32) -> Option<i16> {
+    pub fn floor_at(&self, x: i32, y: i32) -> Option<Fixed16_16> {
         let si = self.sector_index_at(x, y)?;
         self.sectors.get(si).map(|s| s.floor_height)
     }
@@ -1066,8 +1067,8 @@ thing { x = 0; y = 0; angle = 0; type = 1; special = 80; arg0str = "lift_down"; 
             nodes: vec![],
             sectors: vec![
                 Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -1075,8 +1076,8 @@ thing { x = 0; y = 0; angle = 0; type = 1; special = 80; arg0str = "lift_down"; 
                     tag: 0,
                 },
                 Sector {
-                    floor_height: 64,
-                    ceil_height: 192,
+                    floor_height: doom_types::Fixed16_16::from_int(64),
+                    ceil_height: doom_types::Fixed16_16::from_int(192),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -1108,7 +1109,7 @@ thing { x = 0; y = 0; angle = 0; type = 1; special = 80; arg0str = "lift_down"; 
         let level = Level::from_wad(&wad, "E1M1").expect("value must exist in test");
 
         assert_eq!(level.sector_index_at(10, 10), Some(0));
-        assert_eq!(level.floor_at(10, 10), Some(0));
+        assert_eq!(level.floor_at(10, 10), Some(Fixed16_16::from_int(0)));
     }
 
     #[test]

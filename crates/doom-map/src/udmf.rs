@@ -27,6 +27,7 @@ use crate::lumps::{
     FLAG_BLOCKING, FLAG_BLOCKMONSTERS, FLAG_DONTPEGBOTTOM, FLAG_DONTPEGTOP, FLAG_TWO_SIDED,
     Linedef, Sector, Sidedef, Thing, Vertex,
 };
+use doom_types::Fixed16_16;
 
 const FLAG_SECRET: u16 = 0x0020;
 const FLAG_SOUNDBLOCK: u16 = 0x0040;
@@ -403,8 +404,12 @@ impl UdmfMap {
                     y: required_i16(block, index, "vertex", "y")?,
                 }),
                 "sector" => sectors.push(Sector {
-                    floor_height: required_i16(block, index, "sector", "heightfloor")?,
-                    ceil_height: required_i16(block, index, "sector", "heightceiling")?,
+                    floor_height: Fixed16_16::from_int(
+                        required_i16(block, index, "sector", "heightfloor")? as i32,
+                    ),
+                    ceil_height: Fixed16_16::from_int(
+                        required_i16(block, index, "sector", "heightceiling")? as i32,
+                    ),
                     floor_flat: required_name(block, index, "sector", "texturefloor")?,
                     ceil_flat: required_name(block, index, "sector", "textureceiling")?,
                     light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,

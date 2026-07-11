@@ -517,7 +517,7 @@ pub fn tick_player(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level
         gs.player.attack_down = false;
         gs.player.extra_light = 0;
         gs.player.use_down = false;
-        p_death_think(gs, level.as_deref_mut());
+        p_death_think(gs, cmd, level.as_deref_mut());
         return;
     }
 
@@ -1003,7 +1003,7 @@ fn p_move_player(gs: &mut GameState, cmd: TicCmd, level: Option<&mut Level>) {
 /// Order matches vanilla: the angle rotation (in `P_PlayerThink` →
 /// `P_DeathThink`) uses the start-of-tic player/attacker positions, and runs
 /// BEFORE the corpse slide (`P_XYMovement`, in `P_RunThinkers`).
-fn p_death_think(gs: &mut GameState, mut level: Option<&mut Level>) {
+fn p_death_think(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level>) {
     // ANG5 = ANG90 / 18 (p_user.c). Rotate the view angle toward the attacker.
     const ANG5: u32 = ANG90.0 / 18;
     const ANG180: u32 = 0x8000_0000;
@@ -1043,9 +1043,13 @@ fn p_death_think(gs: &mut GameState, mut level: Option<&mut Level>) {
     // player position desynced a monster's approach and cost the lt2084 kill.
     //
     // No input thrust/turn is applied (vanilla runs `P_DeathThink`, never
-    // `P_MovePlayer`, for a dead player), and the STOPSPEED zeroing is therefore
-    // unconditional. The MF_CORPSE "don't stop sliding halfway off a step"
-    // clause is honoured, matching the non-player corpse path.
+    // `P_MovePlayer`, for a dead player). However the STOPSPEED zeroing is NOT
+    // unconditional: vanilla `P_XYMovement` gates it on `!player ||
+    // (cmd.forwardmove == 0 && cmd.sidemove == 0)` — and a *dead* player's
+    // ticcmd still carries the demo-recorded movement, which `P_DeathThink`
+    // never zeroes. So a corpse whose death-tic cmd held movement keeps sliding
+    // (friction) one or more extra tics instead of snapping to rest. The MF_CORPSE
+    // "don't stop sliding halfway off a step" clause is honoured too.
     let (momx0, momy0) = {
         let Some(mo) = gs.mobjslab.get(handle) else {
             return;
@@ -1141,7 +1145,6 @@ fn p_death_think(gs: &mut GameState, mut level: Option<&mut Level>) {
                     };
                     let center_floor = lv
                         .floor_at(final_x.to_int(), final_y.to_int())
-                        .map(|f| Fixed16_16::from_int(f as i32))
                         .unwrap_or(floorz);
                     if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
                         false
@@ -1160,7 +1163,10 @@ fn p_death_think(gs: &mut GameState, mut level: Option<&mut Level>) {
             && mo.momx < stopspeed
             && mo.momy > -stopspeed
             && mo.momy < stopspeed;
-        if below_stop {
+        // Vanilla gates the player-corpse stop on a zero movement command; a
+        // dead player's demo-recorded cmd is not cleared, so nonzero movement
+        // keeps the corpse sliding (friction) rather than snapping to rest.
+        if below_stop && cmd.forward_move == 0 && cmd.side_move == 0 {
             mo.momx = Fixed16_16::ZERO;
             mo.momy = Fixed16_16::ZERO;
         } else {
@@ -1360,7 +1366,6 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
             // floor — skips friction entirely this tic ("do not stop sliding").
             let center_floor = lv
                 .floor_at(x.to_int(), y.to_int())
-                .map(|f| Fixed16_16::from_int(f as i32))
                 .unwrap_or(floorz);
             if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
                 return;
@@ -1486,7 +1491,7 @@ fn p_z_movement_missile(gs: &mut GameState, handle: MobjHandle, level: Option<&L
     let ceilingz = lv
         .sector_index_at(x.to_int(), y.to_int())
         .and_then(|si| lv.sectors.get(si))
-        .map(|s| Fixed16_16::from_int(s.ceil_height as i32));
+        .map(|s| s.ceil_height);
     if let Some(cz) = ceilingz
         && new_z + height > cz
     {
@@ -1684,6 +1689,43 @@ mod tests {
         for _ in 0..24 {
             crate::weapons::tick_psprites(gs, TicCmd::default(), None);
         }
+    }
+
+    /// A dead player's corpse only snaps its (sub-STOPSPEED) momentum to zero
+    /// when the current ticcmd has zero movement — vanilla `P_XYMovement` gates
+    /// the stop on `cmd.forwardmove == 0 && cmd.sidemove == 0` even for a player
+    /// corpse, and `P_DeathThink` never clears the demo-recorded cmd.
+    #[test]
+    fn dead_player_corpse_keeps_sliding_when_cmd_has_movement() {
+        // Sub-STOPSPEED (0x1000) momentum so `below_stop` is true.
+        let mom = Fixed16_16::from_raw(0x800);
+
+        // Zero movement cmd -> corpse snaps to rest.
+        let mut gs = make_game_state();
+        gs.player.apply_damage(200); // health 0 -> dead
+        if let Some(mo) = gs.mobjslab.get_mut(gs.player.handle) {
+            mo.momx = mom;
+            mo.momy = Fixed16_16::ZERO;
+        }
+        p_death_think(&mut gs, TicCmd::default(), None);
+        let mx = gs.mobjslab.get(gs.player.handle).unwrap().momx;
+        assert_eq!(mx, Fixed16_16::ZERO, "zero-movement cmd stops the corpse");
+
+        // Nonzero forward movement in the (dead) cmd -> friction, not a stop.
+        let mut gs = make_game_state();
+        gs.player.apply_damage(200);
+        if let Some(mo) = gs.mobjslab.get_mut(gs.player.handle) {
+            mo.momx = mom;
+            mo.momy = Fixed16_16::ZERO;
+        }
+        let cmd = TicCmd { forward_move: 25, ..TicCmd::default() };
+        p_death_think(&mut gs, cmd, None);
+        let mx = gs.mobjslab.get(gs.player.handle).unwrap().momx;
+        assert_eq!(
+            mx, mom.fixed_mul(FRICTION),
+            "movement cmd keeps the corpse sliding (friction), not stopped"
+        );
+        assert_ne!(mx, Fixed16_16::ZERO);
     }
 
     fn count_mobjs_of_kind(gs: &GameState, kind: MobjKind) -> usize {
@@ -3253,8 +3295,8 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![doom_map::Sector {
-                floor_height,
-                ceil_height: floor_height + 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(floor_height)),
+                ceil_height: doom_types::Fixed16_16::from_int(i32::from(floor_height + 128)),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -3328,8 +3370,8 @@ mod tests {
         ];
         let sectors = vec![
             Sector {
-                floor_height: right_floor,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(right_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -3337,8 +3379,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: left_floor,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(left_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -3641,8 +3683,8 @@ mod tests {
             nodes: vec![],
             sectors: vec![
                 doom_map::Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -3650,8 +3692,8 @@ mod tests {
                     tag: 0,
                 },
                 doom_map::Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -3677,8 +3719,8 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![doom_map::Sector {
-                floor_height,
-                ceil_height: floor_height + 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(floor_height)),
+                ceil_height: doom_types::Fixed16_16::from_int(i32::from(floor_height + 128)),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,

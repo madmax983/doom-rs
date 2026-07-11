@@ -541,8 +541,8 @@ mod tests {
             }],
             nodes: vec![],
             sectors: vec![Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -584,8 +584,8 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![Sector {
-                floor_height: 0,
-                ceil_height: 256,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(256),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,

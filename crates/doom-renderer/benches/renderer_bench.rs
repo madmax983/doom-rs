@@ -25,8 +25,8 @@ use doom_types::Bam;
 fn make_minimal_level() -> Level {
     let vertexes = vec![Vertex { x: 0, y: 128 }, Vertex { x: 128, y: 128 }];
     let sectors = vec![Sector {
-        floor_height: 0,
-        ceil_height: 128,
+        floor_height: doom_types::Fixed16_16::from_int(0),
+        ceil_height: doom_types::Fixed16_16::from_int(128),
         floor_flat: *b"FLAT1\0\0\0",
         ceil_flat: *b"FLAT2\0\0\0",
         light_level: 192,

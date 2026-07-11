@@ -371,8 +371,8 @@ fn slide_traverse(
                 Some(o) => o,
                 None => continue,
             };
-            let opentop = open_top << 16;
-            let openbottom = open_bottom << 16;
+            let opentop = open_top.raw();
+            let openbottom = open_bottom.raw();
             let openrange = opentop - openbottom;
 
             if openrange < mo_height {
@@ -612,7 +612,6 @@ pub(crate) fn support_state_at(
 
     let mut floor_z = level
         .floor_at(x.to_int(), y.to_int())
-        .map(|floor| Fixed16_16::from_int(floor as i32))
         .unwrap_or(fallback_z);
 
     let col_lo = to_block(left, x_origin, x_count);
@@ -656,8 +655,7 @@ pub(crate) fn support_state_at(
                 };
                 let front = &level.sectors[right_sd.sector as usize];
                 let back = &level.sectors[left_sd.sector as usize];
-                let open_floor =
-                    Fixed16_16::from_int(front.floor_height.max(back.floor_height) as i32);
+                let open_floor = front.floor_height.max(back.floor_height);
                 floor_z = floor_z.max(open_floor);
             }
         }
@@ -748,9 +746,7 @@ fn try_move_with_blocker(
         return (false, None);
     }
 
-    let current_floor = level
-        .floor_at(old_x.to_int(), old_y.to_int())
-        .map(|floor| Fixed16_16::from_int(floor as i32));
+    let current_floor = level.floor_at(old_x.to_int(), old_y.to_int());
     let step_base_z = current_floor.map_or(mo_z, |floor_z| mo_z.max(floor_z));
 
     // Proposed bounding box.
@@ -889,12 +885,9 @@ fn try_move_with_blocker(
                 let front = &level.sectors[right_sd.sector as usize];
                 let back = &level.sectors[left_sd.sector as usize];
 
-                let open_floor =
-                    Fixed16_16::from_int(front.floor_height.max(back.floor_height) as i32);
-                let open_ceil =
-                    Fixed16_16::from_int(front.ceil_height.min(back.ceil_height) as i32);
-                let dropoff_floor =
-                    Fixed16_16::from_int(front.floor_height.min(back.floor_height) as i32);
+                let open_floor = front.floor_height.max(back.floor_height);
+                let open_ceil = front.ceil_height.min(back.ceil_height);
+                let dropoff_floor = front.floor_height.min(back.floor_height);
 
                 // Gap too small for actor to fit.
                 if open_ceil - open_floor < height {
@@ -1283,8 +1276,8 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![doom_map::Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1326,8 +1319,8 @@ mod tests {
             sector: 0,
         }];
         let sectors = vec![Sector {
-            floor_height: 0,
-            ceil_height: 128,
+            floor_height: doom_types::Fixed16_16::from_int(0),
+            ceil_height: doom_types::Fixed16_16::from_int(128),
             floor_flat: *b"FLAT1\0\0\0",
             ceil_flat: *b"FLAT2\0\0\0",
             light_level: 192,
@@ -1399,8 +1392,8 @@ mod tests {
         ];
         let sectors = vec![
             Sector {
-                floor_height: front_floor,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(front_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1408,8 +1401,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: back_floor,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(back_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1450,7 +1443,7 @@ mod tests {
     /// sector (1) has a parametrized (low) ceiling; the front sector (0) is tall.
     fn make_two_sided_low_ceiling_level(back_ceil: i16) -> doom_map::Level {
         let mut level = make_two_sided_step_level(0, 0);
-        level.sectors[1].ceil_height = back_ceil;
+        level.sectors[1].ceil_height = doom_types::Fixed16_16::from_int(i32::from(back_ceil));
         level
     }
 
@@ -1581,8 +1574,8 @@ mod tests {
         ];
         let sectors = vec![
             Sector {
-                floor_height: right_floor,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(right_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1590,8 +1583,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: left_floor,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(left_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
