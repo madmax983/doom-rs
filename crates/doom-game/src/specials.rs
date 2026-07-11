@@ -10484,6 +10484,35 @@ mod tests {
     }
 
     #[test]
+    fn raise_to_nearest_and_change_clears_damaging_special() {
+        use crate::linedef_dispatch::{classify_trigger, dispatch_linedef};
+
+        // Type 47 (raiseToNearestAndChange): vanilla clears the raised sector's
+        // damaging special ("NO MORE DAMAGE, IF APPLICABLE", p_plats.c).
+        let mut gs = GameState::new("TEST");
+        let mut level = make_multi_sector_level([10, 0, 32], [128, 128, 128], [0, 1, 0], 47, 1);
+        level.sectors[1].special = 7; // 5% nukage
+        let actor = gs.player.handle;
+        dispatch_linedef(&mut gs, &mut level, 0, 47, classify_trigger(47).unwrap(), actor, 0);
+        assert_eq!(gs.movers.active_floors.len(), 1, "plat spawned on sector 1");
+        assert_eq!(
+            level.sectors[1].special, 0,
+            "raiseToNearestAndChange must clear the sector's damaging special"
+        );
+
+        // Type 66 (raiseAndChange): vanilla does NOT clear the special.
+        let mut gs = GameState::new("TEST");
+        let mut level = make_multi_sector_level([0, 0, 0], [128, 128, 128], [0, 1, 0], 66, 1);
+        level.sectors[1].special = 7;
+        let actor = gs.player.handle;
+        dispatch_linedef(&mut gs, &mut level, 0, 66, classify_trigger(66).unwrap(), actor, 0);
+        assert_eq!(
+            level.sectors[1].special, 7,
+            "raiseAndChange must NOT clear the sector's damaging special"
+        );
+    }
+
+    #[test]
     fn line_type_102_dispatches_lower_to_highest() {
         let mut gs = GameState::new("TEST");
         let mut level = make_multi_sector_level([10, 64, 40], [128, 128, 128], [0, 1, 0], 102, 1);

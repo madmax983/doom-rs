@@ -642,7 +642,7 @@ fn dispatch_locked_doors(
     }
 }
 
-fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefEffect) -> bool {
+fn dispatch_floors(gs: &mut GameState, level: &mut Level, tag: u16, effect: LinedefEffect) -> bool {
     use LinedefEffect::*;
     match effect {
         FloorRaiseToLowestCeiling => {
@@ -666,7 +666,30 @@ fn dispatch_floors(gs: &mut GameState, level: &Level, tag: u16, effect: LinedefE
         // Raise-and-change plats move at FRACUNIT/2 = half a unit per tic in
         // vanilla (PLATSPEED/2, p_plats.c raiseToNearestAndChange / raiseAndChange).
         PlatRaiseToNearestAndChange => {
+            // Vanilla EV_DoPlat(raiseToNearestAndChange) clears the damaging
+            // special of every sector it newly activates ("NO MORE DAMAGE, IF
+            // APPLICABLE" — p_plats.c: `sec->special = 0`). Snapshot the already
+            // active sectors, spawn the plats, then zero the special of any
+            // sector that newly gained a mover.
+            let before: Vec<usize> = gs
+                .movers
+                .active_floors
+                .iter()
+                .map(|f| f.sector_index)
+                .collect();
             crate::specials::ev_floor_raise_to_nearest(gs, level, tag, PLAT_HALF_SPEED);
+            let newly: Vec<usize> = gs
+                .movers
+                .active_floors
+                .iter()
+                .map(|f| f.sector_index)
+                .filter(|idx| !before.contains(idx))
+                .collect();
+            for idx in newly {
+                if let Some(sector) = level.sectors.get_mut(idx) {
+                    sector.special = 0;
+                }
+            }
             true
         }
         PlatRaiseAndChange24 => {
