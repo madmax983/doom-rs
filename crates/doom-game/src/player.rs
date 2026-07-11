@@ -234,10 +234,14 @@ impl PlayerState {
 
     /// Apply `amount` points of damage (positive = hurt).
     ///
-    /// Health is clamped to `[-32768, MAX_HEALTH]` after the operation.
+    /// Health is clamped to `[0, MAX_HEALTH]` after the operation, matching
+    /// vanilla `P_DamageMobj` (`player->health -= damage; if (player->health <
+    /// 0) player->health = 0;` — p_inter.c:884-886). The *mobj* health is a
+    /// separate value that is allowed to go negative so the kill path can pick
+    /// the gib (xdeath) chain; only the player-state health is floored at 0.
     /// Note: negative `amount` heals, but `heal()` is the preferred API.
     pub fn apply_damage(&mut self, amount: i32) {
-        self.health = self.health.saturating_sub(amount).clamp(-32768, MAX_HEALTH);
+        self.health = self.health.saturating_sub(amount).clamp(0, MAX_HEALTH);
     }
 
     /// Heal the player by `amount`, capped at `MAX_HEALTH`.
@@ -480,7 +484,7 @@ mod prop_tests {
         }
 
         // Property: after any sequence of `apply_damage(n)`, health is always
-        // within `[-32768, MAX_HEALTH]`.
+        // within `[0, MAX_HEALTH]` (vanilla floors player->health at 0).
         #[test]
 
         #[test]
@@ -503,8 +507,9 @@ mod prop_tests {
                 "health {} > MAX_HEALTH {} after apply_damage({})", h, MAX_HEALTH, damage
             );
             prop_assert!(
-                h >= -32768,
-                "health {} < -32768 after apply_damage({})", h, damage
+                h >= 0,
+                "player health {} went below 0 after apply_damage({}) \
+                 (vanilla P_DamageMobj floors player->health at 0)", h, damage
             );
         }
 
@@ -627,15 +632,20 @@ mod tests {
     }
 
     #[test]
-    fn damage_drives_health_below_zero() {
+    fn overkill_damage_floors_player_health_at_zero() {
+        // Vanilla P_DamageMobj floors player->health at 0 (p_inter.c:884-886):
+        // an over-kill leaves the player-state health at exactly 0, not negative
+        // (the mobj health, tracked separately, is what goes negative for gib).
         let mut p = PlayerState::pistol_start(MobjHandle::NULL);
         p.apply_damage(200);
-        assert!(p.health() <= 0);
-        assert!(
-            p.health() >= -32768,
-            "health must not underflow past -32768"
-        );
+        assert_eq!(p.health(), 0, "player-state health is floored at 0");
         assert!(p.is_dead());
+
+        // A subsequent hit while already dead stays at 0.
+        let mut p = PlayerState::pistol_start(MobjHandle::NULL);
+        p.apply_damage(96); // 100 -> 4
+        p.apply_damage(15); // 4 - 15 = -11 -> floored to 0
+        assert_eq!(p.health(), 0, "player health never goes negative");
     }
 
     #[test]
