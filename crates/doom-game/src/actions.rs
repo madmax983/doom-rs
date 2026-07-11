@@ -1094,7 +1094,10 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     // --- check for melee attack ---
     if info.melee_state != crate::mobj::StateNum::NULL && p_check_melee_range(gs, handle, level) {
         // attacksound would play here (no RNG)
-        set_mobj_state(gs, handle, info.melee_state);
+        // Vanilla `P_SetMobjState(actor, actor->info->meleestate)` fires the
+        // melee state's entry action (A_FaceTarget) immediately, so the monster
+        // snaps to face its target on the attack transition.
+        crate::tic::p_set_mobj_state(gs, handle, info.melee_state, level);
         return;
     }
 
@@ -1104,7 +1107,11 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         let movecount = gs.mobjslab.get(handle).map(|mo| mo.movecount).unwrap_or(0);
         let can_fire = movecount == 0 && p_check_missile_range(gs, handle, target, level);
         if can_fire {
-            set_mobj_state(gs, handle, info.missile_state);
+            // Vanilla `P_SetMobjState(actor, actor->info->missilestate)` fires the
+            // missile state's entry action (A_FaceTarget) immediately, before
+            // setting MF_JUSTATTACKED — the monster faces its target the moment
+            // it commits to the attack, not only later inside the fire action.
+            crate::tic::p_set_mobj_state(gs, handle, info.missile_state, level);
             if let Some(mo) = gs.mobjslab.get_mut(handle) {
                 mo.flags |= flags::MF_JUSTATTACKED;
             }
@@ -1232,7 +1239,12 @@ fn p_look_for_players(
     true
 }
 
-/// Set an actor to a specific state, updating tics from the STATES table.
+/// Set an actor to a specific state, updating tics from the STATES table
+/// *without* firing the entry action. Production code uses
+/// [`crate::tic::p_set_mobj_state`] (which fires the action, matching vanilla
+/// `P_SetMobjState`); this bare setter is retained only for unit tests that
+/// assert the raw state/tics assignment in isolation.
+#[cfg(test)]
 fn set_mobj_state(gs: &mut GameState, handle: MobjHandle, state: crate::mobj::StateNum) {
     if let Some(entry) = states::STATES.get(state.0 as usize) {
         let new_tics = entry.tics;
@@ -2883,6 +2895,51 @@ mod tests {
             mo.flags & flags::MF_JUSTATTACKED,
             0,
             "MF_JUSTATTACKED must be set after entering missile state"
+        );
+    }
+
+    /// Regression: vanilla A_Chase enters the attack state via `P_SetMobjState`,
+    /// which fires that state's entry action. For every hitscan/melee/projectile
+    /// monster the missile/melee state's first action is `A_FaceTarget`, so the
+    /// monster snaps to face its target the instant it commits to the attack —
+    /// not only later inside the fire action. The trooper here sits at (200,0)
+    /// facing east (angle 0) with the player at the origin (due west), so the
+    /// facing must become ANG180 on the attack transition.
+    #[test]
+    fn a_chase_faces_target_on_attack_entry() {
+        let mut gs = make_game_state();
+        let kind = MobjKind::Trooper;
+        let see_sn = mobjinfo::MOBJINFO[kind as usize].see_state;
+        let missile_sn = mobjinfo::MOBJINFO[kind as usize].missile_state;
+
+        let mut mo = Mobj::new(
+            kind,
+            Fixed16_16::from_int(200),
+            Fixed16_16::from_int(0),
+            Bam::ZERO, // facing east
+        );
+        mo.health = 20;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.state = see_sn;
+        mo.tics = states::STATES[see_sn.0 as usize].tics;
+        mo.target = gs.player.handle;
+        mo.reactiontime = 0;
+        mo.movecount = 0;
+        let trooper = gs.mobjslab.alloc(mo);
+
+        gs.rng.set_index(9);
+        a_chase(&mut gs, trooper, None);
+
+        let mo = gs.mobjslab.get(trooper).expect("item must exist in tests");
+        assert_eq!(mo.state, missile_sn, "trooper should enter missile state");
+        // Exact vanilla R_PointToAngle2 result for the due-west player (~ANG180).
+        let expected = crate::geom::r_point_to_angle2(200 << 16, 0, 0, 0);
+        assert_ne!(expected, 0, "sanity: facing the player is not east");
+        assert_eq!(
+            mo.angle,
+            Bam(expected),
+            "A_FaceTarget must fire on attack entry, snapping the trooper from east \
+             (angle 0) to face the due-west player"
         );
     }
 
