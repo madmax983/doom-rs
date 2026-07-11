@@ -36,8 +36,7 @@ pub struct Bam(pub u32);
 /// The exact table is a compile-time constant ([`crate::finesine_table::FINESINE`]),
 /// so no data has to be computed at init. This flag only preserves the historical
 /// contract that `sin`/`cos` return 0 until `init_trig_tables()` is called.
-static FINESINE_READY: core::sync::atomic::AtomicBool =
-    core::sync::atomic::AtomicBool::new(false);
+static FINESINE_READY: core::sync::atomic::AtomicBool = core::sync::atomic::AtomicBool::new(false);
 
 /// Shift to convert a `Bam` to a fine-angle index (0..8191).
 pub const BAM_TO_FINE_SHIFT: u32 = 32 - 13; // >> 19 gives index in 0..8191
