@@ -1141,7 +1141,6 @@ fn p_death_think(gs: &mut GameState, mut level: Option<&mut Level>) {
                     };
                     let center_floor = lv
                         .floor_at(final_x.to_int(), final_y.to_int())
-                        .map(|f| Fixed16_16::from_int(f as i32))
                         .unwrap_or(floorz);
                     if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
                         false
@@ -1360,7 +1359,6 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
             // floor — skips friction entirely this tic ("do not stop sliding").
             let center_floor = lv
                 .floor_at(x.to_int(), y.to_int())
-                .map(|f| Fixed16_16::from_int(f as i32))
                 .unwrap_or(floorz);
             if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
                 return;
@@ -1486,7 +1484,7 @@ fn p_z_movement_missile(gs: &mut GameState, handle: MobjHandle, level: Option<&L
     let ceilingz = lv
         .sector_index_at(x.to_int(), y.to_int())
         .and_then(|si| lv.sectors.get(si))
-        .map(|s| Fixed16_16::from_int(s.ceil_height as i32));
+        .map(|s| s.ceil_height);
     if let Some(cz) = ceilingz
         && new_z + height > cz
     {
@@ -3253,8 +3251,8 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![doom_map::Sector {
-                floor_height,
-                ceil_height: floor_height + 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(floor_height)),
+                ceil_height: doom_types::Fixed16_16::from_int(i32::from(floor_height + 128)),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -3328,8 +3326,8 @@ mod tests {
         ];
         let sectors = vec![
             Sector {
-                floor_height: right_floor,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(right_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -3337,8 +3335,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: left_floor,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(left_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -3641,8 +3639,8 @@ mod tests {
             nodes: vec![],
             sectors: vec![
                 doom_map::Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -3650,8 +3648,8 @@ mod tests {
                     tag: 0,
                 },
                 doom_map::Sector {
-                    floor_height: 0,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(0),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -3677,8 +3675,8 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![doom_map::Sector {
-                floor_height,
-                ceil_height: floor_height + 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(floor_height)),
+                ceil_height: doom_types::Fixed16_16::from_int(i32::from(floor_height + 128)),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,

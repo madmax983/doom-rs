@@ -797,7 +797,7 @@ pub fn render_actors_with_masked_and_fixed_colormap_ex<'a, I, T>(
     // player is standing in, then add PLAYER_HEIGHT above that floor.
     let player_floor = sector_for_point(level, px as i32, py as i32)
         .and_then(|si| level.sectors.get(si))
-        .map_or(0.0, |s| s.floor_height as f32);
+        .map_or(0.0, |s| s.floor_height.to_int() as f32);
     let view_z = player_floor + PLAYER_HEIGHT;
 
     enum VisibleElement<'a> {
@@ -1106,7 +1106,7 @@ fn render_things_impl(
     let py = player_y.raw() as f32 / 65536.0;
     let player_floor = sector_for_point(level, px as i32, py as i32)
         .and_then(|si| level.sectors.get(si))
-        .map_or(0.0, |s| s.floor_height as f32);
+        .map_or(0.0, |s| s.floor_height.to_int() as f32);
     let view_z = player_floor + PLAYER_HEIGHT;
 
     // Fuzz position counter shared across all fuzz-effect sprites in this frame.
@@ -1213,7 +1213,7 @@ fn render_things_impl(
 
         let thing_floor = sector_for_point(level, i32::from(thing.x), i32::from(thing.y))
             .and_then(|si| level.sectors.get(si))
-            .map_or(0.0, |s| s.floor_height as f32);
+            .map_or(0.0, |s| s.floor_height.to_int() as f32);
         let thing_top_z = thing_floor + frame.top_offset as f32;
         let thing_bottom_z = thing_top_z - frame.height as f32;
         let (screen_y_top, screen_y_bot) =
@@ -3830,8 +3830,8 @@ mod tests {
 
         let vertexes = vec![Vertex { x: 0, y: 128 }, Vertex { x: 128, y: 128 }];
         let sectors = vec![Sector {
-            floor_height: 0,
-            ceil_height: 128,
+            floor_height: doom_types::Fixed16_16::from_int(0),
+            ceil_height: doom_types::Fixed16_16::from_int(128),
             floor_flat: *b"FLAT1\0\0\0",
             ceil_flat: *b"FLAT2\0\0\0",
             light_level: 192,
@@ -3911,8 +3911,8 @@ mod tests {
         let vertexes = vec![Vertex { x: -64, y: 128 }, Vertex { x: 64, y: 128 }];
         let sectors = vec![
             Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -3920,8 +3920,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: 32,
-                ceil_height: 96,
+                floor_height: doom_types::Fixed16_16::from_int(32),
+                ceil_height: doom_types::Fixed16_16::from_int(96),
                 floor_flat: *b"FLAT3\0\0\0",
                 ceil_flat: *b"FLAT4\0\0\0",
                 light_level: 192,

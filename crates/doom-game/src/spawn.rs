@@ -130,9 +130,9 @@ fn sync_mobj_to_level(level: &Level, mo: &mut Mobj) {
         && let Some(sector) = level.sectors.get(sector_idx)
     {
         mo.z = if mo.flags & flags::MF_SPAWNCEILING != 0 {
-            Fixed16_16::from_int(i32::from(sector.ceil_height)) - mo.height
+            sector.ceil_height - mo.height
         } else {
-            Fixed16_16::from_int(i32::from(sector.floor_height))
+            sector.floor_height
         };
     }
 }
@@ -751,8 +751,8 @@ mod tests {
             }],
             nodes: vec![],
             sectors: vec![doom_map::Sector {
-                floor_height,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(floor_height)),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -876,8 +876,8 @@ mod tests {
             }],
             sectors: vec![
                 doom_map::Sector {
-                    floor_height: right_floor,
-                    ceil_height: 128,
+                    floor_height: doom_types::Fixed16_16::from_int(i32::from(right_floor)),
+                    ceil_height: doom_types::Fixed16_16::from_int(128),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -885,8 +885,8 @@ mod tests {
                     tag: 0,
                 },
                 doom_map::Sector {
-                    floor_height: left_floor,
-                    ceil_height: 192,
+                    floor_height: doom_types::Fixed16_16::from_int(i32::from(left_floor)),
+                    ceil_height: doom_types::Fixed16_16::from_int(192),
                     floor_flat: *b"FLAT1\0\0\0",
                     ceil_flat: *b"FLAT2\0\0\0",
                     light_level: 192,
@@ -1092,7 +1092,7 @@ mod tests {
     #[test]
     fn sync_mobj_to_level_honors_spawnceiling() {
         let mut level = make_test_level_with_things(vec![]);
-        level.sectors[0].ceil_height = 128;
+        level.sectors[0].ceil_height = doom_types::Fixed16_16::from_int(128);
 
         let mut mo = Mobj::new(
             MobjKind::Trooper,

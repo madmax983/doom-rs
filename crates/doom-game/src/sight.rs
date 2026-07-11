@@ -333,10 +333,10 @@ impl SightState<'_> {
             let front = &self.level.sectors[front_side.sector as usize];
             let back = &self.level.sectors[back_side.sector as usize];
 
-            let front_floor = (front.floor_height as i32) << 16;
-            let front_ceil = (front.ceil_height as i32) << 16;
-            let back_floor = (back.floor_height as i32) << 16;
-            let back_ceil = (back.ceil_height as i32) << 16;
+            let front_floor = front.floor_height.raw();
+            let front_ceil = front.ceil_height.raw();
+            let back_floor = back.floor_height.raw();
+            let back_ceil = back.ceil_height.raw();
 
             // No wall to block sight with (identical opening)?
             if front_floor == back_floor && front_ceil == back_ceil {
@@ -648,8 +648,8 @@ mod tests {
     /// Build a default sector (floor=0, ceil=128).
     fn make_sector(floor: i16, ceil: i16) -> Sector {
         Sector {
-            floor_height: floor,
-            ceil_height: ceil,
+            floor_height: doom_types::Fixed16_16::from_int(i32::from(floor)),
+            ceil_height: doom_types::Fixed16_16::from_int(i32::from(ceil)),
             floor_flat: *b"FLAT1\0\0\0",
             ceil_flat: *b"FLAT2\0\0\0",
             light_level: 192,

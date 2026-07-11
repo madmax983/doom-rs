@@ -18,6 +18,7 @@
 //! | REJECT    | ceil(N²/8)  |
 //! | BLOCKMAP  | variable    |
 
+use doom_types::Fixed16_16;
 use thiserror::Error;
 
 /// Errors from map-lump parsing.
@@ -487,21 +488,23 @@ impl Node {
 /// ## Examples
 /// ```
 /// use doom_map::lumps::Sector;
+/// use doom_types::Fixed16_16;
 ///
 /// let sector = Sector {
-///     floor_height: 0, ceil_height: 128,
+///     floor_height: Fixed16_16::from_int(0), ceil_height: Fixed16_16::from_int(128),
 ///     floor_flat: *b"FLOOR4_8",
 ///     ceil_flat: *b"CEIL3_5\x00",
 ///     light_level: 144, special: 0, tag: 0,
 /// };
-/// assert_eq!(sector.floor_height, 0);
+/// assert_eq!(sector.floor_height, Fixed16_16::from_int(0));
 /// ```
 #[derive(Clone, Debug)]
 pub struct Sector {
-    /// Floor height in map units.
-    pub floor_height: i16,
-    /// Ceiling height in map units.
-    pub ceil_height: i16,
+    /// Floor height in fixed-point map units (`Fixed16_16`; loaded as
+    /// `map_unit << FRACBITS`, always an integer multiple of `FIXED_ONE`).
+    pub floor_height: Fixed16_16,
+    /// Ceiling height in fixed-point map units (`Fixed16_16`).
+    pub ceil_height: Fixed16_16,
     /// Floor flat texture name.
     pub floor_flat: [u8; 8],
     /// Ceiling flat texture name.
@@ -519,8 +522,8 @@ impl Sector {
 
     fn from_bytes(b: &[u8]) -> Self {
         Self {
-            floor_height: i16::from_le_bytes([b[0], b[1]]),
-            ceil_height: i16::from_le_bytes([b[2], b[3]]),
+            floor_height: Fixed16_16::from_int(i16::from_le_bytes([b[0], b[1]]) as i32),
+            ceil_height: Fixed16_16::from_int(i16::from_le_bytes([b[2], b[3]]) as i32),
             floor_flat: b[4..12].try_into().unwrap(),
             ceil_flat: b[12..20].try_into().unwrap(),
             light_level: i16::from_le_bytes([b[20], b[21]]),

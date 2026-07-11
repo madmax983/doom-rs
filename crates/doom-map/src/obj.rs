@@ -56,8 +56,8 @@ use crate::lumps::SIDEDEF_NONE;
 ///         },
 ///     ],
 ///     sectors: vec![Sector {
-///         floor_height: 0,
-///         ceil_height: 128,
+///         floor_height: doom_types::Fixed16_16::from_int(0),
+///         ceil_height: doom_types::Fixed16_16::from_int(128),
 ///         floor_flat: *b"FLAT1\0\0\0",
 ///         ceil_flat: *b"FLAT2\0\0\0",
 ///         light_level: 192,
@@ -121,6 +121,8 @@ pub fn export_map_to_obj(level: &Level) -> String {
 
             // Doom coords: X is East/West, Y is North/South.
             // 3D coords: X = X, Y = Up (Doom Z), Z = -Doom Y
+            let z_bottom = z_bottom.to_int();
+            let z_top = z_top.to_int();
             obj.push_str(&format!("v {} {} {}\n", v1.x, z_bottom, -v1.y));
             obj.push_str(&format!("v {} {} {}\n", v2.x, z_bottom, -v2.y));
             obj.push_str(&format!("v {} {} {}\n", v2.x, z_top, -v2.y));
@@ -181,8 +183,8 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,

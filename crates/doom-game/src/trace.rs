@@ -6,6 +6,7 @@
 //! Port of Doom's `P_PathTraverse` / `P_AimLineAttack` ray-casting logic.
 
 use doom_map::Level;
+use doom_types::Fixed16_16;
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -120,7 +121,10 @@ pub fn ray_linedef_intersection(
 /// - `open_top` = min of front and back sector ceiling heights
 ///
 /// Returns `None` for one-sided lines (left sidedef is `0xFFFF`).
-pub fn line_opening(level: &Level, linedef: &doom_map::Linedef) -> Option<(i32, i32)> {
+pub fn line_opening(
+    level: &Level,
+    linedef: &doom_map::Linedef,
+) -> Option<(Fixed16_16, Fixed16_16)> {
     if linedef.left_sidedef == doom_map::SIDEDEF_NONE {
         return None;
     }
@@ -131,8 +135,8 @@ pub fn line_opening(level: &Level, linedef: &doom_map::Linedef) -> Option<(i32, 
     let front = level.sectors.get(right_sd.sector as usize)?;
     let back = level.sectors.get(left_sd.sector as usize)?;
 
-    let open_bottom = front.floor_height.max(back.floor_height) as i32;
-    let open_top = front.ceil_height.min(back.ceil_height) as i32;
+    let open_bottom = front.floor_height.max(back.floor_height);
+    let open_top = front.ceil_height.min(back.ceil_height);
 
     Some((open_bottom, open_top))
 }
@@ -650,8 +654,8 @@ mod tests {
     /// Make a single sector with floor=0, ceil=128.
     fn make_sector(floor: i16, ceil: i16) -> doom_map::Sector {
         doom_map::Sector {
-            floor_height: floor,
-            ceil_height: ceil,
+            floor_height: doom_types::Fixed16_16::from_int(i32::from(floor)),
+            ceil_height: doom_types::Fixed16_16::from_int(i32::from(ceil)),
             floor_flat: *b"FLAT1\0\0\0",
             ceil_flat: *b"FLAT2\0\0\0",
             light_level: 192,
@@ -853,8 +857,8 @@ mod tests {
         let opening = line_opening(&level, &ld);
         assert!(opening.is_some());
         let (bottom, top) = opening.expect("value must exist in test");
-        assert_eq!(bottom, 0, "same floor heights -> bottom = 0");
-        assert_eq!(top, 128, "same ceil heights -> top = 128");
+        assert_eq!(bottom, doom_types::Fixed16_16::from_int(0), "same floor heights -> bottom = 0");
+        assert_eq!(top, doom_types::Fixed16_16::from_int(128), "same ceil heights -> top = 128");
     }
 
     #[test]
@@ -881,8 +885,8 @@ mod tests {
         let opening = line_opening(&level, &ld);
         assert!(opening.is_some());
         let (bottom, top) = opening.expect("value must exist in test");
-        assert_eq!(bottom, 32, "open_bottom = max(0, 32) = 32");
-        assert_eq!(top, 128, "open_top = min(128, 128) = 128");
+        assert_eq!(bottom, doom_types::Fixed16_16::from_int(32), "open_bottom = max(0, 32) = 32");
+        assert_eq!(top, doom_types::Fixed16_16::from_int(128), "open_top = min(128, 128) = 128");
     }
 
     #[test]
@@ -910,8 +914,8 @@ mod tests {
         let opening = line_opening(&level, &ld);
         assert!(opening.is_some());
         let (bottom, top) = opening.expect("value must exist in test");
-        assert_eq!(bottom, 100);
-        assert_eq!(top, 100);
+        assert_eq!(bottom, doom_types::Fixed16_16::from_int(100));
+        assert_eq!(top, doom_types::Fixed16_16::from_int(100));
         assert!(top <= bottom, "gap is zero — should block");
     }
 

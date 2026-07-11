@@ -540,15 +540,15 @@ fn line_open(level: &Level, ld: &doom_map::Linedef) -> Option<LineOpen> {
         .sidedefs
         .get(ld.right_sidedef as usize)
         .and_then(|sd| level.sectors.get(sd.sector as usize))?;
-    let front_floor = i32::from(front_sec.floor_height) << 16;
-    let front_ceil = i32::from(front_sec.ceil_height) << 16;
+    let front_floor = front_sec.floor_height.raw();
+    let front_ceil = front_sec.ceil_height.raw();
 
     let back = if ld.left_sidedef != doom_map::SIDEDEF_NONE {
         level
             .sidedefs
             .get(ld.left_sidedef as usize)
             .and_then(|sd| level.sectors.get(sd.sector as usize))
-            .map(|s| (i32::from(s.floor_height) << 16, i32::from(s.ceil_height) << 16))
+            .map(|s| (s.floor_height.raw(), s.ceil_height.raw()))
     } else {
         None
     };
@@ -1091,7 +1091,7 @@ pub fn p_line_attack(
                 if let Some(front) = front_sec
                     && is_sky_flat(&front.ceil_flat)
                 {
-                    if z > (i32::from(front.ceil_height) << 16) {
+                    if z > front.ceil_height.raw() {
                         return None;
                     }
                     let back_sky = (ld.left_sidedef != doom_map::SIDEDEF_NONE)
@@ -1357,8 +1357,8 @@ mod tests {
             ssectors: vec![],
             nodes: vec![],
             sectors: vec![Sector {
-                floor_height: 0,
-                ceil_height: 256,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(256),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -2125,8 +2125,8 @@ mod tests {
             left_sidedef: SIDEDEF_NONE,
         }];
         let secs = vec![Sector {
-            floor_height: 0,
-            ceil_height: 128,
+            floor_height: doom_types::Fixed16_16::from_int(0),
+            ceil_height: doom_types::Fixed16_16::from_int(128),
             floor_flat: *b"FLAT1\0\0\0",
             ceil_flat: *b"FLAT2\0\0\0",
             light_level: 192,
@@ -2709,8 +2709,8 @@ mod tests {
             first_seg: 0,
         }];
         let secs = vec![Sector {
-            floor_height: 0,
-            ceil_height: 128,
+            floor_height: doom_types::Fixed16_16::from_int(0),
+            ceil_height: doom_types::Fixed16_16::from_int(128),
             floor_flat: *b"FLAT1\0\0\0",
             ceil_flat: *b"FLAT2\0\0\0",
             light_level: 192,

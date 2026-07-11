@@ -517,11 +517,11 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
     if let Some(sec_idx) = player_sector_index(level, player_x, player_y)
         && let Some(sec) = level.sectors.get(sec_idx)
     {
-        view_z = sec.floor_height as i32 + player_view_height;
+        view_z = sec.floor_height.to_int() + player_view_height;
         player_ceil_flat = sec.ceil_flat;
         player_floor_flat = sec.floor_flat;
-        player_ceil_h = sec.ceil_height as i32;
-        player_floor_h = sec.floor_height as i32;
+        player_ceil_h = sec.ceil_height.to_int();
+        player_floor_h = sec.floor_height.to_int();
         player_light = ((sec.light_level as u32).min(255) as u8).saturating_add(extra_light_bonus);
     }
 
@@ -654,8 +654,8 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
             None => continue,
         };
 
-        let floor_h = sector.floor_height as i32;
-        let ceil_h = sector.ceil_height as i32;
+        let floor_h = sector.floor_height.to_int();
+        let ceil_h = sector.ceil_height.to_int();
         let sector_light =
             ((sector.light_level as u32).min(255) as u8).saturating_add(extra_light_bonus);
 
@@ -775,8 +775,8 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
                 // Compute screen-space positions of the back sector's ceiling/floor
                 // directly against camera height, then clamp to the front wall span.
                 let (screen_back_ceil, screen_back_floor) = if let Some(bs) = back_sector {
-                    let bc = bs.ceil_height as i32;
-                    let bf = bs.floor_height as i32;
+                    let bc = bs.ceil_height.to_int();
+                    let bf = bs.floor_height.to_int();
                     let mut sb_ceil = project_wall_y(bc - view_z, scale);
                     let mut sb_floor = project_wall_y(bf - view_z, scale);
                     if sb_ceil > sb_floor {
@@ -800,9 +800,9 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
                 let has_upper = upper_bot > w_top;
                 let has_lower = lower_top < w_bot;
                 let front_blocks_top =
-                    back_sector.is_some_and(|bs| (bs.ceil_height as i32) > ceil_h);
+                    back_sector.is_some_and(|bs| (bs.ceil_height.to_int()) > ceil_h);
                 let front_blocks_bottom =
-                    back_sector.is_some_and(|bs| (bs.floor_height as i32) < floor_h);
+                    back_sector.is_some_and(|bs| (bs.floor_height.to_int()) < floor_h);
                 let portal_top = if has_upper {
                     upper_bot.clamp(0, SCREEN_H as i32 - 1)
                 } else {
@@ -815,12 +815,12 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
                 };
                 if has_portal_opening {
                     let top_silhouette_height = if has_upper {
-                        back_sector.map_or(ceil_h as f32, |bs| bs.ceil_height as f32)
+                        back_sector.map_or(ceil_h as f32, |bs| bs.ceil_height.to_int() as f32)
                     } else {
                         ceil_h as f32
                     };
                     let bottom_silhouette_height = if has_lower {
-                        back_sector.map_or(floor_h as f32, |bs| bs.floor_height as f32)
+                        back_sector.map_or(floor_h as f32, |bs| bs.floor_height.to_int() as f32)
                     } else {
                         floor_h as f32
                     };
@@ -975,7 +975,7 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
                             let texturemid = if linedef.flags & FLAG_DONTPEGTOP != 0 {
                                 ceil_h + i32::from(sidedef.y_offset) - view_z
                             } else {
-                                back_sector.map_or(ceil_h, |bs| bs.ceil_height as i32)
+                                back_sector.map_or(ceil_h, |bs| bs.ceil_height.to_int())
                                     + tex.logical_height as i32
                                     + i32::from(sidedef.y_offset)
                                     - view_z
@@ -1046,7 +1046,7 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
                             let texturemid = if linedef.flags & FLAG_DONTPEGBOTTOM != 0 {
                                 ceil_h + i32::from(sidedef.y_offset) - view_z
                             } else {
-                                back_sector.map_or(floor_h, |bs| bs.floor_height as i32)
+                                back_sector.map_or(floor_h, |bs| bs.floor_height.to_int())
                                     + i32::from(sidedef.y_offset)
                                     - view_z
                             };
@@ -1113,12 +1113,12 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
                         let tex_h = tex.height;
                         let fracstep = wall_fracstep(scale);
                         let texturemid = if linedef.flags & FLAG_DONTPEGBOTTOM != 0 {
-                            floor_h.max(back_sector.map_or(floor_h, |bs| bs.floor_height as i32))
+                            floor_h.max(back_sector.map_or(floor_h, |bs| bs.floor_height.to_int()))
                                 + tex.logical_height as i32
                                 + i32::from(sidedef.y_offset)
                                 - view_z
                         } else {
-                            ceil_h.min(back_sector.map_or(ceil_h, |bs| bs.ceil_height as i32))
+                            ceil_h.min(back_sector.map_or(ceil_h, |bs| bs.ceil_height.to_int()))
                                 + i32::from(sidedef.y_offset)
                                 - view_z
                         };
@@ -1448,8 +1448,8 @@ mod tests {
 
         let vertexes = vec![Vertex { x: 0, y: 128 }, Vertex { x: 128, y: 128 }];
         let sectors = vec![Sector {
-            floor_height: 0,
-            ceil_height: 128,
+            floor_height: doom_types::Fixed16_16::from_int(0),
+            ceil_height: doom_types::Fixed16_16::from_int(128),
             floor_flat: *b"FLAT1\0\0\0",
             ceil_flat: *b"FLAT2\0\0\0",
             light_level: 192,
@@ -1540,8 +1540,8 @@ mod tests {
         let sectors = vec![
             // Sector 0 — front (player stands here)
             Sector {
-                floor_height: front_floor,
-                ceil_height: front_ceil,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(front_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(i32::from(front_ceil)),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1550,8 +1550,8 @@ mod tests {
             },
             // Sector 1 — back (player looks into this)
             Sector {
-                floor_height: back_floor,
-                ceil_height: back_ceil,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(back_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(i32::from(back_ceil)),
                 floor_flat: *b"FLAT3\0\0\0",
                 ceil_flat: *b"FLAT4\0\0\0",
                 light_level: 192,
@@ -1648,8 +1648,8 @@ mod tests {
         ];
         let sectors = vec![
             Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1657,8 +1657,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: 64,
-                ceil_height: 192,
+                floor_height: doom_types::Fixed16_16::from_int(64),
+                ceil_height: doom_types::Fixed16_16::from_int(192),
                 floor_flat: *b"FLAT3\0\0\0",
                 ceil_flat: *b"FLAT4\0\0\0",
                 light_level: 192,
@@ -1819,8 +1819,8 @@ mod tests {
 
         let sectors = vec![
             Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1828,8 +1828,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: 32,
-                ceil_height: 96,
+                floor_height: doom_types::Fixed16_16::from_int(32),
+                ceil_height: doom_types::Fixed16_16::from_int(96),
                 floor_flat: *b"FLAT3\0\0\0",
                 ceil_flat: *b"FLAT4\0\0\0",
                 light_level: 192,
@@ -1958,8 +1958,8 @@ mod tests {
         let sectors = vec![
             // Front sector (player side).
             Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -1968,8 +1968,8 @@ mod tests {
             },
             // Back sector visible through portal opening.
             Sector {
-                floor_height: 56,
-                ceil_height: 72,
+                floor_height: doom_types::Fixed16_16::from_int(56),
+                ceil_height: doom_types::Fixed16_16::from_int(72),
                 floor_flat: *b"FLAT3\0\0\0",
                 ceil_flat: *b"FLAT4\0\0\0",
                 light_level: 192,
@@ -2108,8 +2108,8 @@ mod tests {
         ];
         let sectors = vec![
             Sector {
-                floor_height: front_floor,
-                ceil_height: front_ceil,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(front_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(i32::from(front_ceil)),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -2117,8 +2117,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: back_floor,
-                ceil_height: back_ceil,
+                floor_height: doom_types::Fixed16_16::from_int(i32::from(back_floor)),
+                ceil_height: doom_types::Fixed16_16::from_int(i32::from(back_ceil)),
                 floor_flat: *b"FLAT3\0\0\0",
                 ceil_flat: *b"FLAT4\0\0\0",
                 light_level: 192,
@@ -2205,8 +2205,8 @@ mod tests {
 
         let vertexes = vec![Vertex { x: -192, y: 128 }, Vertex { x: 192, y: 512 }];
         let sectors = vec![Sector {
-            floor_height: 0,
-            ceil_height: 128,
+            floor_height: doom_types::Fixed16_16::from_int(0),
+            ceil_height: doom_types::Fixed16_16::from_int(128),
             floor_flat: *b"FLAT1\0\0\0",
             ceil_flat: *b"FLAT2\0\0\0",
             light_level: 192,
@@ -2297,8 +2297,8 @@ mod tests {
 
         let sectors = vec![
             Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -2306,8 +2306,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: 56,
-                ceil_height: 72,
+                floor_height: doom_types::Fixed16_16::from_int(56),
+                ceil_height: doom_types::Fixed16_16::from_int(72),
                 floor_flat: *b"FLAT3\0\0\0",
                 ceil_flat: *b"FLAT4\0\0\0",
                 light_level: 192,
@@ -2315,8 +2315,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT5\0\0\0",
                 ceil_flat: *b"FLAT6\0\0\0",
                 light_level: 192,
@@ -2324,8 +2324,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: 56,
-                ceil_height: 72,
+                floor_height: doom_types::Fixed16_16::from_int(56),
+                ceil_height: doom_types::Fixed16_16::from_int(72),
                 floor_flat: *b"FLAT7\0\0\0",
                 ceil_flat: *b"FLAT8\0\0\0",
                 light_level: 192,
@@ -2466,8 +2466,8 @@ mod tests {
 
         let sectors = vec![
             Sector {
-                floor_height: 0,
-                ceil_height: 96,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(96),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: 192,
@@ -2475,8 +2475,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT3\0\0\0",
                 ceil_flat: *b"FLAT4\0\0\0",
                 light_level: 192,
@@ -2484,8 +2484,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: 0,
-                ceil_height: 72,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(72),
                 floor_flat: *b"FLAT5\0\0\0",
                 ceil_flat: *b"FLAT6\0\0\0",
                 light_level: 192,
@@ -2493,8 +2493,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT7\0\0\0",
                 ceil_flat: *b"FLAT8\0\0\0",
                 light_level: 192,
@@ -4957,8 +4957,8 @@ mod tests {
 
         let vertexes = vec![Vertex { x: 0, y: 128 }, Vertex { x: 128, y: 128 }];
         let sectors = vec![Sector {
-            floor_height: 0,
-            ceil_height: 128,
+            floor_height: doom_types::Fixed16_16::from_int(0),
+            ceil_height: doom_types::Fixed16_16::from_int(128),
             floor_flat: *b"FLAT1\0\0\0",
             ceil_flat: *b"FLAT2\0\0\0",
             light_level: light,
@@ -5035,8 +5035,8 @@ mod tests {
         let vertexes = vec![Vertex { x: -64, y: 128 }, Vertex { x: 64, y: 128 }];
         let sectors = vec![
             Sector {
-                floor_height: 0,
-                ceil_height: 128,
+                floor_height: doom_types::Fixed16_16::from_int(0),
+                ceil_height: doom_types::Fixed16_16::from_int(128),
                 floor_flat: *b"FLAT1\0\0\0",
                 ceil_flat: *b"FLAT2\0\0\0",
                 light_level: front_light,
@@ -5044,8 +5044,8 @@ mod tests {
                 tag: 0,
             },
             Sector {
-                floor_height: 32,
-                ceil_height: 96,
+                floor_height: doom_types::Fixed16_16::from_int(32),
+                ceil_height: doom_types::Fixed16_16::from_int(96),
                 floor_flat: *b"FLAT3\0\0\0",
                 ceil_flat: *b"FLAT4\0\0\0",
                 light_level: back_light,

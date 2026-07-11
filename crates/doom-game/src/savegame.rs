@@ -34,7 +34,10 @@ pub const SAVE_MAGIC: [u8; 4] = *b"DRS1";
 pub const MAX_SAVE_SLOTS: usize = 6;
 
 /// Current save format version.
-const SAVE_VERSION: u32 = 3;
+///
+/// Bumped to 4 for the fixed-point plane-mover conversion: mover height/speed
+/// fields are now serialized as raw `i32` fixed-point bits (was `i16` map units).
+const SAVE_VERSION: u32 = 4;
 
 /// Supported binary savegame formats.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -593,26 +596,26 @@ fn read_player_state(r: &mut ReadCursor<'_>) -> Result<PlayerState, SaveError> {
 
 fn write_door_mover(w: &mut WriteCursor, d: &DoorMover) {
     w.write_u32(d.sector as u32);
-    w.write_i16(d.target_height);
-    w.write_i16(d.current_height);
-    w.write_i16(d.speed);
+    w.write_i32(d.target_height.raw());
+    w.write_i32(d.current_height.raw());
+    w.write_i32(d.speed.raw());
     w.write_bool(d.is_ceiling);
     w.write_i32(d.wait_tics);
     w.write_i32(d.countdown);
-    w.write_i16(d.reopen_height);
+    w.write_i32(d.reopen_height.raw());
     w.write_i32(d.reopen_countdown);
 }
 
 fn read_door_mover(r: &mut ReadCursor<'_>) -> Result<DoorMover, SaveError> {
     Ok(DoorMover {
         sector: r.read_u32()? as usize,
-        target_height: r.read_i16()?,
-        current_height: r.read_i16()?,
-        speed: r.read_i16()?,
+        target_height: Fixed16_16::from_raw(r.read_i32()?),
+        current_height: Fixed16_16::from_raw(r.read_i32()?),
+        speed: Fixed16_16::from_raw(r.read_i32()?),
         is_ceiling: r.read_bool()?,
         wait_tics: r.read_i32()?,
         countdown: r.read_i32()?,
-        reopen_height: r.read_i16()?,
+        reopen_height: Fixed16_16::from_raw(r.read_i32()?),
         reopen_countdown: r.read_i32()?,
     })
 }
@@ -647,10 +650,10 @@ fn read_ceiling_type(r: &mut ReadCursor<'_>) -> Result<CeilingType, SaveError> {
 
 fn write_ceiling_mover(w: &mut WriteCursor, c: &CeilingMover) {
     w.write_u32(c.sector_index as u32);
-    w.write_i16(c.top_height);
-    w.write_i16(c.bottom_height);
-    w.write_i16(c.speed);
-    w.write_i16(c.normal_speed);
+    w.write_i32(c.top_height.raw());
+    w.write_i32(c.bottom_height.raw());
+    w.write_i32(c.speed.raw());
+    w.write_i32(c.normal_speed.raw());
     w.write_i32(c.crush_damage);
     write_move_direction(w, c.direction);
     w.write_bool(c.silent);
@@ -662,10 +665,10 @@ fn write_ceiling_mover(w: &mut WriteCursor, c: &CeilingMover) {
 fn read_ceiling_mover(r: &mut ReadCursor<'_>) -> Result<CeilingMover, SaveError> {
     Ok(CeilingMover {
         sector_index: r.read_u32()? as usize,
-        top_height: r.read_i16()?,
-        bottom_height: r.read_i16()?,
-        speed: r.read_i16()?,
-        normal_speed: r.read_i16()?,
+        top_height: Fixed16_16::from_raw(r.read_i32()?),
+        bottom_height: Fixed16_16::from_raw(r.read_i32()?),
+        speed: Fixed16_16::from_raw(r.read_i32()?),
+        normal_speed: Fixed16_16::from_raw(r.read_i32()?),
         crush_damage: r.read_i32()?,
         direction: read_move_direction(r)?,
         silent: r.read_bool()?,
@@ -685,11 +688,11 @@ fn read_floor_type(r: &mut ReadCursor<'_>) -> Result<FloorType, SaveError> {
 
 fn write_floor_mover(w: &mut WriteCursor, fm: &FloorMover) {
     w.write_u32(fm.sector_index as u32);
-    w.write_i16(fm.target_height);
-    w.write_i16(fm.speed);
+    w.write_i32(fm.target_height.raw());
+    w.write_i32(fm.speed.raw());
     write_move_direction(w, fm.direction);
     w.write_i32(fm.wait_tics);
-    w.write_i16(fm.return_height);
+    w.write_i32(fm.return_height.raw());
     w.write_bool(fm.waiting);
     w.write_i32(fm.wait_remaining);
     w.write_bool(fm.crush == crate::state::CrushBehavior::Crush);
@@ -700,11 +703,11 @@ fn write_floor_mover(w: &mut WriteCursor, fm: &FloorMover) {
 fn read_floor_mover(r: &mut ReadCursor<'_>) -> Result<FloorMover, SaveError> {
     Ok(FloorMover {
         sector_index: r.read_u32()? as usize,
-        target_height: r.read_i16()?,
-        speed: r.read_i16()?,
+        target_height: Fixed16_16::from_raw(r.read_i32()?),
+        speed: Fixed16_16::from_raw(r.read_i32()?),
         direction: read_move_direction(r)?,
         wait_tics: r.read_i32()?,
-        return_height: r.read_i16()?,
+        return_height: Fixed16_16::from_raw(r.read_i32()?),
         waiting: r.read_bool()?,
         wait_remaining: r.read_i32()?,
         crush: if r.read_bool()? {
@@ -727,9 +730,9 @@ fn read_platform_status(r: &mut ReadCursor<'_>) -> Result<PlatformStatus, SaveEr
 
 fn write_perpetual_platform(w: &mut WriteCursor, p: &PerpetualPlatform) {
     w.write_u32(p.sector_index as u32);
-    w.write_i16(p.low_height);
-    w.write_i16(p.high_height);
-    w.write_i16(p.speed);
+    w.write_i32(p.low_height.raw());
+    w.write_i32(p.high_height.raw());
+    w.write_i32(p.speed.raw());
     w.write_i32(p.wait_tics);
     w.write_i32(p.wait_remaining);
     write_platform_status(w, p.status);
@@ -739,9 +742,9 @@ fn write_perpetual_platform(w: &mut WriteCursor, p: &PerpetualPlatform) {
 fn read_perpetual_platform(r: &mut ReadCursor<'_>) -> Result<PerpetualPlatform, SaveError> {
     Ok(PerpetualPlatform {
         sector_index: r.read_u32()? as usize,
-        low_height: r.read_i16()?,
-        high_height: r.read_i16()?,
-        speed: r.read_i16()?,
+        low_height: Fixed16_16::from_raw(r.read_i32()?),
+        high_height: Fixed16_16::from_raw(r.read_i32()?),
+        speed: Fixed16_16::from_raw(r.read_i32()?),
         wait_tics: r.read_i32()?,
         wait_remaining: r.read_i32()?,
         status: read_platform_status(r)?,
@@ -759,9 +762,9 @@ fn read_lift_status(r: &mut ReadCursor<'_>) -> Result<LiftStatus, SaveError> {
 
 fn write_lift_mover(w: &mut WriteCursor, lm: &LiftMover) {
     w.write_u32(lm.sector_index as u32);
-    w.write_i16(lm.low_height);
-    w.write_i16(lm.high_height);
-    w.write_i16(lm.speed);
+    w.write_i32(lm.low_height.raw());
+    w.write_i32(lm.high_height.raw());
+    w.write_i32(lm.speed.raw());
     w.write_i32(lm.wait_tics);
     w.write_i32(lm.wait_remaining);
     write_lift_status(w, lm.status);
@@ -770,9 +773,9 @@ fn write_lift_mover(w: &mut WriteCursor, lm: &LiftMover) {
 fn read_lift_mover(r: &mut ReadCursor<'_>) -> Result<LiftMover, SaveError> {
     Ok(LiftMover {
         sector_index: r.read_u32()? as usize,
-        low_height: r.read_i16()?,
-        high_height: r.read_i16()?,
-        speed: r.read_i16()?,
+        low_height: Fixed16_16::from_raw(r.read_i32()?),
+        high_height: Fixed16_16::from_raw(r.read_i32()?),
+        speed: Fixed16_16::from_raw(r.read_i32()?),
         wait_tics: r.read_i32()?,
         wait_remaining: r.read_i32()?,
         status: read_lift_status(r)?,
@@ -1590,33 +1593,33 @@ mod tests {
         let mut gs = test_game_state();
         gs.movers.active_doors.push(DoorMover {
             sector: 5,
-            target_height: 128,
-            current_height: 64,
-            speed: 2,
+            target_height: doom_types::Fixed16_16::from_int(128),
+            current_height: doom_types::Fixed16_16::from_int(64),
+            speed: doom_types::Fixed16_16::from_int(2),
             is_ceiling: true,
             wait_tics: 120,
             countdown: 60,
-            reopen_height: 0,
+            reopen_height: doom_types::Fixed16_16::from_int(0),
             reopen_countdown: -1,
         });
         gs.movers.active_doors.push(DoorMover {
             sector: 10,
-            target_height: 0,
-            current_height: 100,
-            speed: -2,
+            target_height: doom_types::Fixed16_16::from_int(0),
+            current_height: doom_types::Fixed16_16::from_int(100),
+            speed: doom_types::Fixed16_16::from_int(-2),
             is_ceiling: true,
             wait_tics: 0,
             countdown: -1,
-            reopen_height: 0,
+            reopen_height: doom_types::Fixed16_16::from_int(0),
             reopen_countdown: -1,
         });
         let data = save_game(&gs, &test_level_name(), 2, "doors test");
         let loaded = load_game(&data).expect("load must succeed");
         assert_eq!(loaded.state.movers.active_doors.len(), 2);
         assert_eq!(loaded.state.movers.active_doors[0].sector, 5);
-        assert_eq!(loaded.state.movers.active_doors[0].target_height, 128);
+        assert_eq!(loaded.state.movers.active_doors[0].target_height, doom_types::Fixed16_16::from_int(128));
         assert_eq!(loaded.state.movers.active_doors[1].sector, 10);
-        assert_eq!(loaded.state.movers.active_doors[1].speed, -2);
+        assert_eq!(loaded.state.movers.active_doors[1].speed, doom_types::Fixed16_16::from_int(-2));
     }
 
     // --- Test 17: Roundtrip with floor movers preserves count ---
@@ -1625,11 +1628,11 @@ mod tests {
         let mut gs = test_game_state();
         gs.movers.active_floors.push(FloorMover {
             sector_index: 3,
-            target_height: -64,
-            speed: 4,
+            target_height: doom_types::Fixed16_16::from_int(-64),
+            speed: doom_types::Fixed16_16::from_int(4),
             direction: MoveDirection::Down,
             wait_tics: 105,
-            return_height: 0,
+            return_height: doom_types::Fixed16_16::from_int(0),
             waiting: false,
             wait_remaining: 0,
             crush: crate::state::CrushBehavior::Crush,
@@ -1640,7 +1643,7 @@ mod tests {
         let loaded = load_game(&data).expect("load must succeed");
         assert_eq!(loaded.state.movers.active_floors.len(), 1);
         assert_eq!(loaded.state.movers.active_floors[0].sector_index, 3);
-        assert_eq!(loaded.state.movers.active_floors[0].target_height, -64);
+        assert_eq!(loaded.state.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(-64));
         assert_eq!(
             loaded.state.movers.active_floors[0].direction,
             MoveDirection::Down
@@ -1802,10 +1805,10 @@ mod tests {
         let mut gs = test_game_state();
         gs.movers.active_ceilings.push(CeilingMover {
             sector_index: 7,
-            top_height: 128,
-            bottom_height: 8,
-            speed: 1,
-            normal_speed: 1,
+            top_height: doom_types::Fixed16_16::from_int(128),
+            bottom_height: doom_types::Fixed16_16::from_int(8),
+            speed: doom_types::Fixed16_16::from_int(1),
+            normal_speed: doom_types::Fixed16_16::from_int(1),
             crush_damage: 10,
             direction: MoveDirection::Down,
             silent: false,
@@ -2050,7 +2053,13 @@ mod tests {
         let gs = test_game_state();
         let mut data = save_game(&gs, &test_level_name(), 2, "havoc");
 
-        for i in 0..(data.len() - 4) {
+        // Skip the fixed header (magic + version + 8-byte header level name) so
+        // the scan targets the length-prefixed body level-name string rather
+        // than the header. Since SAVE_VERSION==4, the version field's bytes are
+        // `04 00 00 00` immediately followed by the header's "E1M1", which would
+        // otherwise be corrupted first and trip a BadVersion error instead.
+        let header_skip = SAVE_MAGIC.len() + 4 + 8;
+        for i in header_skip..(data.len() - 4) {
             // Find the string length
             if data[i] == 4 && data[i + 1] == 0 && data[i + 2] == 0 && data[i + 3] == 0 {
                 // Confirm it's followed by E1M1
