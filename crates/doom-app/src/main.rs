@@ -278,6 +278,14 @@ struct Args {
     /// captured during demo replay (used with --verify-demo).
     #[arg(long)]
     verify_rng_trace: Option<std::path::PathBuf>,
+
+    /// Path to write a per-tic FULL-ACTOR-STATE dump CSV
+    /// (`tic,ord,sprite,frame,x,y,z,momx,momy,momz,angle,health,tics`) — one row
+    /// per live mobj, in thinker (creation/generation) order — captured during
+    /// demo replay (used with --verify-demo). Byte-diffable against the
+    /// instrumented oracle's `$CHOCO_ACTORS_CSV` dump. Off (zero-cost) unless set.
+    #[arg(long)]
+    verify_actors: Option<std::path::PathBuf>,
 }
 
 // ---------------------------------------------------------------------------
@@ -2274,6 +2282,58 @@ struct VerifyRun {
     /// Optional RNG call-trace CSV (`leveltime,seq,retval,caller`), populated
     /// only when `--verify-rng-trace` requested it for this run.
     rng_trace_csv: Option<String>,
+    /// Optional full-actor-state dump CSV, populated only when `--verify-actors`
+    /// requested it for this run.
+    actors_csv: Option<String>,
+}
+
+/// Header line for the full-actor-state dump, shared byte-for-byte with the
+/// instrumented oracle's `$CHOCO_ACTORS_CSV` output.
+const VERIFY_ACTORS_HEADER: &str =
+    "tic,ord,sprite,frame,x,y,z,momx,momy,momz,angle,health,tics";
+
+/// Walk every live actor in vanilla thinker (creation) order and append one CSV
+/// row per mobj to `out`. Ordering mirrors `tic::actors_by_generation`: the
+/// slab's monotonic `generation` counter is each actor's global creation index,
+/// so sorting live handles by ascending generation reproduces vanilla's
+/// `P_AddThinker` tail-append thinker-list order. Fields are raw fixed-point /
+/// raw ints (no truncation); `sprite` is the 4-char `sprnames[]` name and
+/// `frame` strips the fullbright bit — both cross-comparable with the oracle.
+fn dump_actors_for_tic(out: &mut String, tic: usize, gs: &doom_game::GameState) {
+    use std::fmt::Write as _;
+    let slab = &gs.mobjslab;
+    let mut handles: Vec<doom_game::MobjHandle> = (0..slab.slot_count())
+        .filter_map(|i| slab.handle_at(i))
+        .collect();
+    handles.sort_unstable_by_key(|h| h.generation);
+    for (ord, h) in handles.iter().enumerate() {
+        let Some(mo) = slab.get(*h) else { continue };
+        // Derive sprite/frame from the actor's current state (vanilla sets
+        // mobj->sprite/frame from the state on every P_SetMobjState).
+        let (sprite, frame) = match doom_game::states::STATES.get(mo.state.0 as usize) {
+            Some(st) => {
+                let name = doom_game::states::sprite_names::SPRITE_NAMES
+                    .get(st.sprite as usize)
+                    .copied()
+                    .unwrap_or("NONE");
+                (name, (st.frame & 0x7f) as i32)
+            }
+            None => ("NONE", 0),
+        };
+        let _ = writeln!(
+            out,
+            "{tic},{ord},{sprite},{frame},{x},{y},{z},{momx},{momy},{momz},{angle},{health},{tics}",
+            x = mo.x.raw(),
+            y = mo.y.raw(),
+            z = mo.z.raw(),
+            momx = mo.momx.raw(),
+            momy = mo.momy.raw(),
+            momz = mo.momz.raw(),
+            angle = mo.angle.raw(),
+            health = mo.health,
+            tics = mo.tics,
+        );
+    }
 }
 
 /// Header line shared byte-for-byte with the reference oracle.
@@ -2288,6 +2348,7 @@ fn verify_replay_once(
     header: &doom_demo::LmpHeader,
     demo_bytes: &[u8],
     rng_trace: bool,
+    actor_dump: bool,
 ) -> Result<VerifyRun> {
     if rng_trace {
         doom_game::rng_trace_enable();
@@ -2326,6 +2387,15 @@ fn verify_replay_once(
     csv.push_str(VERIFY_CSV_HEADER);
     csv.push('\n');
 
+    let mut actors_csv: Option<String> = if actor_dump {
+        let mut s = String::with_capacity(1 << 20);
+        s.push_str(VERIFY_ACTORS_HEADER);
+        s.push('\n');
+        Some(s)
+    } else {
+        None
+    };
+
     let mut i: usize = 0;
     let reason = loop {
         let Some(cmd) = player.next_tic() else {
@@ -2359,6 +2429,14 @@ fn verify_replay_once(
             csv,
             "{i},{rndindex},{px},{py},{pz},{angle},{health},{kills},{items},{secrets},{leveltime}"
         );
+
+        // Full-actor-state dump for this tic (same sampling point as the player
+        // CSV row above), if requested. `i` is the 0-based tic index == the
+        // oracle's `leveltime - 1`.
+        if let Some(ref mut acsv) = actors_csv {
+            dump_actors_for_tic(acsv, i, &gs);
+        }
+
         i += 1;
 
         // Stop once the level signals an exit (the row for the exiting tic has
@@ -2411,6 +2489,7 @@ fn verify_replay_once(
         } else {
             None
         },
+        actors_csv,
     })
 }
 
@@ -2459,10 +2538,11 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
     let runs = args.verify_runs.max(1);
     let mut results: Vec<VerifyRun> = Vec::with_capacity(runs as usize);
     for run_idx in 0..runs {
-        // Only trace the first run to avoid backtrace overhead on the rest.
+        // Only trace/dump the first run to avoid overhead on the rest.
         let trace = args.verify_rng_trace.is_some() && run_idx == 0;
+        let actor_dump = args.verify_actors.is_some() && run_idx == 0;
         results.push(verify_replay_once(
-            wad_stack, &warp_str, &header, &demo_bytes, trace,
+            wad_stack, &warp_str, &header, &demo_bytes, trace, actor_dump,
         )?);
     }
 
@@ -2472,6 +2552,15 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
                 format!("Could not write RNG trace to '{}'", trace_path.display())
             })?;
             println!("rng trace         : {}", trace_path.display());
+        }
+    }
+
+    if let Some(ref actors_path) = args.verify_actors {
+        if let Some(csv) = results[0].actors_csv.as_ref() {
+            std::fs::write(actors_path, csv.as_bytes()).with_context(|| {
+                format!("Could not write actor dump to '{}'", actors_path.display())
+            })?;
+            println!("actor dump        : {}", actors_path.display());
         }
     }
 

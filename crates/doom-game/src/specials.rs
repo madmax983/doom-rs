@@ -263,24 +263,35 @@ pub fn p_player_in_special_sector(gs: &mut GameState, level: &mut Level) {
     let on_period = (leveltime & 0x1f) == 0;
     let has_ironfeet = gs.player.powers[crate::player::powers::PW_IRONFEET] > 0;
 
+    // Vanilla `P_PlayerInSpecialSector` deals damaging-floor damage through
+    // `P_DamageMobj(player->mo, NULL, NULL, N)` — NOT a direct health deduction.
+    // P_DamageMobj *unconditionally* draws one `P_Random` for the pain check
+    // (`if (P_Random() < info->painchance) ...`; the player's painchance is 255),
+    // so every damaging-floor tick advances the shared playsim RNG by one draw.
+    // Deducting health directly (the old `damage_player` path) skipped that draw
+    // and desynced the stream from the first nukage tick onward (DEMO2: the 5%
+    // nukage tick at leveltime 1920 drew one fewer P_Random than vanilla).
+    let hurt = |gs: &mut GameState, amount: i32| {
+        crate::combat::damage_mobj_source(gs, handle, MobjHandle::NULL, MobjHandle::NULL, amount);
+    };
     match special {
         5 => {
             // HELLSLIME DAMAGE
             if !has_ironfeet && on_period {
-                gs.damage_player(10);
+                hurt(gs, 10);
             }
         }
         7 => {
             // NUKAGE DAMAGE
             if !has_ironfeet && on_period {
-                gs.damage_player(5);
+                hurt(gs, 5);
             }
         }
         16 | 4 => {
             // SUPER HELLSLIME / STROBE HURT.  `P_Random()` is only drawn when
             // ironfeet is active (short-circuit), exactly as in vanilla.
             if (!has_ironfeet || gs.p_random() < 5) && on_period {
-                gs.damage_player(20);
+                hurt(gs, 20);
             }
         }
         9 => {
@@ -291,7 +302,7 @@ pub fn p_player_in_special_sector(gs: &mut GameState, level: &mut Level) {
         11 => {
             // EXIT SUPER DAMAGE (God mode is not modeled).
             if on_period {
-                gs.damage_player(20);
+                hurt(gs, 20);
             }
             if let Some(mo) = gs.mobjslab.get(handle)
                 && mo.health <= 10
@@ -4175,6 +4186,9 @@ mod tests {
             Bam::ZERO,
         );
         mo.health = 100;
+        // The real player mobj is MF_SHOOTABLE; damaging-floor damage now routes
+        // through the vanilla `P_DamageMobj` path, which requires it.
+        mo.flags = crate::mobj::flags::MF_SHOOTABLE | crate::mobj::flags::MF_SOLID;
         mo.z = Fixed16_16::from_int(floor_height);
         gs.mobjslab.alloc(mo)
     }
@@ -6491,6 +6505,53 @@ mod tests {
         assert_eq!(
             mo.health, 95,
             "nukage (special 7) must deal 5 damage when the player rests on the floor"
+        );
+    }
+
+    /// Regression: vanilla `P_PlayerInSpecialSector` deals damaging-floor damage
+    /// via `P_DamageMobj(player->mo, NULL, NULL, N)`, which *unconditionally*
+    /// draws one `P_Random` for the pain check (`P_Random() < info->painchance`).
+    /// A damaging-floor tick must therefore advance the shared playsim RNG by
+    /// exactly one draw — deducting health directly (the old path) drew zero and
+    /// desynced the stream from the first nukage tick (DEMO2 leveltime 1920).
+    #[test]
+    fn damaging_floor_draws_one_painchance_random() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let mut level = make_damage_level(0, 7); // nukage: 5 damage
+
+        gs.stats.level_time = 32; // 32 & 0x1f == 0 -> damaging period
+        let before = gs.rng.index();
+        p_player_in_special_sector(&mut gs, &mut level);
+        assert_eq!(
+            gs.rng.index(),
+            before + 1,
+            "a damaging-floor tick must draw exactly one painchance P_Random"
+        );
+        assert_eq!(
+            gs.mobjslab.get(handle).expect("player mobj exists").health,
+            95,
+            "nukage still deals 5 damage after routing through P_DamageMobj"
+        );
+    }
+
+    /// The painchance draw is gated on the *damaging period* and the player
+    /// resting on the floor, exactly like the damage itself: no period, no draw.
+    #[test]
+    fn damaging_floor_no_random_off_period() {
+        let mut gs = GameState::new("TEST");
+        let handle = make_actor_at_z(&mut gs, 0);
+        gs.player = crate::player::PlayerState::pistol_start(handle);
+        let mut level = make_damage_level(0, 7);
+
+        gs.stats.level_time = 33; // 33 & 0x1f != 0 -> not a damaging period
+        let before = gs.rng.index();
+        p_player_in_special_sector(&mut gs, &mut level);
+        assert_eq!(
+            gs.rng.index(),
+            before,
+            "no damaging period -> no damage and no painchance draw"
         );
     }
 
