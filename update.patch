@@ -1,0 +1,117 @@
+--- a/crates/doom-game/src/player.rs
++++ b/crates/doom-game/src/player.rs
+@@ -1,9 +1,19 @@
+-//! Player state: health, ammo, armor, weapons, and power-ups.
+-//!
+-//! `PlayerState` is separate from the player's `Mobj` (which lives in the slab).
+-//! The `Mobj` handles physics/position; `PlayerState` handles inventory/status.
++//! The `PlayerState` chronicle: managing the mortal coil and arsenal of Doomguy.
+ //!
+-//! # Invariants (Verus-verifiable)
++//! In the architecture of the engine, the physical embodiment of the player—their mass,
++//! bounding box, velocity, and world position—is tracked by an entity in the [`crate::mobj::MobjSlab`].
++//! This module, however, handles everything *internal* to the player: their health,
++//! their armor, the contents of their backpack, and their active power-ups.
++//!
++//! Why split them? Because while a rocket shares the physical properties of an actor (it moves,
++//! it collides), it doesn't have an inventory or a pulse. `PlayerState` encapsulates the
++//! uniquely "human" elements of the simulation.
++//!
++//! # Invariants
++//!
++//! The following mathematical truths are enforced to ensure the simulation does not crash or corrupt:
++//!
+ //! - `health ≤ MAX_HEALTH (100)` at all times
+ //! - `ammo[i] ≤ MAX_AMMO[i]` for all i
+
+@@ -231,18 +241,45 @@
+
+     /// Apply `amount` points of damage (positive = hurt).
+     ///
+-    /// Health is clamped to `[-32768, MAX_HEALTH]` after the operation.
+-    /// Note: negative `amount` heals, but `heal()` is the preferred API.
++    /// # Edge Cases
++    /// Health is clamped to `[-32768, MAX_HEALTH]` after the operation to prevent integer
++    /// underflow from catastrophically reviving the player or breaking the HUD.
++    /// Note that passing a negative `amount` will heal the player, but [`PlayerState::heal`] is the preferred API for that.
++    ///
++    /// # Examples
++    /// ```
++    /// use doom_game::mobj::MobjHandle;
++    /// use doom_game::player::PlayerState;
++    ///
++    /// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
++    /// player.apply_damage(20);
++    /// assert_eq!(player.health(), 80);
++    /// ```
+     pub fn apply_damage(&mut self, amount: i32) {
+         self.health = self.health.saturating_sub(amount).clamp(-32768, MAX_HEALTH);
+     }
+
+     /// Heal the player by `amount`, capped at `MAX_HEALTH`.
+     ///
+     /// Has no effect if the player is already at or above `MAX_HEALTH`.
++    ///
++    /// # Examples
++    /// ```
++    /// use doom_game::mobj::MobjHandle;
++    /// use doom_game::player::PlayerState;
++    ///
++    /// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
++    /// player.apply_damage(50);
++    /// player.heal(20);
++    /// assert_eq!(player.health(), 70);
++    ///
++    /// // Healing stops at the natural cap (usually 100).
++    /// player.heal(500);
++    /// assert_eq!(player.health(), 100);
++    /// ```
+     pub fn heal(&mut self, amount: i32) {
+         if self.health < MAX_HEALTH {
+             self.health = self.health.saturating_add(amount).min(MAX_HEALTH);
+         }
+     }
+
+@@ -250,13 +287,41 @@
+     ///
+     /// Used for power-up items (Soulsphere, Megasphere) that can overheal.
+     /// Health is capped at `cap` (e.g. 200).
++    ///
++    /// # Examples
++    /// ```
++    /// use doom_game::mobj::MobjHandle;
++    /// use doom_game::player::PlayerState;
++    ///
++    /// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
++    /// // A Soulsphere gives 100 health, up to a maximum of 200.
++    /// player.heal_overheal(100, 200);
++    /// assert_eq!(player.health(), 200);
++    /// ```
+     pub fn heal_overheal(&mut self, amount: i32, cap: i32) {
+         self.health = self.health.saturating_add(amount).min(cap);
+     }
+
+     /// Set health directly to `value`, clamped to `[0, cap]`.
+     ///
+-    /// Used for items that set health to a fixed value (e.g. Megasphere).
++    /// Why does this exist instead of `heal_overheal`? Some items in Doom (like the Megasphere)
++    /// don't add to your current health—they forcefully set it to a specific value regardless
++    /// of whether you are near death or already healthy.
++    ///
++    /// # Examples
++    /// ```
++    /// use doom_game::mobj::MobjHandle;
++    /// use doom_game::player::PlayerState;
++    ///
++    /// let mut player = PlayerState::pistol_start(MobjHandle::NULL);
++    /// // Picking up a Megasphere explicitly sets health to 200.
++    /// player.set_health_capped(200, 200);
++    /// assert_eq!(player.health(), 200);
++    /// ```
++    ///
++    /// # Panics
++    /// This function does not panic. The `value` is safely clamped to `[0, cap]`, and `cap` is
++    /// floored at `0` to prevent bounds logic inversion panics.
+     pub fn set_health_capped(&mut self, value: i32, cap: i32) {
+         self.health = value.clamp(0, cap.max(0));
+     }

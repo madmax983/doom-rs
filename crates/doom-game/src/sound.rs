@@ -737,8 +737,14 @@ mod tests {
 
         p_noise_alert(&mut gs, &level, player, player);
 
-        assert_eq!(gs.sound.sound_traversed[0], 1, "emitter sector: soundblocks 0 -> depth 1");
-        assert_eq!(gs.sound.sound_traversed[1], 2, "one soundblock crossed: depth 2");
+        assert_eq!(
+            gs.sound.sound_traversed[0], 1,
+            "emitter sector: soundblocks 0 -> depth 1"
+        );
+        assert_eq!(
+            gs.sound.sound_traversed[1], 2,
+            "one soundblock crossed: depth 2"
+        );
         assert_eq!(
             get_sound_target(&gs, 2),
             None,
