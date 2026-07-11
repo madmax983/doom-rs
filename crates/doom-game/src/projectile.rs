@@ -235,26 +235,69 @@ pub fn p_spawn_missile(
 
 /// Spawn a projectile from the player in the direction they're facing.
 ///
-/// Unlike `p_spawn_missile`, this does not need a destination handle — it
-/// uses the source actor's angle directly.  Vertical aim is zero (straight
-/// ahead on the horizontal plane).
+/// Faithful port of vanilla `P_SpawnPlayerMissile` (`p_mobj.c:1027`):
+///
+/// 1. **Autoaim.** Probe `P_AimLineAttack` at the player's facing angle, then
+///    (if no target) `+1<<26`, then `-1<<26`, over `16*64*FRACUNIT`. The angle
+///    that acquired a target becomes the missile's horizontal angle; its
+///    returned `slope` becomes the vertical aim. If none acquire a target the
+///    angle reverts to the player's facing and slope is 0.
+/// 2. **Spawn z** is `source->z + 4*8*FRACUNIT` (a fixed 32 units above the
+///    shooter's feet), *not* mid-height.
+/// 3. `P_SpawnMobj` draws `lastlook = P_Random() % MAXPLAYERS` for every mobj.
+/// 4. `momx/momy = FixedMul(speed, finecosine/finesine[an])`, `momz =
+///    FixedMul(speed, slope)`.
+/// 5. `P_CheckMissileSpawn` draws `tics -= P_Random()&3` (min 1) and nudges the
+///    missile forward by half its momentum.
+///
+/// The two `P_Random` draws (steps 3 and 5) advance the shared playsim RNG
+/// exactly as vanilla does; omitting them drops two draws on every rocket /
+/// plasma / BFG shot and desyncs the whole stream from the first shot onward.
 pub fn p_spawn_player_missile(
     gs: &mut GameState,
     source: MobjHandle,
     kind: MobjKind,
+    level: Option<&doom_map::Level>,
 ) -> Option<MobjHandle> {
     let info = projectile_info(kind)?;
 
-    // Extract source position, angle, and height.
-    let (sx, sy, sz, s_height, angle) = {
+    // Extract source position, feet z, and facing angle.
+    let (sx, sy, sz, base_angle) = {
         let mo = gs.mobjslab.get(source)?;
-        (mo.x, mo.y, mo.z, mo.height, mo.angle)
+        (mo.x, mo.y, mo.z, mo.angle)
     };
 
-    let spawn_z = sz + Fixed16_16(s_height.0 / 2);
+    // --- Autoaim (draws NO RNG), exactly as vanilla P_SpawnPlayerMissile. ---
+    const AUTOAIM_RANGE: Fixed16_16 = Fixed16_16(16 * 64 << 16);
+    const SIDE_PROBE: u32 = 1 << 26;
 
-    let momx = info.speed.fixed_mul(angle.cos());
-    let momy = info.speed.fixed_mul(angle.sin());
+    let mut an = base_angle.0;
+    let mut aim = crate::combat::p_aim_line_attack(gs, source, Bam(an), AUTOAIM_RANGE, level);
+    if aim.linetarget.is_none() {
+        an = base_angle.0.wrapping_add(SIDE_PROBE);
+        aim = crate::combat::p_aim_line_attack(gs, source, Bam(an), AUTOAIM_RANGE, level);
+        if aim.linetarget.is_none() {
+            // Vanilla does `an += 1<<26` then `an -= 2<<26`, i.e. base - 1<<26.
+            an = base_angle.0.wrapping_add(SIDE_PROBE).wrapping_sub(2 * SIDE_PROBE);
+            aim = crate::combat::p_aim_line_attack(gs, source, Bam(an), AUTOAIM_RANGE, level);
+        }
+        if aim.linetarget.is_none() {
+            an = base_angle.0;
+        }
+    }
+    let slope = aim.slope;
+    let angle = Bam(an);
+
+    // z = source->z + 4*8*FRACUNIT.
+    let spawn_z = sz + Fixed16_16::from_int(32);
+
+    // P_SpawnMobj: `mobj->lastlook = P_Random() % MAXPLAYERS`.
+    let _lastlook = (gs.p_random() as u32) % 4;
+
+    let speed_raw = info.speed.raw();
+    let momx = Fixed16_16::from_raw(crate::geom::fixed_mul(speed_raw, crate::geom::fine_cosine(an)));
+    let momy = Fixed16_16::from_raw(crate::geom::fixed_mul(speed_raw, crate::geom::fine_sine(an)));
+    let momz = Fixed16_16::from_raw(crate::geom::fixed_mul(speed_raw, slope));
 
     let mut proj = Mobj::new(kind, sx, sy, angle);
     crate::spawn::apply_mobjinfo_defaults(&mut proj);
@@ -265,10 +308,25 @@ pub fn p_spawn_player_missile(
     proj.flags = info.flags;
     proj.momx = momx;
     proj.momy = momy;
-    proj.momz = Fixed16_16::ZERO;
+    proj.momz = momz;
     proj.target = source;
 
-    Some(gs.mobjslab.alloc(proj))
+    let handle = gs.mobjslab.alloc(proj);
+
+    // P_CheckMissileSpawn: randomize the initial animation phase and nudge the
+    // missile forward by half its momentum.
+    let r = (gs.p_random() & 3) as i16;
+    if let Some(mo) = gs.mobjslab.get_mut(handle) {
+        mo.tics -= r;
+        if mo.tics < 1 {
+            mo.tics = 1;
+        }
+        mo.x += Fixed16_16::from_raw(momx.raw() >> 1);
+        mo.y += Fixed16_16::from_raw(momy.raw() >> 1);
+        mo.z += Fixed16_16::from_raw(momz.raw() >> 1);
+    }
+
+    Some(handle)
 }
 
 // Missile MOVEMENT and COLLISION are no longer handled here. Vanilla advances
@@ -510,7 +568,7 @@ mod tests {
         // Player faces east (angle = 0).
         let source = gs.player.handle;
 
-        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket);
+        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket, None);
         assert!(proj_h.is_some());
 
         let proj = gs
@@ -531,11 +589,31 @@ mod tests {
     }
 
     #[test]
+    fn player_missile_draws_two_p_randoms() {
+        // Vanilla P_SpawnPlayerMissile draws exactly two P_Random values on the
+        // shared playsim stream: the `P_SpawnMobj` `lastlook = P_Random() %
+        // MAXPLAYERS` and the `P_CheckMissileSpawn` `tics -= P_Random()&3`. The
+        // old stub drew none, dropping two draws on every rocket/plasma/BFG shot
+        // and desyncing the RNG from the first shot (DEMO1 rndindex @ tic 1673).
+        let mut gs = make_game_state();
+        let source = gs.player.handle;
+
+        let before = gs.rng.index();
+        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket, None);
+        assert!(proj_h.is_some());
+        let advanced = (gs.rng.index() + 256 - before) & 255;
+        assert_eq!(
+            advanced, 2,
+            "player missile spawn must advance the P_Random index by exactly 2"
+        );
+    }
+
+    #[test]
     fn player_missile_returns_none_for_non_projectile() {
         let mut gs = make_game_state();
         let source = gs.player.handle;
 
-        let result = p_spawn_player_missile(&mut gs, source, MobjKind::Demon);
+        let result = p_spawn_player_missile(&mut gs, source, MobjKind::Demon, None);
         assert!(result.is_none());
     }
 
@@ -544,11 +622,13 @@ mod tests {
         let mut gs = make_game_state();
         let source = gs.player.handle;
 
-        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::PlasmaBall)
+        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::PlasmaBall, None)
             .expect("value must exist in test");
         let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
-        // Player z=0, height=56, so chest height = 56/2 = 28.
-        assert_eq!(proj.z, Fixed16_16::from_int(28));
+        // Vanilla P_SpawnPlayerMissile spawns at source->z + 4*8*FRACUNIT.
+        // Player z=0, so spawn z = 32. (momz is 0 with no autoaim target, so the
+        // half-step nudge leaves z unchanged.)
+        assert_eq!(proj.z, Fixed16_16::from_int(32));
     }
 
     #[test]
@@ -556,7 +636,7 @@ mod tests {
         let mut gs = make_game_state();
         let source = gs.player.handle;
 
-        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket)
+        let proj_h = p_spawn_player_missile(&mut gs, source, MobjKind::Rocket, None)
             .expect("value must exist in test");
         let proj = gs.mobjslab.get(proj_h).expect("value must exist in test");
         let info = &MOBJINFO[MobjKind::Rocket as usize];

@@ -780,15 +780,15 @@ pub fn fire_weapon(gs: &mut GameState, level: Option<&Level>, handle: MobjHandle
     // --- Projectile weapons: spawn a missile actor ---
     match weapon {
         WeaponType::RocketLauncher => {
-            p_spawn_player_missile(gs, handle, MobjKind::Rocket);
+            p_spawn_player_missile(gs, handle, MobjKind::Rocket, level);
             return;
         }
         WeaponType::PlasmaRifle => {
-            p_spawn_player_missile(gs, handle, MobjKind::PlasmaBall);
+            p_spawn_player_missile(gs, handle, MobjKind::PlasmaBall, level);
             return;
         }
         WeaponType::Bfg => {
-            p_spawn_player_missile(gs, handle, MobjKind::BfgBall);
+            p_spawn_player_missile(gs, handle, MobjKind::BfgBall, level);
             return;
         }
         _ => {} // hitscan weapons fall through
