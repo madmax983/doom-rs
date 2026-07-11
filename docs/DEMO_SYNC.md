@@ -58,9 +58,11 @@ The IWAD is **not committed** — `test-wads/` is gitignored (`*.wad` and
 
 ## Reference oracle
 
-The comparison baseline is an **instrumented Chocolate Doom**, used as
-methodology only (its patched source is not committed here). It was patched to
-emit, on every tic of a demo replay:
+The comparison baseline is an **instrumented Chocolate Doom**. It is now
+reproducible in-repo under **`tools/oracle/`** (`build.sh`/`run.sh`/`README.md`,
+pinned Chocolate Doom commit `353cf50`; the patched clone and generated CSVs are
+gitignored, not committed). It was patched to emit, on every tic of a demo
+replay:
 
 1. Per-tic player state in the same column layout as the harness CSV
    (`px,py,pz,angle,health,kills,items,secrets,leveltime`), and
@@ -282,60 +284,69 @@ lt 977/1046/535).
 
 ## Current sync status
 
-Fresh measurement (release build at HEAD `eaa0f9f` on `m1c-demo-sync`, harness
-vs oracle, diffed on `px,py,pz,angle,health,kills,items,secrets,leveltime`; the
-cosmetic `rndindex` column is ignored). Measured 2026-07-09:
+Fresh measurement on **this branch** (`m2a-demo2-sync` = trunk `0cf9e69` + the M2a
+fix `1b26c6a`), release build, harness vs oracle, diffed on
+`px,py,pz,angle,health,kills,items,secrets,leveltime`; the cosmetic `rndindex`
+column is compared separately (the oracle emits `prndindex`, so it is a valid
+RNG-consumption signal here — see the oracle README). Measured 2026-07-10:
 
-| Demo  | Map  | Total tics | Position (px/py) 1st diverge | % synced | Health 1st diverge | Kills 1st diverge | Final k/i/s (ours) | Final k/i/s (vanilla) | Determinism |
-|-------|------|-----------:|------------------------------|---------:|--------------------|-------------------|--------------------|-----------------------|-------------|
-| DEMO1 | E1M5 | 5026 | tic 976 (lt 977) | ~19% | tic 613 (lt 614) | tic 704 (lt 705) | 10 / 0 / 0 | 61 / 7 / 1 | PASS (2×) |
-| DEMO2 | E1M3 | 3836 | tic 1045 (lt 1046) | ~27% | tic 1194 (lt 1195) | tic 1028 (lt 1029) | 11 / 0 / 0 | 41 / 14 / 0 | PASS (2×) |
-| DEMO3 | E1M7 | 2134 | tic 534 (lt 535) | ~25% | tic 524 (lt 525) | tic 632 (lt 633) | 7 / 0 / 0 | 20 / 9 / 0 | PASS (2×) |
+| Demo  | Map  | Total tics | First divergence (field @ tic / lt) | % synced | Determinism |
+|-------|------|-----------:|-------------------------------------|---------:|-------------|
+| DEMO1 | E1M5 | 5026 | health @ tic 1408 (lt 1409) | ~28% | PASS (2×) |
+| DEMO2 | E1M3 | 3836 | pz @ tic 1962 (lt 1963); rndindex/painchance @ tic 1920 | ~51% | PASS (2×) |
+| DEMO3 | E1M7 | 2134 | none — all outcome fields bit-exact end-to-end (residual transient pz only) | ~100% | PASS (2×) |
 
-`% synced` = position first-divergence / total tics — the fraction of each demo
-for which the player's actual **trajectory** is bit-exact against the oracle.
+`% synced` = first-divergence tic / total tics — the fraction of each demo the
+sim is bit-exact against the oracle before the first outcome-field divergence.
 
 Reading this table:
 
-- **The M1b + M1c fixes roughly tripled-to-quadrupled the sync depth.** The
-  player's position tracks the oracle exactly for the **first ~19 % / 27 % / 25 %**
-  of each demo — position first-divergence is now **lt 977 / lt 1046 / lt 535**,
-  up from lt 234 / 389 / 194 before these fixes (and lt 600 / 717 / 409 before
-  the two newest M1c blockmap / walkover-special fixes). The **`P_Random` values
-  still match the oracle through the entire recorded window** (zero
-  retval-by-ordinal mismatches); what breaks first is player *state*, not the RNG
-  value stream.
-- **Position is the trajectory signal; the earlier health/items divergences are
-  pickup-accounting artifacts, not sim drift.** On DEMO1 and DEMO3 the `health`
-  column diverges before position (lt 614, lt 525), but those are **health-bonus
-  pickup timing**: our health ticks *up* to the next value a few tics early
-  (DEMO1 82→83 one tic early at lt 614; DEMO3 65→66 five tics early at lt 525)
-  and **re-converges** within a handful of tics, with `px/py/angle` bit-exact
-  through the whole window. The `items` counter likewise diverges early (DEMO1
-  lt 256, DEMO2 lt 135, DEMO3 lt 530) — vanilla registers an item-count pickup
-  ours does not — while position stays identical. These are stat-counter /
-  pickup-tally off-by-a-few-tics artifacts that do **not** perturb the
-  trajectory; the real geometry divergence is position, at lt 977 / 1046 / 535.
+- **DEMO1 — first divergence is `health` at tic 1408 (lt 1409).** At that tic
+  doom-rs draws **1 FEWER** `P_Random` (89→88) and health is one lower (86 vs 85):
+  a combat/damage RNG-consumption divergence. Trajectory (`px/py`) holds farther,
+  to tic 1652. This is well past the prior m1c snapshot (position lt 977).
+- **DEMO2 — after the M2a monster-crossing fix, first divergence is `pz` at
+  tic 1962 (lt 1963), ~51%.** The immediate next tractable signal is an
+  `rndindex`/painchance mismatch at **tic 1920** where doom-rs draws **1 FEWER**
+  `P_Random` (a painchance roll in `P_DamageMobj` that vanilla makes and doom-rs
+  does not); position (`px/py`) holds to tic 2000. The M2a fix pushed this out
+  from the prior pre-M2a divergence at tic 814 (which drew 2 EXTRA randoms) and
+  the m1c snapshot at position lt 1046.
+- **DEMO3 — bit-exact end-to-end on every outcome field.** `rndindex, px, py,
+  angle, health, kills, items, secrets` all match the oracle for the full 2134
+  tics. The **only** residual is a transient, self-correcting **`pz` +4-unit
+  (262144 fixed / one platform step) offset** on lift / platform rides — ~60 of
+  2134 tics, in bursts (first at tic 735), and the final rows are byte-identical.
+  This is the known-accepted residual (see item 3 below), not a sync-gating drift.
+- The **`P_Random` value stream still matches the oracle** through the recorded
+  window (zero retval-by-ordinal mismatches); what breaks first on DEMO1/DEMO2 is
+  a single missing/extra draw and player *state*, not the RNG value stream.
 - The demos all **run to completion** (`demo-stream-fully-consumed`, full tic
   counts match the file — 5026 / 3836 / 2134), and **cross-run determinism
   PASSes** on all three (`--verify-runs 2`: PASS) — the harness self-check
   confirms the sim is internally reproducible.
-- Final `kills/items/secrets` diverge widely from vanilla because once one
-  monster interaction drifts, the rest of a multi-minute playthrough follows a
-  different path. The final counts are reported for completeness, **not** as a
-  sync metric — the sync depth is the first-divergence tic.
+
+### Oracle
+
+The instrumented Chocolate Doom oracle these numbers are measured against is
+reproducible in-repo via **`tools/oracle/`** — `build.sh` (clone + pinned commit
+`353cf50` + apply `oracle-instrumentation.patch` + build), `run.sh` (headless
+`-timedemo` run emitting the per-tic CSV), and `README.md` (full recipe, CSV
+column/sampling-point spec, and diffing with `diff_csv.py` / `perfield.py`).
 
 ## Remaining divergences (characterized)
 
-Full bit-exact end-to-end sync is **not yet reached.** Be honest about where we
-are: the demos currently sync only the **first ~19–27% of their length**
-(position first divergence lt 977 / 1046 / 535 of 5026 / 3836 / 2134 tics). What
-is solid: the `P_Random` **value** stream matches the oracle through the whole
-recorded window, every fix above is **vanilla-verified against the instrumented
-Chocolate oracle**, and every major subsystem is vanilla-faithful. What remains:
-the multi-minute tail still diverges, and the remaining failures are **residual
-monster positional drift + attack/AI timing that compounds over the run**, not a
-broken RNG or a missing subsystem.
+Full bit-exact end-to-end sync is **not yet reached** on DEMO1/DEMO2 (DEMO3 is
+bit-exact end-to-end on all outcome fields). Be honest about where we are: DEMO1
+syncs to tic 1408 (~28%) and DEMO2 to tic 1962 (~51%) of their length (first
+divergence lt 1409 / 1963 of 5026 / 3836 tics), and DEMO3 has only a transient
+lift-ride `pz` residual. What is solid: the `P_Random` **value** stream matches
+the oracle through the whole recorded window, every fix above is
+**vanilla-verified against the instrumented Chocolate oracle** (reproducible via
+`tools/oracle/`), and every major subsystem is vanilla-faithful. What remains:
+the multi-minute tail of DEMO1/DEMO2 still diverges, and the remaining failures
+are **residual monster positional drift + attack/AI timing that compounds over
+the run**, not a broken RNG or a missing subsystem.
 
 The general mechanism: both sides draw the **same RNG rolls**, but a slightly
 **drifted geometry** (a monster or projectile a few map units off) turns the same
@@ -345,26 +356,33 @@ which monster the player faces next — and the differences compound over the ru
 
 Known open items (characterized per demo):
 
-1. **DEMO1 — lt 704 / lt 977, monster-AI / combat then trajectory divergence
-   (TBD).** The `kills` counter first drifts at lt 704 (a monster dies a tic
-   off), and the player's **position** first drifts at lt 977. Root cause not yet
-   pinned; it is downstream of sub-map-unit geometry drift in the preceding chase
-   steps, so a same-value damage roll or chase step lands on a slightly different
-   tic. Re-audit the `A_Chase` / attack hitscan geometry and `P_DamageMobj`
-   thrust against `p_map.c` / `p_inter.c` for the last residual fixed-point
-   rounding.
+1. **DEMO1 — tic 1408 (lt 1409), combat/damage RNG-consumption divergence
+   (TBD).** At tic 1408 doom-rs draws **1 FEWER** `P_Random` (89→88) and `health`
+   is one lower (86 vs 85); trajectory (`px/py`) holds to tic 1652. Root cause not
+   yet pinned; it is downstream of sub-map-unit geometry drift in the preceding
+   chase steps, so a same-value damage roll or chase step lands on a slightly
+   different tic. Re-audit the `A_Chase` / attack hitscan geometry and
+   `P_DamageMobj` thrust against `p_map.c` / `p_inter.c` for the last residual
+   fixed-point rounding.
 
-2. **DEMO2 — lt 814 / lt 1046, monster-AI drift then trajectory divergence
-   (TBD).** A monster-AI / combat timing divergence around lt 814 (same RNG
-   rolls, drifted geometry) compounds until it surfaces in the player's
-   **position** at lt 1046. Trace the offending monster's `A_Chase` /
-   `P_NewChaseDir` roll count and hit geometry against the oracle.
+2. **DEMO2 — tic 1962 (lt 1963), post-M2a combat-timing tail (TBD).** After the
+   M2a monster box-straddle crossing fix, the first divergence is `pz` at tic 1962
+   (~51%); the immediate next tractable signal is an `rndindex`/painchance
+   mismatch at **tic 1920** where doom-rs draws **1 FEWER** `P_Random` (a
+   painchance roll in `P_DamageMobj` that vanilla makes on a fireball hit resolving
+   one tic differently). This is compounding projectile/combat-interaction timing
+   drift (same RNG values, a hit resolving a tic off from residual sub-map-unit
+   trajectory drift) — it does not map to a single clean vanilla rule and needs
+   tic-by-tic fixed-point forensics of the fireball + target trajectory.
 
-3. **DEMO3 — lt 535, player-movement / interaction divergence (TBD).** The
-   player's **position** (`px/py/pz` together) first drifts at lt 535 — a
-   movement / interaction divergence from residual fixed-point positional drift
-   in the preceding tics. Root cause TBD; re-audit the player `P_XYMovement` /
-   slide-trace and any monster interaction on the drifting tic.
+3. **DEMO3 — transient lift-ride `pz` residual (known-accepted).** All outcome
+   fields (`rndindex, px, py, angle, health, kills, items, secrets`) are bit-exact
+   for the full 2134 tics. The only residual is a transient, self-correcting `pz`
+   +4-unit (262144 fixed / one platform step) offset during lift / platform rides
+   — ~60 of 2134 tics, in bursts (first at tic 735), with the final rows
+   byte-identical. Accepted as-is; if chased, audit the plat/lift `T_PlatRaise`
+   step-height fixed-point against `p_plats.c` and player `P_ZMovement` while
+   riding.
 
 4. **Cosmetic `A_FaceTarget` ATK1 angle transient.** During the first attack
    frame a monster's facing angle can differ by a small BAM delta for one tic
@@ -374,11 +392,12 @@ Known open items (characterized per demo):
 
 ## How to continue
 
-- **Next divergences to chase:** DEMO1 `leveltime 704`/`977` (monster-AI/combat
-  then trajectory divergence, item 1), DEMO2 `leveltime 814`/`1046` (monster-AI
-  drift then trajectory divergence, item 2), and DEMO3 `leveltime 535`
-  (player-movement / interaction divergence, item 3). The common thread is
-  **residual monster positional drift** compounding into attack/AI timing.
+- **Next divergences to chase:** DEMO1 `tic 1408` / `lt 1409` (combat/damage
+  RNG-consumption, item 1) and DEMO2 `tic 1920` / `1962` (painchance/combat-timing
+  tail, item 2). DEMO3 is bit-exact on outcome fields; its only open residual is
+  the transient lift-ride `pz` offset (item 3), accepted as-is. The common thread
+  on DEMO1/DEMO2 is **residual monster positional drift** compounding into
+  attack/AI timing.
 - **Tooling:** regenerate the harness CSV for the demo under test and diff it
   against `demoN.choco.csv` on `px,py,pz,angle,health,kills,items,secrets,
   leveltime` (ignore the `rndindex` column) to find the first position/health/

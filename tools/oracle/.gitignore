@@ -1,0 +1,5 @@
+# Oracle build clone (default ORACLE_BUILD_DIR) — never commit the ~upstream tree.
+/chocolate-doom/
+# Generated ground-truth traces.
+*.choco.csv
+*.doomrs.csv
