@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Optimizing Hot Path Allocations in `move_spechit`**
+**Learning:** `move_spechit` in `movement.rs` runs heavily on the hot path (monster movement, projectiles) and allocated multiple `Vec<usize>` each time, unnecessarily hammering the heap for tiny collections of linedefs.
+**Action:** Replaced `Vec<usize>` with `smallvec::SmallVec<[usize; 8]>` and `[usize; 32]` for `spechit` and `seen` to completely eliminate heap allocations in common cases. SmallVec implements `Deref<Target = [T]>`, requiring almost zero changes to call sites!

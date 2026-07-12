@@ -1617,9 +1617,15 @@ mod tests {
         let loaded = load_game(&data).expect("load must succeed");
         assert_eq!(loaded.state.movers.active_doors.len(), 2);
         assert_eq!(loaded.state.movers.active_doors[0].sector, 5);
-        assert_eq!(loaded.state.movers.active_doors[0].target_height, doom_types::Fixed16_16::from_int(128));
+        assert_eq!(
+            loaded.state.movers.active_doors[0].target_height,
+            doom_types::Fixed16_16::from_int(128)
+        );
         assert_eq!(loaded.state.movers.active_doors[1].sector, 10);
-        assert_eq!(loaded.state.movers.active_doors[1].speed, doom_types::Fixed16_16::from_int(-2));
+        assert_eq!(
+            loaded.state.movers.active_doors[1].speed,
+            doom_types::Fixed16_16::from_int(-2)
+        );
     }
 
     // --- Test 17: Roundtrip with floor movers preserves count ---
@@ -1643,7 +1649,10 @@ mod tests {
         let loaded = load_game(&data).expect("load must succeed");
         assert_eq!(loaded.state.movers.active_floors.len(), 1);
         assert_eq!(loaded.state.movers.active_floors[0].sector_index, 3);
-        assert_eq!(loaded.state.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(-64));
+        assert_eq!(
+            loaded.state.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(-64)
+        );
         assert_eq!(
             loaded.state.movers.active_floors[0].direction,
             MoveDirection::Down
