@@ -30,6 +30,7 @@ mod cheats;
 mod cogmind;
 mod console;
 mod demo_mode;
+mod iwad;
 mod net_mode;
 mod savegame;
 
@@ -2693,6 +2694,16 @@ fn run_doom(args: Args) -> Result<()> {
         )
     })?;
 
+    // Identify the vanilla game version from the IWAD *before* any PWADs are
+    // merged, matching vanilla/Chocolate (D_IdentifyVersion runs before the
+    // `-file` merge). `game_mode`/`game_mission` are then read by the vanilla
+    // gates below and stay in scope for downstream (warp validation, etc.).
+    let (game_mode, game_mission) = iwad::identify_version(&wad_stack, &args.iwad);
+    eprintln!("game detected     : mode={game_mode:?} mission={game_mission:?}");
+
+    // Vanilla gate: the shareware IWAD refuses external files.
+    check_pwads_allowed(game_mode, args.pwad.len())?;
+
     for pwad_path in &args.pwad {
         let pwad_bytes = std::fs::read(pwad_path).with_context(|| {
             format!(
@@ -2724,6 +2735,12 @@ fn run_doom(args: Args) -> Result<()> {
 
     // Determine which map to load — default to the first canonical map present.
     let default_warp = default_warp_map(&wad_stack);
+    // Vanilla gate: an explicitly requested warp must be valid for the detected
+    // game mode (shareware = E1 only; registered = E1-E3; retail = E1-E4;
+    // commercial = MAPxx). The auto-detected default is always in range.
+    if let Some(ref requested_warp) = args.warp {
+        validate_warp_for_mode(requested_warp, game_mode)?;
+    }
     let warp_str = args.warp.as_deref().unwrap_or(&default_warp);
     let show_title = args.warp.is_none();
 
@@ -3682,6 +3699,63 @@ fn write_bmp(
 // Warp string parsing
 // ---------------------------------------------------------------------------
 
+/// Vanilla gate: the shareware IWAD refuses external `-file`/`--pwad` merges.
+/// Mirrors Chocolate's message ("You cannot -file with the shareware version.
+/// Register!"). Any non-shareware mode permits PWADs.
+fn check_pwads_allowed(mode: iwad::GameMode, pwad_count: usize) -> Result<()> {
+    if mode == iwad::GameMode::Shareware && pwad_count > 0 {
+        anyhow::bail!("You cannot -file with the shareware version. Register!");
+    }
+    Ok(())
+}
+
+/// Reject a user-requested `--warp` that is out of range for the detected
+/// vanilla game mode, mirroring vanilla/Chocolate episode gating.
+///
+/// * Commercial (Doom II / Final Doom) uses `MAPxx`; an `E#M#` warp is refused.
+/// * Doom-1 family (shareware/registered/retail) uses `E#M#`; a `MAPxx` warp is
+///   refused, and the episode number must be within the mode's range
+///   (shareware=1, registered=1-3, retail=1-4).
+/// * `Indetermined` is not gated (we could not identify the IWAD).
+fn validate_warp_for_mode(warp: &str, mode: iwad::GameMode) -> Result<()> {
+    let upper = warp.to_uppercase();
+    let is_map = upper.starts_with("MAP");
+    let is_episode = !is_map && upper.starts_with('E') && upper.contains('M');
+
+    match mode {
+        iwad::GameMode::Commercial => {
+            if is_episode {
+                anyhow::bail!(
+                    "This IWAD uses MAPxx levels (Doom II / Final Doom); \
+                     '{warp}' is not a valid map. Try e.g. --warp MAP01."
+                );
+            }
+        }
+        iwad::GameMode::Shareware | iwad::GameMode::Registered | iwad::GameMode::Retail => {
+            if is_map {
+                anyhow::bail!(
+                    "This IWAD uses episode maps (E#M#); '{warp}' is not a valid \
+                     map. Try e.g. --warp E1M1."
+                );
+            }
+            if is_episode {
+                let (episode, _map) = parse_warp_episode_map(warp);
+                if let Some(max) = mode.max_episode() {
+                    if episode < 1 || episode > max {
+                        anyhow::bail!(
+                            "Episode {episode} is out of range for this IWAD \
+                             (valid episodes are 1-{max}). Register the full \
+                             version for more episodes."
+                        );
+                    }
+                }
+            }
+        }
+        iwad::GameMode::Indetermined => {}
+    }
+    Ok(())
+}
+
 /// Parse a warp string (e.g. `"E1M1"` or `"MAP03"`) into `(episode, map)`.
 ///
 /// For `E{e}M{m}` format: returns `(e, m)`.
@@ -4182,6 +4256,124 @@ mod tests {
             .as_nanos();
         path.push(format!("doom-rs-{name}-{nanos}.log"));
         path
+    }
+
+    // -----------------------------------------------------------------------
+    // IWAD / game-mode auto-detection (crate::iwad + vanilla gates)
+    // -----------------------------------------------------------------------
+
+    use iwad::{GameMission, GameMode, identify_version};
+    use std::path::Path;
+
+    /// Neutral path whose filename is not in Chocolate's `iwads[]` table, so
+    /// detection is forced to rely purely on lump content.
+    fn neutral_iwad_path() -> &'static Path {
+        Path::new("/somewhere/unknown.wad")
+    }
+
+    #[test]
+    fn detect_shareware_from_e1m1_only() {
+        let stack = build_minimal_wad_stack_for_maps(&["E1M1", "E1M2"]);
+        assert_eq!(
+            identify_version(&stack, neutral_iwad_path()),
+            (GameMode::Shareware, GameMission::Doom)
+        );
+    }
+
+    #[test]
+    fn detect_registered_from_e1_through_e3() {
+        let stack = build_minimal_wad_stack_for_maps(&["E1M1", "E2M1", "E3M1"]);
+        assert_eq!(
+            identify_version(&stack, neutral_iwad_path()),
+            (GameMode::Registered, GameMission::Doom)
+        );
+    }
+
+    #[test]
+    fn detect_retail_when_e4m1_present() {
+        let stack = build_minimal_wad_stack_for_maps(&["E1M1", "E2M1", "E3M1", "E4M1"]);
+        assert_eq!(
+            identify_version(&stack, neutral_iwad_path()),
+            (GameMode::Retail, GameMission::Doom)
+        );
+    }
+
+    #[test]
+    fn detect_commercial_from_map01_no_e1m1() {
+        let stack = build_minimal_wad_stack_for_maps(&["MAP01", "MAP02"]);
+        assert_eq!(
+            identify_version(&stack, neutral_iwad_path()),
+            (GameMode::Commercial, GameMission::Doom2)
+        );
+    }
+
+    #[test]
+    fn detect_tnt_mission_from_filename() {
+        let stack = build_minimal_wad_stack_for_maps(&["MAP01"]);
+        assert_eq!(
+            identify_version(&stack, Path::new("/wads/tnt.wad")),
+            (GameMode::Commercial, GameMission::PackTnt)
+        );
+    }
+
+    #[test]
+    fn detect_plutonia_mission_from_filename() {
+        let stack = build_minimal_wad_stack_for_maps(&["MAP01"]);
+        assert_eq!(
+            identify_version(&stack, Path::new("/wads/plutonia.wad")),
+            (GameMode::Commercial, GameMission::PackPlutonia)
+        );
+    }
+
+    #[test]
+    fn detect_chex_from_filename_is_retail() {
+        // chex.wad ships only E1M1..E1M5; the filename pins it to retail/chex.
+        let stack = build_minimal_wad_stack_for_maps(&["E1M1"]);
+        assert_eq!(
+            identify_version(&stack, Path::new("/wads/CHEX.WAD")),
+            (GameMode::Retail, GameMission::PackChex)
+        );
+    }
+
+    #[test]
+    fn detect_hacx_from_filename_is_commercial() {
+        let stack = build_minimal_wad_stack_for_maps(&["MAP01"]);
+        assert_eq!(
+            identify_version(&stack, Path::new("/wads/hacx.wad")),
+            (GameMode::Commercial, GameMission::PackHacx)
+        );
+    }
+
+    #[test]
+    fn shareware_refuses_pwads() {
+        // Gate: shareware + any PWAD is an error; other modes permit PWADs.
+        assert!(check_pwads_allowed(GameMode::Shareware, 1).is_err());
+        assert!(check_pwads_allowed(GameMode::Shareware, 0).is_ok());
+        assert!(check_pwads_allowed(GameMode::Registered, 2).is_ok());
+        assert!(check_pwads_allowed(GameMode::Commercial, 1).is_ok());
+    }
+
+    #[test]
+    fn shareware_warp_to_episode_two_is_rejected() {
+        assert!(validate_warp_for_mode("E2M1", GameMode::Shareware).is_err());
+        // Episode 1 is fine on shareware.
+        assert!(validate_warp_for_mode("E1M9", GameMode::Shareware).is_ok());
+    }
+
+    #[test]
+    fn retail_warp_to_episode_four_is_allowed() {
+        assert!(validate_warp_for_mode("E4M1", GameMode::Retail).is_ok());
+        // Registered stops at episode 3.
+        assert!(validate_warp_for_mode("E4M1", GameMode::Registered).is_err());
+        assert!(validate_warp_for_mode("E3M1", GameMode::Registered).is_ok());
+    }
+
+    #[test]
+    fn warp_format_must_match_family() {
+        // Commercial rejects episode-format warps; doom-family rejects MAPxx.
+        assert!(validate_warp_for_mode("E1M1", GameMode::Commercial).is_err());
+        assert!(validate_warp_for_mode("MAP05", GameMode::Commercial).is_ok());
+        assert!(validate_warp_for_mode("MAP01", GameMode::Shareware).is_err());
     }
 
     #[allow(dead_code)]
