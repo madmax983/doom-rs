@@ -1,0 +1,8 @@
+1. Read the `director.rs`, `movers.rs`, `sound_prop.rs`, `stats.rs` module files in the `doom-game` crate to analyze documentation coverage.
+2. The `director.rs` file lacks module-level documentation and function/struct level `///` comments explaining its purpose, how it manages difficulty, and examples for `tick()`.
+3. Add module-level doc (`//!`), and struct/enum/function level doc strings with `## Examples` in `crates/doom-game/src/director.rs`.
+4. Update `.jules/bard.md` journaling the confusion and clarification for the `AiDirector`.
+5. Run `cargo doc -p doom-game --open` (in background/dev-null).
+6. Run `cargo clippy -p doom-game`, `cargo test`, and `cargo fmt --all`.
+7. Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.
+8. Submit PR titled "🎻 Bard: [documentation update]".
