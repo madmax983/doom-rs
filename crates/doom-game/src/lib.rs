@@ -18,6 +18,8 @@ pub mod combat;
 pub mod dehacked;
 pub mod face;
 pub mod geom;
+#[cfg(feature = "telemetry")]
+pub mod heatmap;
 pub mod intermission;
 pub mod linedef_dispatch;
 pub mod menu;
@@ -44,10 +46,10 @@ pub mod state;
 pub mod states;
 /// Level statistics tracking (kills, items, secrets, etc).
 pub mod stats;
-mod tantoangle;
 #[cfg(feature = "style_meter")]
 pub mod style;
 pub mod switch;
+mod tantoangle;
 #[cfg(feature = "telemetry")]
 pub mod telemetry;
 pub mod tic;
@@ -72,6 +74,8 @@ pub use dehacked::{
     AmmoPatch, DehError, DehPatch, FramePatch, MiscPatch, TextReplacement, ThingPatch, WeaponPatch,
 };
 pub use face::{FaceDir, FaceKind, FaceState, face_patch_name, health_tier};
+#[cfg(feature = "telemetry")]
+pub use heatmap::{HeatmapMetric, TelemetryHeatmap};
 pub use intermission::{IntermissionStats, par_time};
 pub use linedef_dispatch::{
     LinedefEffect, TriggerType, check_cross_lines, classify_trigger, dispatch_linedef,
@@ -91,9 +95,7 @@ pub use pickups::{
     doomed_type_to_kind, kind_to_doomed_type, p_check_pickups, p_touch_special_thing,
 };
 pub use player::PlayerState;
-pub use projectile::{
-    ProjectileInfo, p_spawn_missile, p_spawn_player_missile, projectile_info,
-};
+pub use projectile::{ProjectileInfo, p_spawn_missile, p_spawn_player_missile, projectile_info};
 pub use random::{DoomRng, RNG_TABLE};
 pub use random::{RngTraceEntry, rng_trace_enable, rng_trace_set_leveltime, rng_trace_take};
 pub use random::{p_damage_with_variance, p_missile_angle_spread, p_random_chance, randomize_tics};
