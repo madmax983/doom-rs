@@ -508,6 +508,23 @@ impl Level {
         self.sectors.get(si).map(|s| s.floor_height)
     }
 
+    /// Return the floor height (fixed-point map units) at raw `fixed_t` world
+    /// point `(x, y)`, using vanilla's fixed-point `R_PointInSubsector`.
+    ///
+    /// Unlike [`floor_at`], which truncates the position to integer map units
+    /// before the BSP walk, this resolves the same subsector vanilla caches in
+    /// `mo->subsector`, so `mo->subsector->sector->floorheight` matches even for
+    /// a position a fraction of a unit from a sector-step edge. Required for the
+    /// `P_XYMovement` `MF_CORPSE` "halfway off a step" friction skip (a sliding
+    /// corpse whose center sits a sub-unit past a step edge).
+    ///
+    /// [`floor_at`]: Self::floor_at
+    #[must_use]
+    pub fn floor_at_fixed(&self, x: i32, y: i32) -> Option<Fixed16_16> {
+        let si = self.sector_index_at_fixed(x, y)?;
+        self.sectors.get(si).map(|s| s.floor_height)
+    }
+
     /// Return the subsector index containing world point `(x, y)`.
     #[must_use]
     pub fn subsector_index_at(&self, x: i32, y: i32) -> Option<usize> {
@@ -725,6 +742,149 @@ mod tests {
         }
 
         let _ = REQUIRED_MAP_LUMPS; // ensure import used
+        let _ = WadKind::Iwad;
+        data
+    }
+
+    /// Build an in-memory WAD whose map has TWO sectors of different floor
+    /// heights split by a single diagonal BSP node (partition line `y = x`).
+    ///
+    /// - sector 0 (front / right child): floor 0
+    /// - sector 1 (back / left child): floor 32
+    ///
+    /// A point at `(10.5, 10.0)` lies just below `y = x` (`y < x`) → front →
+    /// sector 0, but truncating to `(10, 10)` puts it exactly on the partition,
+    /// which Doom's tie-break sends to the back → sector 1. This is the exact
+    /// geometry that made a sliding corpse's center-floor lookup pick the wrong
+    /// sector at a step edge (see `floor_at_fixed`).
+    fn build_two_sector_step_wad_bytes() -> Vec<u8> {
+        use doom_wad::{REQUIRED_MAP_LUMPS, WadKind};
+
+        let marker_name = b"E1M1\0\0\0\0";
+
+        // ---- 2 sectors: floor 0 and floor 32 ----
+        let mut sector_data = vec![0u8; 2 * 26];
+        for (i, floor) in [0i16, 32i16].iter().enumerate() {
+            let s = &mut sector_data[i * 26..i * 26 + 26];
+            s[0..2].copy_from_slice(&floor.to_le_bytes()); // floor_height
+            s[2..4].copy_from_slice(&128i16.to_le_bytes()); // ceil_height
+            s[4..12].copy_from_slice(b"FLAT1\0\0\0");
+            s[12..20].copy_from_slice(b"FLAT2\0\0\0");
+            s[20..22].copy_from_slice(&192i16.to_le_bytes()); // light
+        }
+
+        // ---- vertices: (0,0), (64,0), (64,64), (0,64) ----
+        let mut vert_data = vec![0u8; 4 * 4];
+        let verts = [(0i16, 0i16), (64, 0), (64, 64), (0, 64)];
+        for (i, (x, y)) in verts.iter().enumerate() {
+            vert_data[i * 4..i * 4 + 2].copy_from_slice(&x.to_le_bytes());
+            vert_data[i * 4 + 2..i * 4 + 4].copy_from_slice(&y.to_le_bytes());
+        }
+
+        // ---- 2 sidedefs: sidedef 0 -> sector 0, sidedef 1 -> sector 1 ----
+        let mut sd_data = vec![0u8; 2 * 30];
+        for (i, sector) in [0u16, 1u16].iter().enumerate() {
+            sd_data[i * 30 + 20..i * 30 + 28].copy_from_slice(b"WALL1\0\0\0"); // middle
+            sd_data[i * 30 + 28..i * 30 + 30].copy_from_slice(&sector.to_le_bytes());
+        }
+
+        // ---- 2 one-sided linedefs (front sector resolved via right sidedef) ----
+        let mut ld_data = vec![0u8; 2 * 14];
+        let edges = [(0u16, 1u16, 0u16), (2, 3, 1)]; // from, to, right_sidedef
+        for (i, (from, to, rsd)) in edges.iter().enumerate() {
+            let b = &mut ld_data[i * 14..i * 14 + 14];
+            b[0..2].copy_from_slice(&from.to_le_bytes());
+            b[2..4].copy_from_slice(&to.to_le_bytes());
+            b[10..12].copy_from_slice(&rsd.to_le_bytes()); // right_sidedef
+            b[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes()); // left = none
+        }
+
+        // ---- 2 segs: seg i -> linedef i, direction 0 ----
+        let mut seg_data = vec![0u8; 2 * 12];
+        let seg_verts = [(0u16, 1u16, 0u16), (2, 3, 1)]; // from, to, linedef
+        for (i, (from, to, ld)) in seg_verts.iter().enumerate() {
+            let s = &mut seg_data[i * 12..i * 12 + 12];
+            s[0..2].copy_from_slice(&from.to_le_bytes());
+            s[2..4].copy_from_slice(&to.to_le_bytes());
+            s[6..8].copy_from_slice(&ld.to_le_bytes()); // linedef
+        }
+
+        // ---- 2 ssectors: ss i covers seg i (front sector i) ----
+        let mut ss_data = vec![0u8; 2 * 4];
+        for (i, first_seg) in [0u16, 1u16].iter().enumerate() {
+            ss_data[i * 4..i * 4 + 2].copy_from_slice(&1u16.to_le_bytes()); // seg_count
+            ss_data[i * 4 + 2..i * 4 + 4].copy_from_slice(&first_seg.to_le_bytes());
+        }
+
+        // ---- 1 node: partition (0,0)->(64,64) = line y = x ----
+        // right child (front) = subsector 0, left child (back) = subsector 1.
+        let mut node_data = vec![0u8; 28];
+        node_data[0..2].copy_from_slice(&0i16.to_le_bytes()); // x
+        node_data[2..4].copy_from_slice(&0i16.to_le_bytes()); // y
+        node_data[4..6].copy_from_slice(&64i16.to_le_bytes()); // dx
+        node_data[6..8].copy_from_slice(&64i16.to_le_bytes()); // dy
+        // right_bbox + left_bbox (ymax, ymin, xmin, xmax), non-degenerate.
+        for base in [8usize, 16usize] {
+            node_data[base..base + 2].copy_from_slice(&64i16.to_le_bytes()); // ymax
+            node_data[base + 2..base + 4].copy_from_slice(&0i16.to_le_bytes()); // ymin
+            node_data[base + 4..base + 6].copy_from_slice(&0i16.to_le_bytes()); // xmin
+            node_data[base + 6..base + 8].copy_from_slice(&64i16.to_le_bytes()); // xmax
+        }
+        node_data[24..26].copy_from_slice(&(0x8000u16).to_le_bytes()); // right_child = ss 0
+        node_data[26..28].copy_from_slice(&(0x8000u16 | 1).to_le_bytes()); // left_child = ss 1
+
+        // ---- things: player 1 start ----
+        let mut thing_data = vec![0u8; 10];
+        thing_data[6..8].copy_from_slice(&1u16.to_le_bytes());
+        thing_data[8..10].copy_from_slice(&7u16.to_le_bytes());
+
+        // ---- reject: ceil(2*2 / 8) = 1 byte ----
+        let reject_data = vec![0u8; 1];
+
+        // ---- blockmap: minimal 1×1 grid ----
+        let mut bm_data = vec![0u8; 14];
+        bm_data[4..6].copy_from_slice(&1u16.to_le_bytes()); // x_count
+        bm_data[6..8].copy_from_slice(&1u16.to_le_bytes()); // y_count
+        bm_data[8..10].copy_from_slice(&5u16.to_le_bytes()); // offset
+        bm_data[10..12].copy_from_slice(&0u16.to_le_bytes()); // 0x0000 sentinel
+        bm_data[12..14].copy_from_slice(&0xFFFFu16.to_le_bytes()); // terminator
+
+        let lump_payloads: &[(&[u8; 8], &[u8])] = &[
+            (marker_name, &[]),
+            (b"THINGS\0\0", &thing_data),
+            (b"LINEDEFS", &ld_data),
+            (b"SIDEDEFS", &sd_data),
+            (b"VERTEXES", &vert_data),
+            (b"SEGS\0\0\0\0", &seg_data),
+            (b"SSECTORS", &ss_data),
+            (b"NODES\0\0\0", &node_data),
+            (b"SECTORS\0", &sector_data),
+            (b"REJECT\0\0", &reject_data),
+            (b"BLOCKMAP", &bm_data),
+        ];
+
+        let mut data: Vec<u8> = Vec::new();
+        data.extend_from_slice(b"IWAD");
+        data.extend_from_slice(&(lump_payloads.len() as i32).to_le_bytes());
+        data.extend_from_slice(&0i32.to_le_bytes()); // placeholder
+
+        let mut offsets: Vec<(usize, usize)> = Vec::new();
+        for (_, payload) in lump_payloads {
+            let pos = data.len();
+            data.extend_from_slice(payload);
+            offsets.push((pos, payload.len()));
+        }
+
+        let dir_offset = data.len() as i32;
+        data[8..12].copy_from_slice(&dir_offset.to_le_bytes());
+        for (i, (name_bytes, _)) in lump_payloads.iter().enumerate() {
+            let (filepos, size) = offsets[i];
+            data.extend_from_slice(&(filepos as i32).to_le_bytes());
+            data.extend_from_slice(&(size as i32).to_le_bytes());
+            data.extend_from_slice(*name_bytes);
+        }
+
+        let _ = REQUIRED_MAP_LUMPS;
         let _ = WadKind::Iwad;
         data
     }
@@ -1131,6 +1291,38 @@ thing { x = 0; y = 0; angle = 0; type = 1; special = 80; arg0str = "lift_down"; 
 
         assert_eq!(level.sector_index_at(10, 10), Some(0));
         assert_eq!(level.floor_at(10, 10), Some(Fixed16_16::from_int(0)));
+    }
+
+    #[test]
+    fn floor_at_fixed_uses_fractional_bits_at_step_edge() {
+        // Two sectors (floor 0 / floor 32) split by the diagonal partition
+        // y = x. A corpse center at raw fixed (10.5, 10.0) lies just below the
+        // line (front → sector 0, floor 0); truncating to (10, 10) lands ON the
+        // partition, which Doom's tie-break sends to the back (sector 1, floor
+        // 32). The truncated `floor_at` therefore reads the WRONG sector's floor
+        // — exactly the case that made a sliding corpse's center floor spuriously
+        // equal its bbox-support floor and apply friction one tic early. The
+        // fixed-point `floor_at_fixed` matches vanilla `mo->subsector->sector`.
+        let wad_bytes = build_two_sector_step_wad_bytes();
+        let wad = doom_wad::WadFile::parse(wad_bytes).expect("value must exist in test");
+        let level = Level::from_wad(&wad, "E1M1").expect("value must exist in test");
+
+        let x_fixed = (10i32 << 16) | 0x8000; // 10.5
+        let y_fixed = 10i32 << 16; // 10.0
+
+        // Fixed-point lookup keeps the 0.5 → front sector 0 → floor 0.
+        assert_eq!(
+            level.floor_at_fixed(x_fixed, y_fixed),
+            Some(Fixed16_16::from_int(0)),
+            "fixed-point center lookup must resolve the front (floor 0) sector"
+        );
+        // Truncated lookup drops the 0.5, lands on the partition → back sector 1
+        // → floor 32, demonstrating the divergence the fixed-point path fixes.
+        assert_eq!(
+            level.floor_at(10, 10),
+            Some(Fixed16_16::from_int(32)),
+            "truncated center lookup picks the back (floor 32) sector"
+        );
     }
 
     #[test]

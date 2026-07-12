@@ -1143,8 +1143,12 @@ fn p_death_think(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level>)
                         let mo = gs.mobjslab.get(handle).expect("player corpse exists");
                         (mo.momx, mo.momy)
                     };
+                    // Fixed-point center lookup (matching
+                    // `mo->subsector->sector->floorheight`); see the sibling
+                    // note in `p_xy_movement_mobj`. A truncated center would
+                    // apply corpse friction a tic early at a step edge.
                     let center_floor = lv
-                        .floor_at(final_x.to_int(), final_y.to_int())
+                        .floor_at_fixed(final_x.raw(), final_y.raw())
                         .unwrap_or(floorz);
                     if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
                         false
@@ -1384,8 +1388,15 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
             // off a step — `mo->floorz != mo->subsector->sector->floorheight`,
             // i.e. the bbox-support floor differs from the center-point sector
             // floor — skips friction entirely this tic ("do not stop sliding").
+            // Vanilla compares `mo->floorz` against
+            // `mo->subsector->sector->floorheight`, both resolved from the
+            // fixed-point position. Truncating the center to integer map units
+            // (`floor_at`) lands a corpse whose center sits a fraction of a unit
+            // past a step edge in the wrong sector, making the center floor
+            // spuriously equal the bbox-support floor and applying friction one
+            // tic early. Use the fixed-point subsector lookup to match vanilla.
             let center_floor = lv
-                .floor_at(x.to_int(), y.to_int())
+                .floor_at_fixed(x.raw(), y.raw())
                 .unwrap_or(floorz);
             if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
                 return;
