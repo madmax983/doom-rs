@@ -211,6 +211,15 @@ pub struct Mobj {
     /// Index of the subsector this actor occupies.
     pub subsector: u32,
 
+    // --- Blockmap thing-list links (vanilla `bnext`/`bprev`) ---
+    /// Next actor in this actor's blockmap-cell list, or `NULL` if this is the
+    /// tail / not linked.  Maintained by [`MobjSlab::set_thing_position`] /
+    /// [`MobjSlab::unset_thing_position`], mirroring vanilla `mobj_t::bnext`.
+    pub bnext: MobjHandle,
+    /// Previous actor in this actor's blockmap-cell list, or `NULL` if this is
+    /// the head / not linked (vanilla `mobj_t::bprev`).
+    pub bprev: MobjHandle,
+
     // --- Nightmare respawn ---
     /// Original spawn X (map units, fixed-point).
     pub spawn_x: Fixed16_16,
@@ -247,6 +256,8 @@ impl Mobj {
             reactiontime: 0,
             threshold: 0,
             subsector: 0,
+            bnext: MobjHandle::NULL,
+            bprev: MobjHandle::NULL,
             spawn_x: Fixed16_16::ZERO,
             spawn_y: Fixed16_16::ZERO,
             spawn_angle: Bam::ZERO,
@@ -320,9 +331,30 @@ pub struct MobjSlab {
     live_count: usize,
     /// Next generation value to assign (never 0).
     next_generation: u32,
+
+    // --- Blockmap thing-list (vanilla `blocklinks`) ---
+    /// Per-cell list heads: `blocklinks[row * bmap_width + col]` is the handle
+    /// of the most-recently-linked actor whose origin is in that cell, or
+    /// `NULL` for an empty cell.  Sized by [`Self::setup_blockmap`].  Iterate a
+    /// cell via `bnext` (head-insertion order = newest first), matching vanilla
+    /// `P_BlockThingsIterator`.
+    blocklinks: Vec<MobjHandle>,
+    /// Blockmap X origin in raw fixed-point (`x_origin << FRACBITS`).
+    bmap_orgx: i32,
+    /// Blockmap Y origin in raw fixed-point (`y_origin << FRACBITS`).
+    bmap_orgy: i32,
+    /// Blockmap width in cells.  Zero until [`Self::setup_blockmap`] runs; while
+    /// zero all things are treated as off-map and are not linked.
+    bmap_width: i32,
+    /// Blockmap height in cells.
+    bmap_height: i32,
 }
 
 impl MobjSlab {
+    /// Blockmap-block shift in fixed-point space (vanilla `MAPBLOCKSHIFT`,
+    /// `FRACBITS + 7` → 128-unit cells).
+    const MAPBLOCKSHIFT: u32 = 16 + 7;
+
     /// Create an empty slab.
     pub fn new() -> Self {
         Self {
@@ -330,6 +362,130 @@ impl MobjSlab {
             free_head: None,
             live_count: 0,
             next_generation: 1,
+            blocklinks: Vec::new(),
+            bmap_orgx: 0,
+            bmap_orgy: 0,
+            bmap_width: 0,
+            bmap_height: 0,
+        }
+    }
+
+    /// Size the per-cell blockmap thing-list heads for a level and clear them.
+    ///
+    /// Mirrors vanilla `P_LoadBlockMap`'s allocation of `blocklinks`
+    /// (`bmapwidth * bmapheight` head pointers, all NULL).  Call once at level
+    /// setup, **before** spawning any actor, so that each subsequent
+    /// [`Self::alloc`] head-inserts in vanilla spawn order.  Every currently
+    /// linked actor is implicitly unlinked (heads reset to NULL); callers that
+    /// resize mid-level must re-link existing actors.
+    pub fn setup_blockmap(&mut self, x_origin: i16, y_origin: i16, x_count: u16, y_count: u16) {
+        self.bmap_orgx = i32::from(x_origin) << 16;
+        self.bmap_orgy = i32::from(y_origin) << 16;
+        self.bmap_width = i32::from(x_count);
+        self.bmap_height = i32::from(y_count);
+        let n = self.bmap_width as usize * self.bmap_height as usize;
+        self.blocklinks = vec![MobjHandle::NULL; n];
+    }
+
+    /// Blockmap cell index for a fixed-point position, or `None` if the position
+    /// is off the map (or the blockmap is unsized).  Uses the exact vanilla
+    /// `(x - bmaporgx) >> MAPBLOCKSHIFT` derivation with the unclamped in-range
+    /// test — mirroring `P_SetThingPosition` / `P_BlockThingsIterator`.
+    #[inline]
+    fn block_cell(&self, x: Fixed16_16, y: Fixed16_16) -> Option<usize> {
+        if self.bmap_width == 0 || self.bmap_height == 0 {
+            return None;
+        }
+        let bx = x.raw().wrapping_sub(self.bmap_orgx) >> Self::MAPBLOCKSHIFT;
+        let by = y.raw().wrapping_sub(self.bmap_orgy) >> Self::MAPBLOCKSHIFT;
+        if bx < 0 || bx >= self.bmap_width || by < 0 || by >= self.bmap_height {
+            return None;
+        }
+        Some((by * self.bmap_width + bx) as usize)
+    }
+
+    /// Head of the blockmap thing-list for cell `(col, row)`, or `NULL` if the
+    /// cell is out of range or empty.  Read-only accessor for consumers that
+    /// walk the list via [`Mobj::bnext`] (used from Stage 2 onward).
+    #[inline]
+    pub fn block_things_head(&self, col: i32, row: i32) -> MobjHandle {
+        if col < 0 || col >= self.bmap_width || row < 0 || row >= self.bmap_height {
+            return MobjHandle::NULL;
+        }
+        self.blocklinks[(row * self.bmap_width + col) as usize]
+    }
+
+    /// Port of `P_SetThingPosition`'s blockmap-link step (`p_maputl.c:391`).
+    ///
+    /// Head-inserts `handle` into its home cell's list (new node becomes the
+    /// head; the old head's `bprev` points back), so per-cell iteration order is
+    /// the reverse of link order (newest first).  No-op for `MF_NOBLOCKMAP`
+    /// actors and for actors off the blockmap (their `bnext`/`bprev` are left
+    /// NULL — "thing is off the map").  Call **after** the actor's `x`/`y` and
+    /// `flags` are final.
+    pub fn set_thing_position(&mut self, handle: MobjHandle) {
+        let (flags, x, y) = match self.get(handle) {
+            Some(mo) => (mo.flags, mo.x, mo.y),
+            None => return,
+        };
+        if flags & flags::MF_NOBLOCKMAP != 0 {
+            return;
+        }
+        let Some(cell) = self.block_cell(x, y) else {
+            // Off the map: not linked.
+            if let Some(mo) = self.get_mut(handle) {
+                mo.bnext = MobjHandle::NULL;
+                mo.bprev = MobjHandle::NULL;
+            }
+            return;
+        };
+        let old_head = self.blocklinks[cell];
+        if let Some(mo) = self.get_mut(handle) {
+            mo.bprev = MobjHandle::NULL;
+            mo.bnext = old_head;
+        }
+        if old_head != MobjHandle::NULL
+            && let Some(oh) = self.get_mut(old_head)
+        {
+            oh.bprev = handle;
+        }
+        self.blocklinks[cell] = handle;
+    }
+
+    /// Port of `P_UnsetThingPosition`'s blockmap-unlink step (`p_maputl.c:343`).
+    ///
+    /// O(1) unlink of `handle` from its current cell list (patch the neighbors'
+    /// `bnext`/`bprev`, and the cell head if this actor was the head — the head
+    /// case re-derives the cell from `x`/`y`, so this MUST run **before** any
+    /// `x`/`y` change).  No-op for `MF_NOBLOCKMAP` actors.  Safe to call more
+    /// than once: the head is only cleared when it actually points at `handle`.
+    pub fn unset_thing_position(&mut self, handle: MobjHandle) {
+        let (flags, x, y, bnext, bprev) = match self.get(handle) {
+            Some(mo) => (mo.flags, mo.x, mo.y, mo.bnext, mo.bprev),
+            None => return,
+        };
+        if flags & flags::MF_NOBLOCKMAP != 0 {
+            return;
+        }
+        if bnext != MobjHandle::NULL
+            && let Some(n) = self.get_mut(bnext)
+        {
+            n.bprev = bprev;
+        }
+        if bprev != MobjHandle::NULL {
+            if let Some(p) = self.get_mut(bprev) {
+                p.bnext = bnext;
+            }
+        } else if let Some(cell) = self.block_cell(x, y)
+            && self.blocklinks[cell] == handle
+        {
+            // This actor was the cell head; the guard makes a redundant unlink
+            // safe (never clobbers a different actor's head).
+            self.blocklinks[cell] = bnext;
+        }
+        if let Some(mo) = self.get_mut(handle) {
+            mo.bnext = MobjHandle::NULL;
+            mo.bprev = MobjHandle::NULL;
         }
     }
 
@@ -341,7 +497,7 @@ impl MobjSlab {
 
         self.live_count += 1;
 
-        if let Some(free_idx) = self.free_head {
+        let handle = if let Some(free_idx) = self.free_head {
             let next = match &self.slots[free_idx as usize] {
                 Slot::Free { next_free } => *next_free,
                 Slot::Occupied { .. } => unreachable!("free list points to occupied slot"),
@@ -365,7 +521,14 @@ impl MobjSlab {
                 index: idx,
                 generation: new_gen,
             }
-        }
+        };
+
+        // Vanilla `P_SpawnMobj` ends with `P_SetThingPosition`, which links the
+        // fresh actor into the blockmap.  The actor's `x`/`y`/`flags` are final
+        // by the time it reaches `alloc`, so link here — no-op until a level has
+        // called `setup_blockmap`, and for `MF_NOBLOCKMAP` / off-map actors.
+        self.set_thing_position(handle);
+        handle
     }
 
     /// Release the slot for `handle`.  Returns `true` if the handle was valid.
@@ -378,6 +541,9 @@ impl MobjSlab {
             Slot::Occupied { generation, .. } if *generation == handle.generation => {}
             _ => return false,
         }
+        // Vanilla `P_RemoveMobj` calls `P_UnsetThingPosition` before releasing
+        // the actor; unlink from the blockmap while `x`/`y` are still valid.
+        self.unset_thing_position(handle);
         self.slots[idx] = Slot::Free {
             next_free: self.free_head,
         };
@@ -630,5 +796,140 @@ mod tests {
 
         // Attempting to allocate should follow the free list, encounter the Occupied slot, and panic.
         slab.alloc(make_player_mobj());
+    }
+
+    // -----------------------------------------------------------------------
+    // Blockmap thing-list (blocklinks) — vanilla P_SetThingPosition /
+    // P_UnsetThingPosition semantics.  These prove the structure is
+    // vanilla-correct before any consumer relies on it (Stage 2+).
+    // -----------------------------------------------------------------------
+
+    /// A shootable, blockmap-linked actor at integer map position `(x, y)`.
+    fn positioned_mobj(x: i32, y: i32) -> Mobj {
+        let mut mo = Mobj::new(
+            MobjKind::Imp,
+            Fixed16_16::from_int(x),
+            Fixed16_16::from_int(y),
+            Bam::ZERO,
+        );
+        mo.health = 100;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE; // NOT MF_NOBLOCKMAP
+        mo
+    }
+
+    /// Collect a cell's list by walking `bnext` from the head (vanilla
+    /// `P_BlockThingsIterator` order).
+    fn cell_chain(slab: &MobjSlab, col: i32, row: i32) -> Vec<MobjHandle> {
+        let mut out = Vec::new();
+        let mut h = slab.block_things_head(col, row);
+        while h != MobjHandle::NULL {
+            out.push(h);
+            h = slab.get(h).expect("linked handle must be live").bnext;
+        }
+        out
+    }
+
+    #[test]
+    fn blocklinks_head_insertion_order_is_newest_first() {
+        let mut slab = MobjSlab::new();
+        slab.setup_blockmap(0, 0, 4, 4);
+        // (10,10),(20,20),(30,30) all resolve to cell (0,0): 30<<16 >> 23 == 0.
+        let a = slab.alloc(positioned_mobj(10, 10));
+        let b = slab.alloc(positioned_mobj(20, 20));
+        let c = slab.alloc(positioned_mobj(30, 30));
+        // Iteration order = reverse of insertion (newest first).
+        assert_eq!(cell_chain(&slab, 0, 0), vec![c, b, a]);
+        // bprev threads the other way; head has NULL bprev, tail NULL bnext.
+        assert_eq!(slab.get(c).expect("c").bprev, MobjHandle::NULL);
+        assert_eq!(slab.get(b).expect("b").bprev, c);
+        assert_eq!(slab.get(a).expect("a").bprev, b);
+        assert_eq!(slab.get(a).expect("a").bnext, MobjHandle::NULL);
+    }
+
+    #[test]
+    fn blocklinks_move_relinks_into_new_cell() {
+        let mut slab = MobjSlab::new();
+        slab.setup_blockmap(0, 0, 4, 4);
+        let a = slab.alloc(positioned_mobj(10, 10));
+        let b = slab.alloc(positioned_mobj(20, 20));
+        let c = slab.alloc(positioned_mobj(30, 30));
+        // Move B (middle of the (0,0) chain) to cell (1,0): x=200 -> col 1.
+        slab.unset_thing_position(b);
+        slab.get_mut(b).expect("b").x = Fixed16_16::from_int(200);
+        slab.set_thing_position(b);
+        // (0,0) now holds C -> A with B spliced out.
+        assert_eq!(cell_chain(&slab, 0, 0), vec![c, a]);
+        assert_eq!(slab.get(c).expect("c").bnext, a);
+        assert_eq!(slab.get(a).expect("a").bprev, c);
+        // B is the sole head of cell (1,0).
+        assert_eq!(cell_chain(&slab, 1, 0), vec![b]);
+        assert_eq!(slab.get(b).expect("b").bnext, MobjHandle::NULL);
+        assert_eq!(slab.get(b).expect("b").bprev, MobjHandle::NULL);
+    }
+
+    #[test]
+    fn blocklinks_remove_unlinks_from_cell() {
+        let mut slab = MobjSlab::new();
+        slab.setup_blockmap(0, 0, 4, 4);
+        let a = slab.alloc(positioned_mobj(10, 10));
+        let b = slab.alloc(positioned_mobj(20, 20));
+        let c = slab.alloc(positioned_mobj(30, 30));
+        // Free the tail (A): chain becomes C -> B, B is new tail.
+        slab.free(a);
+        assert_eq!(cell_chain(&slab, 0, 0), vec![c, b]);
+        assert_eq!(slab.get(b).expect("b").bnext, MobjHandle::NULL);
+        // Free the head (C): chain becomes just B, now both head and tail.
+        slab.free(c);
+        assert_eq!(cell_chain(&slab, 0, 0), vec![b]);
+        assert_eq!(slab.get(b).expect("b").bprev, MobjHandle::NULL);
+    }
+
+    #[test]
+    fn blocklinks_noblockmap_and_offmap_not_linked() {
+        let mut slab = MobjSlab::new();
+        slab.setup_blockmap(0, 0, 4, 4);
+        // A NOBLOCKMAP actor (missile/puff/blood) is never linked.
+        let mut miss = positioned_mobj(30, 30);
+        miss.flags |= flags::MF_NOBLOCKMAP;
+        let m = slab.alloc(miss);
+        assert_eq!(slab.get(m).expect("m").bnext, MobjHandle::NULL);
+        assert_eq!(slab.get(m).expect("m").bprev, MobjHandle::NULL);
+        assert_eq!(slab.block_things_head(0, 0), MobjHandle::NULL);
+        // An off-map actor (cell outside the 4x4 grid) is not linked either.
+        let off = slab.alloc(positioned_mobj(100_000, 100_000));
+        assert_eq!(slab.get(off).expect("off").bnext, MobjHandle::NULL);
+        assert_eq!(slab.block_things_head(0, 0), MobjHandle::NULL);
+    }
+
+    #[test]
+    fn blocklinks_every_linked_handle_home_cell_matches_position() {
+        let mut slab = MobjSlab::new();
+        slab.setup_blockmap(0, 0, 8, 8);
+        // Scatter actors across several cells, two sharing a cell.
+        let handles = [
+            slab.alloc(positioned_mobj(10, 10)),   // (0,0)
+            slab.alloc(positioned_mobj(300, 10)),  // (2,0)
+            slab.alloc(positioned_mobj(300, 300)), // (2,2)
+            slab.alloc(positioned_mobj(40, 20)),   // (0,0) again
+        ];
+        // Invariant: every linked handle hashes back to the cell it is in.
+        let mut seen = 0;
+        for row in 0..8 {
+            for col in 0..8 {
+                let mut h = slab.block_things_head(col, row);
+                while h != MobjHandle::NULL {
+                    let mo = slab.get(h).expect("linked handle must be live");
+                    assert_eq!(
+                        slab.block_cell(mo.x, mo.y),
+                        Some((row * 8 + col) as usize),
+                        "handle in cell ({col},{row}) has mismatched home cell"
+                    );
+                    seen += 1;
+                    h = mo.bnext;
+                }
+            }
+        }
+        // Every allocated (blockmap-linked) handle appears exactly once.
+        assert_eq!(seen, handles.len());
     }
 }

@@ -431,6 +431,10 @@ fn read_mobj(r: &mut ReadCursor<'_>) -> Result<Mobj, SaveError> {
         reactiontime,
         threshold,
         subsector,
+        // Blockmap links are rebuilt by `set_thing_position` on relink (via the
+        // slab `alloc`), never serialized.
+        bnext: MobjHandle::NULL,
+        bprev: MobjHandle::NULL,
         spawn_x: Fixed16_16::ZERO,
         spawn_y: Fixed16_16::ZERO,
         spawn_angle: Bam::ZERO,

@@ -539,6 +539,10 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
     };
 
     if can_move {
+        // Vanilla `P_Move` commits through `P_TryMove`, which unlinks the actor
+        // from the blockmap, updates its position, then relinks it.  Mirror that
+        // here so the monster's blockmap-cell membership tracks its walk step.
+        gs.mobjslab.unset_thing_position(handle);
         if let Some(mo) = gs.mobjslab.get_mut(handle) {
             mo.x = new_x;
             mo.y = new_y;
@@ -551,6 +555,9 @@ pub fn p_move(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) -> 
             // `P_XYMovement` integrates it next tic) and destroy any residual
             // thrust momentum, drifting monsters out of vanilla sync.
         }
+        // Relink into the blockmap at the new position (paired with the unlink
+        // above), mirroring vanilla `P_TryMove`'s `P_SetThingPosition`.
+        gs.mobjslab.set_thing_position(handle);
         if let Some(lv) = level
             && let Some((support_floor, subsector)) =
                 crate::movement::support_state_at(&gs.mobjslab, handle, new_x, new_y, lv)
