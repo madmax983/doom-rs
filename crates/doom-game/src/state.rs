@@ -253,6 +253,8 @@ impl GameState {
     /// randomness (e.g. bullet spread, melee miss offset).
     ///
     /// Port of `P_SubRandom()` from various Doom source files.
+    // Verified in proofs.rs::lemma_p_subrandom_range: the result is always in
+    // [-255, 255] (both draws are bytes).
     pub fn p_subrandom(&mut self) -> i32 {
         let a = self.p_random() as i32;
         let b = self.p_random() as i32;
