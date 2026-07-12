@@ -28,6 +28,7 @@
 mod audio_system;
 mod cheats;
 mod cogmind;
+mod config;
 mod console;
 mod demo_mode;
 mod iwad;
@@ -119,6 +120,18 @@ struct Args {
     /// Skill level 1-5 (1=ITYTD, 2=HNTR, 3=HMP, 4=UV, 5=NM). Defaults to 3.
     #[arg(long, default_value = "3")]
     skill: u8,
+
+    /// Path to the vanilla-compatible config file (default: `default.cfg` in
+    /// the current working directory). Settings are loaded from here at startup
+    /// and written back on normal game exit.
+    #[arg(long)]
+    config: Option<std::path::PathBuf>,
+
+    /// Screen size (vanilla `screenblocks`, 3-11; 9 = fullscreen without HUD
+    /// border, 11 = no status bar). Overrides the config value when set
+    /// explicitly; persisted back to the config file on exit.
+    #[arg(long, default_value = "9")]
+    screenblocks: u8,
 
     /// Compatibility profile for vanilla strictness versus extended behavior.
     #[arg(long, default_value = "extended", value_parser = parse_compatibility_profile)]
@@ -2670,7 +2683,7 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
     Ok(())
 }
 
-fn run_doom(args: Args) -> Result<()> {
+fn run_doom(args: Args, overrides: CliOverrides) -> Result<()> {
     // Initialize trig tables (required for sin/cos in the game simulation).
     // SAFETY: called exactly once at startup, single-threaded, before any
     // Bam::sin() or Bam::cos() calls.
@@ -3566,10 +3579,34 @@ fn run_doom(args: Args) -> Result<()> {
             }
         }
     } else {
+        // Normal interactive game path — the ONLY path that touches the config
+        // file. Config load/save is deliberately kept out of the demo-verify,
+        // timedemo, playdemo, capture, and export early-return paths above so
+        // those runs stay pure and bit-exact (no config read, no config write).
+        let config_path = resolve_config_path(&args);
+        let mut cfg = config::Config::load_or_defaults(&config_path).unwrap_or_else(|e| {
+            eprintln!(
+                "Warning: could not read config '{}': {e}; using defaults",
+                config_path.display()
+            );
+            config::Config::with_defaults()
+        });
+        // Resolve settings with config as the baseline and an explicit CLI flag
+        // taking precedence (a default-valued flag does not clobber the config).
+        apply_config_settings(&mut cfg, &args, overrides);
+
         let mut app = app;
         event_loop
             .run(&mut app, &blit_palette)
             .map_err(|e| anyhow::anyhow!("Terminal Display Failed: {}", e))?;
+
+        // Persist settings back to the config file on normal exit.
+        if let Err(e) = cfg.save(&config_path) {
+            eprintln!(
+                "Warning: could not write config '{}': {e}",
+                config_path.display()
+            );
+        }
 
         #[cfg(feature = "telemetry")]
         if let Some(path) = args.telemetry_out.as_deref() {
@@ -3584,16 +3621,64 @@ fn run_doom(args: Args) -> Result<()> {
     Ok(())
 }
 
+/// Resolve the config-file path: `--config PATH` if given, else `default.cfg`
+/// in the current working directory (vanilla DOS behavior).
+fn resolve_config_path(args: &Args) -> std::path::PathBuf {
+    args.config
+        .clone()
+        .unwrap_or_else(|| std::path::PathBuf::from("default.cfg"))
+}
+
+/// Merge config-backed settings with explicit CLI overrides and fold the
+/// resolved values back into the store so they persist on save.
+///
+/// Precedence: config value is the baseline; an explicitly-provided CLI flag
+/// wins; a default-valued flag leaves the config value intact. Values with a
+/// live engine binding would be applied to the running game here — the current
+/// engine has no global sink for screen size / gamma / master volume, so those
+/// keys are round-tripped and persisted for vanilla compatibility (see
+/// `config.rs` `// note:` annotations) while `screenblocks` demonstrates the
+/// CLI-override precedence end to end.
+fn apply_config_settings(cfg: &mut config::Config, args: &Args, overrides: CliOverrides) {
+    let effective_screenblocks = config::resolve_int(
+        cfg.get_int("screenblocks"),
+        i64::from(args.screenblocks),
+        overrides.screenblocks_explicit,
+        9,
+    );
+    cfg.set("screenblocks", config::Value::Int(effective_screenblocks));
+}
+
+/// Which config-backed settings were provided explicitly on the command line
+/// (as opposed to sitting at their clap default). Derived from
+/// `ArgMatches::value_source` so a default-valued flag does not clobber a value
+/// loaded from the config file.
+#[derive(Debug, Default, Clone, Copy)]
+struct CliOverrides {
+    /// True when `--screenblocks` was passed explicitly.
+    screenblocks_explicit: bool,
+}
+
 fn main() {
-    let args = match Args::try_parse() {
+    use clap::CommandFactory;
+    use clap::FromArgMatches;
+    use clap::parser::ValueSource;
+
+    let matches = match Args::command().try_get_matches() {
+        Ok(m) => m,
+        Err(e) => e.exit(),
+    };
+    let overrides = CliOverrides {
+        screenblocks_explicit: matches.value_source("screenblocks")
+            == Some(ValueSource::CommandLine),
+    };
+    let args = match Args::from_arg_matches(&matches) {
         Ok(a) => a,
-        Err(e) => {
-            e.exit();
-        }
+        Err(e) => e.exit(),
     };
     let is_json = args.json;
 
-    if let Err(err) = run_doom(args) {
+    if let Err(err) = run_doom(args, overrides) {
         if is_json {
             // Memory: manually serialize without serde using format!("{:?}", ...) for escaping
             let mut error_msg = format!("{}", err);
@@ -3792,6 +3877,108 @@ mod tests {
     use doom_game::{GameState, Mobj, PlayerState, flags};
     use doom_map::{Blockmap, Level, Reject, Sector};
     use doom_types::mobj_kind::MobjKind;
+
+    /// Unique temp path for config-file tests (mirrors `unique_temp_log_path`).
+    fn unique_temp_cfg_path(name: &str) -> std::path::PathBuf {
+        let mut path = std::env::temp_dir();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system time must be after unix epoch")
+            .as_nanos();
+        path.push(format!("doom-rs-cfg-{name}-{nanos}.cfg"));
+        path
+    }
+
+    #[test]
+    fn config_arg_points_loader_at_custom_path() {
+        // Write a config at a custom path, then verify `--config PATH` resolves
+        // to it and the loader reads its values.
+        let path = unique_temp_cfg_path("custom-path");
+        std::fs::write(&path, "screenblocks 4\nsfx_volume 3\n").expect("write cfg");
+
+        let args = Args::try_parse_from([
+            "doom-app",
+            "--wad",
+            "doom1.wad",
+            "--config",
+            path.to_str().unwrap(),
+        ])
+        .expect("args parse");
+
+        assert_eq!(resolve_config_path(&args), path);
+        let cfg = config::Config::load_or_defaults(&resolve_config_path(&args)).expect("load");
+        assert_eq!(cfg.get_int("screenblocks"), Some(4));
+        assert_eq!(cfg.get_int("sfx_volume"), Some(3));
+        // Unset keys still fall back to vanilla defaults.
+        assert_eq!(cfg.get_int("music_volume"), Some(8));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn config_default_path_is_default_cfg() {
+        let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]).expect("args parse");
+        assert_eq!(resolve_config_path(&args), std::path::PathBuf::from("default.cfg"));
+    }
+
+    #[test]
+    fn cli_precedence_uses_value_source() {
+        use clap::CommandFactory;
+        use clap::FromArgMatches;
+        use clap::parser::ValueSource;
+
+        // No explicit --screenblocks: value_source is DefaultValue, so a config
+        // value must survive.
+        let m = Args::command()
+            .try_get_matches_from(["doom-app", "--wad", "doom1.wad"])
+            .expect("parse");
+        let explicit = m.value_source("screenblocks") == Some(ValueSource::CommandLine);
+        assert!(!explicit, "unset flag must not read as CommandLine");
+        let overrides = CliOverrides {
+            screenblocks_explicit: explicit,
+        };
+        let args = Args::from_arg_matches(&m).expect("from matches");
+        let mut cfg = config::Config::parse_with_defaults("screenblocks 6\n");
+        apply_config_settings(&mut cfg, &args, overrides);
+        assert_eq!(
+            cfg.get_int("screenblocks"),
+            Some(6),
+            "default-valued CLI flag must not clobber config"
+        );
+
+        // Explicit --screenblocks 4: CLI wins over the config value.
+        let m = Args::command()
+            .try_get_matches_from(["doom-app", "--wad", "doom1.wad", "--screenblocks", "4"])
+            .expect("parse");
+        let explicit = m.value_source("screenblocks") == Some(ValueSource::CommandLine);
+        assert!(explicit, "explicit flag must read as CommandLine");
+        let overrides = CliOverrides {
+            screenblocks_explicit: explicit,
+        };
+        let args = Args::from_arg_matches(&m).expect("from matches");
+        let mut cfg = config::Config::parse_with_defaults("screenblocks 6\n");
+        apply_config_settings(&mut cfg, &args, overrides);
+        assert_eq!(
+            cfg.get_int("screenblocks"),
+            Some(4),
+            "explicit CLI value must win over config"
+        );
+    }
+
+    #[test]
+    fn config_save_load_roundtrip_via_disk() {
+        let path = unique_temp_cfg_path("disk-roundtrip");
+        let mut cfg = config::Config::with_defaults();
+        cfg.set("screenblocks", config::Value::Int(7));
+        cfg.set("chatmacro0", config::Value::Str("Custom line".to_string()));
+        cfg.save(&path).expect("save");
+
+        let reloaded = config::Config::load_or_defaults(&path).expect("load");
+        assert_eq!(reloaded.get_int("screenblocks"), Some(7));
+        assert_eq!(reloaded.get_str("chatmacro0"), Some("Custom line"));
+
+        let _ = std::fs::remove_file(&path);
+    }
 
     #[derive(Default)]
     struct FakeCaptureApp {
