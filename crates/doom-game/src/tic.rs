@@ -1241,6 +1241,59 @@ fn corpse_skips_friction(
     has_momentum && support_floor != center_floor
 }
 
+/// Port of vanilla `P_ZMovement` (`p_mobj.c`) floor-clip for NON-PLAYER,
+/// NON-MISSILE mobjs — monsters and any thrust-sliding thing.
+///
+/// Missiles run `p_z_movement_missile`; the player runs its z-movement inline in
+/// `p_move_player`. doom-rs monsters carry no gravity (their z is seated on the
+/// support floor by the `A_Chase` `P_Move` walk step), but the residual-thrust
+/// momentum-slide path (`p_xy_movement_mobj`) moves x,y without re-clamping z.
+/// This reproduces vanilla's clip: `mo->z += mo->momz; if (mo->z <= mo->floorz)
+/// { if (mo->momz < 0) mo->momz = 0; mo->z = mo->floorz; }`, using the bbox
+/// support floor (= vanilla `mo->floorz`, the tmfloorz set by the last
+/// `P_TryMove`). The only non-idle effect is raising a monster that slid onto a
+/// higher step up to the new floor the same tic; an actor already resting on its
+/// floor (`z == floorz`, `momz == 0`) is a no-op, and an actor above its floor
+/// with no vertical momentum is left untouched (monsters model no gravity).
+fn p_z_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let Some(lv) = level else {
+        return;
+    };
+    let (x, y, z, momz, flags) = {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        (mo.x, mo.y, mo.z, mo.momz, mo.flags)
+    };
+    // Missiles are handled by `p_z_movement_missile`; guard defensively.
+    if flags & flags::MF_MISSILE != 0 {
+        return;
+    }
+    let Some((floorz, _)) =
+        crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
+    else {
+        return;
+    };
+
+    // Vanilla `mo->z += mo->momz;` then the floor-clip.
+    let new_z = z + momz;
+    if new_z <= floorz {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            if mo.momz < Fixed16_16::ZERO {
+                mo.momz = Fixed16_16::ZERO;
+            }
+            mo.z = floorz;
+        }
+    } else if momz != Fixed16_16::ZERO {
+        // Above the floor with vertical momentum: advance z. Monsters never
+        // carry momz in doom-rs (no gravity), so this is inert for them; kept
+        // for faithfulness with the vanilla `mo->z += mo->momz` step.
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.z = new_z;
+        }
+    }
+}
+
 /// Port of vanilla `P_XYMovement` (`p_mobj.c`) for NON-PLAYER, NON-MISSILE
 /// mobjs — monsters and any thing carrying momentum.
 ///
@@ -1357,6 +1410,17 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
             }
         }
     }
+
+    // Vanilla `P_MobjThinker` runs `P_ZMovement` right after `P_XYMovement`.
+    // The `A_Chase` `P_Move` walk step already re-seats a monster's z on the
+    // support floor after each positional step, but this residual-thrust
+    // momentum slide moved x,y (above) without re-clamping z, so a monster
+    // sliding onto a higher step kept its old (lower) z. Reproduce vanilla's
+    // floor clip here (only for actors that actually carried momentum this tic —
+    // an idle monster returns early above, matching vanilla, which calls
+    // `P_ZMovement` only when `z != floorz || momz`). DEMO1/E1M5: a thrust imp
+    // slides north onto an 8-unit step at tic 3022 and must rise -168 -> -160.
+    p_z_movement_mobj(gs, handle, level);
 
     // Friction / STOPSPEED. Missiles and skull-fly charges never get friction.
     let (flags1, mz) = {
@@ -3837,6 +3901,58 @@ mod tests {
         assert_eq!(
             gs.pending_monster_crossings[0].0, 0,
             "the queued crossing must be linedef 0 (the lift trigger)"
+        );
+    }
+
+    /// Regression (DEMO1/E1M5, tic 3022): a monster sliding under residual
+    /// thrust momentum through `p_xy_movement_mobj` onto a HIGHER step must have
+    /// its z raised onto the new floor the same tic (vanilla `P_ZMovement`
+    /// floor-clip `if (mo->z <= mo->floorz) mo->z = mo->floorz`). Previously the
+    /// momentum path moved x,y without re-clamping z, so a thrust imp kept its
+    /// old lower z (oracle z=-160 vs doom-rs z=-168, off by the 8-unit step).
+    /// The clamp only fires for actors that actually carried momentum this tic;
+    /// an idle monster is untouched (guards DEMO2/DEMO3 bit-exact sync).
+    #[test]
+    fn momentum_slide_onto_higher_step_raises_z_to_new_floor() {
+        // Left sector (x<64) floor 0, right sector (x>64) floor 8.
+        let level = make_partition_step_level(8, 0);
+        let mut gs = make_game_state();
+
+        // Park the player far away so it cannot block the slide.
+        gs.mobjslab.unset_thing_position(gs.player.handle);
+        if let Some(mo) = gs.mobjslab.get_mut(gs.player.handle) {
+            mo.x = Fixed16_16::from_int(10000);
+            mo.y = Fixed16_16::from_int(10000);
+        }
+        gs.mobjslab.set_thing_position(gs.player.handle);
+
+        // Imp resting on the low floor at x=40 (center + bbox in the low sector),
+        // thrust east across the x=64 step edge into the high (floor 8) sector.
+        let mut mo = Mobj::new(
+            MobjKind::Imp,
+            Fixed16_16::from_int(40),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 5;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.z = Fixed16_16::ZERO;
+        mo.momx = Fixed16_16::from_int(30);
+        let handle = gs.mobjslab.alloc(mo);
+        gs.mobjslab.set_thing_position(handle);
+
+        p_xy_movement_mobj(&mut gs, handle, Some(&level));
+
+        let after = gs.mobjslab.get(handle).expect("imp exists");
+        assert!(
+            after.x > Fixed16_16::from_int(64),
+            "the imp must have slid past the x=64 step into the high sector (x={:?})",
+            after.x
+        );
+        assert_eq!(
+            after.z,
+            Fixed16_16::from_int(8),
+            "the imp's z must be raised onto the higher (8-unit) step floor, not left at 0"
         );
     }
 
