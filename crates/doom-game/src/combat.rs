@@ -1176,6 +1176,22 @@ pub fn p_line_attack(
 /// spot)` succeeds — deals `bombdamage - dist`. The Cyberdemon and Spider
 /// Mastermind take no concussion damage. When `level` is `None` (unit tests)
 /// the sight check is skipped.
+///
+/// **Iteration order (M5b):** vanilla walks the blockmap, not storage-slot
+/// order. It derives the cell bbox from `spot ± (bombdamage + MAXRADIUS)` and
+/// iterates it **row-major** (`for y in yl..=yh { for x in xl..=xh { … } }`),
+/// applying `PIT_RadiusAttack` to each cell's `blocklinks` list head-first
+/// (newest-linked first). We reproduce that exact order so the per-thing
+/// painchance `P_Random` draws are consumed in the same sequence as vanilla —
+/// the DEMO1 divergence where slot order and blockmap order pick a different
+/// actor for the same roll. `MAXRADIUS` is the maximum thing radius (32 map
+/// units): a thing at `max(|dx|,|dy|) < bombdamage + radius <= bombdamage +
+/// MAXRADIUS` can be in range, so the bbox must cover `± (bombdamage + 32)`
+/// units. The cell range is vanilla's unclamped range **intersected with the
+/// blockmap extent** — visiting the identical set of cells in the identical
+/// order as vanilla's "iterate the raw range, skip out-of-range cells", without
+/// looping over off-grid cells (which is also what keeps the #730 `i32::MAX`
+/// bombdamage hardening test from spinning over a pathological range).
 pub fn p_radius_attack(
     gs: &mut GameState,
     spot: MobjHandle,
@@ -1183,6 +1199,11 @@ pub fn p_radius_attack(
     damage: i32,
     level: Option<&Level>,
 ) {
+    /// Maximum thing radius in map units (vanilla `MAXRADIUS`, `32*FRACUNIT`);
+    /// used only to size the cell bbox (as plain map units here, promoted to
+    /// fixed-point by the `<< FRACBITS` below).
+    const MAXRADIUS: i32 = 32;
+
     // Explosion center.
     let (sx, sy) = {
         let Some(mo) = gs.mobjslab.get(spot) else {
@@ -1191,68 +1212,94 @@ pub fn p_radius_attack(
         (mo.x.raw(), mo.y.raw())
     };
 
-    // Collect iteration boundaries up front.
-    let initial_slot_count = gs.mobjslab.slot_count();
-    let initial_generation = gs.mobjslab.next_generation();
+    // Vanilla `P_RadiusAttack` cell bbox: `dist = (damage+MAXRADIUS)<<FRACBITS`,
+    // then `yh/yl/xh/xl = (spot->{y,x} ± dist - bmaporg{y,x}) >> MAPBLOCKSHIFT`.
+    // Use wrapping arithmetic to mirror vanilla C `int` overflow (and keep the
+    // #730 `i32::MAX` hardening test from panicking in debug).
+    let orgx = gs.mobjslab.bmap_orgx();
+    let orgy = gs.mobjslab.bmap_orgy();
+    let dist = damage.wrapping_add(MAXRADIUS).wrapping_shl(16);
+    let yh = sy.wrapping_add(dist).wrapping_sub(orgy) >> MAPBLOCKSHIFT;
+    let yl = sy.wrapping_sub(dist).wrapping_sub(orgy) >> MAPBLOCKSHIFT;
+    let xh = sx.wrapping_add(dist).wrapping_sub(orgx) >> MAPBLOCKSHIFT;
+    let xl = sx.wrapping_sub(dist).wrapping_sub(orgx) >> MAPBLOCKSHIFT;
 
-    for i in 0..initial_slot_count {
-        let Some(handle) = gs.mobjslab.handle_at(i) else {
-            continue;
-        };
-        // Skip mobjs spawned during this iteration.
-        if handle.generation >= initial_generation {
-            continue;
+    // Intersect the vanilla range with the blockmap extent (equivalent to
+    // vanilla's per-cell out-of-range skip; see the doc comment).
+    let (w, h) = (gs.mobjslab.bmap_width(), gs.mobjslab.bmap_height());
+    if w == 0 || h == 0 {
+        return; // no blockmap (nothing is linked)
+    }
+    let (yl, yh) = (yl.max(0), yh.min(h - 1));
+    let (xl, xh) = (xl.max(0), xh.min(w - 1));
+
+    // Row-major cell scan (vanilla `for (y=yl; y<=yh; y++) for (x=xl; …)`).
+    for by in yl..=yh {
+        for bx in xl..=xh {
+            // Walk the cell's thing-list head-first (vanilla
+            // `P_BlockThingsIterator`: `for (mobj=blocklinks[…]; mobj; …)`).
+            let mut handle = gs.mobjslab.block_things_head(bx, by);
+            while handle != MobjHandle::NULL {
+                // Extract actor data and capture `bnext` BEFORE the callback so
+                // a mid-iteration free/relink cannot break the walk (matches
+                // vanilla, which advances `mobj = mobj->bnext`).
+                let (next, ax, ay, radius, alive, shootable, kind) = {
+                    let Some(mo) = gs.mobjslab.get(handle) else {
+                        break; // linked handle went stale — abort this cell
+                    };
+                    (
+                        mo.bnext,
+                        mo.x.raw(),
+                        mo.y.raw(),
+                        mo.radius.raw(),
+                        mo.health > 0,
+                        mo.flags & flags::MF_SHOOTABLE != 0,
+                        mo.kind,
+                    )
+                };
+
+                // PIT_RadiusAttack per-thing logic (unchanged from slot order).
+                'pit: {
+                    if !alive || !shootable {
+                        break 'pit;
+                    }
+
+                    // Boss spider and cyborg take no damage from concussion.
+                    if kind == MobjKind::Cyberdemon || kind == MobjKind::SpiderMastermind {
+                        break 'pit;
+                    }
+
+                    // dist = max(|dx|,|dy|); dist = (dist - thing->radius) >> FRACBITS.
+                    let dx = ax.wrapping_sub(sx).wrapping_abs();
+                    let dy = ay.wrapping_sub(sy).wrapping_abs();
+                    let dmax = if dx > dy { dx } else { dy };
+                    let mut d = dmax.wrapping_sub(radius) >> 16;
+                    if d < 0 {
+                        d = 0;
+                    }
+                    if d >= damage {
+                        break 'pit; // out of range
+                    }
+
+                    // Must be in direct path (vanilla `P_CheckSight(thing, bombspot)`).
+                    if let Some(lv) = level
+                        && !crate::sight::p_check_sight(gs, lv, handle, spot)
+                    {
+                        break 'pit;
+                    }
+
+                    // Vanilla `PIT_RadiusAttack` applies `bombdamage - dist`
+                    // directly. `d` is non-negative and the `d >= damage` guard
+                    // ensures `0 <= d < damage`, so `damage - d` is in
+                    // `[1, damage]` and cannot i32-overflow — this subsumes
+                    // #730's overflow guard, which fixed the now-removed
+                    // proportional `damage * (radius - dist)` multiply.
+                    damage_mobj_source(gs, handle, spot, source, damage - d);
+                }
+
+                handle = next;
+            }
         }
-
-        // Extract actor data.
-        let (ax, ay, radius, alive, shootable, kind) = {
-            let Some(mo) = gs.mobjslab.get(handle) else {
-                continue;
-            };
-            (
-                mo.x.raw(),
-                mo.y.raw(),
-                mo.radius.raw(),
-                mo.health > 0,
-                mo.flags & flags::MF_SHOOTABLE != 0,
-                mo.kind,
-            )
-        };
-
-        if !alive || !shootable {
-            continue;
-        }
-
-        // Boss spider and cyborg take no damage from concussion.
-        if kind == MobjKind::Cyberdemon || kind == MobjKind::SpiderMastermind {
-            continue;
-        }
-
-        // dist = max(|dx|,|dy|); dist = (dist - thing->radius) >> FRACBITS.
-        let dx = ax.wrapping_sub(sx).wrapping_abs();
-        let dy = ay.wrapping_sub(sy).wrapping_abs();
-        let dmax = if dx > dy { dx } else { dy };
-        let mut dist = dmax.wrapping_sub(radius) >> 16;
-        if dist < 0 {
-            dist = 0;
-        }
-        if dist >= damage {
-            continue; // out of range
-        }
-
-        // Must be in direct path (vanilla `P_CheckSight(thing, bombspot)`).
-        if let Some(lv) = level
-            && !crate::sight::p_check_sight(gs, lv, handle, spot)
-        {
-            continue;
-        }
-
-        // Vanilla `PIT_RadiusAttack` applies `bombdamage - dist` directly.
-        // `dist` is a non-negative i32 and the `dist >= damage` guard above
-        // ensures `0 <= dist < damage`, so `damage - dist` is in `[1, damage]`
-        // and cannot i32-overflow — this subsumes #730's overflow guard, which
-        // fixed the now-removed proportional `damage * (radius - dist)` multiply.
-        damage_mobj_source(gs, handle, spot, source, damage - dist);
     }
 }
 
@@ -1292,6 +1339,12 @@ mod tests {
 
     fn make_game_state() -> GameState {
         let mut gs = GameState::new("test");
+        // Size a generous blockmap BEFORE spawning so `alloc`'s auto-link
+        // (vanilla P_SetThingPosition) links every actor into `blocklinks`;
+        // `p_radius_attack` now iterates the blockmap, so unlinked actors would
+        // be invisible to it. Origin (-1024,-1024), 64x64 128-unit cells covers
+        // [-1024, 7168] on both axes — all radius-attack test coordinates.
+        gs.mobjslab.setup_blockmap(-1024, -1024, 64, 64);
         let mut mo = Mobj::new(
             MobjKind::Player,
             Fixed16_16::ZERO,
@@ -2520,6 +2573,77 @@ mod tests {
     }
 
     #[test]
+    fn radius_attack_iterates_blockmap_head_first_within_cell() {
+        // Vanilla `P_RadiusAttack` walks the blockmap, and within a cell
+        // `P_BlockThingsIterator` iterates the `blocklinks` list **head-first**
+        // (newest-linked first) — NOT storage-slot order. This is the exact
+        // DEMO1 divergence: two co-cell shootables get the same painchance
+        // rolls in a different order depending on the iteration source.
+        //
+        // Place two shootables in the SAME cell, `first` then `second` (so
+        // `second` is the list head). Head-first order visits `second` first,
+        // so `second` draws the earlier `P_Random`. We pick an RNG index where
+        // the first draw enters pain (`<200`) and the second does not
+        // (`>=200`), so ONLY the first-visited actor ends in its pain state.
+        // Under the old slot-order loop, `first` (lower slot) would draw first
+        // and this assertion would flip.
+        let mut gs = make_game_state();
+
+        // (10,0) and (12,0) share cell (col 8, row 8) for the (-1024,-1024)
+        // origin, and both sit inside a 100-unit blast at the player (0,0).
+        let first = spawn_trooper(&mut gs, 10, 0);
+        let second = spawn_trooper(&mut gs, 12, 0);
+        // High health → the blast is non-lethal, so each victim draws exactly
+        // ONE painchance roll (the fall-forward draw is gated off by
+        // `damage >= 40`), keeping the two draws adjacent in the stream.
+        for h in [first, second] {
+            gs.mobjslab
+                .get_mut(h)
+                .expect("trooper must exist in test")
+                .health = 1000;
+        }
+
+        // Find an RNG index whose 1st draw < 200 (Trooper pain_chance) and 2nd
+        // draw >= 200, using a cloned probe (reproduces the exact draw stream).
+        let mut start = None;
+        for i in 0..256u32 {
+            let mut probe = gs.rng.clone();
+            probe.set_index(i);
+            let d1 = probe.next_byte();
+            let d2 = probe.next_byte();
+            if d1 < 200 && d2 >= 200 {
+                start = Some(i);
+                break;
+            }
+        }
+        let start = start.expect("an rng index with draw1<200<=draw2 must exist");
+        gs.rng.set_index(start);
+
+        let player_handle = gs.player.handle;
+        p_radius_attack(&mut gs, player_handle, MobjHandle::NULL, 100, None);
+
+        let pain = crate::mobj::StateNum(ids::S_POSS_PAIN);
+        let second_state = gs
+            .mobjslab
+            .get(second)
+            .expect("second must exist in test")
+            .state;
+        let first_state = gs
+            .mobjslab
+            .get(first)
+            .expect("first must exist in test")
+            .state;
+        assert_eq!(
+            second_state, pain,
+            "head (newest-linked) actor must be visited FIRST and draw the <200 painchance roll"
+        );
+        assert_ne!(
+            first_state, pain,
+            "tail actor must be visited SECOND and draw the >=200 roll (no pain)"
+        );
+    }
+
+    #[test]
     fn radius_attack_credits_bombsource_not_spot() {
         // Vanilla `A_Explode` passes `bombspot->target` as the bombsource, so a
         // monster caught in a barrel/rocket blast retaliates against the actor
@@ -2611,6 +2735,7 @@ mod tests {
         // blast must not reach the trooper even though it is well within range.
         let level = make_reject_blocked_level();
         let mut gs = GameState::new("test");
+        gs.mobjslab.setup_blockmap(-1024, -1024, 64, 64);
         let mut player_mo = Mobj::new(
             MobjKind::Player,
             Fixed16_16::from_int(64),
@@ -2644,6 +2769,7 @@ mod tests {
         // takes splash damage.
         let level = make_combat_test_level();
         let mut gs = GameState::new("test");
+        gs.mobjslab.setup_blockmap(-1024, -1024, 64, 64);
         let mut player_mo = Mobj::new(
             MobjKind::Player,
             Fixed16_16::from_int(64),
