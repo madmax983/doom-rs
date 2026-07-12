@@ -1296,22 +1296,42 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
             };
             let half = MAXMOVE.raw() / 2;
             loop {
-                let (ptryx, ptryy);
-                if xmove > half || ymove > half {
+                let (ptryx, ptryy, old_x, old_y);
+                {
                     let mo = gs.mobjslab.get(handle).expect("mobj exists");
-                    ptryx = mo.x + Fixed16_16::from_raw(xmove / 2);
-                    ptryy = mo.y + Fixed16_16::from_raw(ymove / 2);
-                    xmove >>= 1;
-                    ymove >>= 1;
-                } else {
-                    let mo = gs.mobjslab.get(handle).expect("mobj exists");
-                    ptryx = mo.x + Fixed16_16::from_raw(xmove);
-                    ptryy = mo.y + Fixed16_16::from_raw(ymove);
-                    xmove = 0;
-                    ymove = 0;
+                    old_x = mo.x;
+                    old_y = mo.y;
+                    if xmove > half || ymove > half {
+                        ptryx = mo.x + Fixed16_16::from_raw(xmove / 2);
+                        ptryy = mo.y + Fixed16_16::from_raw(ymove / 2);
+                        xmove >>= 1;
+                        ymove >>= 1;
+                    } else {
+                        ptryx = mo.x + Fixed16_16::from_raw(xmove);
+                        ptryy = mo.y + Fixed16_16::from_raw(ymove);
+                        xmove = 0;
+                        ymove = 0;
+                    }
                 }
 
-                if !crate::movement::p_try_move_commit(&mut gs.mobjslab, handle, ptryx, ptryy, lv) {
+                if crate::movement::p_try_move_commit(&mut gs.mobjslab, handle, ptryx, ptryy, lv) {
+                    // Vanilla `P_TryMove` walks the `spechit` list after a
+                    // successful move and fires `P_CrossSpecialLine` for every
+                    // special line whose side the (non-player) thing's centre
+                    // crossed — for a monster sliding under residual thrust
+                    // momentum through `P_XYMovement`, exactly as for an
+                    // `A_Chase` walk step (see `p_move` in actions.rs). Without
+                    // this a monster knocked across a lift/teleport/raise-door
+                    // trigger line never activates it (DEMO1/E1M5: an imp thrust
+                    // north across the type-88 WR plat line 479 must lower the
+                    // tag-3 lift, so the player falling onto it lands on the
+                    // already-descended floor rather than 5 tics early). Recorded
+                    // here and dispatched by `dispatch_pending_monster_crossings`
+                    // after the actor pass, before the sector movers — same tic.
+                    crate::linedef_dispatch::queue_monster_crossings(
+                        gs, lv, handle, old_x, old_y, ptryx, ptryy,
+                    );
+                } else {
                     // Vanilla: a non-player, non-missile blocked move stops dead
                     // (`mo->momx = mo->momy = 0`). Missiles never reach here.
                     if let Some(mo) = gs.mobjslab.get_mut(handle) {
@@ -3709,6 +3729,104 @@ mod tests {
             reject,
             blockmap: bm,
         }
+    }
+
+    /// A two-sector test level split by a single two-sided linedef at x=0
+    /// (from (0,-64) to (0,64)) carrying `special`, with the linedef and the
+    /// back sector both tagged `tag`. Both sectors are floor 0 / ceil 128 so a
+    /// monster passes freely and the opening never blocks the move.
+    fn make_lift_line_level(special: u16, tag: u16) -> doom_map::Level {
+        let bm = make_minimal_blockmap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).expect("item must exist in tests");
+        let sector = |t: u16| doom_map::Sector {
+            floor_height: doom_types::Fixed16_16::from_int(0),
+            ceil_height: doom_types::Fixed16_16::from_int(128),
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: t,
+        };
+        let side = |sec: u16| doom_map::Sidedef {
+            x_offset: 0,
+            y_offset: 0,
+            upper_texture: *b"\0\0\0\0\0\0\0\0",
+            lower_texture: *b"\0\0\0\0\0\0\0\0",
+            middle_texture: *b"\0\0\0\0\0\0\0\0",
+            sector: sec,
+        };
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004, // ML_TWOSIDED
+                special,
+                tag,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            }],
+            sidedefs: vec![side(0), side(1)],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: -64 },
+                doom_map::Vertex { x: 0, y: 64 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![sector(0), sector(tag)],
+            reject,
+            blockmap: bm,
+        }
+    }
+
+    /// Regression (DEMO1/E1M5, leveltime ~2087): a monster sliding under
+    /// residual thrust momentum through `p_xy_movement_mobj` (vanilla
+    /// `P_XYMovement`) must fire the walkover lift-trigger line its centre
+    /// crosses, exactly as `A_Chase`'s `P_Move` does. Previously the momentum
+    /// path used the untracked `p_try_move_commit` and silently walked over the
+    /// line, so an imp knocked across a type-88 WR plat line never lowered the
+    /// tag-3 lift and the player fell onto it 5 tics early.
+    #[test]
+    fn momentum_slide_fires_monster_walkover_lift_line() {
+        let mut gs = make_game_state();
+        let level = make_lift_line_level(88, 1); // WR plat down-wait-up-stay, tag 1.
+
+        // Move the make_game_state player out of the monster's path (it spawns at
+        // the origin, exactly where the trigger line is crossed) so it does not
+        // block the move via PIT_CheckThing.
+        gs.mobjslab.unset_thing_position(gs.player.handle);
+        if let Some(mo) = gs.mobjslab.get_mut(gs.player.handle) {
+            mo.x = Fixed16_16::from_int(10000);
+            mo.y = Fixed16_16::from_int(10000);
+        }
+        gs.mobjslab.set_thing_position(gs.player.handle);
+
+        // Trooper on the ground at x=-5, thrust east fast enough to cross x=0.
+        let mut mo = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(-5),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 30;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.momx = Fixed16_16::from_int(10);
+        let handle = gs.mobjslab.alloc(mo);
+        gs.mobjslab.set_thing_position(handle);
+
+        p_xy_movement_mobj(&mut gs, handle, Some(&level));
+
+        assert_eq!(
+            gs.pending_monster_crossings.len(),
+            1,
+            "a momentum slide across a monster-crossable type-88 line must queue the crossing"
+        );
+        assert_eq!(
+            gs.pending_monster_crossings[0].0, 0,
+            "the queued crossing must be linedef 0 (the lift trigger)"
+        );
     }
 
     fn make_damage_level(floor_height: i16, special: u16) -> doom_map::Level {
