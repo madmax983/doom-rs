@@ -2389,13 +2389,31 @@ fn open_door(
 
     let target = lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
 
-    // Avoid duplicate movers for the same sector.
-    if gs
+    // Vanilla `EV_VerticalDoor` (`p_doors.c`): if the door sector already has an
+    // active mover (`sec->specialdata`), a re-trigger never spawns a second door.
+    // For a "raise" door (special 1/26/27/28/117 — our `OpenWaitClose` behavior)
+    // a door that is currently *closing* (`direction == -1`) reverses back up
+    // ("go back up"); an opening or waiting door is left alone for a monster
+    // (`!thing->player` — "bad guys never close doors"). This reversal is what
+    // lets a zombieman whose step is blocked by a closing DR door push it back
+    // open and walk through, rather than standing in front of it while the door
+    // finishes closing (E1M5/DEMO1: POSS re-triggering ld477 at lt~1713–1729 —
+    // the closing door reverses at the first blocked step instead of shutting to
+    // the floor and trapping the monster).
+    if let Some(door) = gs
         .movers
         .active_doors
-        .iter()
-        .any(|d| d.sector == sector_idx)
+        .iter_mut()
+        .find(|d| d.sector == sector_idx)
     {
+        if behavior == crate::linedef_dispatch::DoorBehavior::OpenWaitClose
+            && door.speed < Fixed16_16::ZERO
+            && door.reopen_countdown < 0
+        {
+            door.speed = door.speed.abs();
+            door.target_height = target;
+            door.countdown = -1;
+        }
         return;
     }
 
@@ -4713,6 +4731,78 @@ mod tests {
         assert!(monster_activate_door_linedef(&mut gs, &level, 0));
         assert_eq!(gs.movers.active_doors.len(), 1);
         assert_eq!(gs.movers.active_doors[0].sector, 1);
+    }
+
+    /// Vanilla `EV_VerticalDoor` (`p_doors.c`): re-triggering a raise door
+    /// (special 1) whose sector already has an active mover does NOT spawn a
+    /// second door; if that door is currently *closing* (`direction == -1`) it
+    /// reverses back up ("go back up"). This is what unsticks a zombieman whose
+    /// step is blocked by a closing DR door (E1M5/DEMO1 ld477 ~tic 1729): its
+    /// blocked-move `P_UseSpecialLine` re-trigger pushes the door open again
+    /// instead of letting it shut to the floor and trap the monster.
+    #[test]
+    fn monster_retrigger_reverses_closing_raise_door() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level_with_special(0, 1);
+
+        // Door sector (1) partway shut and moving down — a DR door that opened,
+        // waited, and is now closing toward the floor.
+        level.sectors[1].ceil_height = Fixed16_16::from_int(40);
+        gs.movers.active_doors.push(DoorMover {
+            sector: 1,
+            target_height: level.sectors[1].floor_height,
+            current_height: Fixed16_16::from_int(40),
+            speed: -DOOR_SPEED,
+            is_ceiling: true,
+            wait_tics: DOOR_WAIT,
+            countdown: -1,
+            reopen_height: Fixed16_16::ZERO,
+            reopen_countdown: -1,
+        });
+
+        assert!(monster_activate_door_linedef(&mut gs, &level, 0));
+
+        assert_eq!(gs.movers.active_doors.len(), 1, "no second mover is spawned");
+        let d = &gs.movers.active_doors[0];
+        assert!(
+            d.speed > Fixed16_16::ZERO,
+            "a closing raise door reverses to opening on re-trigger"
+        );
+        assert_eq!(
+            d.target_height,
+            Fixed16_16::from_int(124),
+            "reopens to the lowest adjacent ceiling minus 4"
+        );
+        assert_eq!(d.countdown, -1, "moving up, not waiting");
+    }
+
+    /// The other half of the vanilla rule: a monster (`!thing->player`) never
+    /// closes an *opening* (or waiting) door — re-triggering one leaves it
+    /// opening and spawns no second mover.
+    #[test]
+    fn monster_retrigger_leaves_opening_door_unchanged() {
+        let mut gs = GameState::new("TEST");
+        let level = make_door_level_with_special(0, 1);
+
+        gs.movers.active_doors.push(DoorMover {
+            sector: 1,
+            target_height: Fixed16_16::from_int(124),
+            current_height: Fixed16_16::from_int(40),
+            speed: DOOR_SPEED, // opening
+            is_ceiling: true,
+            wait_tics: DOOR_WAIT,
+            countdown: -1,
+            reopen_height: Fixed16_16::ZERO,
+            reopen_countdown: -1,
+        });
+
+        assert!(monster_activate_door_linedef(&mut gs, &level, 0));
+
+        assert_eq!(gs.movers.active_doors.len(), 1, "no second mover is spawned");
+        assert!(
+            gs.movers.active_doors[0].speed > Fixed16_16::ZERO,
+            "an opening door stays opening (a monster never closes it)"
+        );
     }
 
     // -----------------------------------------------------------------------
