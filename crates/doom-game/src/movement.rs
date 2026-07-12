@@ -664,6 +664,109 @@ pub(crate) fn support_state_at(
     Some((floor_z, level.subsector_index_at(x.to_int(), y.to_int())))
 }
 
+/// Vanilla `P_CheckPosition` line-opening scan over an actor's bounding box:
+/// returns `(tmfloorz, tmceilingz, touches_target)`.
+///
+/// `tmfloorz` is the highest floor and `tmceilingz` the lowest ceiling opening
+/// over the bbox (`P_LineOpening` accumulated across every two-sided line the
+/// bbox straddles), seeded from the center subsector's sector. `touches_target`
+/// reports whether any straddled two-sided line borders `target_sector` (or the
+/// center is in it) — the `P_ChangeSector` "thing is in the moving sector's
+/// blockbox" gate. Used by the corpse-crush path.
+#[must_use]
+pub(crate) fn bbox_open_heights(
+    slab: &MobjSlab,
+    handle: MobjHandle,
+    x: Fixed16_16,
+    y: Fixed16_16,
+    level: &Level,
+    target_sector: usize,
+) -> Option<(Fixed16_16, Fixed16_16, bool)> {
+    let radius = slab.get(handle).map(|mo| mo.radius)?;
+
+    let left = x - radius;
+    let right = x + radius;
+    let bottom = y - radius;
+    let top = y + radius;
+
+    let center_sector = level.sector_index_at(x.to_int(), y.to_int());
+    let (mut floor_z, mut ceil_z) = match center_sector.and_then(|si| level.sectors.get(si)) {
+        Some(s) => (s.floor_height, s.ceil_height),
+        None => (
+            slab.get(handle).map(|mo| mo.z).unwrap_or(Fixed16_16::ZERO),
+            Fixed16_16::from_int(32767),
+        ),
+    };
+    let mut touches = center_sector == Some(target_sector);
+
+    let bm = &level.blockmap;
+    let x_origin = bm.x_origin as i32;
+    let y_origin = bm.y_origin as i32;
+    let x_count = bm.x_count as i32;
+    let y_count = bm.y_count as i32;
+    let to_block = |world: Fixed16_16, origin: i32, count: i32| -> usize {
+        let cell = (world.to_int() - origin) / BLOCK_SIZE;
+        cell.max(0).min(count - 1) as usize
+    };
+
+    let col_lo = to_block(left, x_origin, x_count);
+    let col_hi = to_block(right, x_origin, x_count);
+    let row_lo = to_block(bottom, y_origin, y_count);
+    let row_hi = to_block(top, y_origin, y_count);
+
+    for row in row_lo..=row_hi {
+        for col in col_lo..=col_hi {
+            for ld_idx in bm.block_linedefs(col, row) {
+                let Some(ld) = level.linedefs.get(ld_idx as usize) else {
+                    continue;
+                };
+                if !ld.is_two_sided() {
+                    continue;
+                }
+
+                let v1 = &level.vertexes[ld.from_vertex as usize];
+                let v2 = &level.vertexes[ld.to_vertex as usize];
+                let lx1 = Fixed16_16::from_int(v1.x as i32);
+                let ly1 = Fixed16_16::from_int(v1.y as i32);
+                let lx2 = Fixed16_16::from_int(v2.x as i32);
+                let ly2 = Fixed16_16::from_int(v2.y as i32);
+
+                let lx_min = lx1.min(lx2);
+                let lx_max = lx1.max(lx2);
+                let ly_min = ly1.min(ly2);
+                let ly_max = ly1.max(ly2);
+                if right <= lx_min || left >= lx_max || top <= ly_min || bottom >= ly_max {
+                    continue;
+                }
+                if !bbox_straddles_line(left, bottom, right, top, lx1, ly1, lx2, ly2) {
+                    continue;
+                }
+
+                let Some(right_sd) = level.sidedefs.get(ld.right_sidedef as usize) else {
+                    continue;
+                };
+                let Some(left_sd) = level.sidedefs.get(ld.left_sidedef as usize) else {
+                    continue;
+                };
+                let front = &level.sectors[right_sd.sector as usize];
+                let back = &level.sectors[left_sd.sector as usize];
+                // P_LineOpening: opening = [max(floors), min(ceilings)].
+                let open_bottom = front.floor_height.max(back.floor_height);
+                let open_top = front.ceil_height.min(back.ceil_height);
+                floor_z = floor_z.max(open_bottom);
+                ceil_z = ceil_z.min(open_top);
+                if right_sd.sector as usize == target_sector
+                    || left_sd.sector as usize == target_sector
+                {
+                    touches = true;
+                }
+            }
+        }
+    }
+
+    Some((floor_z, ceil_z, touches))
+}
+
 fn clamp_i128_to_i32(v: i128) -> i32 {
     v.clamp(i32::MIN as i128, i32::MAX as i128) as i32
 }

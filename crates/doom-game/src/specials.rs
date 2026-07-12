@@ -731,6 +731,64 @@ fn move_floor_height_clip(
     }
 }
 
+/// Vanilla `P_ChangeSector` / `PIT_ChangeSector` "crunch bodies to giblets"
+/// path, restricted to the corpse case that a descending ceiling (a closing
+/// door or a crusher) reaches.
+///
+/// After a sector's ceiling moves down, vanilla re-clips every thing touching
+/// the sector (`P_ThingHeightClip`).  A thing that no longer fits
+/// (`ceilingz - floorz < height`) and is already dead (`health <= 0`) is
+/// crunched into giblets: its state becomes `S_GIBS` (sprite POL5), it loses
+/// `MF_SOLID`, and its `height`/`radius` collapse to zero so live actors can
+/// walk over the remains.  A live blocker instead sets `nofit` (door reversal),
+/// which is handled elsewhere and intentionally not replicated here.
+///
+/// Corpses only: this makes no RNG draws and does not spray blood (that is the
+/// `crushchange` shootable-thing branch, which never applies to a plain door).
+fn change_sector_crush_corpses(gs: &mut GameState, level: &Level, sector_idx: usize) {
+    if sector_idx >= level.sectors.len() {
+        return;
+    }
+    let mut to_gib: Vec<MobjHandle> = Vec::new();
+    for handle in gs.mobjslab.iter_handles() {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            continue;
+        };
+        // Only already-dead bodies are crunched to giblets; live/shootable
+        // things set `nofit` (door reversal) instead — not handled here.
+        if mo.health > 0 {
+            continue;
+        }
+        let (x, y, height) = (mo.x, mo.y, mo.height);
+        // Vanilla P_ThingHeightClip via P_CheckPosition: tmfloorz / tmceilingz
+        // are the highest floor / lowest ceiling opening over the body's
+        // bounding box. `touches` is P_ChangeSector's "in the moving sector's
+        // blockbox" gate — the body is only re-clipped by this sector's move
+        // when its bbox actually reaches into `sector_idx`.
+        let Some((floorz, ceilingz, touches)) =
+            crate::movement::bbox_open_heights(&gs.mobjslab, handle, x, y, level, sector_idx)
+        else {
+            continue;
+        };
+        if !touches {
+            continue;
+        }
+        if ceilingz - floorz < height {
+            to_gib.push(handle);
+        }
+    }
+
+    for handle in to_gib {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.state = crate::mobj::StateNum(crate::states::ids::S_GIBS);
+            mo.tics = -1;
+            mo.flags &= !crate::mobj::flags::MF_SOLID;
+            mo.height = Fixed16_16::ZERO;
+            mo.radius = Fixed16_16::ZERO;
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // tick_doors
 // ---------------------------------------------------------------------------
@@ -800,7 +858,14 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
             let new_h = if reached { target } else { raw };
 
             if is_ceiling {
+                let old_h = level.sectors[sector_idx].ceil_height;
                 level.sectors[sector_idx].ceil_height = new_h;
+                // Vanilla T_MovePlane calls P_ChangeSector after moving the
+                // plane. A descending ceiling crunches any corpse it reaches
+                // into giblets (PIT_ChangeSector), matching vanilla exactly.
+                if new_h < old_h {
+                    change_sector_crush_corpses(gs, level, sector_idx);
+                }
             } else {
                 // Floor door: drag riders with the plane (P_ChangeSector).
                 move_floor_height_clip(gs, level, sector_idx, new_h);
@@ -10864,6 +10929,81 @@ mod tests {
             gs.mobjslab.get(rider).unwrap().z,
             Fixed16_16::from_int(56),
             "rider on a rising lift must be carried up to the new floor"
+        );
+    }
+
+    /// Turn a live actor into a resting corpse (vanilla P_KillMobj: height >> 2,
+    /// health <= 0).
+    fn make_corpse(gs: &mut GameState, handle: MobjHandle) {
+        let mo = gs.mobjslab.get_mut(handle).unwrap();
+        mo.health = -60;
+        mo.height = Fixed16_16(mo.height.raw() >> 2); // 56 -> 14
+    }
+
+    #[test]
+    fn crushing_ceiling_gibs_a_corpse_in_the_sector() {
+        let mut gs = GameState::new("TEST");
+        // sector 1 (left) floor 0; a corpse of collision height 14 rests there.
+        let mut level = make_lift_bsp_level(0, 0);
+        let body = add_thing(&mut gs, 32, 0, 0);
+        make_corpse(&mut gs, body);
+
+        // Close the sector-1 ceiling to 10 (< corpse height 14): it no longer
+        // fits, so PIT_ChangeSector crunches it to giblets.
+        level.sectors[1].ceil_height = Fixed16_16::from_int(10);
+        change_sector_crush_corpses(&mut gs, &level, 1);
+
+        let mo = gs.mobjslab.get(body).unwrap();
+        assert_eq!(
+            mo.state,
+            crate::mobj::StateNum(crate::states::ids::S_GIBS),
+            "a crushed corpse must enter the S_GIBS (giblets) state"
+        );
+        assert_eq!(mo.height, Fixed16_16::ZERO, "giblets have zero height");
+        assert_eq!(mo.radius, Fixed16_16::ZERO, "giblets have zero radius");
+        assert_eq!(
+            mo.flags & crate::mobj::flags::MF_SOLID,
+            0,
+            "giblets lose MF_SOLID so actors walk over them"
+        );
+    }
+
+    #[test]
+    fn crushing_ceiling_leaves_a_fitting_corpse_untouched() {
+        let mut gs = GameState::new("TEST");
+        let level = make_lift_bsp_level(0, 0);
+        let body = add_thing(&mut gs, 32, 0, 0);
+        make_corpse(&mut gs, body);
+
+        // Ceiling at the default 128 leaves room (>= height 14): no crush.
+        let before = gs.mobjslab.get(body).unwrap().state;
+        change_sector_crush_corpses(&mut gs, &level, 1);
+
+        let mo = gs.mobjslab.get(body).unwrap();
+        assert_eq!(mo.state, before, "a corpse that still fits is not gibbed");
+        assert_ne!(mo.height, Fixed16_16::ZERO, "an un-crushed corpse keeps its height");
+    }
+
+    #[test]
+    fn crushing_ceiling_leaves_a_live_body_intact() {
+        let mut gs = GameState::new("TEST");
+        // A closing ceiling low enough to crush is applied over a LIVE actor.
+        let mut level = make_lift_bsp_level(0, 0);
+        let live = add_thing(&mut gs, 32, 0, 0); // health 60, height 56
+        let before = gs.mobjslab.get(live).unwrap().state;
+
+        level.sectors[1].ceil_height = Fixed16_16::from_int(10);
+        change_sector_crush_corpses(&mut gs, &level, 1);
+
+        let mo = gs.mobjslab.get(live).unwrap();
+        assert_eq!(
+            mo.state, before,
+            "a live actor is never crunched to giblets (it sets nofit instead)"
+        );
+        assert_ne!(
+            mo.flags & crate::mobj::flags::MF_SOLID,
+            0,
+            "a live actor keeps MF_SOLID"
         );
     }
 }

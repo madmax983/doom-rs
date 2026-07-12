@@ -150,9 +150,11 @@ pub mod sprite_names {
     pub const SPR_PLAS: u16 = 80;
     pub const SPR_BAR1: u16 = 81;
     pub const SPR_BEXP: u16 = 82;
+    /// Crushed-corpse giblet pile (vanilla `SPR_POL5`, used by `S_GIBS`).
+    pub const SPR_POL5: u16 = 83;
     pub const SPR_NONE: u16 = 0xFFFF;
 
-    pub const SPRITE_COUNT: usize = 83;
+    pub const SPRITE_COUNT: usize = 84;
 
     /// Sprite name strings for WAD lookup.
     pub const SPRITE_NAMES: [&str; SPRITE_COUNT] = [
@@ -163,7 +165,7 @@ pub mod sprite_names {
         "IFOG", "CLIP", "SHEL", "CELL", "AMMO", "SBOX", "BPAK", "MEDI", "STIM", "BON1", "BON2",
         "SOUL", "PINV", "PINS", "SUIT", "PMAP", "PVIS", "MEGA", "ARM1", "ARM2", "BKEY", "RKEY",
         "YKEY", "BSKU", "RSKU", "YSKU", "COLU", "TBLU", "TGRN", "TRED", "SMBT", "SMGT", "SMRT",
-        "CEYE", "FSKU", "FIRE", "PLAS", "BAR1", "BEXP",
+        "CEYE", "FSKU", "FIRE", "PLAS", "BAR1", "BEXP", "POL5",
     ];
 }
 
@@ -684,9 +686,11 @@ pub mod ids {
     pub const S_TROO_XDIE6: u16 = 406;
     pub const S_TROO_XDIE7: u16 = 407;
     pub const S_TROO_XDIE8: u16 = 408;
+    /// Crushed-corpse resting frame (vanilla `S_GIBS`, sprite POL5, tics -1).
+    pub const S_GIBS: u16 = 409;
 
     /// Total number of entries in the `STATES` table.
-    pub const STATES_COUNT: usize = 409;
+    pub const STATES_COUNT: usize = 410;
 }
 
 // ---------------------------------------------------------------------------
@@ -1247,6 +1251,10 @@ pub static STATES: &[MobjStateEntry] = &[
     st!(SPR_TROO, 18, 5, NONE, ids::S_TROO_XDIE7),    // 406: S_TROO_XDIE6
     st!(SPR_TROO, 19, 5, NONE, ids::S_TROO_XDIE8),    // 407: S_TROO_XDIE7
     st!(SPR_TROO, 20, -1, NONE, ids::S_NULL),         // 408: S_TROO_XDIE8
+    // --- Crushed-corpse giblets (vanilla S_GIBS, SPR_POL5 frame 0, tics -1,
+    //     no action, next S_NULL). A corpse crunched by a moving sector
+    //     (P_ChangeSector/PIT_ChangeSector) is set to this permanent frame. ---
+    st!(SPR_POL5, 0, -1, NONE, ids::S_NULL),          // 409: S_GIBS
 ];
 
 // ---------------------------------------------------------------------------
