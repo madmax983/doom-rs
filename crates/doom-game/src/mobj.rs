@@ -404,6 +404,31 @@ impl MobjSlab {
         Some((by * self.bmap_width + bx) as usize)
     }
 
+    /// Blockmap fixed-point origin X (vanilla `bmaporgx`), for consumers that
+    /// derive a cell bbox from a fixed-point position (e.g. `P_RadiusAttack`).
+    #[inline]
+    pub fn bmap_orgx(&self) -> i32 {
+        self.bmap_orgx
+    }
+
+    /// Blockmap fixed-point origin Y (vanilla `bmaporgy`).
+    #[inline]
+    pub fn bmap_orgy(&self) -> i32 {
+        self.bmap_orgy
+    }
+
+    /// Blockmap width in cells (vanilla `bmapwidth`).
+    #[inline]
+    pub fn bmap_width(&self) -> i32 {
+        self.bmap_width
+    }
+
+    /// Blockmap height in cells (vanilla `bmapheight`).
+    #[inline]
+    pub fn bmap_height(&self) -> i32 {
+        self.bmap_height
+    }
+
     /// Head of the blockmap thing-list for cell `(col, row)`, or `NULL` if the
     /// cell is out of range or empty.  Read-only accessor for consumers that
     /// walk the list via [`Mobj::bnext`] (used from Stage 2 onward).
