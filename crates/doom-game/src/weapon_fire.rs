@@ -355,30 +355,30 @@ pub fn p_fire_chainsaw(gs: &mut GameState, level: Option<&Level>) {
 // ---------------------------------------------------------------------------
 
 /// Fire the rocket launcher: consume 1 Rocket, spawn `MobjKind::Rocket`.
-pub fn p_fire_rocket(gs: &mut GameState, _level: Option<&Level>) {
+pub fn p_fire_rocket(gs: &mut GameState, level: Option<&Level>) {
     if !consume_ammo(gs, WeaponType::RocketLauncher) {
         return;
     }
     let handle = gs.player.handle;
-    p_spawn_player_missile(gs, handle, MobjKind::Rocket);
+    p_spawn_player_missile(gs, handle, MobjKind::Rocket, level);
 }
 
 /// Fire the plasma rifle: consume 1 Cell, spawn `MobjKind::PlasmaBall`.
-pub fn p_fire_plasma(gs: &mut GameState, _level: Option<&Level>) {
+pub fn p_fire_plasma(gs: &mut GameState, level: Option<&Level>) {
     if !consume_ammo(gs, WeaponType::PlasmaRifle) {
         return;
     }
     let handle = gs.player.handle;
-    p_spawn_player_missile(gs, handle, MobjKind::PlasmaBall);
+    p_spawn_player_missile(gs, handle, MobjKind::PlasmaBall, level);
 }
 
 /// Fire the BFG 9000: consume 40 Cells, spawn `MobjKind::BfgBall`.
-pub fn p_fire_bfg(gs: &mut GameState, _level: Option<&Level>) {
+pub fn p_fire_bfg(gs: &mut GameState, level: Option<&Level>) {
     if !consume_ammo(gs, WeaponType::Bfg) {
         return;
     }
     let handle = gs.player.handle;
-    p_spawn_player_missile(gs, handle, MobjKind::BfgBall);
+    p_spawn_player_missile(gs, handle, MobjKind::BfgBall, level);
 }
 
 // ---------------------------------------------------------------------------

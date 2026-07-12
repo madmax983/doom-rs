@@ -234,16 +234,19 @@ pub fn p_player_in_special_sector(gs: &mut GameState, level: &mut Level) {
     let Some(mo) = gs.mobjslab.get(handle) else {
         return;
     };
-    let (px, py, pz) = (mo.x.to_int(), mo.y.to_int(), mo.z.to_int());
-
-    // sector = player->mo->subsector->sector. Use the BSP point lookup; fall
-    // back to the first sector whose floor the player rests on for the minimal
-    // BSP-less levels used by unit tests.
-    let sector_idx = level.sector_index_at(px, py).or_else(|| {
+    // Vanilla resolves `sector = player->mo->subsector->sector`, where the
+    // subsector was cached by `R_PointInSubsector` in full fixed-point at the
+    // player's last move. Truncating the position to integer map units before
+    // the BSP walk (`sector_index_at`) can put a position near a partition line
+    // on the wrong side (e.g. `1136.0 - 1/65536` truncates to `1135`), crediting
+    // a secret one tic early. Use the fixed-point lookup to match vanilla.
+    let (rx, ry, rz) = (mo.x.raw(), mo.y.raw(), mo.z.raw());
+    let sector_idx = level.sector_index_at_fixed(rx, ry).or_else(|| {
+        // BSP-less fallback for the minimal levels used by unit tests.
         level
             .sectors
             .iter()
-            .position(|s| pz == s.floor_height.to_int())
+            .position(|s| rz == s.floor_height.raw())
     });
     let Some(sector_idx) = sector_idx else {
         return;
@@ -254,8 +257,9 @@ pub fn p_player_in_special_sector(gs: &mut GameState, level: &mut Level) {
         return;
     }
 
-    // Falling, not all the way down yet?
-    if pz != level.sectors[sector_idx].floor_height.to_int() {
+    // Falling, not all the way down yet? (`player->mo->z != sector->floorheight`,
+    // compared in raw fixed-point exactly as vanilla does.)
+    if rz != level.sectors[sector_idx].floor_height.raw() {
         return;
     }
 
@@ -727,6 +731,64 @@ fn move_floor_height_clip(
     }
 }
 
+/// Vanilla `P_ChangeSector` / `PIT_ChangeSector` "crunch bodies to giblets"
+/// path, restricted to the corpse case that a descending ceiling (a closing
+/// door or a crusher) reaches.
+///
+/// After a sector's ceiling moves down, vanilla re-clips every thing touching
+/// the sector (`P_ThingHeightClip`).  A thing that no longer fits
+/// (`ceilingz - floorz < height`) and is already dead (`health <= 0`) is
+/// crunched into giblets: its state becomes `S_GIBS` (sprite POL5), it loses
+/// `MF_SOLID`, and its `height`/`radius` collapse to zero so live actors can
+/// walk over the remains.  A live blocker instead sets `nofit` (door reversal),
+/// which is handled elsewhere and intentionally not replicated here.
+///
+/// Corpses only: this makes no RNG draws and does not spray blood (that is the
+/// `crushchange` shootable-thing branch, which never applies to a plain door).
+fn change_sector_crush_corpses(gs: &mut GameState, level: &Level, sector_idx: usize) {
+    if sector_idx >= level.sectors.len() {
+        return;
+    }
+    let mut to_gib: Vec<MobjHandle> = Vec::new();
+    for handle in gs.mobjslab.iter_handles() {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            continue;
+        };
+        // Only already-dead bodies are crunched to giblets; live/shootable
+        // things set `nofit` (door reversal) instead — not handled here.
+        if mo.health > 0 {
+            continue;
+        }
+        let (x, y, height) = (mo.x, mo.y, mo.height);
+        // Vanilla P_ThingHeightClip via P_CheckPosition: tmfloorz / tmceilingz
+        // are the highest floor / lowest ceiling opening over the body's
+        // bounding box. `touches` is P_ChangeSector's "in the moving sector's
+        // blockbox" gate — the body is only re-clipped by this sector's move
+        // when its bbox actually reaches into `sector_idx`.
+        let Some((floorz, ceilingz, touches)) =
+            crate::movement::bbox_open_heights(&gs.mobjslab, handle, x, y, level, sector_idx)
+        else {
+            continue;
+        };
+        if !touches {
+            continue;
+        }
+        if ceilingz - floorz < height {
+            to_gib.push(handle);
+        }
+    }
+
+    for handle in to_gib {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.state = crate::mobj::StateNum(crate::states::ids::S_GIBS);
+            mo.tics = -1;
+            mo.flags &= !crate::mobj::flags::MF_SOLID;
+            mo.height = Fixed16_16::ZERO;
+            mo.radius = Fixed16_16::ZERO;
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // tick_doors
 // ---------------------------------------------------------------------------
@@ -796,7 +858,14 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
             let new_h = if reached { target } else { raw };
 
             if is_ceiling {
+                let old_h = level.sectors[sector_idx].ceil_height;
                 level.sectors[sector_idx].ceil_height = new_h;
+                // Vanilla T_MovePlane calls P_ChangeSector after moving the
+                // plane. A descending ceiling crunches any corpse it reaches
+                // into giblets (PIT_ChangeSector), matching vanilla exactly.
+                if new_h < old_h {
+                    change_sector_crush_corpses(gs, level, sector_idx);
+                }
             } else {
                 // Floor door: drag riders with the plane (P_ChangeSector).
                 move_floor_height_clip(gs, level, sector_idx, new_h);
@@ -2385,13 +2454,31 @@ fn open_door(
 
     let target = lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
 
-    // Avoid duplicate movers for the same sector.
-    if gs
+    // Vanilla `EV_VerticalDoor` (`p_doors.c`): if the door sector already has an
+    // active mover (`sec->specialdata`), a re-trigger never spawns a second door.
+    // For a "raise" door (special 1/26/27/28/117 — our `OpenWaitClose` behavior)
+    // a door that is currently *closing* (`direction == -1`) reverses back up
+    // ("go back up"); an opening or waiting door is left alone for a monster
+    // (`!thing->player` — "bad guys never close doors"). This reversal is what
+    // lets a zombieman whose step is blocked by a closing DR door push it back
+    // open and walk through, rather than standing in front of it while the door
+    // finishes closing (E1M5/DEMO1: POSS re-triggering ld477 at lt~1713–1729 —
+    // the closing door reverses at the first blocked step instead of shutting to
+    // the floor and trapping the monster).
+    if let Some(door) = gs
         .movers
         .active_doors
-        .iter()
-        .any(|d| d.sector == sector_idx)
+        .iter_mut()
+        .find(|d| d.sector == sector_idx)
     {
+        if behavior == crate::linedef_dispatch::DoorBehavior::OpenWaitClose
+            && door.speed < Fixed16_16::ZERO
+            && door.reopen_countdown < 0
+        {
+            door.speed = door.speed.abs();
+            door.target_height = target;
+            door.countdown = -1;
+        }
         return;
     }
 
@@ -4709,6 +4796,78 @@ mod tests {
         assert!(monster_activate_door_linedef(&mut gs, &level, 0));
         assert_eq!(gs.movers.active_doors.len(), 1);
         assert_eq!(gs.movers.active_doors[0].sector, 1);
+    }
+
+    /// Vanilla `EV_VerticalDoor` (`p_doors.c`): re-triggering a raise door
+    /// (special 1) whose sector already has an active mover does NOT spawn a
+    /// second door; if that door is currently *closing* (`direction == -1`) it
+    /// reverses back up ("go back up"). This is what unsticks a zombieman whose
+    /// step is blocked by a closing DR door (E1M5/DEMO1 ld477 ~tic 1729): its
+    /// blocked-move `P_UseSpecialLine` re-trigger pushes the door open again
+    /// instead of letting it shut to the floor and trap the monster.
+    #[test]
+    fn monster_retrigger_reverses_closing_raise_door() {
+        let mut gs = GameState::new("TEST");
+        let mut level = make_door_level_with_special(0, 1);
+
+        // Door sector (1) partway shut and moving down — a DR door that opened,
+        // waited, and is now closing toward the floor.
+        level.sectors[1].ceil_height = Fixed16_16::from_int(40);
+        gs.movers.active_doors.push(DoorMover {
+            sector: 1,
+            target_height: level.sectors[1].floor_height,
+            current_height: Fixed16_16::from_int(40),
+            speed: -DOOR_SPEED,
+            is_ceiling: true,
+            wait_tics: DOOR_WAIT,
+            countdown: -1,
+            reopen_height: Fixed16_16::ZERO,
+            reopen_countdown: -1,
+        });
+
+        assert!(monster_activate_door_linedef(&mut gs, &level, 0));
+
+        assert_eq!(gs.movers.active_doors.len(), 1, "no second mover is spawned");
+        let d = &gs.movers.active_doors[0];
+        assert!(
+            d.speed > Fixed16_16::ZERO,
+            "a closing raise door reverses to opening on re-trigger"
+        );
+        assert_eq!(
+            d.target_height,
+            Fixed16_16::from_int(124),
+            "reopens to the lowest adjacent ceiling minus 4"
+        );
+        assert_eq!(d.countdown, -1, "moving up, not waiting");
+    }
+
+    /// The other half of the vanilla rule: a monster (`!thing->player`) never
+    /// closes an *opening* (or waiting) door — re-triggering one leaves it
+    /// opening and spawns no second mover.
+    #[test]
+    fn monster_retrigger_leaves_opening_door_unchanged() {
+        let mut gs = GameState::new("TEST");
+        let level = make_door_level_with_special(0, 1);
+
+        gs.movers.active_doors.push(DoorMover {
+            sector: 1,
+            target_height: Fixed16_16::from_int(124),
+            current_height: Fixed16_16::from_int(40),
+            speed: DOOR_SPEED, // opening
+            is_ceiling: true,
+            wait_tics: DOOR_WAIT,
+            countdown: -1,
+            reopen_height: Fixed16_16::ZERO,
+            reopen_countdown: -1,
+        });
+
+        assert!(monster_activate_door_linedef(&mut gs, &level, 0));
+
+        assert_eq!(gs.movers.active_doors.len(), 1, "no second mover is spawned");
+        assert!(
+            gs.movers.active_doors[0].speed > Fixed16_16::ZERO,
+            "an opening door stays opening (a monster never closes it)"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -10770,6 +10929,81 @@ mod tests {
             gs.mobjslab.get(rider).unwrap().z,
             Fixed16_16::from_int(56),
             "rider on a rising lift must be carried up to the new floor"
+        );
+    }
+
+    /// Turn a live actor into a resting corpse (vanilla P_KillMobj: height >> 2,
+    /// health <= 0).
+    fn make_corpse(gs: &mut GameState, handle: MobjHandle) {
+        let mo = gs.mobjslab.get_mut(handle).unwrap();
+        mo.health = -60;
+        mo.height = Fixed16_16(mo.height.raw() >> 2); // 56 -> 14
+    }
+
+    #[test]
+    fn crushing_ceiling_gibs_a_corpse_in_the_sector() {
+        let mut gs = GameState::new("TEST");
+        // sector 1 (left) floor 0; a corpse of collision height 14 rests there.
+        let mut level = make_lift_bsp_level(0, 0);
+        let body = add_thing(&mut gs, 32, 0, 0);
+        make_corpse(&mut gs, body);
+
+        // Close the sector-1 ceiling to 10 (< corpse height 14): it no longer
+        // fits, so PIT_ChangeSector crunches it to giblets.
+        level.sectors[1].ceil_height = Fixed16_16::from_int(10);
+        change_sector_crush_corpses(&mut gs, &level, 1);
+
+        let mo = gs.mobjslab.get(body).unwrap();
+        assert_eq!(
+            mo.state,
+            crate::mobj::StateNum(crate::states::ids::S_GIBS),
+            "a crushed corpse must enter the S_GIBS (giblets) state"
+        );
+        assert_eq!(mo.height, Fixed16_16::ZERO, "giblets have zero height");
+        assert_eq!(mo.radius, Fixed16_16::ZERO, "giblets have zero radius");
+        assert_eq!(
+            mo.flags & crate::mobj::flags::MF_SOLID,
+            0,
+            "giblets lose MF_SOLID so actors walk over them"
+        );
+    }
+
+    #[test]
+    fn crushing_ceiling_leaves_a_fitting_corpse_untouched() {
+        let mut gs = GameState::new("TEST");
+        let level = make_lift_bsp_level(0, 0);
+        let body = add_thing(&mut gs, 32, 0, 0);
+        make_corpse(&mut gs, body);
+
+        // Ceiling at the default 128 leaves room (>= height 14): no crush.
+        let before = gs.mobjslab.get(body).unwrap().state;
+        change_sector_crush_corpses(&mut gs, &level, 1);
+
+        let mo = gs.mobjslab.get(body).unwrap();
+        assert_eq!(mo.state, before, "a corpse that still fits is not gibbed");
+        assert_ne!(mo.height, Fixed16_16::ZERO, "an un-crushed corpse keeps its height");
+    }
+
+    #[test]
+    fn crushing_ceiling_leaves_a_live_body_intact() {
+        let mut gs = GameState::new("TEST");
+        // A closing ceiling low enough to crush is applied over a LIVE actor.
+        let mut level = make_lift_bsp_level(0, 0);
+        let live = add_thing(&mut gs, 32, 0, 0); // health 60, height 56
+        let before = gs.mobjslab.get(live).unwrap().state;
+
+        level.sectors[1].ceil_height = Fixed16_16::from_int(10);
+        change_sector_crush_corpses(&mut gs, &level, 1);
+
+        let mo = gs.mobjslab.get(live).unwrap();
+        assert_eq!(
+            mo.state, before,
+            "a live actor is never crunched to giblets (it sets nofit instead)"
+        );
+        assert_ne!(
+            mo.flags & crate::mobj::flags::MF_SOLID,
+            0,
+            "a live actor keeps MF_SOLID"
         );
     }
 }

@@ -250,6 +250,88 @@ impl<'a> BspTree<'a> {
         rel_y * dx >= dy * rel_x
     }
 
+    /// Fixed-point exact `R_PointOnSide` (vanilla `r_main.c`).
+    ///
+    /// Takes the point as raw `fixed_t` (16.16) coordinates, exactly as vanilla
+    /// does — the integer [`point_on_side`] truncates the fractional part of the
+    /// position before the side test, which can flip which side of a partition
+    /// line a point near the boundary falls on (e.g. a position at `1136.0 -
+    /// 1/65536` truncates to `1135`). The node partition coordinates are stored
+    /// as integer map units in the lump; vanilla shifts them to `fixed_t` at load
+    /// (`no->x = SHORT(mn->x) << FRACBITS`), so we do the same here.
+    ///
+    /// Returns `false` for the right/front child, `true` for the left/back child.
+    fn point_on_side_fixed(node: &Node, x: i32, y: i32) -> bool {
+        let node_x = (node.x as i32) << 16;
+        let node_y = (node.y as i32) << 16;
+        let node_dx = (node.dx as i32) << 16;
+        let node_dy = (node.dy as i32) << 16;
+
+        if node_dx == 0 {
+            if x <= node_x {
+                return node_dy > 0;
+            }
+            return node_dy < 0;
+        }
+        if node_dy == 0 {
+            if y <= node_y {
+                return node_dx < 0;
+            }
+            return node_dx > 0;
+        }
+
+        let dx = x.wrapping_sub(node_x);
+        let dy = y.wrapping_sub(node_y);
+
+        // Try to quickly decide by looking at sign bits.
+        if (node_dy ^ node_dx ^ dx ^ dy) & i32::MIN != 0 {
+            return (node_dy ^ dx) & i32::MIN != 0;
+        }
+
+        // left  = FixedMul(node->dy >> FRACBITS, dx)
+        // right = FixedMul(dy, node->dx >> FRACBITS)
+        let left = (((node_dy >> 16) as i64 * dx as i64) >> 16) as i32;
+        let right = (((dy as i64) * (node_dx >> 16) as i64) >> 16) as i32;
+
+        // right < left  → front (false); else back (true).
+        right >= left
+    }
+
+    /// Fixed-point exact `R_PointInSubsector` (vanilla `r_main.c`).
+    ///
+    /// Like [`point_in_subsector`] but takes raw `fixed_t` coordinates and uses
+    /// the fixed-point [`point_on_side_fixed`] test, matching vanilla exactly.
+    /// Use this for playsim sector lookups where sub-map-unit precision changes
+    /// the answer (e.g. `P_PlayerInSpecialSector`'s secret-sector crossing).
+    ///
+    /// [`point_in_subsector`]: Self::point_in_subsector
+    pub fn point_in_subsector_fixed(&self, x: i32, y: i32) -> Option<&Ssector> {
+        if self.nodes.is_empty() {
+            return self.ssectors.first();
+        }
+
+        let mut node_idx = (self.nodes.len() - 1) as u16;
+
+        loop {
+            let node = &self.nodes[node_idx as usize];
+
+            let child_raw = if Self::point_on_side_fixed(node, x, y) {
+                node.left_child
+            } else {
+                node.right_child
+            };
+
+            match BspChild::decode(child_raw) {
+                BspChild::Subsector(ss_idx) => {
+                    return self.ssectors.get(ss_idx as usize);
+                }
+                BspChild::Node(next_node) => {
+                    node_idx = next_node;
+                }
+            }
+        }
+    }
+
     /// Walk to the subsector containing point `(px, py)`.
     ///
     /// Implements Doom's `R_PointInSubsector`: traverse from the root node,
@@ -475,6 +557,47 @@ mod tests {
         assert_eq!(
             ss.first_seg, 0,
             "point on partition line should follow Doom's side tie-break"
+        );
+    }
+
+    #[test]
+    fn point_in_subsector_fixed_uses_fractional_bits_across_partition() {
+        // Diagonal partition through the origin along direction (100, 100)
+        // (the line y = x). A point at (10.5, 10.0) lies just BELOW that line
+        // (y < x), i.e. on the right/front side (child 0) — this is what vanilla
+        // `R_PointInSubsector` returns because it tests the full fixed-point
+        // position. Truncating the position to integer map units (10, 10) puts it
+        // exactly ON the line, which Doom's tie-break sends to the back side
+        // (child 1). This fractional half-unit is exactly the case that credited
+        // the DEMO1 (E1M5) secret sector one tic early before the fix.
+        let mut node = make_node(leaf(0), leaf(1));
+        node.x = 0;
+        node.y = 0;
+        node.dx = 100;
+        node.dy = 100;
+        let nodes = vec![node];
+        let ssectors = vec![make_ssector(0, 1), make_ssector(1, 1)];
+        let tree = BspTree::validate(&nodes, &ssectors, 2).expect("value must exist in test");
+
+        // Raw fixed_t coordinates: x = 10.5 (688128), y = 10.0 (655360).
+        let x_fixed = (10i32 << 16) | 0x8000; // 10.5
+        let y_fixed = 10i32 << 16; // 10.0
+        let ss_fixed = tree
+            .point_in_subsector_fixed(x_fixed, y_fixed)
+            .expect("value must exist in test");
+        assert_eq!(
+            ss_fixed.first_seg, 0,
+            "fixed-point lookup must place (10.5, 10.0) on the front/right side"
+        );
+
+        // The integer-truncated lookup drops the 0.5 and lands on the back side,
+        // demonstrating the divergence the fixed-point path corrects.
+        let ss_trunc = tree
+            .point_in_subsector(10, 10)
+            .expect("value must exist in test");
+        assert_eq!(
+            ss_trunc.first_seg, 1,
+            "truncated lookup drops the fractional bit and picks the back side"
         );
     }
 
