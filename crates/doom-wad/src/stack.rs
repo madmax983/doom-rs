@@ -509,4 +509,18 @@ mod tests {
         let stack: WadStack = Default::default();
         assert_eq!(stack.wad_count(), 0);
     }
+
+    #[test]
+    fn test_has_iwad_empty() {
+        let stack = WadStack::new();
+        assert!(!stack.has_iwad());
+    }
+
+    #[test]
+    fn test_push_iwad_fails_with_pwad() {
+        let mut stack = WadStack::new();
+        let pwad_bytes = b"PWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0TEST\0\0\0\0DATA".to_vec();
+        let result = stack.push_iwad(pwad_bytes);
+        assert!(matches!(result, Err(WadError::ExpectedIwad)));
+    }
 }

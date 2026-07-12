@@ -274,4 +274,17 @@ mod tests {
         let name = LumpName::from_str("TEST");
         assert_eq!(format!("{}", name), "TEST");
     }
+
+    #[test]
+    fn test_lump_name_unwrap_or_8() {
+        // Fill the array exactly, with no trailing null
+        let name = LumpName::from_raw([b'A', b'B', b'C', b'D', b'E', b'F', b'G', b'H']);
+        assert_eq!(name.as_str(), "ABCDEFGH");
+    }
+
+    #[test]
+    fn test_unwrap_or_utf8() {
+        let name = LumpName::from_raw([0xFF, 0xFF, 0, 0, 0, 0, 0, 0]);
+        assert_eq!(name.as_str(), "");
+    }
 }

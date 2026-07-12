@@ -1083,4 +1083,67 @@ mod tests {
             assert!(udmf.find_lump("NONEXISTENT").is_none());
         }
     }
+
+    #[test]
+    fn test_lumps_between_missing_start() {
+        let wad_bytes = b"IWAD\x02\0\0\0\x0C\0\0\0\x1C\0\0\0\x00\0\0\0A\0\0\0\0\0\0\0\x1C\0\0\0\x00\0\0\0B\0\0\0\0\0\0\0".to_vec();
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        let lumps: Vec<_> = wad.lumps_between("MISSING", "B").collect();
+        assert_eq!(lumps.len(), 1); // should include A since start wasn't found and defaults to 0
+    }
+
+    #[test]
+    fn test_lumps_between_missing_end() {
+        let wad_bytes = b"IWAD\x02\0\0\0\x0C\0\0\0\x1C\0\0\0\x00\0\0\0A\0\0\0\0\0\0\0\x1C\0\0\0\x00\0\0\0B\0\0\0\0\0\0\0".to_vec();
+        let wad = WadFile::parse(wad_bytes).unwrap();
+        let lumps: Vec<_> = wad.lumps_between("A", "MISSING").collect();
+        assert_eq!(lumps.len(), 1); // B is after A, end missing defaults to dir.len()
+    }
+
+    #[test]
+    fn test_wad_error_display() {
+        let err = WadError::TooShort(5);
+        assert_eq!(err.to_string(), "WAD file too short: 5 bytes (minimum 12)");
+
+        let err = WadError::InvalidMagic(*b"1234");
+        assert_eq!(
+            err.to_string(),
+            "invalid WAD magic: expected IWAD or PWAD, got [49, 50, 51, 52]"
+        );
+
+        let err = WadError::ExpectedIwad;
+        assert_eq!(
+            err.to_string(),
+            "expected an IWAD as the base WAD, but found a PWAD"
+        );
+
+        let err = WadError::NegativeLumpCount(-10);
+        assert_eq!(err.to_string(), "WAD lump count is negative: -10");
+
+        let err = WadError::DirectoryOutOfBounds {
+            offset: 10,
+            dir_size: 20,
+            file_len: 25,
+        };
+        assert_eq!(
+            err.to_string(),
+            "WAD directory offset 10 + directory size 20 exceeds file length 25"
+        );
+
+        let err = WadError::LumpOutOfBounds {
+            name: "TEST".to_string(),
+            offset: 50,
+            end: 60,
+            file_len: 55,
+        };
+        assert_eq!(
+            err.to_string(),
+            "lump TEST at [50, 60) exceeds file length 55"
+        );
+
+        let err = WadError::LumpNegativeField {
+            name: "BAD".to_string(),
+        };
+        assert_eq!(err.to_string(), "lump BAD has negative filepos or size");
+    }
 }
