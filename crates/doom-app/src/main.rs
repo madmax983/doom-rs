@@ -61,10 +61,8 @@ use doom_renderer::{
 use doom_tui::{DoomApp, DoomEventLoop, RendererMode, TicInput};
 use doom_types::weapons::WeaponType;
 use doom_types::{Bam, CompatibilityProfile, Fixed16_16};
-use doom_wad::WadStack;
-
-#[cfg(test)]
 use doom_wad::WadFile;
+use doom_wad::WadStack;
 
 #[cfg(test)]
 use doom_renderer::SwitchList;
@@ -153,6 +151,40 @@ struct Args {
     #[arg(long)]
     deh: Option<String>,
 
+    /// Disable monster spawning (vanilla `-nomonsters`). Defaults off.
+    // note: parsed-but-not-yet-applied — doom-rs has no `nomonsters` sink in
+    // `spawn_level_things`, so this flag is stored but does not yet suppress
+    // monster spawns (see the WARNING in `run_verify_demo`). Kept off by default
+    // so demo replays are unaffected.
+    #[arg(long)]
+    nomonsters: bool,
+
+    /// Respawn monsters (vanilla `-respawn`). Defaults off.
+    // note: parsed-but-not-yet-applied — no `respawnparm` sink exists yet.
+    #[arg(long)]
+    respawn: bool,
+
+    /// Fast monsters (vanilla `-fast`). Defaults off.
+    // note: parsed-but-not-yet-applied — no `fastparm` sink exists yet.
+    #[arg(long)]
+    fast: bool,
+
+    /// Player speed scale in percent (vanilla `-turbo`, 10-400, bare = 200).
+    // note: parsed-but-not-yet-applied — doom-rs has no forwardmove/sidemove
+    // turbo-scale sink yet; the value is parsed/clamped and stored only.
+    #[arg(long)]
+    turbo: Option<u16>,
+
+    /// Load savegame slot N at startup (vanilla `-loadgame`).
+    // note: parsed-but-not-yet-applied — `savegame::load_game` exists but there
+    // is no established per-slot save-path convention to load from at startup,
+    // so the slot is parsed/stored only.
+    #[arg(long)]
+    loadgame: Option<u8>,
+
+    // note: slice 3's vanilla `-config` shim maps onto the single `--config`
+    // field declared above (added by slice 2, config subsystem). One field,
+    // one `Option<PathBuf>` — the shim and the config loader agree on it.
     /// Run as a relay server on this port (e.g. --server 5029).
     /// Players connect to this address.  Mutually exclusive with --connect,
     /// --record, --playdemo, and --capture.
@@ -3659,12 +3691,330 @@ struct CliOverrides {
     screenblocks_explicit: bool,
 }
 
+// ---------------------------------------------------------------------------
+// Vanilla CLI parity: response-file (`@file`) expansion + single-dash arg shim
+//
+// Vanilla/Chocolate Doom accepts single-dash long-style args (`-warp 1 1`,
+// `-file a.wad b.wad`) and `@response` files (m_argv.c `M_FindResponseFile`).
+// clap can't parse those natively, so before handing argv to clap we:
+//   1. expand any `@file` token into its whitespace/quote-tokenized contents
+//      (matching Chocolate's `LoadResponseFile` tokenizer), then
+//   2. translate the vanilla single-dash forms into the canonical `--long`
+//      forms clap already understands. The GNU `--long` flags remain
+//      first-class and pass through untouched.
+// ---------------------------------------------------------------------------
+
+/// The set of vanilla single-dash args this shim recognizes and translates.
+/// A token is only treated as a vanilla flag if it matches one of these
+/// exactly, so a value that merely looks like a flag is not mis-translated.
+const VANILLA_FLAGS: &[&str] = &[
+    "-file",
+    "-warp",
+    "-episode",
+    "-skill",
+    "-nomonsters",
+    "-respawn",
+    "-fast",
+    "-turbo",
+    "-timedemo",
+    "-playdemo",
+    "-record",
+    "-loadgame",
+    "-config",
+];
+
+/// Tokenize the contents of a response file exactly like Chocolate Doom's
+/// `LoadResponseFile` (m_argv.c): skip whitespace, and either extract a
+/// double-quoted token (stopping at `"` or newline, quotes stripped) or an
+/// unquoted token (stopping at the next whitespace).
+fn tokenize_response_file(content: &str) -> Vec<String> {
+    let bytes: Vec<char> = content.chars().collect();
+    let size = bytes.len();
+    let mut out = Vec::new();
+    let mut k = 0usize;
+    while k < size {
+        while k < size && bytes[k].is_whitespace() {
+            k += 1;
+        }
+        if k >= size {
+            break;
+        }
+        if bytes[k] == '"' {
+            k += 1;
+            let start = k;
+            while k < size && bytes[k] != '"' && bytes[k] != '\n' {
+                k += 1;
+            }
+            out.push(bytes[start..k].iter().collect());
+            k += 1; // consume closing quote (or run past end)
+        } else {
+            let start = k;
+            while k < size && !bytes[k].is_whitespace() {
+                k += 1;
+            }
+            out.push(bytes[start..k].iter().collect());
+            k += 1;
+        }
+    }
+    out
+}
+
+/// Expand any argv token beginning with `@` by splicing in the tokenized
+/// contents of the named response file, in place of the `@file` token.
+/// Errors if a referenced file cannot be read (matching vanilla's fatal
+/// behavior). argv[0] (the program name) is never treated as a response file.
+fn expand_response_files(argv: Vec<String>) -> Result<Vec<String>> {
+    let mut out = Vec::with_capacity(argv.len());
+    for (i, token) in argv.into_iter().enumerate() {
+        if i > 0 && token.starts_with('@') && token.len() > 1 {
+            let path = &token[1..];
+            let content = std::fs::read_to_string(path).with_context(|| {
+                format!("Could not read response file '{path}' (from '{token}')")
+            })?;
+            out.extend(tokenize_response_file(&content));
+        } else {
+            out.push(token);
+        }
+    }
+    Ok(out)
+}
+
+/// Probe the IWAD named in argv (via `--iwad`/`--wad`/`-iwad`) to decide
+/// whether it is a commercial (Doom II) IWAD. Commercial IWADs contain `MAP01`
+/// map markers; Doom 1 IWADs contain `E1M1`. Returns `false` (Doom 1) if the
+/// IWAD cannot be located or read — the probe is only consulted for `-warp`,
+/// and a wrong guess there simply reproduces vanilla's own gamemode ambiguity.
+/// This is a self-contained local lump probe (no dependency on other slices).
+fn iwad_is_commercial(argv: &[String]) -> bool {
+    let mut iwad_path: Option<&str> = None;
+    let mut i = 0;
+    while i < argv.len() {
+        let t = argv[i].as_str();
+        if (t == "--iwad" || t == "--wad" || t == "-iwad") && i + 1 < argv.len() {
+            iwad_path = Some(argv[i + 1].as_str());
+            // last one wins, keep scanning
+        }
+        i += 1;
+    }
+    let Some(path) = iwad_path else {
+        return false;
+    };
+    let Ok(bytes) = std::fs::read(path) else {
+        return false;
+    };
+    match WadFile::parse(bytes) {
+        Ok(wad) => {
+            if wad.find_lump("MAP01").is_some() {
+                true
+            } else {
+                // Neither strictly needed, but be explicit: commercial iff a
+                // MAPxx marker exists and no ExMy does.
+                false
+            }
+        }
+        Err(_) => false,
+    }
+}
+
+/// Returns true if `tok` looks like a numeric argument (used to decide whether
+/// a bare `-turbo` consumes a following value).
+fn looks_numeric(tok: &str) -> bool {
+    !tok.is_empty() && tok.chars().all(|c| c.is_ascii_digit())
+}
+
+/// Translate vanilla single-dash args in `argv` into the canonical `--long`
+/// forms clap parses. `is_commercial` governs `-warp`'s arg count (Doom II =
+/// one map arg; Doom 1 = episode + optional map). Canonical `--long` args and
+/// all other tokens pass through unchanged.
+fn translate_vanilla_args(argv: Vec<String>, is_commercial: bool) -> Vec<String> {
+    let mut out: Vec<String> = Vec::with_capacity(argv.len() + 4);
+    if let Some(prog) = argv.first() {
+        out.push(prog.clone());
+    }
+    let mut i = 1usize;
+    // Helper: is the token at `idx` a value (not the start of another arg)?
+    let is_value = |toks: &[String], idx: usize| -> bool {
+        idx < toks.len() && !toks[idx].starts_with('-')
+    };
+    while i < argv.len() {
+        let tok = argv[i].as_str();
+        if !VANILLA_FLAGS.contains(&tok) {
+            // Canonical `--long`, its values, or anything else: pass through.
+            out.push(argv[i].clone());
+            i += 1;
+            continue;
+        }
+        match tok {
+            "-file" => {
+                // Consume all following non-dash tokens as PWADs.
+                i += 1;
+                while is_value(&argv, i) {
+                    out.push("--pwad".to_string());
+                    out.push(argv[i].clone());
+                    i += 1;
+                }
+            }
+            "-warp" => {
+                if is_commercial {
+                    // One arg: map number -> MAPxx.
+                    if is_value(&argv, i + 1) {
+                        let n: u32 = argv[i + 1].parse().unwrap_or(1);
+                        out.push("--warp".to_string());
+                        out.push(format!("MAP{n:02}"));
+                        i += 2;
+                    } else {
+                        i += 1;
+                    }
+                } else {
+                    // Doom 1: episode + optional map -> E#M# (map defaults 1).
+                    if is_value(&argv, i + 1) {
+                        let ep: u32 = argv[i + 1].parse().unwrap_or(1);
+                        let (map, consumed) = if is_value(&argv, i + 2) {
+                            (argv[i + 2].parse().unwrap_or(1), 3)
+                        } else {
+                            (1u32, 2)
+                        };
+                        out.push("--warp".to_string());
+                        out.push(format!("E{ep}M{map}"));
+                        i += consumed;
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            "-episode" => {
+                // Doom 1 only: episode n, map 1 -> E{n}M1.
+                if is_value(&argv, i + 1) {
+                    let ep: u32 = argv[i + 1].parse().unwrap_or(1);
+                    out.push("--warp".to_string());
+                    out.push(format!("E{ep}M1"));
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "-skill" => {
+                // note: vanilla `-skill n` sets startskill = argv[p+1][0]-'1'
+                // (n-1 internal). doom-rs `--skill n` takes 1..5 and does
+                // checked_sub(1) internally, an identical mapping, so `-skill n`
+                // translates straight to `--skill n` with matching effective skill.
+                if is_value(&argv, i + 1) {
+                    out.push("--skill".to_string());
+                    out.push(argv[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "-nomonsters" => {
+                out.push("--nomonsters".to_string());
+                i += 1;
+            }
+            "-respawn" => {
+                out.push("--respawn".to_string());
+                i += 1;
+            }
+            "-fast" => {
+                out.push("--fast".to_string());
+                i += 1;
+            }
+            "-turbo" => {
+                // Optional numeric arg; bare = 200; clamp 10..=400 (vanilla).
+                let (scale, consumed) = if i + 1 < argv.len() && looks_numeric(&argv[i + 1]) {
+                    (argv[i + 1].parse::<i64>().unwrap_or(200), 2)
+                } else {
+                    (200i64, 1)
+                };
+                let scale = scale.clamp(10, 400) as u16;
+                out.push("--turbo".to_string());
+                out.push(scale.to_string());
+                i += consumed;
+            }
+            "-timedemo" => {
+                if is_value(&argv, i + 1) {
+                    out.push("--timedemo".to_string());
+                    out.push(argv[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "-playdemo" => {
+                if is_value(&argv, i + 1) {
+                    out.push("--playdemo".to_string());
+                    out.push(argv[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "-record" => {
+                if is_value(&argv, i + 1) {
+                    out.push("--record".to_string());
+                    out.push(argv[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "-loadgame" => {
+                if is_value(&argv, i + 1) {
+                    out.push("--loadgame".to_string());
+                    out.push(argv[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            "-config" => {
+                if is_value(&argv, i + 1) {
+                    out.push("--config".to_string());
+                    out.push(argv[i + 1].clone());
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+            _ => unreachable!("VANILLA_FLAGS and match arms are in sync"),
+        }
+    }
+    out
+}
+
+/// Run the full vanilla-parity preprocessing pipeline over a raw argv:
+/// `@file` expansion, then single-dash -> `--long` translation. The IWAD
+/// gamemode probe (for `-warp` arg count) is only performed if a vanilla
+/// `-warp` token is actually present, to avoid reading the WAD needlessly.
+fn preprocess_argv(raw: Vec<String>) -> Result<Vec<String>> {
+    let expanded = expand_response_files(raw)?;
+    let commercial = if expanded.iter().any(|t| t == "-warp") {
+        iwad_is_commercial(&expanded)
+    } else {
+        false
+    };
+    Ok(translate_vanilla_args(expanded, commercial))
+}
+
 fn main() {
     use clap::CommandFactory;
     use clap::FromArgMatches;
     use clap::parser::ValueSource;
 
-    let matches = match Args::command().try_get_matches() {
+    // Vanilla CLI parity (slice 3): expand `@response` files and translate
+    // single-dash vanilla args into canonical `--long` forms BEFORE handing
+    // argv to clap.
+    let raw: Vec<String> = std::env::args().collect();
+    let translated = match preprocess_argv(raw) {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!("❌ Argument Error: {e}");
+            std::process::exit(2);
+        }
+    };
+
+    // Parse the preprocessed argv through the clap `Command` so we retain the
+    // `ArgMatches` needed to compute CLI overrides (slice 2) via `value_source`.
+    let matches = match Args::command().try_get_matches_from(translated) {
         Ok(m) => m,
         Err(e) => e.exit(),
     };
@@ -5714,6 +6064,296 @@ mod tests {
         assert!(args.is_ok(), "args with --deh must parse successfully");
         let args = args.expect("args parse must succeed");
         assert_eq!(args.deh.as_deref(), Some("my_patch.deh"));
+    }
+
+    // -----------------------------------------------------------------------
+    // Vanilla CLI parity: response-file expansion + single-dash arg shim
+    // -----------------------------------------------------------------------
+
+    fn sv(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// Build IWAD bytes on disk containing exactly the given map markers so the
+    /// gamemode probe (`iwad_is_commercial`) can be exercised end-to-end.
+    fn write_temp_iwad_with_maps(map_markers: &[&str], tag: &str) -> PathBuf {
+        let mut lumps: Vec<([u8; 8], Vec<u8>)> = Vec::new();
+        for &m in map_markers {
+            let mut name = [0u8; 8];
+            for (i, &b) in m.as_bytes().iter().take(8).enumerate() {
+                name[i] = b.to_ascii_uppercase();
+            }
+            lumps.push((name, Vec::new()));
+        }
+        let bytes = build_test_wad_bytes_from_lumps(b"IWAD", lumps);
+        let path = unique_temp_log_path(tag);
+        std::fs::write(&path, &bytes).expect("write temp IWAD");
+        path
+    }
+
+    #[test]
+    fn tokenize_response_file_splits_whitespace_and_quotes() {
+        let content = "-warp 1 3\n-file  \"my patch.wad\"  other.wad\n";
+        let toks = tokenize_response_file(content);
+        assert_eq!(
+            toks,
+            sv(&["-warp", "1", "3", "-file", "my patch.wad", "other.wad"]),
+            "quoted token with spaces must stay together; runs of whitespace collapse"
+        );
+    }
+
+    #[test]
+    fn expand_response_files_splices_tokens_in_place() {
+        let path = unique_temp_log_path("respfile");
+        std::fs::write(&path, "--warp E1M3 --pwad \"a b.wad\"").expect("write response file");
+        let raw = sv(&["doom-app", "--iwad", "doom1.wad", &format!("@{}", path.display())]);
+        let expanded = expand_response_files(raw).expect("response expansion must succeed");
+        assert_eq!(
+            expanded,
+            sv(&[
+                "doom-app", "--iwad", "doom1.wad", "--warp", "E1M3", "--pwad", "a b.wad",
+            ]),
+        );
+        // And the expanded tokens must then parse as normal args.
+        let args = Args::try_parse_from(expanded).expect("expanded args must parse");
+        assert_eq!(args.warp.as_deref(), Some("E1M3"));
+        assert_eq!(args.pwad, vec![std::path::PathBuf::from("a b.wad")]);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    #[test]
+    fn expand_response_files_errors_on_missing_file() {
+        let raw = sv(&["doom-app", "@/definitely/not/a/real/response/file.rsp"]);
+        assert!(
+            expand_response_files(raw).is_err(),
+            "a missing response file must be a hard error (vanilla-fatal)"
+        );
+    }
+
+    #[test]
+    fn shim_file_maps_to_repeated_pwad() {
+        let out = translate_vanilla_args(sv(&["doom-app", "-file", "a.wad", "b.wad"]), false);
+        assert_eq!(
+            out,
+            sv(&["doom-app", "--pwad", "a.wad", "--pwad", "b.wad"]),
+        );
+        // Stops consuming at the next dash-arg.
+        let out = translate_vanilla_args(
+            sv(&["doom-app", "-file", "a.wad", "-nomonsters"]),
+            false,
+        );
+        assert_eq!(out, sv(&["doom-app", "--pwad", "a.wad", "--nomonsters"]));
+    }
+
+    #[test]
+    fn shim_warp_doom1_takes_two_args() {
+        let out = translate_vanilla_args(sv(&["doom-app", "-warp", "1", "3"]), false);
+        assert_eq!(out, sv(&["doom-app", "--warp", "E1M3"]));
+        // Single arg on Doom 1 defaults map to 1.
+        let out = translate_vanilla_args(sv(&["doom-app", "-warp", "2"]), false);
+        assert_eq!(out, sv(&["doom-app", "--warp", "E2M1"]));
+    }
+
+    #[test]
+    fn shim_warp_commercial_takes_one_arg() {
+        let out = translate_vanilla_args(sv(&["doom-app", "-warp", "5"]), true);
+        assert_eq!(out, sv(&["doom-app", "--warp", "MAP05"]));
+    }
+
+    #[test]
+    fn shim_warp_arg_count_uses_real_iwad_probe() {
+        // Doom 1 IWAD (E1M1 markers): `-warp 1 3` consumes two args -> E1M3.
+        let doom1 = write_temp_iwad_with_maps(&["E1M1", "E1M2"], "iwad-doom1");
+        let raw = sv(&[
+            "doom-app",
+            "--iwad",
+            doom1.to_str().unwrap(),
+            "-warp",
+            "1",
+            "3",
+        ]);
+        let out = preprocess_argv(raw).expect("preprocess must succeed");
+        let args = Args::try_parse_from(out).expect("parse");
+        assert_eq!(args.warp.as_deref(), Some("E1M3"));
+
+        // Commercial IWAD (MAP01 markers): `-warp 5` consumes one arg -> MAP05.
+        let doom2 = write_temp_iwad_with_maps(&["MAP01", "MAP02"], "iwad-doom2");
+        let raw = sv(&[
+            "doom-app",
+            "--iwad",
+            doom2.to_str().unwrap(),
+            "-warp",
+            "5",
+        ]);
+        let out = preprocess_argv(raw).expect("preprocess must succeed");
+        let args = Args::try_parse_from(out).expect("parse");
+        assert_eq!(args.warp.as_deref(), Some("MAP05"));
+
+        assert!(iwad_is_commercial(&sv(&["doom-app", "--iwad", doom2.to_str().unwrap()])));
+        assert!(!iwad_is_commercial(&sv(&["doom-app", "--iwad", doom1.to_str().unwrap()])));
+
+        let _ = std::fs::remove_file(&doom1);
+        let _ = std::fs::remove_file(&doom2);
+    }
+
+    #[test]
+    fn shim_episode_maps_to_e_n_m1() {
+        let out = translate_vanilla_args(sv(&["doom-app", "-episode", "2"]), false);
+        assert_eq!(out, sv(&["doom-app", "--warp", "E2M1"]));
+    }
+
+    #[test]
+    fn shim_skill_matches_vanilla_offset() {
+        // `-skill 1` -> `--skill 1`; doom-rs internal skill = 1-1 = 0 (ITYTD),
+        // exactly vanilla's startskill = argv[p+1][0]-'1'.
+        let out = translate_vanilla_args(sv(&["doom-app", "-skill", "1"]), false);
+        assert_eq!(out, sv(&["doom-app", "--skill", "1"]));
+        let args = Args::try_parse_from(
+            [sv(&["doom-app", "--iwad", "doom1.wad"]), out[1..].to_vec()].concat(),
+        )
+        .expect("parse");
+        assert_eq!(args.skill, 1, "external skill value is 1");
+        assert_eq!(
+            args.skill.checked_sub(1),
+            Some(0),
+            "internal skill maps to 0 = ITYTD, matching vanilla"
+        );
+    }
+
+    #[test]
+    fn shim_gameplay_flags_set_and_default_off() {
+        let out = translate_vanilla_args(
+            sv(&["doom-app", "-nomonsters", "-respawn", "-fast"]),
+            false,
+        );
+        assert_eq!(
+            out,
+            sv(&["doom-app", "--nomonsters", "--respawn", "--fast"]),
+        );
+        let args = Args::try_parse_from(
+            [sv(&["doom-app", "--iwad", "doom1.wad"]), out[1..].to_vec()].concat(),
+        )
+        .expect("parse");
+        assert!(args.nomonsters && args.respawn && args.fast);
+
+        // Default off when absent (so demos are unaffected).
+        let base = Args::try_parse_from(sv(&["doom-app", "--iwad", "doom1.wad"])).expect("parse");
+        assert!(!base.nomonsters && !base.respawn && !base.fast);
+        assert_eq!(base.turbo, None);
+        assert_eq!(base.loadgame, None);
+    }
+
+    #[test]
+    fn shim_turbo_bare_and_value_and_clamp() {
+        assert_eq!(
+            translate_vanilla_args(sv(&["doom-app", "-turbo"]), false),
+            sv(&["doom-app", "--turbo", "200"]),
+            "bare -turbo defaults to 200"
+        );
+        assert_eq!(
+            translate_vanilla_args(sv(&["doom-app", "-turbo", "150"]), false),
+            sv(&["doom-app", "--turbo", "150"]),
+        );
+        assert_eq!(
+            translate_vanilla_args(sv(&["doom-app", "-turbo", "999"]), false),
+            sv(&["doom-app", "--turbo", "400"]),
+            "clamp high to 400"
+        );
+        assert_eq!(
+            translate_vanilla_args(sv(&["doom-app", "-turbo", "1"]), false),
+            sv(&["doom-app", "--turbo", "10"]),
+            "clamp low to 10"
+        );
+        // A following dash-arg is not eaten as the turbo value.
+        assert_eq!(
+            translate_vanilla_args(sv(&["doom-app", "-turbo", "-fast"]), false),
+            sv(&["doom-app", "--turbo", "200", "--fast"]),
+        );
+    }
+
+    #[test]
+    fn shim_loadgame_and_config() {
+        let out = translate_vanilla_args(
+            sv(&["doom-app", "-loadgame", "3", "-config", "my.cfg"]),
+            false,
+        );
+        assert_eq!(
+            out,
+            sv(&["doom-app", "--loadgame", "3", "--config", "my.cfg"]),
+        );
+        let args = Args::try_parse_from(
+            [sv(&["doom-app", "--iwad", "doom1.wad"]), out[1..].to_vec()].concat(),
+        )
+        .expect("parse");
+        assert_eq!(args.loadgame, Some(3));
+        assert_eq!(args.config, Some(std::path::PathBuf::from("my.cfg")));
+    }
+
+    #[test]
+    fn shim_demo_args_map_to_canonical() {
+        let out = translate_vanilla_args(
+            sv(&["doom-app", "-timedemo", "d1", "-playdemo", "d2", "-record", "d3"]),
+            false,
+        );
+        assert_eq!(
+            out,
+            sv(&[
+                "doom-app", "--timedemo", "d1", "--playdemo", "d2", "--record", "d3",
+            ]),
+        );
+    }
+
+    #[test]
+    fn shim_leaves_canonical_long_args_untouched() {
+        // Passing GNU --long forms directly must survive the shim verbatim, and
+        // untouched flags (--iwad/--pwad/--verify-demo) are not mis-translated.
+        let input = sv(&[
+            "doom-app",
+            "--iwad",
+            "doom1.wad",
+            "--warp",
+            "E1M3",
+            "--pwad",
+            "extra.wad",
+            "--verify-demo",
+            "DEMO1",
+        ]);
+        let out = translate_vanilla_args(input.clone(), false);
+        assert_eq!(out, input, "canonical --long args pass through unchanged");
+        let args = Args::try_parse_from(out).expect("parse");
+        assert_eq!(args.warp.as_deref(), Some("E1M3"));
+        assert_eq!(args.verify_demo.as_deref(), Some("DEMO1"));
+    }
+
+    #[test]
+    fn shim_mixed_vanilla_and_long_forms() {
+        // A realistic mix: canonical --iwad plus vanilla -file/-warp/-skill.
+        let doom1 = write_temp_iwad_with_maps(&["E1M1"], "iwad-mixed");
+        let raw = sv(&[
+            "doom-app",
+            "--iwad",
+            doom1.to_str().unwrap(),
+            "-file",
+            "p1.wad",
+            "p2.wad",
+            "-warp",
+            "1",
+            "5",
+            "-skill",
+            "4",
+        ]);
+        let out = preprocess_argv(raw).expect("preprocess");
+        let args = Args::try_parse_from(out).expect("parse");
+        assert_eq!(
+            args.pwad,
+            vec![
+                std::path::PathBuf::from("p1.wad"),
+                std::path::PathBuf::from("p2.wad")
+            ]
+        );
+        assert_eq!(args.warp.as_deref(), Some("E1M5"));
+        assert_eq!(args.skill, 4);
+        let _ = std::fs::remove_file(&doom1);
     }
 
     #[test]
