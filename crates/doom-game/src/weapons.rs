@@ -504,6 +504,17 @@ fn a_weapon_ready_bob(gs: &mut GameState) {
 /// Vanilla wakes nearby monsters at trigger-pull time, not at bullet time, so
 /// the sound-propagation cascade must start here, not in `A_Fire*`.
 fn p_fire_weapon(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) {
+    // Vanilla `P_FireWeapon` (p_pspr.c) checks ammo BEFORE entering the attack
+    // state: `if (!P_CheckAmmo(player)) return;`.  When ammo is insufficient
+    // (e.g. `A_ReFire` pulls the trigger on the last shell), `P_CheckAmmo`
+    // immediately begins lowering the weapon to switch to the next one.  Omitting
+    // this let doom-rs enter the attack state anyway and only discover the ammo
+    // shortage a few tics later (when the fire action no-op'd and A_WeaponReady
+    // lowered), delaying every out-of-ammo weapon switch — and thus the first
+    // shot of the replacement weapon — by the attack state's lead tics.
+    if !check_ammo(gs, cmd, level) {
+        return;
+    }
     begin_player_weapon_attack(gs);
     let info = weapon_psprite_info(gs.player.weapon);
     set_psprite_state(gs, psprite_slots::WEAPON, info.attack, cmd, level);
@@ -1160,6 +1171,63 @@ mod tests {
             gs.player.ammo(AmmoType::Shells as usize),
             before - 2,
             "held attack must re-fire via A_ReFire, consuming a second shell"
+        );
+    }
+
+    /// Vanilla `P_FireWeapon` checks ammo BEFORE entering the attack state
+    /// (`if (!P_CheckAmmo(player)) return;`).  When `A_ReFire` pulls the trigger
+    /// on the last shell, the gun must begin lowering to switch weapons the same
+    /// tic — not enter the attack state (S_SGUN1) and discover the empty magazine
+    /// several tics later, which would delay every out-of-ammo weapon switch (and
+    /// the first shot of the replacement weapon) by the attack-state lead tics.
+    #[test]
+    fn refire_on_last_shell_begins_lower_immediately() {
+        let mut gs = make_game_state();
+        gs.player.weapon = WeaponType::Shotgun;
+        gs.player.weapons[WeaponType::Shotgun as usize] = true;
+        // A fallback weapon to switch down to (pistol needs a bullet to be
+        // selectable, but the switch is triggered regardless).
+        gs.player.weapons[WeaponType::Pistol as usize] = true;
+        gs.player.give_ammo(AmmoType::Bullets as usize, 20);
+        // Exactly one shell: enough for the first shot, empty on the refire.
+        gs.player.give_ammo(AmmoType::Shells as usize, 1);
+        ready_player_psprites(&mut gs);
+
+        let attack = cmd_with_buttons(bt::BT_ATTACK);
+        // Fire the single shell (S_SGUN1 legitimately entered with ammo).
+        for _ in 0..6 {
+            tick_psprites(&mut gs, attack, None);
+        }
+        assert_eq!(
+            gs.player.ammo(AmmoType::Shells as usize),
+            0,
+            "the one shell should have been consumed by the first shot"
+        );
+        // Hold through the pump loop until A_ReFire fires on the now-empty gun.
+        // The empty refire must begin lowering (S_SGUN_DOWN) the same tic — never
+        // re-entering the shotgun attack chain (S_SGUN1) with zero shells.
+        let mut began_lower = false;
+        for _ in 0..60 {
+            tick_psprites(&mut gs, attack, None);
+            let st = gs.player.psprites[psprite_slots::WEAPON].state;
+            if st == StateNum(ids::S_SGUN_DOWN) {
+                began_lower = true;
+                break;
+            }
+            assert_ne!(
+                st,
+                StateNum(ids::S_SGUN1),
+                "shotgun must not re-enter the attack state with no shells left"
+            );
+        }
+        assert!(
+            began_lower,
+            "out-of-ammo refire must begin lowering the weapon (vanilla P_CheckAmmo)"
+        );
+        assert_eq!(
+            gs.player.ammo(AmmoType::Shells as usize),
+            0,
+            "only the one shell should have been consumed (no extra empty fire)"
         );
     }
 
