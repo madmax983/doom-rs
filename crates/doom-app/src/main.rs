@@ -2289,8 +2289,7 @@ struct VerifyRun {
 
 /// Header line for the full-actor-state dump, shared byte-for-byte with the
 /// instrumented oracle's `$CHOCO_ACTORS_CSV` output.
-const VERIFY_ACTORS_HEADER: &str =
-    "tic,ord,sprite,frame,x,y,z,momx,momy,momz,angle,health,tics";
+const VERIFY_ACTORS_HEADER: &str = "tic,ord,sprite,frame,x,y,z,momx,momy,momz,angle,health,tics";
 
 /// Walk every live actor in vanilla thinker (creation) order and append one CSV
 /// row per mobj to `out`. Ordering mirrors `tic::actors_by_generation`: the
@@ -2337,8 +2336,7 @@ fn dump_actors_for_tic(out: &mut String, tic: usize, gs: &doom_game::GameState) 
 }
 
 /// Header line shared byte-for-byte with the reference oracle.
-const VERIFY_CSV_HEADER: &str =
-    "i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime";
+const VERIFY_CSV_HEADER: &str = "i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime";
 
 /// Build a fresh level for `warp_str`, spawn things from the demo header, and
 /// replay the demo, emitting one CSV row per applied ticcmd.
@@ -2354,9 +2352,8 @@ fn verify_replay_once(
         doom_game::rng_trace_enable();
     }
     // A fresh, mutable level per run: gs.tick mutates sector heights, etc.
-    let mut level = Level::from_wad_stack(wad_stack, warp_str).with_context(|| {
-        format!("Could not load map '{warp_str}' for demo verification.")
-    })?;
+    let mut level = Level::from_wad_stack(wad_stack, warp_str)
+        .with_context(|| format!("Could not load map '{warp_str}' for demo verification."))?;
 
     // Fresh game state: RNG index starts at 0. No title/menu code runs, so the
     // only RNG advancement before the first tic comes from monster-spawn tic
@@ -2447,19 +2444,26 @@ fn verify_replay_once(
     };
 
     // Capture final player-0 state for the console summary.
-    let (final_px_raw, final_py_raw, final_pz_raw, final_px_int, final_py_int, final_pz_int, final_angle) =
-        match gs.mobjslab.get(gs.player.handle) {
-            Some(mo) => (
-                mo.x.raw(),
-                mo.y.raw(),
-                mo.z.raw(),
-                mo.x.to_int(),
-                mo.y.to_int(),
-                mo.z.to_int(),
-                mo.angle.raw(),
-            ),
-            None => (0, 0, 0, 0, 0, 0, 0),
-        };
+    let (
+        final_px_raw,
+        final_py_raw,
+        final_pz_raw,
+        final_px_int,
+        final_py_int,
+        final_pz_int,
+        final_angle,
+    ) = match gs.mobjslab.get(gs.player.handle) {
+        Some(mo) => (
+            mo.x.raw(),
+            mo.y.raw(),
+            mo.z.raw(),
+            mo.x.to_int(),
+            mo.y.to_int(),
+            mo.z.to_int(),
+            mo.angle.raw(),
+        ),
+        None => (0, 0, 0, 0, 0, 0, 0),
+    };
 
     Ok(VerifyRun {
         csv,
@@ -2506,7 +2510,10 @@ fn verify_warp_from_header(wad_stack: &WadStack, header: &doom_demo::LmpHeader) 
     }
     // Fall back to the Doom 1 form even if it did not load, so the caller
     // surfaces a clear load error.
-    candidates.into_iter().next().unwrap_or_else(|| "E1M1".to_owned())
+    candidates
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| "E1M1".to_owned())
 }
 
 /// Resolve demo bytes from `source`: a filesystem path if it exists, otherwise
@@ -2514,8 +2521,8 @@ fn verify_warp_from_header(wad_stack: &WadStack, header: &doom_demo::LmpHeader) 
 fn verify_resolve_demo_bytes(wad_stack: &WadStack, source: &str) -> Result<(Vec<u8>, String)> {
     let path = std::path::Path::new(source);
     if path.is_file() {
-        let bytes = std::fs::read(path)
-            .with_context(|| format!("Failed to read demo file '{source}'"))?;
+        let bytes =
+            std::fs::read(path).with_context(|| format!("Failed to read demo file '{source}'"))?;
         return Ok((bytes, format!("file:{source}")));
     }
     match wad_stack.lump_data(source) {
@@ -2542,7 +2549,12 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
         let trace = args.verify_rng_trace.is_some() && run_idx == 0;
         let actor_dump = args.verify_actors.is_some() && run_idx == 0;
         results.push(verify_replay_once(
-            wad_stack, &warp_str, &header, &demo_bytes, trace, actor_dump,
+            wad_stack,
+            &warp_str,
+            &header,
+            &demo_bytes,
+            trace,
+            actor_dump,
         )?);
     }
 
@@ -2604,68 +2616,237 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
 
     // --- Console summary ---
     let r0 = &results[0];
-    let flags_set = header.deathmatch != 0
-        || header.respawn
-        || header.fast
-        || header.nomonsters;
+    let flags_set = header.deathmatch != 0 || header.respawn || header.fast || header.nomonsters;
 
-    println!("=== doom-rs demo verification ===");
-    println!("demo source       : {source_label}");
-    println!(
-        "header            : version={} skill={} episode={} map={} -> warp={warp_str}",
-        header.version, header.skill, header.episode, header.map
-    );
-    println!(
-        "header flags       : deathmatch={} respawn={} fast={} nomonsters={}",
-        header.deathmatch,
-        u8::from(header.respawn),
-        u8::from(header.fast),
-        u8::from(header.nomonsters),
-    );
-    if header.nomonsters || header.fast || header.respawn {
+    let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+    if is_tty {
+        use crossterm::style::Stylize;
         println!(
-            "WARNING           : nomonsters/fast/respawn are NOT wired into spawn_level_things; \
-             this replay ignores them and may desync from vanilla."
+            "{} {}",
+            "🌟".green(),
+            "Completed demo verification".green().bold()
         );
+        if header.nomonsters || header.fast || header.respawn {
+            println!(
+                "{} {}",
+                "⚠️".yellow(),
+                "WARNING: nomonsters/fast/respawn are NOT wired into spawn_level_things; \
+                 this replay ignores them and may desync from vanilla."
+                    .yellow()
+            );
+        }
+    } else {
+        println!("Completed demo verification");
+        if header.nomonsters || header.fast || header.respawn {
+            println!(
+                "WARNING: nomonsters/fast/respawn are NOT wired into spawn_level_things; this replay ignores them and may desync from vanilla."
+            );
+        }
     }
     let _ = flags_set;
-    println!("demo tics in file : {}", {
-        // Reconstruct the parsed tic count for reporting.
-        DemoPlayer::from_lmp(&demo_bytes).map_or(0, |p| p.total_tics())
-    });
-    println!("total tics played : {}", r0.total_tics);
-    println!("stop reason       : {}", r0.reason.as_str());
-    println!(
-        "final player pos  : raw=({},{},{})  int=({},{},{}) map units",
-        r0.final_px_raw,
-        r0.final_py_raw,
-        r0.final_pz_raw,
-        r0.final_px_int,
-        r0.final_py_int,
-        r0.final_pz_int
-    );
-    println!("final angle (BAM) : {}", r0.final_angle);
-    println!("final health      : {}", r0.final_health);
-    println!(
-        "final k/i/s       : kills={} items={} secrets={}",
-        r0.final_kills, r0.final_items, r0.final_secrets
-    );
-    println!("final rndindex    : {}", r0.final_rndindex);
-    if determinism_pass {
-        println!("determinism ({runs}x): PASS");
-    } else {
-        println!(
-            "determinism ({runs}x): FAIL (run {} differs; first differing row index {})",
-            diff_run.unwrap_or(0),
-            first_diff_row
-                .map(|r| r.to_string())
-                .unwrap_or_else(|| "unknown".to_owned()),
-        );
-    }
-    if let Some(ref log_path) = args.verify_log {
-        println!("per-tic log       : {}", log_path.display());
-    }
 
+    let parsed_tics = DemoPlayer::from_lmp(&demo_bytes).map_or(0, |p| p.total_tics());
+
+    let mut table = comfy_table::Table::new();
+    table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+    table
+        .load_preset(comfy_table::presets::UTF8_FULL)
+        .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+        .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+    if is_tty {
+        table.set_header(vec![
+            comfy_table::Cell::new("Property")
+                .fg(comfy_table::Color::Cyan)
+                .add_attribute(comfy_table::Attribute::Bold),
+            comfy_table::Cell::new("Value")
+                .fg(comfy_table::Color::Cyan)
+                .add_attribute(comfy_table::Attribute::Bold),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("📁 Source"),
+            comfy_table::Cell::new(&source_label).fg(comfy_table::Color::Yellow),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("⚙️  Header"),
+            comfy_table::Cell::new(format!(
+                "v{} skill={} E{}M{} -> warp={}",
+                header.version, header.skill, header.episode, header.map, warp_str
+            )),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("🚩 Flags"),
+            comfy_table::Cell::new(format!(
+                "dm={} respawn={} fast={} nomonsters={}",
+                header.deathmatch,
+                u8::from(header.respawn),
+                u8::from(header.fast),
+                u8::from(header.nomonsters)
+            )),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("⏱️  Tics"),
+            comfy_table::Cell::new(format!(
+                "{} in file / {} played",
+                parsed_tics, r0.total_tics
+            ))
+            .fg(comfy_table::Color::Cyan),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("🛑 Stop Reason"),
+            comfy_table::Cell::new(r0.reason.as_str()).fg(comfy_table::Color::Magenta),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("📍 Final Pos"),
+            comfy_table::Cell::new(format!(
+                "raw=({},{},{}) int=({},{},{})",
+                r0.final_px_raw,
+                r0.final_py_raw,
+                r0.final_pz_raw,
+                r0.final_px_int,
+                r0.final_py_int,
+                r0.final_pz_int
+            )),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("📐 Final Angle"),
+            comfy_table::Cell::new(r0.final_angle.to_string()),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("❤️  Final Health"),
+            comfy_table::Cell::new(r0.final_health.to_string()),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("🏆 Final Stats"),
+            comfy_table::Cell::new(format!(
+                "k={} i={} s={}",
+                r0.final_kills, r0.final_items, r0.final_secrets
+            )),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("🎲 Final RNG"),
+            comfy_table::Cell::new(r0.final_rndindex.to_string()),
+        ]);
+
+        let det_cell = if determinism_pass {
+            comfy_table::Cell::new("PASS")
+                .fg(comfy_table::Color::Green)
+                .add_attribute(comfy_table::Attribute::Bold)
+        } else {
+            comfy_table::Cell::new(format!(
+                "FAIL (run {} differs; first diff row {})",
+                diff_run.unwrap_or(0),
+                first_diff_row
+                    .map(|r| r.to_string())
+                    .unwrap_or_else(|| "unknown".to_owned())
+            ))
+            .fg(comfy_table::Color::Red)
+            .add_attribute(comfy_table::Attribute::Bold)
+        };
+        table.add_row(vec![
+            comfy_table::Cell::new(format!("🔬 Determinism ({}x)", runs)),
+            det_cell,
+        ]);
+
+        if let Some(ref log_path) = args.verify_log {
+            table.add_row(vec![
+                comfy_table::Cell::new("📝 Log Path"),
+                comfy_table::Cell::new(log_path.display().to_string()).fg(comfy_table::Color::Cyan),
+            ]);
+        }
+    } else {
+        table.set_header(vec![
+            comfy_table::Cell::new("Property"),
+            comfy_table::Cell::new("Value"),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("Source"),
+            comfy_table::Cell::new(&source_label),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("Header"),
+            comfy_table::Cell::new(format!(
+                "v{} skill={} E{}M{} -> warp={}",
+                header.version, header.skill, header.episode, header.map, warp_str
+            )),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("Flags"),
+            comfy_table::Cell::new(format!(
+                "dm={} respawn={} fast={} nomonsters={}",
+                header.deathmatch,
+                u8::from(header.respawn),
+                u8::from(header.fast),
+                u8::from(header.nomonsters)
+            )),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("Tics"),
+            comfy_table::Cell::new(format!(
+                "{} in file / {} played",
+                parsed_tics, r0.total_tics
+            )),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("Stop Reason"),
+            comfy_table::Cell::new(r0.reason.as_str()),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("Final Pos"),
+            comfy_table::Cell::new(format!(
+                "raw=({},{},{}) int=({},{},{})",
+                r0.final_px_raw,
+                r0.final_py_raw,
+                r0.final_pz_raw,
+                r0.final_px_int,
+                r0.final_py_int,
+                r0.final_pz_int
+            )),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("Final Angle"),
+            comfy_table::Cell::new(r0.final_angle.to_string()),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("Final Health"),
+            comfy_table::Cell::new(r0.final_health.to_string()),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("Final Stats"),
+            comfy_table::Cell::new(format!(
+                "k={} i={} s={}",
+                r0.final_kills, r0.final_items, r0.final_secrets
+            )),
+        ]);
+        table.add_row(vec![
+            comfy_table::Cell::new("Final RNG"),
+            comfy_table::Cell::new(r0.final_rndindex.to_string()),
+        ]);
+
+        let det_str = if determinism_pass {
+            "PASS".to_string()
+        } else {
+            format!(
+                "FAIL (run {} differs; first diff row {})",
+                diff_run.unwrap_or(0),
+                first_diff_row
+                    .map(|r| r.to_string())
+                    .unwrap_or_else(|| "unknown".to_owned())
+            )
+        };
+        table.add_row(vec![
+            comfy_table::Cell::new(format!("Determinism ({}x)", runs)),
+            comfy_table::Cell::new(det_str),
+        ]);
+
+        if let Some(ref log_path) = args.verify_log {
+            table.add_row(vec![
+                comfy_table::Cell::new("Log Path"),
+                comfy_table::Cell::new(log_path.display().to_string()),
+            ]);
+        }
+    }
+    println!("{table}");
     Ok(())
 }
 
