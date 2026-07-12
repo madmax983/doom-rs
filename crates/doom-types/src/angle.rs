@@ -91,6 +91,8 @@ impl Bam {
     /// use doom_types::{Bam, ANG90, ANG180};
     /// assert_eq!(ANG90.wrapping_add(ANG90), ANG180);
     /// ```
+    // Verified in proofs.rs::lemma_bam_add_modular: wrapping_add then
+    // wrapping_sub of the same offset is the identity (modular group law).
     #[inline]
     pub fn wrapping_add(self, rhs: Self) -> Self {
         Self(self.0.wrapping_add(rhs.0))
@@ -134,6 +136,9 @@ impl Bam {
     /// // 90 degrees is exactly 1/4th of the way through the 8192 entry table.
     /// assert_eq!(ANG90.fine_angle(), 2048);
     /// ```
+    // Verified in proofs.rs::lemma_fine_index_in_bounds: `raw >> 19` is always
+    // in [0, 8191], so `sin`'s `FINESINE[fine]` and `cos`'s `FINESINE[fine +
+    // 2048]` (≤ 10239) never index past the 10240-entry table.
     #[inline]
     pub const fn fine_angle(self) -> usize {
         (self.0 >> BAM_TO_FINE_SHIFT) as usize

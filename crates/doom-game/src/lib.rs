@@ -30,6 +30,10 @@ pub mod phase;
 pub mod pickups;
 pub mod player;
 pub mod projectile;
+// Verus RNG proofs (only processed by verus, not rustc).
+#[allow(unexpected_cfgs)]
+#[cfg(verus_keep_ghost)]
+mod proofs;
 pub mod random;
 pub mod savegame;
 mod savegame_vanilla;

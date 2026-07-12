@@ -243,6 +243,10 @@ impl DoomRng {
     /// Port of `P_Random()` from `m_random.c`: the index is incremented
     /// **before** the table read, so from index 0 the first call returns
     /// `RNG_TABLE[1]` (matching vanilla after `M_ClearRandom`).
+    // Verified in proofs.rs::lemma_rng_index_in_bounds (the advanced index is
+    // always < 256, so RNG_TABLE[index] never panics), lemma_rng_index_mod256
+    // (index stays in 0..256 and wraps mod 256), and lemma_rng_deterministic
+    // (the returned byte is a pure function of the index — bit-identical replay).
     #[inline]
     pub fn next_byte(&mut self) -> u8 {
         self.index = (self.index + 1) & 255;

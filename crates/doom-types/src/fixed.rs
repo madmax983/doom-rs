@@ -56,6 +56,8 @@ impl Fixed16_16 {
     /// let f = Fixed16_16::from_int(5);
     /// assert_eq!(f.raw(), 5 << 16);
     /// ```
+    // Verified in proofs.rs::lemma_fixed_roundtrip: from_int(n).to_int() == n
+    // for every n in [i16::MIN, i16::MAX].
     #[inline]
     pub const fn from_int(n: i32) -> Self {
         Self(n << FRAC_BITS)
@@ -98,6 +100,9 @@ impl Fixed16_16 {
     /// let b = Fixed16_16::from_int(4);
     /// assert_eq!(a.fixed_mul(b), Fixed16_16::from_int(12));
     /// ```
+    // Verified in proofs.rs::lemma_fixed_mul_i64_no_overflow (the i64 product
+    // never overflows for ANY i32 × i32) and lemma_fixed_mul_no_overflow
+    // (game-range headroom against i64::MAX).
     #[inline]
     pub fn fixed_mul(self, rhs: Self) -> Self {
         let product = (self.0 as i64) * (rhs.0 as i64);
@@ -131,6 +136,10 @@ impl Fixed16_16 {
     /// let b = Fixed16_16::from_int(2);
     /// assert_eq!(a.fixed_div(b), Fixed16_16::from_int(5));
     /// ```
+    // Verified in proofs.rs::lemma_fixed_div_guard_sufficient (when the guard is
+    // NOT taken, the i64 quotient is within [i32::MIN, i32::MAX], so the `as i32`
+    // cast is lossless — the vanilla overflow guard is exactly sufficient) and
+    // lemma_fixed_div_no_div_by_zero (the else branch implies b != 0).
     #[inline]
     pub fn fixed_div(self, rhs: Self) -> Self {
         let a = self.0;
