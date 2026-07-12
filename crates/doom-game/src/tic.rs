@@ -1143,8 +1143,12 @@ fn p_death_think(gs: &mut GameState, cmd: TicCmd, mut level: Option<&mut Level>)
                         let mo = gs.mobjslab.get(handle).expect("player corpse exists");
                         (mo.momx, mo.momy)
                     };
+                    // Fixed-point center lookup (matching
+                    // `mo->subsector->sector->floorheight`); see the sibling
+                    // note in `p_xy_movement_mobj`. A truncated center would
+                    // apply corpse friction a tic early at a step edge.
                     let center_floor = lv
-                        .floor_at(final_x.to_int(), final_y.to_int())
+                        .floor_at_fixed(final_x.raw(), final_y.raw())
                         .unwrap_or(floorz);
                     if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
                         false
@@ -1237,6 +1241,59 @@ fn corpse_skips_friction(
     has_momentum && support_floor != center_floor
 }
 
+/// Port of vanilla `P_ZMovement` (`p_mobj.c`) floor-clip for NON-PLAYER,
+/// NON-MISSILE mobjs — monsters and any thrust-sliding thing.
+///
+/// Missiles run `p_z_movement_missile`; the player runs its z-movement inline in
+/// `p_move_player`. doom-rs monsters carry no gravity (their z is seated on the
+/// support floor by the `A_Chase` `P_Move` walk step), but the residual-thrust
+/// momentum-slide path (`p_xy_movement_mobj`) moves x,y without re-clamping z.
+/// This reproduces vanilla's clip: `mo->z += mo->momz; if (mo->z <= mo->floorz)
+/// { if (mo->momz < 0) mo->momz = 0; mo->z = mo->floorz; }`, using the bbox
+/// support floor (= vanilla `mo->floorz`, the tmfloorz set by the last
+/// `P_TryMove`). The only non-idle effect is raising a monster that slid onto a
+/// higher step up to the new floor the same tic; an actor already resting on its
+/// floor (`z == floorz`, `momz == 0`) is a no-op, and an actor above its floor
+/// with no vertical momentum is left untouched (monsters model no gravity).
+fn p_z_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
+    let Some(lv) = level else {
+        return;
+    };
+    let (x, y, z, momz, flags) = {
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
+        };
+        (mo.x, mo.y, mo.z, mo.momz, mo.flags)
+    };
+    // Missiles are handled by `p_z_movement_missile`; guard defensively.
+    if flags & flags::MF_MISSILE != 0 {
+        return;
+    }
+    let Some((floorz, _)) =
+        crate::movement::support_state_at(&gs.mobjslab, handle, x, y, lv)
+    else {
+        return;
+    };
+
+    // Vanilla `mo->z += mo->momz;` then the floor-clip.
+    let new_z = z + momz;
+    if new_z <= floorz {
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            if mo.momz < Fixed16_16::ZERO {
+                mo.momz = Fixed16_16::ZERO;
+            }
+            mo.z = floorz;
+        }
+    } else if momz != Fixed16_16::ZERO {
+        // Above the floor with vertical momentum: advance z. Monsters never
+        // carry momz in doom-rs (no gravity), so this is inert for them; kept
+        // for faithfulness with the vanilla `mo->z += mo->momz` step.
+        if let Some(mo) = gs.mobjslab.get_mut(handle) {
+            mo.z = new_z;
+        }
+    }
+}
+
 /// Port of vanilla `P_XYMovement` (`p_mobj.c`) for NON-PLAYER, NON-MISSILE
 /// mobjs — monsters and any thing carrying momentum.
 ///
@@ -1296,22 +1353,42 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
             };
             let half = MAXMOVE.raw() / 2;
             loop {
-                let (ptryx, ptryy);
-                if xmove > half || ymove > half {
+                let (ptryx, ptryy, old_x, old_y);
+                {
                     let mo = gs.mobjslab.get(handle).expect("mobj exists");
-                    ptryx = mo.x + Fixed16_16::from_raw(xmove / 2);
-                    ptryy = mo.y + Fixed16_16::from_raw(ymove / 2);
-                    xmove >>= 1;
-                    ymove >>= 1;
-                } else {
-                    let mo = gs.mobjslab.get(handle).expect("mobj exists");
-                    ptryx = mo.x + Fixed16_16::from_raw(xmove);
-                    ptryy = mo.y + Fixed16_16::from_raw(ymove);
-                    xmove = 0;
-                    ymove = 0;
+                    old_x = mo.x;
+                    old_y = mo.y;
+                    if xmove > half || ymove > half {
+                        ptryx = mo.x + Fixed16_16::from_raw(xmove / 2);
+                        ptryy = mo.y + Fixed16_16::from_raw(ymove / 2);
+                        xmove >>= 1;
+                        ymove >>= 1;
+                    } else {
+                        ptryx = mo.x + Fixed16_16::from_raw(xmove);
+                        ptryy = mo.y + Fixed16_16::from_raw(ymove);
+                        xmove = 0;
+                        ymove = 0;
+                    }
                 }
 
-                if !crate::movement::p_try_move_commit(&mut gs.mobjslab, handle, ptryx, ptryy, lv) {
+                if crate::movement::p_try_move_commit(&mut gs.mobjslab, handle, ptryx, ptryy, lv) {
+                    // Vanilla `P_TryMove` walks the `spechit` list after a
+                    // successful move and fires `P_CrossSpecialLine` for every
+                    // special line whose side the (non-player) thing's centre
+                    // crossed — for a monster sliding under residual thrust
+                    // momentum through `P_XYMovement`, exactly as for an
+                    // `A_Chase` walk step (see `p_move` in actions.rs). Without
+                    // this a monster knocked across a lift/teleport/raise-door
+                    // trigger line never activates it (DEMO1/E1M5: an imp thrust
+                    // north across the type-88 WR plat line 479 must lower the
+                    // tag-3 lift, so the player falling onto it lands on the
+                    // already-descended floor rather than 5 tics early). Recorded
+                    // here and dispatched by `dispatch_pending_monster_crossings`
+                    // after the actor pass, before the sector movers — same tic.
+                    crate::linedef_dispatch::queue_monster_crossings(
+                        gs, lv, handle, old_x, old_y, ptryx, ptryy,
+                    );
+                } else {
                     // Vanilla: a non-player, non-missile blocked move stops dead
                     // (`mo->momx = mo->momy = 0`). Missiles never reach here.
                     if let Some(mo) = gs.mobjslab.get_mut(handle) {
@@ -1333,6 +1410,17 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
             }
         }
     }
+
+    // Vanilla `P_MobjThinker` runs `P_ZMovement` right after `P_XYMovement`.
+    // The `A_Chase` `P_Move` walk step already re-seats a monster's z on the
+    // support floor after each positional step, but this residual-thrust
+    // momentum slide moved x,y (above) without re-clamping z, so a monster
+    // sliding onto a higher step kept its old (lower) z. Reproduce vanilla's
+    // floor clip here (only for actors that actually carried momentum this tic —
+    // an idle monster returns early above, matching vanilla, which calls
+    // `P_ZMovement` only when `z != floorz || momz`). DEMO1/E1M5: a thrust imp
+    // slides north onto an 8-unit step at tic 3022 and must rise -168 -> -160.
+    p_z_movement_mobj(gs, handle, level);
 
     // Friction / STOPSPEED. Missiles and skull-fly charges never get friction.
     let (flags1, mz) = {
@@ -1364,8 +1452,15 @@ fn p_xy_movement_mobj(gs: &mut GameState, handle: MobjHandle, level: Option<&Lev
             // off a step — `mo->floorz != mo->subsector->sector->floorheight`,
             // i.e. the bbox-support floor differs from the center-point sector
             // floor — skips friction entirely this tic ("do not stop sliding").
+            // Vanilla compares `mo->floorz` against
+            // `mo->subsector->sector->floorheight`, both resolved from the
+            // fixed-point position. Truncating the center to integer map units
+            // (`floor_at`) lands a corpse whose center sits a fraction of a unit
+            // past a step edge in the wrong sector, making the center floor
+            // spuriously equal the bbox-support floor and applying friction one
+            // tic early. Use the fixed-point subsector lookup to match vanilla.
             let center_floor = lv
-                .floor_at(x.to_int(), y.to_int())
+                .floor_at_fixed(x.raw(), y.raw())
                 .unwrap_or(floorz);
             if corpse_skips_friction(flags1, momx, momy, floorz, center_floor) {
                 return;
@@ -3709,6 +3804,156 @@ mod tests {
             reject,
             blockmap: bm,
         }
+    }
+
+    /// A two-sector test level split by a single two-sided linedef at x=0
+    /// (from (0,-64) to (0,64)) carrying `special`, with the linedef and the
+    /// back sector both tagged `tag`. Both sectors are floor 0 / ceil 128 so a
+    /// monster passes freely and the opening never blocks the move.
+    fn make_lift_line_level(special: u16, tag: u16) -> doom_map::Level {
+        let bm = make_minimal_blockmap();
+        let reject = doom_map::Reject::parse_lump(&[0u8], 2).expect("item must exist in tests");
+        let sector = |t: u16| doom_map::Sector {
+            floor_height: doom_types::Fixed16_16::from_int(0),
+            ceil_height: doom_types::Fixed16_16::from_int(128),
+            floor_flat: *b"FLAT1\0\0\0",
+            ceil_flat: *b"FLAT2\0\0\0",
+            light_level: 192,
+            special: 0,
+            tag: t,
+        };
+        let side = |sec: u16| doom_map::Sidedef {
+            x_offset: 0,
+            y_offset: 0,
+            upper_texture: *b"\0\0\0\0\0\0\0\0",
+            lower_texture: *b"\0\0\0\0\0\0\0\0",
+            middle_texture: *b"\0\0\0\0\0\0\0\0",
+            sector: sec,
+        };
+        doom_map::Level {
+            name: "TEST".to_string(),
+            things: vec![],
+            linedefs: vec![doom_map::Linedef {
+                from_vertex: 0,
+                to_vertex: 1,
+                flags: 0x0004, // ML_TWOSIDED
+                special,
+                tag,
+                right_sidedef: 0,
+                left_sidedef: 1,
+            }],
+            sidedefs: vec![side(0), side(1)],
+            vertexes: vec![
+                doom_map::Vertex { x: 0, y: -64 },
+                doom_map::Vertex { x: 0, y: 64 },
+            ],
+            segs: vec![],
+            ssectors: vec![],
+            nodes: vec![],
+            sectors: vec![sector(0), sector(tag)],
+            reject,
+            blockmap: bm,
+        }
+    }
+
+    /// Regression (DEMO1/E1M5, leveltime ~2087): a monster sliding under
+    /// residual thrust momentum through `p_xy_movement_mobj` (vanilla
+    /// `P_XYMovement`) must fire the walkover lift-trigger line its centre
+    /// crosses, exactly as `A_Chase`'s `P_Move` does. Previously the momentum
+    /// path used the untracked `p_try_move_commit` and silently walked over the
+    /// line, so an imp knocked across a type-88 WR plat line never lowered the
+    /// tag-3 lift and the player fell onto it 5 tics early.
+    #[test]
+    fn momentum_slide_fires_monster_walkover_lift_line() {
+        let mut gs = make_game_state();
+        let level = make_lift_line_level(88, 1); // WR plat down-wait-up-stay, tag 1.
+
+        // Move the make_game_state player out of the monster's path (it spawns at
+        // the origin, exactly where the trigger line is crossed) so it does not
+        // block the move via PIT_CheckThing.
+        gs.mobjslab.unset_thing_position(gs.player.handle);
+        if let Some(mo) = gs.mobjslab.get_mut(gs.player.handle) {
+            mo.x = Fixed16_16::from_int(10000);
+            mo.y = Fixed16_16::from_int(10000);
+        }
+        gs.mobjslab.set_thing_position(gs.player.handle);
+
+        // Trooper on the ground at x=-5, thrust east fast enough to cross x=0.
+        let mut mo = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_int(-5),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 30;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.momx = Fixed16_16::from_int(10);
+        let handle = gs.mobjslab.alloc(mo);
+        gs.mobjslab.set_thing_position(handle);
+
+        p_xy_movement_mobj(&mut gs, handle, Some(&level));
+
+        assert_eq!(
+            gs.pending_monster_crossings.len(),
+            1,
+            "a momentum slide across a monster-crossable type-88 line must queue the crossing"
+        );
+        assert_eq!(
+            gs.pending_monster_crossings[0].0, 0,
+            "the queued crossing must be linedef 0 (the lift trigger)"
+        );
+    }
+
+    /// Regression (DEMO1/E1M5, tic 3022): a monster sliding under residual
+    /// thrust momentum through `p_xy_movement_mobj` onto a HIGHER step must have
+    /// its z raised onto the new floor the same tic (vanilla `P_ZMovement`
+    /// floor-clip `if (mo->z <= mo->floorz) mo->z = mo->floorz`). Previously the
+    /// momentum path moved x,y without re-clamping z, so a thrust imp kept its
+    /// old lower z (oracle z=-160 vs doom-rs z=-168, off by the 8-unit step).
+    /// The clamp only fires for actors that actually carried momentum this tic;
+    /// an idle monster is untouched (guards DEMO2/DEMO3 bit-exact sync).
+    #[test]
+    fn momentum_slide_onto_higher_step_raises_z_to_new_floor() {
+        // Left sector (x<64) floor 0, right sector (x>64) floor 8.
+        let level = make_partition_step_level(8, 0);
+        let mut gs = make_game_state();
+
+        // Park the player far away so it cannot block the slide.
+        gs.mobjslab.unset_thing_position(gs.player.handle);
+        if let Some(mo) = gs.mobjslab.get_mut(gs.player.handle) {
+            mo.x = Fixed16_16::from_int(10000);
+            mo.y = Fixed16_16::from_int(10000);
+        }
+        gs.mobjslab.set_thing_position(gs.player.handle);
+
+        // Imp resting on the low floor at x=40 (center + bbox in the low sector),
+        // thrust east across the x=64 step edge into the high (floor 8) sector.
+        let mut mo = Mobj::new(
+            MobjKind::Imp,
+            Fixed16_16::from_int(40),
+            Fixed16_16::ZERO,
+            Bam::ZERO,
+        );
+        mo.health = 5;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.z = Fixed16_16::ZERO;
+        mo.momx = Fixed16_16::from_int(30);
+        let handle = gs.mobjslab.alloc(mo);
+        gs.mobjslab.set_thing_position(handle);
+
+        p_xy_movement_mobj(&mut gs, handle, Some(&level));
+
+        let after = gs.mobjslab.get(handle).expect("imp exists");
+        assert!(
+            after.x > Fixed16_16::from_int(64),
+            "the imp must have slid past the x=64 step into the high sector (x={:?})",
+            after.x
+        );
+        assert_eq!(
+            after.z,
+            Fixed16_16::from_int(8),
+            "the imp's z must be raised onto the higher (8-unit) step floor, not left at 0"
+        );
     }
 
     fn make_damage_level(floor_height: i16, special: u16) -> doom_map::Level {

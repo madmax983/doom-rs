@@ -284,51 +284,101 @@ lt 977/1046/535).
 
 ## Current sync status
 
-Fresh measurement on **this branch** (`m3a-fixedpoint-heights`, measurement commit
-`639f13a` — the M3a–M3e fixed-point sector-height / plane-mover work stacked on
-the M2b RNG baseline), release build, harness vs oracle, diffed on
+Fresh measurement on **this branch** (`m7a-demo1-sync`, measurement commit
+`14ff445` — the M6a/M7a DEMO1 fixes 6–12 stacked on the M5b blockmap baseline),
+release build, harness vs oracle, diffed on
 `px,py,pz,angle,health,kills,items,secrets,leveltime`; the cosmetic `rndindex`
 column is compared separately (the oracle emits `prndindex`, so it is a valid
-RNG-consumption signal here — see the oracle README). Measured 2026-07-11:
+RNG-consumption signal here — see the oracle README). Measured 2026-07-12:
 
 | Demo  | Map  | Total tics | First divergence (field @ tic / lt) | % synced | Determinism |
 |-------|------|-----------:|-------------------------------------|---------:|-------------|
-| DEMO1 | E1M5 | 5026 | secrets @ tic 1457 (health @ tic 1685) | ~29% | PASS (2×) |
+| DEMO1 | E1M5 | 5026 | none — bit-exact end-to-end (all significant fields + prndindex) | 100% | PASS (2×) |
 | DEMO2 | E1M3 | 3836 | none — bit-exact end-to-end (all significant fields) | 100% | PASS (2×) |
-| DEMO3 | E1M7 | 2134 | none — all outcome fields bit-exact end-to-end (residual transient pz only) | ~100% | PASS (2×) |
+| DEMO3 | E1M7 | 2134 | none — bit-exact end-to-end (all significant fields, incl. pz) | 100% | PASS (2×) |
 
 `% synced` = first-divergence tic / total tics — the fraction of each demo the
 sim is bit-exact against the oracle before the first outcome-field divergence.
+**All three shareware demos are now bit-exact end-to-end** on every outcome
+field.
 
 Reading this table:
 
-- **DEMO1 — first divergence is `secrets` at tic 1457, `health` at tic 1685.**
-  This is an incidental improvement over the prior `health` @ tic 1408 snapshot —
-  the M2b RNG work (damaging-floor painchance + `A_Chase` facing) moved the
-  first-diverging field out — but the demo still diverges mid-run and remains a
-  future target. It is not a regression from the M3 refactor.
+- **DEMO1 — bit-exact end-to-end, no significant-field divergence across all 5026
+  tics.** `px, py, pz, angle, health, kills, items, secrets, leveltime` all match
+  the oracle for the full demo, and the `prndindex` column matches through the end
+  (142/149/150/151/177…). The DEMO1 tail was closed by fixes 6–12 (M6a/M7a): a
+  momentum-slide monster walkover-line crossing (Fix 6), a lift `T_MovePlane`
+  exact-arrival off-by-one (Fix 7), fixed-point step-edge floor lookups for corpse
+  friction (Fix 8), a `P_ZMovement` floor-clip on momentum slides (Fix 9), a
+  fixed-point `P_CheckMissileRange` distance (Fix 10), an ammo-check-before-attack
+  in `P_FireWeapon` (Fix 11), and a `P_CheckAmmo`-preserves-refire fix on the
+  out-of-ammo weapon switch (Fix 12). The prior `secrets @ 1457` / `health @ 1685`
+  frontier is gone.
 - **DEMO2 — bit-exact end-to-end, no significant-field divergence across all 3836
   tics.** After the M3a/M3b fixed-point sector-height + half-speed plane-mover
   work, `rndindex, px, py, pz, angle, health, kills, items, secrets` all match the
-  oracle for the full demo. This closes the prior `pz` @ tic 1962 (~51%) frontier:
+  oracle for the full demo. This closed the prior `pz` @ tic 1962 (~51%) frontier:
   giving sector floor/ceiling heights and plane movers a true fixed-point (16.16)
   representation let lifts move at vanilla's **FRACUNIT/2** half-unit-per-tic
   speed, which was exactly the `pz` divergence source (an integer-unit height
-  could not represent the half-step). The M3c–M3e vanilla-parity fixes ride along.
-- **DEMO3 — bit-exact end-to-end on every outcome field.** `rndindex, px, py,
-  angle, health, kills, items, secrets` all match the oracle for the full 2134
-  tics. The **only** residual is a transient, self-correcting **`pz` +4-unit
-  (262144 fixed / one platform step) offset** on lift / platform rides — ~60 of
-  2134 tics, in bursts (first at tic 735), and the final rows are byte-identical.
-  This is the known-accepted residual (see item 3 below), not a sync-gating drift.
-- The **`P_Random` value stream still matches the oracle** through the recorded
-  window (zero retval-by-ordinal mismatches); what breaks first on DEMO1 is a
-  single missing/extra draw and player *state*, not the RNG value stream (DEMO2 no
-  longer breaks at all).
+  could not represent the half-step). DEMO2 has held byte-identical (a hard
+  guardrail) across every subsequent fix, including the M6a/M7a DEMO1 work.
+- **DEMO3 — bit-exact end-to-end on every outcome field, including `pz`.**
+  `rndindex, px, py, pz, angle, health, kills, items, secrets` all match the
+  oracle for the full 2134 tics. The former transient, self-correcting `pz`
+  +4-unit (262144 fixed / one platform step) lift-ride residual (first at tic 735)
+  is now **eliminated** — the lift `T_MovePlane` exact-arrival off-by-one fix
+  (Fix 7) shared the same root cause and closed it, so the demo is byte-identical
+  end-to-end.
+- The **`P_Random` value stream matches the oracle** through the recorded window
+  on all three demos (zero retval-by-ordinal mismatches), and now the per-tic
+  playsim outcome fields do too.
 - The demos all **run to completion** (`demo-stream-fully-consumed`, full tic
   counts match the file — 5026 / 3836 / 2134), and **cross-run determinism
   PASSes** on all three (`--verify-runs 2`: PASS) — the harness self-check
   confirms the sim is internally reproducible.
+
+### Known remaining work — full-actor fidelity (non-outcome)
+
+The outcome fields (position/health/kills/items/secrets + `prndindex`) are
+bit-exact on all three demos. The **only** remaining divergence is at the
+*full-actor* level (every thing's per-tic state dump), and it is provably **not**
+an outcome divergence: doom-rs lacks a general monster/thing `P_ZMovement` gravity
+else-branch, so **dead corpses that slide off a ledge do not fall** — they float
+at their pre-fall z instead of dropping to the floor below. On DEMO1 this first
+appears at full-actor tic **3560** (an inert imp corpse floating at z=−200 where
+the oracle falls to z=−208 and settles).
+
+This is proven independent of the outcome fields:
+- Every **live** monster stays bit-exact for **783 tics** after tic 3560 (through
+  4343) — if the floating corpses perturbed anything, a live actor would have
+  drifted far sooner.
+- The corpse draws **no `P_Random`**, has `MF_SOLID`/`MF_SHOOTABLE` cleared (it is
+  not hit and does not block movement), and its `z` is irrelevant to blockmap
+  iteration order, to `PIT_RadiusAttack` (x,y-only Chebyshev distance), and to LOS
+  through a non-solid thing.
+
+The staged plan to close it (kept here so it is not lost with the scratchpad):
+
+- **Stage 1 — persistent `Mobj.floorz`/`ceilingz`, behavior-neutral.** Add
+  `floorz`/`ceilingz` fields to `Mobj` and set them wherever a move commits
+  position (`P_TryMove` commit, `A_Chase` `P_Move`, the momentum slide, spawn,
+  teleport, and the plane-mover rider clip). Nothing reads them yet, so the gate
+  is that **all three demos stay byte-identical**.
+- **Stage 2 — promote `p_z_movement_mobj` to full vanilla `P_ZMovement`.** Add the
+  gravity else-branch (`if momz==0 { momz=-2*GRAVITY } else { momz-=GRAVITY }`),
+  the ceiling clip, and the `MF_FLOAT` bob, reading the **persistent** `floorz`
+  (not a recomputed bbox floor — that regressed DEMO3 in the Fix 9 attempt). Run
+  it as its own per-non-missile-actor phase gated on `z != floorz || momz != 0`
+  (so a still-falling actor whose xy momentum has decayed is not skipped), and
+  **drop `A_Chase`'s unconditional `mo.z = support_floor` down-seat** (vanilla
+  drops via `P_ZMovement`, not `P_Move`). Gate: DEMO2/DEMO3 stay bit-exact and
+  DEMO1 full-actor advances past 3560. This is the highest-risk edit.
+- **Stage 3 (available, not yet needed) — blockmap iteration order.** Migrate the
+  remaining spatial consumers (autoaim / `P_LineAttack`, thing-vs-thing collision,
+  and `missile_check_things`) to `P_BlockThingsIterator` order, as Fix 5 did for
+  `P_RadiusAttack`. Not required for any current sync frontier.
 
 ### Oracle
 
@@ -340,51 +390,54 @@ column/sampling-point spec, and diffing with `diff_csv.py` / `perfield.py`).
 
 ## Remaining divergences (characterized)
 
-**DEMO2 is now bit-exact end-to-end** on every significant field (all 3836 tics),
-joining DEMO3 (bit-exact on all outcome fields). Full bit-exact end-to-end sync is
-**not yet reached on DEMO1**. Be honest about where we are: DEMO1 syncs to tic
-1457 (~29%) of its length (first divergence `secrets` @ tic 1457, `health` @ tic
-1685 of 5026 tics), and DEMO3 has only a transient lift-ride `pz` residual. What is
+**All three demos are now bit-exact end-to-end** on every significant field
+(DEMO1 5026 tics, DEMO2 3836 tics, DEMO3 2134 tics) — plus the `prndindex`
+column. There is no remaining outcome-field divergence on any demo. What is
 solid: the `P_Random` **value** stream matches the oracle through the whole
 recorded window, every fix above is **vanilla-verified against the instrumented
-Chocolate oracle** (reproducible via `tools/oracle/`), and every major subsystem is
-vanilla-faithful. What remains: the multi-minute tail of DEMO1 still diverges, and
-the remaining failures are **residual monster positional drift + attack/AI timing
-that compounds over the run**, not a broken RNG or a missing subsystem.
+Chocolate oracle** (reproducible via `tools/oracle/`), and every major subsystem
+is vanilla-faithful.
 
-The general mechanism: both sides draw the **same RNG rolls**, but a slightly
-**drifted geometry** (a monster or projectile a few map units off) turns the same
-roll into a hit-vs-miss or an earlier-vs-later hit, or shifts an `A_Chase` step
-by a tic. That one difference perturbs health, then knockback position, then
-which monster the player faces next — and the differences compound over the run.
+The only remaining divergence is the **full-actor corpse-gravity** item
+documented under "Known remaining work — full-actor fidelity (non-outcome)"
+above: inert dead corpses do not fall off ledges because doom-rs has no general
+monster/thing `P_ZMovement` gravity else-branch. It is proven independent of the
+outcome fields (live monsters bit-exact for 783 tics past it; the corpse draws no
+RNG and its z is irrelevant to blockmap/radius/LOS), so it does not gate sync.
 
-Known open items (characterized per demo):
+Historical note on the general mechanism that drove the earlier frontiers: both
+sides draw the **same RNG rolls**, but a slightly **drifted geometry** (a monster
+or projectile a few map units off) turns the same roll into a hit-vs-miss or an
+earlier-vs-later hit, or shifts an `A_Chase` step by a tic — and the difference
+compounds over the run. Fixes 6–12 closed the last of these on DEMO1 by removing
+the sub-unit fixed-point and plane-mover-timing sources of that drift.
 
-1. **DEMO1 — tic 1457 (`secrets`) / tic 1685 (`health`), combat/damage
-   RNG-consumption divergence (TBD).** The first-diverging field is now `secrets`
-   at tic 1457, with `health` following at tic 1685 — moved out from the prior
-   `health` @ tic 1408 snapshot by the M2b RNG work. Root cause not yet pinned; it
-   is downstream of sub-map-unit geometry drift in the preceding chase steps, so a
-   same-value damage roll or chase step lands on a slightly different tic. Re-audit
-   the `A_Chase` / attack hitscan geometry and `P_DamageMobj` thrust against
-   `p_map.c` / `p_inter.c` for the last residual fixed-point rounding.
+Known items (characterized per demo):
+
+1. **DEMO1 — resolved (fixes 6–12, M6a/M7a).** The former `secrets` @ 1457 /
+   `health` @ 1685 frontier and the whole DEMO1 tail are closed. The final chain
+   of fixes was: momentum-slide monster walkover crossings (Fix 6), lift
+   `T_MovePlane` exact-arrival off-by-one (Fix 7), fixed-point step-edge floor
+   lookup for corpse friction (Fix 8), `P_ZMovement` floor-clip on momentum slides
+   (Fix 9), fixed-point `P_CheckMissileRange` distance (Fix 10),
+   `P_FireWeapon` ammo-check-before-attack (Fix 11), and `P_CheckAmmo` preserving
+   refire on the out-of-ammo weapon switch (Fix 12). DEMO1 is now bit-exact
+   end-to-end on all outcome fields plus `prndindex`.
 
 2. **DEMO2 — resolved (M3a/M3b).** Previously the first divergence was `pz` at
    tic 1962 (~51%), a lift/platform ride where doom-rs stored sector heights and
    plane-mover speeds as integer units and could not represent vanilla's
    FRACUNIT/2 half-unit-per-tic plat movement. The M3a fixed-point (16.16)
    sector-height + plane-mover refactor and the M3b `raiseToNearestAndChange` /
-   `raiseAndChange` half-speed plats closed it: DEMO2 is now bit-exact end-to-end
-   on all significant fields for the full 3836 tics.
+   `raiseAndChange` half-speed plats closed it: DEMO2 is bit-exact end-to-end
+   on all significant fields for the full 3836 tics, and has held byte-identical
+   across every subsequent fix.
 
-3. **DEMO3 — transient lift-ride `pz` residual (known-accepted).** All outcome
-   fields (`rndindex, px, py, angle, health, kills, items, secrets`) are bit-exact
-   for the full 2134 tics. The only residual is a transient, self-correcting `pz`
-   +4-unit (262144 fixed / one platform step) offset during lift / platform rides
-   — ~60 of 2134 tics, in bursts (first at tic 735), with the final rows
-   byte-identical. Accepted as-is; if chased, audit the plat/lift `T_PlatRaise`
-   step-height fixed-point against `p_plats.c` and player `P_ZMovement` while
-   riding.
+3. **DEMO3 — resolved (Fix 7).** All outcome fields are bit-exact for the full
+   2134 tics **including `pz`**. The former transient, self-correcting `pz`
+   +4-unit (262144 fixed / one platform step) lift-ride offset (first at tic 735)
+   is now eliminated: the lift `T_MovePlane` exact-arrival off-by-one fix (Fix 7)
+   shared its root cause. DEMO3 is byte-identical end-to-end.
 
 4. **Cosmetic `A_FaceTarget` ATK1 angle transient.** During the first attack
    frame a monster's facing angle can differ by a small BAM delta for one tic
@@ -394,17 +447,18 @@ Known open items (characterized per demo):
 
 ## How to continue
 
-- **Next divergences to chase:** DEMO1 `tic 1457` (`secrets`) / `tic 1685`
-  (`health`) — combat/damage RNG-consumption, item 1. DEMO2 is now bit-exact
-  end-to-end (item 2, resolved by M3a/M3b). DEMO3 is bit-exact on outcome fields;
-  its only open residual is the transient lift-ride `pz` offset (item 3), accepted
-  as-is. The common thread on DEMO1 is **residual monster positional drift**
-  compounding into attack/AI timing.
+- **Outcome-field sync is complete** on all three demos. The one open item is the
+  **full-actor monster/corpse-gravity** refactor (Stages 1–2 under "Known
+  remaining work — full-actor fidelity (non-outcome)" above), which is needed only
+  for full-actor bit-exactness (the DEMO1 inert corpse at tic 3560 and any later
+  falling actor), not for outcome sync. The optional blockmap Stage 3 remains
+  available but has not been needed.
 - **Tooling:** regenerate the harness CSV for the demo under test and diff it
   against `demoN.choco.csv` on `px,py,pz,angle,health,kills,items,secrets,
-  leveltime` (ignore the `rndindex` column) to find the first position/health/
-  kills drift. Use **position/health/kills as the signal** — the RNG *values*
-  already match through the recorded window, and the rng-trace `leveltime` stamp
-  has a known off-by-one, so its per-tic "draw placement" is not a reliable
-  signal to diff against. Note the oracle raw trace runs to ~lt 1644, so
-  measurement well past lt 400 is possible.
+  leveltime` (ignore the cosmetic `rndindex` column semantics per the methodology
+  gotcha) to find the first position/health/kills drift. Use
+  **position/health/kills as the signal** — the RNG *values* already match through
+  the recorded window, and the rng-trace `leveltime` stamp has a known off-by-one,
+  so its per-tic "draw placement" is not a reliable signal to diff against. For
+  full-actor work, diff the actor dumps (`demoN.doomrs.actors.csv` vs
+  `oracle/demoN.choco.actors.csv`) with `oracle/diff_actors.py`.

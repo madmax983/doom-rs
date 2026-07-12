@@ -415,13 +415,6 @@ fn p_check_sight_local(
     dist <= 4096
 }
 
-fn approx_distance(dx: i32, dy: i32) -> i32 {
-    let dx = dx.abs();
-    let dy = dy.abs();
-    let (hi, lo) = if dx >= dy { (dx, dy) } else { (dy, dx) };
-    hi + lo - (lo / 2)
-}
-
 fn p_check_missile_range(
     gs: &mut GameState,
     handle: MobjHandle,
@@ -467,10 +460,19 @@ fn p_check_missile_range(
     let tx = t.x;
     let ty = t.y;
 
-    let mut dist = approx_distance((tx - mo_x).to_int(), (ty - mo_y).to_int()) - 64;
+    // Vanilla `P_CheckMissileRange` (p_enemy.c) computes the range in *fixed
+    // point* and only truncates to integer map units at the end:
+    //   dist = P_AproxDistance(...) - 64*FRACUNIT;
+    //   if (!meleestate) dist -= 128*FRACUNIT;
+    //   dist >>= FRACBITS;
+    // Truncating each delta to an integer *before* P_AproxDistance (the old
+    // path) rounds the distance up by a unit or two, which flips the boundary
+    // `P_Random() < dist` roll and desyncs the monster's attack cadence.
+    let mut dist_fixed = p_aprox_distance_fixed((tx - mo_x).raw(), (ty - mo_y).raw()) - 64 * 65536;
     if info.melee_state == crate::mobj::StateNum::NULL {
-        dist -= 128;
+        dist_fixed -= 128 * 65536;
     }
+    let mut dist = dist_fixed >> 16;
 
     match mo_kind {
         MobjKind::ArchVile => {
@@ -3096,6 +3098,44 @@ mod tests {
         let can_fire = p_check_missile_range(&mut gs, trooper, player_handle, None);
 
         assert!(!can_fire, "reactiontime > 0 must prevent missile fire");
+    }
+
+    #[test]
+    fn p_check_missile_range_uses_fixed_point_distance_at_boundary() {
+        // Regression: vanilla `P_CheckMissileRange` (p_enemy.c) computes
+        // `P_AproxDistance` in fixed point and only `>>= FRACBITS` at the end.
+        // Truncating each delta to integer map units *first* rounds the distance
+        // up by a unit at sub-unit-fractional positions, which flips the
+        // boundary `P_Random() < dist` roll. Here the true fixed-point distance
+        // is 69 units but int-first truncation yields 70. With `P_Random() == 69`
+        // vanilla fires (69 < 69 is false) while the old int-first path did not
+        // (69 < 70 is true -> no fire). This exact off-by-one desynced the
+        // DEMO1 imp attack cadence.
+        let mut gs = make_game_state();
+        let player_handle = gs.player.handle;
+        // Trooper (has a melee state, so no -128 adjustment) at a fractional
+        // fixed-point offset from the player at the origin.
+        let mut mo = Mobj::new(
+            MobjKind::Trooper,
+            Fixed16_16::from_raw(6_911_170),
+            Fixed16_16::from_raw(3_736_762),
+            Bam::ZERO,
+        );
+        mo.health = 20;
+        mo.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
+        mo.target = player_handle;
+        mo.radius = Fixed16_16::from_int(20);
+        mo.height = Fixed16_16::from_int(56);
+        mo.reactiontime = 0;
+        let trooper = gs.mobjslab.alloc(mo);
+
+        // set_index(103) -> next P_Random() == 69 == fixed-point dist -> fire.
+        gs.rng.set_index(103);
+        assert!(
+            p_check_missile_range(&mut gs, trooper, player_handle, None),
+            "fixed-point dist=69 with P_Random=69 must fire (69 < 69 is false); \
+             the int-first path computed dist=70 and wrongly declined"
+        );
     }
 
     #[test]
