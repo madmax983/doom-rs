@@ -688,6 +688,38 @@ fn capture_onfloor_things(gs: &GameState, level: &Level, sector_idx: usize) -> V
     resting
 }
 
+/// Vanilla `T_MovePlane` arrival step for a plane moving toward `dest`.
+///
+/// Returns `(new_height, reached)`. `reached` mirrors vanilla's `pastdest`
+/// result: it is `true` only on the tic where a *full* `speed` step would move
+/// **strictly past** `dest` (`floorheight - speed < dest` for a lowering plane,
+/// `floorheight + speed > dest` for a rising one). When a full step lands the
+/// plane *exactly* on `dest`, vanilla takes the `else` branch and returns `ok`
+/// (not `pastdest`) that tic — the plane is placed on `dest` but the mover does
+/// **not** transition; arrival is only reported the following tic, once any
+/// further step would overshoot. Callers must gate their phase change
+/// (enter-wait / stop / remove) on `reached`, not on `new_height == dest`, so a
+/// mover that reaches its destination on an exact step waits the extra tic
+/// vanilla does. `up` selects the raising vs lowering test.
+fn t_move_plane_step(
+    height: Fixed16_16,
+    speed: Fixed16_16,
+    dest: Fixed16_16,
+    up: bool,
+) -> (Fixed16_16, bool) {
+    if up {
+        if height + speed > dest {
+            (dest, true)
+        } else {
+            (height + speed, false)
+        }
+    } else if height - speed < dest {
+        (dest, true)
+    } else {
+        (height - speed, false)
+    }
+}
+
 /// Move `sector_idx`'s floor to `new_floor`, dragging riders (vanilla
 /// `T_MovePlane` -> `P_ChangeSector` -> `P_ThingHeightClip`).
 ///
@@ -2332,9 +2364,14 @@ pub fn tick_lifts(gs: &mut GameState, level: &mut Level) {
             LiftStatus::Lowering => {
                 let speed = lift.speed;
                 let low = lift.low_height;
-                let new_floor = (level.sectors[sector_idx].floor_height - speed).max(low);
+                // Vanilla T_MovePlane: transition to the wait phase only when a
+                // full step overshoots `low` (`pastdest`). An exact-landing step
+                // returns `ok` and defers arrival one tic, so a lift that reaches
+                // its low on an exact step waits the extra tic vanilla does.
+                let (new_floor, reached) =
+                    t_move_plane_step(level.sectors[sector_idx].floor_height, speed, low, false);
                 move_floor_height_clip(gs, level, sector_idx, new_floor);
-                if new_floor <= low {
+                if reached {
                     lift.status = LiftStatus::Waiting;
                     lift.wait_remaining = lift.wait_tics;
                 }
@@ -2348,9 +2385,10 @@ pub fn tick_lifts(gs: &mut GameState, level: &mut Level) {
             LiftStatus::Raising => {
                 let speed = lift.speed;
                 let high = lift.high_height;
-                let new_floor = (level.sectors[sector_idx].floor_height + speed).min(high);
+                let (new_floor, reached) =
+                    t_move_plane_step(level.sectors[sector_idx].floor_height, speed, high, true);
                 move_floor_height_clip(gs, level, sector_idx, new_floor);
-                if new_floor >= high {
+                if reached {
                     lift.status = LiftStatus::Done;
                 }
             }
@@ -8774,7 +8812,9 @@ mod tests {
         // Sector 1 floor=64, low=0 (from sec 0), speed=4.
         ev_do_lift(&mut gs, &level, 5, doom_types::Fixed16_16::from_int(4), 105);
 
-        // 64/4 = 16 tics to reach low_height=0.
+        // 64/4 = 16 tics to land the floor exactly on low_height=0. Vanilla
+        // T_MovePlane returns `ok` (not `pastdest`) on an exact-landing step, so
+        // the mover is still Lowering at that point — the wait does not start yet.
         for _ in 0..16 {
             tick_lifts(&mut gs, &mut level);
         }
@@ -8782,6 +8822,14 @@ mod tests {
             level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(0),
             "floor must reach low_height"
         );
+        assert_eq!(
+            gs.movers.lifts[0].status, LiftStatus::Lowering,
+            "an exact-landing step returns `ok`; the wait starts one tic later"
+        );
+
+        // The next tic (a full step would now undershoot `low`) reports arrival
+        // (`pastdest`) and enters the wait phase — one tic after reaching low.
+        tick_lifts(&mut gs, &mut level);
         assert_eq!(gs.movers.lifts[0].status, LiftStatus::Waiting);
         assert_eq!(gs.movers.lifts[0].wait_remaining, 105);
     }
@@ -8796,8 +8844,9 @@ mod tests {
         let mut level = make_lift_test_level(16, 0, 5);
         ev_do_lift(&mut gs, &level, 5, doom_types::Fixed16_16::from_int(4), 105);
 
-        // Lower to bottom.
-        for _ in 0..16 {
+        // Lower to bottom: 16 tics to land on low, +1 tic for vanilla `pastdest`
+        // to fire and enter the wait phase.
+        for _ in 0..17 {
             tick_lifts(&mut gs, &mut level);
         }
         assert_eq!(gs.movers.lifts[0].status, LiftStatus::Waiting);
@@ -8819,8 +8868,9 @@ mod tests {
         let mut level = make_lift_test_level(16, 0, 5);
         ev_do_lift(&mut gs, &level, 5, doom_types::Fixed16_16::from_int(4), 105);
 
-        // Lower (16 tics), wait (105 tics), then raise.
-        for _ in 0..16 {
+        // Lower (17 tics: 16 to land on low + 1 for `pastdest`), wait (105 tics),
+        // then raise.
+        for _ in 0..17 {
             tick_lifts(&mut gs, &mut level);
         }
         for _ in 0..105 {
@@ -8828,8 +8878,9 @@ mod tests {
         }
         assert_eq!(gs.movers.lifts[0].status, LiftStatus::Raising);
 
-        // Raise from 0 to 64 at speed 4: 16 tics.
-        for _ in 0..16 {
+        // Raise from 0 to 64 at speed 4: 16 tics to land on high, +1 for
+        // vanilla `pastdest` to fire and mark the lift Done.
+        for _ in 0..17 {
             tick_lifts(&mut gs, &mut level);
         }
         assert_eq!(
@@ -8850,8 +8901,10 @@ mod tests {
         let mut level = make_lift_test_level(16, 0, 5);
         ev_do_lift(&mut gs, &level, 5, doom_types::Fixed16_16::from_int(4), 105);
 
-        // Lower (16 tics) + wait (105 tics) + raise (16 tics) + removal (1 tic).
-        let total_tics = 16 + 105 + 16 + 1;
+        // Lower (17 tics) + wait (105 tics) + raise (17 tics) + removal (1 tic).
+        // The lower and raise each spend 16 tics reaching the destination plus 1
+        // tic for vanilla `T_MovePlane` to report the exact-landing arrival.
+        let total_tics = 17 + 105 + 17 + 1;
         for _ in 0..total_tics {
             tick_lifts(&mut gs, &mut level);
         }
@@ -8864,6 +8917,59 @@ mod tests {
             gs.movers.lifts.is_empty(),
             "lift must be removed after full cycle"
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Regression: vanilla T_MovePlane exact-arrival vs overshoot semantics.
+    //
+    // A lift whose travel divides evenly by its speed lands *exactly* on its
+    // destination; vanilla returns `ok` on that step and only fires `pastdest`
+    // (entering the wait) the following tic. A lift whose travel does NOT divide
+    // evenly overshoots on its final step; vanilla clamps to the destination and
+    // fires `pastdest` that same tic. Both must be reproduced, or a resting rider
+    // (player/corpse) starts moving one tic early relative to the demo (this was
+    // the DEMO1 pz@3982 / corpse@2434 and DEMO3 pz@735 divergence).
+    // -----------------------------------------------------------------------
+    #[test]
+    fn lift_exact_landing_defers_wait_but_overshoot_does_not() {
+        use crate::state::LiftStatus;
+
+        // Exact case: floor 64 -> 0 at speed 4 lands exactly on 0 at tic 16.
+        {
+            let mut gs = GameState::new("TEST");
+            let mut level = make_lift_test_level(16, 0, 5);
+            ev_do_lift(&mut gs, &level, 5, doom_types::Fixed16_16::from_int(4), 105);
+            for _ in 0..16 {
+                tick_lifts(&mut gs, &mut level);
+            }
+            assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(0));
+            assert_eq!(
+                gs.movers.lifts[0].status,
+                LiftStatus::Lowering,
+                "exact landing returns `ok`; wait is deferred one tic"
+            );
+            tick_lifts(&mut gs, &mut level);
+            assert_eq!(gs.movers.lifts[0].status, LiftStatus::Waiting);
+        }
+
+        // Overshoot case: floor 64 -> 0 at speed 6 would undershoot on the final
+        // step (60 - 6 = -6 < 0), so vanilla clamps to 0 and enters the wait on
+        // that same tic. 64/6 -> steps land at 58,52,46,40,34,28,22,16,10,4 (10
+        // tics) then the 11th step clamps 4 -> 0 with `pastdest`.
+        {
+            let mut gs = GameState::new("TEST");
+            let mut level = make_lift_test_level(16, 0, 5);
+            ev_do_lift(&mut gs, &level, 5, doom_types::Fixed16_16::from_int(6), 105);
+            for _ in 0..11 {
+                tick_lifts(&mut gs, &mut level);
+            }
+            assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(0));
+            assert_eq!(
+                gs.movers.lifts[0].status,
+                LiftStatus::Waiting,
+                "an overshooting final step reports arrival the same tic"
+            );
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -8881,11 +8987,15 @@ mod tests {
             "blazing lift must have speed 8"
         );
 
-        // 64/8 = 8 tics to lower.
+        // 64/8 = 8 tics to land the floor exactly on 0; the exact-landing step
+        // returns `ok`, so the lift is still Lowering. One more tic reports the
+        // `pastdest` arrival and enters the wait phase.
         for _ in 0..8 {
             tick_lifts(&mut gs, &mut level);
         }
         assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(0));
+        assert_eq!(gs.movers.lifts[0].status, LiftStatus::Lowering);
+        tick_lifts(&mut gs, &mut level);
         assert_eq!(gs.movers.lifts[0].status, LiftStatus::Waiting);
     }
 
