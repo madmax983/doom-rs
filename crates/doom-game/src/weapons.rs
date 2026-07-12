@@ -337,7 +337,14 @@ fn check_ammo(gs: &mut GameState, cmd: TicCmd, level: Option<&Level>) -> bool {
     if player_can_fire(gs) {
         return true;
     }
-    gs.player.refire = 0;
+    // Vanilla `P_CheckAmmo` (p_pspr.c) does NOT reset `player->refire`: the reset
+    // lives solely in `A_ReFire`'s else-branch. When the gun runs dry mid-burst
+    // (`A_ReFire` refires on the last shell → `P_FireWeapon` → `P_CheckAmmo`
+    // fails), the refire count is carried into the replacement weapon, so its
+    // first shot is INACCURATE (`A_FirePistol`/`A_FireCGun` pass `!refire` to
+    // `P_GunShot`, drawing the two extra `P_SubRandom` spread bytes vanilla draws).
+    // Zeroing it here made that first shot spuriously accurate, dropping two
+    // P_Random draws versus vanilla.
     gs.player.pending_weapon = crate::weapon_fire::select_next_weapon(gs);
     begin_lower_weapon(gs, cmd, level);
     false
@@ -1228,6 +1235,14 @@ mod tests {
             gs.player.ammo(AmmoType::Shells as usize),
             0,
             "only the one shell should have been consumed (no extra empty fire)"
+        );
+        // Vanilla P_CheckAmmo does NOT reset refire (only A_ReFire's else-branch
+        // does). The empty refire ran A_ReFire's IF-branch (refire++), so the
+        // count must be carried into the replacement weapon — making its first
+        // shot inaccurate, matching vanilla's spread P_Random draws.
+        assert!(
+            gs.player.refire > 0,
+            "refire must survive the out-of-ammo switch (P_CheckAmmo must not zero it)"
         );
     }
 
