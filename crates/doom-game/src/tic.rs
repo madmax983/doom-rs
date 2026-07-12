@@ -1525,10 +1525,15 @@ fn p_try_move_missile(
         return false;
     }
     // Commit the new position (vanilla P_TryMove sets mo->x/mo->y on success).
+    // Unlink/relink around the coordinate change as vanilla `P_TryMove` does;
+    // missiles are `MF_NOBLOCKMAP`, so this is a no-op in practice, but keeps
+    // the position-commit path uniform with the actor movers.
+    gs.mobjslab.unset_thing_position(handle);
     if let Some(mo) = gs.mobjslab.get_mut(handle) {
         mo.x = x;
         mo.y = y;
     }
+    gs.mobjslab.set_thing_position(handle);
     true
 }
 

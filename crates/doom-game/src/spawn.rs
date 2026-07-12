@@ -200,6 +200,17 @@ pub fn spawn_level_things(
     // monster (weapon fire would silently fail to alert nearby monsters).
     crate::sound::init_sound_state(gs, level.sectors.len());
 
+    // Size the blockmap thing-list heads for this level BEFORE spawning any
+    // actor, so each map-thing `alloc` head-inserts into its cell in vanilla
+    // spawn order (vanilla `P_LoadBlockMap` allocates `blocklinks`, then
+    // `P_SpawnMapThing`/`P_SpawnMobj` link each thing as it is created).
+    gs.mobjslab.setup_blockmap(
+        level.blockmap.x_origin,
+        level.blockmap.y_origin,
+        level.blockmap.x_count,
+        level.blockmap.y_count,
+    );
+
     // Vanilla P_SpawnMapThing skill bit (p_mobj.c): sk_baby->1, sk_nightmare->4,
     // otherwise 1 << (gameskill-1).  A thing spawns only if `options & bit`.
     let skill_bit: u16 = match skill {

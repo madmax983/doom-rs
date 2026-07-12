@@ -189,10 +189,15 @@ fn p_try_move_commit_inner(
         return false;
     }
     let old = slab.get(handle).map(|mo| (mo.x, mo.y));
+    // Vanilla `P_TryMove`: unlink from the blockmap, move, then relink
+    // (`P_UnsetThingPosition` → set `x`/`y` → `P_SetThingPosition`).  Unlink
+    // must precede the coordinate change (the head-unlink re-derives the cell).
+    slab.unset_thing_position(handle);
     if let Some(mo) = slab.get_mut(handle) {
         mo.x = x;
         mo.y = y;
     }
+    slab.set_thing_position(handle);
     if let (Some(sink), Some((old_x, old_y))) = (sink, old) {
         record_player_crossings(slab, handle, old_x, old_y, x, y, level, sink);
     }

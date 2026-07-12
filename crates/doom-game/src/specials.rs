@@ -402,7 +402,10 @@ pub fn ev_teleport(gs: &mut GameState, level: &Level, tag: u16, mobj_handle: Mob
         // Get the floor height of the first tagged sector for Z placement.
         let dest_floor = level.sectors[first_tagged_idx].floor_height;
 
-        // Move the actor to the destination.
+        // Move the actor to the destination.  Unlink from the blockmap before
+        // the coordinate change and relink after, as vanilla `EV_Teleport` does
+        // via `P_UnsetThingPosition` / `P_SetThingPosition`.
+        gs.mobjslab.unset_thing_position(mobj_handle);
         if let Some(mo) = gs.mobjslab.get_mut(mobj_handle) {
             mo.x = Fixed16_16::from_int(thing.x as i32);
             mo.y = Fixed16_16::from_int(thing.y as i32);
@@ -415,6 +418,7 @@ pub fn ev_teleport(gs: &mut GameState, level: &Level, tag: u16, mobj_handle: Mob
         } else {
             return false;
         }
+        gs.mobjslab.set_thing_position(mobj_handle);
 
         return true;
     }
