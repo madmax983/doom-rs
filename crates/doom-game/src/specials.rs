@@ -1102,7 +1102,11 @@ pub fn highest_adjacent_ceiling(level: &Level, sector_index: usize) -> Fixed16_1
 ///
 /// This variant accepts an explicit `current_height` parameter, unlike the
 /// zero-arg `next_highest_floor` which uses the sector's own floor height.
-pub fn next_highest_floor_above(level: &Level, sector_index: usize, current_height: Fixed16_16) -> Fixed16_16 {
+pub fn next_highest_floor_above(
+    level: &Level,
+    sector_index: usize,
+    current_height: Fixed16_16,
+) -> Fixed16_16 {
     adjacent_sectors(level, sector_index)
         .map(|(_, s)| s.floor_height)
         .filter(|&h| h > current_height)
@@ -1710,7 +1714,12 @@ const PLATFORM_WAIT: i32 = 105;
 /// use doom_game::specials::ev_perpetual_platform;
 /// // ev_perpetual_platform(&mut gs, &level, 1, 8);
 /// ```
-pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed: Fixed16_16) -> usize {
+pub fn ev_perpetual_platform(
+    gs: &mut GameState,
+    level: &Level,
+    tag: u16,
+    speed: Fixed16_16,
+) -> usize {
     let mut count = 0;
     for idx in level
         .sectors
@@ -3455,7 +3464,13 @@ fn activate_floors(
         // Type 5: W1 Floor raise to lowest adjacent ceiling (crush).
         5 => {
             let tag = level.linedefs[linedef_idx].tag;
-            ev_floor_raise_to_lowest_ceiling(gs, level, tag, Fixed16_16::from_int(1), crate::state::CrushBehavior::Crush);
+            ev_floor_raise_to_lowest_ceiling(
+                gs,
+                level,
+                tag,
+                Fixed16_16::from_int(1),
+                crate::state::CrushBehavior::Crush,
+            );
         }
 
         // Type 14: S1 Raise floor 32 + change texture/type.
@@ -4475,7 +4490,8 @@ mod tests {
             "p_use_lines must enqueue a door mover"
         );
         assert_eq!(
-            gs.movers.active_doors[0].target_height, doom_types::Fixed16_16::from_int(124),
+            gs.movers.active_doors[0].target_height,
+            doom_types::Fixed16_16::from_int(124),
             "door target must be four units below the lowest adjacent ceiling"
         );
     }
@@ -4766,12 +4782,17 @@ mod tests {
         // Door sector has ceil == floor (closed).
         let mut level = make_door_level(0);
 
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(0), "precondition: door closed");
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(0),
+            "precondition: door closed"
+        );
 
         activate_linedef(&mut gs, &mut level, 0);
 
         assert_eq!(
-            level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(128),
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(128),
             "activate_linedef must open a closed door to floor + 128"
         );
     }
@@ -4782,12 +4803,17 @@ mod tests {
         // Door sector has ceil == floor + 128 (open).
         let mut level = make_door_level(128);
 
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(128), "precondition: door open");
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(128),
+            "precondition: door open"
+        );
 
         activate_linedef(&mut gs, &mut level, 0);
 
         assert_eq!(
-            level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(0),
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(0),
             "activate_linedef must close an open door to floor height"
         );
     }
@@ -4831,7 +4857,11 @@ mod tests {
 
         assert!(monster_activate_door_linedef(&mut gs, &level, 0));
 
-        assert_eq!(gs.movers.active_doors.len(), 1, "no second mover is spawned");
+        assert_eq!(
+            gs.movers.active_doors.len(),
+            1,
+            "no second mover is spawned"
+        );
         let d = &gs.movers.active_doors[0];
         assert!(
             d.speed > Fixed16_16::ZERO,
@@ -4867,7 +4897,11 @@ mod tests {
 
         assert!(monster_activate_door_linedef(&mut gs, &level, 0));
 
-        assert_eq!(gs.movers.active_doors.len(), 1, "no second mover is spawned");
+        assert_eq!(
+            gs.movers.active_doors.len(),
+            1,
+            "no second mover is spawned"
+        );
         assert!(
             gs.movers.active_doors[0].speed > Fixed16_16::ZERO,
             "an opening door stays opening (a monster never closes it)"
@@ -4884,7 +4918,11 @@ mod tests {
         // Type 2: open door, stays open. Start fully closed (ceil == floor == 0).
         let mut level = make_door_level_with_special(0, 2);
 
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(0), "precondition: door closed");
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(0),
+            "precondition: door closed"
+        );
         assert!(gs.movers.active_doors.is_empty());
 
         // Activate the linedef — enqueues a DoorMover.
@@ -4935,7 +4973,8 @@ mod tests {
         tick_doors(&mut gs, &mut level);
 
         assert_eq!(
-            level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(2),
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(2),
             "normal doors should begin raising on the first tic"
         );
     }
@@ -5309,7 +5348,8 @@ mod tests {
         // Adjacent to sector 1: sectors 0 (floor=0) and 2 (floor=32).
         let result = lowest_adjacent_floor(&level, 1);
         assert_eq!(
-            result, doom_types::Fixed16_16::from_int(0),
+            result,
+            doom_types::Fixed16_16::from_int(0),
             "lowest adjacent floor to sector 1 should be 0 (sector 0)"
         );
     }
@@ -5321,7 +5361,8 @@ mod tests {
         // Adjacent to sector 1: sectors 0 (floor=10) and 2 (floor=50).
         let result = highest_adjacent_floor(&level, 1);
         assert_eq!(
-            result, doom_types::Fixed16_16::from_int(50),
+            result,
+            doom_types::Fixed16_16::from_int(50),
             "highest adjacent floor to sector 1 should be 50 (sector 2)"
         );
     }
@@ -5332,7 +5373,11 @@ mod tests {
         let level = make_multi_sector_level([32, 0, 64], [128, 128, 128], [0, 0, 0], 0, 0);
 
         let result = next_highest_floor(&level, 1);
-        assert_eq!(result, doom_types::Fixed16_16::from_int(32), "next highest floor above 0 should be 32");
+        assert_eq!(
+            result,
+            doom_types::Fixed16_16::from_int(32),
+            "next highest floor above 0 should be 32"
+        );
     }
 
     #[test]
@@ -5341,7 +5386,11 @@ mod tests {
         let level = make_multi_sector_level([20, 100, 50], [200, 200, 200], [0, 0, 0], 0, 0);
 
         let result = next_highest_floor(&level, 1);
-        assert_eq!(result, doom_types::Fixed16_16::from_int(100), "no higher floor => returns own floor");
+        assert_eq!(
+            result,
+            doom_types::Fixed16_16::from_int(100),
+            "no higher floor => returns own floor"
+        );
     }
 
     #[test]
@@ -5351,7 +5400,8 @@ mod tests {
 
         let result = lowest_adjacent_ceiling(&level, 1);
         assert_eq!(
-            result, doom_types::Fixed16_16::from_int(96),
+            result,
+            doom_types::Fixed16_16::from_int(96),
             "lowest adjacent ceiling to sector 1 should be 96 (sector 2)"
         );
     }
@@ -5361,7 +5411,11 @@ mod tests {
         // A sector with no linedefs connecting to others.
         let level = make_damage_level(42, 0);
         let result = lowest_adjacent_floor(&level, 0);
-        assert_eq!(result, doom_types::Fixed16_16::from_int(42), "no adjacent sectors => returns own floor");
+        assert_eq!(
+            result,
+            doom_types::Fixed16_16::from_int(42),
+            "no adjacent sectors => returns own floor"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -5389,7 +5443,8 @@ mod tests {
             tick_ceilings(&mut gs, &mut level);
         }
         assert_eq!(
-            level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(8),
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(8),
             "ceiling must reach bottom_height"
         );
 
@@ -5412,7 +5467,8 @@ mod tests {
             "perpetual crusher must reverse to Down after reaching top"
         );
         assert_eq!(
-            level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(128),
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(128),
             "crusher must return to top_height"
         );
 
@@ -5421,7 +5477,8 @@ mod tests {
             tick_ceilings(&mut gs, &mut level);
         }
         assert_eq!(
-            level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(118),
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(118),
             "perpetual crusher must continue oscillating"
         );
     }
@@ -5444,7 +5501,10 @@ mod tests {
         for _ in 0..60 {
             tick_ceilings(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(8)
+        );
 
         // LowerAndCrush removes itself when reaching bottom.
         assert!(
@@ -5499,13 +5559,17 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_ceilings.len(), 1);
         assert_eq!(
-            gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(1),
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(1),
             "type 25 must use speed 1 (slow)"
         );
 
         // Tick once — should move by 1.
         tick_ceilings(&mut gs, &mut level);
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(127));
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(127)
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -5520,7 +5584,11 @@ mod tests {
         // Sector 0 is adjacent to sector 1 with floor=0 → lowest adjacent = 0.
         let mut level = make_tagged_sector_level(64, 128, 1, 62);
 
-        assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(64), "precondition: floor=64");
+        assert_eq!(
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(64),
+            "precondition: floor=64"
+        );
 
         // Activate line type 62 (lift lower-wait-raise, speed 4).
         activate_linedef(&mut gs, &mut level, 0);
@@ -5532,11 +5600,13 @@ mod tests {
 
         // Lowest adjacent floor is sector 0's floor = 0.
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(0),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(0),
             "lift target = lowest adjacent = 0"
         );
         assert_eq!(
-            gs.movers.active_floors[0].return_height, doom_types::Fixed16_16::from_int(64),
+            gs.movers.active_floors[0].return_height,
+            doom_types::Fixed16_16::from_int(64),
             "return height = original floor"
         );
 
@@ -5544,7 +5614,11 @@ mod tests {
         for _ in 0..16 {
             tick_floors(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(0), "floor must lower to 0");
+        assert_eq!(
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(0),
+            "floor must lower to 0"
+        );
 
         // Should now be in wait phase.
         assert!(
@@ -5568,7 +5642,8 @@ mod tests {
             tick_floors(&mut gs, &mut level);
         }
         assert_eq!(
-            level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(64),
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(64),
             "floor must raise back to 64"
         );
 
@@ -5587,7 +5662,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].speed, doom_types::Fixed16_16::from_int(8),
+            gs.movers.active_floors[0].speed,
+            doom_types::Fixed16_16::from_int(8),
             "type 121 must use speed 8 (turbo)"
         );
     }
@@ -5610,12 +5686,16 @@ mod tests {
             1,  // tag 1 targets sector 1
         );
 
-        assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(0));
+        assert_eq!(
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(0)
+        );
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(32),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(32),
             "target = next highest floor = 32"
         );
 
@@ -5623,7 +5703,11 @@ mod tests {
         for _ in 0..32 {
             tick_floors(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(32), "floor must reach 32");
+        assert_eq!(
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(32),
+            "floor must reach 32"
+        );
 
         // One-shot raiser should be removed.
         assert!(
@@ -5646,12 +5730,16 @@ mod tests {
             1,
         );
 
-        assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(64));
+        assert_eq!(
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(64)
+        );
 
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(0),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(0),
             "target = lowest adjacent = 0"
         );
 
@@ -5659,7 +5747,11 @@ mod tests {
         for _ in 0..64 {
             tick_floors(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(0), "floor must lower to 0");
+        assert_eq!(
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(0),
+            "floor must lower to 0"
+        );
 
         assert!(
             gs.movers.active_floors.is_empty(),
@@ -5684,7 +5776,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(96),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(96),
             "target = lowest adjacent ceiling = 96"
         );
         assert!(
@@ -5709,7 +5802,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(48),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(48),
             "target = highest adjacent = 48"
         );
     }
@@ -5730,7 +5824,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(38),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(38),
             "target = highest_adj(30) + 8 = 38"
         );
     }
@@ -5745,7 +5840,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(92),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(92),
             "target = lowest_adj_ceil(100) - 8 = 92"
         );
         assert!(
@@ -5836,8 +5932,14 @@ mod tests {
             1,
             "clone must include floors"
         );
-        assert_eq!(gs2.movers.active_ceilings[0].top_height, doom_types::Fixed16_16::from_int(128));
-        assert_eq!(gs2.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(0));
+        assert_eq!(
+            gs2.movers.active_ceilings[0].top_height,
+            doom_types::Fixed16_16::from_int(128)
+        );
+        assert_eq!(
+            gs2.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(0)
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -7100,13 +7202,25 @@ mod tests {
         assert_eq!(gs.movers.active_floors.len(), 4);
 
         // Check target heights: 8, 16, 24, 32.
-        assert_eq!(gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(8)
+        );
         assert_eq!(gs.movers.active_floors[0].sector_index, 0);
-        assert_eq!(gs.movers.active_floors[1].target_height, doom_types::Fixed16_16::from_int(16));
+        assert_eq!(
+            gs.movers.active_floors[1].target_height,
+            doom_types::Fixed16_16::from_int(16)
+        );
         assert_eq!(gs.movers.active_floors[1].sector_index, 1);
-        assert_eq!(gs.movers.active_floors[2].target_height, doom_types::Fixed16_16::from_int(24));
+        assert_eq!(
+            gs.movers.active_floors[2].target_height,
+            doom_types::Fixed16_16::from_int(24)
+        );
         assert_eq!(gs.movers.active_floors[2].sector_index, 2);
-        assert_eq!(gs.movers.active_floors[3].target_height, doom_types::Fixed16_16::from_int(32));
+        assert_eq!(
+            gs.movers.active_floors[3].target_height,
+            doom_types::Fixed16_16::from_int(32)
+        );
         assert_eq!(gs.movers.active_floors[3].sector_index, 3);
     }
 
@@ -7125,11 +7239,23 @@ mod tests {
 
         assert_eq!(count, 3, "3 sectors should get stair movers");
         // Target heights: 16, 32, 48.
-        assert_eq!(gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(16));
-        assert_eq!(gs.movers.active_floors[1].target_height, doom_types::Fixed16_16::from_int(32));
-        assert_eq!(gs.movers.active_floors[2].target_height, doom_types::Fixed16_16::from_int(48));
+        assert_eq!(
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(16)
+        );
+        assert_eq!(
+            gs.movers.active_floors[1].target_height,
+            doom_types::Fixed16_16::from_int(32)
+        );
+        assert_eq!(
+            gs.movers.active_floors[2].target_height,
+            doom_types::Fixed16_16::from_int(48)
+        );
         // Speed should be 4 for turbo.
-        assert_eq!(gs.movers.active_floors[0].speed, doom_types::Fixed16_16::from_int(4));
+        assert_eq!(
+            gs.movers.active_floors[0].speed,
+            doom_types::Fixed16_16::from_int(4)
+        );
     }
 
     #[test]
@@ -7205,7 +7331,8 @@ mod tests {
         }
 
         assert_eq!(
-            level.sectors[0].floor_height, doom_types::Fixed16_16::from_int(8),
+            level.sectors[0].floor_height,
+            doom_types::Fixed16_16::from_int(8),
             "floor must reach target height"
         );
         assert!(
@@ -7239,7 +7366,8 @@ mod tests {
         }
 
         assert_eq!(
-            level.sectors[0].floor_height, doom_types::Fixed16_16::from_int(0),
+            level.sectors[0].floor_height,
+            doom_types::Fixed16_16::from_int(0),
             "floor must lower to target"
         );
         assert!(
@@ -7308,7 +7436,8 @@ mod tests {
             "donut mover must target the hole sector"
         );
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(64),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(64),
             "donut target must be ring sector floor height"
         );
         assert_eq!(
@@ -7331,8 +7460,14 @@ mod tests {
         ev_perpetual_platform(&mut gs, &level, 5, doom_types::Fixed16_16::from_int(4));
 
         assert_eq!(gs.movers.active_platforms.len(), 1);
-        assert_eq!(gs.movers.active_platforms[0].low_height, doom_types::Fixed16_16::from_int(-32));
-        assert_eq!(gs.movers.active_platforms[0].high_height, doom_types::Fixed16_16::from_int(64));
+        assert_eq!(
+            gs.movers.active_platforms[0].low_height,
+            doom_types::Fixed16_16::from_int(-32)
+        );
+        assert_eq!(
+            gs.movers.active_platforms[0].high_height,
+            doom_types::Fixed16_16::from_int(64)
+        );
 
         // Tick until platform reaches low.
         // Distance = 64 - (-32) = 96, speed = 4, takes 96/4 = 24 tics.
@@ -7341,7 +7476,8 @@ mod tests {
         }
 
         assert_eq!(
-            level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(-32),
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(-32),
             "platform must reach low_height"
         );
         assert_eq!(
@@ -7401,12 +7537,18 @@ mod tests {
 
         // Speed 1
         ev_perpetual_platform(&mut gs, &level, 5, doom_types::Fixed16_16::from_int(1));
-        assert_eq!(gs.movers.active_platforms[0].speed, doom_types::Fixed16_16::from_int(1));
+        assert_eq!(
+            gs.movers.active_platforms[0].speed,
+            doom_types::Fixed16_16::from_int(1)
+        );
 
         // Clear and test speed 4.
         gs.movers.active_platforms.clear();
         ev_perpetual_platform(&mut gs, &level, 5, doom_types::Fixed16_16::from_int(4));
-        assert_eq!(gs.movers.active_platforms[0].speed, doom_types::Fixed16_16::from_int(4));
+        assert_eq!(
+            gs.movers.active_platforms[0].speed,
+            doom_types::Fixed16_16::from_int(4)
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -7504,7 +7646,10 @@ mod tests {
             "line type 7 must create stair movers"
         );
         // Step size should be 8 (Build8), speed 2.
-        assert_eq!(gs.movers.active_floors[0].speed, doom_types::Fixed16_16::from_int(2));
+        assert_eq!(
+            gs.movers.active_floors[0].speed,
+            doom_types::Fixed16_16::from_int(2)
+        );
     }
 
     #[test]
@@ -7519,7 +7664,10 @@ mod tests {
             "line type 8 must create stair movers"
         );
         // Turbo speed = 4.
-        assert_eq!(gs.movers.active_floors[0].speed, doom_types::Fixed16_16::from_int(4));
+        assert_eq!(
+            gs.movers.active_floors[0].speed,
+            doom_types::Fixed16_16::from_int(4)
+        );
     }
 
     #[test]
@@ -7655,7 +7803,11 @@ mod tests {
             !gs.movers.active_floors.is_empty(),
             "line type 127 must create stair movers"
         );
-        assert_eq!(gs.movers.active_floors[0].speed, doom_types::Fixed16_16::from_int(4), "turbo speed must be 4");
+        assert_eq!(
+            gs.movers.active_floors[0].speed,
+            doom_types::Fixed16_16::from_int(4),
+            "turbo speed must be 4"
+        );
     }
 
     #[test]
@@ -7828,12 +7980,16 @@ mod tests {
 
         // Activate slow crusher (type 25, speed=1).
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(128));
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(128)
+        );
 
         // One tick should lower by speed=1.
         tick_ceilings(&mut gs, &mut level);
         assert_eq!(
-            level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(127),
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(127),
             "ceiling must lower by speed each tic"
         );
 
@@ -7842,7 +7998,8 @@ mod tests {
             tick_ceilings(&mut gs, &mut level);
         }
         assert_eq!(
-            level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(122),
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(122),
             "ceiling must continue lowering"
         );
     }
@@ -7862,7 +8019,11 @@ mod tests {
         for _ in 0..120 {
             tick_ceilings(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(8), "must reach bottom_height");
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(8),
+            "must reach bottom_height"
+        );
         assert_eq!(
             gs.movers.active_ceilings[0].direction,
             MoveDirection::Up,
@@ -7887,7 +8048,11 @@ mod tests {
         for _ in 0..120 {
             tick_ceilings(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(128), "must return to top");
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(128),
+            "must return to top"
+        );
         assert_eq!(
             gs.movers.active_ceilings[0].direction,
             MoveDirection::Down,
@@ -7914,14 +8079,16 @@ mod tests {
             CeilingType::FastCrushAndRaise
         );
         assert_eq!(
-            gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(2),
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(2),
             "fast crusher uses speed 2"
         );
 
         // Tick once.
         tick_ceilings(&mut gs, &mut level);
         assert_eq!(
-            level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(126),
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(126),
             "fast crusher must move 2 units per tic"
         );
 
@@ -7930,13 +8097,15 @@ mod tests {
         let mut level2 = make_tagged_sector_level(0, 128, 1, 25);
         activate_linedef(&mut gs2, &mut level2, 0);
         assert_eq!(
-            gs2.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(1),
+            gs2.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(1),
             "slow crusher uses speed 1"
         );
 
         tick_ceilings(&mut gs2, &mut level2);
         assert_eq!(
-            level2.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(127),
+            level2.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(127),
             "slow crusher must move 1 unit per tic"
         );
     }
@@ -7957,7 +8126,10 @@ mod tests {
         for _ in 0..60 {
             tick_ceilings(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(8)
+        );
         assert!(
             gs.movers.active_ceilings.is_empty(),
             "LowerAndCrush must remove itself at bottom"
@@ -7977,7 +8149,8 @@ mod tests {
             CeilingType::LowerToFloor
         );
         assert_eq!(
-            gs.movers.active_ceilings[0].bottom_height, doom_types::Fixed16_16::from_int(0),
+            gs.movers.active_ceilings[0].bottom_height,
+            doom_types::Fixed16_16::from_int(0),
             "LowerToFloor bottom must be floor height (0), not floor+8"
         );
 
@@ -7987,7 +8160,8 @@ mod tests {
             tick_ceilings(&mut gs, &mut level_mut);
         }
         assert_eq!(
-            level_mut.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(0),
+            level_mut.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(0),
             "ceiling must reach floor"
         );
         assert!(
@@ -8038,7 +8212,10 @@ mod tests {
         for _ in 0..2 {
             tick_ceilings(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(8)
+        );
 
         // Player should have taken damage.
         let health = gs
@@ -8071,9 +8248,14 @@ mod tests {
         gs.player = crate::player::PlayerState::pistol_start(handle);
 
         activate_linedef(&mut gs, &mut level, 0);
-        assert_eq!(gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(2), "initial speed is 2");
         assert_eq!(
-            gs.movers.active_ceilings[0].normal_speed, doom_types::Fixed16_16::from_int(2),
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(2),
+            "initial speed is 2"
+        );
+        assert_eq!(
+            gs.movers.active_ceilings[0].normal_speed,
+            doom_types::Fixed16_16::from_int(2),
             "normal speed is 2"
         );
 
@@ -8090,13 +8272,19 @@ mod tests {
             gs.movers.active_ceilings[0].ceiling_type,
             CeilingType::CrushAndRaise
         );
-        assert_eq!(gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(1));
+        assert_eq!(
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(1)
+        );
 
         // Tick down to floor+8 = 8. ceil=16, speed=1 → 8 tics.
         for _ in 0..8 {
             tick_ceilings(&mut gs, &mut level2);
         }
-        assert_eq!(level2.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            level2.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(8)
+        );
 
         // The crush damage should have triggered slow-down to speed 1.
         // (It's already 1, so this is a no-op for speed=1 crushers.
@@ -8117,8 +8305,14 @@ mod tests {
                 ceiling_type: CeilingType::CrushAndRaise,
             },
         );
-        assert_eq!(gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(4));
-        assert_eq!(gs.movers.active_ceilings[0].normal_speed, doom_types::Fixed16_16::from_int(4));
+        assert_eq!(
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(4)
+        );
+        assert_eq!(
+            gs.movers.active_ceilings[0].normal_speed,
+            doom_types::Fixed16_16::from_int(4)
+        );
 
         let mut level3_mut = level3;
 
@@ -8126,11 +8320,15 @@ mod tests {
         for _ in 0..3 {
             tick_ceilings(&mut gs, &mut level3_mut);
         }
-        assert_eq!(level3_mut.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            level3_mut.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(8)
+        );
 
         // Speed should be slowed to 1 after crush.
         assert_eq!(
-            gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(1),
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(1),
             "CrushAndRaise must slow to speed 1 when crushing"
         );
 
@@ -8142,7 +8340,8 @@ mod tests {
             "must reverse to Up"
         );
         assert_eq!(
-            gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(4),
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(4),
             "speed must be restored to normal_speed when going up"
         );
     }
@@ -8162,7 +8361,10 @@ mod tests {
             gs.movers.active_ceilings[0].ceiling_type,
             CeilingType::FastCrushAndRaise
         );
-        assert_eq!(gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(2));
+        assert_eq!(
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(2)
+        );
         assert!(!gs.movers.active_ceilings[0].remove_when_done);
     }
 
@@ -8177,7 +8379,10 @@ mod tests {
             gs.movers.active_ceilings[0].ceiling_type,
             CeilingType::CrushAndRaise
         );
-        assert_eq!(gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(1));
+        assert_eq!(
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(1)
+        );
     }
 
     #[test]
@@ -8271,7 +8476,8 @@ mod tests {
             CeilingType::CrushAndRaise
         );
         assert_eq!(
-            gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(1),
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(1),
             "type 73 is slow (speed 1)"
         );
     }
@@ -8409,8 +8615,14 @@ mod tests {
 
         // Tick and verify both move.
         tick_ceilings(&mut gs, &mut level);
-        assert_eq!(level.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(127));
-        assert_eq!(level.sectors[2].ceil_height, doom_types::Fixed16_16::from_int(199));
+        assert_eq!(
+            level.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(127)
+        );
+        assert_eq!(
+            level.sectors[2].ceil_height,
+            doom_types::Fixed16_16::from_int(199)
+        );
     }
 
     #[test]
@@ -8436,7 +8648,10 @@ mod tests {
             gs2.movers.active_ceilings[0].ceiling_type,
             CeilingType::SilentCrush
         );
-        assert_eq!(gs2.movers.active_ceilings[0].normal_speed, doom_types::Fixed16_16::from_int(2));
+        assert_eq!(
+            gs2.movers.active_ceilings[0].normal_speed,
+            doom_types::Fixed16_16::from_int(2)
+        );
         assert!(gs2.movers.active_ceilings[0].silent);
     }
 
@@ -8503,7 +8718,10 @@ mod tests {
                 ceiling_type: CeilingType::SilentCrush,
             },
         );
-        assert_eq!(gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(4));
+        assert_eq!(
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(4)
+        );
 
         let mut level_mut = level;
 
@@ -8523,11 +8741,15 @@ mod tests {
         for _ in 0..3 {
             tick_ceilings(&mut gs, &mut level_mut);
         }
-        assert_eq!(level_mut.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            level_mut.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(8)
+        );
 
         // SilentCrush should also slow to speed 1.
         assert_eq!(
-            gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(1),
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(1),
             "SilentCrush must also slow down when crushing"
         );
     }
@@ -8550,7 +8772,10 @@ mod tests {
                 ceiling_type: CeilingType::FastCrushAndRaise,
             },
         );
-        assert_eq!(gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(4));
+        assert_eq!(
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(4)
+        );
 
         let mut level_mut = level;
 
@@ -8570,11 +8795,15 @@ mod tests {
         for _ in 0..3 {
             tick_ceilings(&mut gs, &mut level_mut);
         }
-        assert_eq!(level_mut.sectors[1].ceil_height, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            level_mut.sectors[1].ceil_height,
+            doom_types::Fixed16_16::from_int(8)
+        );
 
         // FastCrushAndRaise should NOT slow down — speed stays at 4.
         assert_eq!(
-            gs.movers.active_ceilings[0].speed, doom_types::Fixed16_16::from_int(4),
+            gs.movers.active_ceilings[0].speed,
+            doom_types::Fixed16_16::from_int(4),
             "FastCrushAndRaise must NOT slow down"
         );
     }
@@ -8739,7 +8968,8 @@ mod tests {
         let level = make_lift_test_level(16, 0, 5);
         let low = lowest_adjacent_floor(&level, 1);
         assert_eq!(
-            low, doom_types::Fixed16_16::from_int(0),
+            low,
+            doom_types::Fixed16_16::from_int(0),
             "lowest adjacent floor to sector 1 should be 0 (sector 0)"
         );
     }
@@ -8760,7 +8990,10 @@ mod tests {
 
         // After 1 tic, floor = 64 - 4 = 60.
         tick_lifts(&mut gs, &mut level);
-        assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(60));
+        assert_eq!(
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(60)
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -8779,7 +9012,8 @@ mod tests {
             tick_lifts(&mut gs, &mut level);
         }
         assert_eq!(
-            level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(0),
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(0),
             "floor must reach low_height"
         );
         assert_eq!(gs.movers.lifts[0].status, LiftStatus::Waiting);
@@ -8833,7 +9067,8 @@ mod tests {
             tick_lifts(&mut gs, &mut level);
         }
         assert_eq!(
-            level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(64),
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(64),
             "floor must return to high_height"
         );
         // LiftStatus::Done triggers removal on next tick.
@@ -8857,7 +9092,8 @@ mod tests {
         }
 
         assert_eq!(
-            level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(64),
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(64),
             "floor must be back at original"
         );
         assert!(
@@ -8877,7 +9113,8 @@ mod tests {
         ev_do_lift(&mut gs, &level, 5, doom_types::Fixed16_16::from_int(8), 105);
 
         assert_eq!(
-            gs.movers.lifts[0].speed, doom_types::Fixed16_16::from_int(8),
+            gs.movers.lifts[0].speed,
+            doom_types::Fixed16_16::from_int(8),
             "blazing lift must have speed 8"
         );
 
@@ -8885,7 +9122,10 @@ mod tests {
         for _ in 0..8 {
             tick_lifts(&mut gs, &mut level);
         }
-        assert_eq!(level.sectors[1].floor_height, doom_types::Fixed16_16::from_int(0));
+        assert_eq!(
+            level.sectors[1].floor_height,
+            doom_types::Fixed16_16::from_int(0)
+        );
         assert_eq!(gs.movers.lifts[0].status, LiftStatus::Waiting);
     }
 
@@ -8980,7 +9220,8 @@ mod tests {
             "line type 120 should create a LiftMover"
         );
         assert_eq!(
-            gs.movers.lifts[0].speed, doom_types::Fixed16_16::from_int(8),
+            gs.movers.lifts[0].speed,
+            doom_types::Fixed16_16::from_int(8),
             "line type 120 should be blazing speed 8"
         );
     }
@@ -9180,9 +9421,18 @@ mod tests {
 
         assert_eq!(loaded.state.movers.lifts.len(), 1, "must restore 1 lift");
         assert_eq!(loaded.state.movers.lifts[0].sector_index, 3);
-        assert_eq!(loaded.state.movers.lifts[0].low_height, doom_types::Fixed16_16::from_int(-32));
-        assert_eq!(loaded.state.movers.lifts[0].high_height, doom_types::Fixed16_16::from_int(64));
-        assert_eq!(loaded.state.movers.lifts[0].speed, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            loaded.state.movers.lifts[0].low_height,
+            doom_types::Fixed16_16::from_int(-32)
+        );
+        assert_eq!(
+            loaded.state.movers.lifts[0].high_height,
+            doom_types::Fixed16_16::from_int(64)
+        );
+        assert_eq!(
+            loaded.state.movers.lifts[0].speed,
+            doom_types::Fixed16_16::from_int(8)
+        );
         assert_eq!(loaded.state.movers.lifts[0].wait_tics, 105);
         assert_eq!(loaded.state.movers.lifts[0].wait_remaining, 42);
         assert_eq!(loaded.state.movers.lifts[0].status, LiftStatus::Waiting);
@@ -9202,7 +9452,10 @@ mod tests {
             1,
             "line type 122 should create a LiftMover"
         );
-        assert_eq!(gs.movers.lifts[0].speed, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            gs.movers.lifts[0].speed,
+            doom_types::Fixed16_16::from_int(8)
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -9219,7 +9472,10 @@ mod tests {
             1,
             "line type 123 should create a LiftMover"
         );
-        assert_eq!(gs.movers.lifts[0].speed, doom_types::Fixed16_16::from_int(8));
+        assert_eq!(
+            gs.movers.lifts[0].speed,
+            doom_types::Fixed16_16::from_int(8)
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -9253,7 +9509,8 @@ mod tests {
         // Close = negative speed.
         assert_eq!(gs.movers.active_doors[0].speed, -BLAZING_DOOR_SPEED);
         assert_eq!(
-            gs.movers.active_doors[0].target_height, doom_types::Fixed16_16::from_int(0),
+            gs.movers.active_doors[0].target_height,
+            doom_types::Fixed16_16::from_int(0),
             "closing doors should lower back to floor height"
         );
     }
@@ -10046,7 +10303,8 @@ mod tests {
         let level = make_multi_sector_level([0, 0, 0], [128, 96, 200], [0, 0, 0], 0, 0);
         let result = highest_adjacent_ceiling(&level, 1);
         assert_eq!(
-            result, doom_types::Fixed16_16::from_int(200),
+            result,
+            doom_types::Fixed16_16::from_int(200),
             "highest adjacent ceiling to sector 1 should be 200 (sector 2)"
         );
     }
@@ -10056,7 +10314,11 @@ mod tests {
         let level = make_damage_level(0, 0);
         // Sector 0 has ceil=128 and no adjacent sectors.
         let result = highest_adjacent_ceiling(&level, 0);
-        assert_eq!(result, doom_types::Fixed16_16::from_int(128), "no adjacent sectors => returns own ceiling");
+        assert_eq!(
+            result,
+            doom_types::Fixed16_16::from_int(128),
+            "no adjacent sectors => returns own ceiling"
+        );
     }
 
     #[test]
@@ -10064,7 +10326,11 @@ mod tests {
         // Sector 1: floor=0, adjacent to sector 0 (floor=32) and sector 2 (floor=64).
         let level = make_multi_sector_level([32, 0, 64], [128, 128, 128], [0, 0, 0], 0, 0);
         let result = next_highest_floor_above(&level, 1, doom_types::Fixed16_16::from_int(10));
-        assert_eq!(result, doom_types::Fixed16_16::from_int(32), "next floor above 10 should be 32 (sector 0)");
+        assert_eq!(
+            result,
+            doom_types::Fixed16_16::from_int(32),
+            "next floor above 10 should be 32 (sector 0)"
+        );
     }
 
     #[test]
@@ -10072,7 +10338,11 @@ mod tests {
         // Sector 1: floor=100, adjacent to 0 (floor=20) and 2 (floor=50). Both below 100.
         let level = make_multi_sector_level([20, 100, 50], [200, 200, 200], [0, 0, 0], 0, 0);
         let result = next_highest_floor_above(&level, 1, doom_types::Fixed16_16::from_int(100));
-        assert_eq!(result, doom_types::Fixed16_16::from_int(100), "no floor above 100 => returns 100");
+        assert_eq!(
+            result,
+            doom_types::Fixed16_16::from_int(100),
+            "no floor above 100 => returns 100"
+        );
     }
 
     #[test]
@@ -10205,10 +10475,14 @@ mod tests {
         ev_floor_lower_to_lowest(&mut gs, &level, 1, doom_types::Fixed16_16::from_int(2));
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(0),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(0),
             "lowest adjacent = 0"
         );
-        assert_eq!(gs.movers.active_floors[0].speed, doom_types::Fixed16_16::from_int(2));
+        assert_eq!(
+            gs.movers.active_floors[0].speed,
+            doom_types::Fixed16_16::from_int(2)
+        );
         assert_eq!(gs.movers.active_floors[0].direction, MoveDirection::Down);
         assert_eq!(
             gs.movers.active_floors[0].floor_type,
@@ -10221,10 +10495,17 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=48.
         let level = make_multi_sector_level([10, 64, 48], [128, 128, 128], [0, 1, 0], 0, 0);
-        ev_floor_lower_to_highest(&mut gs, &level, 1, doom_types::Fixed16_16::from_int(1), false);
+        ev_floor_lower_to_highest(
+            &mut gs,
+            &level,
+            1,
+            doom_types::Fixed16_16::from_int(1),
+            false,
+        );
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(48),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(48),
             "highest adjacent = 48"
         );
         assert_eq!(
@@ -10244,13 +10525,24 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 0: floor=10, Sector 1: floor=64 tag=1, Sector 2: floor=48.
         let level = make_multi_sector_level([10, 64, 48], [128, 128, 128], [0, 1, 0], 0, 0);
-        ev_floor_lower_to_highest(&mut gs, &level, 1, doom_types::Fixed16_16::from_int(4), true);
+        ev_floor_lower_to_highest(
+            &mut gs,
+            &level,
+            1,
+            doom_types::Fixed16_16::from_int(4),
+            true,
+        );
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(56),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(56),
             "turbo lower dest = highest adjacent (48) + 8"
         );
-        assert_eq!(gs.movers.active_floors[0].speed, doom_types::Fixed16_16::from_int(4), "turbo lower is 4x speed");
+        assert_eq!(
+            gs.movers.active_floors[0].speed,
+            doom_types::Fixed16_16::from_int(4),
+            "turbo lower is 4x speed"
+        );
     }
 
     #[test]
@@ -10267,7 +10559,8 @@ mod tests {
         );
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(96),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(96),
             "lowest adj ceil = 96"
         );
         assert_eq!(gs.movers.active_floors[0].direction, MoveDirection::Up);
@@ -10286,7 +10579,8 @@ mod tests {
         ev_floor_raise_to_nearest(&mut gs, &level, 1, doom_types::Fixed16_16::from_int(1));
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(32),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(32),
             "next highest = 32"
         );
         assert_eq!(
@@ -10368,7 +10662,11 @@ mod tests {
         ev_floor_raise_by_texture(&mut gs, &level, 1, doom_types::Fixed16_16::from_int(1));
         assert_eq!(gs.movers.active_floors.len(), 1);
         // floor=16, shortest lower texture=48, target=16+48=64.
-        assert_eq!(gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(64), "16 + 48 = 64");
+        assert_eq!(
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(64),
+            "16 + 48 = 64"
+        );
         assert_eq!(
             gs.movers.active_floors[0].floor_type,
             FloorType::RaiseByTexture
@@ -10382,7 +10680,11 @@ mod tests {
         let level = make_multi_sector_level([0, 10, 0], [128, 128, 128], [0, 1, 0], 0, 0);
         ev_floor_raise_24(&mut gs, &level, 1, doom_types::Fixed16_16::from_int(1));
         assert_eq!(gs.movers.active_floors.len(), 1);
-        assert_eq!(gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(34), "10 + 24 = 34");
+        assert_eq!(
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(34),
+            "10 + 24 = 34"
+        );
         assert_eq!(gs.movers.active_floors[0].floor_type, FloorType::Raise24);
     }
 
@@ -10393,7 +10695,11 @@ mod tests {
         let level = make_multi_sector_level([0, 20, 0], [128, 128, 128], [0, 1, 0], 0, 0);
         ev_floor_raise_32(&mut gs, &level, 1, doom_types::Fixed16_16::from_int(1));
         assert_eq!(gs.movers.active_floors.len(), 1);
-        assert_eq!(gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(52), "20 + 32 = 52");
+        assert_eq!(
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(52),
+            "20 + 32 = 52"
+        );
         assert_eq!(gs.movers.active_floors[0].floor_type, FloorType::Raise32);
     }
 
@@ -10402,10 +10708,17 @@ mod tests {
         let mut gs = GameState::new("TEST");
         // Sector 1: floor=0, ceil=200, tag=1.
         let level = make_multi_sector_level([0, 0, 0], [128, 200, 128], [0, 1, 0], 0, 0);
-        ev_floor_raise_to_ceiling(&mut gs, &level, 1, doom_types::Fixed16_16::from_int(1), crate::state::CrushBehavior::NoCrush);
+        ev_floor_raise_to_ceiling(
+            &mut gs,
+            &level,
+            1,
+            doom_types::Fixed16_16::from_int(1),
+            crate::state::CrushBehavior::NoCrush,
+        );
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(200),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(200),
             "target = own ceiling = 200"
         );
         assert_eq!(
@@ -10424,7 +10737,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(48),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(48),
             "type 19: target = highest adjacent = 48"
         );
     }
@@ -10436,7 +10750,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(0),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(0),
             "type 23: target = lowest adjacent = 0"
         );
     }
@@ -10450,11 +10765,13 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(38),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(38),
             "type 36: target = highest_adj(30) + 8 = 38"
         );
         assert_eq!(
-            gs.movers.active_floors[0].speed, doom_types::Fixed16_16::from_int(4),
+            gs.movers.active_floors[0].speed,
+            doom_types::Fixed16_16::from_int(4),
             "type 36: turbo speed = 4"
         );
     }
@@ -10468,7 +10785,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(92),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(92),
             "type 56: target = lowest_adj_ceil(100) - 8 = 92"
         );
         assert!(
@@ -10485,7 +10803,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(96),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(96),
             "type 64: target = lowest_adj_ceil = 96"
         );
     }
@@ -10497,7 +10816,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(80),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(80),
             "type 91: target = lowest_adj_ceil = 80"
         );
     }
@@ -10561,7 +10881,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(10),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(10),
             "type 38: target = lowest adjacent = 10"
         );
     }
@@ -10573,7 +10894,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(48),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(48),
             "type 45: target = highest adjacent = 48"
         );
     }
@@ -10585,7 +10907,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(5),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(5),
             "type 82: target = lowest adjacent = 5"
         );
     }
@@ -10597,7 +10920,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(34),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(34),
             "type 58: target = 10 + 24 = 34"
         );
     }
@@ -10605,7 +10929,7 @@ mod tests {
     #[test]
     fn raise_and_change_plats_spawn_at_half_unit_speed() {
         use crate::linedef_dispatch::{classify_trigger, dispatch_linedef};
-        use doom_types::{Fixed16_16, FIXED_ONE};
+        use doom_types::{FIXED_ONE, Fixed16_16};
         let half = Fixed16_16::from_raw(FIXED_ONE.raw() / 2);
 
         // Drives the live `dispatch_linedef` path (P_UseLines / walkover), not
@@ -10624,7 +10948,10 @@ mod tests {
         // Type 47: raiseToNearestAndChange plat -> half-unit speed, next-highest
         // target (sector 1 floor 0, adjacent 10) = 10.
         let (speed, target) = fire([10, 0, 32], 47);
-        assert_eq!(speed, half, "type 47 raiseToNearestAndChange moves at FRACUNIT/2");
+        assert_eq!(
+            speed, half,
+            "type 47 raiseToNearestAndChange moves at FRACUNIT/2"
+        );
         assert_eq!(target, doom_types::Fixed16_16::from_int(10));
 
         // Type 67: raiseAndChange +32 plat -> half-unit speed, target floor+32.
@@ -10639,11 +10966,17 @@ mod tests {
 
         // Type 58: whole-speed raiseFloor24AndChange floor keeps FRACUNIT speed.
         let (speed, _) = fire([0, 10, 0], 58);
-        assert_eq!(speed, FIXED_ONE, "type 58 raiseFloor24AndChange stays at a whole unit per tic");
+        assert_eq!(
+            speed, FIXED_ONE,
+            "type 58 raiseFloor24AndChange stays at a whole unit per tic"
+        );
 
         // Type 18: whole-speed raiseFloorToNearest keeps FRACUNIT speed.
         let (speed, _) = fire([10, 0, 32], 18);
-        assert_eq!(speed, FIXED_ONE, "type 18 raiseFloorToNearest stays at a whole unit per tic");
+        assert_eq!(
+            speed, FIXED_ONE,
+            "type 18 raiseFloorToNearest stays at a whole unit per tic"
+        );
     }
 
     #[test]
@@ -10656,7 +10989,15 @@ mod tests {
         let mut level = make_multi_sector_level([10, 0, 32], [128, 128, 128], [0, 1, 0], 47, 1);
         level.sectors[1].special = 7; // 5% nukage
         let actor = gs.player.handle;
-        dispatch_linedef(&mut gs, &mut level, 0, 47, classify_trigger(47).unwrap(), actor, 0);
+        dispatch_linedef(
+            &mut gs,
+            &mut level,
+            0,
+            47,
+            classify_trigger(47).unwrap(),
+            actor,
+            0,
+        );
         assert_eq!(gs.movers.active_floors.len(), 1, "plat spawned on sector 1");
         assert_eq!(
             level.sectors[1].special, 0,
@@ -10668,7 +11009,15 @@ mod tests {
         let mut level = make_multi_sector_level([0, 0, 0], [128, 128, 128], [0, 1, 0], 66, 1);
         level.sectors[1].special = 7;
         let actor = gs.player.handle;
-        dispatch_linedef(&mut gs, &mut level, 0, 66, classify_trigger(66).unwrap(), actor, 0);
+        dispatch_linedef(
+            &mut gs,
+            &mut level,
+            0,
+            66,
+            classify_trigger(66).unwrap(),
+            actor,
+            0,
+        );
         assert_eq!(
             level.sectors[1].special, 7,
             "raiseAndChange must NOT clear the sector's damaging special"
@@ -10682,7 +11031,8 @@ mod tests {
         activate_linedef(&mut gs, &mut level, 0);
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(40),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(40),
             "type 102: target = highest adjacent = 40"
         );
     }
@@ -10696,7 +11046,8 @@ mod tests {
         ev_floor_lower_to_nearest(&mut gs, &level, 1, doom_types::Fixed16_16::from_int(1));
         assert_eq!(gs.movers.active_floors.len(), 1);
         assert_eq!(
-            gs.movers.active_floors[0].target_height, doom_types::Fixed16_16::from_int(32),
+            gs.movers.active_floors[0].target_height,
+            doom_types::Fixed16_16::from_int(32),
             "next lowest adjacent below 64 = 32"
         );
         assert_eq!(
@@ -10985,7 +11336,11 @@ mod tests {
 
         let mo = gs.mobjslab.get(body).unwrap();
         assert_eq!(mo.state, before, "a corpse that still fits is not gibbed");
-        assert_ne!(mo.height, Fixed16_16::ZERO, "an un-crushed corpse keeps its height");
+        assert_ne!(
+            mo.height,
+            Fixed16_16::ZERO,
+            "an un-crushed corpse keeps its height"
+        );
     }
 
     #[test]
