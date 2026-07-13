@@ -15,6 +15,18 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new, empty sprite clip history.
+    ///
+    /// This initializes a static array of fixed length to avoid heap allocations,
+    /// storing short sprite clip histories.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// let history = SpriteClipHistory::new();
+    /// assert_eq!(history.last(), None);
+    /// ```
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {

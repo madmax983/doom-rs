@@ -13,7 +13,27 @@ const SLOPERANGE: u32 = 2048;
 
 /// Binary-angle constants (`tables.h`).
 pub const ANG90: u32 = 0x4000_0000;
+/// 180 degrees represented as a binary angle.
+///
+/// Represents half of a full rotation.
+///
+/// # Examples
+///
+/// ```
+/// use doom_game::geom::ANG180;
+/// assert_eq!(ANG180, 0x8000_0000);
+/// ```
 pub const ANG180: u32 = 0x8000_0000;
+/// 270 degrees represented as a binary angle.
+///
+/// Represents three-quarters of a full rotation.
+///
+/// # Examples
+///
+/// ```
+/// use doom_game::geom::ANG270;
+/// assert_eq!(ANG270, 0xC000_0000);
+/// ```
 pub const ANG270: u32 = 0xC000_0000;
 
 /// Fixed-point multiply matching vanilla `FixedMul`.
@@ -117,11 +137,25 @@ pub fn fine_sine(angle: u32) -> i32 {
 }
 
 /// A directed line (`divline_t`) in raw fixed-point.
+///
+/// It defines a point of origin `(x, y)` and a directional vector `(dx, dy)`.
+///
+/// # Examples
+///
+/// ```
+/// use doom_game::geom::DivLine;
+/// // A line passing through origin, pointing right
+/// let line = DivLine { x: 0, y: 0, dx: 1 << 16, dy: 0 };
+/// ```
 #[derive(Clone, Copy, Debug)]
 pub struct DivLine {
+    /// Origin X coordinate in 16.16 fixed-point.
     pub x: i32,
+    /// Origin Y coordinate in 16.16 fixed-point.
     pub y: i32,
+    /// Delta X (direction vector) in 16.16 fixed-point.
     pub dx: i32,
+    /// Delta Y (direction vector) in 16.16 fixed-point.
     pub dy: i32,
 }
 
