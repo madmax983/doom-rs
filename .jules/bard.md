@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-07-13 - [Clarified AiDirector usage and purpose]
+**Confusion:** The `AiDirector` struct in `doom-game::director` was completely undocumented, lacking module-level narrative explaining what it does (dynamic pacing based on player health) and lacking any executable examples demonstrating how it interacts with `PlayerState`.
+**Clarification:** Added a detailed module-level story (`//!`) explaining the pacing strategy. Added exhaustive struct and enum documentation for `AiDirector` and `DirectorAction`. Added an `## Examples` doc-test showing how varying the player's health directly impacts the director's emitted actions.
