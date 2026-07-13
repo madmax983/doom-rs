@@ -268,7 +268,7 @@ pub fn p_spawn_player_missile(
     };
 
     // --- Autoaim (draws NO RNG), exactly as vanilla P_SpawnPlayerMissile. ---
-    const AUTOAIM_RANGE: Fixed16_16 = Fixed16_16(16 * 64 << 16);
+    const AUTOAIM_RANGE: Fixed16_16 = Fixed16_16((16 * 64) << 16);
     const SIDE_PROBE: u32 = 1 << 26;
 
     let mut an = base_angle.0;
@@ -660,9 +660,7 @@ mod tests {
     #[test]
     fn spawn_missile_momentum_is_full_speed_fixed_point() {
         // SAFETY: trig tables are process-global and internally guarded.
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
         let mut gs = make_game_state();
         let source = gs.player.handle;
         // Target off-axis so both momentum components are non-trivial.
@@ -703,9 +701,7 @@ mod tests {
     /// half-momentum nudge (spawn z = source.z + 32, per vanilla).
     #[test]
     fn spawn_missile_applies_checkmissilespawn_half_step_nudge() {
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
         let mut gs = make_game_state();
         let source = gs.player.handle;
         let (sx, sy, sz) = {
@@ -733,9 +729,7 @@ mod tests {
 
     #[test]
     fn spawn_missile_z_is_thirtytwo_above_source_before_nudge() {
-        unsafe {
-            doom_types::Bam::init_trig_tables();
-        }
+        doom_types::Bam::init_trig_tables();
         let mut gs = make_game_state();
         let source = gs.player.handle;
         // Aim horizontally (target at same z) so momz == 0 and there is no z nudge.
