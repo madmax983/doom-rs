@@ -10,10 +10,11 @@
 //! - `check_cross_lines()` — detect walk-trigger lines crossed during movement.
 
 use doom_map::Level;
-use doom_types::{Fixed16_16, FIXED_ONE};
+use doom_types::{FIXED_ONE, Fixed16_16};
 
 use crate::mobj::MobjHandle;
-use crate::state::{ExitRequest, GameState, LockedDoorColor, SoundRequest};
+use crate::sound_prop::SoundRequest;
+use crate::state::{ExitRequest, GameState, LockedDoorColor};
 use crate::switch::KeyType;
 
 /// Raise-and-change plats move at half a map unit per tic (vanilla
@@ -651,7 +652,7 @@ fn dispatch_floors(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                 level,
                 tag,
                 Fixed16_16::from_int(1),
-                crate::state::CrushBehavior::NoCrush,
+                crate::movers::CrushBehavior::NoCrush,
             );
             true
         }
@@ -710,7 +711,7 @@ fn dispatch_floors(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                 level,
                 tag,
                 Fixed16_16::from_int(1),
-                crate::state::CrushBehavior::Crush,
+                crate::movers::CrushBehavior::Crush,
             );
             true
         }
@@ -719,11 +720,23 @@ fn dispatch_floors(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
             true
         }
         FloorLowerToHighest => {
-            crate::specials::ev_floor_lower_to_highest(gs, level, tag, Fixed16_16::from_int(1), false);
+            crate::specials::ev_floor_lower_to_highest(
+                gs,
+                level,
+                tag,
+                Fixed16_16::from_int(1),
+                false,
+            );
             true
         }
         FloorLowerToHighestMinus8 => {
-            crate::specials::ev_floor_lower_to_highest(gs, level, tag, Fixed16_16::from_int(4), true);
+            crate::specials::ev_floor_lower_to_highest(
+                gs,
+                level,
+                tag,
+                Fixed16_16::from_int(4),
+                true,
+            );
             true
         }
         FloorLowerAndChange => {
@@ -803,7 +816,7 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                     level,
                     idx,
                     crate::specials::StairType::Build8,
-                    crate::state::CrushBehavior::NoCrush,
+                    crate::movers::CrushBehavior::NoCrush,
                 );
             }
             true
@@ -816,7 +829,7 @@ fn dispatch_stairs(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
                     level,
                     idx,
                     crate::specials::StairType::Turbo16,
-                    crate::state::CrushBehavior::NoCrush,
+                    crate::movers::CrushBehavior::NoCrush,
                 );
             }
             true
@@ -1005,7 +1018,8 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavi
         return;
     };
     let sector = s;
-    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
+    let target =
+        crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
     if gs
         .movers
         .active_doors
@@ -1014,7 +1028,7 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavi
     {
         return;
     }
-    gs.movers.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::movers::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -1045,7 +1059,7 @@ fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
     {
         return;
     }
-    gs.movers.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::movers::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -1072,8 +1086,9 @@ fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) 
     {
         return;
     }
-    let reopen_h = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
-    gs.movers.active_doors.push(crate::state::DoorMover {
+    let reopen_h =
+        crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
+    gs.movers.active_doors.push(crate::movers::DoorMover {
         sector: sector_idx,
         target_height: sector.floor_height,
         current_height: sector.ceil_height,
@@ -1096,7 +1111,8 @@ fn open_blazing_door_helper(
         return;
     };
     let sector = s;
-    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
+    let target =
+        crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
     if gs
         .movers
         .active_doors
@@ -1105,7 +1121,7 @@ fn open_blazing_door_helper(
     {
         return;
     }
-    gs.movers.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::movers::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -1136,7 +1152,7 @@ fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usiz
     {
         return;
     }
-    gs.movers.active_doors.push(crate::state::DoorMover {
+    gs.movers.active_doors.push(crate::movers::DoorMover {
         sector: sector_idx,
         target_height: target,
         current_height: sector.ceil_height,
@@ -1335,8 +1351,7 @@ pub fn queue_monster_crossings(
         let dx = ((v2.x as i32) << 16) - v1x;
         let dy = ((v2.y as i32) << 16) - v1y;
         let side = crate::geom::p_point_on_line_side(new_x.raw(), new_y.raw(), v1x, v1y, dx, dy);
-        let oldside =
-            crate::geom::p_point_on_line_side(old_x.raw(), old_y.raw(), v1x, v1y, dx, dy);
+        let oldside = crate::geom::p_point_on_line_side(old_x.raw(), old_y.raw(), v1x, v1y, dx, dy);
         if side != oldside {
             gs.pending_monster_crossings.push((ld_idx, actor));
         }
@@ -2052,7 +2067,7 @@ mod tests {
         assert!(!result, "locked door without key should fail");
         assert_eq!(
             gs.sound.sound_queue,
-            vec![crate::state::SoundRequest::PlayerUseLockedDoor(
+            vec![crate::sound_prop::SoundRequest::PlayerUseLockedDoor(
                 crate::state::LockedDoorColor::Blue,
             )],
             "player should get Doom-style keyed-door feedback"
