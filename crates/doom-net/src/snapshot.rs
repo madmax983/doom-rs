@@ -16,6 +16,18 @@ use crate::packet::MAX_ROLLBACK_TICS;
 /// Fixed-size ring buffer of `(tic, state)` pairs for rollback.
 ///
 /// Capacity defaults to [`MAX_ROLLBACK_TICS`] but can be set at construction.
+///
+/// ## Examples
+///
+/// ```
+/// use doom_net::SnapshotRing;
+///
+/// // Create a snapshot ring storing dummy game states (Strings here).
+/// let mut ring: SnapshotRing<String> = SnapshotRing::new(4);
+/// ring.save(10, "state_10".to_string());
+/// assert_eq!(ring.latest_tic(), Some(10));
+/// assert_eq!(ring.get(10), Some(&"state_10".to_string()));
+/// ```
 #[derive(Debug, Clone)]
 pub struct SnapshotRing<S: Clone> {
     /// Each slot holds an optional `(tic_num, state)` pair.
