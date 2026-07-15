@@ -137,6 +137,9 @@ pub struct GameState {
     /// here and dispatched right after the actor pass (before the sector movers
     /// run) — the same tic, matching vanilla's appended-thinker timing.
     pub pending_monster_crossings: Vec<(usize, MobjHandle)>,
+
+    #[cfg(feature = "bestiary")]
+    pub bestiary: crate::bestiary::Bestiary,
 }
 
 impl GameState {
@@ -168,6 +171,8 @@ impl GameState {
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
             pending_monster_crossings: Vec::new(),
+            #[cfg(feature = "bestiary")]
+            bestiary: crate::bestiary::Bestiary::new(),
         }
     }
 

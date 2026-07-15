@@ -12,6 +12,8 @@
 //! - Dead actors (`health ≤ 0`) never transition to attack states (batch 2).
 
 pub mod actions;
+#[cfg(feature = "bestiary")]
+pub mod bestiary;
 pub mod automap;
 pub mod cheats;
 pub mod combat;

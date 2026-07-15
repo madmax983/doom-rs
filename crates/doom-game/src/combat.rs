@@ -423,6 +423,11 @@ pub fn damage_mobj_source(
             gs.style.register_kill(gs.tic_num);
         }
 
+        #[cfg(feature = "bestiary")]
+        if source == gs.player.handle {
+            gs.bestiary.record_kill(kind);
+        }
+
         #[cfg(feature = "telemetry")]
         if source == gs.player.handle {
             let name = format!("{:?}", kind);
