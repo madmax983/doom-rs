@@ -137,6 +137,8 @@ pub struct GameState {
     /// here and dispatched right after the actor pass (before the sector movers
     /// run) — the same tic, matching vanilla's appended-thinker timing.
     pub pending_monster_crossings: Vec<(usize, MobjHandle)>,
+    #[cfg(feature = "rpg")]
+    pub rpg: crate::rpg::RpgSystem,
 }
 
 impl GameState {
@@ -168,6 +170,8 @@ impl GameState {
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
             pending_monster_crossings: Vec::new(),
+            #[cfg(feature = "rpg")]
+            rpg: crate::rpg::RpgSystem::new(),
         }
     }
 
@@ -208,6 +212,17 @@ impl GameState {
     pub fn heal_player_overheal(&mut self, amount: i32, cap: i32) {
         self.player.heal_overheal(amount, cap);
         self.sync_player_mobj_health();
+    }
+
+    #[cfg(feature = "rpg")]
+    pub fn grant_rpg_xp(&mut self, kind: doom_types::mobj_kind::MobjKind) {
+        let leveled_up = self.rpg.grant_xp(kind);
+        if leveled_up {
+            let new_max = self.rpg.current_max_health();
+            self.player
+                .heal_overheal(new_max - self.player.health(), new_max);
+            self.sync_player_mobj_health();
+        }
     }
 
     /// Set the player's health directly and keep the player mobj in sync.
