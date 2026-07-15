@@ -404,12 +404,18 @@ impl UdmfMap {
                     y: required_i16(block, index, "vertex", "y")?,
                 }),
                 "sector" => sectors.push(Sector {
-                    floor_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightfloor")? as i32,
-                    ),
-                    ceil_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightceiling")? as i32,
-                    ),
+                    floor_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightfloor",
+                    )? as i32),
+                    ceil_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightceiling",
+                    )? as i32),
                     floor_flat: required_name(block, index, "sector", "texturefloor")?,
                     ceil_flat: required_name(block, index, "sector", "textureceiling")?,
                     light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,
@@ -1196,5 +1202,169 @@ mod tests {
             map.into_level_data(),
             Err(UdmfError::UnsupportedNamespace(namespace)) if namespace == "zdoom"
         ));
+    }
+    #[test]
+    fn test_skip_comments() {
+        let udmf_data = br#"
+        // This is a line comment
+        namespace = "doom"; // Another line comment
+        /* This is a block comment */
+        vertex { x = 0; y = 0; }
+        /* Multi-line
+           block comment */
+        "#;
+        let map = UdmfMap::parse(udmf_data).expect("should parse successfully with comments");
+        assert_eq!(map.namespace, "doom");
+        assert_eq!(map.blocks.len(), 1);
+    }
+
+    #[test]
+    fn test_unterminated_block_comment() {
+        let udmf_data = br#"
+        namespace = "doom";
+        /* This block comment never ends
+        "#;
+        let err = UdmfMap::parse(udmf_data).expect_err("should fail to parse");
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "unterminated block comment")
+        );
+    }
+
+    #[test]
+    fn test_unknown_block_is_ignored_in_conversion() {
+        let udmf_data = br#"
+        namespace = "doom";
+        unknown_block { some_field = 123; }
+        vertex { x = 0; y = 0; }
+        "#;
+        let map = UdmfMap::parse(udmf_data).expect("should parse successfully");
+        let level = map.into_level_data().expect("should convert successfully");
+        assert_eq!(level.vertexes.len(), 1);
+    }
+
+    #[test]
+    fn test_expect_char_fails() {
+        let udmf_data = br#"
+        namespace = "doom"
+        vertex { x = 0; y = 0; }
+        "#;
+        let err = UdmfMap::parse(udmf_data).expect_err("should fail to parse missing semicolon");
+        assert!(matches!(err, UdmfError::ParseFailed { message, .. } if message == "expected ';'"));
+    }
+
+    #[test]
+    fn test_line_comment_eof() {
+        let udmf_data = br#"
+        namespace = "doom";
+        vertex { x = 0; y = 0; }
+        // This comment goes to EOF without newline"#;
+        let map = UdmfMap::parse(udmf_data).expect("should parse successfully");
+        assert_eq!(map.blocks.len(), 1);
+    }
+
+    #[test]
+    fn test_parse_ident_invalid_start() {
+        let udmf_data = br#"
+        namespace = "doom";
+        123bad { }
+        "#;
+        let err = UdmfMap::parse(udmf_data).expect_err("should fail to parse bad identifier");
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "expected identifier")
+        );
+    }
+
+    #[test]
+    fn test_float_to_integral_out_of_range() {
+        let udmf_data = br#"
+        namespace = "doom";
+        vertex { x = 1e30; y = 0; }
+        "#;
+        let map = UdmfMap::parse(udmf_data).expect("should parse");
+        let err = map.into_level_data().expect_err("should fail");
+        assert!(matches!(err, UdmfError::OutOfRange { field: "x", .. }));
+    }
+
+    #[test]
+    fn test_thing_flags_multiplayer_single() {
+        let udmf_data = br#"
+        namespace = "doom";
+        thing { x = 0; y = 0; type = 1; single = false; }
+        "#;
+        let map = UdmfMap::parse(udmf_data).expect("should parse");
+        let level = map.into_level_data().expect("should convert");
+        assert_eq!(level.things.len(), 1);
+        // single = false means it should have THING_FLAG_MULTIPLAYER which is 0x0010
+        assert_eq!(level.things[0].flags & 0x0010, 0x0010);
+    }
+
+    #[test]
+    fn test_linedef_flags() {
+        let udmf_data = br#"
+        namespace = "doom";
+        vertex { x = 0; y = 0; }
+        vertex { x = 64; y = 64; }
+        sidedef { sector = 0; }
+        linedef {
+            v1 = 0;
+            v2 = 1;
+            sidefront = 0;
+            blocking = true;
+            blockmonsters = true;
+            dontpegtop = true;
+            dontpegbottom = true;
+            secret = true;
+            blocksound = true;
+            dontdraw = true;
+            mapped = true;
+            twosided = true;
+        }
+        "#;
+        let map = UdmfMap::parse(udmf_data).expect("should parse");
+        let level = map.into_level_data().expect("should convert");
+        assert_eq!(level.linedefs.len(), 1);
+        let flags = level.linedefs[0].flags;
+        assert_eq!(flags & 0x0001, 0x0001); // blocking
+        assert_eq!(flags & 0x0002, 0x0002); // blockmonsters
+        assert_eq!(flags & 0x0004, 0x0004); // two sided
+        assert_eq!(flags & 0x0008, 0x0008); // dontpegtop
+        assert_eq!(flags & 0x0010, 0x0010); // dontpegbottom
+        assert_eq!(flags & 0x0020, 0x0020); // secret
+        assert_eq!(flags & 0x0040, 0x0040); // blocksound
+        assert_eq!(flags & 0x0080, 0x0080); // dontdraw
+        assert_eq!(flags & 0x0100, 0x0100); // mapped
+    }
+
+    #[test]
+    fn test_expected_equals_or_brace() {
+        let udmf_data = br#"
+        namespace = "doom";
+        vertex ;
+        "#;
+        let err = UdmfMap::parse(udmf_data).expect_err("should fail");
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "expected '=' or '{' after identifier")
+        );
+    }
+
+    #[test]
+    fn test_parse_block_field_eof() {
+        let udmf_data = br#"
+        namespace = "doom";
+        vertex {
+        "#;
+        let err = UdmfMap::parse(udmf_data).expect_err("should fail");
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "expected identifier, found end of input")
+        );
+    }
+
+    #[test]
+    fn test_parse_ident_eof_field_name_fix() {
+        let err =
+            UdmfMap::parse(b"namespace = \"doom\"; vertex { x = 0; ").expect_err("should fail");
+        assert!(
+            matches!(err, UdmfError::ParseFailed { message, .. } if message == "expected identifier, found end of input")
+        );
     }
 }
