@@ -1,0 +1,27 @@
+1. **Update `move_spechit` signature in `crates/doom-game/src/movement.rs`**
+   - Replace the `move_spechit` signature to use `SmallVec` with a capacity of 8. We will use `replace_with_git_merge_diff` with exact blocks.
+   - Run `git diff crates/doom-game/src/movement.rs` to verify.
+
+2. **Update allocations in `crates/doom-game/src/movement.rs`**
+   - Use `replace_with_git_merge_diff` to replace `let mut seen: Vec<usize> = Vec::new();` with `let mut seen: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();`.
+   - Run `git diff crates/doom-game/src/movement.rs` to verify.
+
+3. **Fix tests in `crates/doom-game/src/movement.rs`**
+   - Use `replace_with_git_merge_diff` to compare `sh` against `&[0usize]`.
+   - Run `git diff crates/doom-game/src/movement.rs` to verify.
+
+4. **Update `actions.rs` to match the new return type**
+   - Use `replace_with_git_merge_diff` to change `Vec::new()` to `smallvec::SmallVec::new()` in `crates/doom-game/src/actions.rs`.
+   - Run `git diff crates/doom-game/src/actions.rs` to verify.
+
+5. **Verify correctness locally**
+   - Execute `run_in_bash_session` with `cargo clippy --all-targets --all-features -- -D warnings && cargo test && cargo fmt --all` to ensure no warnings or failures are introduced.
+
+6. **Journal the Learning**
+   - Use `run_in_bash_session` with `cat << 'INNER_EOF' >> .jules/bolt.md` to append the learning and `cat .jules/bolt.md` to verify.
+
+7. **Pre-commit Steps**
+   - Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.
+
+8. **Submit the PR**
+   - Execute `submit` with the exact branch name `bolt-smallvec-spechit`, the given title and description.
