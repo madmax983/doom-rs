@@ -1,3 +1,14 @@
+//! Sprite clipping and occlusion handling.
+//!
+//! In a 2.5D engine, sprites (2D billboards) must be correctly occluded by the
+//! level geometry (walls, floors, ceilings). This module chronicles the `SpriteClipHistory`,
+//! a specialized structure designed to track how a sprite column is sliced by various
+//! portals and solid walls during the rendering phase.
+//!
+//! By keeping a short history of clipping steps without heap allocations, the engine
+//! efficiently calculates the visible segments of each sprite, ensuring that monsters
+//! hiding behind corners remain properly concealed from the player's view.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.

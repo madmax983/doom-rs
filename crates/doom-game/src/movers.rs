@@ -1,3 +1,15 @@
+//! The shifting architecture: Moving sectors, doors, and lifts.
+//!
+//! A Doom map is not entirely static. Sectors can change height, crush players, or act as
+//! elevators. This module defines the state structures for all moving environmental features:
+//! - **Doors**: Vertical boundaries that open and close.
+//! - **Lifts**: Platforms that lower to a target height, wait, and return.
+//! - **Ceilings**: Crushers and lowering traps.
+//! - **Floors**: Moving platforms and stairs.
+//!
+//! Each mover is a tiny state machine attached to a sector, ticked every frame by the engine
+//! until it reaches its destination or encounters an obstruction.
+
 use doom_types::Fixed16_16;
 
 /// An animated door or floor/ceiling mover.

@@ -1,3 +1,10 @@
+//! 👹 Havoc: Savegame Truncation Tests
+//!
+//! Save files can be corrupted on disk. This test takes a valid, newly generated
+//! savegame and intentionally overwrites its trailing bytes (truncation). It verifies
+//! that the `load_game` function safely detects the corruption and yields a
+//! `SaveError::Truncated` rather than panicking when reading past the end of the buffer.
+
 #![allow(missing_docs)]
 
 use doom_game::{GameState, savegame::*};

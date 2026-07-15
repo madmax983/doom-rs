@@ -1,3 +1,12 @@
+//! The final tally: Level statistics and end-screen metrics.
+//!
+//! Every demon slain, every secret uncovered, and every item hoarded is meticulously
+//! tracked here. The `LevelStats` structure maintains the running totals needed for
+//! the iconic intermission screen (the "Level Completed" tally).
+//!
+//! It serves as the ultimate record of the player's thoroughness, ensuring that
+//! the elusive 100% completion remains a precise and tracked goal.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {

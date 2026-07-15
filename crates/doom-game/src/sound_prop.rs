@@ -1,3 +1,15 @@
+//! The unseen echoes: Sound propagation and alerting mechanics.
+//!
+//! When a weapon fires or a monster wakes, the sound doesn't just play through the
+//! speakers—it travels through the map's BSP tree. This module manages the
+//! `SoundPropagation` state, which floods sound outward from an origin sector to
+//! adjacent sectors.
+//!
+//! This is how monsters "hear" the player. By traversing the graph of sectors and
+//! keeping track of sound-blocking lines (`ML_SOUNDBLOCK`), the engine determines
+//! exactly which sectors receive the alert, ensuring that enemies in distant,
+//! isolated rooms remain blissfully unaware until the noise reaches them.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

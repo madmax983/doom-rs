@@ -1,3 +1,10 @@
+//! 👹 Havoc: Map Analyzer Graph Resilience Tests
+//!
+//! A map analyzer must gracefully handle non-Euclidean, disconnected, or otherwise
+//! broken sector graphs. This test module intentionally feeds malformed adjacency lists
+//! to the `MapAnalyzer` (such as asymmetric edges and missing nodes) to verify that
+//! choke-point and isolated-area algorithms do not panic.
+
 #![allow(missing_docs)]
 
 use doom_map::analyzer::MapAnalyzer;

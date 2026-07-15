@@ -1,3 +1,10 @@
+//! 👹 Havoc: Reject Table Overflow Tests
+//!
+//! This integration test simulates malicious or extremely large WAD files that
+//! attempt to overflow the REJECT table allocation. By pushing the sector count
+//! to `usize::MAX`, we ensure the engine gracefully returns a `BadRejectSize`
+//! error instead of panicking and crashing the process.
+
 #![allow(missing_docs)]
 
 use doom_map::lumps::Reject;

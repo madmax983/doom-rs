@@ -1,3 +1,12 @@
+//! The unseen hand: AI Director and dynamic difficulty.
+//!
+//! Not everything in Doom is statically placed. The `AiDirector` watches the player's
+//! health and performance, subtly deciding when to apply pressure and when to grant relief.
+//!
+//! This module introduces dynamic spawning decisions. When the player is doing too well,
+//! it might unleash an ambush; when they are on the brink of death, it might hold back
+//! or provide a breather, ensuring the pacing remains tense but fair.
+
 use crate::PlayerState;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
