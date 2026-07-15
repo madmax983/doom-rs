@@ -11,3 +11,18 @@
 **Blockmap OOB Silent Corruption**
 **Learning:** Using `.unwrap_or(0)` on missing offsets in blockmap causes silent fallback to the file header instead of gracefully failing.
 **Action:** Replace missing offset fallbacks with explicitly starting iteration at the end of the file or returning empty.
+**OOM in `tokenize_response_file`**
+**Learning:** `tokenize_response_file` used `content.chars().collect::<Vec<char>>()` to iterate over characters which triggers an O(N) heap allocation, leading to OOM on very large response files.
+**Action:** Replace string collection and indexed traversal with `char_indices().peekable()` to iterate over bounds directly and slice the original `&str`.
+
+**No Unhandled Aborts in string unwraps (`doom_game::savegame`)**
+**Learning:** Evaluated how string representations are handled during Savegame loads (e.g. `desc_str` strings in test bounds and `unwrap_or("")`). All cases safely map to empty strings if UTF-8 coercion fails, mitigating runtime aborts.
+**Action:** Always safely fallback using `.unwrap_or("")` when parsing string-like metadata from unknown bytes.
+
+**No Unhandled Aborts Found in `doom-net` unwraps**
+**Learning:** Evaluated how `unwrap_or`, `unwrap`, and `expect` are used inside the `doom-net` parsing logic (e.g. `TicPacket::from_bytes`). All occurrences inside network handling are checked results matching test bounds constraints, mitigating malicious network inputs aborting the engine unexpectedly.
+**Action:** Continue to bound networking packets carefully.
+
+**Audio System deadlocks under Loom permutations**
+**Learning:** `audio_cmd_thread` uses a standard `std::sync::mpsc::Receiver::recv()` which blocks indefinitely. When run under Loom permutations with threads simulating drops, this blocks the entire permutation checker, essentially timing out/deadlocking the test runner.
+**Action:** Do not use `loom` for testing standard library MPSC channels unless custom drop-aware or loom-specific alternatives are implemented in the main code.

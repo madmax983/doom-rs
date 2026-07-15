@@ -3728,32 +3728,33 @@ const VANILLA_FLAGS: &[&str] = &[
 /// double-quoted token (stopping at `"` or newline, quotes stripped) or an
 /// unquoted token (stopping at the next whitespace).
 fn tokenize_response_file(content: &str) -> Vec<String> {
-    let bytes: Vec<char> = content.chars().collect();
-    let size = bytes.len();
     let mut out = Vec::new();
-    let mut k = 0usize;
-    while k < size {
-        while k < size && bytes[k].is_whitespace() {
-            k += 1;
+    let mut iter = content.char_indices().peekable();
+    while let Some(&(k, ch)) = iter.peek() {
+        if ch.is_whitespace() {
+            iter.next();
+            continue;
         }
-        if k >= size {
-            break;
-        }
-        if bytes[k] == '"' {
-            k += 1;
-            let start = k;
-            while k < size && bytes[k] != '"' && bytes[k] != '\n' {
-                k += 1;
+        if ch == '"' {
+            iter.next(); // consume opening quote
+            let start = iter.peek().map(|&(idx, _)| idx).unwrap_or(content.len());
+            let mut end = start;
+            while let Some(&(idx, c)) = iter.peek() {
+                if c == '"' || c == '\n' { break; }
+                end = idx + c.len_utf8();
+                iter.next();
             }
-            out.push(bytes[start..k].iter().collect());
-            k += 1; // consume closing quote (or run past end)
+            out.push(content[start..end].to_string());
+            iter.next(); // consume closing quote or newline
         } else {
             let start = k;
-            while k < size && !bytes[k].is_whitespace() {
-                k += 1;
+            let mut end = start;
+            while let Some(&(idx, c)) = iter.peek() {
+                if c.is_whitespace() { break; }
+                end = idx + c.len_utf8();
+                iter.next();
             }
-            out.push(bytes[start..k].iter().collect());
-            k += 1;
+            out.push(content[start..end].to_string());
         }
     }
     out
