@@ -13,10 +13,6 @@ use crate::spawn::Skill;
 use crate::random::DoomRng;
 use crate::stats::LevelStats;
 
-pub use crate::sound_prop::{SoundPropagation, SoundRequest};
-
-pub use crate::movers::*;
-
 // ---------------------------------------------------------------------------
 // Sound events
 // ---------------------------------------------------------------------------
@@ -81,10 +77,10 @@ pub struct GameState {
     pub stats: LevelStats,
 
     /// Manager for active doors, lifts, ceilings, and crushers.
-    pub movers: SectorMovers,
+    pub movers: crate::movers::SectorMovers,
 
     /// Sound emission and propagation state (blockmap sound zones).
-    pub sound: SoundPropagation,
+    pub sound: crate::sound_prop::SoundPropagation,
 
     /// Level exit requested this tic (cleared to `None` at start of each tick).
     pub exit_request: Option<ExitRequest>,
@@ -154,8 +150,8 @@ impl GameState {
             player: PlayerState::default(),
             level_name: level_name.to_string(),
             stats: LevelStats::default(),
-            movers: SectorMovers::default(),
-            sound: SoundPropagation::default(),
+            movers: crate::movers::SectorMovers::default(),
+            sound: crate::sound_prop::SoundPropagation::default(),
             exit_request: None,
             seen_lines: Vec::new(),
             skill: Skill::Medium,

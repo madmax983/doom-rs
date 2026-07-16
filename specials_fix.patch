@@ -1,0 +1,14 @@
+<<<<<<< SEARCH
+use crate::state::{
+    CeilingMover, CeilingType, ConveyorBelt, DoorMover, ExitRequest, FloorMover, FloorType,
+    GameState, LiftMover, LiftStatus, LightEffectType, LightSpecial, LightThinkerKind,
+    MoveDirection, PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
+};
+=======
+use crate::state::{ExitRequest, GameState};
+use crate::movers::{
+    CeilingMover, CeilingType, ConveyorBelt, DoorMover, FloorMover, FloorType,
+    LiftMover, LiftStatus, LightEffectType, LightSpecial, LightThinkerKind,
+    MoveDirection, PerpetualPlatform, PlatformStatus, ScrollingWall, SectorLightEffect,
+};
+>>>>>>> REPLACE

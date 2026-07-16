@@ -12,7 +12,8 @@ use crate::combat::{MISSILERANGE, p_line_attack};
 use crate::mobj::{MobjHandle, StateNum};
 use crate::player::{PlayerState, PspriteState, psprite_slots};
 use crate::projectile::p_spawn_player_missile;
-use crate::state::{GameState, SoundRequest};
+use crate::sound_prop::SoundRequest;
+use crate::state::GameState;
 use crate::states::{STATES, ids, sprite_names};
 use doom_types::mobj_kind::MobjKind;
 use doom_types::weapons::AmmoType;
@@ -498,10 +499,7 @@ fn a_weapon_ready_bob(gs: &mut GameState) {
     // sy uses finesine[angle & (FINEANGLES/2-1)] (always the positive half, so
     // the weapon only ever sways *down* from WEAPONTOP).
     let sy_angle = angle & (FINEMASK >> 1);
-    let sy_off = crate::geom::fixed_mul(
-        bob,
-        crate::geom::fine_sine(sy_angle << FINE_TO_BAM_SHIFT),
-    );
+    let sy_off = crate::geom::fixed_mul(bob, crate::geom::fine_sine(sy_angle << FINE_TO_BAM_SHIFT));
     gs.player.psprites[psprite_slots::WEAPON].sy = WEAPON_TOP + sy_off;
 }
 

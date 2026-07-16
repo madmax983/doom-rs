@@ -13,7 +13,8 @@ use crate::combat::{MELEERANGE, MISSILERANGE, p_aim_line_attack, p_line_attack};
 use crate::mobj::{MobjHandle, flags};
 use crate::player::powers::PW_STRENGTH;
 use crate::projectile::p_spawn_player_missile;
-use crate::state::{GameState, SoundRequest};
+use crate::sound_prop::SoundRequest;
+use crate::state::GameState;
 use doom_types::mobj_kind::MobjKind;
 use doom_types::weapons::AmmoType;
 use doom_types::weapons::WeaponType;
@@ -311,7 +312,15 @@ pub fn p_fire_chainsaw(gs: &mut GameState, level: Option<&Level>) {
     // MELEERANGE + 1 so the puff doesn't skip the flash.
     let chainsaw_range = Fixed16_16(MELEERANGE.0 + (1 << 16));
     let slope = p_aim_line_attack(gs, handle, angle, chainsaw_range, level);
-    p_line_attack(gs, handle, angle, chainsaw_range, slope.slope, damage, level);
+    p_line_attack(
+        gs,
+        handle,
+        angle,
+        chainsaw_range,
+        slope.slope,
+        damage,
+        level,
+    );
 
     let Some(target_handle) = slope.linetarget else {
         return;
@@ -439,7 +448,8 @@ mod tests {
     use crate::mobj::{Mobj, flags};
     use crate::player::PlayerState;
     use crate::sound::{get_sound_target, init_sound_state};
-    use crate::state::{GameState, SoundRequest};
+    use crate::sound_prop::SoundRequest;
+    use crate::state::GameState;
     use doom_map::lumps::{Blockmap, Linedef, Reject, Sector, Seg, Sidedef, Ssector, Vertex};
     use doom_map::{Level, SIDEDEF_NONE};
     use doom_types::mobj_kind::MobjKind;
@@ -721,7 +731,10 @@ mod tests {
         p_fire_pistol(&mut refire, None);
         let refire_draws = refire.rng.index().wrapping_sub(j) & 255;
 
-        assert_eq!(acc_draws, 1, "accurate pistol shot draws only the damage byte");
+        assert_eq!(
+            acc_draws, 1,
+            "accurate pistol shot draws only the damage byte"
+        );
         assert_eq!(
             refire_draws, 3,
             "refire pistol shot also draws P_SubRandom (2 bytes)"
@@ -881,7 +894,10 @@ mod tests {
         p_fire_chaingun(&mut refire, None);
         let refire_draws = refire.rng.index().wrapping_sub(j) & 255;
 
-        assert_eq!(acc_draws, 1, "accurate chaingun shot draws only the damage byte");
+        assert_eq!(
+            acc_draws, 1,
+            "accurate chaingun shot draws only the damage byte"
+        );
         assert_eq!(
             refire_draws, 3,
             "refire chaingun shot also draws P_SubRandom (2 bytes)"
