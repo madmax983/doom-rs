@@ -1155,4 +1155,37 @@ mod tests {
         assert_eq!(app.ticks, 1);
         assert!(!loop_.turn_waiting_for_release);
     }
+
+    #[test]
+    fn turn_action_cost_values() {
+        let mut i = TicInput::default();
+        assert_eq!(DoomEventLoop::turn_action_cost(&i), 6);
+
+        i.wait_pressed = true;
+        assert_eq!(DoomEventLoop::turn_action_cost(&i), 6);
+        i.wait_pressed = false;
+
+        i.buttons |= crate::input::buttons::BT_ATTACK;
+        assert_eq!(DoomEventLoop::turn_action_cost(&i), 8);
+        i.buttons &= !crate::input::buttons::BT_ATTACK;
+
+        i.buttons |= crate::input::buttons::BT_USE;
+        assert_eq!(DoomEventLoop::turn_action_cost(&i), 7);
+        i.buttons &= !crate::input::buttons::BT_USE;
+
+        i.buttons |= crate::input::buttons::BT_CHANGE;
+        assert_eq!(DoomEventLoop::turn_action_cost(&i), 4);
+    }
+
+    #[test]
+    fn query_refresh_rate_is_default_on_non_windows() {
+        assert_eq!(query_refresh_rate(), DEFAULT_REFRESH_HZ);
+    }
+
+    #[test]
+    fn modifier_snapshot_cmp() {
+        let m1 = ModifierSnapshot { shift: Some(true), control: Some(false) };
+        let m2 = ModifierSnapshot { shift: Some(true), control: Some(false) };
+        assert_eq!(m1, m2);
+    }
 }

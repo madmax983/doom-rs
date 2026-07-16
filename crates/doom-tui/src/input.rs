@@ -477,4 +477,115 @@ mod tests {
         assert!(s.to_tic_input().wait_pressed);
         assert!(!s.to_tic_input().wait_pressed);
     }
+
+    #[test]
+    fn weapon_keys_set_weapon_change_button() {
+        let cases = vec![
+            (KeyCode::Char('1'), 0),
+            (KeyCode::Char('2'), 1),
+            (KeyCode::Char('3'), 2),
+            (KeyCode::Char('4'), 3),
+            (KeyCode::Char('5'), 4),
+            (KeyCode::Char('6'), 5),
+            (KeyCode::Char('7'), 6),
+        ];
+
+        for (key, weapon_num) in cases {
+            let mut s = InputState::new();
+            s.key_down(key);
+            let t = s.to_tic_input();
+            assert_ne!(t.buttons & buttons::BT_CHANGE, 0, "BT_CHANGE should be set for key {:?}", key);
+            assert_eq!((t.buttons & buttons::BT_WEAPONMASK) >> 3, weapon_num, "Weapon num should match for key {:?}", key);
+        }
+    }
+
+    #[test]
+    fn modifier_keys_set_and_clear_state() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Modifier(ModifierKeyCode::LeftShift));
+        assert!(s.shift_held);
+        s.key_up(KeyCode::Modifier(ModifierKeyCode::LeftShift));
+        assert!(!s.shift_held);
+
+        s.key_down(KeyCode::Modifier(ModifierKeyCode::RightControl));
+        assert!(s.control_held);
+        s.key_up(KeyCode::Modifier(ModifierKeyCode::RightControl));
+        assert!(!s.control_held);
+
+        // Other modifiers do nothing
+        s.key_down(KeyCode::Modifier(ModifierKeyCode::LeftAlt));
+        s.key_up(KeyCode::Modifier(ModifierKeyCode::LeftAlt));
+    }
+
+    #[test]
+    fn set_control_updates_state() {
+        let mut s = InputState::new();
+        s.set_control(true);
+        assert!(s.control_held);
+        s.set_control(false);
+        assert!(!s.control_held);
+    }
+
+    #[test]
+    fn push_f5_f9_sets_tic_input() {
+        let mut s = InputState::new();
+        s.push_f5();
+        s.push_f9();
+        let t = s.to_tic_input();
+        assert!(t.f5_save);
+        assert!(t.f9_load);
+
+        // Should be cleared after first to_tic_input
+        let t2 = s.to_tic_input();
+        assert!(!t2.f5_save);
+        assert!(!t2.f9_load);
+    }
+
+    #[test]
+    fn push_menu_keys_and_escape_sets_tic_input() {
+        let mut s = InputState::new();
+        s.push_escape();
+        s.push_menu_up();
+        s.push_menu_down();
+        s.push_menu_select();
+
+        let t = s.to_tic_input();
+        assert!(t.escape_pressed);
+        assert!(t.menu_up);
+        assert!(t.menu_down);
+        assert!(t.menu_select);
+
+        // Should be cleared after
+        let t2 = s.to_tic_input();
+        assert!(!t2.escape_pressed);
+        assert!(!t2.menu_up);
+        assert!(!t2.menu_down);
+        assert!(!t2.menu_select);
+    }
+
+    #[test]
+    fn clear_resets_all_state() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('w'));
+        s.set_shift(true);
+        s.set_control(true);
+        s.push_console_char('a');
+        s.push_f5();
+        s.push_f9();
+        s.push_tab();
+        s.push_escape();
+        s.push_menu_up();
+        s.push_menu_down();
+        s.push_menu_select();
+        s.push_wait();
+
+        s.clear();
+
+        assert!(s.held.is_empty());
+        assert!(!s.shift_held);
+        assert!(!s.control_held);
+
+        let t = s.to_tic_input();
+        assert_eq!(t, TicInput::default());
+    }
 }
