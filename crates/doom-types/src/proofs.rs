@@ -35,6 +35,12 @@ pub open spec fn iabs(x: int) -> int {
 
 /// Maximum coordinate value in Doom's fixed-point world (32767 map units).
 /// In Fixed16_16 representation: 32767 * 65536 = 2,147,418,112.
+///
+/// ## Examples
+/// ```
+/// use doom_types::proofs::FIXED_WORLD_MAX;
+/// assert_eq!(FIXED_WORLD_MAX, 2_147_418_112);
+/// ```
 pub const FIXED_WORLD_MAX: i64 = 32767 * 65536;
 
 // ---------------------------------------------------------------------------

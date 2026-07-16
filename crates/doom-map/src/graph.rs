@@ -2,8 +2,39 @@
 //!
 //! This module provides a `SectorGraph` which builds an adjacency list of sectors,
 //! primarily useful for pathfinding, topological sorting, and mapping sector relationships.
-//! It establishes connections by finding two-sided linedefs that connect one sector
-//! to another via their front and back sidedefs.
+//!
+//! # The Story
+//!
+//! In the Doom engine, levels are not continuous 3D meshes but rather 2D plans carved into discrete
+//! regions called `Sector`s. However, sectors don't inherently know who their neighbors are. To determine
+//! if a monster in one sector can hear a sound or walk into an adjacent sector, we must traverse the map
+//! topologically.
+//!
+//! The `SectorGraph` solves this by tracing the boundary lines (`Linedef`s) of every sector. When a
+//! boundary line is two-sided (meaning it has both a front and back `Sidedef`), it acts as a portal connecting
+//! the two sectors that own those sidedefs. By scanning the entire map and linking these portals, we build
+//! an adjacency list—a web representing how every room connects to the rest of the level.
+//!
+//! # Examples
+//!
+//! To build a graph and query the shortest topological path (minimum sector transitions) between two sectors:
+//!
+//! ```rust,no_run
+//! use doom_map::{graph::SectorGraph, Level};
+//!
+//! // Assuming we have loaded a parsed level `level`...
+//! # let level: Level = unimplemented!();
+//!
+//! // 1. Build the topological web of sectors
+//! let graph = SectorGraph::build(&level);
+//!
+//! // 2. Find the shortest number of rooms to traverse from sector 0 to sector 2
+//! if let Some(path) = graph.shortest_path(0, 2) {
+//!     println!("Path found! Traversing {} sectors.", path.len());
+//! } else {
+//!     println!("No connection exists between the sectors.");
+//! }
+//! ```
 
 use crate::Level;
 use std::collections::{HashMap, HashSet, VecDeque};
