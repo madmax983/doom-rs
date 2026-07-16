@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+## 2024-07-16 - Refactoring Clippy warnings in `doom-game`
+**Learning:** Resolving common Clippy warnings like `manual_range_contains`, `obfuscated_if_else`, and `single_match` improves readability and idiomatic Rust structure without altering the execution logic.
+**Action:** Consistently use `..=contains()`, replace `boolean.then(|| ...).unwrap_or()` with explicit `if/else`, and use `if let` for single variant extraction instead of `match`.
