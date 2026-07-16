@@ -1155,4 +1155,73 @@ mod tests {
         assert_eq!(app.ticks, 1);
         assert!(!loop_.turn_waiting_for_release);
     }
+
+    #[test]
+    fn tic_has_turn_action_detects_actions() {
+        let mut input = TicInput::default();
+        assert!(!DoomEventLoop::tic_has_turn_action(&input));
+
+        input.wait_pressed = true;
+        assert!(DoomEventLoop::tic_has_turn_action(&input));
+        input.wait_pressed = false;
+
+        input.forward_move = 1;
+        assert!(DoomEventLoop::tic_has_turn_action(&input));
+        input.forward_move = 0;
+
+        input.side_move = 1;
+        assert!(DoomEventLoop::tic_has_turn_action(&input));
+        input.side_move = 0;
+
+        input.angle_turn = 1;
+        assert!(DoomEventLoop::tic_has_turn_action(&input));
+        input.angle_turn = 0;
+
+        input.buttons = crate::input::buttons::BT_ATTACK;
+        assert!(DoomEventLoop::tic_has_turn_action(&input));
+    }
+
+    #[test]
+    fn turn_action_cost_returns_expected_costs() {
+        let cases = vec![
+            (
+                TicInput {
+                    wait_pressed: true,
+                    ..Default::default()
+                },
+                6,
+            ),
+            (
+                TicInput {
+                    buttons: crate::input::buttons::BT_ATTACK,
+                    ..Default::default()
+                },
+                8,
+            ),
+            (
+                TicInput {
+                    buttons: crate::input::buttons::BT_USE,
+                    ..Default::default()
+                },
+                7,
+            ),
+            (
+                TicInput {
+                    buttons: crate::input::buttons::BT_CHANGE,
+                    ..Default::default()
+                },
+                4,
+            ),
+            (TicInput::default(), 6),
+        ];
+
+        for (input, expected_cost) in cases {
+            assert_eq!(
+                DoomEventLoop::turn_action_cost(&input),
+                expected_cost,
+                "failed for input {:?}",
+                input
+            );
+        }
+    }
 }
