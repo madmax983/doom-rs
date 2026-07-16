@@ -3,6 +3,9 @@ name    = "doom-demo"
 version.workspace = true
 edition.workspace = true
 
+[features]
+analytics = []
+
 [dependencies]
 doom-types = { workspace = true }
 doom-game  = { workspace = true }

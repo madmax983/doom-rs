@@ -17,6 +17,9 @@ pub mod player;
 pub mod recorder;
 pub mod ticcmd;
 
+#[cfg(feature = "analytics")]
+pub mod analytics;
+
 // Re-export primary types at crate root for convenience.
 pub use csv::export_demo_to_csv;
 pub use header::{LMP_HEADER_SIZE, LMP_TERMINATOR, LMP_VERSION_1_9, LmpHeader};
