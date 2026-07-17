@@ -101,6 +101,10 @@ pub struct GameState {
     /// Current skill level (affects Nightmare respawning).
     pub skill: Skill,
 
+    #[cfg(feature = "achievements")]
+    /// Tracks level achievements.
+    pub achievements: crate::achievements::AchievementTracker,
+
     /// Actor `generation` boundary separating level-setup actors from
     /// gameplay-spawned ones. Every actor created during `P_SetupLevel`
     /// (map things) has `generation < thinker_setup_boundary`; missiles, puffs,
@@ -163,6 +167,8 @@ impl GameState {
             brain_awake: false,
             brain_targets: Vec::new(),
             brain_target_index: 0,
+            #[cfg(feature = "achievements")]
+            achievements: crate::achievements::AchievementTracker::new(),
             #[cfg(feature = "style_meter")]
             style: crate::style::StyleMeter::new(),
             #[cfg(feature = "telemetry")]
