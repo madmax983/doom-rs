@@ -4,6 +4,11 @@
 //! primarily useful for pathfinding, topological sorting, and mapping sector relationships.
 //! It establishes connections by finding two-sided linedefs that connect one sector
 //! to another via their front and back sidedefs.
+//!
+//! The graph conceptually abstracts away the raw geometry of a map into a graph of connected nodes (sectors)
+//! where edges indicate a shared linedef portal (a two-sided linedef). This gives pathfinding and monster
+//! traversal algorithms an easy, topological way to navigate map structures without needing to deal with
+//! underlying geometric intersection algorithms at every step.
 
 use crate::Level;
 use std::collections::{HashMap, HashSet, VecDeque};
