@@ -1,10 +1,15 @@
-//! Verus proofs for core numeric operations.
+//! Formal verification proofs for core numeric operations.
 //!
 //! This module contains formal mathematical proofs using the Verus verifier.
 //! It verifies the safety and correctness of core doom-types numeric operations,
 //! such as fixed-point math (`Fixed16_16`) and Binary Angle Measurement (`Bam`)
-//! arithmetic, ensuring that overflows do not occur and operations remain within
-//! correct bounds.
+//! arithmetic. Because Doom heavily relies on these fixed-point arithmetic types,
+//! it is notoriously prone to overflows and divide-by-zero errors.
+//!
+//! These proofs statically guarantee that critical operations, like fixed-point
+//! multiplication and division, will never panic or silently wrap around when
+//! used within the legal boundaries of the Doom game world (e.g., coordinates
+//! restricted to `±32767`).
 //!
 //! These proofs are verified with the Verus verifier, NOT `rustc`.
 //! Run `verus --crate-type lib crates/doom-types/src/proofs.rs` to verify
