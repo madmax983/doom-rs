@@ -1,0 +1,17 @@
+<<<<<<< SEARCH
+) -> Vec<usize> {
+    let (radius, mo_flags) = match slab.get(handle) {
+        Some(mo) => (mo.radius, mo.flags),
+        None => return Vec::new(),
+    };
+
+    let mut spechit: Vec<usize> = Vec::new();
+=======
+) -> smallvec::SmallVec<[usize; 8]> {
+    let (radius, mo_flags) = match slab.get(handle) {
+        Some(mo) => (mo.radius, mo.flags),
+        None => return smallvec::SmallVec::new(),
+    };
+
+    let mut spechit: smallvec::SmallVec<[usize; 8]> = smallvec::SmallVec::new();
+>>>>>>> REPLACE

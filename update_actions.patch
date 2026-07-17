@@ -1,0 +1,11 @@
+<<<<<<< SEARCH
+        let spechit = match level {
+            Some(lv) => crate::movement::move_spechit(&gs.mobjslab, handle, new_x, new_y, lv),
+            None => Vec::new(),
+        };
+=======
+        let spechit = match level {
+            Some(lv) => crate::movement::move_spechit(&gs.mobjslab, handle, new_x, new_y, lv),
+            None => smallvec::SmallVec::new(),
+        };
+>>>>>>> REPLACE

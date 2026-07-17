@@ -1,0 +1,7 @@
+<<<<<<< SEARCH
+    // Vanilla `validcount`: each linedef is examined once across the whole scan.
+    let mut seen: Vec<usize> = Vec::new();
+=======
+    // Vanilla `validcount`: each linedef is examined once across the whole scan.
+    let mut seen: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
+>>>>>>> REPLACE

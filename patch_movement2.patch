@@ -1,0 +1,7 @@
+<<<<<<< SEARCH
+) -> Vec<usize> {
+    let (radius, mo_flags) = match slab.get(handle) {
+=======
+) -> smallvec::SmallVec<[usize; 8]> {
+    let (radius, mo_flags) = match slab.get(handle) {
+>>>>>>> REPLACE
