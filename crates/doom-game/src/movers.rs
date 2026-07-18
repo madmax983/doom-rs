@@ -267,26 +267,6 @@ pub struct LightSpecial {
 }
 
 // ---------------------------------------------------------------------------
-// Sector damage types
-// ---------------------------------------------------------------------------
-
-/// Type of periodic sector damage applied to a sector.
-#[derive(strum_macros::FromRepr, Debug, Clone, Copy, PartialEq, Eq)]
-#[repr(u16)]
-pub enum SectorDamageType {
-    /// Special 4: Nukage, blink 0.5s (-20% health randomly, ~5 damage per period)
-    NukageBlink = 4,
-    /// Special 5: Hellslime (-10% health, ~5 damage per period)
-    Hellslime = 5,
-    /// Special 7: Nukage, no blink (-5% health, ~2 damage per period)
-    Nukage = 7,
-    /// Special 11: God exit (-20% health + end level when health <= 10)
-    GodExit = 11,
-    /// Special 16: Super hellslime (-20% health, ~20 damage per period)
-    SuperHellslime = 16,
-}
-
-// ---------------------------------------------------------------------------
 // Sector light effect types (extended)
 // ---------------------------------------------------------------------------
 
