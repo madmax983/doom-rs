@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**[Eliminate Per-Movement Heap Allocations in move_spechit]**
+**Learning:** `Vec::new()` instantiated within `move_spechit` generated two per-actor movement heap allocations on the hot path (`seen` array and `spechit` return array). Since the number of crossed linedefs is almost always very small, migrating to `smallvec::SmallVec<[usize; 8]>` eliminated this overhead entirely. `rustc` may struggle to infer the array trait of the `smallvec![]` macro in test cases, requiring an explicit type annotation `let expected: smallvec::SmallVec<[usize; 8]> = smallvec::smallvec![...];`.
+**Action:** Replace small, frequently-allocated transient `Vec`s in core game loop updates with `SmallVec` with a small fallback array size. When initializing the macro in tests, provide explicit type hints to avoid `smallvec::Array` trait resolution failures.
