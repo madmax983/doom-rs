@@ -300,7 +300,7 @@ impl<'a> BspTree<'a> {
     /// Fixed-point exact `R_PointInSubsector` (vanilla `r_main.c`).
     ///
     /// Like [`point_in_subsector`] but takes raw `fixed_t` coordinates and uses
-    /// the fixed-point [`point_on_side_fixed`] test, matching vanilla exactly.
+    /// the fixed-point `` `point_on_side_fixed` `` test, matching vanilla exactly.
     /// Use this for playsim sector lookups where sub-map-unit precision changes
     /// the answer (e.g. `P_PlayerInSpecialSector`'s secret-sector crossing).
     ///
