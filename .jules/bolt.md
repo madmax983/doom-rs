@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+## 2025-02-12 - Replaced Vec with SmallVec on Collision Hot Paths
+**Learning:** `Vec::new()` is surprisingly expensive in `P_CheckPosition`, `P_TryMove`, and `P_SlideMove` when collision routines allocate arrays that rarely exceed 1 or 2 items per movement step. Unconditional heap allocations on these arrays (`spechit`, `player_crossings`, `seen`) hurt engine efficiency. Replacing these with `smallvec::SmallVec<[usize; 8]>` avoids the allocations entirely without breaking idiomatic Rust.
+**Action:** Identify hot loops in physics engines that construct dynamic arrays. Use `smallvec` to keep temporary bounded collections on the stack.
