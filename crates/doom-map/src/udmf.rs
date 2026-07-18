@@ -404,12 +404,18 @@ impl UdmfMap {
                     y: required_i16(block, index, "vertex", "y")?,
                 }),
                 "sector" => sectors.push(Sector {
-                    floor_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightfloor")? as i32,
-                    ),
-                    ceil_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightceiling")? as i32,
-                    ),
+                    floor_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightfloor",
+                    )? as i32),
+                    ceil_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightceiling",
+                    )? as i32),
                     floor_flat: required_name(block, index, "sector", "texturefloor")?,
                     ceil_flat: required_name(block, index, "sector", "textureceiling")?,
                     light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,
@@ -1196,5 +1202,80 @@ mod tests {
             map.into_level_data(),
             Err(UdmfError::UnsupportedNamespace(namespace)) if namespace == "zdoom"
         ));
+    }
+
+    #[test]
+    fn conversion_errors_table_driven() {
+        let tests = vec![
+            ("vertex { x = 70000; y = 0; }", "OutOfRange", "x"),
+            ("vertex { x = \"foo\"; y = 0; }", "WrongType", "x"),
+            (
+                "sector { heightfloor = 0; heightceiling = 0; texturefloor = \"Looooooooong\"; textureceiling = \"f\"; }",
+                "NameTooLong",
+                "texturefloor",
+            ),
+            (
+                "sector { heightfloor = 0; heightceiling = 0; texturefloor = \"bad🚀\"; textureceiling = \"f\"; }",
+                "NameNotAscii",
+                "texturefloor",
+            ),
+            (
+                "linedef { v1 = 0; v2 = 1; sidefront = 0; sideback = -1; }",
+                "Valid",
+                "",
+            ),
+            ("vertex { x = 10.0; y = 0; }", "Valid", ""),
+            (
+                "thing { x = 0; y = 0; type = 1; flags = 4096; }",
+                "Valid",
+                "",
+            ),
+            (
+                "thing { x = 0; y = 0; type = 1; skill1 = false; skill2 = true; skill3 = true; skill4 = true; skill5 = false; single = false; ambush = true; }",
+                "Valid",
+                "",
+            ),
+        ];
+
+        for (block_str, expected_err, expected_field) in tests {
+            let map_str = format!("namespace = \"doom\";\n{}", block_str);
+            let map = UdmfMap::parse(map_str.as_bytes()).unwrap();
+            let result = map.into_level_data();
+
+            match expected_err {
+                "OutOfRange" => {
+                    assert!(matches!(
+                        result,
+                        Err(UdmfError::OutOfRange { field, .. }) if field == expected_field
+                    ));
+                }
+                "WrongType" => {
+                    assert!(matches!(
+                        result,
+                        Err(UdmfError::WrongType { field, .. }) if field == expected_field
+                    ));
+                }
+                "NameTooLong" => {
+                    assert!(matches!(
+                        result,
+                        Err(UdmfError::NameTooLong { field, .. }) if field == expected_field
+                    ));
+                }
+                "NameNotAscii" => {
+                    assert!(matches!(
+                        result,
+                        Err(UdmfError::NameNotAscii { field, .. }) if field == expected_field
+                    ));
+                }
+                "Valid" => {
+                    assert!(
+                        result.is_ok(),
+                        "Expected valid map, got: {:?}",
+                        result.unwrap_err()
+                    );
+                }
+                _ => panic!("Unknown expected error type"),
+            }
+        }
     }
 }
