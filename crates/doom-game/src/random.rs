@@ -175,11 +175,7 @@ fn map_caller(seg: &str) -> &str {
 fn rng_trace_record(retval: u8) {
     // Prefer the explicit context-stack label; only fall back to the (slow,
     // inlining-sensitive) backtrace when no guard is active.
-    let ctx_label = RNG_TRACE.with(|t| {
-        t.borrow()
-            .as_ref()
-            .map(|s| s.ctx.last().copied())
-    });
+    let ctx_label = RNG_TRACE.with(|t| t.borrow().as_ref().map(|s| s.ctx.last().copied()));
     let Some(ctx_label) = ctx_label else {
         return; // tracing disabled
     };
