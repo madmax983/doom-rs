@@ -52,3 +52,7 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+
+**[Fix doom-game clippy warnings]**
+**Tangle:** The `doom-game` crate had multiple compiler warnings around logic simplicity, redundant code, precedence rules, and unneeded `unsafe` blocks which violate code quality.
+**Blueprint:** Resolved `clippy` warnings by transforming redundant `match` blocks to `if let`, removing unnecessary `unsafe` blocks around safe `doom_types::Bam::init_trig_tables()`, improving precedence clarity with parentheses, and simplifying boolean expressions.
