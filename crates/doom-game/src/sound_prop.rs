@@ -182,3 +182,81 @@ pub struct SoundPropagation {
     /// Sound events queued this tic.
     pub sound_queue: Vec<SoundRequest>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use doom_types::{Fixed16_16, weapons::WeaponType};
+
+    #[test]
+    fn origin_handle_with_no_player_returns_none() {
+        let req1 = SoundRequest::PlayerUseFail;
+        let req2 = SoundRequest::PlayerDie;
+        let req3 = SoundRequest::PlayerUseLockedDoor(crate::state::LockedDoorColor::Red);
+
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            doom_types::mobj_kind::MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            doom_types::Bam::ZERO,
+        );
+        let dummy_handle = slab.alloc(mobj);
+
+        assert_eq!(req1.origin_handle(Some(dummy_handle)), None);
+        assert_eq!(req2.origin_handle(Some(dummy_handle)), None);
+        assert_eq!(req3.origin_handle(Some(dummy_handle)), None);
+    }
+
+    #[test]
+    fn origin_handle_with_player_returns_player() {
+        let req1 = SoundRequest::PlayerWeaponFire(WeaponType::Pistol);
+        let req2 = SoundRequest::PlayerSuperShotgunOpen;
+        let req3 = SoundRequest::PlayerSuperShotgunLoad;
+        let req4 = SoundRequest::PlayerSuperShotgunClose;
+
+        let mut slab = crate::mobj::MobjSlab::new();
+        let mobj = crate::mobj::Mobj::new(
+            doom_types::mobj_kind::MobjKind::Player,
+            Fixed16_16::ZERO,
+            Fixed16_16::ZERO,
+            doom_types::Bam::ZERO,
+        );
+        let dummy_handle = slab.alloc(mobj);
+
+        assert_eq!(req1.origin_handle(Some(dummy_handle)), Some(dummy_handle));
+        assert_eq!(req2.origin_handle(Some(dummy_handle)), Some(dummy_handle));
+        assert_eq!(req3.origin_handle(Some(dummy_handle)), Some(dummy_handle));
+        assert_eq!(req4.origin_handle(Some(dummy_handle)), Some(dummy_handle));
+    }
+
+    #[test]
+    fn emitter_with_no_position_returns_none() {
+        let req1 = SoundRequest::PlayerDie;
+        let req2 = SoundRequest::PlayerUseFail;
+        let req3 = SoundRequest::PlayerUseLockedDoor(crate::state::LockedDoorColor::Blue);
+
+        let px = Fixed16_16::from_int(10);
+        let py = Fixed16_16::from_int(20);
+
+        assert_eq!(req1.emitter(px, py), None);
+        assert_eq!(req2.emitter(px, py), None);
+        assert_eq!(req3.emitter(px, py), None);
+    }
+
+    #[test]
+    fn emitter_with_player_position_returns_position() {
+        let req1 = SoundRequest::PlayerWeaponFire(WeaponType::Pistol);
+        let req2 = SoundRequest::PlayerSuperShotgunOpen;
+        let req3 = SoundRequest::PlayerSuperShotgunLoad;
+        let req4 = SoundRequest::PlayerSuperShotgunClose;
+
+        let px = Fixed16_16::from_int(30);
+        let py = Fixed16_16::from_int(40);
+
+        assert_eq!(req1.emitter(px, py), Some((px, py)));
+        assert_eq!(req2.emitter(px, py), Some((px, py)));
+        assert_eq!(req3.emitter(px, py), Some((px, py)));
+        assert_eq!(req4.emitter(px, py), Some((px, py)));
+    }
+}
