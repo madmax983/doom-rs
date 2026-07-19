@@ -404,12 +404,18 @@ impl UdmfMap {
                     y: required_i16(block, index, "vertex", "y")?,
                 }),
                 "sector" => sectors.push(Sector {
-                    floor_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightfloor")? as i32,
-                    ),
-                    ceil_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightceiling")? as i32,
-                    ),
+                    floor_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightfloor",
+                    )? as i32),
+                    ceil_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightceiling",
+                    )? as i32),
                     floor_flat: required_name(block, index, "sector", "texturefloor")?,
                     ceil_flat: required_name(block, index, "sector", "textureceiling")?,
                     light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,
@@ -1196,5 +1202,51 @@ mod tests {
             map.into_level_data(),
             Err(UdmfError::UnsupportedNamespace(namespace)) if namespace == "zdoom"
         ));
+    }
+
+    #[test]
+    fn conversion_thing_flags_combinations() {
+        let cases = vec![
+            ("default skills", "", 0x0001 | 0x0002 | 0x0004),
+            ("explicit flags", "flags = 1234;", 1234),
+            (
+                "multiplayer and ambush",
+                "single = false; ambush = true;",
+                0x0001 | 0x0002 | 0x0004 | 0x0010 | 0x0008,
+            ),
+            ("skill1 is easy", "skill1 = true;", 0x0001),
+            ("skill2 is easy", "skill2 = true;", 0x0001),
+            ("skill3 is medium", "skill3 = true;", 0x0002),
+            ("skill4 is hard", "skill4 = true;", 0x0004),
+            ("skill5 is hard", "skill5 = true;", 0x0004),
+            (
+                "easy and hard",
+                "skill1 = true; skill4 = true;",
+                0x0001 | 0x0004,
+            ),
+        ];
+
+        for (name, props, expected_flags) in cases {
+            let textmap = format!(
+                r#"
+                namespace = "doom";
+                thing {{
+                    x = 0;
+                    y = 0;
+                    type = 3004;
+                    angle = 90;
+                    {}
+                }}
+                "#,
+                props
+            );
+            let map = UdmfMap::parse(textmap.as_bytes()).expect("parse");
+            let level_data = map.into_level_data().expect("into_level_data");
+            assert_eq!(
+                level_data.things[0].flags, expected_flags,
+                "failed test case: {}",
+                name
+            );
+        }
     }
 }
