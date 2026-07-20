@@ -1197,4 +1197,102 @@ mod tests {
             Err(UdmfError::UnsupportedNamespace(namespace)) if namespace == "zdoom"
         ));
     }
+
+    #[test]
+    fn test_thing_flags() {
+        struct TestCase {
+            name: &'static str,
+            fields: Vec<UdmfField>,
+            expected: u16,
+        }
+
+        let cases = vec![
+            TestCase {
+                name: "no fields means easy medium hard",
+                fields: vec![],
+                expected: THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD,
+            },
+            TestCase {
+                name: "flags explicit field overrides all",
+                fields: vec![UdmfField {
+                    key: "flags".to_string(),
+                    value: UdmfValue::Int(123),
+                }],
+                expected: 123,
+            },
+            TestCase {
+                name: "skill1 sets easy",
+                fields: vec![UdmfField {
+                    key: "skill1".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: THING_FLAG_EASY,
+            },
+            TestCase {
+                name: "skill2 sets easy",
+                fields: vec![UdmfField {
+                    key: "skill2".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: THING_FLAG_EASY,
+            },
+            TestCase {
+                name: "skill3 sets medium",
+                fields: vec![UdmfField {
+                    key: "skill3".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: THING_FLAG_MEDIUM,
+            },
+            TestCase {
+                name: "skill4 sets hard",
+                fields: vec![UdmfField {
+                    key: "skill4".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: THING_FLAG_HARD,
+            },
+            TestCase {
+                name: "skill5 sets hard",
+                fields: vec![UdmfField {
+                    key: "skill5".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: THING_FLAG_HARD,
+            },
+            TestCase {
+                name: "ambush sets ambush",
+                fields: vec![UdmfField {
+                    key: "ambush".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD | THING_FLAG_AMBUSH,
+            },
+            TestCase {
+                name: "single false sets multiplayer",
+                fields: vec![UdmfField {
+                    key: "single".to_string(),
+                    value: UdmfValue::Bool(false),
+                }],
+                expected: THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD | THING_FLAG_MULTIPLAYER,
+            },
+            TestCase {
+                name: "single true does not set multiplayer",
+                fields: vec![UdmfField {
+                    key: "single".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD,
+            },
+        ];
+
+        for case in cases {
+            let block = UdmfBlock {
+                kind: "thing".to_string(),
+                fields: case.fields,
+            };
+            let actual = thing_flags(&block, 0).expect(case.name);
+            assert_eq!(actual, case.expected, "{}", case.name);
+        }
+    }
 }
