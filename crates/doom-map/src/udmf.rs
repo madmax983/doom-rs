@@ -404,12 +404,18 @@ impl UdmfMap {
                     y: required_i16(block, index, "vertex", "y")?,
                 }),
                 "sector" => sectors.push(Sector {
-                    floor_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightfloor")? as i32,
-                    ),
-                    ceil_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightceiling")? as i32,
-                    ),
+                    floor_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightfloor",
+                    )? as i32),
+                    ceil_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightceiling",
+                    )? as i32),
                     floor_flat: required_name(block, index, "sector", "texturefloor")?,
                     ceil_flat: required_name(block, index, "sector", "textureceiling")?,
                     light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,
@@ -1078,6 +1084,133 @@ fn thing_flags(block: &UdmfBlock, index: usize) -> Result<u16, UdmfError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn table_driven_thing_flags_parsing() {
+        struct Case {
+            fields: Vec<UdmfField>,
+            expected: Result<u16, ()>, // Use () for error to simplify setup
+        }
+
+        let cases = vec![
+            Case {
+                fields: vec![],
+                expected: Ok(THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD),
+            },
+            Case {
+                fields: vec![UdmfField {
+                    key: "flags".to_string(),
+                    value: UdmfValue::Int(123),
+                }],
+                expected: Ok(123),
+            },
+            Case {
+                fields: vec![
+                    UdmfField {
+                        key: "skill1".to_string(),
+                        value: UdmfValue::Bool(true),
+                    },
+                    UdmfField {
+                        key: "skill2".to_string(),
+                        value: UdmfValue::Bool(false),
+                    },
+                    UdmfField {
+                        key: "skill3".to_string(),
+                        value: UdmfValue::Bool(false),
+                    },
+                    UdmfField {
+                        key: "skill4".to_string(),
+                        value: UdmfValue::Bool(false),
+                    },
+                    UdmfField {
+                        key: "skill5".to_string(),
+                        value: UdmfValue::Bool(false),
+                    },
+                ],
+                expected: Ok(THING_FLAG_EASY),
+            },
+            Case {
+                fields: vec![UdmfField {
+                    key: "skill2".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: Ok(THING_FLAG_EASY),
+            },
+            Case {
+                fields: vec![UdmfField {
+                    key: "skill3".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: Ok(THING_FLAG_MEDIUM),
+            },
+            Case {
+                fields: vec![UdmfField {
+                    key: "skill4".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: Ok(THING_FLAG_HARD),
+            },
+            Case {
+                fields: vec![UdmfField {
+                    key: "skill5".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: Ok(THING_FLAG_HARD),
+            },
+            Case {
+                fields: vec![UdmfField {
+                    key: "ambush".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                expected: Ok(THING_FLAG_EASY
+                    | THING_FLAG_MEDIUM
+                    | THING_FLAG_HARD
+                    | THING_FLAG_AMBUSH),
+            },
+            Case {
+                fields: vec![UdmfField {
+                    key: "single".to_string(),
+                    value: UdmfValue::Bool(false),
+                }],
+                expected: Ok(THING_FLAG_EASY
+                    | THING_FLAG_MEDIUM
+                    | THING_FLAG_HARD
+                    | THING_FLAG_MULTIPLAYER),
+            },
+            Case {
+                fields: vec![UdmfField {
+                    key: "skill1".to_string(),
+                    value: UdmfValue::Int(1), // Wrong type
+                }],
+                expected: Err(()),
+            },
+            Case {
+                fields: vec![UdmfField {
+                    key: "flags".to_string(),
+                    value: UdmfValue::Str("nope".to_string()), // Wrong type
+                }],
+                expected: Err(()),
+            },
+        ];
+
+        for (i, case) in cases.into_iter().enumerate() {
+            let block = UdmfBlock {
+                kind: "thing".to_string(),
+                fields: case.fields,
+            };
+
+            let result = thing_flags(&block, 0);
+            match case.expected {
+                Ok(expected_flags) => {
+                    let actual_flags = result.expect(&format!("case {} failed to parse", i));
+                    assert_eq!(actual_flags, expected_flags, "case {} flags mismatch", i);
+                }
+                Err(_) => {
+                    assert!(result.is_err(), "case {} expected error but got Ok", i);
+                }
+            }
+        }
+    }
 
     #[test]
     fn parse_rejects_non_string_namespace() {
