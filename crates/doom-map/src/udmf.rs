@@ -399,81 +399,11 @@ impl UdmfMap {
 
         for (index, block) in self.blocks.iter().enumerate() {
             match block.kind.as_str() {
-                "vertex" => vertexes.push(Vertex {
-                    x: required_i16(block, index, "vertex", "x")?,
-                    y: required_i16(block, index, "vertex", "y")?,
-                }),
-                "sector" => sectors.push(Sector {
-                    floor_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightfloor")? as i32,
-                    ),
-                    ceil_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightceiling")? as i32,
-                    ),
-                    floor_flat: required_name(block, index, "sector", "texturefloor")?,
-                    ceil_flat: required_name(block, index, "sector", "textureceiling")?,
-                    light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,
-                    special: optional_u16(block, index, "sector", "special", 0)?,
-                    tag: first_present_u16(block, index, "sector", &["tag", "id"], 0)?,
-                }),
-                "sidedef" => sidedefs.push(Sidedef {
-                    x_offset: optional_i16(block, index, "sidedef", "offsetx", 0)?,
-                    y_offset: optional_i16(block, index, "sidedef", "offsety", 0)?,
-                    upper_texture: optional_name(block, index, "sidedef", "texturetop")?,
-                    lower_texture: optional_name(block, index, "sidedef", "texturebottom")?,
-                    middle_texture: optional_name(block, index, "sidedef", "texturemiddle")?,
-                    sector: required_u16(block, index, "sidedef", "sector")?,
-                }),
-                "linedef" => {
-                    let left_sidedef = optional_sidedef_index(block, index, "linedef", "sideback")?;
-                    let mut flags = 0;
-                    if optional_bool(block, index, "linedef", "blocking")? {
-                        flags |= FLAG_BLOCKING;
-                    }
-                    if optional_bool(block, index, "linedef", "blockmonsters")? {
-                        flags |= FLAG_BLOCKMONSTERS;
-                    }
-                    if optional_bool(block, index, "linedef", "dontpegtop")? {
-                        flags |= FLAG_DONTPEGTOP;
-                    }
-                    if optional_bool(block, index, "linedef", "dontpegbottom")? {
-                        flags |= FLAG_DONTPEGBOTTOM;
-                    }
-                    if optional_bool(block, index, "linedef", "secret")? {
-                        flags |= FLAG_SECRET;
-                    }
-                    if optional_bool(block, index, "linedef", "blocksound")? {
-                        flags |= FLAG_SOUNDBLOCK;
-                    }
-                    if optional_bool(block, index, "linedef", "dontdraw")? {
-                        flags |= FLAG_DONTDRAW;
-                    }
-                    if optional_bool(block, index, "linedef", "mapped")? {
-                        flags |= FLAG_MAPPED;
-                    }
-                    if left_sidedef != SIDEDEF_NONE
-                        || optional_bool(block, index, "linedef", "twosided")?
-                    {
-                        flags |= FLAG_TWO_SIDED;
-                    }
-
-                    linedefs.push(Linedef {
-                        from_vertex: required_u16(block, index, "linedef", "v1")?,
-                        to_vertex: required_u16(block, index, "linedef", "v2")?,
-                        flags,
-                        special: optional_u16(block, index, "linedef", "special", 0)?,
-                        tag: first_present_u16(block, index, "linedef", &["tag", "arg0", "id"], 0)?,
-                        right_sidedef: required_u16(block, index, "linedef", "sidefront")?,
-                        left_sidedef,
-                    });
-                }
-                "thing" => things.push(Thing {
-                    x: required_i16(block, index, "thing", "x")?,
-                    y: required_i16(block, index, "thing", "y")?,
-                    angle: optional_u16(block, index, "thing", "angle", 0)?,
-                    kind: required_first_present_u16(block, index, "thing", &["type", "kind"])?,
-                    flags: thing_flags(block, index)?,
-                }),
+                "vertex" => vertexes.push(parse_vertex(block, index)?),
+                "sector" => sectors.push(parse_sector(block, index)?),
+                "sidedef" => sidedefs.push(parse_sidedef(block, index)?),
+                "linedef" => linedefs.push(parse_linedef(block, index)?),
+                "thing" => things.push(parse_thing(block, index)?),
                 _ => {}
             }
         }
@@ -486,6 +416,92 @@ impl UdmfMap {
             sectors,
         })
     }
+}
+
+fn parse_vertex(block: &UdmfBlock, index: usize) -> Result<Vertex, UdmfError> {
+    Ok(Vertex {
+        x: required_i16(block, index, "vertex", "x")?,
+        y: required_i16(block, index, "vertex", "y")?,
+    })
+}
+
+fn parse_sector(block: &UdmfBlock, index: usize) -> Result<Sector, UdmfError> {
+    Ok(Sector {
+        floor_height: Fixed16_16::from_int(
+            required_i16(block, index, "sector", "heightfloor")? as i32
+        ),
+        ceil_height: Fixed16_16::from_int(
+            required_i16(block, index, "sector", "heightceiling")? as i32
+        ),
+        floor_flat: required_name(block, index, "sector", "texturefloor")?,
+        ceil_flat: required_name(block, index, "sector", "textureceiling")?,
+        light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,
+        special: optional_u16(block, index, "sector", "special", 0)?,
+        tag: first_present_u16(block, index, "sector", &["tag", "id"], 0)?,
+    })
+}
+
+fn parse_sidedef(block: &UdmfBlock, index: usize) -> Result<Sidedef, UdmfError> {
+    Ok(Sidedef {
+        x_offset: optional_i16(block, index, "sidedef", "offsetx", 0)?,
+        y_offset: optional_i16(block, index, "sidedef", "offsety", 0)?,
+        upper_texture: optional_name(block, index, "sidedef", "texturetop")?,
+        lower_texture: optional_name(block, index, "sidedef", "texturebottom")?,
+        middle_texture: optional_name(block, index, "sidedef", "texturemiddle")?,
+        sector: required_u16(block, index, "sidedef", "sector")?,
+    })
+}
+
+fn parse_linedef(block: &UdmfBlock, index: usize) -> Result<Linedef, UdmfError> {
+    let left_sidedef = optional_sidedef_index(block, index, "linedef", "sideback")?;
+    let mut flags = 0;
+    if optional_bool(block, index, "linedef", "blocking")? {
+        flags |= FLAG_BLOCKING;
+    }
+    if optional_bool(block, index, "linedef", "blockmonsters")? {
+        flags |= FLAG_BLOCKMONSTERS;
+    }
+    if optional_bool(block, index, "linedef", "dontpegtop")? {
+        flags |= FLAG_DONTPEGTOP;
+    }
+    if optional_bool(block, index, "linedef", "dontpegbottom")? {
+        flags |= FLAG_DONTPEGBOTTOM;
+    }
+    if optional_bool(block, index, "linedef", "secret")? {
+        flags |= FLAG_SECRET;
+    }
+    if optional_bool(block, index, "linedef", "blocksound")? {
+        flags |= FLAG_SOUNDBLOCK;
+    }
+    if optional_bool(block, index, "linedef", "dontdraw")? {
+        flags |= FLAG_DONTDRAW;
+    }
+    if optional_bool(block, index, "linedef", "mapped")? {
+        flags |= FLAG_MAPPED;
+    }
+    if left_sidedef != SIDEDEF_NONE || optional_bool(block, index, "linedef", "twosided")? {
+        flags |= FLAG_TWO_SIDED;
+    }
+
+    Ok(Linedef {
+        from_vertex: required_u16(block, index, "linedef", "v1")?,
+        to_vertex: required_u16(block, index, "linedef", "v2")?,
+        flags,
+        special: optional_u16(block, index, "linedef", "special", 0)?,
+        tag: first_present_u16(block, index, "linedef", &["tag", "arg0", "id"], 0)?,
+        right_sidedef: required_u16(block, index, "linedef", "sidefront")?,
+        left_sidedef,
+    })
+}
+
+fn parse_thing(block: &UdmfBlock, index: usize) -> Result<Thing, UdmfError> {
+    Ok(Thing {
+        x: required_i16(block, index, "thing", "x")?,
+        y: required_i16(block, index, "thing", "y")?,
+        angle: optional_u16(block, index, "thing", "angle", 0)?,
+        kind: required_first_present_u16(block, index, "thing", &["type", "kind"])?,
+        flags: thing_flags(block, index)?,
+    })
 }
 
 struct Parser<'a> {
