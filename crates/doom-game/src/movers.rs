@@ -1,3 +1,13 @@
+//! Map Geometry Movers.
+//!
+//! This module contains the state structures for dynamic map geometry elements,
+//! such as doors, ceilings, floors, lifts, and scroll effects.
+//!
+//! # The "Black Box"
+//!
+//! `doom-map` parsing initializes the static BSP and flat arrays, but `doom-game`
+//! tracks any geometry that moves or changes state dynamically over time.
+
 use doom_types::Fixed16_16;
 
 /// An animated door or floor/ceiling mover.
