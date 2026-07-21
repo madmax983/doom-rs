@@ -44,15 +44,8 @@ crossterm = "0.29.0"
 # Audio
 cpal = "0.15"
 
-# Networking
-bincode   = "2"
-crc32fast = "1"
-
 # Parsing
 nom = "7"
-
-# Data / Error
-serde     = { version = "1", features = ["derive"] }
 thiserror = "2"
 anyhow    = "1"
 bytemuck  = { version = "1", features = ["derive"] }
