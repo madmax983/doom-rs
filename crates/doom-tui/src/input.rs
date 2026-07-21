@@ -477,4 +477,97 @@ mod tests {
         assert!(s.to_tic_input().wait_pressed);
         assert!(!s.to_tic_input().wait_pressed);
     }
+
+    #[test]
+    fn edge_triggered_ui_actions_exhaustively() {
+        let mut s = InputState::new();
+
+        s.push_f5();
+        s.push_f9();
+        s.push_escape();
+        s.push_menu_up();
+        s.push_menu_down();
+        s.push_menu_select();
+
+        let t = s.to_tic_input();
+        assert!(t.f5_save);
+        assert!(t.f9_load);
+        assert!(t.escape_pressed);
+        assert!(t.menu_up);
+        assert!(t.menu_down);
+        assert!(t.menu_select);
+
+        let t2 = s.to_tic_input();
+        assert!(!t2.f5_save);
+        assert!(!t2.f9_load);
+        assert!(!t2.escape_pressed);
+        assert!(!t2.menu_up);
+        assert!(!t2.menu_down);
+        assert!(!t2.menu_select);
+    }
+
+    #[test]
+    fn set_control_method_sets_control_held() {
+        let mut s = InputState::new();
+        s.set_control(true);
+        assert_ne!(s.to_tic_input().buttons & buttons::BT_ATTACK, 0);
+
+        s.set_control(false);
+        assert_eq!(s.to_tic_input().buttons & buttons::BT_ATTACK, 0);
+    }
+
+    #[test]
+    fn table_driven_modifier_keys() {
+        let test_cases = [
+            (KeyCode::Modifier(ModifierKeyCode::LeftShift), true, true),
+            (KeyCode::Modifier(ModifierKeyCode::RightShift), true, true),
+            (KeyCode::Modifier(ModifierKeyCode::LeftControl), false, true),
+            (
+                KeyCode::Modifier(ModifierKeyCode::RightControl),
+                false,
+                true,
+            ),
+        ];
+
+        for (modifier, is_shift, is_control_if_not_shift) in test_cases {
+            let mut s = InputState::new();
+            s.key_down(modifier);
+
+            if is_shift {
+                s.key_down(KeyCode::Char('a'));
+                assert!(s.to_tic_input().side_move < 0);
+            } else if is_control_if_not_shift {
+                assert_ne!(s.to_tic_input().buttons & buttons::BT_ATTACK, 0);
+            }
+
+            s.key_up(modifier);
+            let t = s.to_tic_input();
+            if is_shift {
+                assert_eq!(t.side_move, 0);
+            } else if is_control_if_not_shift {
+                assert_eq!(t.buttons & buttons::BT_ATTACK, 0);
+            }
+        }
+    }
+
+    #[test]
+    fn clear_resets_all_state() {
+        let mut s = InputState::new();
+        s.key_down(KeyCode::Char('w'));
+        s.key_down(KeyCode::Modifier(ModifierKeyCode::LeftShift));
+        s.push_f5();
+        s.push_escape();
+
+        s.clear();
+        let t = s.to_tic_input();
+        assert_eq!(t.forward_move, 0);
+        assert!(!t.f5_save);
+        assert!(!t.escape_pressed);
+
+        s.key_down(KeyCode::Char('a'));
+        // shift is cleared, so 'a' should turn instead of strafe
+        let t2 = s.to_tic_input();
+        assert!(t2.angle_turn > 0);
+        assert_eq!(t2.side_move, 0);
+    }
 }
