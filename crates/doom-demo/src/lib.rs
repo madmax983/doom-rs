@@ -135,12 +135,18 @@ mod tests {
         assert_eq!(player.total_tics(), 2);
         assert_eq!(player.header().num_players(), 2);
 
-        let tic0 = player.next_tic_cmds().expect("value must exist in test");
+        let tic0 = player
+            .next_tic_cmds()
+            .expect("value must exist in test")
+            .to_vec();
         assert_eq!(tic0.len(), 2);
         assert_eq!(tic0[0], p1_cmd);
         assert_eq!(tic0[1], p2_cmd);
 
-        let tic1 = player.next_tic_cmds().expect("value must exist in test");
+        let tic1 = player
+            .next_tic_cmds()
+            .expect("value must exist in test")
+            .to_vec();
         assert_eq!(tic1.len(), 2);
         assert_eq!(tic1[0].forward_move, 30);
         assert_eq!(tic1[1].forward_move, 40);
