@@ -198,11 +198,11 @@ impl DemoPlayer {
     ///
     /// Returns one [`DemoTicCmd`] per present player. Returns `None` once all
     /// recorded tics have been consumed.
-    pub fn next_tic_cmds(&mut self) -> Option<Vec<DemoTicCmd>> {
+    pub fn next_tic_cmds(&mut self) -> Option<&[DemoTicCmd]> {
         if self.current_tic >= self.tics.len() {
             return None;
         }
-        let cmds = self.tics[self.current_tic].clone();
+        let cmds = self.tics[self.current_tic].as_slice();
         self.current_tic += 1;
         Some(cmds)
     }
@@ -274,14 +274,14 @@ mod tests {
         let lmp = rec.to_lmp();
         let mut player = DemoPlayer::from_lmp(&lmp).expect("value must exist in test");
 
-        let t0 = player.next_tic_cmds().expect("value must exist in test");
-        assert_eq!(t0[0].forward_move, 0);
+        let t0 = player.next_tic_cmds().expect("value must exist in test")[0];
+        assert_eq!(t0.forward_move, 0);
 
-        let t1 = player.next_tic_cmds().expect("value must exist in test");
-        assert_eq!(t1[0].forward_move, 10);
+        let t1 = player.next_tic_cmds().expect("value must exist in test")[0];
+        assert_eq!(t1.forward_move, 10);
 
-        let t2 = player.next_tic_cmds().expect("value must exist in test");
-        assert_eq!(t2[0].forward_move, 20);
+        let t2 = player.next_tic_cmds().expect("value must exist in test")[0];
+        assert_eq!(t2.forward_move, 20);
 
         assert!(player.next_tic_cmds().is_none());
     }
