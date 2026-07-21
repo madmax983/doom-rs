@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+## 2026-07-20 - Lazy iterators for flat spans
+
+**Learning:** Returning a `Vec` for small slices of items that will immediately be consumed by a for-loop (like visplane spans during flat rasterization) allocates on the hot path needlessly. Iterating manually through the structure without allocations performs exactly the same role while avoiding the allocator bottleneck entirely.
+**Action:** Replace `foo() -> Vec<T>` with `struct FooIter` containing state implementing `Iterator` for hot paths where the data is instantly consumed instead of stored.

@@ -48,7 +48,7 @@ use crate::sky::{
 };
 use crate::span::{DrawSpanParams, draw_span};
 use crate::texture::TextureCache;
-use crate::visplane::{PlaneKind, VisplaneSet, visplane_to_spans};
+use crate::visplane::{PlaneKind, VisplaneSet};
 
 // ---------------------------------------------------------------------------
 // Screen constants
@@ -1355,7 +1355,7 @@ pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
     for plane in visplanes.planes() {
         let resolved = anim.map_or(plane.flat_name, |a| a.resolve_flat(&plane.flat_name));
         let source = cache.get(&resolved);
-        let spans = visplane_to_spans(plane, SCREEN_H);
+        let spans = plane.iter_spans(SCREEN_H);
         let flat_lp = LightParams::new(plane.light_level, is_fullbright);
 
         for span in spans {
