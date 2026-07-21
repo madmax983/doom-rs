@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-07-21 - [Added missing doctest for SnapshotRing]
+**Confusion:** The `SnapshotRing` struct in `doom-net` lacked executable examples showing how capacity governs eviction of older game states.
+**Clarification:** Added an executable `## Examples` block demonstrating that saving a tic beyond the buffer's capacity will successfully evict the oldest entry without error.
