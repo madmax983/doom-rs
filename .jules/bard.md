@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-07-21 - [Clarified The "Black Box" Modules]
+**Confusion:** Various core modules like `director.rs`, `movers.rs`, `sound_prop.rs`, `stats.rs` in `doom-game` and `sprite_clip.rs` in `doom-renderer`, as well as `doom-app` library root lacked high-level module documentation, leaving the intent and connection of these components unclear.
+**Clarification:** Added module-level `//!` stories to each of these files, explaining the "why" and the high-level operation of the components. Also added executable `///` doc-tests for `AiDirector` and `SpriteClipHistory` to show real usage examples.

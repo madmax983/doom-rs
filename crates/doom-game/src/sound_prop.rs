@@ -1,3 +1,16 @@
+//! Sound Propagation and Event Queues.
+//!
+//! This module defines how sound travels through the map's BSP tree, waking up
+//! monsters along the way, and provides the event queue for dispatching sound
+//! requests to the audio system.
+//!
+//! # The "Black Box"
+//!
+//! Sound propagation in Doom is not real physics; it's a flood-fill algorithm
+//! that traverses connected sectors. A `validcount` mechanism ensures sectors are
+//! only processed once per sound event. When an actor makes a noise, it emits a
+//! `SoundRequest` which the external application routes to the audio subsystem.
+
 use crate::mobj::MobjHandle;
 use crate::state::LockedDoorColor;
 use doom_types::mobj_kind::MobjKind;

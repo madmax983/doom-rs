@@ -1,3 +1,14 @@
+//! End-of-level Statistics and Map Tracking.
+//!
+//! This module defines the state structures used to track the player's
+//! progression, kills, items, and secrets throughout a level.
+//!
+//! # The "Black Box"
+//!
+//! At the end of every map, the intermission screen tallies up the player's
+//! performance. The `LevelStats` struct gathers this data over time during gameplay
+//! so it is ready when the map completes.
+
 /// End-of-level statistics and map tracking.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LevelStats {
