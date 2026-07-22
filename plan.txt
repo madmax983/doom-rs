@@ -1,0 +1,207 @@
+1. *Refactor CLI JSON output format for global errors in `crates/doom-app/src/main.rs`.*
+   - Execute a `replace_with_git_merge_diff` on `crates/doom-app/src/main.rs` to replace manual string building with `serde_json::json!`:
+<<<<<<< SEARCH
+        if is_json {
+            // Memory: manually serialize without serde using format!("{:?}", ...) for escaping
+            let mut error_msg = format!("{}", err);
+            let mut causes = err.chain().skip(1).peekable();
+            if causes.peek().is_some() {
+                error_msg.push_str(" \nReason:\n");
+                for cause in causes {
+                    error_msg.push_str(&format!("    {}\n", cause));
+                }
+            }
+            let json_data = format!(r#"{{"error": {:?}}}"#, error_msg.trim_end());
+            println!("{json_data}");
+        } else {
+=======
+        if is_json {
+            let mut error_msg = format!("{}", err);
+            let mut causes = err.chain().skip(1).peekable();
+            if causes.peek().is_some() {
+                error_msg.push_str(" \nReason:\n");
+                for cause in causes {
+                    error_msg.push_str(&format!("    {}\n", cause));
+                }
+            }
+            let json_data = serde_json::json!({
+                "error": error_msg.trim_end()
+            });
+            println!("{}", json_data);
+        } else {
+>>>>>>> REPLACE
+   - Verify with `cat crates/doom-app/src/main.rs`.
+2. *Refactor CLI JSON output format for `map-stats` in `crates/doom-app/src/main.rs`.*
+   - Execute a `replace_with_git_merge_diff` on `crates/doom-app/src/main.rs` to replace manual string interpolation with `serde_json::json!`:
+<<<<<<< SEARCH
+        if args.json {
+            let json_data = format!(
+                r#"{{
+  "map": "{}",
+  "total_kills": {},
+  "total_items": {},
+  "total_secrets": {},
+  "par_time_tics": {}
+}}"#,
+                warp_str,
+                stats.total_kills,
+                stats.total_items,
+                stats.total_secrets,
+                stats.par_time_tics
+            );
+            println!("{json_data}");
+        } else {
+=======
+        if args.json {
+            let json_data = serde_json::json!({
+                "map": warp_str,
+                "total_kills": stats.total_kills,
+                "total_items": stats.total_items,
+                "total_secrets": stats.total_secrets,
+                "par_time_tics": stats.par_time_tics
+            });
+            println!("{}", serde_json::to_string_pretty(&json_data).unwrap());
+        } else {
+>>>>>>> REPLACE
+   - Verify with `cat crates/doom-app/src/main.rs`.
+3. *Refactor CLI JSON output format for `analyze` in `crates/doom-app/src/main.rs`.*
+   - Execute a `replace_with_git_merge_diff` on `crates/doom-app/src/main.rs` to replace manual string building with `serde_json::json!`:
+<<<<<<< SEARCH
+        if args.json {
+            // ⚡ Bolt Optimization:
+            // Formats the JSON array inline directly into a single `String` buffer.
+            // This completely eliminates intermediate `.collect::<Vec<_>>()` chains
+            // and intermediate inner string allocations that previously happened per-area,
+            // saving ~3 heap allocations per JSON generation loop.
+            let mut chokepoints_json = String::new();
+            chokepoints_json.push('[');
+            for (i, s) in chokepoints.iter().enumerate() {
+                if i > 0 {
+                    chokepoints_json.push_str(", ");
+                }
+                chokepoints_json.push_str(&s.to_string());
+            }
+            chokepoints_json.push(']');
+            let mut areas_json = String::new();
+            areas_json.push('[');
+            for (i, a) in areas.iter().enumerate() {
+                if i > 0 {
+                    areas_json.push_str(", ");
+                }
+                areas_json.push('[');
+                for (j, s) in a.iter().enumerate() {
+                    if j > 0 {
+                        areas_json.push_str(", ");
+                    }
+                    areas_json.push_str(&s.to_string());
+                }
+                areas_json.push(']');
+            }
+            areas_json.push(']');
+
+            let json_data = format!(
+                r#"{{
+  "map": "{}",
+  "chokepoints": {},
+  "isolated_areas": {}
+}}"#,
+                warp_str, chokepoints_json, areas_json
+            );
+            println!("{json_data}");
+        } else {
+=======
+        if args.json {
+            let json_data = serde_json::json!({
+                "map": warp_str,
+                "chokepoints": chokepoints,
+                "isolated_areas": areas
+            });
+            println!("{}", serde_json::to_string_pretty(&json_data).unwrap());
+        } else {
+>>>>>>> REPLACE
+   - Verify with `cat crates/doom-app/src/main.rs`.
+4. *Refactor CLI JSON output format for `pathfind` in `crates/doom-app/src/main.rs`.*
+   - Execute a `replace_with_git_merge_diff` on `crates/doom-app/src/main.rs` to replace manual string building with `serde_json::json!`:
+<<<<<<< SEARCH
+                    if args.json {
+                        let mut path_inner = String::new();
+                        for (j, s) in path.iter().enumerate() {
+                            if j > 0 {
+                                path_inner.push_str(", ");
+                            }
+                            path_inner.push_str(&s.to_string());
+                        }
+                        let path_json = format!("[{}]", path_inner);
+                        let json_data = format!(r#"{{ "path": {} }}"#, path_json);
+                        println!("{json_data}");
+                    } else {
+=======
+                    if args.json {
+                        let json_data = serde_json::json!({
+                            "path": path
+                        });
+                        println!("{}", json_data);
+                    } else {
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+                    if args.json {
+                        let msg =
+                            format!("No path found between sector {} and sector {}", start, end);
+                        let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                        println!("{json_data}");
+                    } else {
+=======
+                    if args.json {
+                        let msg =
+                            format!("No path found between sector {} and sector {}", start, end);
+                        let json_data = serde_json::json!({
+                            "error": msg
+                        });
+                        println!("{}", json_data);
+                    } else {
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+                if args.json {
+                    let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                    println!("{json_data}");
+                } else {
+=======
+                if args.json {
+                    let json_data = serde_json::json!({
+                        "error": msg
+                    });
+                    println!("{}", json_data);
+                } else {
+>>>>>>> REPLACE
+<<<<<<< SEARCH
+            if args.json {
+                let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                println!("{json_data}");
+            } else {
+=======
+            if args.json {
+                let json_data = serde_json::json!({
+                    "error": msg
+                });
+                println!("{}", json_data);
+            } else {
+>>>>>>> REPLACE
+   - Verify with `cat crates/doom-app/src/main.rs`.
+5. *Run test suite and linters.*
+   - Execute `cargo clippy --all-targets --all-features -- -D warnings`, `cargo test`, and `cargo fmt --all`.
+6. *Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.*
+7. *Submit the change.*
+   - Submit the PR titled "🎨 Mosaic: UI Polish for CLI Output".
+   - The description will contain exactly:
+```
+🎨 Mosaic: UI Polish for CLI Output
+
+🖌️ **Before:**
+The CLI output raw JSON via manual string building for map statistics, pathfinding, tactical analysis, and engine errors. This was prone to escaping bugs, complex logic (e.g., custom string iterators for arrays), and resulted in fragile, un-formatted JSON strings output to the console.
+
+✨ **After:**
+The CLI commands `--json`, `--analyze`, `--map-stats`, and error handlers now utilize `serde_json` to securely construct structured JSON payloads. This guarantees proper escaping, well-formed arrays, and outputs formatted, readable JSON (`to_string_pretty`) where beneficial.
+
+🖼️ **Visuals:**
+JSON outputs for `map-stats`, `pathfind`, and `analyze` are now robustly structured arrays/objects, eliminating manual string parsing constraints and allowing clean integrations for automated tooling.
+```
