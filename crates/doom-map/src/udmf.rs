@@ -404,12 +404,18 @@ impl UdmfMap {
                     y: required_i16(block, index, "vertex", "y")?,
                 }),
                 "sector" => sectors.push(Sector {
-                    floor_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightfloor")? as i32,
-                    ),
-                    ceil_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightceiling")? as i32,
-                    ),
+                    floor_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightfloor",
+                    )? as i32),
+                    ceil_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightceiling",
+                    )? as i32),
                     floor_flat: required_name(block, index, "sector", "texturefloor")?,
                     ceil_flat: required_name(block, index, "sector", "textureceiling")?,
                     light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,
@@ -1195,6 +1201,58 @@ mod tests {
         assert!(matches!(
             map.into_level_data(),
             Err(UdmfError::UnsupportedNamespace(namespace)) if namespace == "zdoom"
+        ));
+    }
+
+    #[test]
+    fn thing_flags_evaluation() {
+        let cases: Vec<(&[u8], u16)> = vec![
+            (
+                b"namespace = \"doom\"; thing { x=0; y=0; type=1; }",
+                THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD,
+            ),
+            (
+                b"namespace = \"doom\"; thing { x=0; y=0; type=1; flags=10; }",
+                10,
+            ),
+            (
+                b"namespace = \"doom\"; thing { x=0; y=0; type=1; skill1=true; skill4=true; }",
+                THING_FLAG_EASY | THING_FLAG_HARD,
+            ),
+            (
+                b"namespace = \"doom\"; thing { x=0; y=0; type=1; skill3=true; ambush=true; }",
+                THING_FLAG_MEDIUM | THING_FLAG_AMBUSH,
+            ),
+            (
+                b"namespace = \"doom\"; thing { x=0; y=0; type=1; single=false; }",
+                THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD | THING_FLAG_MULTIPLAYER,
+            ),
+        ];
+
+        for (input, expected_flags) in cases {
+            let map = UdmfMap::parse(input).expect("parse");
+            let data = map.into_level_data().expect("into_level_data");
+            assert_eq!(data.things[0].flags, expected_flags);
+        }
+    }
+
+    #[test]
+    fn conversion_rejects_wrong_type() {
+        let map = UdmfMap::parse(
+            br#"
+            namespace = "doom";
+            thing { x = 0; y = 0; type = 1; flags = "foo"; }
+            "#,
+        )
+        .expect("parse");
+
+        assert!(matches!(
+            map.into_level_data(),
+            Err(UdmfError::WrongType {
+                block: "thing",
+                field: "flags",
+                ..
+            })
         ));
     }
 }
