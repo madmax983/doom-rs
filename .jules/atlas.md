@@ -52,3 +52,6 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+**[Remove unused doom-game dependency from doom-demo]**
+**Tangle:** The `doom-demo` crate had a direct dependency on the `doom-game` crate in its `Cargo.toml`. This violated the separation of concerns since demo playback logic shouldn't inherently depend on the entirety of the game simulation logic, but rather just on the shared `doom-types` data format to process commands. `doom-demo` was actually only referencing `doom-game` via doc comments.
+**Blueprint:** Removed the `doom-game` dependency from `crates/doom-demo/Cargo.toml`. This breaks the cycle and reinforces that `doom-demo` only requires core types, allowing it to build without needing the full game state machinery.
