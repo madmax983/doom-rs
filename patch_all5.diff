@@ -1,0 +1,65 @@
+--- a/crates/doom-game/src/actions.rs
++++ b/crates/doom-game/src/actions.rs
+@@ -608,7 +608,7 @@
+         // and drift the monster off the vanilla path.
+         let spechit = match level {
+             Some(lv) => crate::movement::move_spechit(&gs.mobjslab, handle, new_x, new_y, lv),
+-            None => Vec::new(),
++            None => smallvec::SmallVec::new(),
+         };
+         if spechit.is_empty() {
+             // numspechit == 0: movedir is left untouched.
+--- a/crates/doom-game/src/movement.rs
++++ b/crates/doom-game/src/movement.rs
+@@ -1094,18 +1094,20 @@
+ /// The vanilla `!tmthing->player` guard on `ML_BLOCKMONSTERS` is expressed here
+ /// via `MF_COUNTKILL` (players and non-monster things carry no `MF_COUNTKILL`),
+ /// so this same routine serves the player, monster and missile spechit passes.
++/// ⚡ Bolt: Uses `SmallVec` to eliminate multiple temporary heap allocations
++/// per frame during the collision traversal, easing garbage collection pressure.
+ #[must_use]
+ pub fn move_spechit(
+     slab: &MobjSlab,
+     handle: MobjHandle,
+     new_x: Fixed16_16,
+     new_y: Fixed16_16,
+     level: &Level,
+-) -> Vec<usize> {
++) -> smallvec::SmallVec<[usize; 8]> {
+     let (radius, mo_flags) = match slab.get(handle) {
+         Some(mo) => (mo.radius, mo.flags),
+-        None => return Vec::new(),
++        None => return smallvec::SmallVec::new(),
+     };
+
+-    let mut spechit: Vec<usize> = Vec::new();
++    let mut spechit: smallvec::SmallVec<[usize; 8]> = smallvec::SmallVec::new();
+
+     if mo_flags & flags::MF_NOCLIP != 0 {
+         return spechit;
+@@ -1124,7 +1126,7 @@
+     // chase step and desyncing the demo).
+     if move_blocked_by_solid_thing(slab, handle, radius, mo_flags, new_x, new_y) {
+         return spechit;
+     }
+
+     let is_missile = mo_flags & flags::MF_MISSILE != 0;
+@@ -1154,7 +1156,7 @@
+     let row_hi = to_block(top, y_origin, y_count);
+
+     // Vanilla `validcount`: each linedef is examined once across the whole scan.
+-    let mut seen: Vec<usize> = Vec::new();
++    let mut seen: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
+
+     // Vanilla iterates `for (bx...) for (by...)` — column-major.
+     for col in col_lo..=col_hi {
+@@ -1838,8 +1840,8 @@
+         // Baseline: no other thing → the straddled special line is collected.
+         let sh = move_spechit(&slab, mover, new_x, new_y, &level);
+         assert_eq!(
+-            sh,
+-            vec![0usize],
++            sh.as_slice(),
++            &[0usize],
+             "box straddling a two-sided special line must collect it"
+         );

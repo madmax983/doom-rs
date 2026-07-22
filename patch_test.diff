@@ -1,0 +1,12 @@
+--- a/crates/doom-game/src/movement.rs
++++ b/crates/doom-game/src/movement.rs
+@@ -1838,8 +1840,8 @@
+         // Baseline: no other thing → the straddled special line is collected.
+         let sh = move_spechit(&slab, mover, new_x, new_y, &level);
+         assert_eq!(
+-            sh,
+-            vec![0usize],
++            sh.as_slice(),
++            &[0usize],
+             "box straddling a two-sided special line must collect it"
+         );
