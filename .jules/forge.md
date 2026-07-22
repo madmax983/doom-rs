@@ -63,3 +63,6 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+## 2026-07-22 - Fixed Clippy warnings in `doom-game`
+**Learning:** Fixing various Clippy warnings, like `needless_bool`, `doc_lazy_continuation`, `single_match`, `if_same_then_else`, `manual_range_contains`, `obfuscated_if_else`, and `needless_option_as_deref`, significantly improves idiomatic Rust adherence and code readability without altering business logic.
+**Action:** Consistently run `cargo clippy --all-targets --all-features -- -D warnings` and fix warnings using native Rust constructs like guard clauses, flattened `if..else`, and standard bounds checking.
