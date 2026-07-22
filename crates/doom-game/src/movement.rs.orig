@@ -1840,8 +1840,8 @@ mod tests {
         // Baseline: no other thing → the straddled special line is collected.
         let sh = move_spechit(&slab, mover, new_x, new_y, &level);
         assert_eq!(
-            sh.as_slice(),
-            &[0usize],
+            sh,
+            vec![0usize],
             "box straddling a two-sided special line must collect it"
         );
 
