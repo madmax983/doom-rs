@@ -1085,7 +1085,7 @@ fn try_move_with_blocker(
 ///
 /// This is what `P_Move` consults via `numspechit` to decide whether a blocked
 /// monster halts (`movedir = DI_NODIR`) and tries the crossed lines as doors,
-/// and what `P_TryMove` walks (via [`record_player_crossings`]) after a
+/// and what `P_TryMove` walks (via `` `record_player_crossings` ``) after a
 /// successful player/monster step to fire `P_CrossSpecialLine`. Unlike the
 /// movement bool (`try_move_with_blocker`), which early-returns at the first
 /// blocker, this must see every special line crossed *before* the blocker, so it

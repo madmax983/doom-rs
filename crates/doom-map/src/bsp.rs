@@ -253,7 +253,7 @@ impl<'a> BspTree<'a> {
     /// Fixed-point exact `R_PointOnSide` (vanilla `r_main.c`).
     ///
     /// Takes the point as raw `fixed_t` (16.16) coordinates, exactly as vanilla
-    /// does — the integer [`point_on_side`] truncates the fractional part of the
+    /// does — the integer `` `point_on_side` `` truncates the fractional part of the
     /// position before the side test, which can flip which side of a partition
     /// line a point near the boundary falls on (e.g. a position at `1136.0 -
     /// 1/65536` truncates to `1135`). The node partition coordinates are stored
@@ -300,7 +300,7 @@ impl<'a> BspTree<'a> {
     /// Fixed-point exact `R_PointInSubsector` (vanilla `r_main.c`).
     ///
     /// Like [`point_in_subsector`] but takes raw `fixed_t` coordinates and uses
-    /// the fixed-point [`point_on_side_fixed`] test, matching vanilla exactly.
+    /// the fixed-point `` `point_on_side_fixed` `` test, matching vanilla exactly.
     /// Use this for playsim sector lookups where sub-map-unit precision changes
     /// the answer (e.g. `P_PlayerInSpecialSector`'s secret-sector crossing).
     ///
