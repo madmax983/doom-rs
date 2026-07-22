@@ -869,7 +869,7 @@ fn p_spawn_blood(gs: &mut GameState, level: Option<&Level>, x: i32, y: i32, z: i
             mo.tics = 1;
         }
     }
-    if damage <= 12 && damage >= 9 {
+    if (9..=12).contains(&damage) {
         set_mobj_state_raw(gs, h, ids::S_BLOOD2);
     } else if damage < 9 {
         set_mobj_state_raw(gs, h, ids::S_BLOOD3);
@@ -1094,15 +1094,13 @@ pub fn p_line_attack(
                     if z > front.ceil_height.raw() {
                         return None;
                     }
-                    let back_sky = (ld.left_sidedef != doom_map::SIDEDEF_NONE)
-                        .then(|| {
+                    let back_sky = if ld.left_sidedef != doom_map::SIDEDEF_NONE { {
                             lvl.sidedefs
                                 .get(ld.left_sidedef as usize)
                                 .and_then(|sd| lvl.sectors.get(sd.sector as usize))
                                 .map(|s| is_sky_flat(&s.ceil_flat))
                                 .unwrap_or(false)
-                        })
-                        .unwrap_or(false);
+                        } } else { false };
                     if back_sky {
                         return None;
                     }

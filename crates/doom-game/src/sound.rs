@@ -170,7 +170,7 @@ pub fn p_noise_alert(gs: &mut GameState, level: &Level, target: MobjHandle, emit
 /// sector is (re)processed whenever it has not yet been stamped this pass, OR it
 /// was stamped at a strictly-greater block depth (`soundtraversed > soundblocks
 /// + 1`) — the latter lets sound that arrives via a shallower path continue
-/// propagating deeper than an earlier, more-blocked visit allowed.
+///   propagating deeper than an earlier, more-blocked visit allowed.
 fn recursive_sound(
     gs: &mut GameState,
     level: &Level,

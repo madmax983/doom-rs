@@ -38,7 +38,7 @@ pub const AMMO_PER_SHOT: [(WeaponType, AmmoType, u32); 9] = [
 ];
 
 /// Autoaim probe range for `P_BulletSlope`: `16*64*FRACUNIT` = 1024 units.
-const BULLET_AUTOAIM_RANGE: Fixed16_16 = Fixed16_16(16 * 64 << 16);
+const BULLET_AUTOAIM_RANGE: Fixed16_16 = Fixed16_16((16 * 64) << 16);
 /// Horizontal probe step used by `P_BulletSlope` (`1<<26` BAM).
 const BULLET_AUTOAIM_SIDE_PROBE: u32 = 1 << 26;
 

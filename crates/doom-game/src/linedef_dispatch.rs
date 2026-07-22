@@ -1388,11 +1388,8 @@ pub fn dispatch_player_crossings(
         if special == 0 {
             continue;
         }
-        match classify_trigger(special) {
-            Some(trigger @ (TriggerType::WalkOnce | TriggerType::WalkRepeat)) => {
-                dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
-            }
-            _ => {}
+        if let Some(trigger @ (TriggerType::WalkOnce | TriggerType::WalkRepeat)) = classify_trigger(special) {
+            dispatch_linedef(gs, level, ld_idx, special, trigger, actor, 0);
         }
     }
 }
