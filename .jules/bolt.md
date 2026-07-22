@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**SmallVec for P_SlideMove fallbacks**
+**Learning:** `Vec::new()` is instantiated per movement slide fallback (`p_slide_move_vanilla` and `slide_traverse`) heavily impacting allocation overhead during collision intensive scenes since the raycast only hits a few lines.
+**Action:** Replace `let mut scratch = Vec::new()` with `let mut scratch: smallvec::SmallVec<[(i32, usize); 8]> = smallvec::SmallVec::new()` keeping the hit lines buffer stack-allocated.
