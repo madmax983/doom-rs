@@ -266,7 +266,7 @@ fn default_entries() -> Vec<(&'static str, Value)> {
         ("key_left", Int(KEY_LEFTARROW)),
         ("key_up", Int(KEY_UPARROW)),
         ("key_down", Int(KEY_DOWNARROW)),
-        ("key_strafeleft", Int(i64::from(b','))), // 44
+        ("key_strafeleft", Int(i64::from(b','))),  // 44
         ("key_straferight", Int(i64::from(b'.'))), // 46
         ("key_fire", Int(KEY_RCTRL)),
         ("key_use", Int(i64::from(b' '))), // 32
@@ -452,7 +452,10 @@ snd_pitchshift 1
 
         // No CLI override (flag at its clap default 9): config value wins.
         let effective = resolve_int(config_value, 9, /*cli_explicit=*/ false, 9);
-        assert_eq!(effective, 6, "default-valued CLI flag must not clobber config");
+        assert_eq!(
+            effective, 6,
+            "default-valued CLI flag must not clobber config"
+        );
 
         // Explicit CLI override: CLI value wins.
         let effective = resolve_int(config_value, 4, /*cli_explicit=*/ true, 9);
