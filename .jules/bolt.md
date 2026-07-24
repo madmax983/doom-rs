@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+## 2026-07-24 - Removing HashMap from Audio Hot Path
+**Learning:** For small mappings where the maximum capacity is known and extremely low (like 8 audio channels), `HashMap` introduces unnecessary hashing and synchronization overhead.
+**Action:** Replace `HashMap` with a linear scan over a fixed-size array (`[Option<T>; 8]`) on hot paths like audio or rendering loops where N is guaranteed to be small.
