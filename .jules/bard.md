@@ -39,3 +39,9 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-07-24 - [Fixed broken and redundant intra-doc links]
+**Confusion:** Rustdoc warnings were emitted for broken links (`record_player_crossings`, `point_on_side_fixed`) that were pointing to private items or items not in scope, and redundant links (`TIC_DURATION`) where the label already mapped perfectly to the explicit path.
+**Clarification:** Modified the broken intra-doc links to use backticks instead (e.g. `` `record_player_crossings` ``), as per the previous learning about not exposing internal module implementation. Also removed the redundant explicit link target for `TIC_DURATION` to resolve the rustdoc warning.
+## 2026-07-24 - [Clarified SectorGraph topology]
+**Confusion:** The `doom-map::graph` module was lacking narrative documentation and examples, leaving developers guessing about how the map sector topology is built and how to use `SectorGraph`.
+**Clarification:** Added module-level narrative docs `//!` that explain *why* the module exists and what a topological graph in this context means. Added a `## Examples` doc-test to `SectorGraph::build` showing exactly how to instantiate and query a graph using an in-memory `WadFile` and `Level::from_wad_stack`.
