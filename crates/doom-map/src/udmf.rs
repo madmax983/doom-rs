@@ -404,12 +404,18 @@ impl UdmfMap {
                     y: required_i16(block, index, "vertex", "y")?,
                 }),
                 "sector" => sectors.push(Sector {
-                    floor_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightfloor")? as i32,
-                    ),
-                    ceil_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightceiling")? as i32,
-                    ),
+                    floor_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightfloor",
+                    )? as i32),
+                    ceil_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightceiling",
+                    )? as i32),
                     floor_flat: required_name(block, index, "sector", "texturefloor")?,
                     ceil_flat: required_name(block, index, "sector", "textureceiling")?,
                     light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,
@@ -1196,5 +1202,71 @@ mod tests {
             map.into_level_data(),
             Err(UdmfError::UnsupportedNamespace(namespace)) if namespace == "zdoom"
         ));
+    }
+
+    #[test]
+    fn test_thing_flags_combinations() {
+        struct TestCase {
+            udmf: &'static str,
+            expected: u16,
+            name: &'static str,
+        }
+
+        let cases = vec![
+            TestCase {
+                udmf: r#"namespace = "doom"; thing { x=0; y=0; type=1; flags=123; }"#,
+                expected: 123,
+                name: "explicit flags field overrides everything else",
+            },
+            TestCase {
+                udmf: r#"namespace = "doom"; thing { x=0; y=0; type=1; }"#,
+                expected: THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD,
+                name: "default when no skill fields are present",
+            },
+            TestCase {
+                udmf: r#"namespace = "doom"; thing { x=0; y=0; type=1; skill1=true; }"#,
+                expected: THING_FLAG_EASY,
+                name: "only skill1 present",
+            },
+            TestCase {
+                udmf: r#"namespace = "doom"; thing { x=0; y=0; type=1; skill3=true; }"#,
+                expected: THING_FLAG_MEDIUM,
+                name: "only skill3 present",
+            },
+            TestCase {
+                udmf: r#"namespace = "doom"; thing { x=0; y=0; type=1; skill5=true; }"#,
+                expected: THING_FLAG_HARD,
+                name: "only skill5 present",
+            },
+            TestCase {
+                udmf: r#"namespace = "doom"; thing { x=0; y=0; type=1; skill1=true; skill3=true; skill5=true; }"#,
+                expected: THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD,
+                name: "skills 1, 3, 5 present",
+            },
+            TestCase {
+                udmf: r#"namespace = "doom"; thing { x=0; y=0; type=1; ambush=true; }"#,
+                expected: THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD | THING_FLAG_AMBUSH,
+                name: "ambush flag sets correctly",
+            },
+            TestCase {
+                udmf: r#"namespace = "doom"; thing { x=0; y=0; type=1; single=false; }"#,
+                expected: THING_FLAG_EASY
+                    | THING_FLAG_MEDIUM
+                    | THING_FLAG_HARD
+                    | THING_FLAG_MULTIPLAYER,
+                name: "single=false sets multiplayer flag",
+            },
+            TestCase {
+                udmf: r#"namespace = "doom"; thing { x=0; y=0; type=1; single=true; }"#,
+                expected: THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD,
+                name: "single=true does not set multiplayer flag",
+            },
+        ];
+
+        for case in cases {
+            let map = UdmfMap::parse(case.udmf.as_bytes()).expect(case.name);
+            let flags = thing_flags(&map.blocks[0], 0).expect(case.name);
+            assert_eq!(flags, case.expected, "failed test: {}", case.name);
+        }
     }
 }
