@@ -4,6 +4,12 @@
 //! primarily useful for pathfinding, topological sorting, and mapping sector relationships.
 //! It establishes connections by finding two-sided linedefs that connect one sector
 //! to another via their front and back sidedefs.
+//!
+//! # Graph Building
+//! The `SectorGraph` acts as a simplified view of the BSP tree, collapsing the
+//! subsectors and lines down into purely logical spaces (sectors) and the
+//! portals (two-sided lines) between them. This allows the AI (or Havoc analyzer)
+//! to reason about reachability without worrying about geometry.
 
 use crate::Level;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -19,6 +25,25 @@ impl SectorGraph {
     /// Builds a topological graph of sectors from the given Level.
     /// Connections are established by finding two-sided linedefs that connect
     /// one sector to another via their front and back sidedefs.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use doom_map::{Level, graph::SectorGraph};
+    /// use doom_wad::WadStack;
+    ///
+    /// let mut stack = WadStack::new();
+    /// stack.push_iwad(vec![]).unwrap();
+    ///
+    /// // Load E1M1 and build the graph.
+    /// let level = Level::from_wad_stack(&stack, "E1M1").unwrap();
+    /// let graph = SectorGraph::build(&level);
+    ///
+    /// // Find a path from the start sector (0) to the exit sector (or any other sector).
+    /// if let Some(path) = graph.shortest_path(0, 10) {
+    ///     println!("Path found with length {}", path.len());
+    /// }
+    /// ```
     #[must_use]
     pub fn build(level: &Level) -> Self {
         let mut adjacency_list: HashMap<usize, HashSet<usize>> = HashMap::new();
