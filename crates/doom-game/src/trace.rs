@@ -857,8 +857,16 @@ mod tests {
         let opening = line_opening(&level, &ld);
         assert!(opening.is_some());
         let (bottom, top) = opening.expect("value must exist in test");
-        assert_eq!(bottom, doom_types::Fixed16_16::from_int(0), "same floor heights -> bottom = 0");
-        assert_eq!(top, doom_types::Fixed16_16::from_int(128), "same ceil heights -> top = 128");
+        assert_eq!(
+            bottom,
+            doom_types::Fixed16_16::from_int(0),
+            "same floor heights -> bottom = 0"
+        );
+        assert_eq!(
+            top,
+            doom_types::Fixed16_16::from_int(128),
+            "same ceil heights -> top = 128"
+        );
     }
 
     #[test]
@@ -885,8 +893,16 @@ mod tests {
         let opening = line_opening(&level, &ld);
         assert!(opening.is_some());
         let (bottom, top) = opening.expect("value must exist in test");
-        assert_eq!(bottom, doom_types::Fixed16_16::from_int(32), "open_bottom = max(0, 32) = 32");
-        assert_eq!(top, doom_types::Fixed16_16::from_int(128), "open_top = min(128, 128) = 128");
+        assert_eq!(
+            bottom,
+            doom_types::Fixed16_16::from_int(32),
+            "open_bottom = max(0, 32) = 32"
+        );
+        assert_eq!(
+            top,
+            doom_types::Fixed16_16::from_int(128),
+            "open_top = min(128, 128) = 128"
+        );
     }
 
     #[test]
