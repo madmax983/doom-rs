@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Removed clone in DemoPlayer::next_tic_cmds**
+**Learning:** Returning owned `Vec`s from an iterator-like structure (e.g. demo player) introduces unnecessary allocations per tick.
+**Action:** Replaced `.clone()` with a slice reference (`&[DemoTicCmd]`) to provide zero-copy access to the internal data buffer.
