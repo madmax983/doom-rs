@@ -272,7 +272,6 @@ fn audio_cmd_thread(
     sfx_cache: &SfxCache,
     on_music_start: impl Fn(),
 ) {
-    let mut origin_channels = std::collections::HashMap::<doom_game::MobjHandle, usize>::new();
     let mut channel_origins = [None; MAX_CHANNELS];
 
     while let Ok(event) = rx.recv() {
@@ -286,7 +285,7 @@ fn audio_cmd_thread(
                 };
 
                 if let Some(origin) = origin {
-                    if let Some(&channel) = origin_channels.get(&origin) {
+                    if let Some(channel) = channel_origins.iter().position(|&o| o == Some(origin)) {
                         mixer.play_on_channel(
                             channel,
                             sfx_id,
@@ -307,14 +306,7 @@ fn audio_cmd_thread(
                     pan,
                     priority,
                 ) {
-                    if let Some(previous_origin) = channel_origins[channel].take() {
-                        origin_channels.remove(&previous_origin);
-                    }
-
-                    if let Some(origin) = origin {
-                        origin_channels.insert(origin, channel);
-                        channel_origins[channel] = Some(origin);
-                    }
+                    channel_origins[channel] = origin;
                 }
             }
 
