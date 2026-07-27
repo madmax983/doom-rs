@@ -404,12 +404,18 @@ impl UdmfMap {
                     y: required_i16(block, index, "vertex", "y")?,
                 }),
                 "sector" => sectors.push(Sector {
-                    floor_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightfloor")? as i32,
-                    ),
-                    ceil_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightceiling")? as i32,
-                    ),
+                    floor_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightfloor",
+                    )? as i32),
+                    ceil_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightceiling",
+                    )? as i32),
                     floor_flat: required_name(block, index, "sector", "texturefloor")?,
                     ceil_flat: required_name(block, index, "sector", "textureceiling")?,
                     light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,
