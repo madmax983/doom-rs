@@ -13,7 +13,7 @@
 **Confusion:** The `doom-map` crate's `udmf` module was missing module-level documentation explaining the high-level concept of what UDMF is, how it relates to the binary WAD format, and how the AST is 'compiled' down into fast arrays.
 **Clarification:** Added a detailed module-level story (`//!`) tracing the data pipeline, and added executable `## Examples` to `UdmfMap::into_level_data` to show how the flexible AST is converted into the classic `Level` arrays. Also documented the `UdmfError` struct comprehensively.
 
-## 2024-07-28 - [Clarified WAD lump discovery behavior]
+## 2026-07-28 - [Clarified WAD lump discovery behavior]
 **Confusion:** The documentation for `WadFile::find_lump` and `WadFile::lumps_between` lacked examples demonstrating the "last defined wins" principle and how markers like `F_START`/`F_END` actually encapsulate data. There were also no executable doc-tests showing case-insensitivity during WAD parsing or how `map_lump_group` pulls out a classic 10-lump map versus UDMF.
 **Clarification:** Added executable `## Examples` to `find_lump`, `find_lump_data`, `lumps_between`, and `map_lump_group` in `doom-wad`, highlighting how the parser handles multiple lumps with identical names and how to extract data bounds using marker lumps.
 ## 2024-04-03 - [Missing Module Docs]
@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2026-07-28 - [Internal modules showing up as broken links]
+**Confusion:** Rustdoc throws warnings when public items link to `pub(crate)` modules or items via intra-doc links. Making those internal items `pub` with `#[doc(hidden)]` is an anti-pattern as it still exposes internal logic to the public API programmatically.
+**Clarification:** To resolve private intra-doc link warnings while strictly keeping the public API clean, remove the intra-doc brackets (`[ ]`) and just use regular backticked markdown code formatting (e.g. `` `module_name` ``) for internal items in public docs.
