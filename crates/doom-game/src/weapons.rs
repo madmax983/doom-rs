@@ -498,10 +498,7 @@ fn a_weapon_ready_bob(gs: &mut GameState) {
     // sy uses finesine[angle & (FINEANGLES/2-1)] (always the positive half, so
     // the weapon only ever sways *down* from WEAPONTOP).
     let sy_angle = angle & (FINEMASK >> 1);
-    let sy_off = crate::geom::fixed_mul(
-        bob,
-        crate::geom::fine_sine(sy_angle << FINE_TO_BAM_SHIFT),
-    );
+    let sy_off = crate::geom::fixed_mul(bob, crate::geom::fine_sine(sy_angle << FINE_TO_BAM_SHIFT));
     gs.player.psprites[psprite_slots::WEAPON].sy = WEAPON_TOP + sy_off;
 }
 
