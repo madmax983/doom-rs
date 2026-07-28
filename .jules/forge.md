@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+## 2026-07-28 - Refactored various clippy warnings in `doom-game`
+**Learning:** Leftover clippy warnings like `clippy::precedence`, `clippy::manual_range_contains`, `clippy::obfuscated_if_else`, `clippy::single_match`, `clippy::if_same_then_else`, `clippy::doc_lazy_continuation`, `clippy::needless_bool`, and `clippy::needless_option_as_deref` create noise and obscure intent, reducing code readability and making it harder to spot real issues.
+**Action:** Always run `cargo clippy --all-targets --all-features -- -D warnings` and fix these warnings idiomatically to maintain a clean foundation.
