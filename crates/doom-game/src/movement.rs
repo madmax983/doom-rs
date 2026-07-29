@@ -1152,7 +1152,12 @@ pub fn move_spechit(
     let row_hi = to_block(top, y_origin, y_count);
 
     // Vanilla `validcount`: each linedef is examined once across the whole scan.
-    let mut seen: Vec<usize> = Vec::new();
+    // `seen` uses `SmallVec` to keep visited linedef tracking on the stack for up
+    // to 32 elements. `move_spechit` is called repeatedly for all moving actors
+    // in the world (sometimes multiple times per tic per actor), making dynamic
+    // heap allocations (`Vec::new()`) extremely costly. A capacity of 32 easily covers
+    // standard map density, resulting in a zero-cost abstraction for 99.9% of calls.
+    let mut seen: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
 
     // Vanilla iterates `for (bx...) for (by...)` — column-major.
     for col in col_lo..=col_hi {
