@@ -404,12 +404,18 @@ impl UdmfMap {
                     y: required_i16(block, index, "vertex", "y")?,
                 }),
                 "sector" => sectors.push(Sector {
-                    floor_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightfloor")? as i32,
-                    ),
-                    ceil_height: Fixed16_16::from_int(
-                        required_i16(block, index, "sector", "heightceiling")? as i32,
-                    ),
+                    floor_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightfloor",
+                    )? as i32),
+                    ceil_height: Fixed16_16::from_int(required_i16(
+                        block,
+                        index,
+                        "sector",
+                        "heightceiling",
+                    )? as i32),
                     floor_flat: required_name(block, index, "sector", "texturefloor")?,
                     ceil_flat: required_name(block, index, "sector", "textureceiling")?,
                     light_level: optional_i16(block, index, "sector", "lightlevel", 160)?,
@@ -1196,5 +1202,119 @@ mod tests {
             map.into_level_data(),
             Err(UdmfError::UnsupportedNamespace(namespace)) if namespace == "zdoom"
         ));
+    }
+
+    #[test]
+    fn should_parse_thing_flags_correctly() {
+        let cases = vec![
+            (
+                "explicit_flags",
+                vec![UdmfField {
+                    key: "flags".to_string(),
+                    value: UdmfValue::Int(42),
+                }],
+                Ok(42),
+            ),
+            (
+                "default_skills",
+                vec![],
+                Ok(THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD),
+            ),
+            (
+                "easy_skill1",
+                vec![UdmfField {
+                    key: "skill1".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                Ok(THING_FLAG_EASY),
+            ),
+            (
+                "easy_skill2",
+                vec![UdmfField {
+                    key: "skill2".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                Ok(THING_FLAG_EASY),
+            ),
+            (
+                "medium_skill3",
+                vec![UdmfField {
+                    key: "skill3".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                Ok(THING_FLAG_MEDIUM),
+            ),
+            (
+                "hard_skill4",
+                vec![UdmfField {
+                    key: "skill4".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                Ok(THING_FLAG_HARD),
+            ),
+            (
+                "hard_skill5",
+                vec![UdmfField {
+                    key: "skill5".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                Ok(THING_FLAG_HARD),
+            ),
+            (
+                "ambush",
+                vec![UdmfField {
+                    key: "ambush".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                Ok(THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD | THING_FLAG_AMBUSH),
+            ),
+            (
+                "single_false_adds_multiplayer",
+                vec![UdmfField {
+                    key: "single".to_string(),
+                    value: UdmfValue::Bool(false),
+                }],
+                Ok(THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD | THING_FLAG_MULTIPLAYER),
+            ),
+            (
+                "single_true_no_multiplayer",
+                vec![UdmfField {
+                    key: "single".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                Ok(THING_FLAG_EASY | THING_FLAG_MEDIUM | THING_FLAG_HARD),
+            ),
+            (
+                "invalid_flags_type",
+                vec![UdmfField {
+                    key: "flags".to_string(),
+                    value: UdmfValue::Bool(true),
+                }],
+                Err("wrong type"),
+            ),
+        ];
+
+        for (name, fields, expected) in cases {
+            let block = UdmfBlock {
+                kind: "thing".to_string(),
+                fields,
+            };
+
+            let result = thing_flags(&block, 0);
+
+            match expected {
+                Ok(expected_flags) => {
+                    assert_eq!(
+                        result.unwrap(),
+                        expected_flags,
+                        "Test case '{}' failed",
+                        name
+                    );
+                }
+                Err(_) => {
+                    assert!(result.is_err(), "Test case '{}' should have failed", name);
+                }
+            }
+        }
     }
 }
