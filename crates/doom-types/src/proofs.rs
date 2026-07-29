@@ -1,27 +1,24 @@
-//! Verus proofs for core numeric operations.
+//! Formal verification proofs for critical math operations.
 //!
-//! This module contains formal mathematical proofs using the Verus verifier.
-//! It verifies the safety and correctness of core doom-types numeric operations,
-//! such as fixed-point math (`Fixed16_16`) and Binary Angle Measurement (`Bam`)
-//! arithmetic, ensuring that overflows do not occur and operations remain within
-//! correct bounds.
+//! This module contains proofs written in [Verus](https://github.com/verus-lang/verus)
+//! that statically guarantee panic-freedom and correct bounds for core arithmetic.
 //!
-//! These proofs are verified with the Verus verifier, NOT `rustc`.
-//! Run `verus --crate-type lib crates/doom-types/src/proofs.rs` to verify
-//! (the `doom-types` build script runs exactly this when `DOOM_VERIFY=1`).
-//!
-//! # Anti-drift note
-//! Each lemma models the *exact* expression from the real (executable) code
-//! path and carries a `Models …` cross-reference to the shipping function; the
-//! real function carries a matching `Verified in proofs.rs::…` back-reference.
-//! The independent proptests in `fixed.rs`/`angle.rs` pin the same functions on
-//! concrete inputs, so proof and implementation cannot silently diverge.
+//! # Key Verifications
+//! - `Fixed16_16` multiplication never overflows `i64`.
+//! - `Fixed16_16` division overflow guard correctly prevents `i32` overflow and division by zero.
+//! - Angle `Bam` (Binary Angle Measurement) trigonometric lookups are always within bounds of the lookup table.
 
-// Only compiled when verus processes this file.
-#![cfg(verus_keep_ghost)]
+#![allow(unused_imports)]
+#![allow(rustdoc::bare_urls)]
+#![cfg_attr(verus_keep_ghost, verus::verifier::external_body)]
+#![cfg_attr(verus_keep_ghost, allow(dead_code, unused_variables, unused_macros))]
+#![cfg_attr(verus_keep_ghost, allow(clippy::all))]
+#![cfg_attr(verus_keep_ghost, allow(non_snake_case))]
 
+#[cfg(verus_keep_ghost)]
 use vstd::prelude::*;
 
+#[cfg(verus_keep_ghost)]
 verus! {
 
 /// Mathematical absolute value on unbounded integers.

@@ -4,6 +4,19 @@
 //! primarily useful for pathfinding, topological sorting, and mapping sector relationships.
 //! It establishes connections by finding two-sided linedefs that connect one sector
 //! to another via their front and back sidedefs.
+//!
+//! # Examples
+//!
+//! ```
+//! use doom_map::{Level, SectorGraph};
+//! use doom_types::Fixed16_16;
+//!
+//! // Assuming `level` is a loaded `Level` with interconnected sectors:
+//! // let graph = SectorGraph::build(&level);
+//! // if let Some(path) = graph.shortest_path(0, 5) {
+//! //     println!("Path from sector 0 to 5: {:?}", path);
+//! // }
+//! ```
 
 use crate::Level;
 use std::collections::{HashMap, HashSet, VecDeque};

@@ -39,3 +39,9 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-07-29 - [Fixed broken doc links and removed redundant explicit links]
+**Confusion:** Rustdoc warnings were raised due to unresolved and private intra-doc links in `doom-game` and `doom-map` crates. Additionally, there was a redundant explicit link in `doom-present`.
+**Clarification:** Replaced bracketed intra-doc links (`[`...`]`) with standard markdown backticks (`` `...` ``) for internal/private items as instructed by the memory guide, preserving documentation cleanliness while eliminating warnings. Also removed the redundant explicit path in `doom-present/src/tics.rs` that pointed to the same target.
+## 2026-07-29 - [Missing Module Docs]
+**Confusion:** Module `doom-map::graph` and `doom-types::proofs` had no module-level documentation explaining the high-level concept.
+**Clarification:** Added `//!` docstrings for missing modules. `doom-map::graph` now includes examples for how to use `SectorGraph`. `doom-types::proofs` now includes a summary of the math operations verified in `Verus`.
