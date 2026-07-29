@@ -2232,6 +2232,507 @@ fn load_demo_player(path: &std::path::Path) -> Result<DemoPlayer> {
 // main
 // ---------------------------------------------------------------------------
 
+fn run_map_exports(args: &Args, level: &Level) -> Result<bool> {
+    if handle_export(
+        args.export_html.as_deref(),
+        || doom_map::export_map_to_html(level),
+        "🌟",
+        "Exported",
+        "HTML report",
+        "HTML report",
+        args.json,
+    )? {
+        return Ok(true);
+    }
+
+    if handle_export(
+        args.export_json.as_deref(),
+        || doom_map::export_map_to_json(level),
+        "🌟",
+        "Exported",
+        "JSON report",
+        "JSON report",
+        args.json,
+    )? {
+        return Ok(true);
+    }
+
+    if handle_export(
+        args.export_svg.as_deref(),
+        || doom_map::export_map_to_svg(level),
+        "🌟",
+        "Exported",
+        "layout",
+        "SVG layout",
+        args.json,
+    )? {
+        return Ok(true);
+    }
+
+    if handle_export(
+        args.export_geojson.as_deref(),
+        || doom_map::export_map_to_geojson(level),
+        "🌟",
+        "Exported",
+        "GeoJSON",
+        "GeoJSON file",
+        args.json,
+    )? {
+        return Ok(true);
+    }
+
+    if handle_export(
+        args.export_dot.as_deref(),
+        || doom_map::SectorGraph::build(level).to_dot(),
+        "🌟",
+        "Exported",
+        "Graphviz DOT",
+        "Graphviz DOT file",
+        args.json,
+    )? {
+        return Ok(true);
+    }
+
+    if handle_export(
+        args.export_obj.as_deref(),
+        || doom_map::obj::export_map_to_obj(level),
+        "🌟",
+        "Exported",
+        "3D model",
+        "3D model",
+        args.json,
+    )? {
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
+fn run_media_exports(args: &Args, wad_stack: &WadStack, warp_str: &str) -> Result<bool> {
+    if let Some(ref paths) = args.export_demo_csv {
+        let input_path = &paths[0];
+        let output_path = &paths[1];
+        let mut player = load_demo_player(input_path)?;
+        let csv_data = doom_demo::export_demo_to_csv(&mut player);
+        std::fs::write(output_path, csv_data).with_context(|| {
+            format!(
+                "Could not save demo CSV to '{}'. Please check your permissions.",
+                output_path.display()
+            )
+        })?;
+        if args.json {
+            let json_data = format!(
+                r#"{{"status":"success","action":"export","type":"demo CSV","file":{:?}}}"#,
+                output_path.display().to_string()
+            );
+            println!("{json_data}");
+        } else {
+            use crossterm::style::Stylize;
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                println!(
+                    "{} {} demo CSV to {}",
+                    "🌟".green(),
+                    "Exported".green().bold(),
+                    output_path.display().to_string().cyan()
+                );
+            } else {
+                println!("Exported demo CSV to {}", output_path.display());
+            }
+        }
+        return Ok(true);
+    }
+
+    if let Some(ref wav_path) = args.export_music_wav {
+        export_music_wav_for_map(wad_stack, warp_str, args.music_loops, wav_path)?;
+        if args.json {
+            let json_data = format!(
+                r#"{{"status":"success","action":"export","type":"music WAV","file":{:?}}}"#,
+                wav_path.display().to_string()
+            );
+            println!("{json_data}");
+        } else {
+            use crossterm::style::Stylize;
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                println!(
+                    "{} {} music WAV to {}",
+                    "🎵".green(),
+                    "Exported".green().bold(),
+                    wav_path.display().to_string().cyan()
+                );
+            } else {
+                println!("Exported music WAV to {}", wav_path.display());
+            }
+        }
+        return Ok(true);
+    }
+
+    if let Some(ref sfx_wav_path) = args.export_sfx_wav {
+        let sfx_name = args
+            .sfx_name
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("--sfx-name is required when using --export-sfx-wav"))?;
+        export_sfx_wav_for_name(wad_stack, sfx_name, sfx_wav_path)?;
+        if args.json {
+            let json_data = format!(
+                r#"{{"status":"success","action":"export","type":"SFX WAV","file":{:?}}}"#,
+                sfx_wav_path.display().to_string()
+            );
+            println!("{json_data}");
+        } else {
+            use crossterm::style::Stylize;
+            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
+                println!(
+                    "{} {} SFX WAV to {}",
+                    "🔊".green(),
+                    "Exported".green().bold(),
+                    sfx_wav_path.display().to_string().cyan()
+                );
+            } else {
+                println!("Exported SFX WAV to {}", sfx_wav_path.display());
+            }
+        }
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
+fn run_analysis_commands(args: &Args, level: &Level, warp_str: &str) -> Result<bool> {
+    if args.analyze {
+        let graph = doom_map::SectorGraph::build(level);
+        let analyzer = doom_map::MapAnalyzer::new(&graph);
+        let chokepoints = analyzer.chokepoints();
+        let areas = analyzer.isolated_areas();
+
+        if args.json {
+            // ⚡ Bolt Optimization:
+            // Formats the JSON array inline directly into a single `String` buffer.
+            // This completely eliminates intermediate `.collect::<Vec<_>>()` chains
+            // and intermediate inner string allocations that previously happened per-area,
+            // saving ~3 heap allocations per JSON generation loop.
+            let mut chokepoints_json = String::new();
+            chokepoints_json.push('[');
+            for (i, s) in chokepoints.iter().enumerate() {
+                if i > 0 {
+                    chokepoints_json.push_str(", ");
+                }
+                chokepoints_json.push_str(&s.to_string());
+            }
+            chokepoints_json.push(']');
+            let mut areas_json = String::new();
+            areas_json.push('[');
+            for (i, a) in areas.iter().enumerate() {
+                if i > 0 {
+                    areas_json.push_str(", ");
+                }
+                areas_json.push('[');
+                for (j, s) in a.iter().enumerate() {
+                    if j > 0 {
+                        areas_json.push_str(", ");
+                    }
+                    areas_json.push_str(&s.to_string());
+                }
+                areas_json.push(']');
+            }
+            areas_json.push(']');
+
+            let json_data = format!(
+                r#"{{
+  "map": "{}",
+  "chokepoints": {},
+  "isolated_areas": {}
+}}"#,
+                warp_str, chokepoints_json, areas_json
+            );
+            println!("{json_data}");
+        } else {
+            use crossterm::style::Stylize;
+            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+            if is_tty {
+                println!(
+                    "{} {} tactical analysis for {}",
+                    "🌟".green(),
+                    "Completed".green().bold(),
+                    warp_str.cyan()
+                );
+            } else {
+                println!("Completed tactical analysis for {}", warp_str);
+            }
+
+            let mut chokepoints_str = String::new();
+            if chokepoints.is_empty() {
+                chokepoints_str.push_str("None");
+            } else {
+                for (i, s) in chokepoints.iter().enumerate() {
+                    if i > 0 {
+                        chokepoints_str.push_str(", ");
+                    }
+                    chokepoints_str.push_str(&s.to_string());
+                }
+            }
+
+            let mut table = comfy_table::Table::new();
+            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+            if is_tty {
+                table.set_header(vec![
+                    comfy_table::Cell::new("Feature")
+                        .fg(comfy_table::Color::Cyan)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                    comfy_table::Cell::new("Data")
+                        .fg(comfy_table::Color::Cyan)
+                        .add_attribute(comfy_table::Attribute::Bold),
+                ]);
+                table.add_row(vec![
+                    comfy_table::Cell::new("🗺️  Chokepoints"),
+                    comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
+                ]);
+                for (i, area) in areas.iter().enumerate() {
+                    let mut area_str = String::new();
+                    for (j, s) in area.iter().enumerate() {
+                        if j > 0 {
+                            area_str.push_str(", ");
+                        }
+                        area_str.push_str(&s.to_string());
+                    }
+                    table.add_row(vec![
+                        comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
+                        comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
+                    ]);
+                }
+            } else {
+                table.set_header(vec![
+                    comfy_table::Cell::new("Feature"),
+                    comfy_table::Cell::new("Data"),
+                ]);
+                table.add_row(vec![
+                    comfy_table::Cell::new("🗺️  Chokepoints"),
+                    comfy_table::Cell::new(&chokepoints_str),
+                ]);
+                for (i, area) in areas.iter().enumerate() {
+                    let mut area_str = String::new();
+                    for (j, s) in area.iter().enumerate() {
+                        if j > 0 {
+                            area_str.push_str(", ");
+                        }
+                        area_str.push_str(&s.to_string());
+                    }
+                    table.add_row(vec![
+                        comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
+                        comfy_table::Cell::new(area_str),
+                    ]);
+                }
+            }
+            println!("{table}");
+        }
+        return Ok(true);
+    }
+
+    if let Some(path_str) = &args.pathfind {
+        use crossterm::style::Stylize;
+        let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+        // Avoids an unnecessary heap allocation from .collect::<Vec<_>>()
+        if let Some((start_str, end_str)) = path_str.split_once(',') {
+            if let (Ok(start), Ok(end)) = (start_str.parse::<usize>(), end_str.parse::<usize>()) {
+                let graph = doom_map::SectorGraph::build(level);
+                if let Some(path) = graph.shortest_path(start, end) {
+                    if args.json {
+                        let mut path_inner = String::new();
+                        for (j, s) in path.iter().enumerate() {
+                            if j > 0 {
+                                path_inner.push_str(", ");
+                            }
+                            path_inner.push_str(&s.to_string());
+                        }
+                        let path_json = format!("[{}]", path_inner);
+                        let json_data = format!(r#"{{ "path": {} }}"#, path_json);
+                        println!("{json_data}");
+                    } else {
+                        let mut path_str = String::new();
+                        for (j, s) in path.iter().enumerate() {
+                            if j > 0 {
+                                path_str.push_str(" ➔ ");
+                            }
+                            path_str.push_str(&s.to_string());
+                        }
+                        if is_tty {
+                            println!(
+                                "{} {} {}",
+                                "🗺️ ".green(),
+                                "Path found:".green().bold(),
+                                path_str.cyan()
+                            );
+                        } else {
+                            println!("Path found: {}", path_str);
+                        }
+                    }
+                } else {
+                    if args.json {
+                        let msg =
+                            format!("No path found between sector {} and sector {}", start, end);
+                        let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                        println!("{json_data}");
+                    } else {
+                        if is_tty {
+                            println!(
+                                "{} {}",
+                                "❌".yellow(),
+                                format!(
+                                    "No path found between sector {} and sector {}",
+                                    start, end
+                                )
+                                .yellow()
+                                .bold()
+                            );
+                        } else {
+                            println!("No path found between sector {} and sector {}", start, end);
+                        }
+                    }
+                }
+            } else {
+                let msg =
+                    "Invalid sector indices. Please provide two integers separated by a comma.";
+                if args.json {
+                    let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                    println!("{json_data}");
+                } else {
+                    if is_tty {
+                        println!("{} {}", "❌".yellow(), msg.yellow().bold());
+                    } else {
+                        println!("{}", msg);
+                    }
+                }
+            }
+        } else {
+            let msg = "Invalid format. Please use START,END (e.g. 0,5).";
+            if args.json {
+                let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
+                println!("{json_data}");
+            } else {
+                if is_tty {
+                    println!("{} {}", "❌".yellow(), msg.yellow().bold());
+                } else {
+                    println!("{}", msg);
+                }
+            }
+        }
+        return Ok(true);
+    }
+
+    if args.map_stats {
+        let mut gs = GameState::new(warp_str);
+        doom_game::spawn_level_things(
+            &mut gs,
+            level,
+            Skill::Medium,
+            doom_game::GameMode::SinglePlayer,
+        );
+        let stats = gs.compute_intermission_stats();
+
+        if args.json {
+            let json_data = format!(
+                r#"{{
+  "map": "{}",
+  "total_kills": {},
+  "total_items": {},
+  "total_secrets": {},
+  "par_time_tics": {}
+}}"#,
+                warp_str,
+                stats.total_kills,
+                stats.total_items,
+                stats.total_secrets,
+                stats.par_time_tics
+            );
+            println!("{json_data}");
+        } else {
+            let par_time_mins = stats.par_time_tics / 35 / 60;
+            let par_time_secs = (stats.par_time_tics / 35) % 60;
+            let par_time_formatted = format!(
+                "{:02}:{:02} ({} tics)",
+                par_time_mins, par_time_secs, stats.par_time_tics
+            );
+
+            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
+            let mut table = comfy_table::Table::new();
+            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+            table
+                .load_preset(comfy_table::presets::UTF8_FULL)
+                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+            if is_tty {
+                table
+                    .set_header(vec![
+                        comfy_table::Cell::new("Statistic")
+                            .fg(comfy_table::Color::Cyan)
+                            .add_attribute(comfy_table::Attribute::Bold),
+                        comfy_table::Cell::new("Value")
+                            .fg(comfy_table::Color::Cyan)
+                            .add_attribute(comfy_table::Attribute::Bold),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("🗺️  Map"),
+                        comfy_table::Cell::new(warp_str.to_string()).fg(comfy_table::Color::Yellow),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("💀 Total Kills"),
+                        comfy_table::Cell::new(stats.total_kills.to_string())
+                            .fg(comfy_table::Color::Yellow),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("📦 Total Items"),
+                        comfy_table::Cell::new(stats.total_items.to_string())
+                            .fg(comfy_table::Color::Green),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("🕵️  Total Secrets"),
+                        comfy_table::Cell::new(stats.total_secrets.to_string())
+                            .fg(comfy_table::Color::Magenta),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("⏱️  Par Time"),
+                        comfy_table::Cell::new(par_time_formatted).fg(comfy_table::Color::Cyan),
+                    ]);
+            } else {
+                table
+                    .set_header(vec![
+                        comfy_table::Cell::new("Statistic"),
+                        comfy_table::Cell::new("Value"),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("Map"),
+                        comfy_table::Cell::new(warp_str.to_string()),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("Total Kills"),
+                        comfy_table::Cell::new(stats.total_kills.to_string()),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("Total Items"),
+                        comfy_table::Cell::new(stats.total_items.to_string()),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("Total Secrets"),
+                        comfy_table::Cell::new(stats.total_secrets.to_string()),
+                    ])
+                    .add_row(vec![
+                        comfy_table::Cell::new("Par Time"),
+                        comfy_table::Cell::new(par_time_formatted),
+                    ]);
+            }
+            println!("{table}");
+        }
+        return Ok(true);
+    }
+
+    Ok(false)
+}
+
 fn handle_export(
     export_path: Option<&std::path::Path>,
     generate_data: impl FnOnce() -> String,
@@ -2335,8 +2836,7 @@ struct VerifyRun {
 
 /// Header line for the full-actor-state dump, shared byte-for-byte with the
 /// instrumented oracle's `$CHOCO_ACTORS_CSV` output.
-const VERIFY_ACTORS_HEADER: &str =
-    "tic,ord,sprite,frame,x,y,z,momx,momy,momz,angle,health,tics";
+const VERIFY_ACTORS_HEADER: &str = "tic,ord,sprite,frame,x,y,z,momx,momy,momz,angle,health,tics";
 
 /// Walk every live actor in vanilla thinker (creation) order and append one CSV
 /// row per mobj to `out`. Ordering mirrors `tic::actors_by_generation`: the
@@ -2383,8 +2883,7 @@ fn dump_actors_for_tic(out: &mut String, tic: usize, gs: &doom_game::GameState) 
 }
 
 /// Header line shared byte-for-byte with the reference oracle.
-const VERIFY_CSV_HEADER: &str =
-    "i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime";
+const VERIFY_CSV_HEADER: &str = "i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime";
 
 /// Build a fresh level for `warp_str`, spawn things from the demo header, and
 /// replay the demo, emitting one CSV row per applied ticcmd.
@@ -2400,9 +2899,8 @@ fn verify_replay_once(
         doom_game::rng_trace_enable();
     }
     // A fresh, mutable level per run: gs.tick mutates sector heights, etc.
-    let mut level = Level::from_wad_stack(wad_stack, warp_str).with_context(|| {
-        format!("Could not load map '{warp_str}' for demo verification.")
-    })?;
+    let mut level = Level::from_wad_stack(wad_stack, warp_str)
+        .with_context(|| format!("Could not load map '{warp_str}' for demo verification."))?;
 
     // Fresh game state: RNG index starts at 0. No title/menu code runs, so the
     // only RNG advancement before the first tic comes from monster-spawn tic
@@ -2493,19 +2991,26 @@ fn verify_replay_once(
     };
 
     // Capture final player-0 state for the console summary.
-    let (final_px_raw, final_py_raw, final_pz_raw, final_px_int, final_py_int, final_pz_int, final_angle) =
-        match gs.mobjslab.get(gs.player.handle) {
-            Some(mo) => (
-                mo.x.raw(),
-                mo.y.raw(),
-                mo.z.raw(),
-                mo.x.to_int(),
-                mo.y.to_int(),
-                mo.z.to_int(),
-                mo.angle.raw(),
-            ),
-            None => (0, 0, 0, 0, 0, 0, 0),
-        };
+    let (
+        final_px_raw,
+        final_py_raw,
+        final_pz_raw,
+        final_px_int,
+        final_py_int,
+        final_pz_int,
+        final_angle,
+    ) = match gs.mobjslab.get(gs.player.handle) {
+        Some(mo) => (
+            mo.x.raw(),
+            mo.y.raw(),
+            mo.z.raw(),
+            mo.x.to_int(),
+            mo.y.to_int(),
+            mo.z.to_int(),
+            mo.angle.raw(),
+        ),
+        None => (0, 0, 0, 0, 0, 0, 0),
+    };
 
     Ok(VerifyRun {
         csv,
@@ -2552,7 +3057,10 @@ fn verify_warp_from_header(wad_stack: &WadStack, header: &doom_demo::LmpHeader) 
     }
     // Fall back to the Doom 1 form even if it did not load, so the caller
     // surfaces a clear load error.
-    candidates.into_iter().next().unwrap_or_else(|| "E1M1".to_owned())
+    candidates
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| "E1M1".to_owned())
 }
 
 /// Resolve demo bytes from `source`: a filesystem path if it exists, otherwise
@@ -2560,8 +3068,8 @@ fn verify_warp_from_header(wad_stack: &WadStack, header: &doom_demo::LmpHeader) 
 fn verify_resolve_demo_bytes(wad_stack: &WadStack, source: &str) -> Result<(Vec<u8>, String)> {
     let path = std::path::Path::new(source);
     if path.is_file() {
-        let bytes = std::fs::read(path)
-            .with_context(|| format!("Failed to read demo file '{source}'"))?;
+        let bytes =
+            std::fs::read(path).with_context(|| format!("Failed to read demo file '{source}'"))?;
         return Ok((bytes, format!("file:{source}")));
     }
     match wad_stack.lump_data(source) {
@@ -2588,7 +3096,12 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
         let trace = args.verify_rng_trace.is_some() && run_idx == 0;
         let actor_dump = args.verify_actors.is_some() && run_idx == 0;
         results.push(verify_replay_once(
-            wad_stack, &warp_str, &header, &demo_bytes, trace, actor_dump,
+            wad_stack,
+            &warp_str,
+            &header,
+            &demo_bytes,
+            trace,
+            actor_dump,
         )?);
     }
 
@@ -2650,10 +3163,7 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
 
     // --- Console summary ---
     let r0 = &results[0];
-    let flags_set = header.deathmatch != 0
-        || header.respawn
-        || header.fast
-        || header.nomonsters;
+    let flags_set = header.deathmatch != 0 || header.respawn || header.fast || header.nomonsters;
 
     println!("=== doom-rs demo verification ===");
     println!("demo source       : {source_label}");
@@ -2796,492 +3306,15 @@ fn run_doom(args: Args, overrides: CliOverrides) -> Result<()> {
         )
     })?;
 
-    if handle_export(
-        args.export_html.as_deref(),
-        || doom_map::export_map_to_html(&level),
-        "🌟",
-        "Exported",
-        "HTML report",
-        "HTML report",
-        args.json,
-    )? {
+    if run_map_exports(&args, &level)? {
         return Ok(());
     }
 
-    if handle_export(
-        args.export_json.as_deref(),
-        || doom_map::export_map_to_json(&level),
-        "🌟",
-        "Exported",
-        "JSON report",
-        "JSON report",
-        args.json,
-    )? {
+    if run_media_exports(&args, &wad_stack, warp_str)? {
         return Ok(());
     }
 
-    if handle_export(
-        args.export_svg.as_deref(),
-        || doom_map::export_map_to_svg(&level),
-        "🌟",
-        "Exported",
-        "layout",
-        "SVG layout",
-        args.json,
-    )? {
-        return Ok(());
-    }
-
-    if handle_export(
-        args.export_geojson.as_deref(),
-        || doom_map::export_map_to_geojson(&level),
-        "🌟",
-        "Exported",
-        "GeoJSON",
-        "GeoJSON file",
-        args.json,
-    )? {
-        return Ok(());
-    }
-
-    if handle_export(
-        args.export_dot.as_deref(),
-        || doom_map::SectorGraph::build(&level).to_dot(),
-        "🌟",
-        "Exported",
-        "Graphviz DOT",
-        "Graphviz DOT file",
-        args.json,
-    )? {
-        return Ok(());
-    }
-
-    if handle_export(
-        args.export_obj.as_deref(),
-        || doom_map::obj::export_map_to_obj(&level),
-        "🌟",
-        "Exported",
-        "3D model",
-        "3D model",
-        args.json,
-    )? {
-        return Ok(());
-    }
-
-    if let Some(ref paths) = args.export_demo_csv {
-        let input_path = &paths[0];
-        let output_path = &paths[1];
-        let mut player = load_demo_player(input_path)?;
-        let csv_data = doom_demo::export_demo_to_csv(&mut player);
-        std::fs::write(output_path, csv_data).with_context(|| {
-            format!(
-                "Could not save demo CSV to '{}'. Please check your permissions.",
-                output_path.display()
-            )
-        })?;
-        if args.json {
-            let json_data = format!(
-                r#"{{"status":"success","action":"export","type":"demo CSV","file":{:?}}}"#,
-                output_path.display().to_string()
-            );
-            println!("{json_data}");
-        } else {
-            use crossterm::style::Stylize;
-            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-                println!(
-                    "{} {} demo CSV to {}",
-                    "🌟".green(),
-                    "Exported".green().bold(),
-                    output_path.display().to_string().cyan()
-                );
-            } else {
-                println!("Exported demo CSV to {}", output_path.display());
-            }
-        }
-        return Ok(());
-    }
-
-    if let Some(ref wav_path) = args.export_music_wav {
-        export_music_wav_for_map(&wad_stack, warp_str, args.music_loops, wav_path)?;
-        if args.json {
-            let json_data = format!(
-                r#"{{"status":"success","action":"export","type":"music WAV","file":{:?}}}"#,
-                wav_path.display().to_string()
-            );
-            println!("{json_data}");
-        } else {
-            use crossterm::style::Stylize;
-            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-                println!(
-                    "{} {} music WAV to {}",
-                    "🎵".green(),
-                    "Exported".green().bold(),
-                    wav_path.display().to_string().cyan()
-                );
-            } else {
-                println!("Exported music WAV to {}", wav_path.display());
-            }
-        }
-        return Ok(());
-    }
-
-    if let Some(ref sfx_wav_path) = args.export_sfx_wav {
-        let sfx_name = args
-            .sfx_name
-            .as_deref()
-            .ok_or_else(|| anyhow::anyhow!("--sfx-name is required when using --export-sfx-wav"))?;
-        export_sfx_wav_for_name(&wad_stack, sfx_name, sfx_wav_path)?;
-        if args.json {
-            let json_data = format!(
-                r#"{{"status":"success","action":"export","type":"SFX WAV","file":{:?}}}"#,
-                sfx_wav_path.display().to_string()
-            );
-            println!("{json_data}");
-        } else {
-            use crossterm::style::Stylize;
-            if std::io::IsTerminal::is_terminal(&std::io::stdout()) {
-                println!(
-                    "{} {} SFX WAV to {}",
-                    "🔊".green(),
-                    "Exported".green().bold(),
-                    sfx_wav_path.display().to_string().cyan()
-                );
-            } else {
-                println!("Exported SFX WAV to {}", sfx_wav_path.display());
-            }
-        }
-        return Ok(());
-    }
-
-    if args.analyze {
-        let graph = doom_map::SectorGraph::build(&level);
-        let analyzer = doom_map::MapAnalyzer::new(&graph);
-        let chokepoints = analyzer.chokepoints();
-        let areas = analyzer.isolated_areas();
-
-        if args.json {
-            // ⚡ Bolt Optimization:
-            // Formats the JSON array inline directly into a single `String` buffer.
-            // This completely eliminates intermediate `.collect::<Vec<_>>()` chains
-            // and intermediate inner string allocations that previously happened per-area,
-            // saving ~3 heap allocations per JSON generation loop.
-            let mut chokepoints_json = String::new();
-            chokepoints_json.push('[');
-            for (i, s) in chokepoints.iter().enumerate() {
-                if i > 0 {
-                    chokepoints_json.push_str(", ");
-                }
-                chokepoints_json.push_str(&s.to_string());
-            }
-            chokepoints_json.push(']');
-            let mut areas_json = String::new();
-            areas_json.push('[');
-            for (i, a) in areas.iter().enumerate() {
-                if i > 0 {
-                    areas_json.push_str(", ");
-                }
-                areas_json.push('[');
-                for (j, s) in a.iter().enumerate() {
-                    if j > 0 {
-                        areas_json.push_str(", ");
-                    }
-                    areas_json.push_str(&s.to_string());
-                }
-                areas_json.push(']');
-            }
-            areas_json.push(']');
-
-            let json_data = format!(
-                r#"{{
-  "map": "{}",
-  "chokepoints": {},
-  "isolated_areas": {}
-}}"#,
-                warp_str, chokepoints_json, areas_json
-            );
-            println!("{json_data}");
-        } else {
-            use crossterm::style::Stylize;
-            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-            if is_tty {
-                println!(
-                    "{} {} tactical analysis for {}",
-                    "🌟".green(),
-                    "Completed".green().bold(),
-                    warp_str.cyan()
-                );
-            } else {
-                println!("Completed tactical analysis for {}", warp_str);
-            }
-
-            let mut chokepoints_str = String::new();
-            if chokepoints.is_empty() {
-                chokepoints_str.push_str("None");
-            } else {
-                for (i, s) in chokepoints.iter().enumerate() {
-                    if i > 0 {
-                        chokepoints_str.push_str(", ");
-                    }
-                    chokepoints_str.push_str(&s.to_string());
-                }
-            }
-
-            let mut table = comfy_table::Table::new();
-            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-            table
-                .load_preset(comfy_table::presets::UTF8_FULL)
-                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
-                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-
-            if is_tty {
-                table.set_header(vec![
-                    comfy_table::Cell::new("Feature")
-                        .fg(comfy_table::Color::Cyan)
-                        .add_attribute(comfy_table::Attribute::Bold),
-                    comfy_table::Cell::new("Data")
-                        .fg(comfy_table::Color::Cyan)
-                        .add_attribute(comfy_table::Attribute::Bold),
-                ]);
-                table.add_row(vec![
-                    comfy_table::Cell::new("🗺️  Chokepoints"),
-                    comfy_table::Cell::new(&chokepoints_str).fg(comfy_table::Color::Yellow),
-                ]);
-                for (i, area) in areas.iter().enumerate() {
-                    let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
-                        if j > 0 {
-                            area_str.push_str(", ");
-                        }
-                        area_str.push_str(&s.to_string());
-                    }
-                    table.add_row(vec![
-                        comfy_table::Cell::new(format!("🏝️  Isolated Area {}", i + 1)),
-                        comfy_table::Cell::new(area_str).fg(comfy_table::Color::Magenta),
-                    ]);
-                }
-            } else {
-                table.set_header(vec![
-                    comfy_table::Cell::new("Feature"),
-                    comfy_table::Cell::new("Data"),
-                ]);
-                table.add_row(vec![
-                    comfy_table::Cell::new("🗺️  Chokepoints"),
-                    comfy_table::Cell::new(&chokepoints_str),
-                ]);
-                for (i, area) in areas.iter().enumerate() {
-                    let mut area_str = String::new();
-                    for (j, s) in area.iter().enumerate() {
-                        if j > 0 {
-                            area_str.push_str(", ");
-                        }
-                        area_str.push_str(&s.to_string());
-                    }
-                    table.add_row(vec![
-                        comfy_table::Cell::new(format!("Isolated Area {}", i + 1)),
-                        comfy_table::Cell::new(area_str),
-                    ]);
-                }
-            }
-            println!("{table}");
-        }
-        return Ok(());
-    }
-
-    if let Some(path_str) = &args.pathfind {
-        use crossterm::style::Stylize;
-        let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-        // Avoids an unnecessary heap allocation from .collect::<Vec<_>>()
-        if let Some((start_str, end_str)) = path_str.split_once(',') {
-            if let (Ok(start), Ok(end)) = (start_str.parse::<usize>(), end_str.parse::<usize>()) {
-                let graph = doom_map::SectorGraph::build(&level);
-                if let Some(path) = graph.shortest_path(start, end) {
-                    if args.json {
-                        let mut path_inner = String::new();
-                        for (j, s) in path.iter().enumerate() {
-                            if j > 0 {
-                                path_inner.push_str(", ");
-                            }
-                            path_inner.push_str(&s.to_string());
-                        }
-                        let path_json = format!("[{}]", path_inner);
-                        let json_data = format!(r#"{{ "path": {} }}"#, path_json);
-                        println!("{json_data}");
-                    } else {
-                        let mut path_str = String::new();
-                        for (j, s) in path.iter().enumerate() {
-                            if j > 0 {
-                                path_str.push_str(" ➔ ");
-                            }
-                            path_str.push_str(&s.to_string());
-                        }
-                        if is_tty {
-                            println!(
-                                "{} {} {}",
-                                "🗺️ ".green(),
-                                "Path found:".green().bold(),
-                                path_str.cyan()
-                            );
-                        } else {
-                            println!("Path found: {}", path_str);
-                        }
-                    }
-                } else {
-                    if args.json {
-                        let msg =
-                            format!("No path found between sector {} and sector {}", start, end);
-                        let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
-                        println!("{json_data}");
-                    } else {
-                        if is_tty {
-                            println!(
-                                "{} {}",
-                                "❌".yellow(),
-                                format!(
-                                    "No path found between sector {} and sector {}",
-                                    start, end
-                                )
-                                .yellow()
-                                .bold()
-                            );
-                        } else {
-                            println!("No path found between sector {} and sector {}", start, end);
-                        }
-                    }
-                }
-            } else {
-                let msg =
-                    "Invalid sector indices. Please provide two integers separated by a comma.";
-                if args.json {
-                    let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
-                    println!("{json_data}");
-                } else {
-                    if is_tty {
-                        println!("{} {}", "❌".yellow(), msg.yellow().bold());
-                    } else {
-                        println!("{}", msg);
-                    }
-                }
-            }
-        } else {
-            let msg = "Invalid format. Please use START,END (e.g. 0,5).";
-            if args.json {
-                let json_data = format!(r#"{{ "error": "{}" }}"#, msg);
-                println!("{json_data}");
-            } else {
-                if is_tty {
-                    println!("{} {}", "❌".yellow(), msg.yellow().bold());
-                } else {
-                    println!("{}", msg);
-                }
-            }
-        }
-        return Ok(());
-    }
-
-    if args.map_stats {
-        let mut gs = GameState::new(warp_str);
-        doom_game::spawn_level_things(
-            &mut gs,
-            &level,
-            Skill::Medium,
-            doom_game::GameMode::SinglePlayer,
-        );
-        let stats = gs.compute_intermission_stats();
-
-        if args.json {
-            let json_data = format!(
-                r#"{{
-  "map": "{}",
-  "total_kills": {},
-  "total_items": {},
-  "total_secrets": {},
-  "par_time_tics": {}
-}}"#,
-                warp_str,
-                stats.total_kills,
-                stats.total_items,
-                stats.total_secrets,
-                stats.par_time_tics
-            );
-            println!("{json_data}");
-        } else {
-            let par_time_mins = stats.par_time_tics / 35 / 60;
-            let par_time_secs = (stats.par_time_tics / 35) % 60;
-            let par_time_formatted = format!(
-                "{:02}:{:02} ({} tics)",
-                par_time_mins, par_time_secs, stats.par_time_tics
-            );
-
-            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stdout());
-            let mut table = comfy_table::Table::new();
-            table.set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-            table
-                .load_preset(comfy_table::presets::UTF8_FULL)
-                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
-                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
-
-            if is_tty {
-                table
-                    .set_header(vec![
-                        comfy_table::Cell::new("Statistic")
-                            .fg(comfy_table::Color::Cyan)
-                            .add_attribute(comfy_table::Attribute::Bold),
-                        comfy_table::Cell::new("Value")
-                            .fg(comfy_table::Color::Cyan)
-                            .add_attribute(comfy_table::Attribute::Bold),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("🗺️  Map"),
-                        comfy_table::Cell::new(warp_str.to_string()).fg(comfy_table::Color::Yellow),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("💀 Total Kills"),
-                        comfy_table::Cell::new(stats.total_kills.to_string())
-                            .fg(comfy_table::Color::Yellow),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("📦 Total Items"),
-                        comfy_table::Cell::new(stats.total_items.to_string())
-                            .fg(comfy_table::Color::Green),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("🕵️  Total Secrets"),
-                        comfy_table::Cell::new(stats.total_secrets.to_string())
-                            .fg(comfy_table::Color::Magenta),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("⏱️  Par Time"),
-                        comfy_table::Cell::new(par_time_formatted).fg(comfy_table::Color::Cyan),
-                    ]);
-            } else {
-                table
-                    .set_header(vec![
-                        comfy_table::Cell::new("Statistic"),
-                        comfy_table::Cell::new("Value"),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Map"),
-                        comfy_table::Cell::new(warp_str.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Total Kills"),
-                        comfy_table::Cell::new(stats.total_kills.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Total Items"),
-                        comfy_table::Cell::new(stats.total_items.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Total Secrets"),
-                        comfy_table::Cell::new(stats.total_secrets.to_string()),
-                    ])
-                    .add_row(vec![
-                        comfy_table::Cell::new("Par Time"),
-                        comfy_table::Cell::new(par_time_formatted),
-                    ]);
-            }
-            println!("{table}");
-        }
+    if run_analysis_commands(&args, &level, warp_str)? {
         return Ok(());
     }
 
@@ -3833,9 +3866,8 @@ fn translate_vanilla_args(argv: Vec<String>, is_commercial: bool) -> Vec<String>
     }
     let mut i = 1usize;
     // Helper: is the token at `idx` a value (not the start of another arg)?
-    let is_value = |toks: &[String], idx: usize| -> bool {
-        idx < toks.len() && !toks[idx].starts_with('-')
-    };
+    let is_value =
+        |toks: &[String], idx: usize| -> bool { idx < toks.len() && !toks[idx].starts_with('-') };
     while i < argv.len() {
         let tok = argv[i].as_str();
         if !VANILLA_FLAGS.contains(&tok) {
@@ -4268,7 +4300,10 @@ mod tests {
     #[test]
     fn config_default_path_is_default_cfg() {
         let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]).expect("args parse");
-        assert_eq!(resolve_config_path(&args), std::path::PathBuf::from("default.cfg"));
+        assert_eq!(
+            resolve_config_path(&args),
+            std::path::PathBuf::from("default.cfg")
+        );
     }
 
     #[test]
@@ -6106,12 +6141,23 @@ mod tests {
     fn expand_response_files_splices_tokens_in_place() {
         let path = unique_temp_log_path("respfile");
         std::fs::write(&path, "--warp E1M3 --pwad \"a b.wad\"").expect("write response file");
-        let raw = sv(&["doom-app", "--iwad", "doom1.wad", &format!("@{}", path.display())]);
+        let raw = sv(&[
+            "doom-app",
+            "--iwad",
+            "doom1.wad",
+            &format!("@{}", path.display()),
+        ]);
         let expanded = expand_response_files(raw).expect("response expansion must succeed");
         assert_eq!(
             expanded,
             sv(&[
-                "doom-app", "--iwad", "doom1.wad", "--warp", "E1M3", "--pwad", "a b.wad",
+                "doom-app",
+                "--iwad",
+                "doom1.wad",
+                "--warp",
+                "E1M3",
+                "--pwad",
+                "a b.wad",
             ]),
         );
         // And the expanded tokens must then parse as normal args.
@@ -6133,15 +6179,9 @@ mod tests {
     #[test]
     fn shim_file_maps_to_repeated_pwad() {
         let out = translate_vanilla_args(sv(&["doom-app", "-file", "a.wad", "b.wad"]), false);
-        assert_eq!(
-            out,
-            sv(&["doom-app", "--pwad", "a.wad", "--pwad", "b.wad"]),
-        );
+        assert_eq!(out, sv(&["doom-app", "--pwad", "a.wad", "--pwad", "b.wad"]),);
         // Stops consuming at the next dash-arg.
-        let out = translate_vanilla_args(
-            sv(&["doom-app", "-file", "a.wad", "-nomonsters"]),
-            false,
-        );
+        let out = translate_vanilla_args(sv(&["doom-app", "-file", "a.wad", "-nomonsters"]), false);
         assert_eq!(out, sv(&["doom-app", "--pwad", "a.wad", "--nomonsters"]));
     }
 
@@ -6178,19 +6218,21 @@ mod tests {
 
         // Commercial IWAD (MAP01 markers): `-warp 5` consumes one arg -> MAP05.
         let doom2 = write_temp_iwad_with_maps(&["MAP01", "MAP02"], "iwad-doom2");
-        let raw = sv(&[
-            "doom-app",
-            "--iwad",
-            doom2.to_str().unwrap(),
-            "-warp",
-            "5",
-        ]);
+        let raw = sv(&["doom-app", "--iwad", doom2.to_str().unwrap(), "-warp", "5"]);
         let out = preprocess_argv(raw).expect("preprocess must succeed");
         let args = Args::try_parse_from(out).expect("parse");
         assert_eq!(args.warp.as_deref(), Some("MAP05"));
 
-        assert!(iwad_is_commercial(&sv(&["doom-app", "--iwad", doom2.to_str().unwrap()])));
-        assert!(!iwad_is_commercial(&sv(&["doom-app", "--iwad", doom1.to_str().unwrap()])));
+        assert!(iwad_is_commercial(&sv(&[
+            "doom-app",
+            "--iwad",
+            doom2.to_str().unwrap()
+        ])));
+        assert!(!iwad_is_commercial(&sv(&[
+            "doom-app",
+            "--iwad",
+            doom1.to_str().unwrap()
+        ])));
 
         let _ = std::fs::remove_file(&doom1);
         let _ = std::fs::remove_file(&doom2);
@@ -6222,10 +6264,8 @@ mod tests {
 
     #[test]
     fn shim_gameplay_flags_set_and_default_off() {
-        let out = translate_vanilla_args(
-            sv(&["doom-app", "-nomonsters", "-respawn", "-fast"]),
-            false,
-        );
+        let out =
+            translate_vanilla_args(sv(&["doom-app", "-nomonsters", "-respawn", "-fast"]), false);
         assert_eq!(
             out,
             sv(&["doom-app", "--nomonsters", "--respawn", "--fast"]),
@@ -6292,13 +6332,27 @@ mod tests {
     #[test]
     fn shim_demo_args_map_to_canonical() {
         let out = translate_vanilla_args(
-            sv(&["doom-app", "-timedemo", "d1", "-playdemo", "d2", "-record", "d3"]),
+            sv(&[
+                "doom-app",
+                "-timedemo",
+                "d1",
+                "-playdemo",
+                "d2",
+                "-record",
+                "d3",
+            ]),
             false,
         );
         assert_eq!(
             out,
             sv(&[
-                "doom-app", "--timedemo", "d1", "--playdemo", "d2", "--record", "d3",
+                "doom-app",
+                "--timedemo",
+                "d1",
+                "--playdemo",
+                "d2",
+                "--record",
+                "d3",
             ]),
         );
     }

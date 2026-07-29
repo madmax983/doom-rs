@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**[2026-07-29 - run_doom God Function]**
+**Learning:** Extracting large sets of related CLI flag handlers into separate helper functions massively reduces the cognitive complexity and length of a CLI main loop or run handler.
+**Action:** When a function grows beyond 100-200 lines mostly due to `if let Some(arg)` checks, group them by domain (e.g. Map Exports, Media Exports, Analysis) and extract them into helpers that return `Result<bool>` (true if handled/exit).
