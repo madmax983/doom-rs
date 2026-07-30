@@ -15,10 +15,14 @@ pub mod csv;
 pub mod header;
 pub mod player;
 pub mod recorder;
+#[cfg(feature = "nova_stats")]
+pub mod stats;
 pub mod ticcmd;
 
 // Re-export primary types at crate root for convenience.
 pub use csv::export_demo_to_csv;
+#[cfg(feature = "nova_stats")]
+pub use stats::{PlayerStats, analyze_demo};
 pub use header::{LMP_HEADER_SIZE, LMP_TERMINATOR, LMP_VERSION_1_9, LmpHeader};
 pub use player::{DemoError, DemoPlayer};
 pub use recorder::DemoRecorder;
