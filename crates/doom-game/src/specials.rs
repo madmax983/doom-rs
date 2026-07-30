@@ -76,6 +76,26 @@ const PERIODIC_DAMAGE_GOD_EXIT: i32 = 20;
 const PERIODIC_DAMAGE_SUPER_HELLSLIME: i32 = 20;
 
 // ---------------------------------------------------------------------------
+// Sector damage types
+// ---------------------------------------------------------------------------
+
+/// Type of periodic sector damage applied to a sector.
+#[derive(strum_macros::FromRepr, Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u16)]
+enum SectorDamageType {
+    /// Special 4: Nukage, blink 0.5s (-20% health randomly, ~5 damage per period)
+    NukageBlink = 4,
+    /// Special 5: Hellslime (-10% health, ~5 damage per period)
+    Hellslime = 5,
+    /// Special 7: Nukage, no blink (-5% health, ~2 damage per period)
+    Nukage = 7,
+    /// Special 11: God exit (-20% health + end level when health <= 10)
+    GodExit = 11,
+    /// Special 16: Super hellslime (-20% health, ~20 damage per period)
+    SuperHellslime = 16,
+}
+
+// ---------------------------------------------------------------------------
 // tick_sector_specials (legacy, kept for backward compatibility)
 // ---------------------------------------------------------------------------
 
@@ -105,10 +125,10 @@ pub fn tick_sector_specials(gs: &mut GameState, level: &Level, handle: MobjHandl
             continue;
         }
 
-        let dmg: i32 = match crate::state::SectorDamageType::from_repr(sector.special) {
-            Some(crate::state::SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
-            Some(crate::state::SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
-            Some(crate::state::SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
+        let dmg: i32 = match SectorDamageType::from_repr(sector.special) {
+            Some(SectorDamageType::Hellslime) => LEGACY_DAMAGE_HELLSLIME,
+            Some(SectorDamageType::Nukage) => LEGACY_DAMAGE_NUKAGE,
+            Some(SectorDamageType::SuperHellslime) => LEGACY_DAMAGE_SUPER_HELLSLIME,
             _ => continue,
         };
 
@@ -165,16 +185,16 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
             continue;
         }
 
-        let Some(damage_type) = crate::state::SectorDamageType::from_repr(sector.special) else {
+        let Some(damage_type) = SectorDamageType::from_repr(sector.special) else {
             continue;
         };
 
         let (damage, ignores_radsuit) = match damage_type {
-            crate::state::SectorDamageType::NukageBlink => (PERIODIC_DAMAGE_NUKAGE_BLINK, false),
-            crate::state::SectorDamageType::Hellslime => (PERIODIC_DAMAGE_HELLSLIME, false),
-            crate::state::SectorDamageType::Nukage => (PERIODIC_DAMAGE_NUKAGE, false),
-            crate::state::SectorDamageType::GodExit => (PERIODIC_DAMAGE_GOD_EXIT, true),
-            crate::state::SectorDamageType::SuperHellslime => {
+            SectorDamageType::NukageBlink => (PERIODIC_DAMAGE_NUKAGE_BLINK, false),
+            SectorDamageType::Hellslime => (PERIODIC_DAMAGE_HELLSLIME, false),
+            SectorDamageType::Nukage => (PERIODIC_DAMAGE_NUKAGE, false),
+            SectorDamageType::GodExit => (PERIODIC_DAMAGE_GOD_EXIT, true),
+            SectorDamageType::SuperHellslime => {
                 (PERIODIC_DAMAGE_SUPER_HELLSLIME, false)
             }
         };
@@ -184,7 +204,7 @@ pub fn tick_sector_damage(gs: &mut GameState, level: &Level) {
         }
 
         // God exit specific behavior
-        if damage_type == crate::state::SectorDamageType::GodExit {
+        if damage_type == SectorDamageType::GodExit {
             if let Some(mo) = gs.mobjslab.get(handle) {
                 if mo.health <= 10 {
                     gs.exit_request = Some(ExitRequest::Normal);
