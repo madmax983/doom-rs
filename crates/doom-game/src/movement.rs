@@ -380,11 +380,7 @@ fn slide_traverse(
             let openbottom = open_bottom.raw();
             let openrange = opentop - openbottom;
 
-            if openrange < mo_height {
-                blocking = true;
-            } else if opentop - mo_z < mo_height {
-                blocking = true;
-            } else if openbottom - mo_z > 24 * FRACUNIT {
+            if openrange < mo_height || opentop - mo_z < mo_height || openbottom - mo_z > 24 * FRACUNIT {
                 blocking = true;
             } else {
                 continue; // this line doesn't block movement
