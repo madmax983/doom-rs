@@ -52,3 +52,6 @@
 **[Extract DoomRng to random.rs]**
 **Tangle:** The `DoomRng` struct and its internal `RNG_TABLE` were defined inside `crates/doom-game/src/movers.rs`, despite `DoomRng` being a foundational engine randomness source used across many components (via `GameState`), causing unrelated files to implicitly depend on the `movers` module just to access rng components, creating low cohesion and breaking domain boundaries.
 **Blueprint:** Extracted `DoomRng` and `RNG_TABLE` into `crates/doom-game/src/random.rs`, matching their responsibility domain. Updated `state.rs` and `savegame.rs` to import from `random` instead of `movers`, ensuring a clearer directed graph of dependencies.
+**[Move SectorDamageType to match domain responsibility]**
+**Tangle:** The `SectorDamageType` enum was defined in `crates/doom-game/src/movers.rs` but was only utilized by the sector specials logic in `crates/doom-game/src/specials.rs`. This created low cohesion by placing business logic in an unrelated file, forcing `specials.rs` to reach into the movers state.
+**Blueprint:** Extracted `SectorDamageType` from `movers.rs` and moved it into `specials.rs` where it is actually used. Stripped the public visibility, ensuring strict internal encapsulation and eliminating unnecessary cross-module dependencies.
