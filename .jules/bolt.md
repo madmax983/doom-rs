@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+## 2026-07-30 - Doc Comments on Let Bindings
+**Learning:** In Rust, applying an outer doc comment (`///`) to a local `let` binding inside a function body is syntactically invalid and produces a compiler error (`E0585`).
+**Action:** Use standard comments (`//`) for inline documentation inside function bodies.
