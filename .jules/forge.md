@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+## 2026-07-31 - Refactored Clippy Warnings in doom-game
+**Learning:** `cargo clippy` can catch subtle operator precedence issues (`16 * 64 << 16`), redundant manual bounds checking (`x <= 12 && x >= 9`), unnecessary `match` blocks when `if let` suffices, and confusing chained conditionals (`.then().unwrap_or()`). Also, wrapping safe function calls inside `unsafe` blocks adds unnecessary noise.
+**Action:** Always prefer explicit parentheses in bitwise math, use `.contains()` for range checks, flatten boolean chains into standard `if/else`, and remove `unsafe` blocks around safe methods to keep code idiomatic and readable.
