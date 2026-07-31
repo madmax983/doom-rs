@@ -3011,7 +3011,7 @@ fn run_doom(args: Args, overrides: CliOverrides) -> Result<()> {
                     warp_str.cyan()
                 );
             } else {
-                println!("Completed tactical analysis for {}", warp_str);
+                println!("🌟 Completed tactical analysis for {}", warp_str);
             }
 
             let mut chokepoints_str = String::new();
@@ -3122,7 +3122,7 @@ fn run_doom(args: Args, overrides: CliOverrides) -> Result<()> {
                                 path_str.cyan()
                             );
                         } else {
-                            println!("Path found: {}", path_str);
+                            println!("🗺️  Path found: {}", path_str);
                         }
                     }
                 } else {
@@ -3144,7 +3144,7 @@ fn run_doom(args: Args, overrides: CliOverrides) -> Result<()> {
                                 .bold()
                             );
                         } else {
-                            println!("No path found between sector {} and sector {}", start, end);
+                            println!("❌ No path found between sector {} and sector {}", start, end);
                         }
                     }
                 }
