@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactoring complex match blocks and nesting with guard clauses**
+**Learning:** Returning booleans with verbose nesting obfuscates the underlying logic and creates Pyramids of Doom. Code with deeply nested identical blocks inside `if/else` can be flattened by combining identical actions.
+**Action:** Use guard clauses and `.contains()` to simplify range checks and combine boolean paths into clearer, single condition expressions. Parentheses should be applied appropriately when performing chained operations like `<<`.
