@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-08-01 - [Fixed unresolved/private intra-doc links to private items]
+**Confusion:** Rustdoc throws warnings when public items link to private functions (like `point_on_side_fixed` or `record_player_crossings`) using intra-doc link brackets `[ ]`.
+**Clarification:** Changed the intra-doc link brackets to regular backticked markdown code formatting (e.g. `` `function_name` ``) for private functions in public docs to avoid unresolved or private intra-doc link warnings while keeping the public API clean.
