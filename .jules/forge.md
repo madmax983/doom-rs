@@ -63,3 +63,6 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+**Clippy refactors - 2026-08-01**
+**Learning:** Multiple minor idiomatic gaps, including using obfuscated if/else instead of normal logic, single matches instead of if-let, and complex if-else chains instead of simple `||` conditions.
+**Action:** Used standard `clippy` checks to refine idiomatic patterns, replacing complex builder-like constructs `.then(||...).unwrap_or(false)` with explicit `if/else`, and extracting simple boolean negations.
