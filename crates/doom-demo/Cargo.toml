@@ -8,5 +8,8 @@ doom-types = { workspace = true }
 doom-game  = { workspace = true }
 thiserror  = { workspace = true }
 
+[features]
+json_export = []
+
 [lints]
 workspace = true

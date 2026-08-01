@@ -16,9 +16,13 @@ pub mod header;
 pub mod player;
 pub mod recorder;
 pub mod ticcmd;
+#[cfg(feature = "json_export")]
+pub mod json;
 
 // Re-export primary types at crate root for convenience.
 pub use csv::export_demo_to_csv;
+#[cfg(feature = "json_export")]
+pub use json::export_demo_to_json;
 pub use header::{LMP_HEADER_SIZE, LMP_TERMINATOR, LMP_VERSION_1_9, LmpHeader};
 pub use player::{DemoError, DemoPlayer};
 pub use recorder::DemoRecorder;
