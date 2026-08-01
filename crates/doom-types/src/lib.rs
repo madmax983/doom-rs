@@ -8,11 +8,13 @@
 
 pub mod angle;
 pub mod bbox;
-mod finesine_table;
 pub mod compat;
+mod finesine_table;
 pub mod fixed;
 pub mod limits;
+pub mod powers;
 pub mod primitives;
+pub mod psprite_slots;
 pub mod ticcmd;
 pub mod vec2;
 
