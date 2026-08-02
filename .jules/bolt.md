@@ -23,3 +23,7 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+
+**2026-08-02 - Array scan outperforms HashMap for small N**
+**Learning:** For extremely small capacities like `MAX_CHANNELS` (8), using a `HashMap` incurs unnecessary hashing and allocation overhead. A linear scan over a fixed-size array is a zero-cost abstraction that is measurably faster and simpler.
+**Action:** Always check the maximum capacity of collections on hot paths. If `N` is < 16, prefer arrays or `SmallVec` with linear scans over `HashMap` or dynamic `Vec` allocations.
