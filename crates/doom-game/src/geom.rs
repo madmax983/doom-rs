@@ -13,7 +13,9 @@ const SLOPERANGE: u32 = 2048;
 
 /// Binary-angle constants (`tables.h`).
 pub const ANG90: u32 = 0x4000_0000;
+/// Binary angle representing 180 degrees (facing opposite direction).
 pub const ANG180: u32 = 0x8000_0000;
+/// Binary angle representing 270 degrees.
 pub const ANG270: u32 = 0xC000_0000;
 
 /// Fixed-point multiply matching vanilla `FixedMul`.
@@ -119,9 +121,13 @@ pub fn fine_sine(angle: u32) -> i32 {
 /// A directed line (`divline_t`) in raw fixed-point.
 #[derive(Clone, Copy, Debug)]
 pub struct DivLine {
+    /// The starting X coordinate (in 16.16 fixed-point format).
     pub x: i32,
+    /// The starting Y coordinate (in 16.16 fixed-point format).
     pub y: i32,
+    /// The change in X across the line's length (in 16.16 fixed-point format).
     pub dx: i32,
+    /// The change in Y across the line's length (in 16.16 fixed-point format).
     pub dy: i32,
 }
 

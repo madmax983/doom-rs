@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2026-08-02 - [Fixed missing documentation and clippy warnings]
+**Confusion:** Rustdoc reported missing documentation for `director` module, `sprite_clip` module, `doom-app` crate root, and various structs. Clippy also flagged unused `unsafe` blocks for `Bam::init_trig_tables()`, `needless_bool`, `if_same_then_else` and other minor formatting issues.
+**Clarification:** Added module-level documentation and executable examples to unblock `cargo doc`. Addressed clippy issues directly by reducing conditionals, fixing indentation, and removing `unsafe` since `Bam::init_trig_tables()` is safe.

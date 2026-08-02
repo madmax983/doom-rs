@@ -15,6 +15,18 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new, empty sprite clip history.
+    ///
+    /// The history pre-allocates space for up to 8 clipping portals.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    ///
+    /// let history = SpriteClipHistory::new();
+    /// assert_eq!(history.iter().count(), 0);
+    /// ```
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {
@@ -26,6 +38,10 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Pushes a new clipping step onto the history.
+    ///
+    /// In Doom's rendering engine, a single column of a sprite rarely clips through more than 4-8 portals.
+    /// If the fixed-size capacity (8) is exceeded, extra clips are dropped to ensure the hot rendering path avoids heap allocations.
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +51,9 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Retrieves the most recent clipping step applied, if any.
+    ///
+    /// This is used to determine the immediate visual boundary a sprite needs to respect during rendering.
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +62,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Iterates over all recorded clipping steps in chronological order.
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }
