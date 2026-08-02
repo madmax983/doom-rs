@@ -10,7 +10,7 @@
 //! - `check_cross_lines()` — detect walk-trigger lines crossed during movement.
 
 use doom_map::Level;
-use doom_types::{Fixed16_16, FIXED_ONE};
+use doom_types::{FIXED_ONE, Fixed16_16};
 
 use crate::mobj::MobjHandle;
 use crate::state::{ExitRequest, GameState, LockedDoorColor, SoundRequest};
@@ -719,11 +719,23 @@ fn dispatch_floors(gs: &mut GameState, level: &mut Level, tag: u16, effect: Line
             true
         }
         FloorLowerToHighest => {
-            crate::specials::ev_floor_lower_to_highest(gs, level, tag, Fixed16_16::from_int(1), false);
+            crate::specials::ev_floor_lower_to_highest(
+                gs,
+                level,
+                tag,
+                Fixed16_16::from_int(1),
+                false,
+            );
             true
         }
         FloorLowerToHighestMinus8 => {
-            crate::specials::ev_floor_lower_to_highest(gs, level, tag, Fixed16_16::from_int(4), true);
+            crate::specials::ev_floor_lower_to_highest(
+                gs,
+                level,
+                tag,
+                Fixed16_16::from_int(4),
+                true,
+            );
             true
         }
         FloorLowerAndChange => {
@@ -1005,7 +1017,8 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavi
         return;
     };
     let sector = s;
-    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
+    let target =
+        crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
     if gs
         .movers
         .active_doors
@@ -1072,7 +1085,8 @@ fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) 
     {
         return;
     }
-    let reopen_h = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
+    let reopen_h =
+        crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
     gs.movers.active_doors.push(crate::state::DoorMover {
         sector: sector_idx,
         target_height: sector.floor_height,
@@ -1096,7 +1110,8 @@ fn open_blazing_door_helper(
         return;
     };
     let sector = s;
-    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
+    let target =
+        crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
     if gs
         .movers
         .active_doors
@@ -1335,8 +1350,7 @@ pub fn queue_monster_crossings(
         let dx = ((v2.x as i32) << 16) - v1x;
         let dy = ((v2.y as i32) << 16) - v1y;
         let side = crate::geom::p_point_on_line_side(new_x.raw(), new_y.raw(), v1x, v1y, dx, dy);
-        let oldside =
-            crate::geom::p_point_on_line_side(old_x.raw(), old_y.raw(), v1x, v1y, dx, dy);
+        let oldside = crate::geom::p_point_on_line_side(old_x.raw(), old_y.raw(), v1x, v1y, dx, dy);
         if side != oldside {
             gs.pending_monster_crossings.push((ld_idx, actor));
         }
