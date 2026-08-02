@@ -1,3 +1,5 @@
+//! Tests for the WAV renderer to ensure it does not infinitely loop on malformed input.
+
 use doom_audio::{mus::MusHeader, mus::MusScore, wav::render_mus_to_wav_mono};
 
 #[test]

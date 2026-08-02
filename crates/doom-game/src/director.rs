@@ -1,19 +1,36 @@
 use crate::PlayerState;
 
+/// Represents the decision made by the AI Director for a given simulation tic.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DirectorAction {
+    /// Indicates the player is doing very well and should face harder resistance.
     SpawnAmbush,
+    /// Indicates the player is struggling and should receive health or ammo items.
     SpawnRelief,
+    /// Indicates the current challenge level is appropriate.
     Maintain,
 }
 
+/// Evaluates player performance (health, ammo, etc.) to dynamically adjust game difficulty.
 pub struct AiDirector;
 
 impl AiDirector {
+    /// Initializes a new AI Director with default tracking metrics.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_game::director::AiDirector;
+    /// let director = AiDirector::new();
+    /// ```
     pub fn new() -> Self {
         Self
     }
 
+    /// Evaluates the current state of the player and determines the next action the engine should take.
+    ///
+    /// This function is called periodically to monitor player health. If the player's health is extremely high,
+    /// it may suggest an ambush. If health is dangerously low, it will suggest spawning relief items.
     pub fn tick(&mut self, player: &PlayerState) -> DirectorAction {
         let health = player.health();
 

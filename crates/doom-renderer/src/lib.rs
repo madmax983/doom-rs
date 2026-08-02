@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Fixed-size history of sprite rendering clipping bounds (portals) to avoid heap allocations.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
