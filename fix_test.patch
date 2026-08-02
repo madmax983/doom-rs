@@ -1,0 +1,19 @@
+<<<<<<< SEARCH
+        for &node in self.graph.adjacency_list.keys() {
+            if !visited.contains(&node) {
+                // Iterative DFS to avoid stack overflow on deep graphs.
+                let mut stack = vec![(node, self.graph.adjacency_list.get(&node).unwrap().iter())];
+
+                visited.insert(node);
+                time += 1;
+=======
+        for &node in self.graph.adjacency_list.keys() {
+            if !visited.contains(&node) {
+                // Iterative DFS to avoid stack overflow on deep graphs.
+                let empty_set = HashSet::new();
+                let neighbors = self.graph.adjacency_list.get(&node).unwrap_or(&empty_set);
+                let mut stack = vec![(node, neighbors.iter())];
+
+                visited.insert(node);
+                time += 1;
+>>>>>>> REPLACE
