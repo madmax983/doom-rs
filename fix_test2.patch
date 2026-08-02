@@ -1,0 +1,12 @@
+<<<<<<< SEARCH
+                            stack.push((u, neighbors_iter));
+                            stack.push((v, self.graph.adjacency_list.get(&v).unwrap().iter()));
+                            pushed_child = true;
+                            break;
+=======
+                            stack.push((u, neighbors_iter));
+                            let v_neighbors = self.graph.adjacency_list.get(&v).unwrap_or(&empty_set);
+                            stack.push((v, v_neighbors.iter()));
+                            pushed_child = true;
+                            break;
+>>>>>>> REPLACE
