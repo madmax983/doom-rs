@@ -8,6 +8,7 @@ default = []
 style_meter = []
 telemetry = []
 director = []
+achievements = ["telemetry", "style_meter"]
 
 [dependencies]
 doom-types = { workspace = true }
