@@ -557,7 +557,11 @@ fn give_weapon(
     // Vanilla `P_GiveWeapon`: a spawned weapon gives two clips of ammo, a
     // dropped one (from a slain monster) gives a single clip. `ammo_amount` is
     // the two-clip amount, so a dropped pickup gives exactly half.
-    let amount = if dropped { ammo_amount / 2 } else { ammo_amount };
+    let amount = if dropped {
+        ammo_amount / 2
+    } else {
+        ammo_amount
+    };
     player.give_ammo(ammo_type, amount);
     if !had_weapon {
         player.pending_weapon = Some(weapon);
@@ -1115,10 +1119,7 @@ mod tests {
         let mut gs = make_game_state();
         gs.player.apply_damage(50);
         let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
-        gs.mobjslab
-            .get_mut(item)
-            .expect("item exists")
-            .z = Fixed16_16::from_int(-16); // delta = -16 < -8
+        gs.mobjslab.get_mut(item).expect("item exists").z = Fixed16_16::from_int(-16); // delta = -16 < -8
         assert!(
             !p_touch_special_thing(&mut gs, item),
             "item 16u below the player is out of Z-reach"
@@ -1132,10 +1133,7 @@ mod tests {
         let mut gs = make_game_state();
         gs.player.apply_damage(50);
         let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
-        gs.mobjslab
-            .get_mut(item)
-            .expect("item exists")
-            .z = Fixed16_16::from_int(57); // delta = 57 > height 56
+        gs.mobjslab.get_mut(item).expect("item exists").z = Fixed16_16::from_int(57); // delta = 57 > height 56
         assert!(
             !p_touch_special_thing(&mut gs, item),
             "item above the player's head is out of Z-reach"
@@ -1149,10 +1147,7 @@ mod tests {
         let mut gs = make_game_state();
         gs.player.apply_damage(50);
         let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
-        gs.mobjslab
-            .get_mut(item)
-            .expect("item exists")
-            .z = Fixed16_16::from_int(-8); // delta = -8, not < -8
+        gs.mobjslab.get_mut(item).expect("item exists").z = Fixed16_16::from_int(-8); // delta = -8, not < -8
         assert!(
             p_touch_special_thing(&mut gs, item),
             "item exactly 8u below is still reachable"
@@ -1168,10 +1163,7 @@ mod tests {
         gs.player.apply_damage(50);
         assert_eq!(gs.player.item_count, 0);
         let item = spawn_item(&mut gs, MobjKind::HealthBonus, 0, 0);
-        gs.mobjslab
-            .get_mut(item)
-            .expect("item exists")
-            .flags |= flags::MF_COUNTITEM;
+        gs.mobjslab.get_mut(item).expect("item exists").flags |= flags::MF_COUNTITEM;
         assert!(p_touch_special_thing(&mut gs, item));
         assert_eq!(
             gs.player.item_count, 1,
