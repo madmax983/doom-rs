@@ -101,6 +101,10 @@ pub struct GameState {
     /// Current skill level (affects Nightmare respawning).
     pub skill: Skill,
 
+    /// The Nemesis Manager tracking the player's rival.
+    #[cfg(feature = "nemesis")]
+    pub nemesis: crate::nemesis::NemesisManager,
+
     /// Actor `generation` boundary separating level-setup actors from
     /// gameplay-spawned ones. Every actor created during `P_SetupLevel`
     /// (map things) has `generation < thinker_setup_boundary`; missiles, puffs,
@@ -168,6 +172,8 @@ impl GameState {
             #[cfg(feature = "telemetry")]
             telemetry: crate::telemetry::SessionTelemetry::new(),
             pending_monster_crossings: Vec::new(),
+            #[cfg(feature = "nemesis")]
+            nemesis: crate::nemesis::NemesisManager::new(),
         }
     }
 
