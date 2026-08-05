@@ -1101,13 +1101,13 @@ pub fn move_spechit(
     new_x: Fixed16_16,
     new_y: Fixed16_16,
     level: &Level,
-) -> Vec<usize> {
+) -> smallvec::SmallVec<[usize; 8]> {
     let (radius, mo_flags) = match slab.get(handle) {
         Some(mo) => (mo.radius, mo.flags),
-        None => return Vec::new(),
+        None => return smallvec::SmallVec::new(),
     };
 
-    let mut spechit: Vec<usize> = Vec::new();
+    let mut spechit: smallvec::SmallVec<[usize; 8]> = smallvec::SmallVec::new();
 
     if mo_flags & flags::MF_NOCLIP != 0 {
         return spechit;
@@ -1152,7 +1152,7 @@ pub fn move_spechit(
     let row_hi = to_block(top, y_origin, y_count);
 
     // Vanilla `validcount`: each linedef is examined once across the whole scan.
-    let mut seen: Vec<usize> = Vec::new();
+    let mut seen: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
 
     // Vanilla iterates `for (bx...) for (by...)` — column-major.
     for col in col_lo..=col_hi {
@@ -1838,8 +1838,8 @@ mod tests {
         // Baseline: no other thing → the straddled special line is collected.
         let sh = move_spechit(&slab, mover, new_x, new_y, &level);
         assert_eq!(
-            sh,
-            vec![0usize],
+            sh.as_slice(),
+            &[0usize],
             "box straddling a two-sided special line must collect it"
         );
 
