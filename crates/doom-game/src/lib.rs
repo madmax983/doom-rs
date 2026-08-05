@@ -48,10 +48,10 @@ pub mod state;
 pub mod states;
 /// Level statistics tracking (kills, items, secrets, etc).
 pub mod stats;
-mod tantoangle;
 #[cfg(feature = "style_meter")]
 pub mod style;
 pub mod switch;
+mod tantoangle;
 #[cfg(feature = "telemetry")]
 pub mod telemetry;
 pub mod tic;
@@ -95,9 +95,7 @@ pub use pickups::{
     doomed_type_to_kind, kind_to_doomed_type, p_check_pickups, p_touch_special_thing,
 };
 pub use player::PlayerState;
-pub use projectile::{
-    ProjectileInfo, p_spawn_missile, p_spawn_player_missile, projectile_info,
-};
+pub use projectile::{ProjectileInfo, p_spawn_missile, p_spawn_player_missile, projectile_info};
 pub use random::{DoomRng, RNG_TABLE};
 pub use random::{RngTraceEntry, rng_trace_enable, rng_trace_set_leveltime, rng_trace_take};
 pub use random::{p_damage_with_variance, p_missile_angle_spread, p_random_chance, randomize_tics};
@@ -150,3 +148,8 @@ pub use weapon_fire::{
     select_next_weapon, weapon_ammo_cost,
 };
 pub use weapons::{fire_weapon, player_can_fire, setup_psprites, tick_psprites};
+
+#[cfg(feature = "achievements")]
+pub mod achievements;
+#[cfg(feature = "achievements")]
+pub use achievements::*;
