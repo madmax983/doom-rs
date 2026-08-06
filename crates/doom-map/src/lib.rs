@@ -37,3 +37,8 @@ pub use svg::export_map_to_svg;
 
 pub mod analyzer;
 pub use analyzer::MapAnalyzer;
+
+#[cfg(feature = "analyze_sight")]
+pub mod sight;
+#[cfg(feature = "analyze_sight")]
+pub use sight::SightAnalyzer;
