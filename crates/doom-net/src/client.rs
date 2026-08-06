@@ -140,6 +140,18 @@ impl NetClient {
     }
 
     /// Mark the client as disconnected.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::{NetClient, NetConfig, RelayServer};
+    ///
+    /// let server = RelayServer::bind("127.0.0.1:0", NetConfig::default()).unwrap();
+    /// let mut client = NetClient::connect(&server.local_addr().unwrap().to_string(), 0).unwrap();
+    ///
+    /// client.disconnect();
+    /// assert!(!client.is_connected());
+    /// ```
     pub const fn disconnect(&mut self) {
         self.connected = false;
         self.transport.set_state(ConnectionState::Disconnected);

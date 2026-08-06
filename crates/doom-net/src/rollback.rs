@@ -150,6 +150,15 @@ impl<S: Clone> RollbackManager<S> {
 
     /// If a rollback is needed, returns the tic to roll back to and clears
     /// the flag.  Returns `None` if no rollback is pending.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::RollbackManager;
+    ///
+    /// let mut rm: RollbackManager<u32> = RollbackManager::new(0);
+    /// assert_eq!(rm.needs_rollback(), None);
+    /// ```
     pub const fn needs_rollback(&mut self) -> Option<u32> {
         self.rollback_tic.take()
     }
@@ -180,6 +189,18 @@ impl<S: Clone> RollbackManager<S> {
     }
 
     /// Advance to the next tic.
+    ///
+    /// ## Examples
+    ///
+    /// ```
+    /// use doom_net::RollbackManager;
+    ///
+    /// let mut rm: RollbackManager<u32> = RollbackManager::new(0);
+    /// assert_eq!(rm.current_tic(), 0);
+    ///
+    /// rm.advance_tic();
+    /// assert_eq!(rm.current_tic(), 1);
+    /// ```
     pub const fn advance_tic(&mut self) {
         self.current_tic = self.current_tic.wrapping_add(1);
     }
