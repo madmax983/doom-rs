@@ -84,32 +84,36 @@ pub fn par_time(level_name: &str) -> u32 {
 
     // Doom 1 format: ExMy
     if name.len() == 4 && name.as_bytes()[0] == b'E' && name.as_bytes()[2] == b'M' {
-        if name.is_ascii() {
-            let ep = (name.as_bytes()[1] as char).to_digit(10);
-            let map = (name.as_bytes()[3] as char).to_digit(10);
-            if let (Some(ep), Some(map)) = (ep, map) {
-                let table = match ep {
-                    1 => Some(&DOOM1_E1_PAR_SECS[..]),
-                    2 => Some(&DOOM1_E2_PAR_SECS[..]),
-                    3 => Some(&DOOM1_E3_PAR_SECS[..]),
-                    _ => None,
-                };
-                if let Some(table) = table {
-                    if (1..=9).contains(&map) {
-                        return table[(map - 1) as usize] * 35;
-                    }
-                }
-            }
+        if !name.is_ascii() {
+            return 0;
+        }
+        let Some(ep) = (name.as_bytes()[1] as char).to_digit(10) else {
+            return 0;
+        };
+        let Some(map) = (name.as_bytes()[3] as char).to_digit(10) else {
+            return 0;
+        };
+
+        let table = match ep {
+            1 => &DOOM1_E1_PAR_SECS[..],
+            2 => &DOOM1_E2_PAR_SECS[..],
+            3 => &DOOM1_E3_PAR_SECS[..],
+            _ => return 0,
+        };
+
+        if (1..=9).contains(&map) {
+            return table[(map - 1) as usize] * 35;
         }
         return 0;
     }
 
     // Doom 2 format: MAPxx
     if name.len() == 5 && name.starts_with("MAP") {
-        if let Ok(num) = name[3..].parse::<usize>() {
-            if (1..=32).contains(&num) {
-                return DOOM2_PAR_SECS[num - 1] * 35;
-            }
+        let Ok(num) = name[3..].parse::<usize>() else {
+            return 0;
+        };
+        if (1..=32).contains(&num) {
+            return DOOM2_PAR_SECS[num - 1] * 35;
         }
         return 0;
     }
