@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-08-06 - [Resolving explicit redundant intra-doc links]
+**Confusion:** Rustdoc throws warnings (`rustdoc::redundant_explicit_links`) when intra-doc links contain an explicit link target that resolves to the exact same path as the text label (e.g. `[`TIC_DURATION`](doom_tui::TIC_DURATION)`).
+**Clarification:** You should use implicit link targets for such intra-doc links, instead of repeating the path (e.g., just `[`TIC_DURATION`]`), which cleans up the documentation source and removes the warnings.
