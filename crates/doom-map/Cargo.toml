@@ -11,3 +11,6 @@ nom        = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
+
+[features]
+analyze_sight = []
