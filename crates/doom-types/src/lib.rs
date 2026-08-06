@@ -8,8 +8,8 @@
 
 pub mod angle;
 pub mod bbox;
-mod finesine_table;
 pub mod compat;
+mod finesine_table;
 pub mod fixed;
 pub mod limits;
 pub mod primitives;
