@@ -23,6 +23,17 @@ const EPSILON: f32 = 1.0e-6;
 // ---------------------------------------------------------------------------
 
 /// Result of a ray trace through the level geometry.
+///
+/// ## Examples
+///
+/// ```
+/// # use doom_game::trace::{TraceResult, TraceHit};
+/// let result = TraceResult {
+///     frac: 0.5,
+///     hit: TraceHit::Nothing,
+/// };
+/// assert_eq!(result.frac, 0.5);
+/// ```
 #[derive(Debug, Clone)]
 pub struct TraceResult {
     /// Distance along the ray where the hit occurred (0.0 = origin, 1.0 = max range).
@@ -32,6 +43,17 @@ pub struct TraceResult {
 }
 
 /// What a ray trace hit.
+///
+/// ## Examples
+///
+/// ```
+/// # use doom_game::trace::TraceHit;
+/// let hit = TraceHit::Wall { linedef_index: 42, hit_x: 0, hit_y: 0 };
+/// match hit {
+///     TraceHit::Wall { linedef_index, .. } => assert_eq!(linedef_index, 42),
+///     _ => panic!("Expected wall hit"),
+/// }
+/// ```
 #[derive(Debug, Clone)]
 pub enum TraceHit {
     /// Hit a wall (one-sided linedef or blocked two-sided).
@@ -857,8 +879,16 @@ mod tests {
         let opening = line_opening(&level, &ld);
         assert!(opening.is_some());
         let (bottom, top) = opening.expect("value must exist in test");
-        assert_eq!(bottom, doom_types::Fixed16_16::from_int(0), "same floor heights -> bottom = 0");
-        assert_eq!(top, doom_types::Fixed16_16::from_int(128), "same ceil heights -> top = 128");
+        assert_eq!(
+            bottom,
+            doom_types::Fixed16_16::from_int(0),
+            "same floor heights -> bottom = 0"
+        );
+        assert_eq!(
+            top,
+            doom_types::Fixed16_16::from_int(128),
+            "same ceil heights -> top = 128"
+        );
     }
 
     #[test]
@@ -885,8 +915,16 @@ mod tests {
         let opening = line_opening(&level, &ld);
         assert!(opening.is_some());
         let (bottom, top) = opening.expect("value must exist in test");
-        assert_eq!(bottom, doom_types::Fixed16_16::from_int(32), "open_bottom = max(0, 32) = 32");
-        assert_eq!(top, doom_types::Fixed16_16::from_int(128), "open_top = min(128, 128) = 128");
+        assert_eq!(
+            bottom,
+            doom_types::Fixed16_16::from_int(32),
+            "open_bottom = max(0, 32) = 32"
+        );
+        assert_eq!(
+            top,
+            doom_types::Fixed16_16::from_int(128),
+            "open_top = min(128, 128) = 128"
+        );
     }
 
     #[test]
