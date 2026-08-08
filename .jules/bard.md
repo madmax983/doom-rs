@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2026-07-12 - [Fixed broken doc tests and warnings in trace/sound/movement]
+**Confusion:** Rustdoc warnings related to bad list item indentation in `doom-game::sound` and private intra-doc links in `doom-game::movement`/`doom-game::linedef_dispatch` referencing `record_player_crossings` were muddying up the doc build. Also, the `TraceResult` and `TraceHit` types in `doom-game::trace` were completely lacking executable examples.
+**Clarification:** Fixed the indentation warning in `recursive_sound`. Switched the private intra-doc links for `record_player_crossings` to standard backticks to prevent exposing internal symbols while maintaining readable docs. Finally, wrote executable `## Examples` doc-tests for `TraceResult` and `TraceHit`, validating they compile and function properly.
