@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 doom-types = { workspace = true }
-doom-game  = { workspace = true }
+
 thiserror  = { workspace = true }
 
 [lints]
