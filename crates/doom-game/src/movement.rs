@@ -1094,6 +1094,11 @@ fn try_move_with_blocker(
 /// The vanilla `!tmthing->player` guard on `ML_BLOCKMONSTERS` is expressed here
 /// via `MF_COUNTKILL` (players and non-monster things carry no `MF_COUNTKILL`),
 /// so this same routine serves the player, monster and missile spechit passes.
+///
+/// **Performance:** `SmallVec` is used to keep the collected lines on the stack.
+/// Movement checks are highly frequent, and the number of special lines crossed
+/// in a single tic is almost always small, making stack allocation ideal here to
+/// avoid a heap allocation on a hot path.
 #[must_use]
 pub fn move_spechit(
     slab: &MobjSlab,
@@ -1101,13 +1106,13 @@ pub fn move_spechit(
     new_x: Fixed16_16,
     new_y: Fixed16_16,
     level: &Level,
-) -> Vec<usize> {
+) -> smallvec::SmallVec<[usize; 8]> {
     let (radius, mo_flags) = match slab.get(handle) {
         Some(mo) => (mo.radius, mo.flags),
-        None => return Vec::new(),
+        None => return smallvec::SmallVec::new(),
     };
 
-    let mut spechit: Vec<usize> = Vec::new();
+    let mut spechit: smallvec::SmallVec<[usize; 8]> = smallvec::SmallVec::new();
 
     if mo_flags & flags::MF_NOCLIP != 0 {
         return spechit;
@@ -1838,8 +1843,8 @@ mod tests {
         // Baseline: no other thing → the straddled special line is collected.
         let sh = move_spechit(&slab, mover, new_x, new_y, &level);
         assert_eq!(
-            sh,
-            vec![0usize],
+            sh.as_slice(),
+            &[0usize],
             "box straddling a two-sided special line must collect it"
         );
 
