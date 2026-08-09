@@ -18,6 +18,7 @@ pub mod json;
 pub mod level;
 pub mod lumps;
 pub mod obj;
+pub mod stl;
 pub mod svg;
 pub mod udmf;
 
@@ -33,6 +34,7 @@ pub use lumps::{
     Sector, Seg, Sidedef, Ssector, Thing, Vertex,
 };
 pub use obj::export_map_to_obj;
+pub use stl::export_map_to_stl;
 pub use svg::export_map_to_svg;
 
 pub mod analyzer;
