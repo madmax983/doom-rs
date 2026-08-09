@@ -1,3 +1,5 @@
+//! Sprite clipping structures for rendering.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
@@ -26,6 +28,8 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Pushes a new clip step onto the history.
+    /// If the history is full, extra clips are dropped to avoid heap allocations.
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;

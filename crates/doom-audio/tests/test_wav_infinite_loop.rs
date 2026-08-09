@@ -1,3 +1,5 @@
+//! Tests for WAV rendering logic in `doom-audio`.
+
 use doom_audio::{mus::MusHeader, mus::MusScore, wav::render_mus_to_wav_mono};
 
 #[test]
