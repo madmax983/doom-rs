@@ -2335,8 +2335,7 @@ struct VerifyRun {
 
 /// Header line for the full-actor-state dump, shared byte-for-byte with the
 /// instrumented oracle's `$CHOCO_ACTORS_CSV` output.
-const VERIFY_ACTORS_HEADER: &str =
-    "tic,ord,sprite,frame,x,y,z,momx,momy,momz,angle,health,tics";
+const VERIFY_ACTORS_HEADER: &str = "tic,ord,sprite,frame,x,y,z,momx,momy,momz,angle,health,tics";
 
 /// Walk every live actor in vanilla thinker (creation) order and append one CSV
 /// row per mobj to `out`. Ordering mirrors `tic::actors_by_generation`: the
@@ -2383,8 +2382,7 @@ fn dump_actors_for_tic(out: &mut String, tic: usize, gs: &doom_game::GameState) 
 }
 
 /// Header line shared byte-for-byte with the reference oracle.
-const VERIFY_CSV_HEADER: &str =
-    "i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime";
+const VERIFY_CSV_HEADER: &str = "i,rndindex,px,py,pz,angle,health,kills,items,secrets,leveltime";
 
 /// Build a fresh level for `warp_str`, spawn things from the demo header, and
 /// replay the demo, emitting one CSV row per applied ticcmd.
@@ -2400,9 +2398,8 @@ fn verify_replay_once(
         doom_game::rng_trace_enable();
     }
     // A fresh, mutable level per run: gs.tick mutates sector heights, etc.
-    let mut level = Level::from_wad_stack(wad_stack, warp_str).with_context(|| {
-        format!("Could not load map '{warp_str}' for demo verification.")
-    })?;
+    let mut level = Level::from_wad_stack(wad_stack, warp_str)
+        .with_context(|| format!("Could not load map '{warp_str}' for demo verification."))?;
 
     // Fresh game state: RNG index starts at 0. No title/menu code runs, so the
     // only RNG advancement before the first tic comes from monster-spawn tic
@@ -2493,19 +2490,26 @@ fn verify_replay_once(
     };
 
     // Capture final player-0 state for the console summary.
-    let (final_px_raw, final_py_raw, final_pz_raw, final_px_int, final_py_int, final_pz_int, final_angle) =
-        match gs.mobjslab.get(gs.player.handle) {
-            Some(mo) => (
-                mo.x.raw(),
-                mo.y.raw(),
-                mo.z.raw(),
-                mo.x.to_int(),
-                mo.y.to_int(),
-                mo.z.to_int(),
-                mo.angle.raw(),
-            ),
-            None => (0, 0, 0, 0, 0, 0, 0),
-        };
+    let (
+        final_px_raw,
+        final_py_raw,
+        final_pz_raw,
+        final_px_int,
+        final_py_int,
+        final_pz_int,
+        final_angle,
+    ) = match gs.mobjslab.get(gs.player.handle) {
+        Some(mo) => (
+            mo.x.raw(),
+            mo.y.raw(),
+            mo.z.raw(),
+            mo.x.to_int(),
+            mo.y.to_int(),
+            mo.z.to_int(),
+            mo.angle.raw(),
+        ),
+        None => (0, 0, 0, 0, 0, 0, 0),
+    };
 
     Ok(VerifyRun {
         csv,
@@ -2552,7 +2556,10 @@ fn verify_warp_from_header(wad_stack: &WadStack, header: &doom_demo::LmpHeader) 
     }
     // Fall back to the Doom 1 form even if it did not load, so the caller
     // surfaces a clear load error.
-    candidates.into_iter().next().unwrap_or_else(|| "E1M1".to_owned())
+    candidates
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| "E1M1".to_owned())
 }
 
 /// Resolve demo bytes from `source`: a filesystem path if it exists, otherwise
@@ -2560,8 +2567,8 @@ fn verify_warp_from_header(wad_stack: &WadStack, header: &doom_demo::LmpHeader) 
 fn verify_resolve_demo_bytes(wad_stack: &WadStack, source: &str) -> Result<(Vec<u8>, String)> {
     let path = std::path::Path::new(source);
     if path.is_file() {
-        let bytes = std::fs::read(path)
-            .with_context(|| format!("Failed to read demo file '{source}'"))?;
+        let bytes =
+            std::fs::read(path).with_context(|| format!("Failed to read demo file '{source}'"))?;
         return Ok((bytes, format!("file:{source}")));
     }
     match wad_stack.lump_data(source) {
@@ -2588,7 +2595,12 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
         let trace = args.verify_rng_trace.is_some() && run_idx == 0;
         let actor_dump = args.verify_actors.is_some() && run_idx == 0;
         results.push(verify_replay_once(
-            wad_stack, &warp_str, &header, &demo_bytes, trace, actor_dump,
+            wad_stack,
+            &warp_str,
+            &header,
+            &demo_bytes,
+            trace,
+            actor_dump,
         )?);
     }
 
@@ -2650,10 +2662,7 @@ fn run_verify_demo(args: &Args, wad_stack: &WadStack, source: &str) -> Result<()
 
     // --- Console summary ---
     let r0 = &results[0];
-    let flags_set = header.deathmatch != 0
-        || header.respawn
-        || header.fast
-        || header.nomonsters;
+    let flags_set = header.deathmatch != 0 || header.respawn || header.fast || header.nomonsters;
 
     println!("=== doom-rs demo verification ===");
     println!("demo source       : {source_label}");
@@ -3114,13 +3123,43 @@ fn run_doom(args: Args, overrides: CliOverrides) -> Result<()> {
                             }
                             path_str.push_str(&s.to_string());
                         }
+
                         if is_tty {
-                            println!(
-                                "{} {} {}",
-                                "🗺️ ".green(),
-                                "Path found:".green().bold(),
-                                path_str.cyan()
-                            );
+                            let mut table = comfy_table::Table::new();
+                            table
+                                .load_preset(comfy_table::presets::UTF8_FULL)
+                                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+                            table.set_header(vec![
+                                comfy_table::Cell::new("Feature")
+                                    .fg(comfy_table::Color::Cyan)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                                comfy_table::Cell::new("Data")
+                                    .fg(comfy_table::Color::Cyan)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("🗺️  Path Status"),
+                                comfy_table::Cell::new("Found")
+                                    .fg(comfy_table::Color::Green)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("🚀 Start Sector"),
+                                comfy_table::Cell::new(start.to_string())
+                                    .fg(comfy_table::Color::Yellow),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("🎯 End Sector"),
+                                comfy_table::Cell::new(end.to_string())
+                                    .fg(comfy_table::Color::Yellow),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("👣 Route"),
+                                comfy_table::Cell::new(path_str).fg(comfy_table::Color::Cyan),
+                            ]);
+                            println!("{}", table);
                         } else {
                             println!("Path found: {}", path_str);
                         }
@@ -3133,16 +3172,37 @@ fn run_doom(args: Args, overrides: CliOverrides) -> Result<()> {
                         println!("{json_data}");
                     } else {
                         if is_tty {
-                            println!(
-                                "{} {}",
-                                "❌".yellow(),
-                                format!(
-                                    "No path found between sector {} and sector {}",
-                                    start, end
-                                )
-                                .yellow()
-                                .bold()
-                            );
+                            let mut table = comfy_table::Table::new();
+                            table
+                                .load_preset(comfy_table::presets::UTF8_FULL)
+                                .apply_modifier(comfy_table::modifiers::UTF8_ROUND_CORNERS)
+                                .set_content_arrangement(comfy_table::ContentArrangement::Dynamic);
+
+                            table.set_header(vec![
+                                comfy_table::Cell::new("Feature")
+                                    .fg(comfy_table::Color::Cyan)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                                comfy_table::Cell::new("Data")
+                                    .fg(comfy_table::Color::Cyan)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("🗺️  Path Status"),
+                                comfy_table::Cell::new("Not Found")
+                                    .fg(comfy_table::Color::Red)
+                                    .add_attribute(comfy_table::Attribute::Bold),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("🚀 Start Sector"),
+                                comfy_table::Cell::new(start.to_string())
+                                    .fg(comfy_table::Color::Yellow),
+                            ]);
+                            table.add_row(vec![
+                                comfy_table::Cell::new("🎯 End Sector"),
+                                comfy_table::Cell::new(end.to_string())
+                                    .fg(comfy_table::Color::Yellow),
+                            ]);
+                            println!("{}", table);
                         } else {
                             println!("No path found between sector {} and sector {}", start, end);
                         }
@@ -3833,9 +3893,8 @@ fn translate_vanilla_args(argv: Vec<String>, is_commercial: bool) -> Vec<String>
     }
     let mut i = 1usize;
     // Helper: is the token at `idx` a value (not the start of another arg)?
-    let is_value = |toks: &[String], idx: usize| -> bool {
-        idx < toks.len() && !toks[idx].starts_with('-')
-    };
+    let is_value =
+        |toks: &[String], idx: usize| -> bool { idx < toks.len() && !toks[idx].starts_with('-') };
     while i < argv.len() {
         let tok = argv[i].as_str();
         if !VANILLA_FLAGS.contains(&tok) {
@@ -4268,7 +4327,10 @@ mod tests {
     #[test]
     fn config_default_path_is_default_cfg() {
         let args = Args::try_parse_from(["doom-app", "--wad", "doom1.wad"]).expect("args parse");
-        assert_eq!(resolve_config_path(&args), std::path::PathBuf::from("default.cfg"));
+        assert_eq!(
+            resolve_config_path(&args),
+            std::path::PathBuf::from("default.cfg")
+        );
     }
 
     #[test]
@@ -6106,12 +6168,23 @@ mod tests {
     fn expand_response_files_splices_tokens_in_place() {
         let path = unique_temp_log_path("respfile");
         std::fs::write(&path, "--warp E1M3 --pwad \"a b.wad\"").expect("write response file");
-        let raw = sv(&["doom-app", "--iwad", "doom1.wad", &format!("@{}", path.display())]);
+        let raw = sv(&[
+            "doom-app",
+            "--iwad",
+            "doom1.wad",
+            &format!("@{}", path.display()),
+        ]);
         let expanded = expand_response_files(raw).expect("response expansion must succeed");
         assert_eq!(
             expanded,
             sv(&[
-                "doom-app", "--iwad", "doom1.wad", "--warp", "E1M3", "--pwad", "a b.wad",
+                "doom-app",
+                "--iwad",
+                "doom1.wad",
+                "--warp",
+                "E1M3",
+                "--pwad",
+                "a b.wad",
             ]),
         );
         // And the expanded tokens must then parse as normal args.
@@ -6133,15 +6206,9 @@ mod tests {
     #[test]
     fn shim_file_maps_to_repeated_pwad() {
         let out = translate_vanilla_args(sv(&["doom-app", "-file", "a.wad", "b.wad"]), false);
-        assert_eq!(
-            out,
-            sv(&["doom-app", "--pwad", "a.wad", "--pwad", "b.wad"]),
-        );
+        assert_eq!(out, sv(&["doom-app", "--pwad", "a.wad", "--pwad", "b.wad"]),);
         // Stops consuming at the next dash-arg.
-        let out = translate_vanilla_args(
-            sv(&["doom-app", "-file", "a.wad", "-nomonsters"]),
-            false,
-        );
+        let out = translate_vanilla_args(sv(&["doom-app", "-file", "a.wad", "-nomonsters"]), false);
         assert_eq!(out, sv(&["doom-app", "--pwad", "a.wad", "--nomonsters"]));
     }
 
@@ -6178,19 +6245,21 @@ mod tests {
 
         // Commercial IWAD (MAP01 markers): `-warp 5` consumes one arg -> MAP05.
         let doom2 = write_temp_iwad_with_maps(&["MAP01", "MAP02"], "iwad-doom2");
-        let raw = sv(&[
-            "doom-app",
-            "--iwad",
-            doom2.to_str().unwrap(),
-            "-warp",
-            "5",
-        ]);
+        let raw = sv(&["doom-app", "--iwad", doom2.to_str().unwrap(), "-warp", "5"]);
         let out = preprocess_argv(raw).expect("preprocess must succeed");
         let args = Args::try_parse_from(out).expect("parse");
         assert_eq!(args.warp.as_deref(), Some("MAP05"));
 
-        assert!(iwad_is_commercial(&sv(&["doom-app", "--iwad", doom2.to_str().unwrap()])));
-        assert!(!iwad_is_commercial(&sv(&["doom-app", "--iwad", doom1.to_str().unwrap()])));
+        assert!(iwad_is_commercial(&sv(&[
+            "doom-app",
+            "--iwad",
+            doom2.to_str().unwrap()
+        ])));
+        assert!(!iwad_is_commercial(&sv(&[
+            "doom-app",
+            "--iwad",
+            doom1.to_str().unwrap()
+        ])));
 
         let _ = std::fs::remove_file(&doom1);
         let _ = std::fs::remove_file(&doom2);
@@ -6222,10 +6291,8 @@ mod tests {
 
     #[test]
     fn shim_gameplay_flags_set_and_default_off() {
-        let out = translate_vanilla_args(
-            sv(&["doom-app", "-nomonsters", "-respawn", "-fast"]),
-            false,
-        );
+        let out =
+            translate_vanilla_args(sv(&["doom-app", "-nomonsters", "-respawn", "-fast"]), false);
         assert_eq!(
             out,
             sv(&["doom-app", "--nomonsters", "--respawn", "--fast"]),
@@ -6292,13 +6359,27 @@ mod tests {
     #[test]
     fn shim_demo_args_map_to_canonical() {
         let out = translate_vanilla_args(
-            sv(&["doom-app", "-timedemo", "d1", "-playdemo", "d2", "-record", "d3"]),
+            sv(&[
+                "doom-app",
+                "-timedemo",
+                "d1",
+                "-playdemo",
+                "d2",
+                "-record",
+                "d3",
+            ]),
             false,
         );
         assert_eq!(
             out,
             sv(&[
-                "doom-app", "--timedemo", "d1", "--playdemo", "d2", "--record", "d3",
+                "doom-app",
+                "--timedemo",
+                "d1",
+                "--playdemo",
+                "d2",
+                "--record",
+                "d3",
             ]),
         );
     }
