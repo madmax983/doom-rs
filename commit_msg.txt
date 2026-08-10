@@ -1,0 +1,6 @@
+🎻 Bard: [documentation update]
+
+📖 Chapter: The `doom-renderer` and `doom-wad` crates
+🔦 Insight: Documented `SpriteClipHistory` structure, and missing `# Panics` sections for `render_level_...` and WAD `parse`.
+🧪 Example: Added 2 executable doctests for `SpriteClipHistory`.
+🖼️ Preview: [Verified clean `cargo doc` output.]
