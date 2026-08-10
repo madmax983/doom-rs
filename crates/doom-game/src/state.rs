@@ -1,8 +1,22 @@
-//! Top-level game simulation state.
+//! The Grand Simulation Engine: Top-level game state.
 //!
-//! `GameState` is fully self-contained and `Clone`-able for rollback.
-//! It must never contain `Arc`, `Rc`, raw pointers, `HashMap`, or any
-//! non-deterministic source (no `Instant::now()`, no OS calls).
+//! `GameState` is the beating heart of the game, completely detached from rendering
+//! or audio. It holds the world, the player, the monsters, and the timeline.
+//!
+//! Because `doom-net` uses rollback netcode to synchronize players across the wire,
+//! this state struct is heavily restricted. It must be a pure, `Clone`-able,
+//! deterministic black box.
+//!
+//! # The Golden Rules of Determinism
+//!
+//! To ensure that tick `N` is always identical across every machine in the universe,
+//! `GameState` must obey the following boundaries:
+//! - **No Shared State:** No `Arc`, `Rc`, or raw pointers. Every object is owned.
+//! - **No Hash Entropy:** No `HashMap` or `HashSet` which iterate in random order. Use `BTreeMap` or `Vec`.
+//! - **No Outside World:** No `Instant::now()`, no file I/O, no OS calls.
+//!
+//! Any mutation to this state must come exclusively through [`doom_types::TicCmd`]
+//! via [`crate::tic::tick_world`].
 
 use doom_types::Fixed16_16;
 
