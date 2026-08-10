@@ -498,10 +498,7 @@ fn a_weapon_ready_bob(gs: &mut GameState) {
     // sy uses finesine[angle & (FINEANGLES/2-1)] (always the positive half, so
     // the weapon only ever sways *down* from WEAPONTOP).
     let sy_angle = angle & (FINEMASK >> 1);
-    let sy_off = crate::geom::fixed_mul(
-        bob,
-        crate::geom::fine_sine(sy_angle << FINE_TO_BAM_SHIFT),
-    );
+    let sy_off = crate::geom::fixed_mul(bob, crate::geom::fine_sine(sy_angle << FINE_TO_BAM_SHIFT));
     gs.player.psprites[psprite_slots::WEAPON].sy = WEAPON_TOP + sy_off;
 }
 
@@ -1716,6 +1713,23 @@ mod tests {
         assert!(
             gs.player.psprites[psprite_slots::WEAPON].sy > WEAPON_TOP,
             "movement bob must sway the resting weapon below WEAPONTOP (sy > WEAPON_TOP)"
+        );
+    }
+
+    #[test]
+    fn tick_psprite_invalid_state_falls_back_to_null() {
+        let mut gs = make_game_state();
+        setup_psprites(&mut gs.player);
+        // Force an invalid state that doesn't exist in STATES array
+        gs.player.psprites[psprite_slots::WEAPON].state = StateNum(65535);
+        gs.player.psprites[psprite_slots::WEAPON].tics = 1;
+
+        tick_psprites(&mut gs, TicCmd::default(), None);
+
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            StateNum::NULL,
+            "an invalid psprite state must fall back to NULL"
         );
     }
 }
