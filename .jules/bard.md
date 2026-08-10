@@ -39,3 +39,7 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+
+## 2026-08-10 - [Clarified GameState determinism constraints]
+**Confusion:** The `GameState` module documentation stated the rules about determinism and rollback but lacked the story-driven explanation of *why* those constraints exist and how they relate to the decoupled architecture and `doom-net`.
+**Clarification:** Rewrote the `state.rs` module-level documentation (`//!`) to explain the "Grand Simulation Engine", framing the restrictions as the "Golden Rules of Determinism" required for rollback netcode, and linking to `doom_types::TicCmd` to explain how state is actually mutated.
