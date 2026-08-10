@@ -1,3 +1,9 @@
+//! Sprite clipping records for occlusion.
+//!
+//! This module provides a stack-allocated history of occlusion portals
+//! ([`SpriteClipHistory`]) used during column rendering to mask out
+//! sprite pixels that fall behind geometry.
+
 use crate::render::SpriteClipStep;
 
 /// A manual ArrayVec-like structure to avoid allocating Vecs on the heap for short sprite clip histories.
@@ -15,6 +21,15 @@ impl Default for SpriteClipHistory {
 }
 
 impl SpriteClipHistory {
+    /// Creates a new, empty [`SpriteClipHistory`].
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    ///
+    /// let history = SpriteClipHistory::new();
+    /// assert!(history.last().is_none());
+    /// ```
     pub const fn new() -> Self {
         Self {
             steps: [SpriteClipStep {
@@ -26,6 +41,19 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Pushes a new [`SpriteClipStep`] onto the history.
+    ///
+    /// Silently ignores the push if the internal array is at maximum capacity (8 elements).
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_renderer::sprite_clip::SpriteClipHistory;
+    /// use doom_renderer::render::SpriteClipStep;
+    ///
+    /// let mut history = SpriteClipHistory::new();
+    /// history.push(SpriteClipStep { depth: 100.0, row: 10, silhouette_height: 50.0 });
+    /// assert!(history.last().is_some());
+    /// ```
     pub fn push(&mut self, step: SpriteClipStep) {
         if self.len < self.steps.len() {
             self.steps[self.len] = step;
@@ -35,6 +63,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns the most recently added [`SpriteClipStep`], or `None` if the history is empty.
     pub fn last(&self) -> Option<&SpriteClipStep> {
         if self.len > 0 {
             Some(&self.steps[self.len - 1])
@@ -43,6 +72,7 @@ impl SpriteClipHistory {
         }
     }
 
+    /// Returns an iterator over the stored [`SpriteClipStep`]s.
     pub fn iter(&self) -> core::slice::Iter<'_, SpriteClipStep> {
         self.steps[..self.len].iter()
     }
