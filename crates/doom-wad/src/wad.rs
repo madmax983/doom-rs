@@ -120,9 +120,30 @@ impl WadFile {
     /// processes every 16-byte lump entry. During this phase, it validates that
     /// every lump's byte range falls strictly within the bounds of the provided data.
     ///
+    /// # Panics
+    /// This function should never panic under normal circumstances. An internal bounds check
+    /// on `data[0..4]` expects a length of 4, which is guaranteed by the preceding `data.len() < 12` check.
+    ///
     /// # Errors
     /// Returns [`WadError`] if the file is malformed, too short, has invalid magic bytes,
     /// or if any lump's claimed offset and size exceed the file's total length.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::{WadFile, WadError};
+    ///
+    /// let valid_iwad_data = vec![
+    ///     b'I', b'W', b'A', b'D', // Magic
+    ///     0, 0, 0, 0,             // Num Lumps
+    ///     12, 0, 0, 0,            // Directory Offset
+    /// ];
+    ///
+    /// let wad = WadFile::parse(valid_iwad_data).unwrap();
+    /// assert_eq!(wad.lump_count(), 0);
+    ///
+    /// let invalid_data = vec![0, 1, 2, 3];
+    /// assert!(matches!(WadFile::parse(invalid_data), Err(WadError::TooShort(4))));
+    /// ```
     pub fn parse(data: Vec<u8>) -> Result<Self, WadError> {
         if data.len() < 12 {
             return Err(WadError::TooShort(data.len()));
