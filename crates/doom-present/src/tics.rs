@@ -3,9 +3,20 @@
 //! `abrash`'s `run_windowed` drives `update`/`render` at a variable (per-redraw)
 //! rate, but Doom's simulation must advance at a fixed 35 Hz. This mirrors
 //! doom-tui's `drain_ready_tics` accumulator, reusing the same
-//! [`TIC_DURATION`](doom_tui::TIC_DURATION) constant so the two hosts stay in
+//! [`TIC_DURATION`] constant so the two hosts stay in
 //! lockstep. The struct holds no game state, so its arithmetic is unit-testable
 //! without a window.
+//!
+//! ## Examples
+//! ```
+//! use std::time::Duration;
+//! use doom_present::TicAccumulator;
+//!
+//! let mut acc = TicAccumulator::new();
+//! // Advance 1 second, producing exactly 35 tics (35 Hz).
+//! let tics_to_run = acc.advance_secs(1.0);
+//! assert_eq!(tics_to_run, 35);
+//! ```
 
 use doom_tui::TIC_DURATION;
 use std::time::Duration;

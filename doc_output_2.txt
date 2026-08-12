@@ -1,0 +1,141 @@
+   Compiling alsa-sys v0.3.1
+    Checking rand_chacha v0.3.1
+    Checking ratatui-macros v0.7.2
+    Checking ratatui-crossterm v0.1.2
+    Checking qoi v0.4.1
+    Checking memmap2 v0.9.11
+    Checking ttf-parser v0.25.1
+    Checking strict-num v0.1.1
+    Checking arrayref v0.3.9
+    Checking vsimd v0.8.0
+    Checking outref v0.5.2
+   Compiling ratatui-image v10.0.8
+    Checking colorchoice v1.0.5
+    Checking anstyle-query v1.1.5
+   Compiling drm-fourcc v2.2.0
+    Checking as-raw-xcb-connection v1.0.1
+    Checking linux-raw-sys v0.9.4
+    Checking cursor-icon v1.2.0
+    Checking xkeysym v0.2.1
+   Compiling getrandom v0.3.4
+    Checking is_terminal_polyfill v1.70.2
+   Compiling smithay-client-toolkit v0.18.1
+    Checking xcursor v0.3.11
+    Checking anstyle v1.0.14
+    Checking abrash-core v0.1.0 (https://github.com/madmax983/abrash?rev=c19530b7ba3808c5e9f980fecffaff43c1abee4b#c19530b7)
+    Checking anstream v1.0.0
+    Checking wayland-cursor v0.31.14
+    Checking drm-sys v0.8.1
+    Checking base64-simd v0.8.0
+    Checking wayland-csd-frame v0.3.0
+    Checking tiny-skia-path v0.11.4
+    Checking image v0.25.10
+    Checking rand v0.8.7
+    Checking owned_ttf_parser v0.25.1
+    Checking ratatui v0.30.2
+    Checking icy_sixel v0.5.1
+    Checking calloop-wayland-source v0.2.0
+    Checking wayland-protocols-wlr v0.2.0
+   Compiling ahash v0.8.12
+    Checking gethostname v1.1.0
+   Compiling tiny-xlib v0.2.5
+   Compiling x11-dl v2.21.0
+    Checking tracing-core v0.1.36
+    Checking ab_glyph_rasterizer v0.1.10
+   Compiling cfg_aliases v0.1.1
+    Checking pin-project-lite v0.2.17
+    Checking strsim v0.11.1
+   Compiling cpal v0.15.3
+    Checking x11rb-protocol v0.13.2
+    Checking clap_lex v1.1.0
+    Checking clap_builder v4.6.6
+    Checking tracing v0.1.44
+   Compiling winit v0.29.15
+    Checking ab_glyph v0.2.32
+    Checking alsa v0.9.1
+    Checking tiny-skia v0.11.4
+    Checking drm-ffi v0.9.1
+    Checking doom-renderer v0.1.0 (/app/crates/doom-renderer)
+   Compiling clap_derive v4.6.4
+    Checking raw-window-handle v0.6.2
+    Checking ctor v0.10.1
+    Checking dasp_sample v0.11.0
+    Checking sctk-adwaita v0.8.3
+    Checking drm v0.14.1
+    Checking abrash-anim v0.1.0 (https://github.com/madmax983/abrash?rev=c19530b7ba3808c5e9f980fecffaff43c1abee4b#c19530b7)
+    Checking xkbcommon-dl v0.4.2
+    Checking wayland-protocols-plasma v0.2.0
+    Checking clap v4.6.6
+    Checking comfy-table v7.2.2
+    Checking smol_str v0.2.2
+    Checking fastrand v2.5.0
+    Checking percent-encoding v2.3.2
+    Checking abrash-skeletal v0.1.0 (https://github.com/madmax983/abrash?rev=c19530b7ba3808c5e9f980fecffaff43c1abee4b#c19530b7)
+    Checking doom-tui v0.1.0 (/app/crates/doom-tui)
+    Checking abrash-raycast v0.1.0 (https://github.com/madmax983/abrash?rev=c19530b7ba3808c5e9f980fecffaff43c1abee4b#c19530b7)
+    Checking abrash-render v0.1.0 (https://github.com/madmax983/abrash?rev=c19530b7ba3808c5e9f980fecffaff43c1abee4b#c19530b7)
+    Checking doom-audio v0.1.0 (/app/crates/doom-audio)
+    Checking doom-demo v0.1.0 (/app/crates/doom-demo)
+    Checking doom-net v0.1.0 (/app/crates/doom-net)
+ Documenting doom-audio v0.1.0 (/app/crates/doom-audio)
+ Documenting doom-app v0.1.0 (/app/crates/doom-app)
+ Documenting doom-tui v0.1.0 (/app/crates/doom-tui)
+ Documenting doom-renderer v0.1.0 (/app/crates/doom-renderer)
+ Documenting doom-demo v0.1.0 (/app/crates/doom-demo)
+ Documenting doom-game v0.1.0 (/app/crates/doom-game)
+ Documenting doom-map v0.1.0 (/app/crates/doom-map)
+warning: unresolved link to `crate::movement::record_player_crossings`
+    --> crates/doom-game/src/linedef_dispatch.rs:1295:8
+     |
+1295 | /// ([`crate::movement::record_player_crossings`]) uses. Only the vani...
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no item named `record_player_crossings` in module `movement`
+     |
+     = note: `#[warn(rustdoc::broken_intra_doc_links)]` on by default
+
+warning: public documentation for `move_spechit` links to private item `record_player_crossings`
+    --> crates/doom-game/src/movement.rs:1088:39
+     |
+1088 | /// and what `P_TryMove` walks (via [`record_player_crossings`]) after a
+     |                                       ^^^^^^^^^^^^^^^^^^^^^^^ this item is private
+     |
+     = note: this link will resolve properly if you pass `--document-private-items`
+     = note: `#[warn(rustdoc::private_intra_doc_links)]` on by default
+
+warning: unresolved link to `point_on_side_fixed`
+   --> crates/doom-map/src/bsp.rs:303:27
+    |
+303 | ... the fixed-point [`point_on_side_fixed`] test, matching vanilla exac...
+    |                       ^^^^^^^^^^^^^^^^^^^ no item named `point_on_side_fixed` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+    = note: `#[warn(rustdoc::broken_intra_doc_links)]` on by default
+
+warning: `doom-map` (lib doc) generated 1 warning
+ Documenting doom-wad v0.1.0 (/app/crates/doom-wad)
+warning: `doom-game` (lib doc) generated 2 warnings
+ Documenting doom-net v0.1.0 (/app/crates/doom-net)
+ Documenting doom-types v0.1.0 (/app/crates/doom-types)
+    Checking x11rb v0.13.2
+    Checking softbuffer v0.4.8
+    Checking abrash v0.1.0 (https://github.com/madmax983/abrash?rev=c19530b7ba3808c5e9f980fecffaff43c1abee4b#c19530b7)
+ Documenting doom-present v0.1.0 (/app/crates/doom-present)
+warning: redundant explicit link target
+ --> crates/doom-present/src/tics.rs:6:22
+  |
+6 | //! [`TIC_DURATION`](doom_tui::TIC_DURATION) constant so the two hosts st...
+  |      --------------  ^^^^^^^^^^^^^^^^^^^^^^ explicit target is redundant
+  |      |
+  |      because label contains path that resolves to same destination
+  |
+  = note: when a link's destination is not specified,
+          the label is used to resolve intra-doc links
+  = note: `#[warn(rustdoc::redundant_explicit_links)]` on by default
+help: remove explicit link target
+  |
+6 - //! [`TIC_DURATION`](doom_tui::TIC_DURATION) constant so the two hosts stay in
+6 + //! [`TIC_DURATION`] constant so the two hosts stay in
+  |
+
+warning: `doom-present` (lib doc) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 30.58s
+   Generated /app/target/doc/doom_app/index.html and 10 other files
