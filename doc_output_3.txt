@@ -1,0 +1,49 @@
+    Blocking waiting for file lock on artifact directory
+warning: redundant explicit link target
+ --> crates/doom-present/src/tics.rs:6:22
+  |
+6 | //! [`TIC_DURATION`](doom_tui::TIC_DURATION) constant so the two hosts st...
+  |      --------------  ^^^^^^^^^^^^^^^^^^^^^^ explicit target is redundant
+  |      |
+  |      because label contains path that resolves to same destination
+  |
+  = note: when a link's destination is not specified,
+          the label is used to resolve intra-doc links
+  = note: `#[warn(rustdoc::redundant_explicit_links)]` on by default
+help: remove explicit link target
+  |
+6 - //! [`TIC_DURATION`](doom_tui::TIC_DURATION) constant so the two hosts stay in
+6 + //! [`TIC_DURATION`] constant so the two hosts stay in
+  |
+
+warning: `doom-present` (lib doc) generated 1 warning
+warning: unresolved link to `crate::movement::record_player_crossings`
+    --> crates/doom-game/src/linedef_dispatch.rs:1295:8
+     |
+1295 | /// ([`crate::movement::record_player_crossings`]) uses. Only the vani...
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no item named `record_player_crossings` in module `movement`
+     |
+     = note: `#[warn(rustdoc::broken_intra_doc_links)]` on by default
+
+warning: public documentation for `move_spechit` links to private item `record_player_crossings`
+    --> crates/doom-game/src/movement.rs:1088:39
+     |
+1088 | /// and what `P_TryMove` walks (via [`record_player_crossings`]) after a
+     |                                       ^^^^^^^^^^^^^^^^^^^^^^^ this item is private
+     |
+     = note: this link will resolve properly if you pass `--document-private-items`
+     = note: `#[warn(rustdoc::private_intra_doc_links)]` on by default
+
+warning: unresolved link to `point_on_side_fixed`
+   --> crates/doom-map/src/bsp.rs:303:27
+    |
+303 | ... the fixed-point [`point_on_side_fixed`] test, matching vanilla exac...
+    |                       ^^^^^^^^^^^^^^^^^^^ no item named `point_on_side_fixed` in scope
+    |
+    = help: to escape `[` and `]` characters, add '\' before them like `\[` or `\]`
+    = note: `#[warn(rustdoc::broken_intra_doc_links)]` on by default
+
+warning: `doom-game` (lib doc) generated 2 warnings
+warning: `doom-map` (lib doc) generated 1 warning
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 15.17s
+   Generated /app/target/doc/doom_app/index.html and 10 other files
