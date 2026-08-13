@@ -226,9 +226,15 @@ impl Sidedef {
         Self {
             x_offset: i16::from_le_bytes([b[0], b[1]]),
             y_offset: i16::from_le_bytes([b[2], b[3]]),
-            upper_texture: b[4..12].try_into().unwrap(),
-            lower_texture: b[12..20].try_into().unwrap(),
-            middle_texture: b[20..28].try_into().unwrap(),
+            upper_texture: b[4..12]
+                .try_into()
+                .expect("Sidedef upper_texture name must be 8 bytes long"),
+            lower_texture: b[12..20]
+                .try_into()
+                .expect("Sidedef lower_texture name must be 8 bytes long"),
+            middle_texture: b[20..28]
+                .try_into()
+                .expect("Sidedef middle_texture name must be 8 bytes long"),
             sector: u16::from_le_bytes([b[28], b[29]]),
         }
     }
@@ -524,8 +530,12 @@ impl Sector {
         Self {
             floor_height: Fixed16_16::from_int(i16::from_le_bytes([b[0], b[1]]) as i32),
             ceil_height: Fixed16_16::from_int(i16::from_le_bytes([b[2], b[3]]) as i32),
-            floor_flat: b[4..12].try_into().unwrap(),
-            ceil_flat: b[12..20].try_into().unwrap(),
+            floor_flat: b[4..12]
+                .try_into()
+                .expect("Sector floor_flat name must be 8 bytes long"),
+            ceil_flat: b[12..20]
+                .try_into()
+                .expect("Sector ceil_flat name must be 8 bytes long"),
             light_level: i16::from_le_bytes([b[20], b[21]]),
             special: u16::from_le_bytes([b[22], b[23]]),
             tag: u16::from_le_bytes([b[24], b[25]]),
