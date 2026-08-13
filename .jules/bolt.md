@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**SmallVec for Stack Bounds**
+**Learning:** Vanilla Doom's `spechit` and `seen` lists during collision have strict bounds (e.g. max 8 and 32 items). Replacing `Vec` with `SmallVec` eliminates heap allocations entirely on the collision/movement hot paths. SmallVec requires careful `as_slice()` conversion for unit tests that match against arrays (`&[0usize]`).
+**Action:** Always check the capacity requirements for intermediate lists in tight loops. If the max capacity is small and determinable, use `smallvec::SmallVec` to keep allocations on the stack.
