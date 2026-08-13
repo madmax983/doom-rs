@@ -120,9 +120,22 @@ impl WadFile {
     /// processes every 16-byte lump entry. During this phase, it validates that
     /// every lump's byte range falls strictly within the bounds of the provided data.
     ///
+    /// # Panics
+    /// Panics if the first 4 bytes cannot be extracted (e.g. if the slice is too short),
+    /// however this is protected by an explicit length check so it should never panic in practice.
+    ///
     /// # Errors
     /// Returns [`WadError`] if the file is malformed, too short, has invalid magic bytes,
     /// or if any lump's claimed offset and size exceed the file's total length.
+    ///
+    /// ## Examples
+    /// ```
+    /// use doom_wad::{WadFile, WadKind};
+    ///
+    /// let data = b"IWAD\x00\x00\x00\x00\x0c\x00\x00\x00".to_vec();
+    /// let wad = WadFile::parse(data).unwrap();
+    /// assert_eq!(wad.kind(), WadKind::Iwad);
+    /// ```
     pub fn parse(data: Vec<u8>) -> Result<Self, WadError> {
         if data.len() < 12 {
             return Err(WadError::TooShort(data.len()));
