@@ -1083,4 +1083,17 @@ mod tests {
             assert!(udmf.find_lump("NONEXISTENT").is_none());
         }
     }
+
+    #[test]
+    fn udmf_map_lump_group_missing_endmap_returns_none() {
+        let wad_bytes = make_iwad(&[
+            ("MAP01", b""),
+            ("TEXTMAP", b""),
+            ("ZNODES", b""),
+            // Missing ENDMAP
+        ]);
+        let wad = WadFile::parse(wad_bytes).expect("value must exist in test");
+
+        assert!(wad.map_lump_group("MAP01").is_none());
+    }
 }
