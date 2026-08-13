@@ -63,3 +63,6 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+**Extracting Skullfly logic**
+**Learning:** Embedded state-reset logic within large movement functions bloats the primary path. Extracting such conditional logic into helper functions cleans up the main function's readability.
+**Action:** Look out for complex conditional logic blocks that can be extracted to well-named helper functions to improve clarity.
