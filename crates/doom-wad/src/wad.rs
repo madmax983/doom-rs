@@ -123,6 +123,10 @@ impl WadFile {
     /// # Errors
     /// Returns [`WadError`] if the file is malformed, too short, has invalid magic bytes,
     /// or if any lump's claimed offset and size exceed the file's total length.
+    ///
+    /// # Panics
+    /// Panics if the internal slice conversion to an array fails, though this is unreachable
+    /// because the prior length check ensures the buffer is at least 12 bytes long.
     pub fn parse(data: Vec<u8>) -> Result<Self, WadError> {
         if data.len() < 12 {
             return Err(WadError::TooShort(data.len()));
