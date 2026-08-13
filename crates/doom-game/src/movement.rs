@@ -240,7 +240,7 @@ fn collect_slide_intercepts(
     dy: i32,
     out: &mut Vec<(i32, usize)>,
 ) {
-    use crate::geom::{p_intercept_vector, p_point_on_divline_side, p_point_on_line_side, DivLine};
+    use crate::geom::{DivLine, p_intercept_vector, p_point_on_divline_side, p_point_on_line_side};
 
     out.clear();
     let trace = DivLine {
@@ -412,8 +412,8 @@ fn p_hit_slide_line(
     tmymove: &mut i32,
 ) {
     use crate::geom::{
-        fine_cosine, fine_sine, fixed_mul, p_aprox_distance, p_point_on_line_side,
-        r_point_to_angle2, ANG180,
+        ANG180, fine_cosine, fine_sine, fixed_mul, p_aprox_distance, p_point_on_line_side,
+        r_point_to_angle2,
     };
 
     let Some(ld) = level.linedefs.get(ld_idx) else {
@@ -472,10 +472,15 @@ pub fn p_slide_move_vanilla(
             return;
         }
 
-        let Some((mo_x, mo_y, momx, momy, radius)) = slab
-            .get(handle)
-            .map(|mo| (mo.x.raw(), mo.y.raw(), mo.momx.raw(), mo.momy.raw(), mo.radius.raw()))
-        else {
+        let Some((mo_x, mo_y, momx, momy, radius)) = slab.get(handle).map(|mo| {
+            (
+                mo.x.raw(),
+                mo.y.raw(),
+                mo.momx.raw(),
+                mo.momy.raw(),
+                mo.radius.raw(),
+            )
+        }) else {
             return;
         };
 
@@ -496,9 +501,39 @@ pub fn p_slide_move_vanilla(
             best_line: None,
         };
 
-        slide_traverse(slab, handle, level, leadx, leady, momx, momy, &mut scratch, &mut state);
-        slide_traverse(slab, handle, level, trailx, leady, momx, momy, &mut scratch, &mut state);
-        slide_traverse(slab, handle, level, leadx, traily, momx, momy, &mut scratch, &mut state);
+        slide_traverse(
+            slab,
+            handle,
+            level,
+            leadx,
+            leady,
+            momx,
+            momy,
+            &mut scratch,
+            &mut state,
+        );
+        slide_traverse(
+            slab,
+            handle,
+            level,
+            trailx,
+            leady,
+            momx,
+            momy,
+            &mut scratch,
+            &mut state,
+        );
+        slide_traverse(
+            slab,
+            handle,
+            level,
+            leadx,
+            traily,
+            momx,
+            momy,
+            &mut scratch,
+            &mut state,
+        );
 
         // Move up to the wall.
         if state.best_frac == FRACUNIT + 1 {
@@ -568,15 +603,8 @@ pub fn p_slide_move_vanilla(
 }
 
 /// Vanilla `stairstep` fallback inside `P_SlideMove`.
-fn slide_stairstep(
-    slab: &mut MobjSlab,
-    handle: MobjHandle,
-    level: &Level,
-    sink: &mut Vec<usize>,
-) {
-    let Some((mo_x, mo_y, momx, momy)) = slab
-        .get(handle)
-        .map(|mo| (mo.x, mo.y, mo.momx, mo.momy))
+fn slide_stairstep(slab: &mut MobjSlab, handle: MobjHandle, level: &Level, sink: &mut Vec<usize>) {
+    let Some((mo_x, mo_y, momx, momy)) = slab.get(handle).map(|mo| (mo.x, mo.y, mo.momx, mo.momy))
     else {
         return;
     };
@@ -615,9 +643,7 @@ pub(crate) fn support_state_at(
         cell.max(0).min(count - 1) as usize
     };
 
-    let mut floor_z = level
-        .floor_at(x.to_int(), y.to_int())
-        .unwrap_or(fallback_z);
+    let mut floor_z = level.floor_at(x.to_int(), y.to_int()).unwrap_or(fallback_z);
 
     let col_lo = to_block(left, x_origin, x_count);
     let col_hi = to_block(right, x_origin, x_count);
@@ -1095,19 +1121,20 @@ fn try_move_with_blocker(
 /// via `MF_COUNTKILL` (players and non-monster things carry no `MF_COUNTKILL`),
 /// so this same routine serves the player, monster and missile spechit passes.
 #[must_use]
+/// ⚡ Bolt: Stack-allocated spechit reduces heap allocations per frame by keeping small lists on the stack.
 pub fn move_spechit(
     slab: &MobjSlab,
     handle: MobjHandle,
     new_x: Fixed16_16,
     new_y: Fixed16_16,
     level: &Level,
-) -> Vec<usize> {
+) -> smallvec::SmallVec<[usize; 8]> {
     let (radius, mo_flags) = match slab.get(handle) {
         Some(mo) => (mo.radius, mo.flags),
-        None => return Vec::new(),
+        None => return smallvec::SmallVec::new(),
     };
 
-    let mut spechit: Vec<usize> = Vec::new();
+    let mut spechit: smallvec::SmallVec<[usize; 8]> = smallvec::SmallVec::new();
 
     if mo_flags & flags::MF_NOCLIP != 0 {
         return spechit;
@@ -1152,7 +1179,8 @@ pub fn move_spechit(
     let row_hi = to_block(top, y_origin, y_count);
 
     // Vanilla `validcount`: each linedef is examined once across the whole scan.
-    let mut seen: Vec<usize> = Vec::new();
+    // ⚡ Bolt: Stack-allocated seen reduces heap allocations per frame by keeping small lists on the stack.
+    let mut seen: smallvec::SmallVec<[usize; 32]> = smallvec::SmallVec::new();
 
     // Vanilla iterates `for (bx...) for (by...)` — column-major.
     for col in col_lo..=col_hi {
@@ -1338,11 +1366,7 @@ pub(crate) fn p_box_on_line_side(
         p2 = p_point_on_line_side(left, bottom, v1x, v1y, ldx, ldy);
     }
 
-    if p1 == p2 {
-        p1
-    } else {
-        -1
-    }
+    if p1 == p2 { p1 } else { -1 }
 }
 
 // ---------------------------------------------------------------------------
@@ -1838,18 +1862,13 @@ mod tests {
         // Baseline: no other thing → the straddled special line is collected.
         let sh = move_spechit(&slab, mover, new_x, new_y, &level);
         assert_eq!(
-            sh,
-            vec![0usize],
+            sh.as_slice(),
+            &[0usize],
             "box straddling a two-sided special line must collect it"
         );
 
         // Add a solid thing overlapping the destination box (thing-first block).
-        let mut blocker = Mobj::new(
-            MobjKind::Imp,
-            new_x,
-            new_y,
-            Bam::ZERO,
-        );
+        let mut blocker = Mobj::new(MobjKind::Imp, new_x, new_y, Bam::ZERO);
         blocker.flags = flags::MF_SOLID | flags::MF_SHOOTABLE | flags::MF_COUNTKILL;
         blocker.radius = Fixed16_16::from_int(20);
         blocker.height = Fixed16_16::from_int(56);
@@ -1970,7 +1989,10 @@ mod tests {
             Fixed16_16::from_int(-320),
             Fixed16_16::from_int(-96),
         );
-        assert!(straddles, "corner-tangent positive-slope wall must straddle");
+        assert!(
+            straddles,
+            "corner-tangent positive-slope wall must straddle"
+        );
     }
 
     #[test]
