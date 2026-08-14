@@ -116,13 +116,37 @@ pub struct WadFile {
 impl WadFile {
     /// Parse a WAD from raw bytes (typically loaded via `std::fs::read("doom.wad")`).
     ///
+    /// This function acts as the primary gateway between the raw bytes of a file on
+    /// disk and a structured archive format that the Doom engine can query. It allows
+    /// extracting and mapping individual assets (like textures, sprites, or maps) from
+    /// the lump directory.
+    ///
     /// The parser reads the 12-byte header, jumps to the directory offset, and
     /// processes every 16-byte lump entry. During this phase, it validates that
     /// every lump's byte range falls strictly within the bounds of the provided data.
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doom_wad::WadFile;
+    ///
+    /// // A minimal valid WAD with one 4-byte lump named "TEST".
+    /// let wad_bytes = b"IWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0TEST\0\0\0\0DATA".to_vec();
+    /// let wad = WadFile::parse(wad_bytes).unwrap();
+    ///
+    /// assert_eq!(wad.lump_count(), 1);
+    /// assert_eq!(wad.find_lump_data("TEST").unwrap(), b"DATA");
+    /// ```
+    ///
     /// # Errors
     /// Returns [`WadError`] if the file is malformed, too short, has invalid magic bytes,
     /// or if any lump's claimed offset and size exceed the file's total length.
+    ///
+    /// # Panics
+    /// This function will not panic under normal circumstances because boundary
+    /// constraints are checked prior to byte slicing. However, it contains structural
+    /// panic assertions (via `expect()`) for static type conversions that the compiler
+    /// cannot inherently prove.
     pub fn parse(data: Vec<u8>) -> Result<Self, WadError> {
         if data.len() < 12 {
             return Err(WadError::TooShort(data.len()));
