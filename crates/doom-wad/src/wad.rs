@@ -123,6 +123,9 @@ impl WadFile {
     /// # Errors
     /// Returns [`WadError`] if the file is malformed, too short, has invalid magic bytes,
     /// or if any lump's claimed offset and size exceed the file's total length.
+    ///
+    /// # Panics
+    /// Panics if internal slice conversions fail (should be impossible since lengths are checked beforehand).
     pub fn parse(data: Vec<u8>) -> Result<Self, WadError> {
         if data.len() < 12 {
             return Err(WadError::TooShort(data.len()));
@@ -467,6 +470,21 @@ impl WadFile {
 /// A complete directory of resolved lumps (from one or more WAD files).
 ///
 /// Used as the output of `WadStack::build_dir()`.
+///
+/// # Examples
+/// ```
+/// use doom_wad::wad::WadDir;
+/// use doom_wad::lump::{LumpDef, LumpName};
+///
+/// let dir = WadDir::from_lumps(vec![
+///     LumpDef {
+///         name: LumpName::from_str("TEST"),
+///         offset: 0,
+///         size: 10,
+///     }
+/// ]);
+/// assert_eq!(dir.len(), 1);
+/// ```
 #[derive(Debug, Default)]
 pub struct WadDir {
     lumps: Vec<LumpDef>,
@@ -474,27 +492,79 @@ pub struct WadDir {
 
 impl WadDir {
     /// Construct from a flat list of lumps.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::wad::WadDir;
+    ///
+    /// let empty_dir = WadDir::from_lumps(vec![]);
+    /// assert!(empty_dir.is_empty());
+    /// ```
     pub fn from_lumps(lumps: Vec<LumpDef>) -> Self {
         Self { lumps }
     }
 
     /// Find a lump by name (last occurrence wins — PWAD override semantics).
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::wad::WadDir;
+    /// use doom_wad::lump::{LumpDef, LumpName};
+    ///
+    /// let dir = WadDir::from_lumps(vec![
+    ///     LumpDef { name: LumpName::from_str("TEST"), offset: 0, size: 5 },
+    ///     LumpDef { name: LumpName::from_str("TEST"), offset: 5, size: 10 },
+    /// ]);
+    /// // The last occurrence wins.
+    /// let lump = dir.find("TEST").unwrap();
+    /// assert_eq!(lump.size, 10);
+    /// ```
     pub fn find(&self, name: &str) -> Option<&LumpDef> {
         let key = LumpName::from_str(name);
         self.lumps.iter().rev().find(|l| l.name == key)
     }
 
     /// All lumps.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::wad::WadDir;
+    /// use doom_wad::lump::{LumpDef, LumpName};
+    ///
+    /// let dir = WadDir::from_lumps(vec![
+    ///     LumpDef { name: LumpName::from_str("TEST"), offset: 0, size: 5 },
+    /// ]);
+    /// assert_eq!(dir.lumps().len(), 1);
+    /// ```
     pub fn lumps(&self) -> &[LumpDef] {
         &self.lumps
     }
 
     /// Total lump count.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::wad::WadDir;
+    /// use doom_wad::lump::{LumpDef, LumpName};
+    ///
+    /// let dir = WadDir::from_lumps(vec![
+    ///     LumpDef { name: LumpName::from_str("TEST"), offset: 0, size: 5 },
+    /// ]);
+    /// assert_eq!(dir.len(), 1);
+    /// ```
     pub fn len(&self) -> usize {
         self.lumps.len()
     }
 
     /// Returns `true` if no lumps are present.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::wad::WadDir;
+    ///
+    /// let empty_dir = WadDir::from_lumps(vec![]);
+    /// assert!(empty_dir.is_empty());
+    /// ```
     pub fn is_empty(&self) -> bool {
         self.lumps.is_empty()
     }
