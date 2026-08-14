@@ -23,3 +23,6 @@
 **SmallVec for Walk Lines Allocation**
 **Learning:** `Vec::new()` is heavily used during collision detection on the hot loop (e.g. `walk_lines.sort_by`). Replacing this with `smallvec::SmallVec` stops dynamic allocations for small intersection arrays.
 **Action:** Use `smallvec::SmallVec<[T; N]>` where small static allocations cover 99% of cases on performance-critical paths.
+**Avoid allocating Vectors on Hot Paths for Known Bound Limits**
+**Learning:** Functions like `move_spechit` run very frequently (per-movement) and allocate vectors even when the number of lines crossed (`spechit`) or cells traversed (`seen`) is strictly bounded and small.
+**Action:** Use `smallvec::SmallVec` to keep small lists on the stack (e.g. `[usize; 8]` for `spechit`, `[usize; 32]` for `seen`), eliminating continuous heap allocations.
