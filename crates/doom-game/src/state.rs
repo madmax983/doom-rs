@@ -13,9 +13,9 @@ use crate::spawn::Skill;
 use crate::random::DoomRng;
 use crate::stats::LevelStats;
 
-pub use crate::sound_prop::{SoundPropagation, SoundRequest};
+pub(crate) use crate::sound_prop::{SoundPropagation, SoundRequest};
 
-pub use crate::movers::*;
+pub(crate) use crate::movers::*;
 
 // ---------------------------------------------------------------------------
 // Sound events

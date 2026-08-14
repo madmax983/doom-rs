@@ -2191,7 +2191,7 @@ pub fn ev_ceiling_raise_to_highest(gs: &mut GameState, level: &Level, tag: u16) 
 /// ## Examples
 /// ```
 /// # use doom_game::specials::CrusherParams;
-/// # use doom_game::state::CeilingType;
+/// # use doom_game::movers::CeilingType;
 /// # use doom_types::Fixed16_16;
 /// let params = CrusherParams {
 ///     speed: Fixed16_16::from_int(2),
