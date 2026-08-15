@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactoring large God Functions into helper methods**
+**Learning:** Extracting parts of a massive `tick` or `render` function into smaller, private helper methods reduces the cognitive load of understanding the control flow. However, you must place those helper methods in the inherent implementation block (`impl StructName`) and not the trait implementation block (`impl Trait for StructName`), or the code will fail to compile.
+**Action:** Always check the `impl` block where you intend to add helper methods. Use `replace_with_git_merge_diff` to add the helpers to the inherent `impl` block first, then use another edit block or step to use those helpers within the trait's `impl` block.
