@@ -123,6 +123,29 @@ impl WadFile {
     /// # Errors
     /// Returns [`WadError`] if the file is malformed, too short, has invalid magic bytes,
     /// or if any lump's claimed offset and size exceed the file's total length.
+    ///
+    /// # Panics
+    /// This function performs internal byte slice conversions that technically can panic,
+    /// but in practice, these panics are unreachable because we verify the data is at
+    /// least 12 bytes long before attempting to slice the header.
+    ///
+    /// # Examples
+    /// Loading a minimal WAD with one valid lump:
+    /// ```
+    /// use doom_wad::WadFile;
+    ///
+    /// let valid_bytes = b"PWAD\x01\0\0\0\x0C\0\0\0\x1C\0\0\0\x04\0\0\0LUMP\0\0\0\0DATA".to_vec();
+    /// let wad = WadFile::parse(valid_bytes).unwrap();
+    /// assert_eq!(wad.lump_count(), 1);
+    /// ```
+    ///
+    /// Demonstrating a failure when parsing an invalid/truncated WAD:
+    /// ```
+    /// use doom_wad::WadFile;
+    ///
+    /// let invalid_bytes = b"TRUNCATED".to_vec();
+    /// assert!(WadFile::parse(invalid_bytes).is_err());
+    /// ```
     pub fn parse(data: Vec<u8>) -> Result<Self, WadError> {
         if data.len() < 12 {
             return Err(WadError::TooShort(data.len()));
