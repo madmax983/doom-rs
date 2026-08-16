@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2025-02-12 - Fix missing panics/errors and broken intra-doc links
+**Confusion:** Several functions returning `Result` lacked `# Errors` sections and those panicking lacked `# Panics` sections, leading to cargo clippy errors under strict documentation flags. Additionally, several doc comments referenced incorrect error variants or missing functions, causing broken intra-doc links.
+**Clarification:** Added `# Errors` and `# Panics` sections to satisfy strict clippy lints (`-W clippy::missing_errors_doc`, `-W clippy::missing_panics_doc`) and fixed broken intra-doc links by changing them to standard inline code or updating to the correct enum variants.

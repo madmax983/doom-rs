@@ -139,6 +139,10 @@ impl<'a> BspTree<'a> {
     // -- individual checks ---------------------------------------------------
 
     /// Verifies `N_SSECTORS == N_NODES + 1`.
+    ///
+    /// # Errors
+    /// Returns a [`BspError::LeafCountMismatch`] if the number of leaves
+    /// (`N_SSECTORS`) differs from `N_NODES + 1`.
     pub fn validate_leaf_count(&self) -> Result<(), BspError> {
         let n = self.nodes.len();
         let s = self.ssectors.len();
@@ -300,7 +304,7 @@ impl<'a> BspTree<'a> {
     /// Fixed-point exact `R_PointInSubsector` (vanilla `r_main.c`).
     ///
     /// Like [`point_in_subsector`] but takes raw `fixed_t` coordinates and uses
-    /// the fixed-point [`point_on_side_fixed`] test, matching vanilla exactly.
+    /// the fixed-point `point_on_side_fixed` test, matching vanilla exactly.
     /// Use this for playsim sector lookups where sub-map-unit precision changes
     /// the answer (e.g. `P_PlayerInSpecialSector`'s secret-sector crossing).
     ///
