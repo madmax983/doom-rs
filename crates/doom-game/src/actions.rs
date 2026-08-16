@@ -1021,10 +1021,10 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
     // Vanilla (gameversion > exe_doom_1_2): drop threshold to 0 when the target
     // is gone/dead, otherwise decrement it.
     {
-        let (threshold, target) = match gs.mobjslab.get(handle) {
-            Some(mo) => (mo.threshold, mo.target),
-            None => return,
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return;
         };
+        let (threshold, target) = (mo.threshold, mo.target);
         if threshold != 0 {
             let target_dead = gs
                 .mobjslab
@@ -1061,24 +1061,18 @@ fn a_chase(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
         }
     }
 
-    let mo_kind = match gs.mobjslab.get(handle) {
-        Some(mo) => mo.kind,
-        None => return,
+    let Some(mo) = gs.mobjslab.get(handle) else {
+        return;
     };
-    let info = match mobjinfo::MOBJINFO.get(mo_kind as usize) {
-        Some(i) => *i,
-        None => return,
+    let mo_kind = mo.kind;
+    let target = mo.target;
+
+    let Some(info) = mobjinfo::MOBJINFO.get(mo_kind as usize) else {
+        return;
     };
 
     // --- target still valid? ---
-    let (target, tflags) = match gs.mobjslab.get(handle) {
-        Some(mo) => {
-            let t = mo.target;
-            let tf = gs.mobjslab.get(t).map(|x| x.flags).unwrap_or(0);
-            (t, tf)
-        }
-        None => return,
-    };
+    let tflags = gs.mobjslab.get(target).map(|x| x.flags).unwrap_or(0);
     if target == MobjHandle::NULL || (tflags & flags::MF_SHOOTABLE) == 0 {
         // look for a new target
         if p_look_for_players(gs, handle, true, level) {
@@ -1224,14 +1218,15 @@ fn p_look_for_players(
     }
 
     if !allaround {
-        let (ax, ay, aang) = match gs.mobjslab.get(handle) {
-            Some(mo) => (mo.x.raw(), mo.y.raw(), mo.angle.raw()),
-            None => return false,
+        let Some(mo) = gs.mobjslab.get(handle) else {
+            return false;
         };
-        let (px, py) = match gs.mobjslab.get(player) {
-            Some(p) => (p.x.raw(), p.y.raw()),
-            None => return false,
+        let (ax, ay, aang) = (mo.x.raw(), mo.y.raw(), mo.angle.raw());
+
+        let Some(p) = gs.mobjslab.get(player) else {
+            return false;
         };
+        let (px, py) = (p.x.raw(), p.y.raw());
         let an = crate::geom::r_point_to_angle2(ax, ay, px, py).wrapping_sub(aang);
         // ANG90 = 0x40000000, ANG270 = 0xC0000000
         if an > 0x4000_0000 && an < 0xC000_0000 {
@@ -1436,8 +1431,13 @@ fn a_pos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) {
 
     // Vanilla A_PosAttack: slope = P_AimLineAttack(actor, angle, MISSILERANGE)
     // (no RNG); then `angle += P_SubRandom()<<20; damage = (P_Random()%5+1)*3;`.
-    let aim =
-        crate::combat::p_aim_line_attack(gs, handle, base_angle, crate::combat::MISSILERANGE, level);
+    let aim = crate::combat::p_aim_line_attack(
+        gs,
+        handle,
+        base_angle,
+        crate::combat::MISSILERANGE,
+        level,
+    );
     let angle = Bam(base_angle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
     let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
     crate::combat::p_line_attack(
@@ -1483,7 +1483,8 @@ fn a_spos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     // Vanilla A_SPosAttack: slope = P_AimLineAttack(actor, bangle, MISSILERANGE)
     // once (no RNG); then 3 pellets each `angle = bangle + (P_SubRandom()<<20);
     // damage = (P_Random()%5+1)*3;`.
-    let aim = crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
+    let aim =
+        crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
     for _ in 0..3 {
         let shot_angle = Bam(bangle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
         let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
@@ -1653,7 +1654,8 @@ fn a_cpos_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
 
     // Vanilla A_CPosAttack: slope = P_AimLineAttack(actor, bangle, MISSILERANGE)
     // (no RNG); `angle = bangle + (P_SubRandom()<<20); damage = (P_Random()%5+1)*3;`.
-    let aim = crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
+    let aim =
+        crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
     let shot_angle = Bam(bangle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
     let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
     let cpos_kind = gs
@@ -1909,7 +1911,8 @@ fn a_spid_attack(gs: &mut GameState, handle: MobjHandle, level: Option<&Level>) 
     let bangle = mo.angle;
 
     // Spider Mastermind uses the A_SPosAttack pellet pattern.
-    let aim = crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
+    let aim =
+        crate::combat::p_aim_line_attack(gs, handle, bangle, crate::combat::MISSILERANGE, level);
     let shot_angle = Bam(bangle.0.wrapping_add((gs.p_subrandom() << 20) as u32));
     let damage = (i32::from(gs.p_random()) % 5 + 1) * 3;
     crate::combat::p_line_attack(
@@ -3295,7 +3298,10 @@ mod tests {
         let mut gs = make_game_state();
         let trooper = spawn_trooper(&mut gs, 100, 0);
         {
-            let mo = gs.mobjslab.get_mut(trooper).expect("item must exist in tests");
+            let mo = gs
+                .mobjslab
+                .get_mut(trooper)
+                .expect("item must exist in tests");
             mo.movedir = DI_EAST;
             mo.momx = Fixed16_16::ZERO;
             mo.momy = Fixed16_16::ZERO;
@@ -3523,7 +3529,10 @@ mod tests {
         // (`movedir = DI_NODIR`), `P_UseSpecialLine` opens it, and P_Move returns
         // that `good` result — true here — so `A_Chase` treats the move as done
         // and does NOT pick a new chase direction this tic.
-        assert!(moved, "opening a blocking door returns P_UseSpecialLine's good=true");
+        assert!(
+            moved,
+            "opening a blocking door returns P_UseSpecialLine's good=true"
+        );
         assert_eq!(
             gs.mobjslab
                 .get(trooper)
