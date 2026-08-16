@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2026-08-16 - [Documented WadFile::parse panics and purpose]
+**Confusion:** `WadFile::parse` was missing a `# Panics` section as identified by Clippy, and its description lacked the broader context of *why* it's so important (preventing out-of-bounds panics later in the codebase by sanitizing inputs immediately) along with an executable example.
+**Clarification:** Added an executable `## Examples` doctest demonstrating `WadFile::parse` by hand-crafting a byte slice with a single dummy lump, and added the missing `## Panics` documentation explaining that the panic case requires violation of internal length checking.
