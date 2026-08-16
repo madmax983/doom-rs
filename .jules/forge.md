@@ -63,3 +63,7 @@
 ## 2024-05-18 - Refactored Option destructuring boolean blindness in MapAnalyzer
 **Learning:** `if let (Some(a), Some(b)) = (map.get(x), map.get(y))` combined with `unwrap()` fallback on the values causes boolean blindness and leads to verbose error-prone code, especially when updating parent-child tree states inside a graph loop.
 **Action:** Always prefer cleanly copying small `Copy` primitive values from maps inside a guard block `let (a, b) = (map.get(x).copied(), map.get(y).copied())` and testing `if let (Some(x), Some(y))` to flatten Option extraction without requiring runtime unwraps.
+
+**Refactor Mobj field extraction using let-else guard clauses**
+**Learning:** `match gs.mobjslab.get(handle) { Some(mo) => (mo.x, mo.y), None => return, };` with tuple destructuring repeats boilerplate, is noisy, and has an indentation hit.
+**Action:** Replace `match` blocks used solely for extracting values into tuples with idiomatic `let Some(mo) = gs.mobjslab.get(handle) else { return; };` guard clauses to improve linearity and readability.
