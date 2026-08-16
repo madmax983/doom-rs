@@ -116,13 +116,30 @@ pub struct WadFile {
 impl WadFile {
     /// Parse a WAD from raw bytes (typically loaded via `std::fs::read("doom.wad")`).
     ///
-    /// The parser reads the 12-byte header, jumps to the directory offset, and
+    /// This is the entry point for turning binary WAD files from disk into structured
+    /// data. The parser reads the 12-byte header, jumps to the directory offset, and
     /// processes every 16-byte lump entry. During this phase, it validates that
-    /// every lump's byte range falls strictly within the bounds of the provided data.
+    /// every lump's byte range falls strictly within the bounds of the provided data,
+    /// preventing malicious or corrupted WADs from causing out-of-bounds panics later.
     ///
     /// # Errors
     /// Returns [`WadError`] if the file is malformed, too short, has invalid magic bytes,
     /// or if any lump's claimed offset and size exceed the file's total length.
+    ///
+    /// # Panics
+    /// Panics if the internal byte slicing logic violates expected fixed lengths (e.g., extracting 4 bytes into a `[u8; 4]`), though this is prevented by preceding length checks.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use doom_wad::WadFile;
+    /// let mut data = b"IWAD\x01\x00\x00\x00\x0C\x00\x00\x00".to_vec();
+    /// // filepos = 12 (0x0C), size = 4 (0x04)
+    /// data.extend_from_slice(b"\x1C\x00\x00\x00\x04\x00\x00\x00TEST\x00\x00\x00\x00");
+    /// data.extend_from_slice(b"1234");
+    /// let wad = WadFile::parse(data).unwrap();
+    /// assert_eq!(wad.lump_count(), 1);
+    /// assert_eq!(wad.find_lump_data("TEST").unwrap(), b"1234");
+    /// ```
     pub fn parse(data: Vec<u8>) -> Result<Self, WadError> {
         if data.len() < 12 {
             return Err(WadError::TooShort(data.len()));
