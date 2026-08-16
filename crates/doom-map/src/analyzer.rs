@@ -61,6 +61,10 @@ impl<'a> MapAnalyzer<'a> {
     }
 
     /// Finds articulation points (sectors that, if removed, disconnect parts of the map).
+    ///
+    /// # Panics
+    /// Panics if the node is missing from the adjacency list during the graph search,
+    /// which would indicate a corrupted graph state.
     pub fn chokepoints(&self) -> Vec<usize> {
         let mut visited = HashSet::new();
         let mut discovery_time = HashMap::new();

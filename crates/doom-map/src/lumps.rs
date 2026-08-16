@@ -118,6 +118,10 @@ impl Thing {
     }
 
     /// Parse a THINGS lump.
+    ///
+    /// # Errors
+    /// Returns a [`LumpParseError::BadLength`] if the data slice length
+    /// is not a multiple of the struct's byte size.
     pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
         parse_fixed_records(data, Self::BYTE_SIZE, "THINGS", Self::from_bytes)
     }
@@ -173,6 +177,10 @@ impl Linedef {
     }
 
     /// Parse a LINEDEFS lump.
+    ///
+    /// # Errors
+    /// Returns a [`LumpParseError::BadLength`] if the data slice length
+    /// is not a multiple of the struct's byte size.
     pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
         parse_fixed_records(data, Self::BYTE_SIZE, "LINEDEFS", Self::from_bytes)
     }
@@ -234,6 +242,10 @@ impl Sidedef {
     }
 
     /// Parse a SIDEDEFS lump.
+    ///
+    /// # Errors
+    /// Returns a [`LumpParseError::BadLength`] if the data slice length
+    /// is not a multiple of the struct's byte size.
     pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
         parse_fixed_records(data, Self::BYTE_SIZE, "SIDEDEFS", Self::from_bytes)
     }
@@ -271,6 +283,10 @@ impl Vertex {
     }
 
     /// Parse a VERTEXES lump.
+    ///
+    /// # Errors
+    /// Returns a [`LumpParseError::BadLength`] if the data slice length
+    /// is not a multiple of the struct's byte size.
     pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
         parse_fixed_records(data, Self::BYTE_SIZE, "VERTEXES", Self::from_bytes)
     }
@@ -322,6 +338,10 @@ impl Seg {
     }
 
     /// Parse a SEGS lump.
+    ///
+    /// # Errors
+    /// Returns a [`LumpParseError::BadLength`] if the data slice length
+    /// is not a multiple of the struct's byte size.
     pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
         parse_fixed_records(data, Self::BYTE_SIZE, "SEGS", Self::from_bytes)
     }
@@ -361,6 +381,10 @@ impl Ssector {
     }
 
     /// Parse a SSECTORS lump.
+    ///
+    /// # Errors
+    /// Returns a [`LumpParseError::BadLength`] if the data slice length
+    /// is not a multiple of the struct's byte size.
     pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
         parse_fixed_records(data, Self::BYTE_SIZE, "SSECTORS", Self::from_bytes)
     }
@@ -474,6 +498,10 @@ impl Node {
     }
 
     /// Parse a NODES lump.
+    ///
+    /// # Errors
+    /// Returns a [`LumpParseError::BadLength`] if the data slice length
+    /// is not a multiple of the struct's byte size.
     pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
         parse_fixed_records(data, Self::BYTE_SIZE, "NODES", Self::from_bytes)
     }
@@ -533,6 +561,10 @@ impl Sector {
     }
 
     /// Parse a SECTORS lump.
+    ///
+    /// # Errors
+    /// Returns a [`LumpParseError::BadLength`] if the data slice length
+    /// is not a multiple of the struct's byte size.
     pub fn parse_lump(data: &[u8]) -> Result<Vec<Self>, LumpParseError> {
         parse_fixed_records(data, Self::BYTE_SIZE, "SECTORS", Self::from_bytes)
     }
@@ -656,6 +688,10 @@ impl Blockmap {
     const HEADER_BYTES: usize = 8;
 
     /// Parse a BLOCKMAP lump.
+    ///
+    /// # Errors
+    /// Returns a [`LumpParseError::BlockmapTooShort`] if the data slice length
+    /// is not equal to the expected matrix size in bytes.
     pub fn parse_lump(data: &[u8]) -> Result<Self, LumpParseError> {
         if data.len() < Self::HEADER_BYTES {
             return Err(LumpParseError::BlockmapTooShort(data.len()));
