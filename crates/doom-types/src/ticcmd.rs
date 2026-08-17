@@ -43,3 +43,31 @@ pub mod bt {
     /// Bits 3-5 encode the target weapon number.
     pub const BT_WEAPONMASK: u8 = 0x38;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ticcmd_default_initialization() {
+        let cmd = TicCmd::default();
+        assert_eq!(cmd.forward_move, 0);
+        assert_eq!(cmd.side_move, 0);
+        assert_eq!(cmd.angle_turn, 0);
+        assert_eq!(cmd.buttons, 0);
+        assert_eq!(cmd.chatchar, 0);
+        assert_eq!(cmd._pad, [0, 0]);
+    }
+
+    #[test]
+    fn button_constants_are_distinct() {
+        assert_eq!(bt::BT_ATTACK & bt::BT_USE, 0);
+        assert_eq!(bt::BT_ATTACK & bt::BT_CHANGE, 0);
+        assert_eq!(bt::BT_USE & bt::BT_CHANGE, 0);
+
+        // Ensure weapon mask does not overlap with basic buttons
+        assert_eq!(bt::BT_WEAPONMASK & bt::BT_ATTACK, 0);
+        assert_eq!(bt::BT_WEAPONMASK & bt::BT_USE, 0);
+        assert_eq!(bt::BT_WEAPONMASK & bt::BT_CHANGE, 0);
+    }
+}
