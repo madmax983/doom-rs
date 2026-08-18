@@ -123,6 +123,23 @@ impl WadFile {
     /// # Errors
     /// Returns [`WadError`] if the file is malformed, too short, has invalid magic bytes,
     /// or if any lump's claimed offset and size exceed the file's total length.
+    ///
+    /// # Panics
+    /// Panics if the internal `data` byte slice conversions fail, which should be impossible
+    /// since the function immediately validates that `data.len() >= 12`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doom_wad::WadFile;
+    ///
+    /// // A minimal 12-byte IWAD header with 0 lumps
+    /// let mut data = Vec::new();
+    /// data.extend_from_slice(b"IWAD");
+    /// data.extend_from_slice(&0i32.to_le_bytes()); // numlumps
+    /// data.extend_from_slice(&12i32.to_le_bytes()); // infotableofs
+    ///
+    /// let _wad = WadFile::parse(data).unwrap();
+    /// ```
     pub fn parse(data: Vec<u8>) -> Result<Self, WadError> {
         if data.len() < 12 {
             return Err(WadError::TooShort(data.len()));
