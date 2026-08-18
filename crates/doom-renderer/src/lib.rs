@@ -26,6 +26,7 @@ pub mod seg;
 pub mod sky;
 pub mod span;
 pub mod sprite;
+/// Structures for maintaining a history of sprite clipping operations.
 pub mod sprite_clip;
 pub mod sprite_lookup;
 pub mod statusbar;
