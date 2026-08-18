@@ -162,3 +162,17 @@ fn filename_hint(name: &str) -> Option<(GameMode, GameMission)> {
         _ => return None,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn max_episode_returns_correct_bounds() {
+        assert_eq!(GameMode::Shareware.max_episode(), Some(1));
+        assert_eq!(GameMode::Registered.max_episode(), Some(3));
+        assert_eq!(GameMode::Retail.max_episode(), Some(4));
+        assert_eq!(GameMode::Commercial.max_episode(), None);
+        assert_eq!(GameMode::Indetermined.max_episode(), None);
+    }
+}
