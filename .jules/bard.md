@@ -39,3 +39,6 @@
 ## 2024-04-19 - [Added doc tests for SoundRequest emitter functions]
 **Confusion:** The `SoundRequest` type in `doom-game::state` lacked documentation and executable examples for `emitter` and `origin_handle`.
 **Clarification:** Added explicit `///` block comments with `## Examples` doc-tests for both `emitter` and `origin_handle`. During testing, we encountered compilation errors regarding missing methods (`MobjHandle::from_index` and `Fixed16_16::from_f64`), so the examples were adjusted to use real working syntax (`MobjSlab::alloc` and `Fixed16_16::from_int`) to ensure accurate docs.
+## 2024-05-18 - The Unseen Director
+**Confusion:** The `AiDirector` in `doom-game` wasn't documented, and its existence and behavior weren't easily visible via standard `cargo doc`. Furthermore, missing doc-comments on several types in `geom.rs`, `tic.rs`, and `sprite_clip.rs` resulted in rustdoc lints.
+**Clarification:** Documented `AiDirector` and `DirectorAction`, providing usage examples showing how it affects game flow via the `tick()` method. Also added documentation for `SpriteClipHistory`, `DivLine`, `ANG180`, `ANG270`, and `tick_all_mobjs`, making sure they provide context and executable examples where appropriate.
