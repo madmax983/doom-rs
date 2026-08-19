@@ -498,10 +498,7 @@ fn a_weapon_ready_bob(gs: &mut GameState) {
     // sy uses finesine[angle & (FINEANGLES/2-1)] (always the positive half, so
     // the weapon only ever sways *down* from WEAPONTOP).
     let sy_angle = angle & (FINEMASK >> 1);
-    let sy_off = crate::geom::fixed_mul(
-        bob,
-        crate::geom::fine_sine(sy_angle << FINE_TO_BAM_SHIFT),
-    );
+    let sy_off = crate::geom::fixed_mul(bob, crate::geom::fine_sine(sy_angle << FINE_TO_BAM_SHIFT));
     gs.player.psprites[psprite_slots::WEAPON].sy = WEAPON_TOP + sy_off;
 }
 
@@ -1406,6 +1403,24 @@ mod tests {
             gs.player.psprites[psprite_slots::WEAPON].state,
             crate::mobj::StateNum(ids::S_SGUN_READY),
             "the new weapon should end in its ready state"
+        );
+    }
+
+    #[test]
+    fn tick_psprite_with_invalid_state_sets_null() {
+        let mut gs = make_game_state();
+        setup_psprites(&mut gs.player);
+        // Force an invalid state that is out of bounds of the STATES array.
+        // We know the maximum state is around 966 in Doom.
+        gs.player.psprites[psprite_slots::WEAPON].state = StateNum(65535);
+        gs.player.psprites[psprite_slots::WEAPON].tics = 0; // ready to transition
+
+        tick_psprite_slot(&mut gs, psprite_slots::WEAPON, TicCmd::default(), None);
+
+        assert_eq!(
+            gs.player.psprites[psprite_slots::WEAPON].state,
+            StateNum::NULL,
+            "an invalid state index should fall back to StateNum::NULL"
         );
     }
 
