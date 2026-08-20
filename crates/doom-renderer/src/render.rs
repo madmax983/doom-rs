@@ -454,6 +454,10 @@ pub fn render_level_with_view_height_and_extra_light<'a>(
 
 /// Render a Doom level using an explicit player view height, optional fixed
 /// colormap override, and player extra-light bonus.
+///
+/// # Panics
+///
+/// Panics if `flat_cache` is `None` but there are active visplanes that need rendering.
 #[allow(clippy::too_many_arguments)]
 pub fn render_level_with_view_height_and_extra_light_and_fixed_colormap<'a>(
     level: &Level,
