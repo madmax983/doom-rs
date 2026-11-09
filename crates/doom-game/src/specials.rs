@@ -420,6 +420,13 @@ pub fn ev_teleport(gs: &mut GameState, level: &Level, tag: u16, mobj_handle: Mob
         }
         gs.mobjslab.set_thing_position(mobj_handle);
 
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::Teleport(
+                Fixed16_16::from_int(thing.x as i32),
+                Fixed16_16::from_int(thing.y as i32),
+            ));
+
         return true;
     }
 
@@ -832,6 +839,49 @@ fn change_sector_crush_corpses(gs: &mut GameState, level: &Level, sector_idx: us
 /// Advance all active door/floor movers by one tic.
 ///
 /// Call this once per tic from `tick()`.
+/// Compute a sector's sound origin: the center of the bounding box of all
+/// vertices referenced by linedefs that face the sector (vanilla's
+/// `sec->soundorg` equivalent).  Falls back to (0, 0) for a sector with no
+/// facing lines.
+///
+/// Used as the emitter position for door/platform sounds.  Called only on
+/// mover state changes, never per tic.
+pub(crate) fn sector_sound_origin(level: &Level, sector_idx: usize) -> (Fixed16_16, Fixed16_16) {
+    let (mut min_x, mut min_y) = (i32::MAX, i32::MAX);
+    let (mut max_x, mut max_y) = (i32::MIN, i32::MIN);
+    let mut any = false;
+    for line in &level.linedefs {
+        for side_idx in [line.right_sidedef, line.left_sidedef] {
+            if side_idx == u16::MAX {
+                continue;
+            }
+            let Some(side) = level.sidedefs.get(usize::from(side_idx)) else {
+                continue;
+            };
+            if usize::from(side.sector) != sector_idx {
+                continue;
+            }
+            for v_idx in [line.from_vertex, line.to_vertex] {
+                let Some(v) = level.vertexes.get(usize::from(v_idx)) else {
+                    continue;
+                };
+                any = true;
+                min_x = min_x.min(i32::from(v.x));
+                min_y = min_y.min(i32::from(v.y));
+                max_x = max_x.max(i32::from(v.x));
+                max_y = max_y.max(i32::from(v.y));
+            }
+        }
+    }
+    if !any {
+        return (Fixed16_16::ZERO, Fixed16_16::ZERO);
+    }
+    (
+        Fixed16_16::from_int((min_x + max_x) / 2),
+        Fixed16_16::from_int((min_y + max_y) / 2),
+    )
+}
+
 pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
     const CLOSE_WAIT_OPEN_DELAY: i32 = 1050; // 30 s at 35 Hz
 
@@ -852,6 +902,10 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
             door.speed = DOOR_SPEED; // positive = opening
             door.reopen_height = Fixed16_16::ZERO;
             door.reopen_countdown = -1;
+            let (ox, oy) = sector_sound_origin(level, sector_idx);
+            gs.sound
+                .sound_queue
+                .push(crate::state::SoundRequest::DoorOpen(false, ox, oy));
             // Fall through to movement logic.
         }
 
@@ -870,6 +924,14 @@ pub fn tick_doors(gs: &mut GameState, level: &mut Level) {
                 door.target_height = sector.floor_height;
             }
             door.countdown = -1;
+            let (ox, oy) = sector_sound_origin(level, sector_idx);
+            gs.sound
+                .sound_queue
+                .push(crate::state::SoundRequest::DoorClose(
+                    speed_abs >= Fixed16_16::from_int(8),
+                    ox,
+                    oy,
+                ));
         }
 
         // ── Move toward target ──
@@ -1774,6 +1836,10 @@ pub fn ev_perpetual_platform(gs: &mut GameState, level: &Level, tag: u16, speed:
             status: PlatformStatus::Down,
             tag,
         });
+        let (ox, oy) = sector_sound_origin(level, idx);
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::PlatformStart(ox, oy));
         count += 1;
     }
     count
@@ -1830,6 +1896,10 @@ pub fn tick_platforms(gs: &mut GameState, level: &mut Level) {
                 if new_floor <= plat.low_height {
                     plat.status = PlatformStatus::Waiting;
                     plat.wait_remaining = plat.wait_tics;
+                    let (ox, oy) = sector_sound_origin(level, sector_idx);
+                    gs.sound
+                        .sound_queue
+                        .push(crate::state::SoundRequest::PlatformStop(ox, oy));
                 }
             }
             PlatformStatus::Up => {
@@ -1839,6 +1909,10 @@ pub fn tick_platforms(gs: &mut GameState, level: &mut Level) {
                 if new_floor >= plat.high_height {
                     plat.status = PlatformStatus::Waiting;
                     plat.wait_remaining = plat.wait_tics;
+                    let (ox, oy) = sector_sound_origin(level, sector_idx);
+                    gs.sound
+                        .sound_queue
+                        .push(crate::state::SoundRequest::PlatformStop(ox, oy));
                 }
             }
         }
@@ -2335,6 +2409,10 @@ pub fn ev_do_lift(
             wait_remaining: 0,
             status: LiftStatus::Lowering,
         });
+        let (ox, oy) = sector_sound_origin(level, idx);
+        gs.sound
+            .sound_queue
+            .push(crate::state::SoundRequest::PlatformStart(ox, oy));
         count += 1;
     }
     count
@@ -2374,6 +2452,10 @@ pub fn tick_lifts(gs: &mut GameState, level: &mut Level) {
                 if reached {
                     lift.status = LiftStatus::Waiting;
                     lift.wait_remaining = lift.wait_tics;
+                    let (ox, oy) = sector_sound_origin(level, sector_idx);
+                    gs.sound
+                        .sound_queue
+                        .push(crate::state::SoundRequest::PlatformStop(ox, oy));
                 }
             }
             LiftStatus::Waiting => {
@@ -2390,6 +2472,10 @@ pub fn tick_lifts(gs: &mut GameState, level: &mut Level) {
                 move_floor_height_clip(gs, level, sector_idx, new_floor);
                 if reached {
                     lift.status = LiftStatus::Done;
+                    let (ox, oy) = sector_sound_origin(level, sector_idx);
+                    gs.sound
+                        .sound_queue
+                        .push(crate::state::SoundRequest::PlatformStop(ox, oy));
                 }
             }
             LiftStatus::Done => {
@@ -2803,6 +2889,25 @@ pub fn p_use_lines(gs: &mut GameState, level: &mut Level, handle: MobjHandle) {
                     dispatch_linedef(gs, level, ld_idx, special, trigger, handle, use_side);
                 if activated {
                     crate::switch::toggle_switch_texture(level, ld_idx);
+                    // Switch click at the linedef midpoint; exit switches
+                    // (11/51/52/124) get the exit variant.
+                    let line = &level.linedefs[ld_idx];
+                    let (fx, fy) = (
+                        i32::from(level.vertexes[usize::from(line.from_vertex)].x),
+                        i32::from(level.vertexes[usize::from(line.from_vertex)].y),
+                    );
+                    let (tx, ty) = (
+                        i32::from(level.vertexes[usize::from(line.to_vertex)].x),
+                        i32::from(level.vertexes[usize::from(line.to_vertex)].y),
+                    );
+                    let is_exit = matches!(special, 11 | 51 | 52 | 124);
+                    gs.sound
+                        .sound_queue
+                        .push(crate::state::SoundRequest::SwitchPressed(
+                            is_exit,
+                            Fixed16_16::from_int((fx + tx) / 2),
+                            Fixed16_16::from_int((fy + ty) / 2),
+                        ));
                 }
                 return;
             }

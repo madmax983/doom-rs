@@ -84,6 +84,10 @@ pub fn apply_press(input: &mut doom_tui::InputState, code: KeyCode) {
         input.push_menu_up();
     } else if code == KeyCode::Down {
         input.push_menu_down();
+    } else if code == KeyCode::Left {
+        input.push_menu_left();
+    } else if code == KeyCode::Right {
+        input.push_menu_right();
     } else if code == KeyCode::Enter {
         input.push_menu_select();
     }

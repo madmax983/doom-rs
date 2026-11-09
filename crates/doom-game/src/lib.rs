@@ -115,7 +115,7 @@ pub use sound::{
     ML_SOUNDBLOCK, adjacent_sectors, clear_sound_targets, get_sound_target, init_sound_state,
     monster_should_wake, p_noise_alert,
 };
-pub use sound_prop::{SoundPropagation, SoundRequest};
+pub use sound_prop::{PickupClass, SoundPropagation, SoundRequest};
 pub use spawn::{GameMode, Skill, spawn_level_things};
 pub use specials::{
     StairType, USE_RANGE, activate_linedef, ev_build_stairs, ev_ceiling_crush_and_raise,

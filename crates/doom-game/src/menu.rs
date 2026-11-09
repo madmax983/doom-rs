@@ -61,6 +61,10 @@ pub enum MenuAction {
     SaveSlot(u8),
     /// Quit the game.
     Quit,
+    /// SFX volume slider (0–15), adjusted with left/right.
+    SfxVolume,
+    /// Music volume slider (0–15), adjusted with left/right.
+    MusicVolume,
     /// No-op / placeholder.
     Noop,
 }
@@ -102,6 +106,10 @@ pub enum MenuResult {
     Quit,
     /// Navigated to a new page (no external action needed).
     PageChange,
+    /// SFX volume slider moved; payload is the new value (0–15).
+    SfxVolumeChanged(u8),
+    /// Music volume slider moved; payload is the new value (0–15).
+    MusicVolumeChanged(u8),
 }
 
 // ---------------------------------------------------------------------------
@@ -281,12 +289,12 @@ static SAVE_ITEMS: &[MenuItem] = &[
 static OPTIONS_ITEMS: &[MenuItem] = &[
     MenuItem {
         label: "Sound Volume",
-        action: MenuAction::Noop,
+        action: MenuAction::SfxVolume,
         enabled: true,
     },
     MenuItem {
         label: "Music Volume",
-        action: MenuAction::Noop,
+        action: MenuAction::MusicVolume,
         enabled: true,
     },
     MenuItem {
@@ -320,6 +328,10 @@ pub struct GameMenu {
     is_doom2: bool,
     /// Skull cursor animation tic (toggles between two frames).
     skull_tic: u32,
+    /// SFX volume (0–15, vanilla scale).  Mirrors the `sfx_volume` config key.
+    sfx_volume: u8,
+    /// Music volume (0–15, vanilla scale).  Mirrors the `music_volume` config key.
+    music_volume: u8,
 }
 
 impl GameMenu {
@@ -332,6 +344,57 @@ impl GameMenu {
             selected_episode: 1,
             is_doom2: game_version == GameVersion::Doom2,
             skull_tic: 0,
+            sfx_volume: 8,
+            music_volume: 8,
+        }
+    }
+
+    /// Current SFX volume (0–15).
+    pub fn sfx_volume(&self) -> u8 {
+        self.sfx_volume
+    }
+
+    /// Current music volume (0–15).
+    pub fn music_volume(&self) -> u8 {
+        self.music_volume
+    }
+
+    /// Set both volumes (clamped to 0–15), e.g. from the config file at
+    /// startup.  Does not emit a [`MenuResult`]; the caller applies the
+    /// values to the audio system itself.
+    pub fn set_volumes(&mut self, sfx_volume: u8, music_volume: u8) {
+        self.sfx_volume = sfx_volume.min(15);
+        self.music_volume = music_volume.min(15);
+    }
+
+    /// Adjust the highlighted slider by `delta` (left = -1, right = +1).
+    ///
+    /// Returns the corresponding [`MenuResult`] when the highlighted item
+    /// is a volume slider and the value actually changed; `None` otherwise.
+    pub fn adjust(&mut self, delta: i32) -> Option<MenuResult> {
+        let items = self.items();
+        let item = items.get(self.cursor)?;
+        if !item.enabled {
+            return None;
+        }
+        match item.action {
+            MenuAction::SfxVolume => {
+                let new = (i32::from(self.sfx_volume) + delta).clamp(0, 15) as u8;
+                if new == self.sfx_volume {
+                    return None;
+                }
+                self.sfx_volume = new;
+                Some(MenuResult::SfxVolumeChanged(new))
+            }
+            MenuAction::MusicVolume => {
+                let new = (i32::from(self.music_volume) + delta).clamp(0, 15) as u8;
+                if new == self.music_volume {
+                    return None;
+                }
+                self.music_volume = new;
+                Some(MenuResult::MusicVolumeChanged(new))
+            }
+            _ => None,
         }
     }
 
@@ -447,7 +510,8 @@ impl GameMenu {
             MenuAction::LoadSlot(n) => Some(MenuResult::LoadGame(n)),
             MenuAction::SaveSlot(n) => Some(MenuResult::SaveGame(n)),
             MenuAction::Quit => Some(MenuResult::Quit),
-            MenuAction::Noop => None,
+            // Sliders are adjusted with left/right (see `adjust`), not Enter.
+            MenuAction::SfxVolume | MenuAction::MusicVolume | MenuAction::Noop => None,
         }
     }
 

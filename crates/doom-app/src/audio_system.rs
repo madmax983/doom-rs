@@ -45,6 +45,14 @@ pub(crate) enum AudioEvent {
     StartMusic(std::sync::Arc<[u8]>),
     /// Stop current music (silences the OPL sequencer).
     StopMusic,
+    /// Set SFX volume (0–15, vanilla scale).
+    SetSfxVolume(u8),
+    /// Set music volume (0–15, vanilla scale).
+    SetMusicVolume(u8),
+    /// Refresh a playing channel's spatial params for a moving origin.
+    /// Fields: (origin, volume 0‥1, pan -1‥1).  No-op if the origin has no
+    /// live channel.
+    UpdateSpatial(doom_game::MobjHandle, f32, f32),
 }
 
 // ---------------------------------------------------------------------------
@@ -221,6 +229,23 @@ impl AudioSystem {
         let _ = self.sender.send(AudioEvent::StopMusic);
     }
 
+    /// Set the SFX volume (0–15, vanilla scale) on the mixer.
+    pub(crate) fn set_sfx_volume(&self, volume: u8) {
+        let _ = self.sender.send(AudioEvent::SetSfxVolume(volume.min(15)));
+    }
+
+    /// Set the music volume (0–15, vanilla scale) on the sequencer.
+    pub(crate) fn set_music_volume(&self, volume: u8) {
+        let _ = self.sender.send(AudioEvent::SetMusicVolume(volume.min(15)));
+    }
+
+    /// Refresh spatial params for a sound whose origin moved.
+    pub(crate) fn update_spatial(&self, origin: doom_game::MobjHandle, volume: f32, pan: f32) {
+        let _ = self
+            .sender
+            .send(AudioEvent::UpdateSpatial(origin, volume, pan));
+    }
+
     #[cfg(test)]
     pub(crate) fn debug_music_start_count(&self) -> usize {
         self.music_start_count.load(Ordering::SeqCst)
@@ -357,6 +382,28 @@ fn audio_cmd_thread(
                 };
                 mp.stop();
             }
+
+            AudioEvent::SetSfxVolume(v) => {
+                if let Ok(mut mixer) = mixer_arc.lock() {
+                    mixer.set_volume(f32::from(v.min(15)) / 15.0);
+                }
+            }
+
+            AudioEvent::SetMusicVolume(v) => {
+                if let Ok(mut mp) = midi_arc.lock() {
+                    mp.set_volume(f32::from(v.min(15)) / 15.0);
+                }
+            }
+
+            AudioEvent::UpdateSpatial(origin, volume, pan) => {
+                if let Some(&channel) = origin_channels.get(&origin) {
+                    if channel_origins[channel] == Some(origin) {
+                        if let Ok(mut mixer) = mixer_arc.lock() {
+                            mixer.update_spatial(channel, volume, pan);
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -406,6 +453,32 @@ pub(crate) fn sound_request_sfx(
         doom_game::SoundRequest::PlayerDie => Some(("DSPLDETH", SfxPriority::Weapon)),
         doom_game::SoundRequest::PlayerUseFail => Some(("DSNOWAY", SfxPriority::High)),
         doom_game::SoundRequest::PlayerUseLockedDoor(_) => Some(("DSOOF", SfxPriority::High)),
+        doom_game::SoundRequest::DoorOpen(fast, _, _) => Some((
+            if fast { "DSBDOPN" } else { "DSDOROPN" },
+            SfxPriority::Medium,
+        )),
+        doom_game::SoundRequest::DoorClose(fast, _, _) => Some((
+            if fast { "DSBDCLS" } else { "DSDORCLS" },
+            SfxPriority::Medium,
+        )),
+        doom_game::SoundRequest::PlatformStart(_, _) => Some(("DSPSTART", SfxPriority::Medium)),
+        doom_game::SoundRequest::PlatformStop(_, _) => Some(("DSPSTOP", SfxPriority::Medium)),
+        doom_game::SoundRequest::SwitchPressed(is_exit, _, _) => Some((
+            if is_exit { "DSSWTCHX" } else { "DSSWTCHN" },
+            SfxPriority::High,
+        )),
+        doom_game::SoundRequest::ItemPickup(class, _, _) => {
+            use doom_game::PickupClass;
+            Some((
+                match class {
+                    PickupClass::Item => "DSITEMUP",
+                    PickupClass::Weapon => "DSWPNUP",
+                    PickupClass::Powerup => "DSGETPOW",
+                },
+                SfxPriority::High,
+            ))
+        }
+        doom_game::SoundRequest::Teleport(_, _) => Some(("DSTELEPT", SfxPriority::High)),
     }
 }
 
@@ -508,6 +581,8 @@ pub(crate) fn monster_death_lump(kind: doom_types::mobj_kind::MobjKind) -> &'sta
         MobjKind::ArchVile => "DSVILDTH",
         MobjKind::SpiderMastermind => "DSSPIDTH",
         MobjKind::Cyberdemon => "DSCYBDTH",
+        // A barrel's "death" is its explosion.
+        MobjKind::Barrel => "DSBAREXP",
         _ => "",
     }
 }

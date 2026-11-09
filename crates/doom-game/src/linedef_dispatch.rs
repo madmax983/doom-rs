@@ -1000,12 +1000,24 @@ const BLAZING_DOOR_SPEED: Fixed16_16 = Fixed16_16::from_int(8);
 /// Door wait time (tics).
 const DOOR_WAIT: i32 = 120;
 
+/// Queue the door sound for a mover that was just started.
+fn push_door_sound(gs: &mut GameState, level: &Level, sector_idx: usize, open: bool, fast: bool) {
+    let (ox, oy) = crate::specials::sector_sound_origin(level, sector_idx);
+    let req = if open {
+        SoundRequest::DoorOpen(fast, ox, oy)
+    } else {
+        SoundRequest::DoorClose(fast, ox, oy)
+    };
+    gs.sound.sound_queue.push(req);
+}
+
 fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavior: DoorBehavior) {
     let Some(s) = level.sectors.get(sector_idx) else {
         return;
     };
     let sector = s;
-    let target = crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
+    let target =
+        crate::specials::lowest_adjacent_ceiling(level, sector_idx) - Fixed16_16::from_int(4);
     if gs
         .movers
         .active_doors
@@ -1029,6 +1041,7 @@ fn open_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize, behavi
         reopen_height: Fixed16_16::from_int(0),
         reopen_countdown: -1,
     });
+    push_door_sound(gs, level, sector_idx, true, false);
 }
 
 fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
@@ -1056,6 +1069,7 @@ fn close_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
         reopen_height: Fixed16_16::from_int(0),
         reopen_countdown: -1,
     });
+    push_door_sound(gs, level, sector_idx, false, false);
 }
 
 /// Close a door then reopen it after 30 s (types 16 / 76).
@@ -1084,6 +1098,7 @@ fn close_wait_open_helper(gs: &mut GameState, level: &Level, sector_idx: usize) 
         reopen_height: reopen_h,
         reopen_countdown: -1,
     });
+    push_door_sound(gs, level, sector_idx, false, false);
 }
 
 fn open_blazing_door_helper(
@@ -1120,6 +1135,7 @@ fn open_blazing_door_helper(
         reopen_height: Fixed16_16::from_int(0),
         reopen_countdown: -1,
     });
+    push_door_sound(gs, level, sector_idx, true, true);
 }
 
 fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usize) {
@@ -1147,6 +1163,7 @@ fn close_blazing_door_helper(gs: &mut GameState, level: &Level, sector_idx: usiz
         reopen_height: Fixed16_16::from_int(0),
         reopen_countdown: -1,
     });
+    push_door_sound(gs, level, sector_idx, false, true);
 }
 
 // ---------------------------------------------------------------------------
