@@ -770,6 +770,10 @@ impl DoomEventLoop {
                                 self.input.push_menu_up();
                             } else if key.code == KeyCode::Down {
                                 self.input.push_menu_down();
+                            } else if key.code == KeyCode::Left {
+                                self.input.push_menu_left();
+                            } else if key.code == KeyCode::Right {
+                                self.input.push_menu_right();
                             } else if key.code == KeyCode::Enter {
                                 self.input.push_menu_select();
                             }

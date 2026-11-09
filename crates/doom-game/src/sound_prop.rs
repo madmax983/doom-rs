@@ -47,6 +47,33 @@ pub enum SoundRequest {
     PlayerUseFail,
     /// Player tried to use a keyed door without the required key color.
     PlayerUseLockedDoor(LockedDoorColor),
+    /// A door started opening.  Fields: (fast, map_x, map_y) — position is
+    /// the door sector's sound origin; `fast` selects the blazing-door lump.
+    DoorOpen(bool, doom_types::Fixed16_16, doom_types::Fixed16_16),
+    /// A door started closing.  Fields: (fast, map_x, map_y).
+    DoorClose(bool, doom_types::Fixed16_16, doom_types::Fixed16_16),
+    /// A platform or lift started moving.  Fields: (map_x, map_y).
+    PlatformStart(doom_types::Fixed16_16, doom_types::Fixed16_16),
+    /// A platform or lift stopped moving.  Fields: (map_x, map_y).
+    PlatformStop(doom_types::Fixed16_16, doom_types::Fixed16_16),
+    /// A switch was pressed.  Fields: (is_exit_switch, map_x, map_y).
+    SwitchPressed(bool, doom_types::Fixed16_16, doom_types::Fixed16_16),
+    /// The player picked up an item.  Fields: (class, map_x, map_y).
+    ItemPickup(PickupClass, doom_types::Fixed16_16, doom_types::Fixed16_16),
+    /// An actor teleported; sound plays at the destination.
+    /// Fields: (map_x, map_y).
+    Teleport(doom_types::Fixed16_16, doom_types::Fixed16_16),
+}
+
+/// Which pickup jingle an [`SoundRequest::ItemPickup`] maps to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PickupClass {
+    /// Ordinary item (health, armor, ammo) — DSITEMUP.
+    Item,
+    /// Weapon — DSWPNUP.
+    Weapon,
+    /// Powerup (spheres, invulnerability, berserk, ...) — DSGETPOW.
+    Powerup,
 }
 
 impl SoundRequest {
@@ -95,7 +122,14 @@ impl SoundRequest {
         match *self {
             SoundRequest::MonsterWake(_, _, x, y)
             | SoundRequest::MonsterAttack(_, _, x, y)
-            | SoundRequest::MonsterDie(_, _, x, y) => Some((x, y)),
+            | SoundRequest::MonsterDie(_, _, x, y)
+            | SoundRequest::DoorOpen(_, x, y)
+            | SoundRequest::DoorClose(_, x, y)
+            | SoundRequest::PlatformStart(x, y)
+            | SoundRequest::PlatformStop(x, y)
+            | SoundRequest::SwitchPressed(_, x, y)
+            | SoundRequest::ItemPickup(_, x, y)
+            | SoundRequest::Teleport(x, y) => Some((x, y)),
             SoundRequest::PlayerWeaponFire(_)
             | SoundRequest::PlayerSuperShotgunOpen
             | SoundRequest::PlayerSuperShotgunLoad
@@ -152,7 +186,14 @@ impl SoundRequest {
             | SoundRequest::PlayerSuperShotgunClose => player_origin,
             SoundRequest::PlayerDie
             | SoundRequest::PlayerUseFail
-            | SoundRequest::PlayerUseLockedDoor(_) => None,
+            | SoundRequest::PlayerUseLockedDoor(_)
+            | SoundRequest::DoorOpen(_, _, _)
+            | SoundRequest::DoorClose(_, _, _)
+            | SoundRequest::PlatformStart(_, _)
+            | SoundRequest::PlatformStop(_, _)
+            | SoundRequest::SwitchPressed(_, _, _)
+            | SoundRequest::ItemPickup(_, _, _)
+            | SoundRequest::Teleport(_, _) => None,
         }
     }
 }

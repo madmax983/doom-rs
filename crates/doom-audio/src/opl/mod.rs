@@ -7,27 +7,44 @@
 // OPL2 operator slot mapping: register-offset → (channel index, operator index)
 // Operator 0 = modulator, operator 1 = carrier (Doom convention)
 // ---------------------------------------------------------------------------
-// Valid offsets 0..=17 only.
-const SLOT_MAP: [(usize, usize); 18] = [
-    (0, 0),
-    (1, 0),
-    (2, 0),
-    (0, 1),
-    (1, 1),
-    (2, 1),
-    (3, 0),
-    (4, 0),
-    (5, 0),
-    (3, 1),
-    (4, 1),
-    (5, 1),
-    (6, 0),
-    (7, 0),
-    (8, 0),
-    (6, 1),
-    (7, 1),
-    (8, 1),
+// YM3812 operator register offsets are SPARSE, not dense: channels 0-2 live
+// at offsets 0-5, channels 3-5 at 8-13, channels 6-8 at 16-21, with offsets
+// 6, 7, 14 and 15 unused. (This matches the mod/car tables in midi.rs.)
+//
+// The previous table indexed offsets densely 0..=17, which permuted every
+// operator parameter for channels 3-5 onto the wrong channel and dropped
+// channels 6-8's carriers (offsets 19-21) entirely — only channels 0-2 ever
+// sounded as intended, which is also all the old tests exercised.
+const SLOT_MAP: [Option<(usize, usize)>; 22] = [
+    Some((0, 0)),  // 0:  ch0 mod
+    Some((1, 0)),  // 1:  ch1 mod
+    Some((2, 0)),  // 2:  ch2 mod
+    Some((0, 1)),  // 3:  ch0 car
+    Some((1, 1)),  // 4:  ch1 car
+    Some((2, 1)),  // 5:  ch2 car
+    None,          // 6:  unused
+    None,          // 7:  unused
+    Some((3, 0)),  // 8:  ch3 mod
+    Some((4, 0)),  // 9:  ch4 mod
+    Some((5, 0)),  // 10: ch5 mod
+    Some((3, 1)),  // 11: ch3 car
+    Some((4, 1)),  // 12: ch4 car
+    Some((5, 1)),  // 13: ch5 car
+    None,          // 14: unused
+    None,          // 15: unused
+    Some((6, 0)),  // 16: ch6 mod
+    Some((7, 0)),  // 17: ch7 mod
+    Some((8, 0)),  // 18: ch8 mod
+    Some((6, 1)),  // 19: ch6 car
+    Some((7, 1)),  // 20: ch7 car
+    Some((8, 1)),  // 21: ch8 car
 ];
+
+/// Decode the (channel, operator) for a register offset, if the offset is a
+/// real operator slot.
+fn slot_for_offset(offset: usize) -> Option<(usize, usize)> {
+    SLOT_MAP.get(offset).copied().flatten()
+}
 
 /// OPL2 frequency multiplier table (index = MULT field 0–15).
 const MULT: [f32; 16] = [
@@ -68,6 +85,9 @@ impl Default for OperatorState {
 struct ChannelState {
     ops: [OperatorState; 2],
     was_keyon: bool,
+    /// The modulator's last two emitted samples (post-envelope, post-TL),
+    /// averaged to form the feedback phase deviation.
+    mod_prev: [f32; 2],
 }
 
 // ---------------------------------------------------------------------------
@@ -87,6 +107,10 @@ pub struct OplOperator {
     pub release_rate: u8,
     /// Total level / attenuation (bits 5-0 of 0x40+offset register).
     pub total_level: u8,
+    /// Envelope type (bit 5 of 0x20+offset register): when true the
+    /// envelope holds at the sustain level; when false (percussive) it
+    /// keeps decaying through the sustain phase toward zero.
+    pub egt: bool,
     /// Frequency multiplier (bits 3-0 of 0x20+offset register).
     pub mult: u8,
     /// Waveform select (bits 2-0 of 0xE0+offset register).
@@ -102,6 +126,12 @@ pub struct OplChannel {
     pub freq_high: u8,
     /// Key-on bit (bit 5 of register 0xB0+ch).
     pub key_on: bool,
+    /// Modulator feedback amount, 0–7 (bits 3-1 of register 0xC0+ch).
+    pub feedback: u8,
+    /// Connection mode (bit 0 of register 0xC0+ch): false = FM
+    /// (modulator phase-modulates the carrier), true = additive
+    /// (both operators sound directly).
+    pub additive: bool,
     /// `[modulator, carrier]` operator states.
     pub operators: [OplOperator; 2],
 }
@@ -129,6 +159,16 @@ impl Default for OplChip {
 // ---------------------------------------------------------------------------
 // Synthesis helpers
 // ---------------------------------------------------------------------------
+
+/// Amplitude multiplier for an OPL total-level value.
+///
+/// TL is logarithmic: each step is 0.75 dB of attenuation, so TL 0 is
+/// full output and TL 63 is ≈ −47 dB (effectively silent).  The previous
+/// linear `(63 − TL) / 63` mapping made TL 32 half volume instead of
+/// the correct ≈ 1/16, flattening every instrument's dynamics.
+fn tl_amp(tl: u8) -> f32 {
+    10f32.powf(-0.75 * f32::from(tl.min(63)) / 20.0)
+}
 
 /// Generate one sample from a waveform given a 32-bit phase accumulator.
 ///
@@ -193,13 +233,23 @@ impl OplChip {
             }
 
             // ---------------------------------------------------------------
-            // 0x20–0x35: mult (frequency multiplier), bits 3-0
+            // 0x20–0x35: EGT (bit 5) + mult (frequency multiplier, bits 3-0)
             // ---------------------------------------------------------------
             0x20..=0x35 => {
                 let offset = (reg - 0x20) as usize;
-                if let Some(&(ch, op)) = SLOT_MAP.get(offset) {
+                if let Some((ch, op)) = slot_for_offset(offset) {
+                    self.channels[ch].operators[op].egt = val & 0x20 != 0;
                     self.channels[ch].operators[op].mult = val & 0x0F;
                 }
+            }
+
+            // ---------------------------------------------------------------
+            // 0xC0–0xC8: feedback (bits 3-1) + connection (bit 0), per channel
+            // ---------------------------------------------------------------
+            0xC0..=0xC8 => {
+                let ch = (reg - 0xC0) as usize;
+                self.channels[ch].feedback = (val >> 1) & 0x07;
+                self.channels[ch].additive = val & 0x01 != 0;
             }
 
             // ---------------------------------------------------------------
@@ -207,7 +257,7 @@ impl OplChip {
             // ---------------------------------------------------------------
             0x40..=0x55 => {
                 let offset = (reg - 0x40) as usize;
-                if let Some(&(ch, op)) = SLOT_MAP.get(offset) {
+                if let Some((ch, op)) = slot_for_offset(offset) {
                     self.channels[ch].operators[op].total_level = val & 0x3F;
                 }
             }
@@ -217,7 +267,7 @@ impl OplChip {
             // ---------------------------------------------------------------
             0x60..=0x75 => {
                 let offset = (reg - 0x60) as usize;
-                if let Some(&(ch, op)) = SLOT_MAP.get(offset) {
+                if let Some((ch, op)) = slot_for_offset(offset) {
                     self.channels[ch].operators[op].attack_rate = val >> 4;
                     self.channels[ch].operators[op].decay_rate = val & 0x0F;
                 }
@@ -228,7 +278,7 @@ impl OplChip {
             // ---------------------------------------------------------------
             0x80..=0x95 => {
                 let offset = (reg - 0x80) as usize;
-                if let Some(&(ch, op)) = SLOT_MAP.get(offset) {
+                if let Some((ch, op)) = slot_for_offset(offset) {
                     self.channels[ch].operators[op].sustain_level = val >> 4;
                     self.channels[ch].operators[op].release_rate = val & 0x0F;
                 }
@@ -239,7 +289,7 @@ impl OplChip {
             // ---------------------------------------------------------------
             0xE0..=0xF5 => {
                 let offset = (reg - 0xE0) as usize;
-                if let Some(&(ch, op)) = SLOT_MAP.get(offset) {
+                if let Some((ch, op)) = slot_for_offset(offset) {
                     self.channels[ch].operators[op].waveform = val & 0x07;
                 }
             }
@@ -248,6 +298,25 @@ impl OplChip {
             // additional to decode (global chip settings, rhythm mode, etc.).
             _ => {}
         }
+    }
+
+    /// Force channel `ch`'s envelopes back to the start of Attack at the next
+    /// synthesized sample, even if the channel is already keyed on.
+    ///
+    /// Register writes alone cannot retrigger a voice that is re-keyed
+    /// between two `synthesize` calls (the key-on edge is never seen low),
+    /// so the sequencer calls this when it restarts a busy voice.
+    pub fn force_retrigger(&mut self, ch: usize) {
+        if ch >= 9 {
+            return;
+        }
+        let st = &mut self.synth[ch];
+        for op in &mut st.ops {
+            op.env_phase = EnvPhase::Attack;
+            op.env_level = 0.0;
+            op.phase_acc = 0;
+        }
+        st.was_keyon = true;
     }
 
     /// Read the raw register byte at `reg` (shadow copy, not real hardware).
@@ -305,6 +374,19 @@ impl OplChip {
                 let shift = 20u32.saturating_sub(block as u32);
                 let freq_hz = fnum as f32 * 49716.0 / (1u32 << shift.min(30)) as f32;
 
+                // -- Modulator feedback deviation ----------------------------
+                // The modulator's own phase is bent by the average of its
+                // last two emitted samples, scaled by the feedback amount
+                // (0 = none, each step doubles it).  Computed in cycles and
+                // converted to phase-accumulator units below.
+                let fb_offset = if ch.feedback > 0 {
+                    let scale = (1u32 << (ch.feedback - 1)) as f32 / 32.0;
+                    let dev_cycles = (st.mod_prev[0] + st.mod_prev[1]) * 0.5 * scale;
+                    (dev_cycles * 4_294_967_296.0) as i32 as u32
+                } else {
+                    0
+                };
+
                 // -- Process each operator ------------------------------------
                 let mut op_outputs = [0.0f32; 2];
                 for (op_idx, op_output) in op_outputs.iter_mut().enumerate() {
@@ -335,7 +417,21 @@ impl OplChip {
                             }
                         }
                         EnvPhase::Sustain => {
-                            op_st.env_level = sustain_target;
+                            if op_reg.egt {
+                                // Sustaining type: hold at the sustain level.
+                                op_st.env_level = sustain_target;
+                            } else {
+                                // Percussive type (EGT clear): the envelope
+                                // keeps decaying through the sustain phase
+                                // until it dies completely.
+                                let dr = op_reg.decay_rate as f32;
+                                op_st.env_level -= dr * 2.0 / sr;
+                                if op_st.env_level <= 0.0 {
+                                    op_st.env_level = 0.0;
+                                    op_st.env_phase = EnvPhase::Off;
+                                    continue;
+                                }
+                            }
                         }
                         EnvPhase::Release => {
                             let rr = op_reg.release_rate as f32;
@@ -355,18 +451,48 @@ impl OplChip {
                     let phase_inc = (op_freq / sr * 4_294_967_296.0) as u32;
                     op_st.phase_acc = op_st.phase_acc.wrapping_add(phase_inc);
 
-                    *op_output = opl_waveform(op_reg.waveform, op_st.phase_acc) * op_st.env_level;
+                    let wave_phase = if op_idx == 0 {
+                        op_st.phase_acc.wrapping_add(fb_offset)
+                    } else {
+                        op_st.phase_acc
+                    };
+                    *op_output = opl_waveform(op_reg.waveform, wave_phase) * op_st.env_level;
                 }
 
-                // -- 2-operator FM: modulator → carrier phase modulation ------
-                let mod_depth = (63i32 - ch.operators[0].total_level as i32).max(0) as f32 / 63.0;
-                let fm_offset = (op_outputs[0] * mod_depth * 65536.0 * 4.0) as i32 as u32;
-                let car_phase = self.synth[ch_idx].ops[1].phase_acc.wrapping_add(fm_offset);
+                // -- Modulator signal (post-envelope, post-TL) ---------------
+                // This is the value that phase-modulates the carrier in FM
+                // mode, sounds directly in additive mode, and feeds the
+                // feedback history.
+                let mod_signal = op_outputs[0] * tl_amp(ch.operators[0].total_level);
+                st.mod_prev[1] = st.mod_prev[0];
+                st.mod_prev[0] = mod_signal;
+
+                // -- Channel output -------------------------------------------
                 let car_waveform = ch.operators[1].waveform;
                 let car_env = self.synth[ch_idx].ops[1].env_level;
-                let car_vol = (63i32 - ch.operators[1].total_level as i32).max(0) as f32 / 63.0;
-                let channel_out = if self.synth[ch_idx].ops[1].env_phase != EnvPhase::Off {
-                    opl_waveform(car_waveform, car_phase) * car_env * car_vol
+                let car_phase_acc = self.synth[ch_idx].ops[1].phase_acc;
+                let car_active = self.synth[ch_idx].ops[1].env_phase != EnvPhase::Off;
+                let car_amp = tl_amp(ch.operators[1].total_level);
+                let channel_out = if ch.additive {
+                    // Additive connection: both operators sound directly;
+                    // no phase modulation is applied.
+                    let car = if car_active {
+                        opl_waveform(car_waveform, car_phase_acc) * car_env * car_amp
+                    } else {
+                        0.0
+                    };
+                    car + mod_signal
+                } else if car_active {
+                    // FM connection: the modulator bends the carrier's
+                    // phase.  Deviation is in *cycles* — a full-scale
+                    // modulator output at TL 0 deviates the carrier by a
+                    // full cycle.  (The old code added the offset in
+                    // 1/65536-cycle units, capping deviation at 4/65536
+                    // of a cycle: FM was effectively switched off and
+                    // every instrument degenerated to a plain sine.)
+                    let fm_offset = (mod_signal * 4_294_967_296.0) as i32 as u32;
+                    let car_phase = car_phase_acc.wrapping_add(fm_offset);
+                    opl_waveform(car_waveform, car_phase) * car_env * car_amp
                 } else {
                     0.0
                 };
@@ -423,6 +549,57 @@ mod tests {
         assert!(chip.channel(0).key_on);
         chip.write(0xB0, 0x00);
         assert!(!chip.channel(0).key_on);
+    }
+
+    #[test]
+    fn opl_operator_slots_decode_for_all_nine_channels() {
+        // YM3812 sparse operator offsets, per the datasheet — the same
+        // tables midi.rs uses to *write* instruments. Every channel's
+        // modulator and carrier parameters must land on that channel.
+        const MOD_OFF: [u8; 9] = [0, 1, 2, 8, 9, 10, 16, 17, 18];
+        const CAR_OFF: [u8; 9] = [3, 4, 5, 11, 12, 13, 19, 20, 21];
+        let mut chip = OplChip::new();
+        for ch in 0..9u8 {
+            // Distinct MULT per channel on the modulator (0x20 range).
+            chip.write(0x20 + MOD_OFF[ch as usize], ch + 1);
+            // Distinct TL per channel on the carrier (0x40 range).
+            chip.write(0x40 + CAR_OFF[ch as usize], 40 + ch);
+            // Distinct AR on the carrier (0x60 range).
+            chip.write(0x60 + CAR_OFF[ch as usize], (ch + 1) << 4);
+        }
+        for ch in 0..9usize {
+            assert_eq!(
+                chip.channel(ch).operators[0].mult,
+                (ch + 1) as u8,
+                "channel {ch} modulator MULT misrouted"
+            );
+            assert_eq!(
+                chip.channel(ch).operators[1].total_level,
+                40 + ch as u8,
+                "channel {ch} carrier TL misrouted or dropped"
+            );
+            assert_eq!(
+                chip.channel(ch).operators[1].attack_rate,
+                (ch + 1) as u8,
+                "channel {ch} carrier AR misrouted or dropped"
+            );
+        }
+    }
+
+    #[test]
+    fn opl_unused_offsets_do_not_corrupt_channels() {
+        // Offsets 6, 7, 14, 15 are not operator slots on real hardware.
+        let mut chip = OplChip::new();
+        for off in [6u8, 7, 14, 15] {
+            chip.write(0x20 + off, 0x0F);
+            chip.write(0x40 + off, 0x3F);
+        }
+        for ch in 0..9 {
+            assert_eq!(chip.channel(ch).operators[0].mult, 0);
+            assert_eq!(chip.channel(ch).operators[1].mult, 0);
+            assert_eq!(chip.channel(ch).operators[0].total_level, 0);
+            assert_eq!(chip.channel(ch).operators[1].total_level, 0);
+        }
     }
 
     #[test]
@@ -506,6 +683,151 @@ mod tests {
         assert!(
             buf.iter().any(|&s| s != first),
             "phase must advance — not all samples identical"
+        );
+    }
+
+    /// Set up channel 0 with fast envelopes and a 440 Hz carrier.
+    /// `mod_tl`/`car_tl` are the operator total levels; `mod_mult` the
+    /// modulator multiplier (via the 0x20 register, EGT set).
+    fn keyed_channel(mod_tl: u8, car_tl: u8, mod_mult: u8) -> OplChip {
+        let mut chip = OplChip::new();
+        chip.write(0x20, 0x20 | mod_mult); // mod: EGT on, mult
+        chip.write(0x23, 0x21); // car: EGT on, mult 1
+        chip.write(0x60, 0xF0); // mod AR=15, DR=0
+        chip.write(0x63, 0xF0); // car AR=15, DR=0
+        chip.write(0x40, mod_tl);
+        chip.write(0x43, car_tl);
+        chip.write(0xA0, 172);
+        chip.write(0xB0, (4 << 2) | 0x20);
+        chip
+    }
+
+    fn rms(buf: &[f32]) -> f32 {
+        (buf.iter().map(|s| s * s).sum::<f32>() / buf.len() as f32).sqrt()
+    }
+
+    #[test]
+    fn opl_feedback_connection_registers_decode() {
+        let mut chip = OplChip::new();
+        chip.write(0xC0, 0x0E | 0x01); // feedback 7, additive
+        assert_eq!(chip.channel(0).feedback, 7);
+        assert!(chip.channel(0).additive);
+        chip.write(0xC0, 0x04); // feedback 2, FM
+        assert_eq!(chip.channel(0).feedback, 2);
+        assert!(!chip.channel(0).additive);
+        // Other channels untouched.
+        assert_eq!(chip.channel(1).feedback, 0);
+    }
+
+    #[test]
+    fn opl_egt_bit_decodes() {
+        let mut chip = OplChip::new();
+        chip.write(0x20, 0x21); // mod op: EGT set, mult 1
+        assert!(chip.channel(0).operators[0].egt);
+        assert_eq!(chip.channel(0).operators[0].mult, 1);
+        chip.write(0x20, 0x01); // EGT clear
+        assert!(!chip.channel(0).operators[0].egt);
+    }
+
+    #[test]
+    fn opl_fm_modulation_actually_bends_the_carrier() {
+        // Pure carrier (modulator silenced by TL=63) vs the same carrier
+        // with a full-strength modulator at the same frequency: with real
+        // FM depth the waveforms must differ substantially.  Under the old
+        // 4/65536-cycle deviation cap they were nearly identical.
+        let mut pure = keyed_channel(63, 0, 1);
+        let mut fm = keyed_channel(0, 0, 1);
+        let mut buf_pure = vec![0.0f32; 4096];
+        let mut buf_fm = vec![0.0f32; 4096];
+        pure.synthesize(&mut buf_pure, 44_100);
+        fm.synthesize(&mut buf_fm, 44_100);
+        let mean_abs_diff = buf_pure
+            .iter()
+            .zip(&buf_fm)
+            .map(|(a, b)| (a - b).abs())
+            .sum::<f32>()
+            / buf_pure.len() as f32;
+        assert!(
+            mean_abs_diff > 0.05,
+            "FM output must differ audibly from the pure carrier, diff={mean_abs_diff}"
+        );
+    }
+
+    #[test]
+    fn opl_total_level_uses_db_scaling() {
+        // TL 32 is -24 dB ≈ 1/16 amplitude.  The old linear mapping gave
+        // (63-32)/63 ≈ 0.49 — far too loud.
+        let mut loud = keyed_channel(63, 0, 1);
+        let mut quiet = keyed_channel(63, 32, 1);
+        let mut buf_loud = vec![0.0f32; 4096];
+        let mut buf_quiet = vec![0.0f32; 4096];
+        loud.synthesize(&mut buf_loud, 44_100);
+        quiet.synthesize(&mut buf_quiet, 44_100);
+        let ratio = rms(&buf_quiet) / rms(&buf_loud);
+        assert!(
+            ratio < 0.15,
+            "TL 32 must be ≈1/16 the amplitude of TL 0, ratio={ratio}"
+        );
+    }
+
+    #[test]
+    fn opl_additive_mode_sounds_the_modulator_directly() {
+        // Carrier silenced (TL 63): in FM mode the channel is silent, in
+        // additive mode the modulator itself is audible.
+        let mut fm = keyed_channel(0, 63, 1);
+        let mut add = keyed_channel(0, 63, 1);
+        add.write(0xC0, 0x01); // additive connection
+        let mut buf_fm = vec![0.0f32; 2048];
+        let mut buf_add = vec![0.0f32; 2048];
+        fm.synthesize(&mut buf_fm, 44_100);
+        add.synthesize(&mut buf_add, 44_100);
+        assert!(
+            rms(&buf_fm) < 0.01,
+            "FM mode with silent carrier must be silent, rms={}",
+            rms(&buf_fm)
+        );
+        assert!(
+            rms(&buf_add) > 0.1,
+            "additive mode must sound the modulator, rms={}",
+            rms(&buf_add)
+        );
+    }
+
+    #[test]
+    fn opl_percussive_envelope_decays_through_sustain() {
+        // EGT clear + nonzero decay: after attack and decay the envelope
+        // keeps falling through the sustain phase to silence, while the
+        // sustaining (EGT set) twin holds its level indefinitely.
+        fn percussive_chip(egt: bool) -> OplChip {
+            let mut chip = OplChip::new();
+            let mod20 = if egt { 0x21 } else { 0x01 };
+            chip.write(0x20, mod20);
+            chip.write(0x23, mod20);
+            chip.write(0x60, 0xF4); // AR=15, DR=4
+            chip.write(0x63, 0xF4);
+            chip.write(0x80, 0x80); // SL=8 (target ≈0.47), RR=0
+            chip.write(0x83, 0x80);
+            chip.write(0x40, 63); // modulator silent: listen to carrier only
+            chip.write(0x43, 0);
+            chip.write(0xA0, 172);
+            chip.write(0xB0, (4 << 2) | 0x20);
+            chip
+        }
+        let mut sustaining = percussive_chip(true);
+        let mut percussive = percussive_chip(false);
+        let mut buf_s = vec![0.0f32; 88_200];
+        let mut buf_p = vec![0.0f32; 88_200];
+        sustaining.synthesize(&mut buf_s, 44_100);
+        percussive.synthesize(&mut buf_p, 44_100);
+        let tail_s = rms(&buf_s[buf_s.len() - 1000..]);
+        let tail_p = rms(&buf_p[buf_p.len() - 1000..]);
+        assert!(
+            tail_s > 0.1,
+            "sustaining envelope must still sound after 2s, rms={tail_s}"
+        );
+        assert!(
+            tail_p < 0.01,
+            "percussive envelope must decay to silence, rms={tail_p}"
         );
     }
 

@@ -8,7 +8,7 @@
 use crate::font::BitmapFont;
 use crate::framebuffer::Framebuffer;
 use crate::patch_cache::PatchCache;
-use doom_game::menu::{GameMenu, MenuPage, TitlePhase, TitleScreen};
+use doom_game::menu::{GameMenu, MenuAction, MenuPage, TitlePhase, TitleScreen};
 use doom_types::limits::{FB_SIZE, FB_WIDTH};
 use doom_wad::WadStack;
 
@@ -79,12 +79,37 @@ pub fn draw_menu(fb: &mut Framebuffer, menu: &GameMenu, font: &BitmapFont) {
         };
 
         // Item text (indented to leave room for skull cursor).
-        font.draw_string(fb, 80, y, item.label, color);
+        // Volume sliders show their value as a 15-segment bar.
+        match item.action {
+            MenuAction::SfxVolume => {
+                let text = format!("{} {}", item.label, slider_bar(menu.sfx_volume()));
+                font.draw_string(fb, 80, y, &text, color);
+            }
+            MenuAction::MusicVolume => {
+                let text = format!("{} {}", item.label, slider_bar(menu.music_volume()));
+                font.draw_string(fb, 80, y, &text, color);
+            }
+            _ => {
+                font.draw_string(fb, 80, y, item.label, color);
+            }
+        }
     }
 
     // Draw skull cursor.
     let cursor_y = start_y + (menu.cursor() as i32) * item_height;
     draw_skull_cursor(fb, font, 56, cursor_y, menu.skull_frame());
+}
+
+/// Render a 0–15 volume as a text bar, e.g. `[|||||-----] 8`.
+fn slider_bar(volume: u8) -> String {
+    let filled = usize::from(volume.min(15));
+    let mut bar = String::with_capacity(20);
+    bar.push('[');
+    for i in 0..15 {
+        bar.push(if i < filled { '|' } else { '-' });
+    }
+    bar.push_str(&format!("] {}", volume.min(15)));
+    bar
 }
 
 /// Draw the skull cursor (simplified as '>' / '>>' text).

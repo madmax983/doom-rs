@@ -65,6 +65,10 @@ pub struct TicInput {
     pub menu_down: bool,
     /// Enter pressed this tic — edge-triggered for menu selection.
     pub menu_select: bool,
+    /// Left arrow pressed this tic — edge-triggered for menu slider adjustment.
+    pub menu_left: bool,
+    /// Right arrow pressed this tic — edge-triggered for menu slider adjustment.
+    pub menu_right: bool,
     /// Wait in place for one turn (turn-based mode only).
     pub wait_pressed: bool,
 }
@@ -92,6 +96,10 @@ pub struct InputState {
     pending_menu_down: bool,
     /// Enter pressed this tic — edge-triggered menu select.
     pending_menu_select: bool,
+    /// Left arrow pressed this tic — edge-triggered menu slider adjustment.
+    pending_menu_left: bool,
+    /// Right arrow pressed this tic — edge-triggered menu slider adjustment.
+    pending_menu_right: bool,
     /// Period key was pressed since the last tic (turn-based wait action).
     pending_wait: bool,
 }
@@ -218,6 +226,16 @@ impl InputState {
         self.pending_menu_select = true;
     }
 
+    /// Signal that the Left arrow was pressed (edge-triggered menu slider).
+    pub fn push_menu_left(&mut self) {
+        self.pending_menu_left = true;
+    }
+
+    /// Signal that the Right arrow was pressed (edge-triggered menu slider).
+    pub fn push_menu_right(&mut self) {
+        self.pending_menu_right = true;
+    }
+
     /// Signal that '.' (wait in place) was pressed.
     pub fn push_wait(&mut self) {
         self.pending_wait = true;
@@ -313,6 +331,8 @@ impl InputState {
         t.menu_up = std::mem::take(&mut self.pending_menu_up);
         t.menu_down = std::mem::take(&mut self.pending_menu_down);
         t.menu_select = std::mem::take(&mut self.pending_menu_select);
+        t.menu_left = std::mem::take(&mut self.pending_menu_left);
+        t.menu_right = std::mem::take(&mut self.pending_menu_right);
         t.wait_pressed = std::mem::take(&mut self.pending_wait);
 
         t
@@ -331,6 +351,8 @@ impl InputState {
         self.pending_menu_up = false;
         self.pending_menu_down = false;
         self.pending_menu_select = false;
+        self.pending_menu_left = false;
+        self.pending_menu_right = false;
         self.pending_wait = false;
     }
 }

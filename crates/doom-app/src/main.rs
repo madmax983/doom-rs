@@ -357,6 +357,8 @@ pub(crate) struct DoomGame {
     automap_full_reveal: bool,
     /// Optional audio subsystem.  `None` when no audio device is available.
     audio: Option<AudioSystem>,
+    /// Non-player mobjs whose active sounds need per-tic spatial refresh.
+    live_sound_origins: Vec<doom_game::MobjHandle>,
     /// WAD music lumps keyed by their canonical `D_*` lump names.
     music_library: std::collections::HashMap<doom_wad::lump::LumpName, std::sync::Arc<[u8]>>,
     /// Flat texture cache (floor/ceiling textures loaded from the WAD).
@@ -527,6 +529,7 @@ impl DoomGame {
             automap: AutomapState::new(),
             automap_full_reveal: false,
             audio,
+            live_sound_origins: Vec::new(),
             music_library,
             flat_cache,
             tex_cache,
@@ -561,6 +564,8 @@ impl DoomGame {
 
         if game.title_screen.is_none() {
             game.start_level_music();
+        } else {
+            game.start_title_music();
         }
 
         game
@@ -630,9 +635,22 @@ impl DoomGame {
 
     fn enter_title_screen(&mut self) {
         self.title_screen = Some(TitleScreen::new());
+        // Preserve the player's volume settings across the menu rebuild.
+        let (sfx_volume, music_volume) = (self.menu.sfx_volume(), self.menu.music_volume());
         self.menu = doom_game::menu::GameMenu::new(doom_game::menu::GameVersion::Doom1);
+        self.menu.set_volumes(sfx_volume, music_volume);
         self.menu.open();
         self.intermission_renderer = None;
+        self.start_title_music();
+    }
+
+    /// Start the title-screen music (D_INTRO for Doom 1, D_INTROA for
+    /// Doom 2), falling back to silence if neither lump is loaded.
+    fn start_title_music(&self) {
+        if self.start_music_lump("D_INTROA") {
+            return;
+        }
+        let _ = self.start_music_lump("D_INTRO");
     }
 
     fn handle_menu_result(&mut self, result: doom_game::menu::MenuResult) {
@@ -706,8 +724,36 @@ impl DoomGame {
                     self.menu.close();
                 }
             }
+            doom_game::menu::MenuResult::SfxVolumeChanged(v) => {
+                if let Some(audio) = self.audio.as_ref() {
+                    audio.set_sfx_volume(v);
+                }
+            }
+            doom_game::menu::MenuResult::MusicVolumeChanged(v) => {
+                if let Some(audio) = self.audio.as_ref() {
+                    audio.set_music_volume(v);
+                }
+            }
             _ => {}
         }
+    }
+
+    /// Apply config-file volumes (0–15) to the menu state and audio system.
+    ///
+    /// Called once at startup from the interactive path after the config
+    /// file is loaded; menu adjustments afterwards flow back out through
+    /// [`DoomGame::volumes`] so the caller can persist them on exit.
+    pub fn apply_volumes(&mut self, sfx_volume: u8, music_volume: u8) {
+        self.menu.set_volumes(sfx_volume, music_volume);
+        if let Some(audio) = self.audio.as_ref() {
+            audio.set_sfx_volume(sfx_volume.min(15));
+            audio.set_music_volume(music_volume.min(15));
+        }
+    }
+
+    /// Current (sfx, music) volumes on the 0–15 vanilla scale.
+    pub fn volumes(&self) -> (u8, u8) {
+        (self.menu.sfx_volume(), self.menu.music_volume())
     }
 
     fn update_intermission_renderer(&mut self) {
@@ -937,12 +983,56 @@ impl DoomGame {
                         continue;
                     }
 
+                    if let Some(origin_handle) = origin
+                        && origin_handle != self.gs.player.handle
+                        && !self.live_sound_origins.contains(&origin_handle)
+                        && self.live_sound_origins.len() < 32
+                    {
+                        self.live_sound_origins.push(origin_handle);
+                    }
+
                     audio.play_sfx(id, priority, spatial.volume, spatial.pan, origin);
                 } else {
                     audio.play_sfx(id, priority, 1.0, 0.0, origin);
                 }
             }
         }
+    }
+
+    /// Refresh volume/pan for sounds whose originating mobj has moved.
+    ///
+    /// Registered origins are pruned once their mobj leaves the slab.  The
+    /// audio command thread resolves each origin to its currently assigned
+    /// mixer channel, so stale registrations for finished sounds are inert.
+    fn refresh_sound_spatial(&mut self) {
+        if self.live_sound_origins.is_empty() {
+            return;
+        }
+
+        let origins = std::mem::take(&mut self.live_sound_origins);
+        let Some(audio) = self.audio.as_ref() else {
+            return;
+        };
+
+        let Some((pl_x, pl_y, pl_angle)) = self
+            .gs
+            .mobjslab
+            .get(self.gs.player.handle)
+            .map(|mo| (mo.x, mo.y, mo.angle))
+        else {
+            return;
+        };
+
+        let mut live = Vec::with_capacity(origins.len());
+        for origin in origins {
+            let Some(mo) = self.gs.mobjslab.get(origin) else {
+                continue;
+            };
+            let spatial = compute_spatial(&SfxEmitter { x: mo.x, y: mo.y }, pl_x, pl_y, pl_angle);
+            audio.update_spatial(origin, spatial.volume, spatial.pan);
+            live.push(origin);
+        }
+        self.live_sound_origins = live;
     }
 
     /// Write a plain-text event line to the debug log (if active).
@@ -1099,6 +1189,16 @@ impl DoomApp for DoomGame {
             } else if input.menu_down {
                 self.menu.move_down();
             }
+            // Left/Right adjust the highlighted slider (volume controls).
+            if input.menu_left {
+                if let Some(result) = self.menu.adjust(-1) {
+                    self.handle_menu_result(result);
+                }
+            } else if input.menu_right {
+                if let Some(result) = self.menu.adjust(1) {
+                    self.handle_menu_result(result);
+                }
+            }
             if input.escape_pressed {
                 self.menu.back();
             }
@@ -1169,6 +1269,15 @@ impl DoomApp for DoomGame {
                 self.menu.move_up();
             } else if input.menu_down {
                 self.menu.move_down();
+            }
+            if input.menu_left {
+                if let Some(result) = self.menu.adjust(-1) {
+                    self.handle_menu_result(result);
+                }
+            } else if input.menu_right {
+                if let Some(result) = self.menu.adjust(1) {
+                    self.handle_menu_result(result);
+                }
             }
             if input.menu_select {
                 if let Some(result) = self.menu.select() {
@@ -1306,6 +1415,7 @@ impl DoomApp for DoomGame {
                     .spawn_sound_ripples(&events, &self.gs);
             }
             self.handle_sound_events(events);
+            self.refresh_sound_spatial();
         }
 
         // Log kill and item events.
@@ -2025,7 +2135,7 @@ fn load_music_library(
         }
     }
 
-    for lump in ["D_INTER", "D_DM2INT"] {
+    for lump in ["D_INTER", "D_DM2INT", "D_INTRO", "D_INTROA"] {
         if let Some(mus_data) = wad.lump_data(lump) {
             music_library.insert(
                 doom_wad::lump::LumpName::from_str(lump),
@@ -2105,7 +2215,7 @@ fn export_sfx_wav_for_name(
         .lump_data(sfx_name)
         .ok_or_else(|| anyhow::anyhow!("SFX lump {} not found in WAD stack", sfx_name))?;
 
-    let sfx_sample = doom_audio::mixer::PcmSample::parse_sfx_lump(sfx_lump)
+    let sfx_sample = doom_audio::PcmSample::parse_sfx_lump(sfx_lump)
         .map_err(|e| anyhow::anyhow!("Failed to parse SFX lump {}: {}", sfx_name, e))?;
 
     let mut samples_i16 = Vec::with_capacity(sfx_sample.data.len());

@@ -534,6 +534,34 @@ pub fn p_touch_special_thing(gs: &mut GameState, item_handle: MobjHandle) -> boo
             }
         }
         gs.player.bonus_count = 6; // HUD flash for 6 tics
+
+        // Pickup jingle, classed the way vanilla's P_TouchSpecialThing picks
+        // sfx_itemup / sfx_wpnup / sfx_getpow.
+        if let Some(mo) = gs.mobjslab.get(item_handle) {
+            use crate::sound_prop::PickupClass;
+            let class = match kind {
+                MobjKind::Shotgun
+                | MobjKind::SuperShotgun
+                | MobjKind::Chaingun
+                | MobjKind::RocketLauncher
+                | MobjKind::PlasmaRifle
+                | MobjKind::BfgPickup
+                | MobjKind::Chainsaw => PickupClass::Weapon,
+                MobjKind::Soulsphere
+                | MobjKind::Megasphere
+                | MobjKind::Berserk
+                | MobjKind::BlurSphere
+                | MobjKind::RadSuit
+                | MobjKind::Allmap
+                | MobjKind::Infrared
+                | MobjKind::InvulnerabilitySphere => PickupClass::Powerup,
+                _ => PickupClass::Item,
+            };
+            let (ix, iy) = (mo.x, mo.y);
+            gs.sound
+                .sound_queue
+                .push(crate::state::SoundRequest::ItemPickup(class, ix, iy));
+        }
     }
 
     picked_up
