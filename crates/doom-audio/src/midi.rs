@@ -289,10 +289,36 @@ enum LoopAction {
 // MidiPlayer
 // ---------------------------------------------------------------------------
 
+/// One sounding note on an OPL2 hardware channel.
+///
+/// Voices are allocated per *note*, not per MUS channel: a single MUS
+/// channel can have several notes sounding at once (up to the 9 hardware
+/// voices), and a note-off releases only the voice playing that note.
+#[derive(Debug, Clone, Copy, Default)]
+struct Voice {
+    /// Whether this voice is currently keyed on.
+    active: bool,
+    /// MUS channel that owns the note (15 = percussion).
+    mus_channel: u8,
+    /// MIDI note number being played.
+    note: u8,
+    /// Effective note velocity after MUS volume memory (0–127).
+    velocity: u8,
+    /// Allocation sequence number; the smallest value is the oldest voice
+    /// and therefore the first candidate for stealing.
+    started: u64,
+}
+
+/// The MUS channel reserved for percussion.
+const PERCUSSION_CHANNEL: u8 = 15;
+
 /// Drives an [`OplChip`] from a stream of [`MusEvent`] values.
 ///
-/// Channel allocation uses round-robin assignment of the 9 OPL2 hardware
-/// channels.  MUS channel 15 (percussion) is treated as a no-op.
+/// The 9 OPL2 hardware channels are a voice pool: each `PlayNote` allocates
+/// a voice (retriggering an identical channel+note, reusing a free voice, or
+/// stealing the oldest voice), and each `ReleaseNote` frees only its own
+/// voice.  MUS channel 15 plays GENMIDI percussion patches (instruments
+/// 128–174, selected by note number).
 ///
 /// For timed playback, load a score with [`MidiPlayer::load_score`] and call
 /// [`MidiPlayer::advance_samples`] from the audio callback on every buffer
@@ -301,11 +327,10 @@ enum LoopAction {
 pub struct MidiPlayer {
     /// The OPL2 chip register state.
     pub opl: OplChip,
-    /// Map from MUS channel index → allocated OPL2 channel (0–8).
-    /// `0xFF` means the MUS channel has not yet been assigned.
-    channel_map: [u8; 16],
-    /// Next OPL2 channel to hand out (wraps modulo 9).
-    next_opl_ch: u8,
+    /// The voice pool, one entry per OPL2 hardware channel (0–8).
+    voices: [Voice; 9],
+    /// Monotonic counter stamped onto voices at allocation time.
+    voice_seq: u64,
     /// Playback rate in ticks per second (MUS default: 140 Hz).
     pub ticks_per_sec: u32,
 
@@ -336,6 +361,15 @@ pub struct MidiPlayer {
     ///
     /// Updated by `Controller { controller: 2, value }` events.
     channel_program: [u8; 16],
+    /// Per-channel volume from `Controller { controller: 3, value }` events
+    /// (0–127, default 127).  Scales the carrier level of sounding voices.
+    channel_volume: [u8; 16],
+    /// Per-channel last explicit note volume.  In MUS, a `PlayNote` without
+    /// a volume byte reuses the channel's previous volume (default 127).
+    channel_last_volume: [u8; 16],
+    /// Music volume gain (0.0–1.0) applied to the synthesized output.
+    /// Set via [`MidiPlayer::set_volume`]; defaults to 1.0.
+    music_gain: f32,
     /// Fractional source-sample position used when resampling the native OPL
     /// stream (49_716 Hz) to the output device sample rate.
     resample_frac: f64,
@@ -357,8 +391,8 @@ impl MidiPlayer {
     pub fn new() -> Self {
         Self {
             opl: OplChip::new(),
-            channel_map: [0xFF; 16],
-            next_opl_ch: 0,
+            voices: [Voice::default(); 9],
+            voice_seq: 0,
             ticks_per_sec: 140,
             current_score: None,
             event_cursor: 0,
@@ -366,6 +400,9 @@ impl MidiPlayer {
             sample_count: 0,
             genmidi: None,
             channel_program: [0u8; 16],
+            channel_volume: [127u8; 16],
+            channel_last_volume: [127u8; 16],
+            music_gain: 1.0,
             resample_frac: 0.0,
             resample_prev: 0.0,
             resample_initialized: false,
@@ -380,17 +417,25 @@ impl MidiPlayer {
         self.genmidi = Some(bank);
     }
 
+    /// Set the music volume gain (clamped to 0.0–1.0), applied to the
+    /// synthesized output in [`MidiPlayer::advance_samples`].
+    pub fn set_volume(&mut self, gain: f32) {
+        self.music_gain = gain.clamp(0.0, 1.0);
+    }
+
     /// Load a new score for timed playback, resetting position to the start.
     ///
     /// Silences the OPL chip and resets all channel allocations before
     /// beginning playback of the new score.  Per-channel GM program numbers
     /// are also reset to 0 (Acoustic Grand Piano).
     pub fn load_score(&mut self, score: MusScore) {
-        // Silence the chip and reset channel allocations.
+        // Silence the chip and reset voice allocations.
         self.opl = OplChip::new();
-        self.channel_map = [0xFF; 16];
-        self.next_opl_ch = 0;
+        self.voices = [Voice::default(); 9];
+        self.voice_seq = 0;
         self.channel_program = [0u8; 16];
+        self.channel_volume = [127u8; 16];
+        self.channel_last_volume = [127u8; 16];
 
         // The first event is due immediately (its delta is the delay *before*
         // it fires, so for event 0 the absolute tick = events[0].0).
@@ -409,8 +454,8 @@ impl MidiPlayer {
     pub fn stop(&mut self) {
         self.current_score = None;
         self.opl = OplChip::new();
-        self.channel_map = [0xFF; 16];
-        self.next_opl_ch = 0;
+        self.voices = [Voice::default(); 9];
+        self.voice_seq = 0;
         self.sample_count = 0;
         self.event_cursor = 0;
         self.next_event_tick = 0;
@@ -572,7 +617,70 @@ impl MidiPlayer {
             self.resample_prev = src[drop];
         }
 
+        if self.music_gain != 1.0 {
+            for s in buf.iter_mut() {
+                *s *= self.music_gain;
+            }
+        }
+
         self.sample_count = sample_count_end;
+    }
+
+    /// Carrier total-level byte for a voice: the GENMIDI/default KSL bits
+    /// (top 2 bits of the register) are preserved and the TL field is set
+    /// from the effective velocity (note velocity × channel volume).
+    ///
+    /// TL 63 = silence, 0 = loudest; velocity 127 → TL 0, velocity 0 → TL 63.
+    fn carrier_level_byte(&self, opl_ch: u8, velocity: u8, mus_channel: u8) -> u8 {
+        let chan_vol = self.channel_volume[mus_channel as usize & 0x0F];
+        let eff = u16::from(velocity) * u16::from(chan_vol) / 127;
+        let tl = 63u8.saturating_sub((eff / 2) as u8).min(63);
+        let car_reg = opl2_car_reg(opl_ch);
+        let ksl_bits = self.opl.read(0x40 + car_reg) & 0xC0;
+        ksl_bits | tl
+    }
+
+    /// Write the carrier level for `opl_ch` from the voice's velocity and
+    /// its channel's current volume.
+    fn apply_carrier_level(&mut self, opl_ch: u8, velocity: u8, mus_channel: u8) {
+        let byte = self.carrier_level_byte(opl_ch, velocity, mus_channel);
+        let car_reg = opl2_car_reg(opl_ch);
+        self.opl.write(0x40 + car_reg, byte);
+    }
+
+    /// Allocate an OPL voice for (`mus_channel`, `note`).
+    ///
+    /// Preference order: retrigger the voice already playing that exact
+    /// channel+note, then the first free voice, then steal the oldest
+    /// sounding voice.  Returns the OPL channel index.
+    fn alloc_voice(&mut self, mus_channel: u8, note: u8) -> u8 {
+        // 1. Same channel+note already sounding: retrigger in place.
+        if let Some(idx) = self
+            .voices
+            .iter()
+            .position(|v| v.active && v.mus_channel == mus_channel && v.note == note)
+        {
+            return idx as u8;
+        }
+        // 2. First free voice.
+        if let Some(idx) = self.voices.iter().position(|v| !v.active) {
+            return idx as u8;
+        }
+        // 3. Steal the oldest voice.
+        let idx = self
+            .voices
+            .iter()
+            .enumerate()
+            .min_by_key(|(_, v)| v.started)
+            .map_or(0, |(i, _)| i);
+        idx as u8
+    }
+
+    /// Key off the OPL channel for `opl_ch` (clear bit 5 of 0xB0+ch),
+    /// preserving the frequency/block bits.
+    fn key_off(&mut self, opl_ch: u8) {
+        let prev = self.opl.read(0xB0 + opl_ch);
+        self.opl.write(0xB0 + opl_ch, prev & !0x20);
     }
 
     /// Process a single [`MusEvent`], writing the appropriate OPL2 registers.
@@ -583,28 +691,57 @@ impl MidiPlayer {
                 note,
                 volume,
             } => {
-                // MUS channel 15 is percussion — no melodic OPL channel.
-                if *channel == 15 {
-                    return;
-                }
-                let opl_ch = self.alloc_channel(*channel);
+                let mus_ch = *channel & 0x0F;
+
+                // MUS volume memory: an explicit volume byte updates the
+                // channel's remembered volume; without one, the remembered
+                // volume is reused (not a flat 127).
+                let velocity = match volume {
+                    Some(v) => {
+                        self.channel_last_volume[mus_ch as usize] = *v;
+                        *v
+                    }
+                    None => self.channel_last_volume[mus_ch as usize],
+                };
+
+                // Resolve the GENMIDI program: melodic channels use their
+                // current program; the percussion channel selects a patch
+                // (128–174) from the note number (GM drums 35–81).
+                let program = if mus_ch == PERCUSSION_CHANNEL {
+                    (128 + usize::from(note.saturating_sub(35))).min(174)
+                } else {
+                    usize::from(self.channel_program[mus_ch as usize])
+                };
+
+                let opl_ch = self.alloc_voice(mus_ch, *note);
+                let retrigger = self.voices[opl_ch as usize].active;
+                self.voice_seq += 1;
+                self.voices[opl_ch as usize] = Voice {
+                    active: true,
+                    mus_channel: mus_ch,
+                    note: *note,
+                    velocity,
+                    started: self.voice_seq,
+                };
 
                 // Apply instrument — GENMIDI if loaded, else default sine.
-                // Compute the note offset from the GENMIDI bank at the same time.
+                // Fixed-pitch instruments (flag bit 0, common for drums)
+                // play their fixed note instead of the requested one.
+                let mut pitch_note = *note;
                 let genmidi_note_offset: i16 = if let Some(ref bank) = self.genmidi {
-                    let prog = self.channel_program[*channel as usize & 0x0F] as usize;
-                    let instr = bank.get(prog);
-                    apply_genmidi_instrument(&mut self.opl, opl_ch, &instr.voices[0]);
-                    instr.voices[0].base_note_offset
+                    let instr = bank.get(program);
+                    if instr.flags & 0x0001 != 0 {
+                        pitch_note = instr.fixed_note;
+                    }
+                    let voice = instr.voices[0];
+                    apply_genmidi_instrument(&mut self.opl, opl_ch, &voice);
+                    voice.base_note_offset
                 } else {
                     apply_default_instrument(&mut self.opl, opl_ch);
                     0
                 };
 
-                let vol = volume.unwrap_or(127);
-
-                // Apply base_note_offset from GENMIDI voice to the MIDI note.
-                let actual_note = (*note as i16)
+                let actual_note = (i16::from(pitch_note))
                     .saturating_add(genmidi_note_offset)
                     .clamp(0, 127) as u8;
                 let (block, fnum) = note_to_block_fnum(actual_note);
@@ -615,25 +752,24 @@ impl MidiPlayer {
                 // Frequency high bits, block, and key-on (bit 5)
                 let b0_val = ((block & 0x7) << 2) | (((fnum >> 8) as u8) & 0x3) | 0x20;
                 self.opl.write(0xB0 + opl_ch, b0_val);
+                if retrigger {
+                    // The key never went low between buffers, so the chip
+                    // would not see a new attack edge on its own.
+                    self.opl.force_retrigger(usize::from(opl_ch));
+                }
 
-                // Carrier total level: 63 = silence, 0 = loudest.
-                // Map vol (0–127) so that vol=127 → TL=0, vol=0 → TL=63.
-                let tl = 63u8.saturating_sub(vol / 2);
-                let car_reg = opl2_car_reg(opl_ch);
-                self.opl.write(0x40 + car_reg, tl.min(63));
+                self.apply_carrier_level(opl_ch, velocity, mus_ch);
             }
 
-            MusEvent::ReleaseNote { channel, note: _ } => {
-                if *channel == 15 {
-                    return;
-                }
-                let idx = *channel as usize;
-                // Only act if this MUS channel has been allocated.
-                if idx < 16 && self.channel_map[idx] != 0xFF {
-                    let opl_ch = self.channel_map[idx];
-                    // Clear key-on (bit 5) without disturbing freq/block bits.
-                    let prev = self.opl.read(0xB0 + opl_ch);
-                    self.opl.write(0xB0 + opl_ch, prev & !0x20);
+            MusEvent::ReleaseNote { channel, note } => {
+                let mus_ch = *channel & 0x0F;
+                // Release only the voice playing this exact channel+note;
+                // other notes on the same MUS channel keep sounding.
+                if let Some(idx) = self.voices.iter().position(|v| {
+                    v.active && v.mus_channel == mus_ch && v.note == *note
+                }) {
+                    self.voices[idx].active = false;
+                    self.key_off(idx as u8);
                 }
             }
 
@@ -648,13 +784,15 @@ impl MidiPlayer {
                     2 => {
                         self.channel_program[idx] = *value;
                     }
-                    // MUS controller 3 = volume.
+                    // MUS controller 3 = channel volume: rescale the
+                    // carrier level of every sounding voice on the channel.
                     3 => {
-                        if self.channel_map[idx] != 0xFF {
-                            let opl_ch = self.channel_map[idx];
-                            let tl = 63u8.saturating_sub(*value / 2);
-                            let car_reg = opl2_car_reg(opl_ch);
-                            self.opl.write(0x40 + car_reg, tl.min(63));
+                        self.channel_volume[idx] = *value;
+                        for v_idx in 0..9u8 {
+                            let voice = self.voices[usize::from(v_idx)];
+                            if voice.active && usize::from(voice.mus_channel) == idx {
+                                self.apply_carrier_level(v_idx, voice.velocity, voice.mus_channel);
+                            }
                         }
                     }
                     _ => {}
@@ -679,19 +817,6 @@ impl MidiPlayer {
         score.events.len()
     }
 
-    /// Allocate or look up the OPL2 channel for the given MUS channel.
-    ///
-    /// Uses round-robin assignment across the 9 OPL2 hardware channels.
-    fn alloc_channel(&mut self, mus_ch: u8) -> u8 {
-        let idx = mus_ch as usize;
-        if self.channel_map[idx] != 0xFF {
-            return self.channel_map[idx];
-        }
-        let opl_ch = self.next_opl_ch % 9;
-        self.next_opl_ch = (self.next_opl_ch + 1) % 9;
-        self.channel_map[idx] = opl_ch;
-        opl_ch
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -785,20 +910,115 @@ mod tests {
     }
 
     #[test]
-    fn midi_channel_15_is_skipped() {
+    fn midi_channel_15_plays_percussion() {
+        // Channel 15 is percussion: it must allocate a voice like any other
+        // note (previously it was dropped entirely — no drums, ever).
         let mut player = MidiPlayer::new();
         player.process_event(&MusEvent::PlayNote {
             channel: 15,
-            note: 60,
+            note: 38, // GM snare
             volume: Some(127),
         });
-        // No OPL channel should have key_on set.
-        for ch in 0..9 {
-            assert!(
-                !player.opl.channel(ch).key_on,
-                "OPL channel {ch} must not be keyed on for percussion channel 15"
-            );
+        assert!(
+            (0..9).any(|ch| player.opl.channel(ch).key_on),
+            "percussion note must key on an OPL voice"
+        );
+        // And it releases by note, like a melodic voice.
+        player.process_event(&MusEvent::ReleaseNote {
+            channel: 15,
+            note: 38,
+        });
+        assert!(
+            !(0..9).any(|ch| player.opl.channel(ch).key_on),
+            "percussion note-off must release the voice"
+        );
+    }
+
+    #[test]
+    fn midi_polyphony_same_channel_overlapping_notes() {
+        let mut player = MidiPlayer::new();
+        player.process_event(&MusEvent::PlayNote {
+            channel: 0,
+            note: 60,
+            volume: Some(100),
+        });
+        player.process_event(&MusEvent::PlayNote {
+            channel: 0,
+            note: 64,
+            volume: Some(100),
+        });
+        // Two distinct voices must be sounding.
+        let keyed = (0..9).filter(|&ch| player.opl.channel(ch).key_on).count();
+        assert_eq!(keyed, 2, "overlapping notes on one channel need 2 voices");
+
+        // Releasing note 60 must leave note 64 sounding.
+        player.process_event(&MusEvent::ReleaseNote {
+            channel: 0,
+            note: 60,
+        });
+        let keyed = (0..9).filter(|&ch| player.opl.channel(ch).key_on).count();
+        assert_eq!(keyed, 1, "note-off must release only its own voice");
+    }
+
+    #[test]
+    fn midi_voice_stealing_takes_oldest() {
+        let mut player = MidiPlayer::new();
+        // Fill all 9 voices with distinct notes on distinct channels.
+        for i in 0..9u8 {
+            player.process_event(&MusEvent::PlayNote {
+                channel: i,
+                note: 40 + i,
+                volume: Some(100),
+            });
         }
+        assert_eq!(
+            (0..9).filter(|&ch| player.opl.channel(ch).key_on).count(),
+            9
+        );
+        // A 10th note steals the oldest voice (channel 0's note 40, on OPL 0).
+        player.process_event(&MusEvent::PlayNote {
+            channel: 0,
+            note: 90,
+            volume: Some(100),
+        });
+        assert_eq!(
+            (0..9).filter(|&ch| player.opl.channel(ch).key_on).count(),
+            9,
+            "voice count stays at 9 after stealing"
+        );
+        // Releasing the stolen note must be a no-op now.
+        player.process_event(&MusEvent::ReleaseNote {
+            channel: 0,
+            note: 40,
+        });
+        assert_eq!(
+            (0..9).filter(|&ch| player.opl.channel(ch).key_on).count(),
+            9,
+            "releasing a stolen voice's note must not kill the thief"
+        );
+    }
+
+    #[test]
+    fn midi_volume_memory_reuses_last_volume() {
+        let mut player = MidiPlayer::new();
+        // Note with explicit quiet volume, then a note with no volume byte:
+        // MUS semantics reuse the remembered volume.
+        player.process_event(&MusEvent::PlayNote {
+            channel: 0,
+            note: 60,
+            volume: Some(20),
+        });
+        player.process_event(&MusEvent::PlayNote {
+            channel: 0,
+            note: 62,
+            volume: None,
+        });
+        // Both voices live on OPL 0 and 1; their carrier TLs should match
+        // (both quiet). TL lives in the low 6 bits of 0x40+car_reg.
+        let tl0 = player.opl.read(0x40 + opl2_car_reg(0)) & 0x3F;
+        let tl1 = player.opl.read(0x40 + opl2_car_reg(1)) & 0x3F;
+        assert_eq!(tl0, tl1, "second note must reuse the remembered volume");
+        assert!(tl0 > 40, "volume 20 should be quiet (high TL), got {tl0}");
     }
 
     #[test]

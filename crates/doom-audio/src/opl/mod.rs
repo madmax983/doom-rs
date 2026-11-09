@@ -267,6 +267,25 @@ impl OplChip {
         }
     }
 
+    /// Force channel `ch`'s envelopes back to the start of Attack at the next
+    /// synthesized sample, even if the channel is already keyed on.
+    ///
+    /// Register writes alone cannot retrigger a voice that is re-keyed
+    /// between two `synthesize` calls (the key-on edge is never seen low),
+    /// so the sequencer calls this when it restarts a busy voice.
+    pub fn force_retrigger(&mut self, ch: usize) {
+        if ch >= 9 {
+            return;
+        }
+        let st = &mut self.synth[ch];
+        for op in &mut st.ops {
+            op.env_phase = EnvPhase::Attack;
+            op.env_level = 0.0;
+            op.phase_acc = 0;
+        }
+        st.was_keyon = true;
+    }
+
     /// Read the raw register byte at `reg` (shadow copy, not real hardware).
     #[must_use]
     pub fn read(&self, reg: u8) -> u8 {
