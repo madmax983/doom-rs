@@ -7,27 +7,44 @@
 // OPL2 operator slot mapping: register-offset → (channel index, operator index)
 // Operator 0 = modulator, operator 1 = carrier (Doom convention)
 // ---------------------------------------------------------------------------
-// Valid offsets 0..=17 only.
-const SLOT_MAP: [(usize, usize); 18] = [
-    (0, 0),
-    (1, 0),
-    (2, 0),
-    (0, 1),
-    (1, 1),
-    (2, 1),
-    (3, 0),
-    (4, 0),
-    (5, 0),
-    (3, 1),
-    (4, 1),
-    (5, 1),
-    (6, 0),
-    (7, 0),
-    (8, 0),
-    (6, 1),
-    (7, 1),
-    (8, 1),
+// YM3812 operator register offsets are SPARSE, not dense: channels 0-2 live
+// at offsets 0-5, channels 3-5 at 8-13, channels 6-8 at 16-21, with offsets
+// 6, 7, 14 and 15 unused. (This matches the mod/car tables in midi.rs.)
+//
+// The previous table indexed offsets densely 0..=17, which permuted every
+// operator parameter for channels 3-5 onto the wrong channel and dropped
+// channels 6-8's carriers (offsets 19-21) entirely — only channels 0-2 ever
+// sounded as intended, which is also all the old tests exercised.
+const SLOT_MAP: [Option<(usize, usize)>; 22] = [
+    Some((0, 0)),  // 0:  ch0 mod
+    Some((1, 0)),  // 1:  ch1 mod
+    Some((2, 0)),  // 2:  ch2 mod
+    Some((0, 1)),  // 3:  ch0 car
+    Some((1, 1)),  // 4:  ch1 car
+    Some((2, 1)),  // 5:  ch2 car
+    None,          // 6:  unused
+    None,          // 7:  unused
+    Some((3, 0)),  // 8:  ch3 mod
+    Some((4, 0)),  // 9:  ch4 mod
+    Some((5, 0)),  // 10: ch5 mod
+    Some((3, 1)),  // 11: ch3 car
+    Some((4, 1)),  // 12: ch4 car
+    Some((5, 1)),  // 13: ch5 car
+    None,          // 14: unused
+    None,          // 15: unused
+    Some((6, 0)),  // 16: ch6 mod
+    Some((7, 0)),  // 17: ch7 mod
+    Some((8, 0)),  // 18: ch8 mod
+    Some((6, 1)),  // 19: ch6 car
+    Some((7, 1)),  // 20: ch7 car
+    Some((8, 1)),  // 21: ch8 car
 ];
+
+/// Decode the (channel, operator) for a register offset, if the offset is a
+/// real operator slot.
+fn slot_for_offset(offset: usize) -> Option<(usize, usize)> {
+    SLOT_MAP.get(offset).copied().flatten()
+}
 
 /// OPL2 frequency multiplier table (index = MULT field 0–15).
 const MULT: [f32; 16] = [
@@ -197,7 +214,7 @@ impl OplChip {
             // ---------------------------------------------------------------
             0x20..=0x35 => {
                 let offset = (reg - 0x20) as usize;
-                if let Some(&(ch, op)) = SLOT_MAP.get(offset) {
+                if let Some((ch, op)) = slot_for_offset(offset) {
                     self.channels[ch].operators[op].mult = val & 0x0F;
                 }
             }
@@ -207,7 +224,7 @@ impl OplChip {
             // ---------------------------------------------------------------
             0x40..=0x55 => {
                 let offset = (reg - 0x40) as usize;
-                if let Some(&(ch, op)) = SLOT_MAP.get(offset) {
+                if let Some((ch, op)) = slot_for_offset(offset) {
                     self.channels[ch].operators[op].total_level = val & 0x3F;
                 }
             }
@@ -217,7 +234,7 @@ impl OplChip {
             // ---------------------------------------------------------------
             0x60..=0x75 => {
                 let offset = (reg - 0x60) as usize;
-                if let Some(&(ch, op)) = SLOT_MAP.get(offset) {
+                if let Some((ch, op)) = slot_for_offset(offset) {
                     self.channels[ch].operators[op].attack_rate = val >> 4;
                     self.channels[ch].operators[op].decay_rate = val & 0x0F;
                 }
@@ -228,7 +245,7 @@ impl OplChip {
             // ---------------------------------------------------------------
             0x80..=0x95 => {
                 let offset = (reg - 0x80) as usize;
-                if let Some(&(ch, op)) = SLOT_MAP.get(offset) {
+                if let Some((ch, op)) = slot_for_offset(offset) {
                     self.channels[ch].operators[op].sustain_level = val >> 4;
                     self.channels[ch].operators[op].release_rate = val & 0x0F;
                 }
@@ -239,7 +256,7 @@ impl OplChip {
             // ---------------------------------------------------------------
             0xE0..=0xF5 => {
                 let offset = (reg - 0xE0) as usize;
-                if let Some(&(ch, op)) = SLOT_MAP.get(offset) {
+                if let Some((ch, op)) = slot_for_offset(offset) {
                     self.channels[ch].operators[op].waveform = val & 0x07;
                 }
             }
@@ -423,6 +440,57 @@ mod tests {
         assert!(chip.channel(0).key_on);
         chip.write(0xB0, 0x00);
         assert!(!chip.channel(0).key_on);
+    }
+
+    #[test]
+    fn opl_operator_slots_decode_for_all_nine_channels() {
+        // YM3812 sparse operator offsets, per the datasheet — the same
+        // tables midi.rs uses to *write* instruments. Every channel's
+        // modulator and carrier parameters must land on that channel.
+        const MOD_OFF: [u8; 9] = [0, 1, 2, 8, 9, 10, 16, 17, 18];
+        const CAR_OFF: [u8; 9] = [3, 4, 5, 11, 12, 13, 19, 20, 21];
+        let mut chip = OplChip::new();
+        for ch in 0..9u8 {
+            // Distinct MULT per channel on the modulator (0x20 range).
+            chip.write(0x20 + MOD_OFF[ch as usize], ch + 1);
+            // Distinct TL per channel on the carrier (0x40 range).
+            chip.write(0x40 + CAR_OFF[ch as usize], 40 + ch);
+            // Distinct AR on the carrier (0x60 range).
+            chip.write(0x60 + CAR_OFF[ch as usize], (ch + 1) << 4);
+        }
+        for ch in 0..9usize {
+            assert_eq!(
+                chip.channel(ch).operators[0].mult,
+                (ch + 1) as u8,
+                "channel {ch} modulator MULT misrouted"
+            );
+            assert_eq!(
+                chip.channel(ch).operators[1].total_level,
+                40 + ch as u8,
+                "channel {ch} carrier TL misrouted or dropped"
+            );
+            assert_eq!(
+                chip.channel(ch).operators[1].attack_rate,
+                (ch + 1) as u8,
+                "channel {ch} carrier AR misrouted or dropped"
+            );
+        }
+    }
+
+    #[test]
+    fn opl_unused_offsets_do_not_corrupt_channels() {
+        // Offsets 6, 7, 14, 15 are not operator slots on real hardware.
+        let mut chip = OplChip::new();
+        for off in [6u8, 7, 14, 15] {
+            chip.write(0x20 + off, 0x0F);
+            chip.write(0x40 + off, 0x3F);
+        }
+        for ch in 0..9 {
+            assert_eq!(chip.channel(ch).operators[0].mult, 0);
+            assert_eq!(chip.channel(ch).operators[1].mult, 0);
+            assert_eq!(chip.channel(ch).operators[0].total_level, 0);
+            assert_eq!(chip.channel(ch).operators[1].total_level, 0);
+        }
     }
 
     #[test]
