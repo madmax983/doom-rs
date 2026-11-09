@@ -273,23 +273,31 @@ impl MusScore {
             // After each event, read optional delta-tick if this was the last
             // event in a group (bit 7 of the event byte was set).
             if last_in_group {
-                let mut delta: u32 = 0;
-                let mut shift: u32 = 0;
+                // MUS delta times are stored MSB-first (MUS spec: repeatedly
+                // `time = time * 128 + (byte & 127)` while the byte's high
+                // bit is set). Reading them LSB-first — as this code used to —
+                // silently corrupts every delta >= 128 ticks (~0.9 s): a
+                // 200-tick pause decoded as 9,217 ticks.
+                let mut delta: u64 = 0;
+                let mut nbytes: usize = 0;
                 loop {
                     let b = *data
                         .get(cursor)
                         .ok_or(AudioError::InvalidMus("truncated delta-time"))?;
                     cursor += 1;
-                    if shift >= 32 {
+                    nbytes += 1;
+                    if nbytes > 5 {
                         return Err(AudioError::InvalidMus("delta-time overflow"));
                     }
-                    delta |= u32::from(b & 0x7F) << shift;
-                    shift += 7;
+                    delta = (delta << 7) | u64::from(b & 0x7F);
+                    if delta > u64::from(u32::MAX) {
+                        return Err(AudioError::InvalidMus("delta-time overflow"));
+                    }
                     if (b & 0x80) == 0 {
                         break;
                     }
                 }
-                pending_delta = delta;
+                pending_delta = delta as u32;
             } else {
                 pending_delta = 0;
             }
@@ -371,6 +379,34 @@ mod tests {
                 volume: Some(127)
             }
         );
+    }
+
+    /// Build a score whose single PlayNote is followed by the given raw
+    /// delta bytes, then ScoreEnd. Returns the delta attached to ScoreEnd.
+    fn delta_of(bytes: &[u8]) -> u32 {
+        let mut data = make_header(16, 0);
+        data.push(0x90); // PlayNote ch0, last-in-group
+        data.push(0x3C); // note 60, no volume byte
+        data.extend_from_slice(bytes);
+        data.push(0x60); // ScoreEnd
+        let score = MusScore::parse(&data).expect("score should parse");
+        assert_eq!(score.events.len(), 2);
+        score.events[1].0
+    }
+
+    #[test]
+    fn mus_delta_multibyte_is_msb_first() {
+        // Spec encoding: time = time*128 + (byte & 127) per byte.
+        // 200 = 1*128 + 72 -> bytes [0x81, 0x48]. The old LSB-first reader
+        // returned 1 + 72*128 = 9217 for this.
+        assert_eq!(delta_of(&[0x81, 0x48]), 200);
+        // 128 = 1*128 + 0 -> [0x81, 0x00]. Old reader returned 1.
+        assert_eq!(delta_of(&[0x81, 0x00]), 128);
+        // 16384 = ((1*128) + 0)*128 + 0 -> [0x81, 0x80, 0x00].
+        assert_eq!(delta_of(&[0x81, 0x80, 0x00]), 16_384);
+        // Single-byte deltas are unchanged.
+        assert_eq!(delta_of(&[0x7F]), 127);
+        assert_eq!(delta_of(&[0x00]), 0);
     }
 
     #[test]
