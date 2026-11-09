@@ -62,7 +62,11 @@ pub struct SfxChannel {
     pub priority: SfxPriority,
     /// Whether this channel is currently playing.
     pub active: bool,
-    /// Raw PCM data (8-bit unsigned, [`SFX_SOURCE_RATE`] Hz).
+    /// Sample rate of `data` in Hz, taken from the SFX lump header.
+    /// (Lumps used to be silently assumed to be [`SFX_SOURCE_RATE`] Hz, so
+    /// a 22 050 Hz lump played back at half speed and pitch.)
+    pub source_rate: u32,
+    /// Raw PCM data (8-bit unsigned, at `source_rate` Hz).
     pub data: std::sync::Arc<[u8]>,
 }
 
@@ -81,6 +85,8 @@ pub struct SfxChannel {
 #[derive(Clone, Debug)]
 pub struct SfxMixer {
     channels: [Option<SfxChannel>; MAX_CHANNELS],
+    /// Master SFX gain (0.0–1.0) applied to the mixed output.
+    gain: f32,
 }
 
 impl Default for SfxMixer {
@@ -93,6 +99,7 @@ impl SfxMixer {
     fn make_channel(
         sfx_id: u16,
         data: std::sync::Arc<[u8]>,
+        source_rate: u32,
         volume: f32,
         pan: f32,
         priority: SfxPriority,
@@ -107,6 +114,11 @@ impl SfxMixer {
             pan,
             priority,
             active: true,
+            source_rate: if source_rate == 0 {
+                SFX_SOURCE_RATE
+            } else {
+                source_rate
+            },
             data,
         }
     }
@@ -116,7 +128,14 @@ impl SfxMixer {
     pub fn new() -> Self {
         Self {
             channels: std::array::from_fn(|_| None),
+            gain: 1.0,
         }
+    }
+
+    /// Set the master SFX gain (clamped to 0.0–1.0), applied to the mixed
+    /// output in [`SfxMixer::mix`].
+    pub fn set_volume(&mut self, gain: f32) {
+        self.gain = gain.clamp(0.0, 1.0);
     }
 
     /// Start playing a sound effect. Returns the channel index, or `None`
@@ -138,18 +157,19 @@ impl SfxMixer {
     /// let sfx_data: std::sync::Arc<[u8]> = vec![128; 1024].into(); // dummy silent PCM data
     ///
     /// // Play a high-priority weapon sound
-    /// let channel = mixer.play(1, sfx_data, 1.0, 0.0, SfxPriority::Weapon);
+    /// let channel = mixer.play(1, sfx_data, 11_025, 1.0, 0.0, SfxPriority::Weapon);
     /// assert!(channel.is_some());
     /// ```
     pub fn play(
         &mut self,
         sfx_id: u16,
         data: std::sync::Arc<[u8]>,
+        source_rate: u32,
         volume: f32,
         pan: f32,
         priority: SfxPriority,
     ) -> Option<usize> {
-        let channel = Self::make_channel(sfx_id, data, volume, pan, priority);
+        let channel = Self::make_channel(sfx_id, data, source_rate, volume, pan, priority);
 
         // 1. Find first empty (None) slot.
         if let Some(idx) = self.channels.iter().position(Option::is_none) {
@@ -204,9 +224,9 @@ impl SfxMixer {
     /// let sfx_data: std::sync::Arc<[u8]> = vec![128; 1024].into(); // dummy silent PCM data
     ///
     /// // Play a sound, which gives us a channel index.
-    /// if let Some(channel) = mixer.play(42, sfx_data.clone(), 1.0, 0.0, SfxPriority::Weapon) {
+    /// if let Some(channel) = mixer.play(42, sfx_data.clone(), 11_025, 1.0, 0.0, SfxPriority::Weapon) {
     ///     // The same entity makes another sound immediately. We restart it on the same channel!
-    ///     mixer.play_on_channel(channel, 43, sfx_data, 1.0, 0.0, SfxPriority::Weapon);
+    ///     mixer.play_on_channel(channel, 43, sfx_data, 11_025, 1.0, 0.0, SfxPriority::Weapon);
     /// }
     /// ```
     pub fn play_on_channel(
@@ -214,6 +234,7 @@ impl SfxMixer {
         channel: usize,
         sfx_id: u16,
         data: std::sync::Arc<[u8]>,
+        source_rate: u32,
         volume: f32,
         pan: f32,
         priority: SfxPriority,
@@ -221,7 +242,14 @@ impl SfxMixer {
         if channel >= MAX_CHANNELS {
             return channel;
         }
-        self.channels[channel] = Some(Self::make_channel(sfx_id, data, volume, pan, priority));
+        self.channels[channel] = Some(Self::make_channel(
+            sfx_id,
+            data,
+            source_rate,
+            volume,
+            pan,
+            priority,
+        ));
         channel
     }
 
@@ -238,7 +266,7 @@ impl SfxMixer {
     /// let mut mixer = SfxMixer::new();
     /// let sfx_data: std::sync::Arc<[u8]> = vec![128; 1024].into();
     ///
-    /// if let Some(channel) = mixer.play(42, sfx_data, 1.0, 0.0, SfxPriority::Medium) {
+    /// if let Some(channel) = mixer.play(42, sfx_data, 11_025, 1.0, 0.0, SfxPriority::Medium) {
     ///     // Move the sound to the far left speaker
     ///     mixer.update_spatial(channel, 1.0, -1.0);
     /// }
@@ -257,9 +285,9 @@ impl SfxMixer {
     /// Mix all active channels into a stereo output buffer.
     ///
     /// Output is interleaved stereo f32 samples (`[L0, R0, L1, R1, ...]`)
-    /// at `output_rate` Hz.  Source PCM is assumed to be [`SFX_SOURCE_RATE`] Hz
-    /// (11025 Hz); nearest-neighbour resampling upsamples to the output rate so
-    /// sounds play at the correct pitch and duration regardless of device rate.
+    /// at `output_rate` Hz.  Each channel resamples from its own lump sample
+    /// rate (`source_rate`, typically 11 025 Hz) with linear interpolation,
+    /// so sounds play at the correct pitch and duration at any device rate.
     ///
     /// After mixing, channels whose data is exhausted are marked inactive.
     ///
@@ -269,7 +297,7 @@ impl SfxMixer {
     /// use doom_audio::{SfxMixer, SfxPriority};
     ///
     /// let mut mixer = SfxMixer::new();
-    /// mixer.play(42, vec![200; 1024].into(), 1.0, 0.0, SfxPriority::Weapon);
+    /// mixer.play(42, vec![200; 1024].into(), 11_025, 1.0, 0.0, SfxPriority::Weapon);
     ///
     /// // Interleaved stereo f32 buffer
     /// let mut output = vec![0.0; 256];
@@ -279,10 +307,6 @@ impl SfxMixer {
     /// ```
     #[allow(clippy::cast_precision_loss)]
     pub fn mix(&mut self, output: &mut [f32], output_rate: u32) {
-        // Fixed-point 16.16 step: how many source samples to advance per output frame.
-        // e.g. at 48000 Hz output, 11025 Hz source: step = 11025/48000 * 65536 ≈ 15052
-        let step_fp = ((SFX_SOURCE_RATE as u64) << 16) / (output_rate as u64).max(1);
-
         // Clear output buffer.
         output.fill(0.0);
 
@@ -290,6 +314,11 @@ impl SfxMixer {
             if !ch.active {
                 continue;
             }
+
+            // Fixed-point 16.16 step: how many source samples to advance per
+            // output frame, from this channel's own lump rate.
+            // e.g. at 48000 Hz output, 11025 Hz source: step ≈ 15052.
+            let step_fp = ((ch.source_rate as u64) << 16) / (output_rate as u64).max(1);
 
             // Pan gains are constant for this channel across the whole buffer.
             // pan = -1.0 => left_gain = 1.0, right_gain = 0.0
@@ -306,8 +335,18 @@ impl SfxMixer {
                     break;
                 }
 
-                // Convert 8-bit unsigned PCM to f32 in [-1.0, 1.0].
-                let sample = (ch.data[src_idx] as f32 - 128.0) / 128.0;
+                // Convert 8-bit unsigned PCM to f32 in [-1.0, 1.0], linearly
+                // interpolating between adjacent source samples using the
+                // fixed-point fraction (nearest-neighbour aliasing was the
+                // old behaviour).
+                let frac = ((ch.position_fp & 0xFFFF) as f32) / 65536.0;
+                let a = (ch.data[src_idx] as f32 - 128.0) / 128.0;
+                let b = if src_idx + 1 < ch.length {
+                    (ch.data[src_idx + 1] as f32 - 128.0) / 128.0
+                } else {
+                    a
+                };
+                let sample = a + (b - a) * frac;
                 let scaled = sample * ch.volume;
 
                 output[i] += scaled * left_gain;
@@ -319,9 +358,10 @@ impl SfxMixer {
             }
         }
 
-        // Clamp output to [-1.0, 1.0] to prevent clipping.
+        // Master gain, then clamp to [-1.0, 1.0] to prevent clipping.
+        let gain = self.gain;
         for sample in output.iter_mut() {
-            *sample = sample.clamp(-1.0, 1.0);
+            *sample = (*sample * gain).clamp(-1.0, 1.0);
         }
     }
 
@@ -360,7 +400,7 @@ mod tests {
     fn mixer_play_activates_channel() {
         let mut mixer = SfxMixer::new();
         let data = vec![128u8; 100]; // silence
-        let ch = mixer.play(1, data.into(), 1.0, 0.0, SfxPriority::Medium);
+        let ch = mixer.play(1, data.into(), 11_025, 1.0, 0.0, SfxPriority::Medium);
         assert!(ch.is_some());
         assert_eq!(mixer.active_count(), 1);
     }
@@ -371,7 +411,7 @@ mod tests {
         let mut mixer = SfxMixer::new();
         let data: std::sync::Arc<[u8]> = vec![128u8; 100].into();
         let ch = mixer
-            .play(1, data.clone(), 1.0, 0.0, SfxPriority::Medium)
+            .play(1, data.clone(), 11_025, 1.0, 0.0, SfxPriority::Medium)
             .expect("should allocate a channel");
 
         let channel = mixer.channels[ch].as_ref().expect("channel should exist");
@@ -385,7 +425,7 @@ mod tests {
             let data = vec![128u8; 1000];
             assert!(
                 mixer
-                    .play(i as u16, data.into(), 1.0, 0.0, SfxPriority::Medium)
+                    .play(i as u16, data.into(), 11_025, 1.0, 0.0, SfxPriority::Medium)
                     .is_some()
             );
         }
@@ -398,11 +438,11 @@ mod tests {
         // Fill all channels with low priority.
         for i in 0..MAX_CHANNELS {
             let data = vec![128u8; 1000];
-            mixer.play(i as u16, data.into(), 1.0, 0.0, SfxPriority::Low);
+            mixer.play(i as u16, data.into(), 11_025, 1.0, 0.0, SfxPriority::Low);
         }
         // High priority should steal a channel.
         let data = vec![128u8; 100];
-        let ch = mixer.play(99, data.into(), 1.0, 0.0, SfxPriority::High);
+        let ch = mixer.play(99, data.into(), 11_025, 1.0, 0.0, SfxPriority::High);
         assert!(ch.is_some());
     }
 
@@ -412,11 +452,11 @@ mod tests {
         // Fill all channels with Weapon (highest) priority.
         for i in 0..MAX_CHANNELS {
             let data = vec![128u8; 1000];
-            mixer.play(i as u16, data.into(), 1.0, 0.0, SfxPriority::Weapon);
+            mixer.play(i as u16, data.into(), 11_025, 1.0, 0.0, SfxPriority::Weapon);
         }
         // Low priority should NOT steal.
         let data = vec![128u8; 100];
-        let ch = mixer.play(99, data.into(), 1.0, 0.0, SfxPriority::Low);
+        let ch = mixer.play(99, data.into(), 11_025, 1.0, 0.0, SfxPriority::Low);
         assert!(ch.is_none(), "low priority should not steal from weapon");
     }
 
@@ -425,7 +465,7 @@ mod tests {
         let mut mixer = SfxMixer::new();
         // Play a non-silent sound (200 > 128 = positive signal).
         let data = vec![200u8; 100];
-        mixer.play(1, data.into(), 1.0, 0.0, SfxPriority::Medium);
+        mixer.play(1, data.into(), 11_025, 1.0, 0.0, SfxPriority::Medium);
         let mut output = vec![0.0f32; 200]; // 100 stereo samples
         mixer.mix(&mut output, 11025);
         // At least some samples should be non-zero.
@@ -433,10 +473,45 @@ mod tests {
     }
 
     #[test]
+    fn mix_respects_per_channel_source_rate() {
+        // The same 11_025 samples last 1.0 s when the lump rate is 11_025 Hz
+        // but only 0.5 s when it is 22_050 Hz. Before per-lump rates were
+        // plumbed through, the 22_050 Hz sound played at half speed/pitch.
+        fn mixes_until_done(rate: u32) -> usize {
+            let mut mixer = SfxMixer::new();
+            mixer.play(
+                1,
+                vec![200u8; 11_025].into(),
+                rate,
+                1.0,
+                0.0,
+                SfxPriority::Medium,
+            );
+            let mut buf = vec![0.0f32; 1920]; // 960 frames @ 48 kHz = 20 ms
+            let mut mixes = 0;
+            while mixer.active_count() > 0 && mixes < 200 {
+                mixer.mix(&mut buf, 48_000);
+                mixes += 1;
+            }
+            mixes
+        }
+        let slow = mixes_until_done(11_025);
+        let fast = mixes_until_done(22_050);
+        assert!(
+            (45..=55).contains(&slow),
+            "11_025 Hz should last ~50 mixes (1 s), got {slow}"
+        );
+        assert!(
+            (20..=30).contains(&fast),
+            "22_050 Hz should last ~25 mixes (0.5 s), got {fast}"
+        );
+    }
+
+    #[test]
     fn mixer_stop_all_clears_channels() {
         let mut mixer = SfxMixer::new();
         let data = vec![128u8; 100];
-        mixer.play(1, data.into(), 1.0, 0.0, SfxPriority::Medium);
+        mixer.play(1, data.into(), 11_025, 1.0, 0.0, SfxPriority::Medium);
         mixer.stop_all();
         assert_eq!(mixer.active_count(), 0);
     }
@@ -445,7 +520,7 @@ mod tests {
     fn mixer_mix_applies_panning() {
         let mut mixer = SfxMixer::new();
         let data = vec![200u8; 100];
-        mixer.play(1, data.into(), 1.0, 1.0, SfxPriority::Medium); // full right
+        mixer.play(1, data.into(), 11_025, 1.0, 1.0, SfxPriority::Medium); // full right
         let mut output = vec![0.0f32; 200];
         mixer.mix(&mut output, 11025);
         // Left channel (even indices) should be near-silent.
@@ -462,7 +537,7 @@ mod tests {
     fn mixer_mix_applies_left_panning() {
         let mut mixer = SfxMixer::new();
         let data: std::sync::Arc<[u8]> = vec![200u8; 100].into();
-        mixer.play(1, data.clone(), 1.0, -1.0, SfxPriority::Medium); // full left
+        mixer.play(1, data.clone(), 11_025, 1.0, -1.0, SfxPriority::Medium); // full left
         let mut output = vec![0.0f32; 200];
         mixer.mix(&mut output, 11025);
         let left_energy: f32 = output.iter().step_by(2).map(|s| s * s).sum();
@@ -477,7 +552,7 @@ mod tests {
     fn mixer_channel_finishes_when_data_exhausted() {
         let mut mixer = SfxMixer::new();
         let data: std::sync::Arc<[u8]> = vec![128u8; 10].into(); // very short sound
-        mixer.play(1, data.clone(), 1.0, 0.0, SfxPriority::Medium);
+        mixer.play(1, data.clone(), 11_025, 1.0, 0.0, SfxPriority::Medium);
         let mut output = vec![0.0f32; 200]; // more than enough
         mixer.mix(&mut output, 11025);
         assert_eq!(
@@ -492,7 +567,7 @@ mod tests {
         let mut mixer = SfxMixer::new();
         let data: std::sync::Arc<[u8]> = vec![200u8; 1000].into();
         let ch = mixer
-            .play(1, data, 1.0, 0.0, SfxPriority::Medium)
+            .play(1, data, 11_025, 1.0, 0.0, SfxPriority::Medium)
             .expect("should get channel");
 
         // Update spatial params.
@@ -511,20 +586,14 @@ mod tests {
             .play(
                 1,
                 std::sync::Arc::<[u8]>::from(vec![200u8; 1000]),
+                11_025,
                 1.0,
                 0.0,
                 SfxPriority::Medium,
             )
             .expect("should allocate a channel");
 
-        let replaced = mixer.play_on_channel(
-            ch,
-            2,
-            vec![220u8; 1000].into(),
-            0.4,
-            -0.5,
-            SfxPriority::High,
-        );
+        let replaced = mixer.play_on_channel(ch, 2, vec![220u8; 1000].into(), 11_025, 0.4, -0.5, SfxPriority::High, );
 
         assert_eq!(replaced, ch);
         assert_eq!(mixer.active_count(), 1);
@@ -553,7 +622,7 @@ mod tests {
         let mut mixer = SfxMixer::new();
         // Play a short sound that will finish quickly.
         let data: std::sync::Arc<[u8]> = vec![200u8; 5].into();
-        mixer.play(1, data.clone(), 1.0, 0.0, SfxPriority::Medium);
+        mixer.play(1, data.clone(), 11_025, 1.0, 0.0, SfxPriority::Medium);
 
         // Exhaust it.
         let mut output = vec![0.0f32; 100];
@@ -562,7 +631,7 @@ mod tests {
 
         // Now play another sound -- should reuse the inactive channel.
         let data2: std::sync::Arc<[u8]> = vec![200u8; 100].into();
-        let ch = mixer.play(2, data2.clone(), 1.0, 0.0, SfxPriority::Low);
+        let ch = mixer.play(2, data2.clone(), 11_025, 1.0, 0.0, SfxPriority::Low);
         assert!(ch.is_some());
         assert_eq!(mixer.active_count(), 1);
     }
@@ -573,11 +642,11 @@ mod tests {
         // Fill all channels with Medium priority.
         for i in 0..MAX_CHANNELS {
             let data: std::sync::Arc<[u8]> = vec![128u8; 1000].into();
-            mixer.play(i as u16, data.clone(), 1.0, 0.0, SfxPriority::Medium);
+            mixer.play(i as u16, data.clone(), 11_025, 1.0, 0.0, SfxPriority::Medium);
         }
         // Another Medium priority should be able to steal.
         let data: std::sync::Arc<[u8]> = vec![128u8; 100].into();
-        let ch = mixer.play(99, data.clone(), 1.0, 0.0, SfxPriority::Medium);
+        let ch = mixer.play(99, data.clone(), 11_025, 1.0, 0.0, SfxPriority::Medium);
         assert!(
             ch.is_some(),
             "equal priority should steal lowest-priority channel"
@@ -588,7 +657,7 @@ mod tests {
     fn mixer_volume_zero_produces_silence() {
         let mut mixer = SfxMixer::new();
         let data: std::sync::Arc<[u8]> = vec![255u8; 100].into(); // loud sound
-        mixer.play(1, data.clone(), 0.0, 0.0, SfxPriority::Medium); // zero volume
+        mixer.play(1, data.clone(), 11_025, 0.0, 0.0, SfxPriority::Medium); // zero volume
         let mut output = vec![0.0f32; 200];
         mixer.mix(&mut output, 11025);
         assert!(
@@ -609,17 +678,11 @@ mod tests {
     fn weapon_sound_survives_monster_attack_flood() {
         let mut mixer = SfxMixer::new();
         for i in 0..MAX_CHANNELS {
-            mixer.play(
-                i as u16,
-                vec![128u8; 1000].into(),
-                1.0,
-                0.0,
-                SfxPriority::Medium,
-            );
+            mixer.play(i as u16, vec![128u8; 1000].into(), 11_025, 1.0, 0.0, SfxPriority::Medium, );
         }
         assert_eq!(mixer.active_count(), MAX_CHANNELS);
 
-        let ch = mixer.play(99, vec![128u8; 100].into(), 1.0, 0.0, SfxPriority::Weapon);
+        let ch = mixer.play(99, vec![128u8; 100].into(), 11_025, 1.0, 0.0, SfxPriority::Weapon);
         assert!(
             ch.is_some(),
             "weapon sound must steal a channel from Medium-priority monster sounds"
@@ -632,17 +695,11 @@ mod tests {
     fn weapon_sound_survives_monster_wake_flood() {
         let mut mixer = SfxMixer::new();
         for i in 0..MAX_CHANNELS {
-            mixer.play(
-                i as u16,
-                vec![128u8; 1000].into(),
-                1.0,
-                0.0,
-                SfxPriority::High,
-            );
+            mixer.play(i as u16, vec![128u8; 1000].into(), 11_025, 1.0, 0.0, SfxPriority::High, );
         }
         assert_eq!(mixer.active_count(), MAX_CHANNELS);
 
-        let ch = mixer.play(99, vec![128u8; 100].into(), 1.0, 0.0, SfxPriority::Weapon);
+        let ch = mixer.play(99, vec![128u8; 100].into(), 11_025, 1.0, 0.0, SfxPriority::Weapon);
         assert!(
             ch.is_some(),
             "weapon sound must steal a channel from High-priority monster sounds"
@@ -655,17 +712,11 @@ mod tests {
     fn monster_attack_cannot_steal_weapon_channel() {
         let mut mixer = SfxMixer::new();
         for i in 0..MAX_CHANNELS {
-            mixer.play(
-                i as u16,
-                vec![128u8; 1000].into(),
-                1.0,
-                0.0,
-                SfxPriority::Weapon,
-            );
+            mixer.play(i as u16, vec![128u8; 1000].into(), 11_025, 1.0, 0.0, SfxPriority::Weapon, );
         }
         assert_eq!(mixer.active_count(), MAX_CHANNELS);
 
-        let ch = mixer.play(99, vec![128u8; 100].into(), 1.0, 0.0, SfxPriority::Medium);
+        let ch = mixer.play(99, vec![128u8; 100].into(), 11_025, 1.0, 0.0, SfxPriority::Medium);
         assert!(
             ch.is_none(),
             "monster attack sound must not steal a Weapon-priority channel"
@@ -677,16 +728,10 @@ mod tests {
     fn monster_wake_cannot_steal_weapon_channel() {
         let mut mixer = SfxMixer::new();
         for i in 0..MAX_CHANNELS {
-            mixer.play(
-                i as u16,
-                vec![128u8; 1000].into(),
-                1.0,
-                0.0,
-                SfxPriority::Weapon,
-            );
+            mixer.play(i as u16, vec![128u8; 1000].into(), 11_025, 1.0, 0.0, SfxPriority::Weapon, );
         }
 
-        let ch = mixer.play(99, vec![128u8; 100].into(), 1.0, 0.0, SfxPriority::High);
+        let ch = mixer.play(99, vec![128u8; 100].into(), 11_025, 1.0, 0.0, SfxPriority::High);
         assert!(
             ch.is_none(),
             "monster wake/die sound must not steal a Weapon-priority channel"
@@ -699,7 +744,7 @@ mod tests {
         // Play multiple loud sounds on different channels to try to exceed [-1, 1].
         for i in 0..MAX_CHANNELS {
             let data: std::sync::Arc<[u8]> = vec![255u8; 100].into(); // max positive signal
-            mixer.play(i as u16, data.clone(), 1.0, 0.0, SfxPriority::Medium);
+            mixer.play(i as u16, data.clone(), 11_025, 1.0, 0.0, SfxPriority::Medium);
         }
         let mut output = vec![0.0f32; 200];
         mixer.mix(&mut output, 11025);
@@ -716,6 +761,7 @@ mod tests {
             99,
             1,
             std::sync::Arc::<[u8]>::from(vec![128u8; 100]),
+            11_025,
             1.0,
             0.0,
             SfxPriority::Medium,

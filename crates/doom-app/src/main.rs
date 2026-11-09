@@ -2105,7 +2105,7 @@ fn export_sfx_wav_for_name(
         .lump_data(sfx_name)
         .ok_or_else(|| anyhow::anyhow!("SFX lump {} not found in WAD stack", sfx_name))?;
 
-    let sfx_sample = doom_audio::mixer::PcmSample::parse_sfx_lump(sfx_lump)
+    let sfx_sample = doom_audio::PcmSample::parse_sfx_lump(sfx_lump)
         .map_err(|e| anyhow::anyhow!("Failed to parse SFX lump {}: {}", sfx_name, e))?;
 
     let mut samples_i16 = Vec::with_capacity(sfx_sample.data.len());

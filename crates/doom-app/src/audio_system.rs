@@ -23,7 +23,7 @@ use loom::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use doom_audio::{
-    AudioDriver, GenmidiBank, MAX_CHANNELS, MusScore, SfxCache, SfxPriority, mixer::PcmSample,
+    AudioDriver, GenmidiBank, MAX_CHANNELS, MusScore, PcmSample, SfxCache, SfxPriority,
 };
 use doom_wad::WadStack;
 
@@ -287,22 +287,29 @@ fn audio_cmd_thread(
 
                 if let Some(origin) = origin {
                     if let Some(&channel) = origin_channels.get(&origin) {
-                        mixer.play_on_channel(
-                            channel,
-                            sfx_id,
-                            std::sync::Arc::clone(&sample.data),
-                            volume,
-                            pan,
-                            priority,
-                        );
-                        channel_origins[channel] = Some(origin);
-                        continue;
+                        // Only reuse the channel if it still belongs to this
+                        // origin — it may have been stolen since.
+                        if channel_origins[channel] == Some(origin) {
+                            mixer.play_on_channel(
+                                channel,
+                                sfx_id,
+                                std::sync::Arc::clone(&sample.data),
+                                sample.sample_rate,
+                                volume,
+                                pan,
+                                priority,
+                            );
+                            channel_origins[channel] = Some(origin);
+                            continue;
+                        }
+                        origin_channels.remove(&origin);
                     }
                 }
 
                 if let Some(channel) = mixer.play(
                     sfx_id,
                     std::sync::Arc::clone(&sample.data),
+                    sample.sample_rate,
                     volume,
                     pan,
                     priority,

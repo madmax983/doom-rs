@@ -1,26 +1,84 @@
-//! SFX dispatch — caching and playback of PCM sound effects.
+//! SFX samples and cache.
 //!
-//! Provides [`SfxCache`] for storing decoded [`PcmSample`] lumps keyed by
-//! their Doom SFX ID, and [`play_sfx`] for dispatching a sound effect onto
-//! the nearest available [`Mixer`] channel.
+//! Provides [`PcmSample`] (a decoded Doom SFX lump) and [`SfxCache`] for
+//! storing decoded samples keyed by their Doom SFX ID.  Playback lives in
+//! [`crate::sfx_mixer::SfxMixer`].
+//!
+//! (A previous parallel implementation — an i16 `Mixer` plus a `play_sfx`
+//! dispatch helper in a separate `mixer` module — was removed: nothing
+//! outside this crate referenced it, it resampled nothing, panned nothing,
+//! and stole channel 0 when full, which made it a trap for future edits.)
 
 #[cfg(feature = "loom")]
 use loom::sync::Arc;
 #[cfg(not(feature = "loom"))]
 use std::sync::Arc;
 
-use crate::mixer::{Mixer, PcmSample};
+use crate::AudioError;
 
 // ---------------------------------------------------------------------------
-// SfxPriority
+// PcmSample
 // ---------------------------------------------------------------------------
 
-/// Priority level for a sound effect (higher value = more important).
-///
-/// Used by Doom to decide which active sound to evict when all mixer channels
-/// are busy and a new, higher-priority sound needs to play.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SfxPriority(pub u8);
+/// A decoded PCM sound effect sample.
+pub struct PcmSample {
+    /// Sample rate in Hz as recorded in the SFX lump header.
+    pub sample_rate: u32,
+    /// Raw 8-bit unsigned PCM data (128 = silence).
+    pub data: std::sync::Arc<[u8]>,
+}
+
+impl PcmSample {
+    /// Parse a raw Doom SFX lump.
+    ///
+    /// Lump layout:
+    /// - bytes 0-1: format tag (u16 LE); must be 3
+    /// - bytes 2-3: sample rate (u16 LE)
+    /// - bytes 4-7: sample count (u32 LE)
+    /// - bytes 8..: raw 8-bit unsigned PCM
+    ///
+    /// # Errors
+    /// Returns [`AudioError::InvalidSfx`] if the data is too short or the
+    /// format tag is not 3.
+    pub fn parse_sfx_lump(data: &[u8]) -> Result<Self, AudioError> {
+        if data.len() < 8 {
+            return Err(AudioError::InvalidSfx("lump too short for SFX header"));
+        }
+
+        let format = u16::from_le_bytes([data[0], data[1]]);
+        if format != 3 {
+            return Err(AudioError::InvalidSfx(
+                "unexpected SFX format tag (expected 3)",
+            ));
+        }
+
+        let sample_rate = u32::from(u16::from_le_bytes([data[2], data[3]]));
+        let sample_count = u32::from_le_bytes([data[4], data[5], data[6], data[7]]) as usize;
+
+        let end = 8 + sample_count;
+        if data.len() < end {
+            return Err(AudioError::InvalidSfx(
+                "lump too short for declared sample count",
+            ));
+        }
+
+        Ok(Self {
+            sample_rate,
+            data: data[8..end].to_vec().into(),
+        })
+    }
+
+    /// Create a silent sample buffer of `num_samples` frames at `sample_rate`.
+    ///
+    /// 8-bit unsigned silence is represented by 128.
+    #[must_use]
+    pub fn silence(sample_rate: u32, num_samples: usize) -> Self {
+        Self {
+            sample_rate,
+            data: vec![128u8; num_samples].into(),
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // SfxCache
@@ -75,55 +133,14 @@ impl SfxCache {
 }
 
 // ---------------------------------------------------------------------------
-// play_sfx
-// ---------------------------------------------------------------------------
-
-/// Dispatch sound effect `sfx_id` onto the [`Mixer`] at the given `volume`
-/// (0–127).
-///
-/// Channel selection:
-/// 1. The first inactive mixer channel is used.
-/// 2. If all 8 channels are busy, channel 0 is stolen (lowest-priority
-///    override — intentional fallback).
-///
-/// If `sfx_id` is not present in `cache` the call is a no-op (no panic).
-///
-/// ## Examples
-/// ```
-/// use doom_audio::sfx::{SfxCache, play_sfx};
-/// use doom_audio::mixer::Mixer;
-///
-/// let mut mixer = Mixer::new(22_050);
-/// let cache = SfxCache::new(); // In reality, this would be populated with samples
-///
-/// play_sfx(&mut mixer, &cache, 42, 100);
-/// ```
-pub fn play_sfx(mixer: &mut Mixer, cache: &SfxCache, sfx_id: u16, volume: u8) {
-    let Some(sample) = cache.get(sfx_id) else {
-        return;
-    };
-
-    // Find the first inactive channel; fall back to channel 0 if all are busy.
-    // SAFETY(unwrap): the iterator range is 0..8 and `unwrap_or(0)` guarantees
-    // the result is always a valid channel index.
-    let ch = (0..8usize)
-        .find(|&i| !mixer.channels[i].active)
-        .unwrap_or(0); // steal ch 0 when all channels are busy
-
-    mixer.play(ch, sample, volume);
-}
-
-// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mixer::Mixer;
 
     /// Build a trivial, non-silent [`PcmSample`] (a single byte at silence+1).
-    #[allow(dead_code)]
     fn make_sample() -> Arc<PcmSample> {
         Arc::new(PcmSample {
             sample_rate: 11_025,
@@ -152,33 +169,18 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(feature = "loom"))]
-    fn play_sfx_starts_channel() {
-        let mut mixer = Mixer::new(22_050);
-        let mut cache = SfxCache::new();
-        cache.insert(1, make_sample());
-
-        play_sfx(&mut mixer, &cache, 1, 100);
-
-        assert!(
-            mixer.channels[0].active,
-            "channel 0 should be active after play_sfx"
-        );
+    fn pcm_sample_parse_roundtrip() {
+        // tag=3, rate=22050, count=4, payload bytes.
+        let mut lump = vec![3u8, 0, 0x22, 0x56, 4, 0, 0, 0];
+        lump.extend_from_slice(&[10, 20, 30, 40]);
+        let sample = PcmSample::parse_sfx_lump(&lump).expect("valid lump");
+        assert_eq!(sample.sample_rate, 22_050);
+        assert_eq!(&*sample.data, &[10, 20, 30, 40]);
     }
 
     #[test]
-    fn play_sfx_unknown_id_no_panic() {
-        let mut mixer = Mixer::new(22_050);
-        let cache = SfxCache::new();
-
-        // Must not panic; all channels remain inactive.
-        play_sfx(&mut mixer, &cache, 0xDEAD, 64);
-
-        for i in 0..8 {
-            assert!(
-                !mixer.channels[i].active,
-                "channel {i} should remain inactive when sfx_id is not in cache"
-            );
-        }
+    fn pcm_sample_parse_rejects_bad_tag() {
+        let lump = vec![1u8, 0, 0x22, 0x56, 0, 0, 0, 0];
+        assert!(PcmSample::parse_sfx_lump(&lump).is_err());
     }
 }
