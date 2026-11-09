@@ -306,6 +306,11 @@ struct Voice {
     note: u8,
     /// Effective note velocity after MUS volume memory (0–127).
     velocity: u8,
+    /// The instrument's own carrier total level (from GENMIDI, captured
+    /// at note-on before any velocity attenuation is applied).  Velocity
+    /// and channel volume attenuate *from this base* instead of
+    /// overwriting the instrument's level entirely.
+    base_car_tl: u8,
     /// Allocation sequence number; the smallest value is the oldest voice
     /// and therefore the first candidate for stealing.
     started: u64,
@@ -663,23 +668,41 @@ impl MidiPlayer {
     }
 
     /// Carrier total-level byte for a voice: the GENMIDI/default KSL bits
-    /// (top 2 bits of the register) are preserved and the TL field is set
-    /// from the effective velocity (note velocity × channel volume).
+    /// (top 2 bits of the register) are preserved, and the TL field is the
+    /// instrument's base carrier TL plus velocity attenuation.
     ///
-    /// TL 63 = silence, 0 = loudest; velocity 127 → TL 0, velocity 0 → TL 63.
-    fn carrier_level_byte(&self, opl_ch: u8, velocity: u8, mus_channel: u8) -> u8 {
+    /// Velocity/channel volume form a ±32-step window over the base: an
+    /// effective velocity of 127 adds nothing (the instrument sounds at
+    /// its authored level), 0 adds the full 32 steps of attenuation.
+    /// The old mapping overwrote TL outright (63 − eff/2), discarding the
+    /// GENMIDI patch's own level — every instrument played at the same
+    /// velocity-dictated loudness regardless of its authored balance.
+    fn carrier_level_byte(
+        &self,
+        opl_ch: u8,
+        base_tl: u8,
+        velocity: u8,
+        mus_channel: u8,
+    ) -> u8 {
         let chan_vol = self.channel_volume[mus_channel as usize & 0x0F];
         let eff = u16::from(velocity) * u16::from(chan_vol) / 127;
-        let tl = 63u8.saturating_sub((eff / 2) as u8).min(63);
+        let atten = (127 - eff) * 32 / 127;
+        let tl = (u16::from(base_tl) + atten).min(63) as u8;
         let car_reg = opl2_car_reg(opl_ch);
         let ksl_bits = self.opl.read(0x40 + car_reg) & 0xC0;
         ksl_bits | tl
     }
 
-    /// Write the carrier level for `opl_ch` from the voice's velocity and
-    /// its channel's current volume.
-    fn apply_carrier_level(&mut self, opl_ch: u8, velocity: u8, mus_channel: u8) {
-        let byte = self.carrier_level_byte(opl_ch, velocity, mus_channel);
+    /// Write the carrier level for `opl_ch` from the voice's base TL,
+    /// velocity, and its channel's current volume.
+    fn apply_carrier_level(
+        &mut self,
+        opl_ch: u8,
+        base_tl: u8,
+        velocity: u8,
+        mus_channel: u8,
+    ) {
+        let byte = self.carrier_level_byte(opl_ch, base_tl, velocity, mus_channel);
         let car_reg = opl2_car_reg(opl_ch);
         self.opl.write(0x40 + car_reg, byte);
     }
@@ -757,6 +780,7 @@ impl MidiPlayer {
                     mus_channel: mus_ch,
                     note: *note,
                     velocity,
+                    base_car_tl: 0,
                     started: self.voice_seq,
                 };
 
@@ -794,7 +818,11 @@ impl MidiPlayer {
                     self.opl.force_retrigger(usize::from(opl_ch));
                 }
 
-                self.apply_carrier_level(opl_ch, velocity, mus_ch);
+                // Capture the instrument's authored carrier level before
+                // velocity attenuation is layered over it.
+                let base_car_tl = self.opl.read(0x40 + opl2_car_reg(opl_ch)) & 0x3F;
+                self.voices[opl_ch as usize].base_car_tl = base_car_tl;
+                self.apply_carrier_level(opl_ch, base_car_tl, velocity, mus_ch);
             }
 
             MusEvent::ReleaseNote { channel, note } => {
@@ -827,7 +855,12 @@ impl MidiPlayer {
                         for v_idx in 0..9u8 {
                             let voice = self.voices[usize::from(v_idx)];
                             if voice.active && usize::from(voice.mus_channel) == idx {
-                                self.apply_carrier_level(v_idx, voice.velocity, voice.mus_channel);
+                                self.apply_carrier_level(
+                                    v_idx,
+                                    voice.base_car_tl,
+                                    voice.velocity,
+                                    voice.mus_channel,
+                                );
                             }
                         }
                     }
@@ -1054,7 +1087,37 @@ mod tests {
         let tl0 = player.opl.read(0x40 + opl2_car_reg(0)) & 0x3F;
         let tl1 = player.opl.read(0x40 + opl2_car_reg(1)) & 0x3F;
         assert_eq!(tl0, tl1, "second note must reuse the remembered volume");
-        assert!(tl0 > 40, "volume 20 should be quiet (high TL), got {tl0}");
+        // Base TL 0 (default instrument) + attenuation (127-20)*32/127 = 26.
+        assert_eq!(tl0, 26, "volume 20 must attenuate the base TL by 26 steps");
+    }
+
+    #[test]
+    fn midi_velocity_attenuates_the_instruments_base_level() {
+        // GENMIDI instrument 0 with an authored carrier TL of 20: a
+        // full-velocity note must keep TL 20 (not be overwritten to 0),
+        // and a half-velocity note must land at 20 + (127-64)*32/127 = 35.
+        let mut buf = make_genmidi_buf();
+        let v_offset = 8 + 4; // instrument 0, voice[0]
+        buf[v_offset + 10] = 20; // car_ksl_output: KSL 0, TL 20
+        let bank = GenmidiBank::parse(&buf).expect("valid GENMIDI must parse");
+        let mut player = MidiPlayer::new();
+        player.load_genmidi(bank);
+
+        player.process_event(&MusEvent::PlayNote {
+            channel: 0,
+            note: 60,
+            volume: Some(127),
+        });
+        let tl_full = player.opl.read(0x40 + opl2_car_reg(0)) & 0x3F;
+        assert_eq!(tl_full, 20, "velocity 127 must preserve the base TL");
+
+        player.process_event(&MusEvent::PlayNote {
+            channel: 0,
+            note: 62,
+            volume: Some(64),
+        });
+        let tl_half = player.opl.read(0x40 + opl2_car_reg(1)) & 0x3F;
+        assert_eq!(tl_half, 35, "velocity 64 must add 15 steps over base 20");
     }
 
     #[test]
