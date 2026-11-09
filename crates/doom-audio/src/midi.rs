@@ -282,6 +282,8 @@ enum LoopAction {
     Process {
         event_clone: MusEvent,
         delta_next: Option<u64>,
+        /// Absolute sample position at which the event is due.
+        event_sample: u64,
     },
 }
 
@@ -464,24 +466,90 @@ impl MidiPlayer {
         self.resample_initialized = false;
     }
 
+    /// Synthesize OPL audio into `out` at `sample_rate` Hz with the chip's
+    /// current register state.
+    ///
+    /// Doom's OPL hardware runs at 49_716 Hz; synthesizing directly at the
+    /// output device sample rate audibly shifts timbre and envelope timing.
+    /// Keep synthesis at the native chip rate and linearly resample.  The
+    /// resampler state (`resample_frac`/`resample_prev`) carries across
+    /// calls, so consecutive segments join seamlessly.
+    fn synth_segment(&mut self, sample_rate: u32, out: &mut [f32]) {
+        const OPL_RATE: u32 = 49_716;
+        let n_samples = out.len();
+        if sample_rate == OPL_RATE {
+            self.opl.synthesize(out, sample_rate);
+        } else if n_samples > 0 {
+            let step = OPL_RATE as f64 / (sample_rate.max(1) as f64);
+            let start_pos = self.resample_frac;
+
+            // To prevent massive memory allocations leading to OOM or capacity overflow
+            // when fuzzing with large n_samples, we clamp max_needed to a safe maximum.
+            // OPL synthesis realistically never needs to generate billions of samples per tick.
+            let max_safe_samples = 44100 * 2; // 2 seconds of audio buffer
+            let n_samples_clamped = n_samples.min(max_safe_samples);
+
+            let last_pos = start_pos + step * (n_samples_clamped.saturating_sub(1) as f64);
+
+            let max_interp_idx = (last_pos.floor() as usize).saturating_add(1);
+            let consumed_idx = (start_pos + step * n_samples_clamped as f64).floor() as usize;
+            let max_needed = max_interp_idx.max(consumed_idx).min(max_safe_samples);
+
+            let mut src = vec![0.0f32; max_needed.saturating_add(1)];
+            src[0] = if self.resample_initialized {
+                self.resample_prev
+            } else {
+                self.resample_initialized = true;
+                0.0
+            };
+            if max_needed > 0 {
+                self.opl.synthesize(&mut src[1..], OPL_RATE);
+            }
+
+            for (i, out) in out.iter_mut().enumerate() {
+                let pos = start_pos + step * i as f64;
+                let idx = (pos.floor() as usize).min(src.len().saturating_sub(2));
+                let frac = (pos - idx as f64) as f32;
+                let a = src[idx];
+                let b = src[idx + 1];
+                *out = a + (b - a) * frac;
+            }
+
+            let end_pos = start_pos + step * n_samples as f64;
+            let drop = (end_pos.floor() as usize).min(src.len().saturating_sub(1));
+            self.resample_frac = end_pos - drop as f64;
+            self.resample_prev = src[drop];
+        }
+    }
+
     /// Advance playback by `n_samples` at `sample_rate` Hz, synthesizing OPL
     /// audio into `buf`.
     ///
-    /// - Processes all MUS events whose absolute tick position falls within
-    ///   the current window `[sample_count, sample_count + n_samples)`.
-    /// - Calls `self.opl.synthesize(buf, sample_rate)` to fill `buf` with OPL
-    ///   audio after event processing.
-    /// - Loops the score automatically when [`MusEvent::ScoreEnd`] is reached.
-    /// - If no score is loaded, `buf` is filled with zeros.
+    /// Events fire at their exact sample position *inside* the buffer: the
+    /// buffer is synthesized in segments between consecutive event positions,
+    /// so a note starting mid-buffer is not early by up to a whole buffer
+    /// period (the previous behaviour processed all due events before
+    /// synthesizing anything).
+    ///
+    /// - Loops the score automatically when [`MusEvent::ScoreEnd`] is
+    ///   reached; the new loop's events fire from the next call, bounding
+    ///   loop error to at most one buffer period.
+    /// - If no score is loaded, `buf` is filled with the chip's (silent)
+    ///   output.
     ///
     /// `buf.len()` must equal `n_samples`.
     pub fn advance_samples(&mut self, n_samples: usize, sample_rate: u32, buf: &mut [f32]) {
-        // Zero the output buffer first.
+        let _ = n_samples; // buf.len() is authoritative.
+        let total = buf.len();
+        // Zero the output buffer first (segments overwrite every sample,
+        // but a zeroed start keeps the gain pass below well-defined even
+        // if a segment is skipped).
         for s in buf.iter_mut() {
             *s = 0.0;
         }
 
-        let sample_count_end = self.sample_count.saturating_add(n_samples as u64);
+        let sample_count_end = self.sample_count.saturating_add(total as u64);
+        let mut filled = 0usize;
 
         // Process all events that are due before sample_count_end.
         // `next_event_tick` is an ever-increasing absolute tick counter that
@@ -527,6 +595,7 @@ impl MidiPlayer {
                         LoopAction::Process {
                             event_clone,
                             delta_next,
+                            event_sample,
                         }
                     }
                 }
@@ -555,7 +624,17 @@ impl MidiPlayer {
                 LoopAction::Process {
                     event_clone,
                     delta_next,
+                    event_sample,
                 } => {
+                    // Synthesize everything up to the event's exact sample
+                    // position with the *previous* register state, then
+                    // apply the event.
+                    let offset =
+                        (event_sample.saturating_sub(self.sample_count) as usize).min(total);
+                    if offset > filled {
+                        self.synth_segment(sample_rate, &mut buf[filled..offset]);
+                        filled = offset;
+                    }
                     self.process_event(&event_clone);
                     self.event_cursor += 1;
                     if let Some(d) = delta_next {
@@ -567,54 +646,11 @@ impl MidiPlayer {
             }
         }
 
-        // Synthesize OPL audio for this window.
-        //
-        // Doom's OPL hardware runs at 49_716 Hz; synthesizing directly at the
-        // output device sample rate audibly shifts timbre and envelope timing.
-        // Keep synthesis at the native chip rate and linearly resample.
-        const OPL_RATE: u32 = 49_716;
-        if sample_rate == OPL_RATE {
-            self.opl.synthesize(buf, sample_rate);
-        } else if n_samples > 0 {
-            let step = OPL_RATE as f64 / (sample_rate.max(1) as f64);
-            let start_pos = self.resample_frac;
-
-            // To prevent massive memory allocations leading to OOM or capacity overflow
-            // when fuzzing with large n_samples, we clamp max_needed to a safe maximum.
-            // OPL synthesis realistically never needs to generate billions of samples per tick.
-            let max_safe_samples = 44100 * 2; // 2 seconds of audio buffer
-            let n_samples_clamped = n_samples.min(max_safe_samples);
-
-            let last_pos = start_pos + step * (n_samples_clamped.saturating_sub(1) as f64);
-
-            let max_interp_idx = (last_pos.floor() as usize).saturating_add(1);
-            let consumed_idx = (start_pos + step * n_samples_clamped as f64).floor() as usize;
-            let max_needed = max_interp_idx.max(consumed_idx).min(max_safe_samples);
-
-            let mut src = vec![0.0f32; max_needed.saturating_add(1)];
-            src[0] = if self.resample_initialized {
-                self.resample_prev
-            } else {
-                self.resample_initialized = true;
-                0.0
-            };
-            if max_needed > 0 {
-                self.opl.synthesize(&mut src[1..], OPL_RATE);
-            }
-
-            for (i, out) in buf.iter_mut().enumerate() {
-                let pos = start_pos + step * i as f64;
-                let idx = (pos.floor() as usize).min(src.len().saturating_sub(2));
-                let frac = (pos - idx as f64) as f32;
-                let a = src[idx];
-                let b = src[idx + 1];
-                *out = a + (b - a) * frac;
-            }
-
-            let end_pos = start_pos + step * n_samples as f64;
-            let drop = (end_pos.floor() as usize).min(src.len().saturating_sub(1));
-            self.resample_frac = end_pos - drop as f64;
-            self.resample_prev = src[drop];
+        // Synthesize the remainder of the buffer with the final register
+        // state (everything before `filled` was synthesized segment-wise
+        // between events).
+        if filled < total {
+            self.synth_segment(sample_rate, &mut buf[filled..total]);
         }
 
         if self.music_gain != 1.0 {
@@ -1155,6 +1191,42 @@ mod tests {
         assert!(
             !player.opl.channel(0).key_on,
             "OPL channel 0 must NOT have key_on when event is far in the future"
+        );
+    }
+
+    #[test]
+    fn midi_events_fire_at_sample_position_within_buffer() {
+        // A note due 300 samples into a 1000-sample buffer must be silent
+        // before that position — not smeared across the whole buffer as
+        // happened when all due events were processed before synthesis.
+        let mut player = MidiPlayer::new();
+        let score = make_score_with_deltas(vec![
+            (
+                3,
+                MusEvent::PlayNote {
+                    channel: 0,
+                    note: 60,
+                    volume: Some(127),
+                },
+            ),
+            (1_000_000, MusEvent::ScoreEnd),
+        ]);
+        player.load_score(score);
+        // 14_000 Hz / 140 ticks = exactly 100 samples per tick; the note is
+        // due at tick 3 -> sample 300.
+        let mut buf = vec![0.0f32; 1000];
+        player.advance_samples(1000, 14_000, &mut buf);
+        assert!(
+            buf[..295].iter().all(|&s| s.abs() < 0.001),
+            "no sound may appear before the note's sample position"
+        );
+        let onset = buf
+            .iter()
+            .position(|&s| s.abs() > 0.001)
+            .expect("note must sound within the buffer");
+        assert!(
+            (295..500).contains(&onset),
+            "onset should be at ~300 samples (attack ramp allowed), got {onset}"
         );
     }
 
