@@ -88,75 +88,61 @@ impl AudioDriver {
     /// // something else, which the driver handles gracefully!)
     /// let driver = AudioDriver::open(44100).expect("Failed to open audio device");
     /// ```
-    pub fn open(_sample_rate: u32) -> Result<Self, AudioError> {
+    pub fn open(sample_rate: u32) -> Result<Self, AudioError> {
         use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
         let host = cpal::default_host();
         let device = host.default_output_device().ok_or(AudioError::NoDevice)?;
 
-        let config = device
-            .default_output_config()
-            .map_err(|e| AudioError::Stream(e.to_string()))?;
-
-        // Use the device's actual sample rate in the callback — not the caller's
-        // requested rate — so SFX resampling and OPL timing are correct.
-        let actual_rate = config.sample_rate().0;
+        // Pick a supported config: prefer the caller's requested rate when
+        // the device offers it, else the device default. (The requested
+        // rate used to be silently ignored.)
+        let supported = pick_supported_config(&device, sample_rate)?;
+        // Use the config's actual sample rate in the callback so SFX
+        // resampling and OPL timing are correct.
+        let actual_rate = supported.sample_rate().0;
+        let channels = usize::from(supported.channels()).max(1);
+        let format = supported.sample_format();
 
         log::debug!(
             "[audio-driver] device={:?} channels={} sample_rate={} format={:?}",
             device.name().unwrap_or_default(),
-            config.channels(),
+            channels,
             actual_rate,
-            config.sample_format(),
+            format,
         );
 
         let mixer = Arc::new(Mutex::new(SfxMixer::new()));
         let midi = Arc::new(Mutex::new(MidiPlayer::new()));
 
-        let mixer_cb = Arc::clone(&mixer);
-        let midi_cb = Arc::clone(&midi);
+        // Request a small, explicit buffer (512 frames ≈ 10 ms at 48 kHz)
+        // for tight SFX latency; fall back to the device default size if
+        // the backend rejects it.
+        let mut config: cpal::StreamConfig = supported.into();
+        config.buffer_size = cpal::BufferSize::Fixed(512);
 
-        let stream = device
-            .build_output_stream(
-                &config.into(),
-                move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
-                    // The cpal buffer is interleaved stereo f32.
-                    // We treat it as stereo: n_mono = data.len() / 2.
-                    // If the buffer happens to be mono (channels == 1) then
-                    // n_mono == data.len() and the stereo loop below works
-                    // correctly because i*2 == i*2+1 == i for channels=1
-                    // — but we guard with saturating to handle odd lengths.
-                    // data is interleaved stereo f32: [L0, R0, L1, R1, ...].
-                    let n_mono = (data.len() / 2).max(1);
-
-                    // SfxMixer outputs f32 stereo directly — no i16 conversion needed.
-                    let mut sfx_buf = vec![0.0f32; data.len()];
-                    let mut opl_buf = vec![0.0f32; n_mono];
-
-                    if let Ok(mut m) = mixer_cb.lock() {
-                        m.mix(&mut sfx_buf, actual_rate);
-                    }
-                    if let Ok(mut mp) = midi_cb.lock() {
-                        mp.advance_samples(n_mono, actual_rate, &mut opl_buf);
-                    }
-
-                    // Mix SFX (stereo) and OPL (mono) into the output buffer.
-                    for i in 0..n_mono {
-                        let sfx_l = sfx_buf.get(i * 2).copied().unwrap_or(0.0);
-                        let sfx_r = sfx_buf.get(i * 2 + 1).copied().unwrap_or(0.0);
-                        let opl = opl_buf.get(i).copied().unwrap_or(0.0) * 0.5;
-                        if let Some(out_l) = data.get_mut(i * 2) {
-                            *out_l = (sfx_l + opl).clamp(-1.0, 1.0);
-                        }
-                        if let Some(out_r) = data.get_mut(i * 2 + 1) {
-                            *out_r = (sfx_r + opl).clamp(-1.0, 1.0);
-                        }
-                    }
-                },
-                |err| log::error!("audio stream error: {err}"),
-                None,
+        let stream = build_stream_for_format(
+            &device,
+            &config,
+            channels,
+            actual_rate,
+            format,
+            Arc::clone(&mixer),
+            Arc::clone(&midi),
+        )
+        .or_else(|_| {
+            let mut fallback = config.clone();
+            fallback.buffer_size = cpal::BufferSize::Default;
+            build_stream_for_format(
+                &device,
+                &fallback,
+                channels,
+                actual_rate,
+                format,
+                Arc::clone(&mixer),
+                Arc::clone(&midi),
             )
-            .map_err(|e| AudioError::Stream(e.to_string()))?;
+        })?;
 
         stream
             .play()
@@ -189,6 +175,151 @@ impl AudioDriver {
             midi: Arc::new(Mutex::new(MidiPlayer::new())),
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Stream construction helpers
+// ---------------------------------------------------------------------------
+
+/// Choose a supported output config for `device`, preferring one that
+/// offers the requested sample rate; otherwise the device default.
+fn pick_supported_config(
+    device: &cpal::Device,
+    requested_rate: u32,
+) -> Result<cpal::SupportedStreamConfig, AudioError> {
+    use cpal::traits::DeviceTrait;
+
+    if requested_rate > 0 {
+        if let Ok(configs) = device.supported_output_configs() {
+            for range in configs {
+                let rate = cpal::SampleRate(requested_rate);
+                if range.min_sample_rate() <= rate && rate <= range.max_sample_rate() {
+                    return Ok(range.with_sample_rate(rate));
+                }
+            }
+        }
+    }
+    device
+        .default_output_config()
+        .map_err(|e| AudioError::Stream(e.to_string()))
+}
+
+/// Build and start an output stream in the device's sample format.
+#[allow(clippy::too_many_arguments)]
+fn build_stream_for_format(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    channels: usize,
+    sample_rate: u32,
+    format: cpal::SampleFormat,
+    mixer: SharedSfxMixer,
+    midi: SharedMidiPlayer,
+) -> Result<cpal::Stream, AudioError> {
+    match format {
+        cpal::SampleFormat::F32 => {
+            build_stream::<f32>(device, config, channels, sample_rate, mixer, midi, |s| s)
+        }
+        cpal::SampleFormat::I16 => build_stream::<i16>(
+            device,
+            config,
+            channels,
+            sample_rate,
+            mixer,
+            midi,
+            |s| (s.clamp(-1.0, 1.0) * 32_767.0) as i16,
+        ),
+        cpal::SampleFormat::U16 => build_stream::<u16>(
+            device,
+            config,
+            channels,
+            sample_rate,
+            mixer,
+            midi,
+            |s| ((s.clamp(-1.0, 1.0) * 0.5 + 0.5) * 65_535.0) as u16,
+        ),
+        _ => Err(AudioError::Stream(format!(
+            "unsupported sample format: {format:?}"
+        ))),
+    }
+}
+
+/// Build an output stream for sample type `T`.
+///
+/// The realtime callback is allocation-free in steady state (scratch
+/// buffers are preallocated outside it and only grow if the backend hands
+/// over a larger buffer than requested) and never blocks: it `try_lock`s
+/// the mixer and sequencer, rendering silence for whichever is contended
+/// rather than stalling the audio thread on a mutex.
+fn build_stream<T>(
+    device: &cpal::Device,
+    config: &cpal::StreamConfig,
+    channels: usize,
+    sample_rate: u32,
+    mixer: SharedSfxMixer,
+    midi: SharedMidiPlayer,
+    convert: fn(f32) -> T,
+) -> Result<cpal::Stream, AudioError>
+where
+    T: cpal::SizedSample + Send + 'static,
+{
+    use cpal::traits::DeviceTrait;
+
+    let channels = channels.max(1);
+    // Preallocate scratch for the requested buffer size (512 frames) with
+    // headroom; resized only if the backend delivers something larger.
+    let mut sfx_buf: Vec<f32> = vec![0.0; 1024 * 2];
+    let mut opl_buf: Vec<f32> = vec![0.0; 1024];
+
+    let stream = device
+        .build_output_stream(
+            config,
+            move |data: &mut [T], _info: &cpal::OutputCallbackInfo| {
+                let frames = data.len() / channels;
+                if frames == 0 {
+                    return;
+                }
+                if sfx_buf.len() < frames * 2 {
+                    sfx_buf.resize(frames * 2, 0.0);
+                }
+                if opl_buf.len() < frames {
+                    opl_buf.resize(frames, 0.0);
+                }
+                let sfx = &mut sfx_buf[..frames * 2];
+                let opl = &mut opl_buf[..frames];
+                sfx.fill(0.0);
+                opl.fill(0.0);
+
+                if let Ok(mut m) = mixer.try_lock() {
+                    m.mix(sfx, sample_rate);
+                }
+                if let Ok(mut mp) = midi.try_lock() {
+                    // Music gain is owned by the player (config-driven).
+                    mp.advance_samples(frames, sample_rate, opl);
+                }
+
+                for frame in 0..frames {
+                    let sfx_l = sfx[frame * 2];
+                    let sfx_r = sfx[frame * 2 + 1];
+                    let music = opl[frame];
+                    for (c, out) in data[frame * channels..(frame + 1) * channels]
+                        .iter_mut()
+                        .enumerate()
+                    {
+                        let v = match (channels, c) {
+                            (1, _) => (sfx_l + sfx_r) * 0.5 + music,
+                            (_, 0) => sfx_l + music,
+                            (_, 1) => sfx_r + music,
+                            _ => 0.0,
+                        };
+                        *out = convert(v.clamp(-1.0, 1.0));
+                    }
+                }
+            },
+            |err| log::error!("audio stream error: {err}"),
+            None,
+        )
+        .map_err(|e| AudioError::Stream(e.to_string()))?;
+    Ok(stream)
 }
 
 // ---------------------------------------------------------------------------
